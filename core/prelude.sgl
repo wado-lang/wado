@@ -1,0 +1,158 @@
+// Sigilex Prelude Module
+// Based on WebAssembly Component Model specification
+//
+// This module contains types and functions that are automatically imported into every
+// Sigilex module. The prelude provides access to fundamental Component Model types
+// that are essential for writing Sigilex programs.
+//
+// Types in this prelude:
+// - Option<T>, Result<T, E> - Always available (built-in to language)
+// - Stream<T>, Future<T> - Component Model async types
+// - Pollable - WASI I/O polling
+//
+// To disable the prelude in a module, use: #![no_prelude]
+
+// ============================================================================
+// Component Model Async Types
+// ============================================================================
+
+/// A stream represents a sequence of values that are produced or consumed over time.
+/// Streams are a fundamental part of the Component Model's async support.
+///
+/// Streams can be thought of as async iterators that can be passed between components.
+/// The stream type is built into the Component Model and represents a channel for
+/// transmitting values of type T.
+///
+/// Component Model: `stream<T>`
+#[component_model("stream")]
+resource Stream<T> {
+    /// Read the next value from the stream.
+    /// Returns None when the stream is closed.
+    #[component_model("stream.read")]
+    fn read() -> Option<T>;
+
+    /// Write a value to the stream.
+    /// Returns an error if the stream is closed or full.
+    #[component_model("stream.write")]
+    fn write(value: T) -> Result<(), StreamError>;
+
+    /// Close the stream for writing.
+    /// After closing, no more values can be written.
+    #[component_model("stream.close-write")]
+    fn close_write();
+
+    /// Close the stream for reading.
+    /// After closing, no more values can be read.
+    #[component_model("stream.close-read")]
+    fn close_read();
+
+    /// Check if the stream is readable (has data available).
+    #[component_model("stream.is-readable")]
+    fn is_readable() -> bool;
+
+    /// Check if the stream is writable (has space available).
+    #[component_model("stream.is-writable")]
+    fn is_writable() -> bool;
+}
+
+/// Errors that can occur when working with streams.
+pub enum StreamError {
+    /// The stream has been closed and cannot be written to.
+    Closed,
+    /// The stream is full and cannot accept more data.
+    Full,
+    /// An I/O error occurred.
+    Io,
+}
+
+/// A future represents a value that will be available at some point in the future.
+/// Futures are a fundamental part of the Component Model's async support.
+///
+/// Unlike promises in JavaScript, Component Model futures are single-use and
+/// represent a computation that will eventually produce a value of type T.
+///
+/// Component Model: `future<T>`
+#[component_model("future")]
+resource Future<T> {
+    /// Subscribe to this future, returning a pollable that becomes ready
+    /// when the future resolves.
+    #[component_model("future.subscribe")]
+    fn subscribe() -> Pollable;
+
+    /// Get the value if the future has resolved.
+    /// Returns None if the future is still pending.
+    #[component_model("future.get")]
+    fn get() -> Option<T>;
+}
+
+// ============================================================================
+// WASI I/O Poll (will eventually move to Component Model)
+// ============================================================================
+
+/// A pollable represents something that can be polled for readiness.
+/// Pollables are used to implement async I/O and event handling.
+///
+/// Currently defined in WASI, will eventually be part of Component Model.
+/// WASI: `wasi:io/poll@0.2.9#pollable`
+#[wasi("wasi:io/poll@0.2.9")]
+resource Pollable {
+    /// Check if this pollable is ready.
+    #[wasi("wasi:io/poll@0.2.9#[method]pollable.ready")]
+    fn ready() -> bool;
+
+    /// Block until this pollable becomes ready.
+    #[wasi("wasi:io/poll@0.2.9#[method]pollable.block")]
+    fn block();
+}
+
+/// Poll multiple pollables, blocking until at least one is ready.
+/// Returns the indices of the ready pollables.
+///
+/// This is the Component Model's equivalent of select/epoll.
+/// WASI: `wasi:io/poll@0.2.9#poll`
+#[wasi("wasi:io/poll@0.2.9#poll")]
+pub fn poll(pollables: &List<Pollable>) -> List<u32>;
+
+// ============================================================================
+// Resource Handle Ownership
+// ============================================================================
+
+/// Owned resource handle - Component Model `own<T>`
+/// Ownership is transferred when passed to another component.
+/// This is the default for resource types.
+pub type Own<T> = T;
+
+/// Borrowed resource handle - Component Model `borrow<T>`
+/// Reference is borrowed temporarily, ownership remains with caller.
+/// In Sigilex, this is represented by `&T`.
+pub type Borrow<T> = &T;
+
+// ============================================================================
+// Notes on Built-in Type Mappings
+// ============================================================================
+
+// The following types are built into Sigilex and map to Component Model types:
+//
+// Primitives:
+//   bool              -> bool
+//   char              -> char
+//   string            -> string
+//   i8..i64           -> s8..s64
+//   u8..u64           -> u8..u64
+//   f32, f64          -> f32, f64
+//
+// Containers:
+//   List<T>           -> List<T>
+//   tuple<T1, T2, ...> -> tuple<T1, T2, ...>
+//   Option<T>         -> option<T>
+//   Result<T, E>      -> result<T, E>
+//
+// User-defined:
+//   record { ... }    -> record { ... } (Component Model primitive)
+//   struct { ... }    -> Wasm-GC struct (not Component Model)
+//   variant { ... }   -> variant { ... } (sum type with payloads)
+//   resource          -> resource
+//
+// Extensions (not in Component Model):
+//   i128, u128        -> Wasm wide-arithmetic proposal
+//   dict<K, V>        -> Key-value map

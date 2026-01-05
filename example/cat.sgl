@@ -1,0 +1,89 @@
+// A simple cat(1) implementation in Sigilex
+// Reads files and prints them to stdout, or reads from stdin if no files given
+
+use core::cli::{eprintln, args, exit_with_code, Stdin, Stdout, StdioErrorCode};
+use core::filesystem::{Descriptor, ErrorCode, FileSystem, Preopens, OpenFlags, DescriptorFlags};
+
+/// Read from stdin and write to stdout
+fn cat_stdin() with Stdin, Stdout {
+    let (input_stream, _future) = Stdin.read_via_stream();
+
+    match Stdout.write_via_stream(input_stream) {
+        Ok(_) => {},
+        Err(_) => {
+            exit_with_code(1);
+        },
+    }
+}
+
+/// Read a file and write to stdout
+fn cat_file(path: string) with Preopens, FileSystem, Stdout {
+    // Get preopened directories to access filesystem
+    let preopens = Preopens.get_directories();
+
+    if preopens.len() == 0 {
+        eprintln("cat: no filesystem access");
+        exit_with_code(1);
+    }
+
+    let (root_dir, _) = preopens[0];
+
+    // Open the file for reading
+    let file_descriptor = match FileSystem.open_at(
+        &root_dir,
+        0,           // path_flags
+        path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ) {
+        Ok(fd) => fd,
+        Err(ErrorCode::NoEntry) => {
+            eprintln(`cat: {path}: No such file or directory`);
+            exit_with_code(1);
+        },
+        Err(ErrorCode::IsDirectory) => {
+            eprintln(`cat: {path}: Is a directory`);
+            exit_with_code(1);
+        },
+        Err(ErrorCode::Access) => {
+            eprintln(`cat: {path}: Permission denied`);
+            exit_with_code(1);
+        },
+        Err(_) => {
+            eprintln(`cat: {path}: Cannot open file`);
+            exit_with_code(1);
+        },
+    };
+
+    // Get a stream to read from the file
+    let input_stream = match FileSystem.read_via_stream(&file_descriptor, 0) {
+        Ok(stream) => stream,
+        Err(_) => {
+            eprintln(`cat: {path}: Cannot read file`);
+            exit_with_code(1);
+        },
+    };
+
+    // Write to stdout
+    match Stdout.write_via_stream(input_stream) {
+        Ok(_) => {},
+        Err(_) => {
+            eprintln("cat: write error");
+            exit_with_code(1);
+        },
+    }
+}
+
+fn main() with Preopens, FileSystem, Stdin, Stdout {
+    let [_, ...files] = args();
+
+    if files.len() == 0 {
+        // No files specified, read from stdin
+        cat_stdin();
+    } else {
+        // Read and concatenate all specified files
+        for file in files {
+            cat_file(file);
+        }
+    }
+}

@@ -1,0 +1,378 @@
+// WASI Filesystem interface wrapper for Sigilex
+// Based on wasi:filesystem@0.2.9
+
+// Note: Stream is automatically available from core::prelude
+
+// ============================================================================
+// WASI Filesystem Types
+// ============================================================================
+
+/// A descriptor is a reference to a filesystem object
+#[wasi("wasi:filesystem/types@0.2.9")]
+resource Descriptor;
+
+/// Error codes for filesystem operations
+#[wasi("wasi:filesystem/types@0.2.9")]
+enum ErrorCode {
+    /// Permission denied
+    Access,
+    /// Resource unavailable, or operation would block
+    WouldBlock,
+    /// Connection already in progress
+    Already,
+    /// Bad file descriptor
+    BadDescriptor,
+    /// Device or resource busy
+    Busy,
+    /// Resource deadlock would occur
+    Deadlock,
+    /// Storage quota exceeded
+    Quota,
+    /// File exists
+    Exist,
+    /// File too large
+    FileTooLarge,
+    /// Illegal byte sequence
+    IllegalByteSequence,
+    /// Operation in progress
+    InProgress,
+    /// Interrupted function
+    Interrupted,
+    /// Invalid argument
+    Invalid,
+    /// I/O error
+    Io,
+    /// Is a directory
+    IsDirectory,
+    /// Too many levels of symbolic links
+    Loop,
+    /// Too many links
+    TooManyLinks,
+    /// Message too large
+    MessageSize,
+    /// Filename too long
+    NameTooLong,
+    /// No such device
+    NoDevice,
+    /// No such file or directory
+    NoEntry,
+    /// No locks available
+    NoLock,
+    /// Not enough space
+    InsufficientMemory,
+    /// No space left on device
+    InsufficientSpace,
+    /// Not a directory
+    NotDirectory,
+    /// Directory not empty
+    NotEmpty,
+    /// State not recoverable
+    NotRecoverable,
+    /// Not supported
+    Unsupported,
+    /// Inappropriate I/O control operation
+    NoTty,
+    /// No such device or address
+    NoSuchDevice,
+    /// Value too large to be stored in data type
+    Overflow,
+    /// Operation not permitted
+    NotPermitted,
+    /// Broken pipe
+    Pipe,
+    /// Read-only filesystem
+    ReadOnly,
+    /// Invalid seek
+    InvalidSeek,
+    /// Text file busy
+    TextFileBusy,
+    /// Cross-device link
+    CrossDevice,
+}
+
+/// Flags for opening a file
+#[wasi("wasi:filesystem/types@0.2.9")]
+flags OpenFlags {
+    /// Create file if it does not exist
+    Create,
+    /// Fail if not a directory
+    Directory,
+    /// Fail if file already exists
+    Exclusive,
+    /// Truncate file to size 0
+    Truncate,
+}
+
+/// File descriptor flags
+#[wasi("wasi:filesystem/types@0.2.9")]
+flags DescriptorFlags {
+    /// Read mode
+    Read,
+    /// Write mode
+    Write,
+    /// Append mode
+    Append,
+    /// Data sync mode
+    DataSync,
+    /// Non-blocking mode
+    NonBlock,
+    /// Sync mode
+    Sync,
+}
+
+/// File type
+#[wasi("wasi:filesystem/types@0.2.9")]
+enum DescriptorType {
+    /// Unknown file type
+    Unknown,
+    /// Block device
+    BlockDevice,
+    /// Character device
+    CharacterDevice,
+    /// Directory
+    Directory,
+    /// FIFO
+    Fifo,
+    /// Symbolic link
+    SymbolicLink,
+    /// Regular file
+    RegularFile,
+    /// Socket
+    Socket,
+}
+
+/// File metadata
+#[wasi("wasi:filesystem/types@0.2.9")]
+record DescriptorStat {
+    /// File type
+    type: DescriptorType,
+    /// Number of hard links
+    link_count: u64,
+    /// File size
+    size: u64,
+    /// Last access time
+    data_access_timestamp: Option<u64>,
+    /// Last modification time
+    data_modification_timestamp: Option<u64>,
+    /// Last status change time
+    status_change_timestamp: Option<u64>,
+}
+
+/// Directory entry
+#[wasi("wasi:filesystem/types@0.2.9")]
+record DirectoryEntry {
+    /// File type
+    type: DescriptorType,
+    /// File name
+    name: string,
+}
+
+// ============================================================================
+// Effect Interfaces
+// ============================================================================
+
+/// Effect interface for wasi:filesystem/types@0.2.9
+effect FileSystem {
+    /// Open a file or directory
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.open-at")]
+    fn open_at(
+        descriptor: &Descriptor,
+        path_flags: u32,
+        path: string,
+        open_flags: OpenFlags,
+        flags: DescriptorFlags,
+    ) -> Result<Descriptor, ErrorCode>;
+
+    /// Read from a file via stream
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.read-via-stream")]
+    fn read_via_stream(
+        descriptor: &Descriptor,
+        offset: u64,
+    ) -> Result<Stream<u8>, ErrorCode>;
+
+    /// Write to a file via stream
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.write-via-stream")]
+    fn write_via_stream(
+        descriptor: &Descriptor,
+        offset: u64,
+    ) -> Result<Stream<u8>, ErrorCode>;
+
+    /// Append to a file via stream
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.append-via-stream")]
+    fn append_via_stream(
+        descriptor: &Descriptor,
+    ) -> Result<Stream<u8>, ErrorCode>;
+
+    /// Get file metadata
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.stat")]
+    fn stat(descriptor: &Descriptor) -> Result<DescriptorStat, ErrorCode>;
+
+    /// Get file metadata by path
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.stat-at")]
+    fn stat_at(
+        descriptor: &Descriptor,
+        path_flags: u32,
+        path: string,
+    ) -> Result<DescriptorStat, ErrorCode>;
+
+    /// Set file size
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.set-size")]
+    fn set_size(descriptor: &Descriptor, size: u64) -> Result<(), ErrorCode>;
+
+    /// Set file timestamps
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.set-times")]
+    fn set_times(
+        descriptor: &Descriptor,
+        data_access_timestamp: Option<u64>,
+        data_modification_timestamp: Option<u64>,
+    ) -> Result<(), ErrorCode>;
+
+    /// Read directory entries
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.read-directory")]
+    fn read_directory(
+        descriptor: &Descriptor,
+    ) -> Result<List<DirectoryEntry>, ErrorCode>;
+
+    /// Create directory
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.create-directory-at")]
+    fn create_directory_at(
+        descriptor: &Descriptor,
+        path: string,
+    ) -> Result<(), ErrorCode>;
+
+    /// Remove directory
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.remove-directory-at")]
+    fn remove_directory_at(
+        descriptor: &Descriptor,
+        path: string,
+    ) -> Result<(), ErrorCode>;
+
+    /// Rename file or directory
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.rename-at")]
+    fn rename_at(
+        descriptor: &Descriptor,
+        old_path: string,
+        new_descriptor: &Descriptor,
+        new_path: string,
+    ) -> Result<(), ErrorCode>;
+
+    /// Remove file
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.unlink-file-at")]
+    fn unlink_file_at(
+        descriptor: &Descriptor,
+        path: string,
+    ) -> Result<(), ErrorCode>;
+
+    /// Create symbolic link
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.symlink-at")]
+    fn symlink_at(
+        descriptor: &Descriptor,
+        old_path: string,
+        new_path: string,
+    ) -> Result<(), ErrorCode>;
+
+    /// Read symbolic link
+    #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.readlink-at")]
+    fn readlink_at(
+        descriptor: &Descriptor,
+        path: string,
+    ) -> Result<string, ErrorCode>;
+}
+
+/// Effect interface for wasi:filesystem/preopens@0.2.9
+effect Preopens {
+    /// Get preopened directories
+    #[wasi("wasi:filesystem/preopens@0.2.9#get-directories")]
+    fn get_directories() -> List<Tuple<Descriptor, string>>;
+}
+
+// ============================================================================
+// High-level helper functions
+// ============================================================================
+
+/// Open a file for reading
+pub fn open_read(path: string) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
+    let preopens = Preopens.get_directories();
+
+    if preopens.len() == 0 {
+        return Err(ErrorCode::Access);
+    }
+
+    let (root_dir, _) = preopens[0];
+
+    return FileSystem.open_at(
+        &root_dir,
+        0,  // path_flags
+        path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+}
+
+/// Open a file for writing (create if doesn't exist, truncate if exists)
+pub fn open_write(path: string) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
+    let preopens = Preopens.get_directories();
+
+    if preopens.len() == 0 {
+        return Err(ErrorCode::Access);
+    }
+
+    let (root_dir, _) = preopens[0];
+
+    return FileSystem.open_at(
+        &root_dir,
+        0,  // path_flags
+        path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Write,
+    );
+}
+
+/// Read entire file contents as stream
+pub fn read_file(path: string) -> Result<Stream<u8>, ErrorCode> with Preopens, FileSystem {
+    let descriptor = open_read(path)?;
+    return FileSystem.read_via_stream(&descriptor, 0);
+}
+
+/// Write stream to file
+pub fn write_file(path: string, data: Stream<u8>) -> Result<(), ErrorCode> with Preopens, FileSystem {
+    let descriptor = open_write(path)?;
+    let output_stream = FileSystem.write_via_stream(&descriptor, 0)?;
+
+    // Copy data from input to output stream
+    // (This would require stream operations not yet defined)
+
+    return Ok(());
+}
+
+/// Check if file exists
+pub fn exists(path: string) -> bool with Preopens, FileSystem {
+    let preopens = Preopens.get_directories();
+
+    if preopens.len() == 0 {
+        return false;
+    }
+
+    let (root_dir, _) = preopens[0];
+
+    match FileSystem.stat_at(&root_dir, 0, path) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
+/// Check if path is a directory
+pub fn is_directory(path: string) -> bool with Preopens, FileSystem {
+    let preopens = Preopens.get_directories();
+
+    if preopens.len() == 0 {
+        return false;
+    }
+
+    let (root_dir, _) = preopens[0];
+
+    match FileSystem.stat_at(&root_dir, 0, path) {
+        Ok(stat) => stat.type == DescriptorType::Directory,
+        Err(_) => false,
+    }
+}
