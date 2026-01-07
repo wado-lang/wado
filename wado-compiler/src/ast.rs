@@ -17,6 +17,23 @@ pub enum Item {
     Enum(EnumDecl),
     Type(TypeAlias),
     Impl(ImplBlock),
+    Resource(ResourceDecl),
+}
+
+/// Attribute like #[wasi("...")]
+#[derive(Debug, Clone)]
+pub struct Attribute {
+    pub name: String,
+    pub args: Option<String>,
+    pub span: Span,
+}
+
+/// Resource declaration like `resource Foo;`
+#[derive(Debug, Clone)]
+pub struct ResourceDecl {
+    pub name: String,
+    pub attrs: Vec<Attribute>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -99,7 +116,7 @@ pub struct WhileStmt {
 
 #[derive(Debug, Clone)]
 pub struct ForStmt {
-    pub var: String,
+    pub pattern: Pattern,
     pub iter: Expr,
     pub body: Block,
     pub span: Span,
@@ -139,6 +156,7 @@ pub enum Literal {
     Float(f64),
     String(String),
     Bool(bool),
+    Unit,
 }
 
 #[derive(Debug, Clone)]
@@ -237,7 +255,7 @@ pub enum Pattern {
     Ident(String),
     Literal(Literal),
     Wildcard,
-    // TODO: Add more patterns
+    Tuple(Vec<Pattern>),
 }
 
 #[derive(Debug, Clone)]

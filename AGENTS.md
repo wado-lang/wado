@@ -8,12 +8,25 @@ Read @spec.md to understand the new language.
 
 The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
 
+It generates a WAT file and we run it with `wasmtime`.
+
 ## Wasm and WASI
 
 Because this language is only targeting Wasm with WASI, this project has git submodules for wasi and wasm.
 
 Wasm: `wasm/`
 WASI: `wasi/`
+
+### Wasm and WASI Features
+
+This project relays on the following features:
+
+- Wasm GC
+- Wasm Reference Types
+- Wasm Wide Arithmetic for i128 and u128
+- Wasm Threads
+- Wasm Component Model
+- WASI 0.3
 
 ## General Rules
 

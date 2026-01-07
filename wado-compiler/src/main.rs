@@ -1,12 +1,15 @@
 mod ast;
+mod codegen;
 mod lexer;
 mod parser;
 mod token;
 
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::process;
 
+use codegen::Codegen;
 use lexer::Lexer;
 use parser::Parser;
 
@@ -41,11 +44,6 @@ fn main() {
         }
     };
 
-    println!("=== Tokens ===");
-    for token in &tokens {
-        println!("{:?}", token);
-    }
-
     // Parsing
     let mut parser = Parser::new(tokens);
     let module = match parser.parse() {
@@ -59,6 +57,22 @@ fn main() {
         }
     };
 
-    println!("\n=== AST ===");
-    println!("{:#?}", module);
+    // Code generation
+    let mut codegen = Codegen::new();
+    let wat = codegen.generate(&module);
+
+    // Output WAT file
+    let output_path = Path::new(filename).with_extension("wat");
+    match fs::write(&output_path, &wat) {
+        Ok(_) => {
+            eprintln!("Generated: {}", output_path.display());
+        }
+        Err(e) => {
+            eprintln!("Error writing output file: {}", e);
+            process::exit(1);
+        }
+    }
+
+    // Also print to stdout
+    print!("{}", wat);
 }

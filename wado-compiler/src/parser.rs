@@ -83,6 +83,9 @@ impl Parser {
     // Parsing
 
     fn parse_item(&mut self) -> ParseResult<Item> {
+        // Parse any leading attributes
+        let attrs = self.parse_attributes()?;
+
         let is_pub = if self.check(&TokenKind::Pub) {
             self.advance();
             true
@@ -99,11 +102,66 @@ impl Parser {
             TokenKind::Enum => self.parse_enum_decl(is_pub).map(Item::Enum),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
+            TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
             _ => Err(ParseError {
                 message: format!("expected item, found {:?}", self.peek_kind()),
                 span: self.peek().span,
             }),
         }
+    }
+
+    fn parse_attributes(&mut self) -> ParseResult<Vec<Attribute>> {
+        let mut attrs = Vec::new();
+
+        while self.check(&TokenKind::Hash) {
+            attrs.push(self.parse_attribute()?);
+        }
+
+        Ok(attrs)
+    }
+
+    fn parse_attribute(&mut self) -> ParseResult<Attribute> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Hash)?;
+        self.expect(&TokenKind::LBracket)?;
+
+        let name = self.consume_ident()?;
+
+        let args = if self.check(&TokenKind::LParen) {
+            self.advance();
+            // Parse attribute arguments as a string literal for now
+            let arg = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+                self.advance();
+                Some(s)
+            } else {
+                None
+            };
+            self.expect(&TokenKind::RParen)?;
+            arg
+        } else {
+            None
+        };
+
+        self.expect(&TokenKind::RBracket)?;
+
+        Ok(Attribute {
+            name,
+            args,
+            span: start_span,
+        })
+    }
+
+    fn parse_resource_decl(&mut self, attrs: Vec<Attribute>) -> ParseResult<ResourceDecl> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Resource)?;
+        let name = self.consume_ident()?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(ResourceDecl {
+            name,
+            attrs,
+            span: start_span,
+        })
     }
 
     fn parse_use_decl(&mut self) -> ParseResult<UseDecl> {
@@ -146,6 +204,15 @@ impl Parser {
         self.expect(&TokenKind::Fn)?;
 
         let name = self.consume_ident()?;
+
+        // Skip generic parameters like <T, E>
+        if self.check(&TokenKind::Lt) {
+            self.advance();
+            while !self.check(&TokenKind::Gt) && !self.is_at_end() {
+                self.advance();
+            }
+            self.expect(&TokenKind::Gt)?;
+        }
 
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
@@ -349,17 +416,49 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::For)?;
 
-        let var = self.consume_ident()?;
+        let pattern = self.parse_pattern()?;
         self.expect(&TokenKind::In)?;
         let iter = self.parse_expr()?;
         let body = self.parse_block()?;
 
         Ok(Stmt::For(ForStmt {
-            var,
+            pattern,
             iter,
             body,
             span: start_span,
         }))
+    }
+
+    fn parse_pattern(&mut self) -> ParseResult<Pattern> {
+        if self.check(&TokenKind::LParen) {
+            // Tuple pattern: (a, b, c)
+            self.advance();
+            let mut patterns = Vec::new();
+            if !self.check(&TokenKind::RParen) {
+                patterns.push(self.parse_pattern()?);
+                while self.check(&TokenKind::Comma) {
+                    self.advance();
+                    if self.check(&TokenKind::RParen) {
+                        break;
+                    }
+                    patterns.push(self.parse_pattern()?);
+                }
+            }
+            self.expect(&TokenKind::RParen)?;
+            Ok(Pattern::Tuple(patterns))
+        } else if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            self.advance();
+            if name == "_" {
+                Ok(Pattern::Wildcard)
+            } else {
+                Ok(Pattern::Ident(name))
+            }
+        } else {
+            Err(ParseError {
+                message: format!("expected pattern, found {:?}", self.peek_kind()),
+                span: self.peek().span,
+            })
+        }
     }
 
     fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {
@@ -638,6 +737,14 @@ impl Parser {
             }
             TokenKind::LParen => {
                 self.advance();
+                // Unit expression: ()
+                if self.check(&TokenKind::RParen) {
+                    self.advance();
+                    return Ok(Expr::Literal(LiteralExpr {
+                        value: Literal::Unit,
+                        span: start_span,
+                    }));
+                }
                 let expr = self.parse_expr()?;
                 self.expect(&TokenKind::RParen)?;
                 Ok(expr)
@@ -706,10 +813,41 @@ impl Parser {
     fn parse_type(&mut self) -> ParseResult<Type> {
         let start_span = self.peek().span;
 
+        // Never type: !
+        if self.check(&TokenKind::Not) {
+            self.advance();
+            return Ok(Type::Named(NamedType {
+                name: "!".to_string(),
+                span: start_span,
+            }));
+        }
+
+        // Reference type: &T
         if self.check(&TokenKind::Ampersand) {
             self.advance();
             let inner = self.parse_type()?;
             return Ok(Type::Reference(Box::new(inner)));
+        }
+
+        // Tuple type: () or (T, U, ...)
+        if self.check(&TokenKind::LParen) {
+            self.advance();
+            if self.check(&TokenKind::RParen) {
+                self.advance();
+                // Unit type ()
+                return Ok(Type::Tuple(Vec::new()));
+            }
+            // Tuple with elements
+            let mut types = vec![self.parse_type()?];
+            while self.check(&TokenKind::Comma) {
+                self.advance();
+                if self.check(&TokenKind::RParen) {
+                    break;
+                }
+                types.push(self.parse_type()?);
+            }
+            self.expect(&TokenKind::RParen)?;
+            return Ok(Type::Tuple(types));
         }
 
         let name = self.consume_ident()?;
@@ -760,9 +898,21 @@ impl Parser {
     }
 
     fn parse_effect_method(&mut self) -> ParseResult<EffectMethod> {
+        // Skip any attributes on the method
+        let _attrs = self.parse_attributes()?;
+
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
         let name = self.consume_ident()?;
+
+        // Skip generic parameters like <T, E>
+        if self.check(&TokenKind::Lt) {
+            self.advance();
+            while !self.check(&TokenKind::Gt) && !self.is_at_end() {
+                self.advance();
+            }
+            self.expect(&TokenKind::Gt)?;
+        }
 
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;

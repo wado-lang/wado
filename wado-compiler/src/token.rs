@@ -26,6 +26,7 @@ pub enum TokenKind {
     Enum,
     Type,
     Impl,
+    Resource,
 
     // Literals
     Ident(String),
@@ -51,6 +52,7 @@ pub enum TokenKind {
     FatArrow,    // =>
     Pipe,        // |
     Ampersand,   // &
+    Hash,        // #
 
     // Operators
     Eq,          // =

@@ -213,6 +213,10 @@ impl<'a> Lexer<'a> {
                     TokenKind::Ampersand
                 }
             }
+            '#' => {
+                self.advance();
+                TokenKind::Hash
+            }
 
             _ => {
                 return Err(LexError {
@@ -321,6 +325,7 @@ impl<'a> Lexer<'a> {
             "enum" => TokenKind::Enum,
             "type" => TokenKind::Type,
             "impl" => TokenKind::Impl,
+            "resource" => TokenKind::Resource,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             _ => TokenKind::Ident(text.to_string()),
