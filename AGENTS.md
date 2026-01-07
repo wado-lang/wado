@@ -39,3 +39,7 @@ This project relays on the following features:
 * Wasm: WebAssembly (not WASM)
 * WASI: WebAssembly System Interface
 
+## Rules for Rust Code
+
+* Do not use wildcard imports (`use ...::*;`).
+

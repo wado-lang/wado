@@ -144,9 +144,17 @@ impl Parser {
 
         self.expect(&TokenKind::RBracket)?;
 
+        // Parse WASI import path if this is a wasi attribute
+        let wasi_import = if name == "wasi" {
+            args.as_ref().and_then(|s| WasiImport::parse(s))
+        } else {
+            None
+        };
+
         Ok(Attribute {
             name,
             args,
+            wasi_import,
             span: start_span,
         })
     }

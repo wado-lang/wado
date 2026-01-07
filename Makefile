@@ -1,17 +1,17 @@
 .PHONY: build hello run test clean
 
 build:
-	cd wado-compiler && cargo build
+	cargo build
 
 hello: build
-	cd wado-compiler && cargo run --quiet -- ../example/hello.wado
+	cargo run --quiet -- example/hello.wado
 
 run: hello
-	wasmtime example/hello.wat
+	wasmtime run --invoke 'run()' example/hello.wasm
 
 test:
-	cd wado-compiler && cargo test
+	cargo test
 
 clean:
-	cd wado-compiler && cargo clean
+	cargo clean
 	rm -f example/*.wat

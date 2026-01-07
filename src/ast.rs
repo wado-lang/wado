@@ -25,7 +25,71 @@ pub enum Item {
 pub struct Attribute {
     pub name: String,
     pub args: Option<String>,
+    pub wasi_import: Option<WasiImport>,
     pub span: Span,
+}
+
+/// Parsed WASI import path
+/// e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream"
+#[derive(Debug, Clone)]
+pub struct WasiImport {
+    /// Namespace (e.g., "wasi")
+    pub namespace: String,
+    /// Package (e.g., "cli")
+    pub package: String,
+    /// Interface (e.g., "stdout")
+    pub interface: String,
+    /// Version (e.g., "0.3.0-rc-2025-09-16")
+    pub version: Option<String>,
+    /// Function name (e.g., "write-via-stream")
+    pub function: Option<String>,
+}
+
+impl WasiImport {
+    /// Parse a WASI path string
+    /// Format: "namespace:package/interface@version#function"
+    /// Examples:
+    ///   "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream"
+    ///   "wasi:cli/terminal-input@0.3.0-rc-2025-09-16"
+    pub fn parse(s: &str) -> Option<WasiImport> {
+        // Split by '#' first to extract function name
+        let (path, function) = if let Some(pos) = s.rfind('#') {
+            (&s[..pos], Some(s[pos + 1..].to_string()))
+        } else {
+            (s, None)
+        };
+
+        // Split by '@' to extract version
+        let (path, version) = if let Some(pos) = path.rfind('@') {
+            (&path[..pos], Some(path[pos + 1..].to_string()))
+        } else {
+            (path, None)
+        };
+
+        // Split by ':' to extract namespace
+        let (namespace, rest) = path.split_once(':')?;
+
+        // Split by '/' to extract package and interface
+        let (package, interface) = rest.split_once('/')?;
+
+        Some(WasiImport {
+            namespace: namespace.to_string(),
+            package: package.to_string(),
+            interface: interface.to_string(),
+            version,
+            function,
+        })
+    }
+
+    /// Get the full interface path (e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16")
+    pub fn interface_path(&self) -> String {
+        let mut path = format!("{}:{}/{}", self.namespace, self.package, self.interface);
+        if let Some(ref ver) = self.version {
+            path.push('@');
+            path.push_str(ver);
+        }
+        path
+    }
 }
 
 /// Resource declaration like `resource Foo;`
