@@ -4,6 +4,10 @@ This is the specification and implementation of **Wado**, a new programming lang
 
 Read @spec.md to understand the new language.
 
+## The Compiler
+
+The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
+
 ## Wasm and WASI
 
 Because this language is only targeting Wasm with WASI, this project has git submodules for wasi and wasm.
