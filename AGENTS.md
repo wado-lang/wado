@@ -1,4 +1,4 @@
-This is a new programming language specification and implementation.
+This is the specification and implementation of **Wado**, a new programming language targeting Wasm/WASI.
 
 ## The Spec
 

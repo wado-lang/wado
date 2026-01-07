@@ -1,4 +1,4 @@
-# Sigilex Language Specification
+# Wado Language Specification
 
 A new programming language targeting Wasm/WASI
 
@@ -6,8 +6,8 @@ A new programming language targeting Wasm/WASI
 
 | Item | Description |
 |------|-------------|
-| Name | Sigilex |
-| Extension | `.sgl` |
+| Name | Wado |
+| Extension | `.wado` |
 | Target | Wasm/WASI only |
 | Syntax | Rust-like |
 | Paradigm | Reactive, Effect System |
@@ -60,9 +60,9 @@ let other = move handle;  // OK: explicit move
 
 ### Component Model Mapping
 
-All Sigilex types map directly to WebAssembly Component Model types:
+All Wado types map directly to WebAssembly Component Model types:
 
-| Sigilex Type | Component Model Type | Notes |
+| Wado Type | Component Model Type | Notes |
 |--------------|---------------------|-------|
 | `bool` | `bool` | Boolean |
 | `char` | `char` | Unicode scalar value |
@@ -71,17 +71,17 @@ All Sigilex types map directly to WebAssembly Component Model types:
 | `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers |
 | `i128`, `u128` | - | Wasm wide-arithmetic proposal |
 | `f32`, `f64` | `f32`, `f64` | Floating point (32-bit, 64-bit) |
-| `List<T>` | `list<T>` | Dynamic list (UpperCamel in Sigilex) |
-| `Dict<K, V>` | - | Sigilex extension, not in Component Model |
-| `Tuple<T1, T2, ...>` | `tuple<T1, T2, ...>` | Tuple types (UpperCamel in Sigilex) |
-| `Option<T>` | `option<T>` | Optional value (UpperCamel in Sigilex) |
-| `Result<T, E>` | `result<T, E>` | Result type (UpperCamel in Sigilex) |
+| `List<T>` | `list<T>` | Dynamic list (UpperCamel in Wado) |
+| `Dict<K, V>` | - | Wado extension, not in Component Model |
+| `Tuple<T1, T2, ...>` | `tuple<T1, T2, ...>` | Tuple types (UpperCamel in Wado) |
+| `Option<T>` | `option<T>` | Optional value (UpperCamel in Wado) |
+| `Result<T, E>` | `result<T, E>` | Result type (UpperCamel in Wado) |
 | `record { ... }` | `record { ... }` | Record type (component model primitive) |
 | `struct { ... }` | - | GC struct (Wasm-GC, not Component Model) |
 | `variant { ... }` | `variant { ... }` | Variant/sum type with payloads |
 | `resource` | `resource` | Resource handle |
-| `Stream<T>` | `stream<T>` | Component Model async stream (UpperCamel in Sigilex) |
-| `Future<T>` | `future<T>` | Component Model async future (UpperCamel in Sigilex) |
+| `Stream<T>` | `stream<T>` | Component Model async stream (UpperCamel in Wado) |
+| `Future<T>` | `future<T>` | Component Model async future (UpperCamel in Wado) |
 
 **Type Naming Convention:**
 - Built-in primitive types use lowercase: `bool`, `char`, `string`, `i32`, `f64`
