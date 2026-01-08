@@ -1,6 +1,6 @@
 # Wado Language Specification
 
-A new programming language targeting Wasm/WASI
+Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ## Overview
 
@@ -9,7 +9,6 @@ A new programming language targeting Wasm/WASI
 | Name | Wado |
 | Extension | `.wado` |
 | Target | Wasm/WASI only |
-| Syntax | Rust-like |
 | Paradigm | Reactive, Effect System |
 
 ## Design Philosophy

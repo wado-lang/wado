@@ -1,15 +1,18 @@
 // Code generator for Wado
 // Generates Component Model WebAssembly using wasm-encoder
+// Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
 use crate::ast::{Block, CallExpr, Expr, Item, Literal, Stmt};
 use wasm_encoder::{
-    CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind, ComponentTypeRef,
-    ConstExpr, DataSection, DataSegment, DataSegmentMode, EntityType, ExportKind, ExportSection,
-    Function, FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module,
-    ModuleArg, PrimitiveValType, TypeBounds, TypeSection, ValType,
+    Alias, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
+    ComponentOuterAliasKind, ComponentValType, ConstExpr, DataSection, DataSegment,
+    DataSegmentMode, EntityType, ExportKind, ExportSection, Function, FunctionSection,
+    ImportSection, InstanceType, Instruction, MemorySection, MemoryType, Module, ModuleArg,
+    PrimitiveValType, TypeBounds, TypeSection, ValType,
 };
 
 /// Code generator that produces Component Model components
+/// Targets WASI P3 (0.3.0-rc-2025-09-16)
 pub struct Codegen {
     string_literals: Vec<String>,
 }
@@ -136,6 +139,8 @@ impl Codegen {
         panic!("String not found: {}", s);
     }
 
+    /// Generate component for WASI P3
+    /// Uses native stream<T> types and imports wasi:cli/stdout
     fn generate_component(&self, ast_module: &crate::ast::Module) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
 
@@ -143,103 +148,92 @@ impl Codegen {
         let string_data: Vec<u8> = self.string_literals.iter().flat_map(|s| s.bytes()).collect();
 
         // ========================================
-        // Type 0: wasi:io/error instance type
+        // Type 0: types instance type (for wasi:cli/types)
+        // Contains error-code enum definition
         // ========================================
         {
-            let mut io_error_type = wasm_encoder::InstanceType::new();
-            io_error_type.export("error", ComponentTypeRef::Type(TypeBounds::SubResource));
-            let (_, enc) = builder.ty(Some("io-error-type"));
-            enc.instance(&io_error_type);
+            let (_, enc) = builder.ty(Some("types-instance-type"));
+            let mut instance_type = InstanceType::new();
+            // Type 0 within instance: error-code enum
+            instance_type
+                .ty()
+                .defined_type()
+                .enum_type(["io", "illegal-byte-sequence", "pipe"]);
+            // Export error-code type
+            instance_type.export("error-code", wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)));
+            enc.instance(&instance_type);
         }
 
-        // Import wasi:io/error@0.2.3 as instance 0
-        builder.import("wasi:io/error@0.2.3", ComponentTypeRef::Instance(0));
+        // Import types instance from WASI P3 (instance 0)
+        builder.import(
+            "wasi:cli/types@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(0),
+        );
 
-        // Alias export "error" from instance 0 as type $error (type 1)
-        builder.alias_export(0, "error", ComponentExportKind::Type);
+        // Alias error-code from types instance (type 1)
+        builder.alias_export(0, "error-code", ComponentExportKind::Type);
 
         // ========================================
-        // Type 2: wasi:io/streams instance type
+        // Type 2: stdout instance type
+        // Uses the aliased error-code type for result via outer alias
         // ========================================
         {
-            let mut streams_type = wasm_encoder::InstanceType::new();
-            // alias outer error type
-            streams_type.alias(wasm_encoder::Alias::Outer {
+            let (_, enc) = builder.ty(Some("stdout-instance-type"));
+            let mut instance_type = InstanceType::new();
+            // Type 0 within instance: stream<u8>
+            instance_type
+                .ty()
+                .defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+            // Type 1 within instance: outer alias to type 1 (error-code)
+            // count=1 means go up 1 level (to parent component), index=1 is the error-code type
+            instance_type.alias(Alias::Outer {
+                kind: ComponentOuterAliasKind::Type,
                 count: 1,
-                kind: wasm_encoder::ComponentOuterAliasKind::Type,
-                index: 1, // $error
+                index: 1,
             });
-            streams_type.export("error", ComponentTypeRef::Type(TypeBounds::Eq(0)));
-            streams_type.export("output-stream", ComponentTypeRef::Type(TypeBounds::SubResource));
-
-            // Type indices after exports:
-            // - alias error: type 0
-            // - export error (eq 0): type 1
-            // - export output-stream (sub resource): type 2
-            // type 3: (own 0) - own error (for stream-error variant)
-            streams_type.ty().defined_type().own(0);
-            // type 4: stream-error variant
-            streams_type.ty().defined_type().variant([
-                ("last-operation-failed", Some(wasm_encoder::ComponentValType::Type(3)), None),
-                ("closed", None, None),
-            ]);
-            streams_type.export("stream-error", ComponentTypeRef::Type(TypeBounds::Eq(4)));
-            // export creates type 5
-            // type 6: (borrow 2) - borrow output-stream
-            streams_type.ty().defined_type().borrow(2);
-            // type 7: (list u8)
-            streams_type.ty().defined_type().list(wasm_encoder::ComponentValType::Primitive(PrimitiveValType::U8));
-            // type 8: (result (error 5)) - result<_, stream-error>
-            streams_type.ty().defined_type().result(None, Some(wasm_encoder::ComponentValType::Type(5)));
-            // type 9: func type for blocking-write-and-flush
-            // func(self: borrow<output-stream>, contents: list<u8>) -> result<_, stream-error>
-            streams_type.ty().function().params([
-                ("self", wasm_encoder::ComponentValType::Type(6)),
-                ("contents", wasm_encoder::ComponentValType::Type(7)),
-            ]).result(Some(wasm_encoder::ComponentValType::Type(8)));
-            streams_type.export("[method]output-stream.blocking-write-and-flush", ComponentTypeRef::Func(9));
-
-            let (_, enc) = builder.ty(Some("io-streams-type"));
-            enc.instance(&streams_type);
+            // Type 2 within instance: result<_, error-code>
+            instance_type
+                .ty()
+                .defined_type()
+                .result(None, Some(ComponentValType::Type(1)));
+            // Type 3 within instance: async func(stream<u8>) -> result<_, error-code>
+            instance_type
+                .ty()
+                .function()
+                .async_(true)
+                .params([("data", ComponentValType::Type(0))])
+                .result(Some(ComponentValType::Type(2)));
+            // Export write-via-stream referencing type 3 within this instance type
+            instance_type.export("write-via-stream", wasm_encoder::ComponentTypeRef::Func(3));
+            enc.instance(&instance_type);
         }
 
-        // Import wasi:io/streams@0.2.3 as instance 1
-        builder.import("wasi:io/streams@0.2.3", ComponentTypeRef::Instance(2));
+        // Import stdout instance from WASI P3 (instance 1)
+        builder.import(
+            "wasi:cli/stdout@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(2),
+        );
 
-        // Alias export "output-stream" from instance 1 as type $output-stream (type 3)
-        builder.alias_export(1, "output-stream", ComponentExportKind::Type);
+        // Alias write-via-stream from stdout instance (instance 1)
+        builder.alias_export(1, "write-via-stream", ComponentExportKind::Func);
 
         // ========================================
-        // Type 4: wasi:cli/stdout instance type
+        // Type 3: stream<u8> for stream intrinsics
         // ========================================
         {
-            let mut stdout_type = wasm_encoder::InstanceType::new();
-            // alias outer output-stream type
-            stdout_type.alias(wasm_encoder::Alias::Outer {
-                count: 1,
-                kind: wasm_encoder::ComponentOuterAliasKind::Type,
-                index: 3, // $output-stream
-            });
-            stdout_type.export("output-stream", ComponentTypeRef::Type(TypeBounds::Eq(0)));
-            // Type indices after exports:
-            // - alias: type 0
-            // - export output-stream (eq 0): type 1
-            // type 2: (own 1) - own output-stream
-            stdout_type.ty().defined_type().own(1);
-            // type 3: func () -> own output-stream
-            stdout_type.ty().function().params::<[(&str, wasm_encoder::ComponentValType); 0], wasm_encoder::ComponentValType>([]).result(Some(wasm_encoder::ComponentValType::Type(2)));
-            stdout_type.export("get-stdout", ComponentTypeRef::Func(3));
-
-            let (_, enc) = builder.ty(Some("cli-stdout-type"));
-            enc.instance(&stdout_type);
+            let (_, enc) = builder.ty(Some("stream-u8"));
+            enc.defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
         }
 
-        // Import wasi:cli/stdout@0.2.3 as instance 2
-        builder.import("wasi:cli/stdout@0.2.3", ComponentTypeRef::Instance(4));
-
-        // Alias functions from instances
-        builder.alias_export(2, "get-stdout", ComponentExportKind::Func); // func 0: $get-stdout
-        builder.alias_export(1, "[method]output-stream.blocking-write-and-flush", ComponentExportKind::Func); // func 1: $write-flush
+        // ========================================
+        // Type 4: result unit for run function (needed for task.return)
+        // ========================================
+        {
+            let (_, enc) = builder.ty(Some("result-unit"));
+            enc.defined_type().result(None, None);
+        }
 
         // ========================================
         // Core memory module
@@ -247,7 +241,7 @@ impl Codegen {
         let mem_module = self.build_memory_module(&string_data);
         builder.core_module_raw(Some("mem-mod"), &mem_module);
 
-        // Instantiate memory module
+        // Instantiate memory module (core instance 0)
         builder.core_instantiate(Some("mem"), 0, Vec::<(&str, ModuleArg)>::new());
 
         // Alias memory and realloc from mem instance
@@ -255,75 +249,354 @@ impl Codegen {
         builder.core_alias_export(Some("realloc"), 0, "realloc", ExportKind::Func);
 
         // ========================================
-        // Canon lower WASI functions
+        // Stream canonical intrinsics for stream<u8> (type index 3)
         // ========================================
-        // Lower get-stdout (no memory needed)
-        builder.lower_func(Some("get-stdout-core"), 0, Vec::<CanonicalOption>::new());
+        // Core func 1: stream.new -> returns i64 (rx in low 32, tx in high 32)
+        builder.stream_new(3);
+        // Core func 2: stream.write (tx, ptr, len) -> i32 status
+        builder.stream_write(
+            3,
+            [CanonicalOption::Memory(0), CanonicalOption::Realloc(0)],
+        );
+        // Core func 3: stream.drop-writable (tx)
+        builder.stream_drop_writable(3);
 
-        // Lower write-flush (needs memory and realloc)
-        builder.lower_func(Some("write-flush-core"), 1, [
-            CanonicalOption::Memory(0),
-            CanonicalOption::Realloc(0),
-        ]);
+        // Core func 4: stream.drop-readable (rx)
+        builder.stream_drop_readable(3);
 
-        // Resource drop for output-stream
-        builder.resource_drop(3); // type index for $output-stream
+        // Lower write-via-stream (func 0) to core func 5
+        // Use Async lowering - returns i32 (subtask handle or completion status)
+        builder.lower_func(
+            Some("write-via-stream-core"),
+            0,
+            [
+                CanonicalOption::Async,
+                CanonicalOption::Memory(0),
+                CanonicalOption::Realloc(0),
+            ],
+        );
+
+        // Core func 6: task.return for completing async tasks
+        // Result type is type 4 (result unit)
+        // For simple result types without payloads, no memory option needed
+        builder.task_return(Some(ComponentValType::Type(4)), []);
+
+        // Core func 7: waitable-set.new
+        builder.waitable_set_new();
+
+        // Core func 8: waitable.join
+        builder.waitable_join();
+
+        // Core func 9: waitable-set.wait
+        builder.waitable_set_wait(false, 0);
+
+        // Core func 10: subtask.drop
+        builder.subtask_drop();
 
         // ========================================
-        // Main core module
+        // Main core module for P3
         // ========================================
-        let main_module = self.build_main_module(ast_module);
+        let main_module = self.build_main_module_p3(ast_module);
         builder.core_module_raw(Some("main-mod"), &main_module);
 
-        // Create instance with WASI imports
-        // Core func indices: 0=realloc, 1=get-stdout, 2=write-flush, 3=drop
+        // Create instance with stream intrinsics + lowered WASI function + async intrinsics
+        // Core func indices:
+        // 0=realloc, 1=stream.new, 2=stream.write, 3=stream.drop-writable,
+        // 4=stream.drop-readable, 5=write-via-stream, 6=task.return, 7=waitable-set.new,
+        // 8=waitable.join, 9=waitable-set.wait, 10=subtask.drop
         let wasi_exports = [
-            ("get-stdout", ExportKind::Func, 1),
-            ("write-flush", ExportKind::Func, 2),
-            ("drop-ostream", ExportKind::Func, 3),
+            ("stream-new", ExportKind::Func, 1),
+            ("stream-write", ExportKind::Func, 2),
+            ("stream-drop-writable", ExportKind::Func, 3),
+            ("stream-drop-readable", ExportKind::Func, 4),
+            ("write-via-stream", ExportKind::Func, 5),
+            ("task-return", ExportKind::Func, 6),
+            ("waitable-set-new", ExportKind::Func, 7),
+            ("waitable-join", ExportKind::Func, 8),
+            ("waitable-set-wait", ExportKind::Func, 9),
+            ("subtask-drop", ExportKind::Func, 10),
         ];
-        let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
+        let wasi_instance =
+            builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
 
-        let env_exports = [
-            ("memory", ExportKind::Memory, 0),
-        ];
+        let env_exports = [("memory", ExportKind::Memory, 0)];
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
 
-        // Instantiate main module
-        builder.core_instantiate(Some("main"), 1, [
-            ("wasi", ModuleArg::Instance(wasi_instance)),
-            ("env", ModuleArg::Instance(env_instance)),
-        ]);
+        // Instantiate main module (core instance 3)
+        builder.core_instantiate(
+            Some("main"),
+            1,
+            [
+                ("wasi", ModuleArg::Instance(wasi_instance)),
+                ("env", ModuleArg::Instance(env_instance)),
+            ],
+        );
 
-        // Alias run function from main instance (instance 3)
-        // Instances: 0=mem, 1=wasi, 2=env, 3=main
+        // Alias run function from main instance
+        // Core instances: 0=mem, 1=wasi, 2=env, 3=main
         builder.core_alias_export(Some("run-core"), 3, "run", ExportKind::Func);
 
-        // ========================================
-        // Result type and canon lift
-        // ========================================
-        // Type for result unit
-        {
-            let (_, enc) = builder.ty(Some("result-unit"));
-            enc.defined_type().result(None, None);
-        }
-
-        // Type for run function: () -> result
+        // Type 5: async run function type () -> result
         {
             let (_, enc) = builder.ty(Some("run-func-type"));
-            enc.function().params::<[(&str, wasm_encoder::ComponentValType); 0], wasm_encoder::ComponentValType>([]).result(Some(wasm_encoder::ComponentValType::Type(5)));
+            enc.function()
+                .async_(true)
+                .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                .result(Some(ComponentValType::Type(4)));
         }
 
-        // Lift run function
-        // Core funcs: 0=realloc, 1=get-stdout, 2=write-flush, 3=drop, 4=run
-        // This creates component func 2
-        builder.lift_func(Some("run"), 4, 6, Vec::<CanonicalOption>::new());
+        // Lift run function using type 5 with Async option
+        // Core func 11 = the run function (after 10 imports + 1 defined)
+        builder.lift_func(
+            Some("run"),
+            11,
+            5,
+            [CanonicalOption::Async, CanonicalOption::Memory(0)],
+        );
 
-        // For WASI CLI, we need to export the run function.
-        // wasmtime with --invoke run should work for direct function exports.
-        builder.export("run", ComponentExportKind::Func, 2, None);
+        // Export run function (func 1)
+        builder.export("run", ComponentExportKind::Func, 1, None);
 
         builder.finish()
+    }
+
+    /// Build main module for WASI P3 with write-via-stream
+    fn build_main_module_p3(&self, ast_module: &crate::ast::Module) -> Vec<u8> {
+        let mut module = Module::new();
+
+        // Type section
+        let mut types = TypeSection::new();
+        // Type 0: stream-new () -> i64 (rx in low 32, tx in high 32)
+        types.ty().function([], [ValType::I64]);
+        // Type 1: stream-write (tx, ptr, len) -> i32 status
+        types
+            .ty()
+            .function([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
+        // Type 2: stream-drop-writable (tx) -> ()
+        types.ty().function([ValType::I32], []);
+        // Type 3: stream-drop-readable (rx) -> ()
+        types.ty().function([ValType::I32], []);
+        // Type 4: write-via-stream async lowered (rx, outptr) -> i32
+        // Async lowering: takes stream handle + outptr for result, returns status
+        // Return value: if bit 0 set (odd) = completed, if bit 0 clear (even) = subtask handle
+        types
+            .ty()
+            .function([ValType::I32, ValType::I32], [ValType::I32]);
+        // Type 5: task-return (discriminant) -> ()
+        types.ty().function([ValType::I32], []);
+        // Type 6: waitable-set-new () -> i32
+        types.ty().function([], [ValType::I32]);
+        // Type 7: waitable-join (set, waitable) -> ()
+        types.ty().function([ValType::I32, ValType::I32], []);
+        // Type 8: waitable-set-wait (set, outptr) -> i32
+        types
+            .ty()
+            .function([ValType::I32, ValType::I32], [ValType::I32]);
+        // Type 9: subtask-drop (subtask) -> ()
+        types.ty().function([ValType::I32], []);
+        // Type 10: run () -> ()
+        // Async entry point - uses task.return to provide result
+        types.ty().function([], []);
+        module.section(&types);
+
+        // Import section
+        let mut imports = ImportSection::new();
+        imports.import("wasi", "stream-new", EntityType::Function(0));
+        imports.import("wasi", "stream-write", EntityType::Function(1));
+        imports.import("wasi", "stream-drop-writable", EntityType::Function(2));
+        imports.import("wasi", "stream-drop-readable", EntityType::Function(3));
+        imports.import("wasi", "write-via-stream", EntityType::Function(4));
+        imports.import("wasi", "task-return", EntityType::Function(5));
+        imports.import("wasi", "waitable-set-new", EntityType::Function(6));
+        imports.import("wasi", "waitable-join", EntityType::Function(7));
+        imports.import("wasi", "waitable-set-wait", EntityType::Function(8));
+        imports.import("wasi", "subtask-drop", EntityType::Function(9));
+        imports.import(
+            "env",
+            "memory",
+            EntityType::Memory(MemoryType {
+                minimum: 1,
+                maximum: None,
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            }),
+        );
+        module.section(&imports);
+
+        // Function section
+        let mut functions = FunctionSection::new();
+        functions.function(10); // run function uses type 10 (no return value, uses task.return)
+        module.section(&functions);
+
+        // Export section
+        let mut exports = ExportSection::new();
+        exports.export("run", ExportKind::Func, 10); // function index 10 (after 10 imports)
+        module.section(&exports);
+
+        // Code section
+        let mut code = CodeSection::new();
+        // Locals:
+        // 0: $ret64 (i64) - for stream.new result / waitable-set handle (i64 but used as i32)
+        // 1: $rx (i32) - readable stream handle
+        // 2: $tx (i32) - writable stream handle
+        // 3: $status (i32) - write status / waitable handle
+        let mut run_func = Function::new([(1, ValType::I64), (3, ValType::I32)]);
+
+        // Generate body from AST
+        self.generate_run_body_instructions_p3(&mut run_func, ast_module);
+
+        // Call task.return to complete the async task
+        // For result unit with no payload, pass discriminant directly (0 = ok)
+        run_func.instruction(&Instruction::I32Const(0)); // 0 = ok discriminant
+        run_func.instruction(&Instruction::Call(5)); // task-return (func 5)
+
+        // No return value - task.return already provided the result
+        run_func.instruction(&Instruction::End);
+        code.function(&run_func);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    fn generate_run_body_instructions_p3(
+        &self,
+        func: &mut Function,
+        ast_module: &crate::ast::Module,
+    ) {
+        // Find main function
+        let main_func = ast_module.items.iter().find_map(|item| {
+            if let Item::Function(f) = item {
+                if f.name == "main" {
+                    return Some(f);
+                }
+            }
+            None
+        });
+
+        if let Some(main) = main_func {
+            for stmt in &main.body.stmts {
+                self.generate_stmt_instructions_p3(func, stmt);
+            }
+        }
+    }
+
+    fn generate_stmt_instructions_p3(&self, func: &mut Function, stmt: &Stmt) {
+        if let Stmt::Expr(expr_stmt) = stmt {
+            self.generate_expr_instructions_p3(func, &expr_stmt.expr);
+        }
+    }
+
+    fn generate_expr_instructions_p3(&self, func: &mut Function, expr: &Expr) {
+        if let Expr::Call(call) = expr {
+            self.generate_call_instructions_p3(func, call);
+        }
+    }
+
+    fn generate_call_instructions_p3(&self, func: &mut Function, call: &CallExpr) {
+        if let Expr::Ident(ident) = &call.callee {
+            if ident.name == "println" {
+                self.generate_println_instructions_p3(func, call);
+            }
+        }
+    }
+
+    /// Generate println using WASI P3 write-via-stream
+    /// Pattern:
+    /// 1. Create stream with stream.new (returns rx and tx)
+    /// 2. Call write-via-stream(rx) to connect readable end to stdout (starts consumer)
+    /// 3. Write data to tx with stream.write
+    /// 4. Drop tx to signal EOF (stream.drop-writable)
+    /// 5. Wait for write-via-stream subtask to complete
+    /// 6. Drop subtask
+    fn generate_println_instructions_p3(&self, func: &mut Function, call: &CallExpr) {
+        if call.args.len() != 1 {
+            return;
+        }
+
+        if let Expr::Literal(lit) = &call.args[0] {
+            if let Literal::String(s) = &lit.value {
+                let str_offset = self.get_string_offset(s);
+                let str_len = s.len() as i32;
+
+                // Local indices (defined in build_main_module_p3):
+                // 0: $ret64 (i64) - stream.new result / waitable-set handle
+                // 1: $rx (i32) - readable stream handle
+                // 2: $tx (i32) - writable stream handle
+                // 3: $status (i32) - subtask handle / status
+
+                // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
+                func.instruction(&Instruction::Call(0)); // stream-new
+                func.instruction(&Instruction::LocalSet(0)); // store i64 result
+
+                // Extract rx (low 32 bits)
+                func.instruction(&Instruction::LocalGet(0));
+                func.instruction(&Instruction::I32WrapI64);
+                func.instruction(&Instruction::LocalSet(1)); // $rx
+
+                // Extract tx (high 32 bits)
+                func.instruction(&Instruction::LocalGet(0));
+                func.instruction(&Instruction::I64Const(32));
+                func.instruction(&Instruction::I64ShrU);
+                func.instruction(&Instruction::I32WrapI64);
+                func.instruction(&Instruction::LocalSet(2)); // $tx
+
+                // 2. Call write-via-stream(rx, outptr) to start consuming from the stream
+                // Async lowered: takes stream handle + outptr, returns status
+                // Status: bit 0 set (odd) = completed, bit 0 clear (even) = subtask handle
+                func.instruction(&Instruction::LocalGet(1)); // rx (readable end goes to stdout)
+                func.instruction(&Instruction::I32Const(2048)); // outptr for result
+                func.instruction(&Instruction::Call(4)); // write-via-stream (func 4)
+                func.instruction(&Instruction::LocalSet(3)); // save subtask/status
+
+                // 3. Write string to stream: stream-write(tx, ptr, len) -> status
+                func.instruction(&Instruction::LocalGet(2)); // tx
+                func.instruction(&Instruction::I32Const(str_offset as i32)); // ptr
+                func.instruction(&Instruction::I32Const(str_len)); // len
+                func.instruction(&Instruction::Call(1)); // stream-write
+                func.instruction(&Instruction::Drop); // ignore write status for now
+
+                // 4. Close writable end to signal EOF: stream-drop-writable(tx)
+                func.instruction(&Instruction::LocalGet(2)); // tx
+                func.instruction(&Instruction::Call(2)); // stream-drop-writable
+
+                // 5. Wait for write-via-stream subtask to complete if still pending
+                // Check if pending (bit 0 clear = even means subtask handle)
+                func.instruction(&Instruction::LocalGet(3));
+                func.instruction(&Instruction::I32Const(1));
+                func.instruction(&Instruction::I32And);
+                func.instruction(&Instruction::I32Eqz); // true if pending (subtask handle)
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+
+                // Pending - wait for write-via-stream to complete
+                // local 3 contains the subtask handle
+
+                // Create waitable-set: waitable-set-new() -> i32
+                func.instruction(&Instruction::Call(6)); // waitable-set-new (func 6)
+                // Store set handle in local 0 (as i64)
+                func.instruction(&Instruction::I64ExtendI32U);
+                func.instruction(&Instruction::LocalSet(0));
+
+                // Join subtask to waitable-set: waitable-join(set, waitable)
+                func.instruction(&Instruction::LocalGet(0));
+                func.instruction(&Instruction::I32WrapI64); // set handle
+                func.instruction(&Instruction::LocalGet(3)); // subtask handle
+                func.instruction(&Instruction::Call(7)); // waitable-join (func 7)
+
+                // Wait for completion: waitable-set-wait(set, outptr) -> i32
+                func.instruction(&Instruction::LocalGet(0));
+                func.instruction(&Instruction::I32WrapI64); // set handle
+                func.instruction(&Instruction::I32Const(2048)); // outptr
+                func.instruction(&Instruction::Call(8)); // waitable-set-wait (func 8)
+                func.instruction(&Instruction::Drop); // ignore result
+
+                // 6. Drop subtask: subtask-drop(subtask)
+                func.instruction(&Instruction::LocalGet(3)); // subtask handle
+                func.instruction(&Instruction::Call(9)); // subtask-drop (func 9)
+
+                func.instruction(&Instruction::End);
+            }
+        }
     }
 
     fn build_memory_module(&self, string_data: &[u8]) -> Vec<u8> {
@@ -378,127 +651,6 @@ impl Codegen {
         }
 
         module.finish()
-    }
-
-    fn build_main_module(&self, ast_module: &crate::ast::Module) -> Vec<u8> {
-        let mut module = Module::new();
-
-        // Type section
-        let mut types = TypeSection::new();
-        // Type 0: get_stdout () -> i32
-        types.ty().function([], [ValType::I32]);
-        // Type 1: write_flush (i32, i32, i32, i32) -> ()
-        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32], []);
-        // Type 2: drop_ostream (i32) -> ()
-        types.ty().function([ValType::I32], []);
-        // Type 3: run () -> i32
-        types.ty().function([], [ValType::I32]);
-        module.section(&types);
-
-        // Import section
-        let mut imports = ImportSection::new();
-        imports.import("wasi", "get-stdout", EntityType::Function(0));
-        imports.import("wasi", "write-flush", EntityType::Function(1));
-        imports.import("wasi", "drop-ostream", EntityType::Function(2));
-        imports.import("env", "memory", EntityType::Memory(MemoryType {
-            minimum: 1,
-            maximum: None,
-            memory64: false,
-            shared: false,
-            page_size_log2: None,
-        }));
-        module.section(&imports);
-
-        // Function section
-        let mut functions = FunctionSection::new();
-        functions.function(3); // run function uses type 3
-        module.section(&functions);
-
-        // Export section
-        let mut exports = ExportSection::new();
-        exports.export("run", ExportKind::Func, 3); // function index 3 (after 3 imports)
-        module.section(&exports);
-
-        // Code section
-        let mut code = CodeSection::new();
-        let mut run_func = Function::new([(1, ValType::I32)]); // local $handle
-
-        // Generate body from AST
-        self.generate_run_body_instructions(&mut run_func, ast_module);
-
-        // Return 0
-        run_func.instruction(&Instruction::I32Const(0));
-        run_func.instruction(&Instruction::End);
-        code.function(&run_func);
-        module.section(&code);
-
-        module.finish()
-    }
-
-    fn generate_run_body_instructions(&self, func: &mut Function, ast_module: &crate::ast::Module) {
-        // Find main function
-        let main_func = ast_module.items.iter().find_map(|item| {
-            if let Item::Function(f) = item {
-                if f.name == "main" {
-                    return Some(f);
-                }
-            }
-            None
-        });
-
-        if let Some(main) = main_func {
-            for stmt in &main.body.stmts {
-                self.generate_stmt_instructions(func, stmt);
-            }
-        }
-    }
-
-    fn generate_stmt_instructions(&self, func: &mut Function, stmt: &Stmt) {
-        if let Stmt::Expr(expr_stmt) = stmt {
-            self.generate_expr_instructions(func, &expr_stmt.expr);
-        }
-    }
-
-    fn generate_expr_instructions(&self, func: &mut Function, expr: &Expr) {
-        if let Expr::Call(call) = expr {
-            self.generate_call_instructions(func, call);
-        }
-    }
-
-    fn generate_call_instructions(&self, func: &mut Function, call: &CallExpr) {
-        if let Expr::Ident(ident) = &call.callee {
-            if ident.name == "println" {
-                self.generate_println_instructions(func, call);
-            }
-        }
-    }
-
-    fn generate_println_instructions(&self, func: &mut Function, call: &CallExpr) {
-        if call.args.len() != 1 {
-            return;
-        }
-
-        if let Expr::Literal(lit) = &call.args[0] {
-            if let Literal::String(s) = &lit.value {
-                let str_offset = self.get_string_offset(s);
-                let str_len = s.len() as i32;
-
-                // Call get_stdout and store handle
-                func.instruction(&Instruction::Call(0)); // get_stdout
-                func.instruction(&Instruction::LocalSet(0)); // store in $handle
-
-                // Call write_flush(handle, offset, len, result_ptr)
-                func.instruction(&Instruction::LocalGet(0)); // handle
-                func.instruction(&Instruction::I32Const(str_offset as i32)); // offset
-                func.instruction(&Instruction::I32Const(str_len)); // len
-                func.instruction(&Instruction::I32Const(100)); // result ptr
-                func.instruction(&Instruction::Call(1)); // write_flush
-
-                // Drop the handle
-                func.instruction(&Instruction::LocalGet(0)); // handle
-                func.instruction(&Instruction::Call(2)); // drop_ostream
-            }
-        }
     }
 }
 
