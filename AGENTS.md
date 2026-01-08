@@ -50,9 +50,10 @@ This project relays on the following features:
 ## Project Development
 
 ```sh
-make build
-
-make test
+cargo build
+cargo test
+cargo fmt    # formatting
+cargo clippy # linting
 
 make hello-run # simple smoke test
 ```
