@@ -138,11 +138,16 @@ pub fn run(opts: BuildOptions) {
         }
     }
 
-    // Also generate WAT for debugging
-    let wat = wasmprinter::print_bytes(&wasm).unwrap_or_else(|e| {
-        eprintln!("Error generating WAT: {e}");
-        process::exit(1);
-    });
+    // Also generate WAT for debugging (folded style)
+    let mut config = wasmprinter::Config::new();
+    config.fold_instructions(true);
+    let mut wat = String::new();
+    config
+        .print(&wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
+        .unwrap_or_else(|e| {
+            eprintln!("Error generating WAT: {e}");
+            process::exit(1);
+        });
     let wat_path = output_path.with_extension("wat");
     match fs::write(&wat_path, &wat) {
         Ok(_) => {
