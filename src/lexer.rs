@@ -220,7 +220,7 @@ impl<'a> Lexer<'a> {
 
             _ => {
                 return Err(LexError {
-                    message: format!("unexpected character: '{}'", ch),
+                    message: format!("unexpected character: '{ch}'"),
                     span: Span::new(start, self.pos + 1, start_line, start_column),
                 });
             }
@@ -361,7 +361,7 @@ impl<'a> Lexer<'a> {
                     }
                     let text = &self.input[start..self.pos];
                     let value: f64 = text.parse().map_err(|_| LexError {
-                        message: format!("invalid float literal: {}", text),
+                        message: format!("invalid float literal: {text}"),
                         span: Span::new(start, self.pos, start_line, start_column),
                     })?;
                     return Ok(TokenKind::FloatLit(value));
@@ -371,7 +371,7 @@ impl<'a> Lexer<'a> {
 
         let text = &self.input[start..self.pos];
         let value: i64 = text.parse().map_err(|_| LexError {
-            message: format!("invalid integer literal: {}", text),
+            message: format!("invalid integer literal: {text}"),
             span: Span::new(start, self.pos, start_line, start_column),
         })?;
 
@@ -424,7 +424,7 @@ impl<'a> Lexer<'a> {
                         }
                         Some(ch) => {
                             return Err(LexError {
-                                message: format!("invalid escape sequence: \\{}", ch),
+                                message: format!("invalid escape sequence: \\{ch}"),
                                 span: Span::new(start, self.pos, start_line, start_column),
                             });
                         }

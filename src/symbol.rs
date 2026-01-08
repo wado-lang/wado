@@ -175,7 +175,7 @@ impl SymbolTable {
         let module = self
             .modules
             .entry(module_path.to_vec())
-            .or_insert_with(HashMap::new);
+            .or_default();
         module.insert(name.to_string(), id);
 
         id

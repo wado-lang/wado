@@ -33,7 +33,7 @@ pub enum AnalyzeError {
 impl std::fmt::Display for AnalyzeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnalyzeError::ResolveError(e) => write!(f, "{}", e),
+            AnalyzeError::ResolveError(e) => write!(f, "{e}"),
             AnalyzeError::ImportNotFound {
                 module_path,
                 name,

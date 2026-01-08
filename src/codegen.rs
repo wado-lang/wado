@@ -40,7 +40,7 @@ impl Codegen {
     /// Generate WAT text format (for debugging)
     pub fn generate_wat(&mut self, module: &crate::ast::Module) -> String {
         let wasm = self.generate_wasm(module);
-        wasmprinter::print_bytes(&wasm).unwrap_or_else(|e| format!("Error: {}", e))
+        wasmprinter::print_bytes(&wasm).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
     fn collect_strings(&mut self, module: &crate::ast::Module) {
@@ -134,7 +134,7 @@ impl Codegen {
             }
             offset += lit.len() as u32;
         }
-        panic!("String not found: {}", s);
+        panic!("String not found: {s}");
     }
 
     /// Generate component for WASI P3

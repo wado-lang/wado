@@ -43,7 +43,7 @@ fn main() {
                 process::exit(0);
             }
             arg if arg.starts_with('-') => {
-                eprintln!("Error: unknown option '{}'", arg);
+                eprintln!("Error: unknown option '{arg}'");
                 process::exit(1);
             }
             arg => {
@@ -64,7 +64,7 @@ fn main() {
     let source = match fs::read_to_string(filename) {
         Ok(content) => content,
         Err(e) => {
-            eprintln!("Error reading file '{}': {}", filename, e);
+            eprintln!("Error reading file '{filename}': {e}");
             process::exit(1);
         }
     };
@@ -101,7 +101,7 @@ fn main() {
         Ok(()) => {}
         Err(errors) => {
             for e in errors {
-                eprintln!("Analysis error: {}", e);
+                eprintln!("Analysis error: {e}");
             }
             process::exit(1);
         }
@@ -119,7 +119,7 @@ fn main() {
             eprintln!("Generated: {}", output_path.display());
         }
         Err(e) => {
-            eprintln!("Error writing output file: {}", e);
+            eprintln!("Error writing output file: {e}");
             process::exit(1);
         }
     }
@@ -132,7 +132,7 @@ fn main() {
             eprintln!("Generated: {}", wat_path.display());
         }
         Err(e) => {
-            eprintln!("Error writing WAT file: {}", e);
+            eprintln!("Error writing WAT file: {e}");
             process::exit(1);
         }
     }
