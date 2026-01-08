@@ -36,17 +36,19 @@ pub effect Stdin {
 pub effect Stdout {
     /// Write the given stream to stdout.
     ///
-    /// This is an async function in WIT. In Wado, async is handled via
-    /// stack switching, so no async keyword is needed.
+    /// This is an async function in WIT (async func).
+    /// In Wado, function implementations don't use the async keyword
+    /// (colorless async via stack switching), but effect declarations
+    /// must specify async to match WIT signatures accurately.
     #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
-    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
 // Effect interface for wasi:cli/stderr@0.3.0-rc-2025-09-16
 pub effect Stderr {
     /// Write the given stream to stderr.
     #[wasi("wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream")]
-    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
 // Effect interface for wasi:cli/environment@0.3.0-rc-2025-09-16
@@ -232,7 +234,7 @@ world CliCommand {
     }
 
     // Entry point: maps to WIT's "run: async func() -> result"
-    // Note: In Wado, async is handled via stack switching (colorless async),
-    // so no async keyword is needed in the function signature
-    export fn run() -> Result<(), ()>;
+    // The async keyword is required in world declarations to match WIT signatures.
+    // Function implementations don't need async (colorless async via stack switching).
+    export async fn run() -> Result<(), ()>;
 }
