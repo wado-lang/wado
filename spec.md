@@ -606,7 +606,7 @@ world WorldName {
 The standard WASI CLI `command` world in Wado syntax:
 
 ```rust
-// Based on wasi:cli@0.2.x command world
+// Based on wasi:cli@0.3.0-rc-2025-09-16 command world
 // Effect definitions are in core::cli (see cli.wado)
 
 world CliCommand {
@@ -649,7 +649,9 @@ world CliCommand {
         get_terminal_stderr,
     }
 
-    // Entry point: maps to WIT's "run: func() -> result"
+    // Entry point: maps to WIT's "run: async func() -> result"
+    // Note: In Wado, async is handled via stack switching (colorless async),
+    // so no async keyword is needed in the function signature
     export fn run() -> Result<(), ()>;
 }
 
