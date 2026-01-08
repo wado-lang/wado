@@ -1,7 +1,11 @@
+mod analyze;
 mod ast;
 mod codegen;
 mod lexer;
 mod parser;
+mod resolver;
+mod stdlib;
+mod symbol;
 mod token;
 
 use std::env;
@@ -9,6 +13,7 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
+use analyze::Analyzer;
 use codegen::Codegen;
 use lexer::Lexer;
 use parser::Parser;
@@ -90,9 +95,22 @@ fn main() {
         }
     };
 
+    // Semantic analysis (module resolution, symbol table)
+    let mut analyzer = Analyzer::new();
+    match analyzer.analyze(&module, &[]) {
+        Ok(()) => {}
+        Err(errors) => {
+            for e in errors {
+                eprintln!("Analysis error: {}", e);
+            }
+            process::exit(1);
+        }
+    }
+
     // Code generation (Component Model)
-    let mut codegen = Codegen::new();
-    let wasm = codegen.generate(&module);
+    let symbols = analyzer.into_symbols();
+    let mut codegen = Codegen::new(symbols);
+    let wasm = codegen.generate_wasm(&module);
 
     // Output Wasm binary file
     let output_path = Path::new(filename).with_extension("wasm");

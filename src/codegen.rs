@@ -3,6 +3,7 @@
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
 use crate::ast::{Block, CallExpr, Expr, Item, Literal, Stmt};
+use crate::symbol::{SymbolKind, SymbolTable};
 use wasm_encoder::{
     Alias, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
     ComponentOuterAliasKind, ComponentValType, ConstExpr, DataSection, DataSegment,
@@ -15,23 +16,20 @@ use wasm_encoder::{
 /// Targets WASI P3 (0.3.0-rc-2025-09-16)
 pub struct Codegen {
     string_literals: Vec<String>,
-}
-
-impl Default for Codegen {
-    fn default() -> Self {
-        Self::new()
-    }
+    symbols: SymbolTable,
 }
 
 impl Codegen {
-    pub fn new() -> Self {
+    /// Create a new code generator with a symbol table
+    pub fn new(symbols: SymbolTable) -> Self {
         Self {
             string_literals: Vec::new(),
+            symbols,
         }
     }
 
     /// Generate Component Model binary Wasm
-    pub fn generate(&mut self, module: &crate::ast::Module) -> Vec<u8> {
+    pub fn generate_wasm(&mut self, module: &crate::ast::Module) -> Vec<u8> {
         // First pass: collect string literals
         self.collect_strings(module);
 
@@ -41,7 +39,7 @@ impl Codegen {
 
     /// Generate WAT text format (for debugging)
     pub fn generate_wat(&mut self, module: &crate::ast::Module) -> String {
-        let wasm = self.generate(module);
+        let wasm = self.generate_wasm(module);
         wasmprinter::print_bytes(&wasm).unwrap_or_else(|e| format!("Error: {}", e))
     }
 
@@ -495,8 +493,29 @@ impl Codegen {
 
     fn generate_call_instructions_p3(&self, func: &mut Function, call: &CallExpr) {
         if let Expr::Ident(ident) = &call.callee {
-            if ident.name == "println" {
-                self.generate_println_instructions_p3(func, call);
+            // Look up the function in the symbol table
+            if let Some(symbol) = self.symbols.lookup(&ident.name) {
+                if let SymbolKind::Function(func_sym) = &symbol.kind {
+                    // Check if it's a builtin function
+                    if func_sym.is_builtin {
+                        self.generate_builtin_call(func, &ident.name, call);
+                    }
+                    // TODO: handle user-defined function calls
+                }
+            } else {
+                // Symbol not found - for now, try as builtin (backwards compatibility)
+                self.generate_builtin_call(func, &ident.name, call);
+            }
+        }
+    }
+
+    /// Generate code for a builtin function call
+    fn generate_builtin_call(&self, func: &mut Function, name: &str, call: &CallExpr) {
+        match name {
+            "println" => self.generate_println_instructions_p3(func, call),
+            // Add more builtins here as needed
+            _ => {
+                // Unknown builtin - ignore for now
             }
         }
     }
@@ -657,6 +676,7 @@ impl Codegen {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyze::Analyzer;
     use crate::lexer::Lexer;
     use crate::parser::Parser;
 
@@ -665,6 +685,12 @@ mod tests {
         let tokens = lexer.tokenize().expect("lexer error");
         let mut parser = Parser::new(tokens);
         parser.parse().expect("parser error")
+    }
+
+    fn analyze(module: &crate::ast::Module) -> SymbolTable {
+        let mut analyzer = Analyzer::new();
+        analyzer.analyze(module, &[]).expect("analysis error");
+        analyzer.into_symbols()
     }
 
     #[test]
@@ -679,7 +705,8 @@ mod tests {
         "#,
         );
 
-        let mut codegen = Codegen::new();
+        let symbols = analyze(&ast);
+        let mut codegen = Codegen::new(symbols);
         codegen.collect_strings(&ast);
 
         assert_eq!(codegen.string_literals.len(), 1);
@@ -698,8 +725,9 @@ mod tests {
         "#,
         );
 
-        let mut codegen = Codegen::new();
-        let wasm = codegen.generate(&ast);
+        let symbols = analyze(&ast);
+        let mut codegen = Codegen::new(symbols);
+        let wasm = codegen.generate_wasm(&ast);
 
         // Verify it starts with Wasm magic number
         assert!(wasm.len() > 8);
@@ -722,7 +750,8 @@ mod tests {
         "#,
         );
 
-        let mut codegen = Codegen::new();
+        let symbols = analyze(&ast);
+        let mut codegen = Codegen::new(symbols);
         let wat = codegen.generate_wat(&ast);
 
         // Verify it produces valid WAT
