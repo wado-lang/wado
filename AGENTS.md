@@ -1,3 +1,5 @@
+# Wado Project
+
 This is the specification and implementation of **Wado**, a new programming language targeting Wasm/WASI.
 
 ## The Spec
@@ -8,7 +10,14 @@ Read @spec.md to understand the new language.
 
 The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
 
-It generates a WAT file and we run it with `wasmtime`.
+## The CLI
+
+The CLI is implemented in `wado-cli/` with sub-command style CLI:
+
+```sh
+wado build -o file.wasm file.wado
+wado run file.wado
+```
 
 ## Wasm and WASI
 
@@ -25,10 +34,10 @@ This project relays on the following features:
 - Wasm Reference Types
 - Wasm Wide Arithmetic for i128 and u128
 - Wasm Threads
+- Wasm Stack Switching
 - Wasm Component Model
-- WASI (targeting Preview 3, currently implementing 0.2.x)
-  - **Current**: WASI 0.2.x (wasi:io, wasi:cli) - working
-  - **Target**: WASI 0.3 (P3) with native stream/future types - pending Component Model async stabilization
+- WASI
+  - Current target: WASI 0.3 (P3) with native stream/future types
   - P3 (`0.3.0-rc-2025-09-16`) is supported by wasmtime v40 with `-W component-model-async=y`
   - See wasmtime P3 support: `find ../../bytecodealliance/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 

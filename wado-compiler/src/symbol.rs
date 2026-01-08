@@ -172,10 +172,7 @@ impl SymbolTable {
         self.symbols.push(symbol);
 
         // Register in module map
-        let module = self
-            .modules
-            .entry(module_path.to_vec())
-            .or_default();
+        let module = self.modules.entry(module_path.to_vec()).or_default();
         module.insert(name.to_string(), id);
 
         id

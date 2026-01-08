@@ -1,58 +1,58 @@
-mod analyze;
-mod ast;
-mod codegen;
-mod lexer;
-mod parser;
-mod resolver;
-mod stdlib;
-mod symbol;
-mod token;
-
-use std::env;
 use std::fs;
 use std::path::Path;
 use std::process;
 
-use analyze::Analyzer;
-use codegen::Codegen;
-use lexer::Lexer;
-use parser::Parser;
+use wado_compiler::{Analyzer, Codegen, Lexer, Parser};
 
-fn print_usage() {
-    eprintln!("Usage: wado-compiler [OPTIONS] <file.wado>");
-    eprintln!();
-    eprintln!("Options:");
-    eprintln!("  --help  Show this help message");
+pub struct BuildOptions {
+    pub input: String,
+    pub output: Option<String>,
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+pub fn print_usage() {
+    eprintln!("Usage: wado build [options] <file.wado>");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -o <file>   Output file path (default: <input>.wasm)");
+    eprintln!("  --help, -h  Show this help message");
+}
 
-    if args.len() < 2 {
-        print_usage();
-        process::exit(1);
-    }
+pub fn parse_args(args: &[String]) -> BuildOptions {
+    let mut output: Option<String> = None;
+    let mut input: Option<String> = None;
+    let mut i = 0;
 
-    // Parse arguments
-    let mut filename: Option<&str> = None;
-
-    for arg in &args[1..] {
-        match arg.as_str() {
+    while i < args.len() {
+        match args[i].as_str() {
             "--help" | "-h" => {
                 print_usage();
                 process::exit(0);
             }
+            "-o" => {
+                if i + 1 >= args.len() {
+                    eprintln!("Error: -o requires an argument");
+                    process::exit(1);
+                }
+                output = Some(args[i + 1].clone());
+                i += 2;
+            }
             arg if arg.starts_with('-') => {
                 eprintln!("Error: unknown option '{arg}'");
+                print_usage();
                 process::exit(1);
             }
             arg => {
-                filename = Some(arg);
+                if input.is_some() {
+                    eprintln!("Error: multiple input files not supported");
+                    process::exit(1);
+                }
+                input = Some(arg.to_string());
+                i += 1;
             }
         }
     }
 
-    let filename = match filename {
+    let input = match input {
         Some(f) => f,
         None => {
             eprintln!("Error: no input file specified");
@@ -61,6 +61,11 @@ fn main() {
         }
     };
 
+    BuildOptions { input, output }
+}
+
+/// Compile a Wado source file and return the Wasm binary
+pub fn compile(filename: &str) -> Vec<u8> {
     let source = match fs::read_to_string(filename) {
         Ok(content) => content,
         Err(e) => {
@@ -95,7 +100,7 @@ fn main() {
         }
     };
 
-    // Semantic analysis (module resolution, symbol table)
+    // Semantic analysis
     let mut analyzer = Analyzer::new();
     match analyzer.analyze(&module, &[]) {
         Ok(()) => {}
@@ -107,13 +112,22 @@ fn main() {
         }
     }
 
-    // Code generation (Component Model)
+    // Code generation
     let symbols = analyzer.into_symbols();
     let mut codegen = Codegen::new(symbols);
-    let wasm = codegen.generate_wasm(&module);
+    codegen.generate_wasm(&module)
+}
+
+pub fn run(opts: BuildOptions) {
+    let wasm = compile(&opts.input);
+
+    // Determine output path
+    let output_path = match &opts.output {
+        Some(path) => Path::new(path).to_path_buf(),
+        None => Path::new(&opts.input).with_extension("wasm"),
+    };
 
     // Output Wasm binary file
-    let output_path = Path::new(filename).with_extension("wasm");
     match fs::write(&output_path, &wasm) {
         Ok(_) => {
             eprintln!("Generated: {}", output_path.display());
@@ -125,8 +139,11 @@ fn main() {
     }
 
     // Also generate WAT for debugging
-    let wat = codegen.generate_wat(&module);
-    let wat_path = Path::new(filename).with_extension("wat");
+    let wat = wasmprinter::print_bytes(&wasm).unwrap_or_else(|e| {
+        eprintln!("Error generating WAT: {e}");
+        process::exit(1);
+    });
+    let wat_path = output_path.with_extension("wat");
     match fs::write(&wat_path, &wat) {
         Ok(_) => {
             eprintln!("Generated: {}", wat_path.display());
