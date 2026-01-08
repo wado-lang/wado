@@ -143,7 +143,11 @@ impl Codegen {
         let mut builder = ComponentBuilder::default();
 
         // Build string data for memory
-        let string_data: Vec<u8> = self.string_literals.iter().flat_map(|s| s.bytes()).collect();
+        let string_data: Vec<u8> = self
+            .string_literals
+            .iter()
+            .flat_map(|s| s.bytes())
+            .collect();
 
         // ========================================
         // Type 0: types instance type (for wasi:cli/types)
@@ -158,7 +162,10 @@ impl Codegen {
                 .defined_type()
                 .enum_type(["io", "illegal-byte-sequence", "pipe"]);
             // Export error-code type
-            instance_type.export("error-code", wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)));
+            instance_type.export(
+                "error-code",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+            );
             enc.instance(&instance_type);
         }
 
@@ -252,10 +259,7 @@ impl Codegen {
         // Core func 1: stream.new -> returns i64 (rx in low 32, tx in high 32)
         builder.stream_new(3);
         // Core func 2: stream.write (tx, ptr, len) -> i32 status
-        builder.stream_write(
-            3,
-            [CanonicalOption::Memory(0), CanonicalOption::Realloc(0)],
-        );
+        builder.stream_write(3, [CanonicalOption::Memory(0), CanonicalOption::Realloc(0)]);
         // Core func 3: stream.drop-writable (tx)
         builder.stream_drop_writable(3);
 
@@ -314,8 +318,7 @@ impl Codegen {
             ("waitable-set-wait", ExportKind::Func, 9),
             ("subtask-drop", ExportKind::Func, 10),
         ];
-        let wasi_instance =
-            builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
+        let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
 
         let env_exports = [("memory", ExportKind::Memory, 0)];
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
@@ -623,7 +626,10 @@ impl Codegen {
 
         // Type section: realloc type
         let mut types = TypeSection::new();
-        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I32],
+        );
         module.section(&types);
 
         // Function section
@@ -734,8 +740,11 @@ mod tests {
         assert_eq!(&wasm[0..4], b"\0asm");
 
         // Validate the generated Wasm using wasmparser
-        let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
-        validator.validate_all(&wasm).expect("Wasm validation failed");
+        let mut validator =
+            wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
+        validator
+            .validate_all(&wasm)
+            .expect("Wasm validation failed");
     }
 
     #[test]

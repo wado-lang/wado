@@ -14,23 +14,13 @@ use crate::stdlib;
 #[derive(Debug, Clone)]
 pub enum ResolveError {
     /// Module was not found
-    ModuleNotFound {
-        path: Vec<String>,
-    },
+    ModuleNotFound { path: Vec<String> },
     /// Error while parsing module
-    ParseError {
-        path: Vec<String>,
-        message: String,
-    },
+    ParseError { path: Vec<String>, message: String },
     /// Circular import detected
-    CircularImport {
-        path: Vec<String>,
-    },
+    CircularImport { path: Vec<String> },
     /// Lexer error
-    LexError {
-        path: Vec<String>,
-        message: String,
-    },
+    LexError { path: Vec<String>, message: String },
 }
 
 impl std::fmt::Display for ResolveError {
@@ -174,7 +164,11 @@ mod tests {
         let path = vec!["core".to_string(), "cli".to_string()];
 
         let result = resolver.load_module(&path);
-        assert!(result.is_ok(), "Failed to load core::cli: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to load core::cli: {:?}",
+            result.err()
+        );
 
         let module = result.unwrap();
         // core::cli should have some items

@@ -25,15 +25,9 @@ pub enum AnalyzeError {
         span: Span,
     },
     /// Duplicate definition
-    DuplicateDefinition {
-        name: String,
-        span: Span,
-    },
+    DuplicateDefinition { name: String, span: Span },
     /// Undefined symbol reference
-    UndefinedSymbol {
-        name: String,
-        span: Span,
-    },
+    UndefinedSymbol { name: String, span: Span },
 }
 
 impl std::fmt::Display for AnalyzeError {
@@ -162,8 +156,12 @@ impl Analyzer {
                         fields: struct_decl.fields.iter().map(|f| f.name.clone()).collect(),
                     });
 
-                    self.symbols
-                        .define(&struct_decl.name, kind, module_path, Some(struct_decl.span));
+                    self.symbols.define(
+                        &struct_decl.name,
+                        kind,
+                        module_path,
+                        Some(struct_decl.span),
+                    );
                 }
 
                 Item::Record(record) => {
@@ -197,10 +195,7 @@ impl Analyzer {
                 Item::Resource(resource) => {
                     let kind = SymbolKind::Resource(ResourceSymbol {
                         methods: vec![],
-                        wasi_import: resource
-                            .attrs
-                            .first()
-                            .and_then(|a| a.wasi_import.clone()),
+                        wasi_import: resource.attrs.first().and_then(|a| a.wasi_import.clone()),
                     });
 
                     self.symbols
@@ -233,11 +228,7 @@ impl Analyzer {
                 };
 
                 // Collect definitions from the imported module (if not already done)
-                if !self
-                    .symbols
-                    .get_module_symbols(&use_decl.path)
-                    .is_empty()
-                {
+                if !self.symbols.get_module_symbols(&use_decl.path).is_empty() {
                     // Already collected
                 } else {
                     self.collect_definitions(&imported_module, &use_decl.path);
@@ -245,9 +236,7 @@ impl Analyzer {
 
                 // Register each imported item
                 for item_name in &use_decl.items {
-                    if let Some(symbol) =
-                        self.symbols.lookup_in_module(&use_decl.path, item_name)
-                    {
+                    if let Some(symbol) = self.symbols.lookup_in_module(&use_decl.path, item_name) {
                         let symbol_id = symbol.id;
                         self.symbols.register_import(item_name, symbol_id);
                     } else {

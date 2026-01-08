@@ -37,42 +37,42 @@ pub enum TokenKind {
     False,
 
     // Punctuation
-    LParen,      // (
-    RParen,      // )
-    LBrace,      // {
-    RBrace,      // }
-    LBracket,    // [
-    RBracket,    // ]
-    Comma,       // ,
-    Colon,       // :
-    Semicolon,   // ;
-    ColonColon,  // ::
-    Dot,         // .
-    Arrow,       // ->
-    FatArrow,    // =>
-    Pipe,        // |
-    Ampersand,   // &
-    Hash,        // #
+    LParen,     // (
+    RParen,     // )
+    LBrace,     // {
+    RBrace,     // }
+    LBracket,   // [
+    RBracket,   // ]
+    Comma,      // ,
+    Colon,      // :
+    Semicolon,  // ;
+    ColonColon, // ::
+    Dot,        // .
+    Arrow,      // ->
+    FatArrow,   // =>
+    Pipe,       // |
+    Ampersand,  // &
+    Hash,       // #
 
     // Operators
-    Eq,          // =
-    EqEq,        // ==
-    NotEq,       // !=
-    Lt,          // <
-    LtEq,        // <=
-    Gt,          // >
-    GtEq,        // >=
-    Plus,        // +
-    Minus,       // -
-    Star,        // *
-    Slash,       // /
-    Percent,     // %
-    Not,         // !
-    And,         // &&
-    Or,          // ||
-    PlusEq,      // +=
-    MinusEq,     // -=
-    Question,    // ?
+    Eq,       // =
+    EqEq,     // ==
+    NotEq,    // !=
+    Lt,       // <
+    LtEq,     // <=
+    Gt,       // >
+    GtEq,     // >=
+    Plus,     // +
+    Minus,    // -
+    Star,     // *
+    Slash,    // /
+    Percent,  // %
+    Not,      // !
+    And,      // &&
+    Or,       // ||
+    PlusEq,   // +=
+    MinusEq,  // -=
+    Question, // ?
 
     // Special
     Eof,
@@ -100,6 +100,11 @@ impl Token {
 
 impl Span {
     pub fn new(start: usize, end: usize, line: usize, column: usize) -> Self {
-        Self { start, end, line, column }
+        Self {
+            start,
+            end,
+            line,
+            column,
+        }
     }
 }

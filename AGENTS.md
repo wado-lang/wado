@@ -47,3 +47,13 @@ This project relays on the following features:
 
 * Do not use wildcard imports (`use ...::*;`).
 
+## Project Development
+
+```sh
+make build
+
+make test
+
+make hello-run # simple smoke test
+```
+

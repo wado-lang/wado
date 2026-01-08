@@ -6,8 +6,8 @@ build:
 hello: build
 	cargo run --quiet -- example/hello.wado
 
-run: hello
-	wasmtime run -S p3=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' example/hello.wasm
+hello-run: hello
+	wasmtime run -S p3=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' example/$<.wasm
 
 test:
 	cargo test
