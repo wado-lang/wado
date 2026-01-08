@@ -26,7 +26,11 @@ This project relays on the following features:
 - Wasm Wide Arithmetic for i128 and u128
 - Wasm Threads
 - Wasm Component Model
-- WASI 0.3
+- WASI (targeting Preview 3, currently implementing 0.2.x)
+  - **Current**: WASI 0.2.x (wasi:io, wasi:cli) - working
+  - **Target**: WASI 0.3 (P3) with native stream/future types - pending Component Model async stabilization
+  - P3 (`0.3.0-rc-2025-09-16`) is supported by wasmtime v40 with `-W component-model-async=y`
+  - See wasmtime P3 support: `find ../../bytecodealliance/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
 ## General Rules
 

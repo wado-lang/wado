@@ -642,21 +642,88 @@ fn App() -> Element with Dom {
 
 ## WASI / Browser Support
 
+Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
+
+> **Implementation Status**: The compiler currently generates WASI 0.2.x compatible code. WASI P3 with native `stream`/`future` types is pending Component Model async feature stabilization in wasmtime.
+
+### WASI P3 Type Mapping
+
+| WIT Type | Wado Type | Notes |
+|----------|-----------|-------|
+| `stream<u8>` | `Stream<u8>` | First-class async stream |
+| `future<T>` | `Future<T>` | First-class async future |
+| `result<T, E>` | `Result<T, E>` | Error handling |
+| `result` | `Result<(), ()>` | Unit result (no payload) |
+| `option<T>` | `Option<T>` | Optional value |
+| `list<T>` | `List<T>` | Dynamic list |
+| `tuple<A, B>` | `Tuple<A, B>` | Tuple types |
+| `string` | `string` | UTF-8 string |
+| `enum { a, b }` | `enum { A, B }` | Variants use UpperCamelCase in Wado |
+
+### WASI P3 CLI Interfaces
+
+Wado effects map to WASI P3 interfaces:
+
+| Wado Effect | WASI Interface | Key Functions |
+|-------------|----------------|---------------|
+| `Stdout` | `wasi:cli/stdout` | `write-via-stream(stream<u8>)` |
+| `Stderr` | `wasi:cli/stderr` | `write-via-stream(stream<u8>)` |
+| `Stdin` | `wasi:cli/stdin` | `read-via-stream() -> tuple<stream<u8>, future<...>>` |
+| `Environment` | `wasi:cli/environment` | `get-arguments()`, `get-environment()` |
+| `Exit` | `wasi:cli/exit` | `exit(result)`, `exit-with-code(u8)` |
+
+### Async Functions in WASI P3
+
+WASI P3 uses `async func` in WIT for non-blocking operations. In Wado, these are handled transparently via stack switching (colorless async):
+
+```wit
+// WIT definition
+write-via-stream: async func(data: stream<u8>) -> result<_, error-code>;
+```
+
+```rust
+// Wado usage - no async keyword needed
+fn println(message: string) with Stdout {
+    let stream = string_to_stream(`{message}\n`);
+    Stdout.write_via_stream(stream);  // Colorless async
+}
+```
+
 ### Entry Points
 
 ```rust
-// For WASI
-fn main() {
-    with Console => WasiConsole, Http => WasiHttp, FileSystem => WasiFileSystem {
-        cli_app();
-    }
+// For WASI CLI
+fn main() with Stdout {
+    println("Hello, world!");
 }
 
 // For browser
-fn main() {
-    with Console => BrowserConsole, Http => FetchHttp, Dom => BrowserDom {
-        mount(App, "#root");
-    }
+fn main() with Dom {
+    mount(App, "#root");
+}
+```
+
+### Attribute Syntax for WASI Linking
+
+Use `#[wasi(...)]` attributes to link Wado definitions to WASI interfaces:
+
+```rust
+// Link an effect to a WASI interface
+pub effect Stdout {
+    #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
+    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+}
+
+// Link a resource to a WASI resource
+#[wasi("wasi:cli/terminal-output@0.3.0-rc-2025-09-16")]
+resource TerminalOutput;
+
+// Link an enum to a WASI enum
+// Wado uses UpperCamelCase for variants
+pub enum ErrorCode {  // Maps to WIT: enum error-code
+    Io,               // Maps to WIT: io
+    IllegalByteSequence,  // Maps to WIT: illegal-byte-sequence
+    Pipe,             // Maps to WIT: pipe
 }
 ```
 
@@ -666,7 +733,7 @@ Effect declaration = Wasm import = WASI capability:
 
 ```rust
 // Restrict plugin capabilities
-let plugin = load_plugin("transform.Wasm");
+let plugin = load_plugin("transform.wasm");
 plugin.grant(FileSystem);  // Allow
 plugin.deny(Http);         // Deny
 ```

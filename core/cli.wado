@@ -4,8 +4,9 @@
 // Note: Stream and Future are automatically available from core::prelude
 // No need to import them explicitly unless #![no_prelude] is used
 
-// Error codes from wasi:cli/types@0.3.0
-pub enum StdioErrorCode {
+// Error codes from wasi:cli/types@0.3.0-rc-2025-09-16
+// Maps to WIT: enum error-code { io, illegal-byte-sequence, pipe }
+pub enum ErrorCode {
     /// Input/output error
     Io,
     /// Invalid or incomplete multibyte or wide character
@@ -14,53 +15,48 @@ pub enum StdioErrorCode {
     Pipe,
 }
 
-// WASI resources
+// WASI resources for terminal I/O
 #[wasi("wasi:cli/terminal-input@0.3.0-rc-2025-09-16")]
 resource TerminalInput;
 
 #[wasi("wasi:cli/terminal-output@0.3.0-rc-2025-09-16")]
 resource TerminalOutput;
 
-// Effect interface for wasi:cli/stdin@0.3.0
+// Effect interface for wasi:cli/stdin@0.3.0-rc-2025-09-16
 pub effect Stdin {
     /// Return a stream for reading from stdin.
     ///
     /// This function returns a stream which provides data read from stdin,
     /// and a future to signal read results.
     #[wasi("wasi:cli/stdin@0.3.0-rc-2025-09-16#read-via-stream")]
-    fn read_via_stream() -> Tuple<Stream<u8>, Future<Result<(), StdioErrorCode>>>;
+    fn read_via_stream() -> Tuple<Stream<u8>, Future<Result<(), ErrorCode>>>;
 }
 
-// Effect interface for wasi:cli/stdout@0.3.0
+// Effect interface for wasi:cli/stdout@0.3.0-rc-2025-09-16
 pub effect Stdout {
     /// Write the given stream to stdout.
     ///
-    /// If the stream's writable end is dropped this function will either return
-    /// success once the entire contents of the stream have been written or an
-    /// error-code representing a failure.
+    /// This is an async function in WIT. In Wado, async is handled via
+    /// stack switching, so no async keyword is needed.
     #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
-    fn write_via_stream(data: Stream<u8>) -> Result<(), StdioErrorCode>;
+    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-// Effect interface for wasi:cli/stderr@0.3.0
+// Effect interface for wasi:cli/stderr@0.3.0-rc-2025-09-16
 pub effect Stderr {
     /// Write the given stream to stderr.
-    ///
-    /// If the stream's writable end is dropped this function will either return
-    /// success once the entire contents of the stream have been written or an
-    /// error-code representing a failure.
     #[wasi("wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream")]
-    fn write_via_stream(data: Stream<u8>) -> Result<(), StdioErrorCode>;
+    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-// Effect interface for wasi:cli/environment@0.3.0
-effect Environment {
+// Effect interface for wasi:cli/environment@0.3.0-rc-2025-09-16
+pub effect Environment {
     /// Get the POSIX-style environment variables.
     ///
     /// Each environment variable is provided as a pair of string variable names
     /// and string value.
     #[wasi("wasi:cli/environment@0.3.0-rc-2025-09-16#get-environment")]
-    fn get_environment() -> List<(string, string)>;
+    fn get_environment() -> List<Tuple<string, string>>;
 
     /// Get the POSIX-style arguments to the program.
     #[wasi("wasi:cli/environment@0.3.0-rc-2025-09-16#get-arguments")]
@@ -72,11 +68,12 @@ effect Environment {
     fn get_initial_cwd() -> Option<string>;
 }
 
-// Effect interface for wasi:cli/exit@0.3.0
-effect Exit {
+// Effect interface for wasi:cli/exit@0.3.0-rc-2025-09-16
+pub effect Exit {
     /// Exit the current instance and any linked instances.
+    /// WIT signature: exit: func(status: result)
     #[wasi("wasi:cli/exit@0.3.0-rc-2025-09-16#exit")]
-    fn exit<T, E>(status: Result<T, E>) -> !;
+    fn exit(status: Result<(), ()>) -> !;
 
     /// Exit the current instance and any linked instances, reporting the
     /// specified status code to the host.
@@ -87,53 +84,55 @@ effect Exit {
     fn exit_with_code(status_code: u8) -> !;
 }
 
-// Effect interface for wasi:cli/terminal-stdin@0.3.0
-effect TerminalStdin {
+// Effect interface for wasi:cli/terminal-stdin@0.3.0-rc-2025-09-16
+pub effect TerminalStdin {
     /// If stdin is connected to a terminal, return a `terminal-input` handle
     /// allowing further interaction with it.
     #[wasi("wasi:cli/terminal-stdin@0.3.0-rc-2025-09-16#get-terminal-stdin")]
     fn get_terminal_stdin() -> Option<TerminalInput>;
 }
 
-// Effect interface for wasi:cli/terminal-stdout@0.3.0
-effect TerminalStdout {
+// Effect interface for wasi:cli/terminal-stdout@0.3.0-rc-2025-09-16
+pub effect TerminalStdout {
     /// If stdout is connected to a terminal, return a `terminal-output` handle
     /// allowing further interaction with it.
     #[wasi("wasi:cli/terminal-stdout@0.3.0-rc-2025-09-16#get-terminal-stdout")]
     fn get_terminal_stdout() -> Option<TerminalOutput>;
 }
 
-// Effect interface for wasi:cli/terminal-stderr@0.3.0
-effect TerminalStderr {
+// Effect interface for wasi:cli/terminal-stderr@0.3.0-rc-2025-09-16
+pub effect TerminalStderr {
     /// If stderr is connected to a terminal, return a `terminal-output` handle
     /// allowing further interaction with it.
     #[wasi("wasi:cli/terminal-stderr@0.3.0-rc-2025-09-16#get-terminal-stderr")]
     fn get_terminal_stderr() -> Option<TerminalOutput>;
 }
 
+// ============================================
 // High-level helper functions
+// ============================================
 
-/// Print a line to stdout
+/// Print a line to stdout (adds newline)
 pub fn println(message: string) with Stdout {
-    let stream = message_to_stream(`{message}\n`);
+    let stream = string_to_stream(`{message}\n`);
     let _ = Stdout.write_via_stream(stream);
 }
 
-/// Print a line to stderr
+/// Print a line to stderr (adds newline)
 pub fn eprintln(message: string) with Stderr {
-    let stream = message_to_stream(`{message}\n`);
+    let stream = string_to_stream(`{message}\n`);
     let _ = Stderr.write_via_stream(stream);
 }
 
 /// Print to stdout without newline
 pub fn print(message: string) with Stdout {
-    let stream = message_to_stream(message);
+    let stream = string_to_stream(message);
     let _ = Stdout.write_via_stream(stream);
 }
 
 /// Print to stderr without newline
 pub fn eprint(message: string) with Stderr {
-    let stream = message_to_stream(message);
+    let stream = string_to_stream(message);
     let _ = Stderr.write_via_stream(stream);
 }
 
@@ -164,17 +163,24 @@ pub fn exit_success() -> ! with Exit {
 }
 
 /// Exit with error
-pub fn exit_error<E>(error: E) -> ! with Exit {
-    Exit.exit(Err(error));
+pub fn exit_error() -> ! with Exit {
+    Exit.exit(Err(()));
 }
 
 /// Exit with status code
-pub fn exit_with_code(code: u8) -> ! with Exit {
+pub fn exit(code: u8) -> ! with Exit {
     Exit.exit_with_code(code);
 }
 
-// Helper function to convert string to stream
-fn message_to_stream(message: string) -> Stream<u8> {
-    // Implementation would create a stream from the string bytes
-    // This is a placeholder for the actual implementation
+// ============================================
+// Internal helper functions
+// ============================================
+
+/// Convert a string to a stream of bytes (UTF-8 encoded)
+/// This is a built-in function that the compiler handles specially.
+fn string_to_stream(s: string) -> Stream<u8> {
+    // The compiler generates code to:
+    // 1. Get the UTF-8 bytes of the string
+    // 2. Create a stream<u8> with those bytes
+    // This is implemented as a compiler intrinsic.
 }
