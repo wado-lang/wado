@@ -184,3 +184,53 @@ fn string_to_stream(s: string) -> Stream<u8> {
     // 2. Create a stream<u8> with those bytes
     // This is implemented as a compiler intrinsic.
 }
+
+// ============================================
+// WASI CLI Command World
+// ============================================
+
+/// The standard WASI CLI command world
+/// Maps to wasi:cli@0.2.x command world
+world CliCommand {
+    // Standard I/O streams
+    import Stdout {
+        write_via_stream,
+    }
+
+    import Stderr {
+        write_via_stream,
+    }
+
+    import Stdin {
+        read_via_stream,
+    }
+
+    // Environment access
+    import Environment {
+        get_arguments,
+        get_environment,
+        get_initial_cwd,
+    }
+
+    // Process control
+    import Exit {
+        exit,
+        exit_with_code,
+    }
+
+    // Terminal interaction (optional)
+    import TerminalStdin {
+        get_terminal_stdin,
+    }
+
+    import TerminalStdout {
+        get_terminal_stdout,
+    }
+
+    import TerminalStderr {
+        get_terminal_stderr,
+    }
+
+    // Entry point: maps to WIT's "run: func() -> result"
+    export fn run() -> Result<(), ()>;
+}

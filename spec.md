@@ -570,6 +570,134 @@ fn main() {
 
 ---
 
+## World System
+
+### What is a World?
+
+A **world** in Wado corresponds directly to the Component Model's `world` concept. A world defines:
+
+1. **Imports**: Which effects and their functions the component requires from the host
+2. **Exports**: Which functions the component provides to the host
+
+Worlds are the contract between a Wasm component and its runtime environment.
+
+### World Declaration
+
+```rust
+world WorldName {
+    import EffectName {
+        function_name_1,
+        function_name_2,
+    }
+
+    import AnotherEffect {
+        function_name_3,
+    }
+
+    export fn exported_function(arg: Type) -> ReturnType;
+}
+
+// Declare which world this component implements
+#![world(WorldName)]
+```
+
+### WASI CLI World Example
+
+The standard WASI CLI `command` world in Wado syntax:
+
+```rust
+// Based on wasi:cli@0.2.x command world
+// Effect definitions are in core::cli (see cli.wado)
+
+world CliCommand {
+    // Standard I/O streams
+    import Stdout {
+        write_via_stream,
+    }
+
+    import Stderr {
+        write_via_stream,
+    }
+
+    import Stdin {
+        read_via_stream,
+    }
+
+    // Environment access
+    import Environment {
+        get_arguments,
+        get_environment,
+        get_initial_cwd,
+    }
+
+    // Process control
+    import Exit {
+        exit,
+        exit_with_code,
+    }
+
+    // Terminal interaction (optional)
+    import TerminalStdin {
+        get_terminal_stdin,
+    }
+
+    import TerminalStdout {
+        get_terminal_stdout,
+    }
+
+    import TerminalStderr {
+        get_terminal_stderr,
+    }
+
+    // Entry point: maps to WIT's "run: func() -> result"
+    export fn run() -> Result<(), ()>;
+}
+
+// Declare this component implements the CLI command world
+#![world(CliCommand)]
+
+// Implementation
+pub fn run() -> Result<(), ()> {
+    println("Hello, WASI world!");
+    return Ok(());
+}
+```
+
+### Multiple Worlds
+
+A single codebase can define multiple worlds for different deployment targets:
+
+```rust
+world BrowserApp {
+    import Dom {
+        query_selector,
+        create_element,
+    }
+
+    export fn mount(root: string);
+}
+
+world CliApp {
+    import Stdout {
+        write_via_stream,
+    }
+
+    export fn run() -> Result<(), ()>;
+}
+
+// Select world at compile time
+#![world(CliApp)]  // or BrowserApp
+```
+
+### Design Notes
+
+- **Explicit function listing**: Unlike WIT's `include` directive, Wado requires listing each imported function explicitly for clarity
+- **Effect-based imports**: Imports are organized by effect, which maps to WIT interfaces
+- **Type signatures on exports**: Export declarations include full function signatures
+- **Versioning**: Version information (`@0.3.0-rc-2025-09-16`) is specified in the effect definitions (e.g., `cli.wado`), not in the world declaration
+
+---
+
 ## Error Handling
 
 ### Unrecoverable Errors (Wasm Exceptions)
