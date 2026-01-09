@@ -2,8 +2,6 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
-use wado_compiler::{Analyzer, Codegen, Lexer, Parser};
-
 pub struct BuildOptions {
     pub input: String,
     pub output: Option<String>,
@@ -66,56 +64,13 @@ pub fn parse_args(args: &[String]) -> BuildOptions {
 
 /// Compile a Wado source file and return the Wasm binary
 pub fn compile(filename: &str) -> Vec<u8> {
-    let source = match fs::read_to_string(filename) {
-        Ok(content) => content,
+    match wado_compiler::compile_file(Path::new(filename)) {
+        Ok(wasm) => wasm,
         Err(e) => {
-            eprintln!("Error reading file '{filename}': {e}");
-            process::exit(1);
-        }
-    };
-
-    // Lexing
-    let mut lexer = Lexer::new(&source);
-    let tokens = match lexer.tokenize() {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            eprintln!(
-                "Lexer error at line {}, column {}: {}",
-                e.span.line, e.span.column, e.message
-            );
-            process::exit(1);
-        }
-    };
-
-    // Parsing
-    let mut parser = Parser::new(tokens);
-    let module = match parser.parse() {
-        Ok(module) => module,
-        Err(e) => {
-            eprintln!(
-                "Parse error at line {}, column {}: {}",
-                e.span.line, e.span.column, e.message
-            );
-            process::exit(1);
-        }
-    };
-
-    // Semantic analysis
-    let mut analyzer = Analyzer::new();
-    match analyzer.analyze(&module, &[]) {
-        Ok(()) => {}
-        Err(errors) => {
-            for e in errors {
-                eprintln!("Analysis error: {e}");
-            }
+            eprintln!("{e}");
             process::exit(1);
         }
     }
-
-    // Code generation
-    let symbols = analyzer.into_symbols();
-    let mut codegen = Codegen::new(symbols);
-    codegen.generate_wasm(&module)
 }
 
 pub fn run(opts: BuildOptions) {

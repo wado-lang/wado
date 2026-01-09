@@ -87,11 +87,10 @@ impl Codegen {
     fn collect_strings_from_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Literal(lit) => {
-                if let Literal::String(s) = &lit.value {
-                    if !self.string_literals.contains(s) {
+                if let Literal::String(s) = &lit.value
+                    && !self.string_literals.contains(s) {
                         self.string_literals.push(s.clone());
                     }
-                }
             }
             Expr::Call(call) => {
                 self.collect_strings_from_expr(&call.callee);
@@ -101,9 +100,9 @@ impl Codegen {
                     Expr::Ident(IdentExpr { name, .. }) if name == "println"
                 );
                 for arg in &call.args {
-                    if is_println {
-                        if let Expr::Literal(lit) = arg {
-                            if let Literal::String(s) = &lit.value {
+                    if is_println
+                        && let Expr::Literal(lit) = arg
+                            && let Literal::String(s) = &lit.value {
                                 // println appends newline - store the string with \n
                                 let with_newline = format!("{s}\n");
                                 if !self.string_literals.contains(&with_newline) {
@@ -111,8 +110,6 @@ impl Codegen {
                                 }
                                 continue;
                             }
-                        }
-                    }
                     self.collect_strings_from_expr(arg);
                 }
             }
@@ -414,9 +411,7 @@ impl Codegen {
         types.ty().function([ValType::I32], []);
         // Type 10: println (ptr: i32, len: i32) -> ()
         // Library function: writes string to stdout with stream
-        types
-            .ty()
-            .function([ValType::I32, ValType::I32], []);
+        types.ty().function([ValType::I32, ValType::I32], []);
         // Type 11: run () -> ()
         // Async entry point - uses task.return to provide result
         types.ty().function([], []);
@@ -598,11 +593,10 @@ impl Codegen {
     ) {
         // Find main function
         let main_func = ast_module.items.iter().find_map(|item| {
-            if let Item::Function(f) = item {
-                if f.name == "main" {
+            if let Item::Function(f) = item
+                && f.name == "main" {
                     return Some(f);
                 }
-            }
             None
         });
 
@@ -650,9 +644,9 @@ impl Codegen {
             "println" => {
                 // println is at function index 10
                 // It takes (ptr: i32, len: i32)
-                if call.args.len() == 1 {
-                    if let Expr::Literal(lit) = &call.args[0] {
-                        if let Literal::String(s) = &lit.value {
+                if call.args.len() == 1
+                    && let Expr::Literal(lit) = &call.args[0]
+                        && let Literal::String(s) = &lit.value {
                             // Get the string with newline appended
                             let with_newline = format!("{s}\n");
                             let str_offset = self.get_string_offset(&with_newline);
@@ -664,8 +658,6 @@ impl Codegen {
                             // Call println (function index 10)
                             func.instruction(&Instruction::Call(10));
                         }
-                    }
-                }
             }
             _ => {
                 // Unknown function - ignore for now
