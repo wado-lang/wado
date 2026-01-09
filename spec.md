@@ -473,6 +473,54 @@ fn add(a: i32, b: i32) -> i32 {
 }
 ```
 
+### Importing Effect Functions
+
+To avoid the verbosity of `Effect.function()` calls, you can explicitly import effect functions using the `use` statement:
+
+```rust
+// Import effect functions from their module path
+use core::cli::Stdout::{write_via_stream};
+use core::cli::Environment::{get_environment, get_arguments};
+
+pub fn println(message: string) with Stdout {
+    let stream = string_to_stream(`{message}\n`);
+    write_via_stream(stream);  // No need for Stdout. prefix
+}
+
+pub fn env(name: string) -> Option<string> with Environment {
+    let vars = get_environment();  // No need for Environment. prefix
+    for (key, value) in vars {
+        if key == name {
+            return Some(value);
+        }
+    }
+    return None;
+}
+```
+
+**Import Rules:**
+- Effect functions are imported using the full module path: `use module::path::Effect::{function}`
+- Multiple functions can be imported: `use Effect::{func1, func2}`
+- Function renaming is supported: `use Effect::{function as renamed}`
+- Wildcards are prohibited: `use Effect::{*}` is not allowed
+- The `with` declaration is still required for effect tracking
+
+**Name Resolution:**
+- Imported effect functions can be called directly without the `Effect.` prefix
+- If a function name is ambiguous, use the fully qualified `Effect.function()` syntax
+- Non-imported effect functions must always use the `Effect.function()` syntax
+
+```rust
+// Example with name collision handling
+use core::cli::Stdout::{write_via_stream};
+use core::cli::Stderr::{write_via_stream as stderr_write};
+
+pub fn log(message: string) with Stdout, Stderr {
+    write_via_stream(stdout_stream);  // Calls Stdout.write_via_stream
+    stderr_write(stderr_stream);      // Calls Stderr.write_via_stream (renamed)
+}
+```
+
 ### Effect Propagation
 
 - Local functions: Inferred

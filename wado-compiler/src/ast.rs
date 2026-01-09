@@ -146,10 +146,27 @@ pub struct WorldExport {
     pub span: Span,
 }
 
+/// Use declaration item with optional renaming
+#[derive(Debug, Clone)]
+pub struct UseItem {
+    pub name: String,
+    pub alias: Option<String>, // for "as" renaming
+}
+
+/// Target of a use declaration
+#[derive(Debug, Clone)]
+pub enum UseTarget {
+    /// Import from module: use module::path::{items}
+    Module,
+    /// Import from effect: use module::path::Effect::{items}
+    Effect(String),
+}
+
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub path: Vec<String>,
-    pub items: Vec<String>,
+    pub target: UseTarget,
+    pub items: Vec<UseItem>,
     pub span: Span,
 }
 
