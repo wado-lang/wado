@@ -1,4 +1,4 @@
-use core::sys::{debug, info, warn, error};
+use {debug, info, warn, error} from "core:sys";
 
 // Types from wasi:sockets/network@0.2.9
 enum IpAddressFamily {
@@ -215,22 +215,22 @@ struct TcpListener {
 // High-level TcpStream API (wrapper around socket + streams)
 impl TcpStream {
     fn read(&self, len: u64) -> Result<List<u8>, ErrorCode> with Streams {
-        return Streams.blocking_read(&self.input, len);
+        return Streams::blocking_read(&self.input, len);
     }
 
     fn write(&self, data: &List<u8>) -> Result<(), ErrorCode> with Streams {
-        return Streams.blocking_write_and_flush(&self.output, data);
+        return Streams::blocking_write_and_flush(&self.output, data);
     }
 
     fn shutdown(&self, shutdown_type: ShutdownType) -> Result<(), ErrorCode> with Tcp {
-        return Tcp.shutdown(&self.socket, shutdown_type);
+        return Tcp::shutdown(&self.socket, shutdown_type);
     }
 }
 
 // High-level TcpListener API
 impl TcpListener {
     fn accept(&self) -> Result<TcpStream, ErrorCode> with Tcp {
-        let (socket, input, output) = Tcp.accept(&self.socket)?;
+        let (socket, input, output) = Tcp::accept(&self.socket)?;
         return Ok(TcpStream { socket, input, output });
     }
 }
@@ -238,10 +238,10 @@ impl TcpListener {
 // Free function to create a listening socket
 fn listen(network: &Network, addr: IpSocketAddress) -> Result<TcpListener, ErrorCode> with Tcp {
     let socket = TcpSocket::new();
-    Tcp.start_bind(&socket, network, addr)?;
-    Tcp.finish_bind(&socket)?;
-    Tcp.start_listen(&socket)?;
-    Tcp.finish_listen(&socket)?;
+    Tcp::start_bind(&socket, network, addr)?;
+    Tcp::finish_bind(&socket)?;
+    Tcp::start_listen(&socket)?;
+    Tcp::finish_listen(&socket)?;
     return Ok(TcpListener { socket });
 }
 
@@ -250,22 +250,22 @@ fn handle_client(stream: TcpStream) with Tcp, Streams, Logging {
         match stream.read(1024) {
             Ok(data) => {
                 if data.len() == 0 {
-                    Logging.log("info", "Client disconnected");
+                    Logging::log("info", "Client disconnected");
                     break;
                 }
-                Logging.log("debug", "Received {data.len()} bytes");
+                Logging::log("debug", "Received {data.len()} bytes");
                 match stream.write(&data) {
                     Ok(_) => {
-                        Logging.log("debug", "Echoed {data.len()} bytes");
+                        Logging::log("debug", "Echoed {data.len()} bytes");
                     },
                     Err(e) => {
-                        Logging.log("error", "Write error: {e}");
+                        Logging::log("error", "Write error: {e}");
                         break;
                     },
                 }
             },
             Err(e) => {
-                Logging.log("error", "Read error: {e}");
+                Logging::log("error", "Read error: {e}");
                 break;
             },
         }
@@ -280,21 +280,21 @@ fn run_server(network: &Network) with Tcp, Streams, Logging {
     let listener = match listen(network, addr) {
         Ok(l) => l,
         Err(e) => {
-            Logging.log("error", "Failed to bind to 127.0.0.1:8080: {e}");
+            Logging::log("error", "Failed to bind to 127.0.0.1:8080: {e}");
             return;
         },
     };
 
-    Logging.log("info", "TCP echo server listening on 127.0.0.1:8080");
+    Logging::log("info", "TCP echo server listening on 127.0.0.1:8080");
 
     loop {
         match listener.accept() {
             Ok(stream) => {
-                Logging.log("info", "New client connected");
+                Logging::log("info", "New client connected");
                 handle_client(stream);
             },
             Err(e) => {
-                Logging.log("warn", "Accept error: {e}");
+                Logging::log("warn", "Accept error: {e}");
             },
         }
     }
@@ -446,9 +446,9 @@ handler WasiLogging for Logging {
         // Call actual WASI import: wasi:cli/stderr@0.2.9#get-stderr
     },
     log(level, message) => {
-        let stderr = Logging.get_stderr();
+        let stderr = Logging::get_stderr();
         let formatted = "[{level}] {message}\n";
-        let _ = Streams.blocking_write_and_flush(&stderr, formatted.as_bytes());
+        let _ = Streams::blocking_write_and_flush(&stderr, formatted.as_bytes());
     },
 }
 

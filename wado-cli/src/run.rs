@@ -5,7 +5,7 @@ use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
-use crate::build;
+use crate::compile;
 
 pub struct RunOptions {
     pub input: String,
@@ -77,7 +77,7 @@ async fn run_wasm(wasm: Vec<u8>) -> Result<()> {
     config.wasm_component_model(true);
     config.wasm_component_model_async(true);
     config.wasm_component_model_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_async_stackful(true); // stack switching
 
     let engine = Engine::new(&config)?;
 
@@ -109,7 +109,7 @@ async fn run_wasm(wasm: Vec<u8>) -> Result<()> {
 }
 
 pub fn run(opts: RunOptions) {
-    let wasm = build::compile(&opts.input);
+    let wasm = compile::compile(&opts.input);
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()

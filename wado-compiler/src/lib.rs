@@ -24,7 +24,7 @@ use std::path::Path;
 /// # Example
 /// ```
 /// let wasm = wado_compiler::compile(r#"
-/// use core::cli::{println, Stdout};
+/// use {println, Stdout} from "core:cli";
 ///
 /// fn main() with Stdout {
 ///     println("Hello!");

@@ -1,0 +1,95 @@
+// Wado CLI Module
+// High-level CLI helpers built on top of wasi:cli
+//
+// This module provides convenient functions like println(), eprintln(), args(), etc.
+// For raw WASI CLI interfaces, use "wasi:cli" instead.
+
+use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
+
+// Re-export commonly used effects for convenience
+pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
+
+// ============================================================================
+// Output Functions
+// ============================================================================
+
+/// Print a line to stdout (adds newline)
+pub fn println(message: string) with Stdout {
+    let stream = string_to_stream(`{message}\n`);
+    let _ = Stdout::write_via_stream(stream);
+}
+
+/// Print a line to stderr (adds newline)
+pub fn eprintln(message: string) with Stderr {
+    let stream = string_to_stream(`{message}\n`);
+    let _ = Stderr::write_via_stream(stream);
+}
+
+/// Print to stdout without newline
+pub fn print(message: string) with Stdout {
+    let stream = string_to_stream(message);
+    let _ = Stdout::write_via_stream(stream);
+}
+
+/// Print to stderr without newline
+pub fn eprint(message: string) with Stderr {
+    let stream = string_to_stream(message);
+    let _ = Stderr::write_via_stream(stream);
+}
+
+// ============================================================================
+// Environment Functions
+// ============================================================================
+
+/// Get environment variable by name
+pub fn env(name: string) -> Option<string> with Environment {
+    let vars = Environment::get_environment();
+    for (key, value) in vars {
+        if key == name {
+            return Some(value);
+        }
+    }
+    return None;
+}
+
+/// Get all command-line arguments
+pub fn args() -> Array<string> with Environment {
+    return Environment::get_arguments();
+}
+
+/// Get current working directory
+pub fn cwd() -> Option<string> with Environment {
+    return Environment::get_initial_cwd();
+}
+
+// ============================================================================
+// Exit Functions
+// ============================================================================
+
+/// Exit with success (code 0)
+pub fn exit_success() -> ! with Exit {
+    Exit::exit(Ok(()));
+}
+
+/// Exit with error
+pub fn exit_error() -> ! with Exit {
+    Exit::exit(Err(()));
+}
+
+/// Exit with specific status code
+pub fn exit(code: u8) -> ! with Exit {
+    Exit::exit_with_code(code);
+}
+
+// ============================================================================
+// Internal Helper Functions
+// ============================================================================
+
+/// Convert a string to a stream of bytes (UTF-8 encoded)
+/// This is a built-in function that the compiler handles specially.
+fn string_to_stream(s: string) -> Stream<u8> {
+    // The compiler generates code to:
+    // 1. Get the UTF-8 bytes of the string
+    // 2. Create a stream<u8> with those bytes
+    // This is implemented as a compiler intrinsic.
+}

@@ -237,7 +237,7 @@ use;
 #[test]
 fn test_analyzer_error_unknown_module() {
     let source = r#"
-use unknown::module::{foo};
+use {foo} from "unknown:module";
 
 fn main() {
     foo();
@@ -263,7 +263,7 @@ fn main() {
 #[test]
 fn test_analyzer_error_unknown_import() {
     let source = r#"
-use core::cli::{nonexistent_function};
+use {nonexistent_function} from "core:cli";
 
 fn main() {
     nonexistent_function();

@@ -31,7 +31,7 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ### Move Syntax
 
-```rust
+```wado
 // Default: copy or reference (depending on type)
 let a = some_value;
 let b = a;          // a is still usable
@@ -46,7 +46,7 @@ consume(move data);
 
 ### unique Modifier (Unique Ownership)
 
-```rust
+```wado
 // Enforce unique ownership
 let unique handle = open_file("data.txt");
 let other = handle;       // Error: unique cannot be implicitly copied
@@ -92,7 +92,7 @@ All Wado types map directly to WebAssembly Component Model types:
 
 ### The Prelude
 
-The **prelude** (`core::prelude`) is automatically imported into every module, providing access to fundamental types without requiring explicit imports:
+The **prelude** (`core:prelude`) is automatically imported into every module, providing access to fundamental types without requiring explicit imports:
 
 **Automatically Available:**
 
@@ -104,16 +104,16 @@ The **prelude** (`core::prelude`) is automatically imported into every module, p
 
 **Disabling the Prelude:**
 
-```rust
+```wado
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use core::prelude::{Option, Result, Stream};
+use {Option, Result, Stream} from "core:prelude";
 ```
 
 ### Primitive Types (No Import Required)
 
-```rust
+```wado
 // Numeric
 i8, i16, i32, i64, i128
 u8, u16, u32, u64, u128
@@ -139,14 +139,14 @@ Reactive<T>  // Reactive value
 
 **Regular strings** use double quotes:
 
-```rust
+```wado
 let name = "Alice";
 let path = "path/to/file.txt";
 ```
 
 **Template strings** (interpolation) use backticks:
 
-```rust
+```wado
 let name = "Alice";
 let greeting = `Hello, {name}!`;  // "Hello, Alice!"
 
@@ -160,7 +160,7 @@ let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
 
 ### Literal Types
 
-```rust
+```wado
 // String literal types
 type Direction = "north" | "south" | "east" | "west";
 
@@ -178,7 +178,7 @@ type Status = {
 
 Wado uses `struct` for structured data types. Internally they are implemented as Wasm-GC structs, and automatically converted to Component Model `record` at component boundaries.
 
-```rust
+```wado
 // Struct definition
 struct User {
     name: string,
@@ -211,7 +211,7 @@ Wado follows Component Model's distinction between enums and variants (unlike Ru
 
 **Enums** (no payloads - Component Model `enum`):
 
-```rust
+```wado
 // Simple enumeration - all variants have no data
 enum Color {
     Red,
@@ -225,7 +225,7 @@ let c = Color::Red;
 
 **Variants** (with payloads - Component Model `variant`):
 
-```rust
+```wado
 // Sum type where variants can carry data
 variant Shape {
     Circle(f64),           // radius
@@ -245,7 +245,7 @@ match s {
 
 **Flags** (bit flags - Component Model `flags`):
 
-```rust
+```wado
 // Bit flags - can be combined with | operator
 flags Permissions {
     Read,
@@ -267,11 +267,13 @@ let none = Permissions::none();
 let all = Permissions::all();
 ```
 
-**Note**: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
+Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
 
 ---
 
 ## Object Literals
+
+Object literal syntax is compatible with JSON.
 
 ### Syntax Rules
 
@@ -282,7 +284,7 @@ let all = Permissions::all();
 
 ### Struct Initialization
 
-```rust
+```wado
 let user: User = { name: "Alice", age: 30, active: true };
 
 // With quotes (JSON compatible)
@@ -298,7 +300,7 @@ let bob: User = { name, age, active: false };
 
 ### Dictionaries
 
-```rust
+```wado
 // str keys
 let d: Dict<string, i32> = { x: 10, y: 20 };
 
@@ -319,7 +321,7 @@ let nums: Dict<i32, string> = {
 
 ### Access Methods
 
-```rust
+```wado
 // Struct: dot notation
 user.name
 
@@ -331,26 +333,123 @@ d["key"]
 
 ## Module System
 
+Wado uses an ESM-like import syntax with `use {...} from "source"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
+
+### Module Source Types
+
+| Source Type       | Syntax                              | Example                                        |
+| ----------------- | ----------------------------------- | ---------------------------------------------- |
+| WASI standard     | `"wasi:<package>"`                  | `"wasi:cli"`, `"wasi:filesystem"`              |
+| Core library      | `"core:<module>"`                   | `"core:cli"`, `"core:fmt"`                     |
+| Remote (HTTP)     | `"https://..."`                     | `"https://example.com/lib.wado"`               |
+| Local file        | `"./<path>"` or `"../<path>"`       | `"./utils.wado"`, `"../config.wado"`           |
+| Package           | `"<package-name>"`                  | `"parser-lib"`, `"json-utils"`                 |
+
+### Import Syntax
+
+```wado
+// ============================================
+// WIT Package = Wado Module
+// WIT Interface = Wado Effect
+// ============================================
+
+// 1. WASI standard modules (wasi:*)
+use {Stdout, Stderr} from "wasi:cli";
+use {Stdout::{write_via_stream}} from "wasi:cli";
+
+// Effect and its functions together
+use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+
+// 2. Core library (core:*)
+use {println, eprintln} from "core:cli";
+use {format} from "core:fmt";
+
+// 3. Remote modules (https:)
+use {ApiClient} from "https://example.com/api.wado";
+use {config} from "https://example.com/data.json" with { type: "json" };
+
+// 4. Local files (relative path, extension required)
+use {Helper} from "./utils.wado";
+use {Config} from "../config.wado";
+
+// 5. Package dependencies (name only)
+use {Parser} from "parser-lib";
+```
+
+### Import Attributes (`with`)
+
+Use `with { ... }` to specify import metadata:
+
+```wado
+// Version specification
+use {Stdout} from "wasi:cli" with { version: "0.3.0" };
+
+// Type hint for non-code imports
+use {config} from "https://example.com/data.json" with { type: "json" };
+
+// Future: integrity hash for security
+use {Parser} from "parser-lib" with { integrity: "sha384-..." };
+
+// Multiple attributes
+use {ApiClient} from "https://example.com/api.wado" with {
+    integrity: "sha384-...",
+    version: "1.0.0",
+};
+```
+
 ### Import Rules
 
-- Always use curly braces
-- Wildcards prohibited
+- Always use curly braces: `use {x} from "..."`
+- Wildcards prohibited: `use {*} from "..."` is not allowed
 - All imports must be explicit (except the prelude)
+- Use `::` for effect function access: `Effect::{func1, func2}`
 
-```rust
-use core::cli::{println, eprintln};
-use core::dom::{window, document};
-use core::fmt::{format};
-use core::collections::{vec, set};
+```wado
+// Valid patterns
+use {println, eprintln} from "core:cli";
+use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
 
 // Prohibited patterns
-use core::cli::*;        // Wildcard
-use core::cli::println;  // No curly braces
+use * from "core:cli";           // Wildcard not allowed
+use println from "core:cli";     // Missing curly braces
+```
+
+### Calling Effect Functions
+
+Effect functions use `::` syntax (not `.`):
+
+```wado
+use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+
+fn example() with Stdout {
+    // With import - direct call
+    write_via_stream(stream);
+
+    // Fully qualified - always works
+    Stdout::write_via_stream(stream);
+}
+```
+
+**Notation distinction:**
+
+- `.` → struct fields and methods (`user.name`, `stream.read()`)
+- `::` → effect functions and namespace access (`Stdout::write_via_stream()`)
+
+### Renaming Imports
+
+```wado
+use {write_via_stream as stdout_write} from "wasi:cli/Stdout";
+use {write_via_stream as stderr_write} from "wasi:cli/Stderr";
+
+fn log() with Stdout, Stderr {
+    stdout_write(out_stream);
+    stderr_write(err_stream);
+}
 ```
 
 **Exception: The Prelude**
 
-The `core::prelude` module is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports. To opt out, use `#![no_prelude]`.
+The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports. To opt out, use `#![no_prelude]`.
 
 ### core Module Structure (Proposal)
 
@@ -373,7 +472,7 @@ core
 
 Built-in functions provided instead of macros:
 
-```rust
+```wado
 vec(1, 2, 3);             // Rust: vec![1, 2, 3]
 println("hello");         // Rust: println!("hello")
 panic("error");           // Rust: panic!("error")
@@ -391,7 +490,7 @@ Note: Use string interpolation with backticks instead of `format()`: `` `x = {x}
 
 ### reactive Keyword
 
-```rust
+```wado
 // Source (mutable reactive value)
 let reactive mut count = 0;
 
@@ -408,7 +507,7 @@ some_function(&reactive count);
 
 ### Effect Block
 
-```rust
+```wado
 effect {
     console.log("Count changed:", count);
 }
@@ -416,7 +515,7 @@ effect {
 
 ### JSX Integration
 
-```rust
+```wado
 fn Counter() -> Element with Dom {
     let reactive mut count = 0;
 
@@ -434,10 +533,10 @@ fn Counter() -> Element with Dom {
 
 ### Stack Switching Based (Colorless)
 
-```rust
+```wado
 // No async keyword needed in function implementations
 fn fetch_user(id: i32) -> Result<User, HttpError> with Http {
-    let response = Http.get("users/{id}")?;  // Even if Http.get is async in WIT
+    let response = Http::get("users/{id}")?;  // Even if Http::get is async in WIT
     let user = response.json()?;
     return Ok(user);
 }
@@ -477,7 +576,7 @@ Effects can be defined in two ways:
 
 **1. Effect interfaces** (for free functions):
 
-```rust
+```wado
 effect Console {
     fn print(msg: string);
     fn read_line() -> string;
@@ -509,7 +608,7 @@ effect Dom {
 
 **2. Methods with effect requirements**:
 
-```rust
+```wado
 // Methods can declare required effects
 impl TcpStream {
     fn read(&mut self, buffer: &mut Array<u8>) -> Result<i32, IoError> with Network;
@@ -529,16 +628,16 @@ This approach makes effect requirements explicit and visible in method signature
 
 ### Effect Declaration in Functions
 
-```rust
+```wado
 // Declare effects used with `with`
 fn greet(name: string) with Console {
-    Console.print("Hello, {name}!");
+    Console::print("Hello, {name}!");
 }
 
 // Multiple effects
 fn download_and_save(url: string, path: string) with Http, FileSystem {
-    let data = Http.get(url).body;
-    FileSystem.write(path, data);
+    let data = Http::get(url).body;
+    FileSystem::write(path, data);
 }
 
 // No effects = pure function
@@ -549,20 +648,20 @@ fn add(a: i32, b: i32) -> i32 {
 
 ### Importing Effect Functions
 
-To avoid the verbosity of `Effect.function()` calls, you can explicitly import effect functions using the `use` statement:
+To avoid the verbosity of `Effect::function()` calls, you can explicitly import effect functions:
 
-```rust
-// Import effect functions from their module path
-use core::cli::Stdout::{write_via_stream};
-use core::cli::Environment::{get_environment, get_arguments};
+```wado
+// Import effect functions
+use {Stdout::{write_via_stream}} from "wasi:cli";
+use {Environment::{get_environment, get_arguments}} from "wasi:cli";
 
 pub fn println(message: string) with Stdout {
     let stream = string_to_stream(`{message}\n`);
-    write_via_stream(stream);  // No need for Stdout. prefix
+    write_via_stream(stream);  // No need for Stdout:: prefix
 }
 
 pub fn env(name: string) -> Option<string> with Environment {
-    let vars = get_environment();  // No need for Environment. prefix
+    let vars = get_environment();  // No need for Environment:: prefix
     for (key, value) in vars {
         if key == name {
             return Some(value);
@@ -574,26 +673,26 @@ pub fn env(name: string) -> Option<string> with Environment {
 
 **Import Rules:**
 
-- Effect functions are imported using the full module path: `use module::path::Effect::{function}`
-- Multiple functions can be imported: `use Effect::{func1, func2}`
-- Function renaming is supported: `use Effect::{function as renamed}`
-- Wildcards are prohibited: `use Effect::{*}` is not allowed
+- Effect functions use `::` syntax: `use {Effect::{func1, func2}} from "..."`
+- Multiple functions can be imported: `Effect::{func1, func2, func3}`
+- Function renaming is supported: `use {func as renamed} from "..."`
+- Wildcards are prohibited: `use {Effect::{*}}` is not allowed
 - The `with` declaration is still required for effect tracking
 
 **Name Resolution:**
 
-- Imported effect functions can be called directly without the `Effect.` prefix
-- If a function name is ambiguous, use the fully qualified `Effect.function()` syntax
-- Non-imported effect functions must always use the `Effect.function()` syntax
+- Imported effect functions can be called directly without the `Effect::` prefix
+- If a function name is ambiguous, use the fully qualified `Effect::function()` syntax
+- Non-imported effect functions must always use the `Effect::function()` syntax
 
-```rust
+```wado
 // Example with name collision handling
-use core::cli::Stdout::{write_via_stream};
-use core::cli::Stderr::{write_via_stream as stderr_write};
+use {Stdout::{write_via_stream}} from "wasi:cli";
+use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
 
 pub fn log(message: string) with Stdout, Stderr {
-    write_via_stream(stdout_stream);  // Calls Stdout.write_via_stream
-    stderr_write(stderr_stream);      // Calls Stderr.write_via_stream (renamed)
+    write_via_stream(stdout_stream);  // Calls Stdout::write_via_stream
+    stderr_write(stderr_stream);      // Calls Stderr::write_via_stream (renamed)
 }
 ```
 
@@ -602,7 +701,7 @@ pub fn log(message: string) with Stdout, Stderr {
 - Local functions: Inferred
 - pub functions: Must be explicit
 
-```rust
+```wado
 // Local functions are inferred
 fn internal() {
     callee();  // Automatically inherits callee's effects
@@ -618,8 +717,8 @@ pub fn api_function() with Http, FileSystem {
 
 #### Built-in Handlers
 
-```rust
-use core::handlers::{WasiConsole, WasiFileSystem, WasiHttp, BrowserDom};
+```wado
+use {WasiConsole, WasiFileSystem, WasiHttp, BrowserDom} from "core:handlers";
 
 fn main() {
     with Console => WasiConsole, FileSystem => WasiFileSystem, Http => WasiHttp {
@@ -630,7 +729,7 @@ fn main() {
 
 #### Inline Handler
 
-```rust
+```wado
 with handler Console {
     print(msg) => actual_print(msg),
     read_line() => actual_read(),
@@ -641,7 +740,7 @@ with handler Console {
 
 #### Named Handler
 
-```rust
+```wado
 handler MockConsole for Console {
     let mut output: Array<string> = [];
 
@@ -661,7 +760,7 @@ fn test() {
 
 #### Continuation Control
 
-```rust
+```wado
 effect Generator<T> {
     fn yield(value: T);
 }
@@ -669,7 +768,7 @@ effect Generator<T> {
 fn range(start: i32, end: i32) with Generator<i32> {
     let mut i = start;
     while i < end {
-        Generator.yield(i);
+        Generator::yield(i);
         i += 1;
     }
 }
@@ -692,7 +791,7 @@ fn collect_all() -> Array<i32> {
 
 #### Composing Multiple Handlers
 
-```rust
+```wado
 fn main() {
     with Console => WasiConsole, Http => WasiHttp, FileSystem => WasiFileSystem {
         app();
@@ -715,7 +814,7 @@ Worlds are the contract between a Wasm component and its runtime environment.
 
 ### World Declaration
 
-```rust
+```wado
 world WorldName {
     import EffectName {
         function_name_1,
@@ -742,9 +841,9 @@ world WorldName {
 
 The standard WASI CLI `command` world in Wado syntax:
 
-```rust
+```wado
 // Based on wasi:cli@0.3.0-rc-2025-09-16 command world
-// Effect definitions are in core::cli (see cli.wado)
+// Effect definitions are in "core:cli" (see cli.wado)
 
 world CliCommand {
     // Standard I/O streams
@@ -806,7 +905,7 @@ pub fn run() -> Result<(), ()> {
 
 A single codebase can define multiple worlds for different deployment targets:
 
-```rust
+```wado
 world BrowserApp {
     import Dom {
         query_selector,
@@ -842,7 +941,7 @@ world CliApp {
 
 ### Unrecoverable Errors (Wasm Exceptions)
 
-```rust
+```wado
 panic("Fatal error");      // Immediate termination
 assert(condition);         // Condition check, panic on failure
 unreachable();             // Unreachable code
@@ -852,14 +951,14 @@ These cannot be caught; the program terminates.
 
 ### Recoverable Errors (Result Type)
 
-```rust
+```wado
 fn parse_int(s: string) -> Result<i32, ParseError> {
     // ...
 }
 
 fn read_config(path: string) -> Result<Config, ConfigError> with FileSystem {
-    let content = FileSystem.read(path)
-        .map_err(|e| ConfigError.Io(e))?;
+    let content = FileSystem::read(path)
+        .map_err(|e| ConfigError::Io(e))?;
     let config = parse_config(content)?;
     return Ok(config);
 }
@@ -877,7 +976,7 @@ match result {
 
 Built into the language, no macros needed:
 
-```rust
+```wado
 fn App() -> Element with Dom {
     let reactive mut count = 0;
 
@@ -948,17 +1047,17 @@ WASI P3 uses `async func` in WIT for non-blocking operations. In Wado, these are
 write-via-stream: async func(data: stream<u8>) -> result<_, error-code>;
 ```
 
-```rust
+```wado
 // Wado usage - no async keyword needed
 fn println(message: string) with Stdout {
     let stream = string_to_stream(`{message}\n`);
-    Stdout.write_via_stream(stream);  // Colorless async
+    Stdout::write_via_stream(stream);  // Colorless async
 }
 ```
 
 ### Entry Points
 
-```rust
+```wado
 // For WASI CLI
 fn main() with Stdout {
     println("Hello, world!");
@@ -974,7 +1073,7 @@ fn main() with Dom {
 
 Use `#[wasi(...)]` attributes to link Wado definitions to WASI interfaces:
 
-```rust
+```wado
 // Link an effect to a WASI interface
 pub effect Stdout {
     #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
@@ -998,7 +1097,7 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 
 Effect declaration = Wasm import = WASI capability:
 
-```rust
+```wado
 // Restrict plugin capabilities
 let plugin = load_plugin("transform.wasm");
 plugin.grant(FileSystem);  // Allow

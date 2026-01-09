@@ -1,4 +1,4 @@
-mod build;
+mod compile;
 mod run;
 
 use std::env;
@@ -8,11 +8,12 @@ fn print_usage() {
     eprintln!("Usage: wado <command> [options]");
     eprintln!();
     eprintln!("Commands:");
-    eprintln!("  build [options] <file.wado>  Compile a Wado source file");
-    eprintln!("  run [options] <file.wado>    Compile and run a Wado source file");
+    eprintln!("  compile [options] <file.wado>  Compile a Wado source file");
+    eprintln!("  run [options] <file.wado>      Compile and run a Wado source file");
     eprintln!();
-    eprintln!("Build options:");
-    eprintln!("  -o <file>  Output file path (default: <input>.wasm)");
+    eprintln!("Compile options:");
+    eprintln!("  -o <file>        Output file path (default: <input>.wasm)");
+    eprintln!("  --format <fmt>   Output format: wasm, wat (default: guessed from -o extension)");
     eprintln!();
     eprintln!("Global options:");
     eprintln!("  --help, -h  Show this help message");
@@ -31,9 +32,9 @@ fn main() {
             print_usage();
             process::exit(0);
         }
-        "build" => {
-            let opts = build::parse_args(&args[2..]);
-            build::run(opts);
+        "compile" => {
+            let opts = compile::parse_args(&args[2..]);
+            compile::run(opts);
         }
         "run" => {
             let opts = run::parse_args(&args[2..]);

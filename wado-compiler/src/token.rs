@@ -4,6 +4,7 @@
 pub enum TokenKind {
     // Keywords
     Use,
+    From,
     As,
     Fn,
     With,

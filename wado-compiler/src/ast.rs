@@ -146,26 +146,49 @@ pub struct WorldExport {
 }
 
 /// Use declaration item with optional renaming
+/// Supports both simple imports and effect function imports:
+/// - Simple: `name` or `name as alias`
+/// - Effect functions: `Effect::{func1, func2}`
 #[derive(Debug, Clone)]
-pub struct UseItem {
+pub enum UseItem {
+    /// Simple import: `name` or `name as alias`
+    Simple { name: String, alias: Option<String> },
+    /// Effect with functions: `Effect::{func1, func2}`
+    EffectFunctions {
+        effect_name: String,
+        functions: Vec<UseItemSimple>,
+    },
+}
+
+/// Simple use item (used within effect function imports)
+#[derive(Debug, Clone)]
+pub struct UseItemSimple {
     pub name: String,
-    pub alias: Option<String>, // for "as" renaming
+    pub alias: Option<String>,
 }
 
-/// Target of a use declaration
-#[derive(Debug, Clone)]
-pub enum UseTarget {
-    /// Import from module: use module::path::{items}
-    Module,
-    /// Import from effect: use module::path::Effect::{items}
-    Effect(String),
+/// Import attributes for `with { ... }` clause
+#[derive(Debug, Clone, Default)]
+pub struct ImportAttributes {
+    pub version: Option<String>,
+    pub integrity: Option<String>,
+    pub type_hint: Option<String>,
 }
 
+/// Use declaration with ESM-like syntax:
+/// `use {items} from "source"`
+/// `use {items} from "source" with { version: "1.0" }`
+/// `pub use {items} from "source"` (re-export)
 #[derive(Debug, Clone)]
 pub struct UseDecl {
-    pub path: Vec<String>,
-    pub target: UseTarget,
+    /// Whether this is a public re-export
+    pub is_pub: bool,
+    /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
+    pub source: String,
+    /// Items being imported
     pub items: Vec<UseItem>,
+    /// Optional import attributes
+    pub attributes: Option<ImportAttributes>,
     pub span: Span,
 }
 

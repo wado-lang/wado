@@ -8,9 +8,13 @@
 // Types in this prelude:
 // - Option<T>, Result<T, E> - Always available (built-in to language)
 // - Stream<T>, Future<T> - Component Model async types
-// - Pollable - WASI I/O polling
+// - Pollable - WASI I/O polling (re-exported from wasi:io)
 //
 // To disable the prelude in a module, use: #![no_prelude]
+
+// Re-export Pollable from WASI I/O
+use {Pollable, poll} from "wasi:io";
+pub use {Pollable, poll};
 
 // ============================================================================
 // Component Model Async Types
@@ -25,7 +29,7 @@
 ///
 /// Component Model: `stream<T>`
 #[component_model("stream")]
-resource Stream<T> {
+pub resource Stream<T> {
     /// Read the next value from the stream.
     /// Returns None when the stream is closed.
     #[component_model("stream.read")]
@@ -73,7 +77,7 @@ pub enum StreamError {
 ///
 /// Component Model: `future<T>`
 #[component_model("future")]
-resource Future<T> {
+pub resource Future<T> {
     /// Subscribe to this future, returning a pollable that becomes ready
     /// when the future resolves.
     #[component_model("future.subscribe")]
@@ -84,34 +88,6 @@ resource Future<T> {
     #[component_model("future.get")]
     fn get() -> Option<T>;
 }
-
-// ============================================================================
-// WASI I/O Poll (will eventually move to Component Model)
-// ============================================================================
-
-/// A pollable represents something that can be polled for readiness.
-/// Pollables are used to implement async I/O and event handling.
-///
-/// Currently defined in WASI, will eventually be part of Component Model.
-/// WASI: `wasi:io/poll@0.2.9#pollable`
-#[wasi("wasi:io/poll@0.2.9")]
-resource Pollable {
-    /// Check if this pollable is ready.
-    #[wasi("wasi:io/poll@0.2.9#[method]pollable.ready")]
-    fn ready() -> bool;
-
-    /// Block until this pollable becomes ready.
-    #[wasi("wasi:io/poll@0.2.9#[method]pollable.block")]
-    fn block();
-}
-
-/// Poll multiple pollables, blocking until at least one is ready.
-/// Returns the indices of the ready pollables.
-///
-/// This is the Component Model's equivalent of select/epoll.
-/// WASI: `wasi:io/poll@0.2.9#poll`
-#[wasi("wasi:io/poll@0.2.9#poll")]
-pub fn poll(pollables: &Array<Pollable>) -> Array<u32>;
 
 // ============================================================================
 // Resource Handle Ownership

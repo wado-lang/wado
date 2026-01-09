@@ -1,11 +1,15 @@
-// WASI CLI interface wrapper for Wado
+// WASI CLI interfaces
 // Based on wasi:cli@0.3.0-rc-2025-09-16
+//
+// This module provides raw WASI CLI effect interfaces.
+// For high-level helpers like println(), use "core:cli" instead.
 
-// Note: Stream and Future are automatically available from core::prelude
-// No need to import them explicitly unless #![no_prelude] is used
+// ============================================================================
+// Types
+// ============================================================================
 
-// Error codes from wasi:cli/types@0.3.0-rc-2025-09-16
-// Maps to WIT: enum error-code { io, illegal-byte-sequence, pipe }
+/// Error codes from wasi:cli/types@0.3.0-rc-2025-09-16
+/// Maps to WIT: enum error-code { io, illegal-byte-sequence, pipe }
 pub enum ErrorCode {
     /// Input/output error
     Io,
@@ -15,14 +19,23 @@ pub enum ErrorCode {
     Pipe,
 }
 
-// WASI resources for terminal I/O
+// ============================================================================
+// Terminal Resources
+// ============================================================================
+
+/// WASI resource for terminal input
 #[wasi("wasi:cli/terminal-input@0.3.0-rc-2025-09-16")]
-resource TerminalInput;
+pub resource TerminalInput;
 
+/// WASI resource for terminal output
 #[wasi("wasi:cli/terminal-output@0.3.0-rc-2025-09-16")]
-resource TerminalOutput;
+pub resource TerminalOutput;
 
-// Effect interface for wasi:cli/stdin@0.3.0-rc-2025-09-16
+// ============================================================================
+// Effect Interfaces
+// ============================================================================
+
+/// Effect interface for wasi:cli/stdin@0.3.0-rc-2025-09-16
 pub effect Stdin {
     /// Return a stream for reading from stdin.
     ///
@@ -32,7 +45,7 @@ pub effect Stdin {
     fn read_via_stream() -> Tuple<Stream<u8>, Future<Result<(), ErrorCode>>>;
 }
 
-// Effect interface for wasi:cli/stdout@0.3.0-rc-2025-09-16
+/// Effect interface for wasi:cli/stdout@0.3.0-rc-2025-09-16
 pub effect Stdout {
     /// Write the given stream to stdout.
     ///
@@ -44,14 +57,14 @@ pub effect Stdout {
     async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-// Effect interface for wasi:cli/stderr@0.3.0-rc-2025-09-16
+/// Effect interface for wasi:cli/stderr@0.3.0-rc-2025-09-16
 pub effect Stderr {
     /// Write the given stream to stderr.
     #[wasi("wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream")]
     async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-// Effect interface for wasi:cli/environment@0.3.0-rc-2025-09-16
+/// Effect interface for wasi:cli/environment@0.3.0-rc-2025-09-16
 pub effect Environment {
     /// Get the POSIX-style environment variables.
     ///
@@ -70,7 +83,7 @@ pub effect Environment {
     fn get_initial_cwd() -> Option<string>;
 }
 
-// Effect interface for wasi:cli/exit@0.3.0-rc-2025-09-16
+/// Effect interface for wasi:cli/exit@0.3.0-rc-2025-09-16
 pub effect Exit {
     /// Exit the current instance and any linked instances.
     /// WIT signature: exit: func(status: result)
@@ -86,7 +99,7 @@ pub effect Exit {
     fn exit_with_code(status_code: u8) -> !;
 }
 
-// Effect interface for wasi:cli/terminal-stdin@0.3.0-rc-2025-09-16
+/// Effect interface for wasi:cli/terminal-stdin@0.3.0-rc-2025-09-16
 pub effect TerminalStdin {
     /// If stdin is connected to a terminal, return a `terminal-input` handle
     /// allowing further interaction with it.
@@ -94,7 +107,7 @@ pub effect TerminalStdin {
     fn get_terminal_stdin() -> Option<TerminalInput>;
 }
 
-// Effect interface for wasi:cli/terminal-stdout@0.3.0-rc-2025-09-16
+/// Effect interface for wasi:cli/terminal-stdout@0.3.0-rc-2025-09-16
 pub effect TerminalStdout {
     /// If stdout is connected to a terminal, return a `terminal-output` handle
     /// allowing further interaction with it.
@@ -102,7 +115,7 @@ pub effect TerminalStdout {
     fn get_terminal_stdout() -> Option<TerminalOutput>;
 }
 
-// Effect interface for wasi:cli/terminal-stderr@0.3.0-rc-2025-09-16
+/// Effect interface for wasi:cli/terminal-stderr@0.3.0-rc-2025-09-16
 pub effect TerminalStderr {
     /// If stderr is connected to a terminal, return a `terminal-output` handle
     /// allowing further interaction with it.
@@ -110,90 +123,13 @@ pub effect TerminalStderr {
     fn get_terminal_stderr() -> Option<TerminalOutput>;
 }
 
-// ============================================
-// High-level helper functions
-// ============================================
-
-/// Print a line to stdout (adds newline)
-pub fn println(message: string) with Stdout {
-    let stream = string_to_stream(`{message}\n`);
-    let _ = Stdout.write_via_stream(stream);
-}
-
-/// Print a line to stderr (adds newline)
-pub fn eprintln(message: string) with Stderr {
-    let stream = string_to_stream(`{message}\n`);
-    let _ = Stderr.write_via_stream(stream);
-}
-
-/// Print to stdout without newline
-pub fn print(message: string) with Stdout {
-    let stream = string_to_stream(message);
-    let _ = Stdout.write_via_stream(stream);
-}
-
-/// Print to stderr without newline
-pub fn eprint(message: string) with Stderr {
-    let stream = string_to_stream(message);
-    let _ = Stderr.write_via_stream(stream);
-}
-
-/// Get environment variable by name
-pub fn env(name: string) -> Option<string> with Environment {
-    let vars = Environment.get_environment();
-    for (key, value) in vars {
-        if key == name {
-            return Some(value);
-        }
-    }
-    return None;
-}
-
-/// Get all command-line arguments
-pub fn args() -> Array<string> with Environment {
-    return Environment.get_arguments();
-}
-
-/// Get current working directory
-pub fn cwd() -> Option<string> with Environment {
-    return Environment.get_initial_cwd();
-}
-
-/// Exit with success
-pub fn exit_success() -> ! with Exit {
-    Exit.exit(Ok(()));
-}
-
-/// Exit with error
-pub fn exit_error() -> ! with Exit {
-    Exit.exit(Err(()));
-}
-
-/// Exit with status code
-pub fn exit(code: u8) -> ! with Exit {
-    Exit.exit_with_code(code);
-}
-
-// ============================================
-// Internal helper functions
-// ============================================
-
-/// Convert a string to a stream of bytes (UTF-8 encoded)
-/// This is a built-in function that the compiler handles specially.
-fn string_to_stream(s: string) -> Stream<u8> {
-    // The compiler generates code to:
-    // 1. Get the UTF-8 bytes of the string
-    // 2. Create a stream<u8> with those bytes
-    // This is implemented as a compiler intrinsic.
-}
-
-// ============================================
+// ============================================================================
 // WASI CLI Command World
-// ============================================
+// ============================================================================
 
 /// The standard WASI CLI command world
 /// Maps to wasi:cli@0.3.0-rc-2025-09-16 command world
-world CliCommand {
+pub world CliCommand {
     // Standard I/O streams
     import Stdout {
         write_via_stream,
@@ -234,7 +170,5 @@ world CliCommand {
     }
 
     // Entry point: maps to WIT's "run: async func() -> result"
-    // The async keyword is required in world declarations to match WIT signatures.
-    // Function implementations don't need async (colorless async via stack switching).
     export async fn run() -> Result<(), ()>;
 }

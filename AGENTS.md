@@ -15,7 +15,8 @@ The compiler is implemented in `wado-compiler/` with a hand-written recursive de
 The CLI is implemented in `wado-cli/` with sub-command style CLI:
 
 ```sh
-wado build -o file.wasm file.wado
+wado compile -o file.wasm file.wado # generates Wasm
+wado compile -o file.wat file.wado  # generates WAT
 wado run file.wado
 ```
 
@@ -55,6 +56,11 @@ This project relays on the following features:
 ## Rules for Rust Code
 
 * Do not use wildcard imports (`use ...::*;`).
+* Write tests in implementation files just for examples. For complete tests, write them in the `tests/` directory.
+
+## Rules for Markdown
+
+* Format markdown files with `prettier`.
 
 ## Project Development
 

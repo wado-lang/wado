@@ -1,0 +1,40 @@
+// WASI I/O interfaces
+// Based on wasi:io@0.2.9
+
+// ============================================================================
+// Poll Interface (wasi:io/poll@0.2.9)
+// ============================================================================
+
+/// A pollable represents something that can be polled for readiness.
+/// Pollables are used to implement async I/O and event handling.
+///
+/// WASI: `wasi:io/poll@0.2.9#pollable`
+#[wasi("wasi:io/poll@0.2.9")]
+pub resource Pollable {
+    /// Check if this pollable is ready.
+    #[wasi("wasi:io/poll@0.2.9#[method]pollable.ready")]
+    fn ready() -> bool;
+
+    /// Block until this pollable becomes ready.
+    #[wasi("wasi:io/poll@0.2.9#[method]pollable.block")]
+    fn block();
+}
+
+/// Poll multiple pollables, blocking until at least one is ready.
+/// Returns the indices of the ready pollables.
+///
+/// This is the Component Model's equivalent of select/epoll.
+/// WASI: `wasi:io/poll@0.2.9#poll`
+#[wasi("wasi:io/poll@0.2.9#poll")]
+pub fn poll(pollables: &Array<Pollable>) -> Array<u32>;
+
+// ============================================================================
+// Effect Interface for I/O Poll
+// ============================================================================
+
+/// Effect interface for wasi:io/poll@0.2.9
+pub effect Poll {
+    /// Poll multiple pollables, blocking until at least one is ready.
+    #[wasi("wasi:io/poll@0.2.9#poll")]
+    fn poll(pollables: &Array<Pollable>) -> Array<u32>;
+}

@@ -303,6 +303,7 @@ impl<'a> Lexer<'a> {
 
         match text {
             "use" => TokenKind::Use,
+            "from" => TokenKind::From,
             "as" => TokenKind::As,
             "fn" => TokenKind::Fn,
             "with" => TokenKind::With,
@@ -504,18 +505,17 @@ mod tests {
 
     #[test]
     fn test_use_statement() {
-        let mut lexer = Lexer::new("use core::cli::{println};");
+        // Test the new ESM-like import syntax
+        let mut lexer = Lexer::new(r#"use {println} from "core:cli";"#);
         let tokens = lexer.tokenize().unwrap();
 
         assert!(matches!(tokens[0].kind, TokenKind::Use));
-        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "core"));
-        assert!(matches!(tokens[2].kind, TokenKind::ColonColon));
-        assert!(matches!(&tokens[3].kind, TokenKind::Ident(s) if s == "cli"));
-        assert!(matches!(tokens[4].kind, TokenKind::ColonColon));
-        assert!(matches!(tokens[5].kind, TokenKind::LBrace));
-        assert!(matches!(&tokens[6].kind, TokenKind::Ident(s) if s == "println"));
-        assert!(matches!(tokens[7].kind, TokenKind::RBrace));
-        assert!(matches!(tokens[8].kind, TokenKind::Semicolon));
+        assert!(matches!(tokens[1].kind, TokenKind::LBrace));
+        assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println"));
+        assert!(matches!(tokens[3].kind, TokenKind::RBrace));
+        assert!(matches!(tokens[4].kind, TokenKind::From));
+        assert!(matches!(&tokens[5].kind, TokenKind::StringLit(s) if s == "core:cli"));
+        assert!(matches!(tokens[6].kind, TokenKind::Semicolon));
     }
 
     #[test]

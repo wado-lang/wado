@@ -101,13 +101,21 @@ impl ModuleResolver {
 
     /// Get the source code for a module
     fn get_source(&self, module_path: &[String]) -> Result<String, ResolveError> {
-        // Try embedded core library first
-        if let Some(source) = stdlib::get_core_module(module_path) {
+        // Convert path segments to ESM-like import path
+        // e.g., ["core", "cli"] -> "core:cli"
+        let import_path = if module_path.len() == 2 {
+            format!("{}:{}", module_path[0], module_path[1])
+        } else {
+            module_path.join(":")
+        };
+
+        // Try embedded stdlib (core:* and wasi:*)
+        if let Some(source) = stdlib::get_stdlib_module(&import_path) {
             return Ok(source.to_string());
         }
 
-        // For now, only core modules are supported
-        // In the future, this could search the filesystem
+        // For now, only stdlib modules are supported
+        // In the future, this could search the filesystem or fetch URLs
         Err(ResolveError::ModuleNotFound {
             path: module_path.to_vec(),
         })

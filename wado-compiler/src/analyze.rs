@@ -5,7 +5,7 @@
 //! 2. Symbol table construction
 //! 3. Name resolution (binding identifiers to their definitions)
 
-use crate::ast::{Item, Module, UseTarget};
+use crate::ast::{Item, Module, UseItem};
 use crate::resolver::{ModuleResolver, ResolveError};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
@@ -242,8 +242,89 @@ impl Analyzer {
                         .define(&world.name, kind, module_path, Some(world.span));
                 }
 
-                Item::Use(_) | Item::Impl(_) => {
-                    // Use declarations are handled in resolve_imports
+                Item::Use(use_decl) => {
+                    // Handle pub use (re-exports)
+                    if use_decl.is_pub {
+                        // Parse the source string into module path segments
+                        let source_path: Vec<String> = if use_decl.source.contains(':') {
+                            use_decl.source.splitn(2, ':').map(String::from).collect()
+                        } else {
+                            vec![use_decl.source.clone()]
+                        };
+
+                        // Try to load the source module
+                        let source_module = match self.resolver.load_module(&source_path) {
+                            Ok(m) => m.clone(),
+                            Err(e) => {
+                                self.errors.push(AnalyzeError::ResolveError(e));
+                                continue;
+                            }
+                        };
+
+                        // Collect definitions from the source module (if not already done)
+                        if self.symbols.get_module_symbols(&source_path).is_empty() {
+                            self.collect_definitions(&source_module, &source_path);
+                        }
+
+                        // Re-export each item to the current module's namespace
+                        for use_item in &use_decl.items {
+                            match use_item {
+                                UseItem::Simple { name, alias } => {
+                                    if let Some(symbol) =
+                                        self.symbols.lookup_in_module(&source_path, name)
+                                    {
+                                        // Re-register the symbol in the current module
+                                        let export_name = alias.as_ref().unwrap_or(name);
+                                        self.symbols.define(
+                                            export_name,
+                                            symbol.kind.clone(),
+                                            module_path,
+                                            symbol.span,
+                                        );
+                                    } else {
+                                        self.errors.push(AnalyzeError::ImportNotFound {
+                                            module_path: source_path.clone(),
+                                            name: name.clone(),
+                                            span: use_decl.span,
+                                        });
+                                    }
+                                }
+                                UseItem::EffectFunctions {
+                                    effect_name,
+                                    functions,
+                                } => {
+                                    // Re-export effect functions
+                                    for func_item in functions {
+                                        let lookup_name =
+                                            format!("{}.{}", effect_name, func_item.name);
+                                        if let Some(symbol) = self
+                                            .symbols
+                                            .lookup_in_module(&source_path, &lookup_name)
+                                        {
+                                            let export_name =
+                                                func_item.alias.as_ref().unwrap_or(&func_item.name);
+                                            self.symbols.define(
+                                                export_name,
+                                                symbol.kind.clone(),
+                                                module_path,
+                                                symbol.span,
+                                            );
+                                        } else {
+                                            self.errors.push(AnalyzeError::ImportNotFound {
+                                                module_path: source_path.clone(),
+                                                name: lookup_name,
+                                                span: use_decl.span,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Non-pub use declarations are handled in resolve_imports
+                }
+
+                Item::Impl(_) => {
                     // Impl blocks are handled later
                 }
             }
@@ -251,6 +332,9 @@ impl Analyzer {
     }
 
     /// Resolve all import declarations in a module
+    ///
+    /// Handles the new ESM-like import syntax:
+    /// `use {items} from "source";`
     fn resolve_imports(
         &mut self,
         module: &Module,
@@ -258,68 +342,72 @@ impl Analyzer {
     ) -> Result<(), Vec<AnalyzeError>> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                // Try to load as a module first
-                let (final_path, final_target, imported_module) =
-                    match self.resolver.load_module(&use_decl.path) {
-                        Ok(m) => {
-                            // Module found - use as-is
-                            (use_decl.path.clone(), use_decl.target.clone(), m.clone())
-                        }
-                        Err(_) if use_decl.path.len() > 1 => {
-                            // Module not found - try treating last segment as Effect name
-                            let mut path_without_last = use_decl.path.clone();
-                            let potential_effect = path_without_last.pop().unwrap();
+                // Parse the source string into module path segments
+                // e.g., "core:cli" -> ["core", "cli"]
+                // e.g., "wasi:filesystem" -> ["wasi", "filesystem"]
+                let module_path: Vec<String> = if use_decl.source.contains(':') {
+                    use_decl.source.splitn(2, ':').map(String::from).collect()
+                } else {
+                    // For package names or relative paths, just use as-is for now
+                    vec![use_decl.source.clone()]
+                };
 
-                            match self.resolver.load_module(&path_without_last) {
-                                Ok(m) => (
-                                    path_without_last,
-                                    UseTarget::Effect(potential_effect),
-                                    m.clone(),
-                                ),
-                                Err(e) => {
-                                    self.errors.push(AnalyzeError::ResolveError(e));
-                                    continue;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            self.errors.push(AnalyzeError::ResolveError(e));
-                            continue;
-                        }
-                    };
+                // Try to load the module
+                let imported_module = match self.resolver.load_module(&module_path) {
+                    Ok(m) => m.clone(),
+                    Err(e) => {
+                        self.errors.push(AnalyzeError::ResolveError(e));
+                        continue;
+                    }
+                };
 
                 // Collect definitions from the imported module (if not already done)
-                if !self.symbols.get_module_symbols(&final_path).is_empty() {
-                    // Already collected
-                } else {
-                    self.collect_definitions(&imported_module, &final_path);
+                if self.symbols.get_module_symbols(&module_path).is_empty() {
+                    self.collect_definitions(&imported_module, &module_path);
                 }
 
                 // Register each imported item
                 for use_item in &use_decl.items {
-                    let lookup_name = match &final_target {
-                        UseTarget::Module => {
-                            // use module::{item}
-                            use_item.name.clone()
+                    match use_item {
+                        UseItem::Simple { name, alias } => {
+                            // Simple import: `name` or `name as alias`
+                            if let Some(symbol) = self.symbols.lookup_in_module(&module_path, name)
+                            {
+                                let symbol_id = symbol.id;
+                                let import_name = alias.as_ref().unwrap_or(name);
+                                self.symbols.register_import(import_name, symbol_id);
+                            } else {
+                                self.errors.push(AnalyzeError::ImportNotFound {
+                                    module_path: module_path.clone(),
+                                    name: name.clone(),
+                                    span: use_decl.span,
+                                });
+                            }
                         }
-                        UseTarget::Effect(effect_name) => {
-                            // use module::Effect::{function}
-                            // Look up as "{Effect}.{function}"
-                            format!("{}.{}", effect_name, use_item.name)
+                        UseItem::EffectFunctions {
+                            effect_name,
+                            functions,
+                        } => {
+                            // Effect function import: `Effect::{func1, func2}`
+                            for func_item in functions {
+                                // Look up as "{Effect}.{function}"
+                                let lookup_name = format!("{}.{}", effect_name, func_item.name);
+                                if let Some(symbol) =
+                                    self.symbols.lookup_in_module(&module_path, &lookup_name)
+                                {
+                                    let symbol_id = symbol.id;
+                                    let import_name =
+                                        func_item.alias.as_ref().unwrap_or(&func_item.name);
+                                    self.symbols.register_import(import_name, symbol_id);
+                                } else {
+                                    self.errors.push(AnalyzeError::ImportNotFound {
+                                        module_path: module_path.clone(),
+                                        name: lookup_name,
+                                        span: use_decl.span,
+                                    });
+                                }
+                            }
                         }
-                    };
-
-                    if let Some(symbol) = self.symbols.lookup_in_module(&final_path, &lookup_name) {
-                        let symbol_id = symbol.id;
-                        // Register with the alias if provided, otherwise use the original name
-                        let import_name = use_item.alias.as_ref().unwrap_or(&use_item.name);
-                        self.symbols.register_import(import_name, symbol_id);
-                    } else {
-                        self.errors.push(AnalyzeError::ImportNotFound {
-                            module_path: final_path.clone(),
-                            name: lookup_name,
-                            span: use_decl.span,
-                        });
                     }
                 }
             }
@@ -395,7 +483,7 @@ mod tests {
     #[test]
     fn test_analyze_with_imports() {
         let source = r#"
-            use core::cli::{println, Stdout};
+            use {println, Stdout} from "core:cli";
 
             fn main() with Stdout {
                 println("hello");
@@ -421,7 +509,7 @@ mod tests {
     #[test]
     fn test_import_not_found() {
         let source = r#"
-            use core::cli::{nonexistent_function};
+            use {nonexistent_function} from "core:cli";
 
             fn main() {
             }
@@ -443,7 +531,7 @@ mod tests {
     #[test]
     fn test_module_not_found() {
         let source = r#"
-            use nonexistent::module::{something};
+            use {something} from "nonexistent:module";
 
             fn main() {
             }

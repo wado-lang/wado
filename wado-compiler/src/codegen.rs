@@ -758,7 +758,7 @@ mod tests {
     fn test_collect_strings() {
         let ast = parse(
             r#"
-            use core::cli::{println, Stdout};
+            use {println, Stdout} from "core:cli";
 
             fn main() with Stdout {
                 println("Hello, world!");
@@ -779,7 +779,7 @@ mod tests {
     fn test_generate_binary() {
         let ast = parse(
             r#"
-            use core::cli::{println, Stdout};
+            use {println, Stdout} from "core:cli";
 
             fn main() with Stdout {
                 println("Hello!");
@@ -807,7 +807,7 @@ mod tests {
     fn test_generate_wat() {
         let ast = parse(
             r#"
-            use core::cli::{println, Stdout};
+            use {println, Stdout} from "core:cli";
 
             fn main() with Stdout {
                 println("Hello!");

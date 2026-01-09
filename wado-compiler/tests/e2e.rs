@@ -31,7 +31,7 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     config.wasm_component_model(true);
     config.wasm_component_model_async(true);
     config.wasm_component_model_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_async_stackful(true); // stack switching
 
     let engine = Engine::new(&config)?;
 
@@ -107,7 +107,7 @@ async fn test_multiple_println() {
 
 #[tokio::test]
 async fn test_effect_import_demo() {
-    let source = include_str!("fixtures/effect-import-demo.wado");
+    let source = include_str!("fixtures/effect_import_demo.wado");
 
     // Compile the source
     let wasm = compile(source).expect("compilation failed");

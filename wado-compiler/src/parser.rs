@@ -94,7 +94,7 @@ impl Parser {
         };
 
         match self.peek_kind() {
-            TokenKind::Use => self.parse_use_decl().map(Item::Use),
+            TokenKind::Use => self.parse_use_decl(is_pub).map(Item::Use),
             TokenKind::Fn => self.parse_function(is_pub).map(Item::Function),
             TokenKind::Effect => self.parse_effect_decl(is_pub).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
@@ -172,60 +172,147 @@ impl Parser {
         })
     }
 
-    fn parse_use_decl(&mut self) -> ParseResult<UseDecl> {
+    /// Parse use declaration with ESM-like syntax:
+    /// `use {items} from "source";`
+    /// `use {items} from "source" with { version: "1.0" };`
+    ///
+    /// Items can be:
+    /// - Simple: `name` or `name as alias`
+    /// - Effect functions: `Effect::{func1, func2}` or `Effect::{func1 as alias}`
+    fn parse_use_decl(&mut self, is_pub: bool) -> ParseResult<UseDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Use)?;
 
-        // Read all path segments (module path or module::Effect)
-        let mut all_segments = vec![self.consume_ident()?];
+        // Parse items: `{...}`
+        self.expect(&TokenKind::LBrace)?;
+        let items = self.parse_use_items()?;
+        self.expect(&TokenKind::RBrace)?;
 
-        while self.check(&TokenKind::ColonColon) {
-            let saved_pos = self.pos;
-            self.advance(); // consume `::`
-            if self.check(&TokenKind::LBrace) {
-                // End of path, `::` followed by `{`
-                // Restore the `::` so the next section can process it
-                self.pos = saved_pos;
-                break;
-            }
-            all_segments.push(self.consume_ident()?);
-        }
+        // Expect `from`
+        self.expect(&TokenKind::From)?;
 
-        // Determine if this is module import or effect import
-        // Pattern 1: `use module::path::{items}`     -> all_segments = module path, then ::{
-        // Pattern 2: `use module::path::Effect::{items}` -> all_segments includes Effect, then ::{
-        let (path, target) = if self.check(&TokenKind::ColonColon) {
-            self.advance(); // consume the final `::`
+        // Parse source string
+        let source = self.consume_string()?;
 
-            if self.check(&TokenKind::LBrace) {
-                // `::` followed by `{` - all segments are module path
-                (all_segments, UseTarget::Module)
-            } else {
-                // `::` followed by identifier - that's the Effect name
-                let effect_name = self.consume_ident()?;
-                self.expect(&TokenKind::ColonColon)?; // must be followed by `::`
-                // all_segments is the module path
-                (all_segments, UseTarget::Effect(effect_name))
-            }
+        // Parse optional `with { ... }` attributes
+        let attributes = if self.check(&TokenKind::With) {
+            self.advance();
+            Some(self.parse_import_attributes()?)
         } else {
-            // No final `::` - all segments are module path
-            (all_segments, UseTarget::Module)
+            None
         };
 
-        self.expect(&TokenKind::LBrace)?;
+        self.expect(&TokenKind::Semicolon)?;
 
-        // Parse items with optional renaming (as alias)
+        Ok(UseDecl {
+            is_pub,
+            source,
+            items,
+            attributes,
+            span: start_span,
+        })
+    }
+
+    /// Parse use items inside `{...}`
+    fn parse_use_items(&mut self) -> ParseResult<Vec<UseItem>> {
         let mut items = vec![];
-        if !self.check(&TokenKind::RBrace) {
-            loop {
-                let name = self.consume_ident()?;
+
+        if self.check(&TokenKind::RBrace) {
+            return Ok(items);
+        }
+
+        loop {
+            let name = self.consume_ident()?;
+
+            // Check if this is an effect with functions: `Effect::{...}`
+            if self.check(&TokenKind::ColonColon) {
+                self.advance(); // consume `::`
+                self.expect(&TokenKind::LBrace)?;
+
+                // Parse function list inside Effect::{...}
+                let functions = self.parse_use_item_simple_list()?;
+                self.expect(&TokenKind::RBrace)?;
+
+                items.push(UseItem::EffectFunctions {
+                    effect_name: name,
+                    functions,
+                });
+            } else {
+                // Simple import, possibly with alias
                 let alias = if self.check(&TokenKind::As) {
                     self.advance();
                     Some(self.consume_ident()?)
                 } else {
                     None
                 };
-                items.push(UseItem { name, alias });
+                items.push(UseItem::Simple { name, alias });
+            }
+
+            if !self.check(&TokenKind::Comma) {
+                break;
+            }
+            self.advance(); // consume comma
+            if self.check(&TokenKind::RBrace) {
+                break; // trailing comma allowed
+            }
+        }
+
+        Ok(items)
+    }
+
+    /// Parse simple use items (name or name as alias) for use inside Effect::{...}
+    fn parse_use_item_simple_list(&mut self) -> ParseResult<Vec<UseItemSimple>> {
+        let mut items = vec![];
+
+        if self.check(&TokenKind::RBrace) {
+            return Ok(items);
+        }
+
+        loop {
+            let name = self.consume_ident()?;
+            let alias = if self.check(&TokenKind::As) {
+                self.advance();
+                Some(self.consume_ident()?)
+            } else {
+                None
+            };
+            items.push(UseItemSimple { name, alias });
+
+            if !self.check(&TokenKind::Comma) {
+                break;
+            }
+            self.advance(); // consume comma
+            if self.check(&TokenKind::RBrace) {
+                break; // trailing comma allowed
+            }
+        }
+
+        Ok(items)
+    }
+
+    /// Parse import attributes: `{ version: "1.0", integrity: "sha384-..." }`
+    fn parse_import_attributes(&mut self) -> ParseResult<ImportAttributes> {
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut attrs = ImportAttributes::default();
+
+        if !self.check(&TokenKind::RBrace) {
+            loop {
+                let key = self.consume_ident()?;
+                self.expect(&TokenKind::Colon)?;
+                let value = self.consume_string()?;
+
+                match key.as_str() {
+                    "version" => attrs.version = Some(value),
+                    "integrity" => attrs.integrity = Some(value),
+                    "type" => attrs.type_hint = Some(value),
+                    _ => {
+                        return Err(ParseError {
+                            message: format!("unknown import attribute: {}", key),
+                            span: self.peek().span,
+                        });
+                    }
+                }
 
                 if !self.check(&TokenKind::Comma) {
                     break;
@@ -238,14 +325,22 @@ impl Parser {
         }
 
         self.expect(&TokenKind::RBrace)?;
-        self.expect(&TokenKind::Semicolon)?;
+        Ok(attrs)
+    }
 
-        Ok(UseDecl {
-            path,
-            target,
-            items,
-            span: start_span,
-        })
+    /// Consume a string literal and return its value
+    fn consume_string(&mut self) -> ParseResult<String> {
+        match &self.peek().kind {
+            TokenKind::StringLit(s) => {
+                let s = s.clone();
+                self.advance();
+                Ok(s)
+            }
+            _ => Err(ParseError {
+                message: "expected string literal".to_string(),
+                span: self.peek().span,
+            }),
+        }
     }
 
     fn parse_function(&mut self, is_pub: bool) -> ParseResult<Function> {
@@ -744,10 +839,21 @@ impl Parser {
         match self.peek_kind().clone() {
             TokenKind::Ident(name) => {
                 self.advance();
-                Ok(Expr::Ident(IdentExpr {
-                    name,
-                    span: start_span,
-                }))
+                // Check for qualified name (Effect::function)
+                if self.check(&TokenKind::ColonColon) {
+                    self.advance();
+                    let method = self.consume_ident()?;
+                    let qualified_name = format!("{}::{}", name, method);
+                    Ok(Expr::Ident(IdentExpr {
+                        name: qualified_name,
+                        span: start_span,
+                    }))
+                } else {
+                    Ok(Expr::Ident(IdentExpr {
+                        name,
+                        span: start_span,
+                    }))
+                }
             }
             TokenKind::IntLit(value) => {
                 self.advance();
@@ -1273,17 +1379,70 @@ mod tests {
 
     #[test]
     fn test_use_decl() {
-        let module = parse("use core::cli::{println, Stdout};").unwrap();
+        let module = parse(r#"use {println, Stdout} from "core:cli";"#).unwrap();
         assert_eq!(module.items.len(), 1);
 
         if let Item::Use(use_decl) = &module.items[0] {
-            assert_eq!(use_decl.path, vec!["core", "cli"]);
+            assert_eq!(use_decl.source, "core:cli");
             assert_eq!(use_decl.items.len(), 2);
-            assert_eq!(use_decl.items[0].name, "println");
-            assert_eq!(use_decl.items[0].alias, None);
-            assert_eq!(use_decl.items[1].name, "Stdout");
-            assert_eq!(use_decl.items[1].alias, None);
-            assert!(matches!(use_decl.target, UseTarget::Module));
+            assert!(
+                matches!(&use_decl.items[0], UseItem::Simple { name, alias } if name == "println" && alias.is_none())
+            );
+            assert!(
+                matches!(&use_decl.items[1], UseItem::Simple { name, alias } if name == "Stdout" && alias.is_none())
+            );
+            assert!(use_decl.attributes.is_none());
+        } else {
+            panic!("expected use declaration");
+        }
+    }
+
+    #[test]
+    fn test_use_decl_with_alias() {
+        let module = parse(r#"use {println as print} from "core:cli";"#).unwrap();
+
+        if let Item::Use(use_decl) = &module.items[0] {
+            assert_eq!(use_decl.source, "core:cli");
+            assert!(
+                matches!(&use_decl.items[0], UseItem::Simple { name, alias } if name == "println" && alias.as_deref() == Some("print"))
+            );
+        } else {
+            panic!("expected use declaration");
+        }
+    }
+
+    #[test]
+    fn test_use_decl_effect_functions() {
+        let module = parse(r#"use {Stdout::{write_via_stream}} from "wasi:cli";"#).unwrap();
+
+        if let Item::Use(use_decl) = &module.items[0] {
+            assert_eq!(use_decl.source, "wasi:cli");
+            assert_eq!(use_decl.items.len(), 1);
+            if let UseItem::EffectFunctions {
+                effect_name,
+                functions,
+            } = &use_decl.items[0]
+            {
+                assert_eq!(effect_name, "Stdout");
+                assert_eq!(functions.len(), 1);
+                assert_eq!(functions[0].name, "write_via_stream");
+            } else {
+                panic!("expected EffectFunctions");
+            }
+        } else {
+            panic!("expected use declaration");
+        }
+    }
+
+    #[test]
+    fn test_use_decl_with_attributes() {
+        let module = parse(r#"use {Stdout} from "wasi:cli" with { version: "0.3.0" };"#).unwrap();
+
+        if let Item::Use(use_decl) = &module.items[0] {
+            assert_eq!(use_decl.source, "wasi:cli");
+            assert!(use_decl.attributes.is_some());
+            let attrs = use_decl.attributes.as_ref().unwrap();
+            assert_eq!(attrs.version, Some("0.3.0".to_string()));
         } else {
             panic!("expected use declaration");
         }
