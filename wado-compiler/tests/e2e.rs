@@ -262,3 +262,35 @@ async fn test_local_floats_mut() {
     // Verify output - mutable floats with reassignment
     assert_eq!(output, "x is 1.0\nx is 2.5\nx is 3.0\n");
 }
+
+// ============================================================================
+// Boolean variable tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_local_bools() {
+    let source = include_str!("fixtures/local_bools.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - boolean variables in conditions
+    assert_eq!(output, "t is true\nf is false\n");
+}
+
+#[tokio::test]
+async fn test_local_bools_mut() {
+    let source = include_str!("fixtures/local_bools_mut.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - mutable booleans with reassignment
+    assert_eq!(output, "flag is false\nflag is true\n");
+}
