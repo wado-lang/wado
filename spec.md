@@ -71,7 +71,7 @@ All Wado types map directly to WebAssembly Component Model types:
 | `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                           |
 | `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)                   |
 | `List<T>`                 | `list<T>`                            | Dynamic list (UpperCamel in Wado)                 |
-| `Dict<K, V>`              | -                                    | Wado extension, not in Component Model            |
+| `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary                  |
 | `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types (UpperCamel in Wado)                  |
 | `Option<T>`               | `option<T>`                          | Optional value (UpperCamel in Wado)               |
 | `Result<T, E>`            | `result<T, E>`                       | Result type (UpperCamel in Wado)                  |
