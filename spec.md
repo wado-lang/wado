@@ -61,28 +61,28 @@ let other = move handle;  // OK: explicit move
 
 All Wado types map directly to WebAssembly Component Model types:
 
-| Wado Type                 | Component Model Type      | Notes                                             |
-| ------------------------- | ------------------------- | ------------------------------------------------- |
-| `bool`                    | `bool`                    | Boolean                                           |
-| `char`                    | `char`                    | Unicode scalar value                              |
-| `string`                  | `string`                  | UTF-8 string                                      |
-| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers                                   |
-| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers                                 |
-| `i128`, `u128`            | -                         | Wasm wide-arithmetic proposal                     |
-| `f32`, `f64`              | `f32`, `f64`              | Floating point (32-bit, 64-bit)                   |
-| `List<T>`                 | `list<T>`                 | Dynamic list (UpperCamel in Wado)                 |
-| `Dict<K, V>`              | -                         | Wado extension, not in Component Model            |
-| `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`      | Tuple types (UpperCamel in Wado)                  |
-| `Option<T>`               | `option<T>`               | Optional value (UpperCamel in Wado)               |
-| `Result<T, E>`            | `result<T, E>`            | Result type (UpperCamel in Wado)                  |
-| `record { ... }`          | `record { ... }`          | Record type (component model primitive)           |
-| `struct { ... }`          | -                         | GC struct (Wasm-GC, not Component Model)          |
-| `enum { ... }`            | `enum { ... }`            | Enumeration without payloads                      |
-| `variant { ... }`         | `variant { ... }`         | Variant/sum type with payloads                    |
-| `flags { ... }`           | `flags { ... }`           | Bit flags (maps to u8/u16/u32/u64)                |
-| `resource`                | `resource`                | Resource handle                                   |
-| `Stream<T>`               | `stream<T>`               | Component Model async stream (UpperCamel in Wado) |
-| `Future<T>`               | `future<T>`               | Component Model async future (UpperCamel in Wado) |
+| Wado Type                 | Component Model Type                 | Notes                                             |
+| ------------------------- | ------------------------------------ | ------------------------------------------------- |
+| `bool`                    | `bool`                               | Boolean                                           |
+| `char`                    | `char`                               | Unicode scalar value                              |
+| `string`                  | `string`                             | UTF-8 string                                      |
+| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64`            | Signed integers                                   |
+| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                 |
+| `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                           |
+| `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)                   |
+| `List<T>`                 | `list<T>`                            | Dynamic list (UpperCamel in Wado)                 |
+| `Dict<K, V>`              | -                                    | Wado extension, not in Component Model            |
+| `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types (UpperCamel in Wado)                  |
+| `Option<T>`               | `option<T>`                          | Optional value (UpperCamel in Wado)               |
+| `Result<T, E>`            | `result<T, E>`                       | Result type (UpperCamel in Wado)                  |
+| `record { ... }`          | `record { ... }`                     | Record type (component model primitive)           |
+| `struct { ... }`          | -                                    | GC struct (Wasm-GC, not Component Model)          |
+| `enum { ... }`            | `enum { ... }`                       | Enumeration without payloads                      |
+| `variant { ... }`         | `variant { ... }`                    | Variant/sum type with payloads                    |
+| `flags { ... }`           | `flags { ... }`                      | Bit flags (maps to u8/u16/u32/u64)                |
+| `resource`                | `resource`                           | Resource handle                                   |
+| `Stream<T>`               | `stream<T>`                          | Component Model async stream (UpperCamel in Wado) |
+| `Future<T>`               | `future<T>`                          | Component Model async future (UpperCamel in Wado) |
 
 **Type Naming Convention:**
 
