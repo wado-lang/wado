@@ -3,28 +3,159 @@
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
 use crate::ast::{Block, CallExpr, Expr, IdentExpr, Item, Literal, Stmt};
-use crate::symbol::{SymbolKind, SymbolTable};
+use std::collections::HashMap;
 use wasm_encoder::{
-    Alias, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
-    ComponentOuterAliasKind, ComponentValType, ConstExpr, DataSection, DataSegment,
-    DataSegmentMode, EntityType, ExportKind, ExportSection, Function, FunctionSection,
-    ImportSection, InstanceType, Instruction, MemorySection, MemoryType, Module, ModuleArg,
-    NameMap, NameSection, PrimitiveValType, TypeBounds, TypeSection, ValType,
+    Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
+    ComponentOuterAliasKind, ComponentValType, CompositeInnerType, CompositeType, ConstExpr,
+    DataCountSection, DataSection, DataSegment, DataSegmentMode, EntityType, ExportKind,
+    ExportSection, FieldType, Function, FunctionSection, HeapType, ImportSection, InstanceType,
+    Instruction, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
+    PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection, ValType,
 };
 
 /// Code generator that produces Component Model components
 /// Targets WASI P3 (0.3.0-rc-2025-09-16)
 pub struct Codegen {
     string_literals: Vec<String>,
-    symbols: SymbolTable,
+}
+
+/// Context for tracking local variables during function code generation
+/// Local indices in Wasm: parameters come first, then declared locals
+struct FunctionContext {
+    /// Map from variable name to local index
+    locals: HashMap<String, u32>,
+    /// Number of parameters (locals 0..param_count are parameters)
+    #[allow(dead_code)]
+    param_count: u32,
+    /// Next available local index for new variables
+    next_local: u32,
+    /// Local types for non-parameter locals (for function declaration)
+    local_types: Vec<ValType>,
+}
+
+/// Module-level context for tracking function indices and GC types
+struct ModuleContext {
+    /// Map from function name to Wasm function index
+    func_indices: HashMap<String, u32>,
+    /// Next type index
+    next_type_idx: u32,
+    /// Next function index (after imports)
+    next_func_idx: u32,
+    /// Type index for GC string array (array<u8>)
+    /// Used when copying GC strings to linear memory
+    #[allow(dead_code)]
+    string_array_type_idx: u32,
+    /// Function index for realloc import
+    /// Used for allocating linear memory buffers for GC string copies
+    #[allow(dead_code)]
+    realloc_func_idx: u32,
+}
+
+impl FunctionContext {
+    fn new(param_count: u32) -> Self {
+        Self {
+            locals: HashMap::new(),
+            param_count,
+            next_local: param_count,
+            local_types: Vec::new(),
+        }
+    }
+
+    /// Add a parameter (must be called before any locals)
+    fn add_param(&mut self, name: &str) {
+        let index = self.locals.len() as u32;
+        self.locals.insert(name.to_string(), index);
+    }
+
+    /// Allocate a new local variable
+    fn alloc_local(&mut self, name: &str, ty: ValType) -> u32 {
+        let index = self.next_local;
+        self.locals.insert(name.to_string(), index);
+        self.local_types.push(ty);
+        self.next_local += 1;
+        index
+    }
+
+    /// Get local index by name
+    fn get_local(&self, name: &str) -> Option<u32> {
+        self.locals.get(name).copied()
+    }
+
+    /// Get local types for function declaration (after params)
+    fn get_local_decls(&self) -> Vec<(u32, ValType)> {
+        // Group consecutive locals of the same type
+        let mut decls: Vec<(u32, ValType)> = Vec::new();
+        for ty in &self.local_types {
+            if let Some((count, last_ty)) = decls.last_mut()
+                && last_ty == ty
+            {
+                *count += 1;
+                continue;
+            }
+            decls.push((1, *ty));
+        }
+        decls
+    }
+}
+
+impl ModuleContext {
+    /// Create a new module context
+    /// Initialize module context with GC type and function indices
+    ///
+    /// Type layout:
+    /// - 0-9: WASI import function types
+    /// - 10: realloc type (i32, i32, i32, i32) -> i32
+    /// - 11: GC string array type (array<u8>)
+    /// - 12: println type (ptr, len) -> ()
+    /// - 13+: user-defined function types
+    ///
+    /// Function layout:
+    /// - 0-9: WASI imports
+    /// - 10: realloc import from env
+    /// - 11: println (internal)
+    /// - 12+: user-defined functions
+    fn new() -> Self {
+        Self {
+            func_indices: HashMap::new(),
+            next_type_idx: 13,         // Types 0-12 are reserved
+            next_func_idx: 11,         // Functions 0-10 are imports
+            string_array_type_idx: 11, // GC array<u8> type
+            realloc_func_idx: 10,      // realloc import
+        }
+    }
+
+    /// Register a function and return its index
+    fn register_func(&mut self, name: &str, _type_idx: u32) -> u32 {
+        let func_idx = self.next_func_idx;
+        self.func_indices.insert(name.to_string(), func_idx);
+        self.next_func_idx += 1;
+        func_idx
+    }
+
+    /// Get function index by name
+    fn get_func_index(&self, name: &str) -> Option<u32> {
+        self.func_indices.get(name).copied()
+    }
+
+    /// Allocate a new type index
+    fn alloc_type(&mut self) -> u32 {
+        let idx = self.next_type_idx;
+        self.next_type_idx += 1;
+        idx
+    }
+}
+
+impl Default for Codegen {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Codegen {
-    /// Create a new code generator with a symbol table
-    pub fn new(symbols: SymbolTable) -> Self {
+    /// Create a new code generator
+    pub fn new() -> Self {
         Self {
             string_literals: Vec::new(),
-            symbols,
         }
     }
 
@@ -81,7 +212,15 @@ impl Codegen {
                 self.collect_strings_from_block(&while_stmt.body);
             }
             Stmt::For(for_stmt) => {
-                self.collect_strings_from_expr(&for_stmt.iter);
+                if let Some(init) = &for_stmt.init {
+                    self.collect_strings_from_stmt(init);
+                }
+                if let Some(cond) = &for_stmt.condition {
+                    self.collect_strings_from_expr(cond);
+                }
+                if let Some(update) = &for_stmt.update {
+                    self.collect_strings_from_expr(update);
+                }
                 self.collect_strings_from_block(&for_stmt.body);
             }
         }
@@ -318,7 +457,7 @@ impl Codegen {
         // ========================================
         // Main core module for P3
         // ========================================
-        let main_module = self.build_main_module_p3(ast_module);
+        let main_module = self.build_main_module_p3(ast_module, &string_data);
         builder.core_module_raw(Some("main-mod"), &main_module);
 
         // Create instance with stream intrinsics + lowered WASI function + async intrinsics
@@ -340,7 +479,10 @@ impl Codegen {
         ];
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
 
-        let env_exports = [("memory", ExportKind::Memory, 0)];
+        let env_exports = [
+            ("memory", ExportKind::Memory, 0),
+            ("realloc", ExportKind::Func, 0), // realloc is core func 0
+        ];
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
 
         // Instantiate main module (core instance 3)
@@ -380,9 +522,38 @@ impl Codegen {
         builder.finish()
     }
 
+    /// Collect user-defined functions from the AST (excluding main and builtins)
+    fn collect_user_functions<'a>(
+        &self,
+        ast_module: &'a crate::ast::Module,
+    ) -> Vec<&'a crate::ast::Function> {
+        ast_module
+            .items
+            .iter()
+            .filter_map(|item| {
+                if let Item::Function(f) = item {
+                    // Skip main (handled separately as run)
+                    if f.name == "main" {
+                        return None;
+                    }
+                    // Skip bodyless functions (builtins)
+                    if f.body.is_none() {
+                        return None;
+                    }
+                    return Some(f);
+                }
+                None
+            })
+            .collect()
+    }
+
     /// Build main module for WASI P3 with write-via-stream
-    fn build_main_module_p3(&self, ast_module: &crate::ast::Module) -> Vec<u8> {
+    fn build_main_module_p3(&self, ast_module: &crate::ast::Module, string_data: &[u8]) -> Vec<u8> {
         let mut module = Module::new();
+        let mut mod_ctx = ModuleContext::new();
+
+        // Collect user-defined functions
+        let user_funcs = self.collect_user_functions(ast_module);
 
         // Type section
         let mut types = TypeSection::new();
@@ -414,11 +585,62 @@ impl Codegen {
             .function([ValType::I32, ValType::I32], [ValType::I32]);
         // Type 9: subtask-drop (subtask) -> ()
         types.ty().function([ValType::I32], []);
-        // Type 10: println (ptr: i32, len: i32) -> ()
-        // Library function: writes string to stdout with stream
-        types.ty().function([ValType::I32, ValType::I32], []);
-        // Type 11: run () -> ()
-        // Async entry point - uses task.return to provide result
+
+        // Type 10: realloc (old_ptr, old_size, align, new_size) -> new_ptr
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I32],
+        );
+
+        // Type 11: GC string array type (array<u8>)
+        // This is a GC array of bytes for UTF-8 strings
+        types.ty().subtype(&SubType {
+            is_final: true,
+            supertype_idx: None,
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Array(ArrayType(FieldType {
+                    element_type: StorageType::I8,
+                    mutable: false, // Strings are immutable
+                })),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
+        });
+
+        // Type 12: println (str: ref array<u8>) -> ()
+        // Library function: writes GC string to stdout with stream
+        types.ty().function(
+            [ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(11),
+            })],
+            [],
+        );
+        mod_ctx.register_func("println", 12);
+
+        // Types for user-defined functions
+        let mut user_func_type_indices = Vec::new();
+        for func in &user_funcs {
+            let type_idx = mod_ctx.alloc_type();
+            // Convert Wado params to Wasm types
+            let param_types: Vec<ValType> = func
+                .params
+                .iter()
+                .map(|p| self.wado_type_to_wasm(&p.ty))
+                .collect();
+            // Return type (default to i32 if specified, empty if none)
+            let return_types: Vec<ValType> = if func.return_type.is_some() {
+                vec![ValType::I32] // Simplified: all returns are i32 for now
+            } else {
+                vec![]
+            };
+            types.ty().function(param_types, return_types);
+            user_func_type_indices.push(type_idx);
+        }
+
+        // Type for run () -> ()
+        let run_type_idx = mod_ctx.alloc_type();
         types.ty().function([], []);
         module.section(&types);
 
@@ -434,6 +656,8 @@ impl Codegen {
         imports.import("wasi", "waitable-join", EntityType::Function(7));
         imports.import("wasi", "waitable-set-wait", EntityType::Function(8));
         imports.import("wasi", "subtask-drop", EntityType::Function(9));
+        // Import realloc from memory module (function index 10)
+        imports.import("env", "realloc", EntityType::Function(10));
         imports.import(
             "env",
             "memory",
@@ -449,35 +673,70 @@ impl Codegen {
 
         // Function section
         let mut functions = FunctionSection::new();
-        functions.function(10); // println function uses type 10 (ptr, len) -> ()
-        functions.function(11); // run function uses type 11 () -> ()
+        functions.function(12); // println function uses type 12
+
+        // Register and add user-defined functions
+        for (i, func) in user_funcs.iter().enumerate() {
+            let type_idx = user_func_type_indices[i];
+            mod_ctx.register_func(&func.name, type_idx);
+            functions.function(type_idx);
+        }
+
+        // run function
+        mod_ctx.register_func("run", run_type_idx);
+        functions.function(run_type_idx);
         module.section(&functions);
 
-        // Export section
+        // Export section - export run function
+        let run_func_idx = mod_ctx.get_func_index("run").unwrap();
         let mut exports = ExportSection::new();
-        exports.export("run", ExportKind::Func, 11); // function index 11 (after 10 imports + println)
+        exports.export("run", ExportKind::Func, run_func_idx);
         module.section(&exports);
+
+        // Data count section (required for array.new_data with GC)
+        // Count is 1 if we have string data, 0 otherwise
+        let data_count = if string_data.is_empty() { 0 } else { 1 };
+        module.section(&DataCountSection { count: data_count });
 
         // Code section
         let mut code = CodeSection::new();
 
         // ============================================
-        // println function (index 10) - library function from core::cli
-        // Parameters: ptr (param 0), len (param 1)
-        // Locals: ret64 (local 0), rx (local 1), tx (local 2), status (local 3)
+        // println function (index 11) - library function from core::cli
+        // Parameters: str_arr (param 0: ref array<u8>)
+        // Locals:
+        //   local 1: len (i32) - string length
+        //   local 2: ptr (i32) - allocated buffer pointer
+        //   local 3: i (i32) - loop counter
+        //   local 4: ret64 (i64) - stream.new result
+        //   local 5: rx (i32) - readable stream handle
+        //   local 6: tx (i32) - writable stream handle
+        //   local 7: status (i32) - subtask status
         // ============================================
-        let mut println_func = Function::new([(1, ValType::I64), (3, ValType::I32)]);
+        let mut println_func = Function::new([
+            (3, ValType::I32), // len, ptr, i
+            (1, ValType::I64), // ret64
+            (3, ValType::I32), // rx, tx, status
+        ]);
         self.generate_println_body(&mut println_func);
         println_func.instruction(&Instruction::End);
         code.function(&println_func);
 
         // ============================================
-        // run function (index 11) - user entry point
+        // User-defined functions
+        // ============================================
+        for func in &user_funcs {
+            let wasm_func = self.generate_user_function(func, &mod_ctx);
+            code.function(&wasm_func);
+        }
+
+        // ============================================
+        // run function - user entry point
         // ============================================
         let mut run_func = Function::new([]);
 
         // Generate body from AST (calls to println, etc.)
-        self.generate_run_body_instructions_p3(&mut run_func, ast_module);
+        self.generate_run_body_instructions_p3_with_ctx(&mut run_func, ast_module, &mod_ctx);
 
         // Call task.return to complete the async task
         // For result unit with no payload, pass discriminant directly (0 = ok)
@@ -489,10 +748,18 @@ impl Codegen {
         code.function(&run_func);
         module.section(&code);
 
+        // Data section: string literals for array.new_data
+        if !string_data.is_empty() {
+            let mut data = DataSection::new();
+            // Passive data segment (no memory target) - used by array.new_data
+            data.passive(string_data.iter().copied());
+            module.section(&data);
+        }
+
         // Name section (for debugging - preserves function names in WAT output)
         let mut names = NameSection::new();
         let mut func_names = NameMap::new();
-        // Imported functions (indices 0-9)
+        // Imported functions (indices 0-10)
         func_names.append(0, "stream-new");
         func_names.append(1, "stream-write");
         func_names.append(2, "stream-drop-writable");
@@ -503,98 +770,543 @@ impl Codegen {
         func_names.append(7, "waitable-join");
         func_names.append(8, "waitable-set-wait");
         func_names.append(9, "subtask-drop");
-        // Library function (index 10)
-        func_names.append(10, "println");
-        // User function (index 11)
-        func_names.append(11, "run");
+        func_names.append(10, "realloc");
+        // Library function (index 11)
+        func_names.append(11, "println");
+        // User-defined functions
+        for func in &user_funcs {
+            if let Some(idx) = mod_ctx.get_func_index(&func.name) {
+                func_names.append(idx, &func.name);
+            }
+        }
+        // run function
+        func_names.append(run_func_idx, "run");
         names.functions(&func_names);
         module.section(&names);
 
         module.finish()
     }
 
-    /// Generate println function body
-    /// Implements: pub fn println(message: string) from core::cli
-    /// Parameters: ptr (param 0), len (param 1)
-    /// Locals: ret64 (local 0), rx (local 1), tx (local 2), status (local 3)
-    fn generate_println_body(&self, func: &mut Function) {
-        // Local indices (after 2 params):
-        // param 0: $ptr (i32) - string pointer
-        // param 1: $len (i32) - string length
-        // local 0: $ret64 (i64) - stream.new result / waitable-set handle
-        // local 1: $rx (i32) - readable stream handle
-        // local 2: $tx (i32) - writable stream handle
-        // local 3: $status (i32) - subtask handle / status
-
-        // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
-        func.instruction(&Instruction::Call(0)); // stream-new
-        func.instruction(&Instruction::LocalSet(2)); // store i64 result in local 0 (offset by params)
-
-        // Extract rx (low 32 bits)
-        func.instruction(&Instruction::LocalGet(2));
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(3)); // $rx in local 1
-
-        // Extract tx (high 32 bits)
-        func.instruction(&Instruction::LocalGet(2));
-        func.instruction(&Instruction::I64Const(32));
-        func.instruction(&Instruction::I64ShrU);
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(4)); // $tx in local 2
-
-        // 2. Call write-via-stream(rx, outptr) to start consuming from the stream
-        func.instruction(&Instruction::LocalGet(3)); // rx
-        func.instruction(&Instruction::I32Const(2048)); // outptr for result
-        func.instruction(&Instruction::Call(4)); // write-via-stream (func 4)
-        func.instruction(&Instruction::LocalSet(5)); // save subtask/status in local 3
-
-        // 3. Write string to stream: stream-write(tx, ptr, len) -> status
-        func.instruction(&Instruction::LocalGet(4)); // tx
-        func.instruction(&Instruction::LocalGet(0)); // ptr (param 0)
-        func.instruction(&Instruction::LocalGet(1)); // len (param 1)
-        func.instruction(&Instruction::Call(1)); // stream-write
-        func.instruction(&Instruction::Drop); // ignore write status
-
-        // 4. Close writable end to signal EOF: stream-drop-writable(tx)
-        func.instruction(&Instruction::LocalGet(4)); // tx
-        func.instruction(&Instruction::Call(2)); // stream-drop-writable
-
-        // 5. Wait for write-via-stream subtask to complete if still pending
-        func.instruction(&Instruction::LocalGet(5));
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::I32And);
-        func.instruction(&Instruction::I32Eqz); // true if pending
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-        // Create waitable-set
-        func.instruction(&Instruction::Call(6)); // waitable-set-new
-        func.instruction(&Instruction::I64ExtendI32U);
-        func.instruction(&Instruction::LocalSet(2));
-
-        // Join subtask to waitable-set
-        func.instruction(&Instruction::LocalGet(2));
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalGet(5)); // subtask handle
-        func.instruction(&Instruction::Call(7)); // waitable-join
-
-        // Wait for completion
-        func.instruction(&Instruction::LocalGet(2));
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::I32Const(2048));
-        func.instruction(&Instruction::Call(8)); // waitable-set-wait
-        func.instruction(&Instruction::Drop);
-
-        // Drop subtask
-        func.instruction(&Instruction::LocalGet(5));
-        func.instruction(&Instruction::Call(9)); // subtask-drop
-
-        func.instruction(&Instruction::End); // end if
+    /// Convert Wado type to Wasm ValType
+    fn wado_type_to_wasm(&self, ty: &crate::ast::Type) -> ValType {
+        match ty {
+            crate::ast::Type::Named(named) => match named.name.as_str() {
+                "i32" | "u32" | "bool" => ValType::I32,
+                "i64" | "u64" => ValType::I64,
+                "f32" => ValType::F32,
+                "f64" => ValType::F64,
+                // String is a GC array<u8> (type index 11)
+                "string" => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(11),
+                }),
+                _ => ValType::I32, // Default to i32
+            },
+            crate::ast::Type::Generic(generic) => match generic.name.as_str() {
+                "Stream" => ValType::I32, // Stream handle
+                // Array<T> is a GC array (type index 11 for Array<u8>)
+                "Array" => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(11),
+                }),
+                _ => ValType::I32,
+            },
+            _ => ValType::I32,
+        }
     }
 
-    fn generate_run_body_instructions_p3(
+    /// Generate a user-defined function
+    fn generate_user_function(
+        &self,
+        ast_func: &crate::ast::Function,
+        mod_ctx: &ModuleContext,
+    ) -> Function {
+        // First pass: analyze function body to collect locals
+        let mut func_ctx = FunctionContext::new(ast_func.params.len() as u32);
+
+        // Add parameters to context
+        for param in &ast_func.params {
+            func_ctx.add_param(&param.name);
+        }
+
+        // Collect local variables from body
+        if let Some(body) = &ast_func.body {
+            self.collect_locals_from_block(body, &mut func_ctx);
+        }
+
+        // Create Wasm function with collected locals
+        let local_decls = func_ctx.get_local_decls();
+        let mut wasm_func = Function::new(local_decls);
+
+        // Reset context for code generation (keep param mappings, reset locals)
+        let mut gen_ctx = FunctionContext::new(ast_func.params.len() as u32);
+        for param in &ast_func.params {
+            gen_ctx.add_param(&param.name);
+        }
+
+        // Generate function body
+        if let Some(body) = &ast_func.body {
+            for stmt in &body.stmts {
+                self.generate_stmt_with_mod_ctx(&mut wasm_func, stmt, &mut gen_ctx, mod_ctx);
+            }
+        }
+
+        wasm_func.instruction(&Instruction::End);
+        wasm_func
+    }
+
+    /// Collect local variables from a block
+    fn collect_locals_from_block(&self, block: &Block, ctx: &mut FunctionContext) {
+        for stmt in &block.stmts {
+            self.collect_locals_from_stmt(stmt, ctx);
+        }
+    }
+
+    /// Collect local variables from a statement
+    fn collect_locals_from_stmt(&self, stmt: &Stmt, ctx: &mut FunctionContext) {
+        match stmt {
+            Stmt::Let(let_stmt) => {
+                let val_type = self.infer_expr_type(&let_stmt.value);
+                ctx.alloc_local(&let_stmt.name, val_type);
+            }
+            Stmt::For(for_stmt) => {
+                if let Some(init) = &for_stmt.init {
+                    self.collect_locals_from_stmt(init, ctx);
+                }
+                self.collect_locals_from_block(&for_stmt.body, ctx);
+            }
+            Stmt::While(while_stmt) => {
+                self.collect_locals_from_block(&while_stmt.body, ctx);
+            }
+            Stmt::If(if_stmt) => {
+                self.collect_locals_from_block(&if_stmt.then_block, ctx);
+                if let Some(else_block) = &if_stmt.else_block {
+                    self.collect_locals_from_block(else_block, ctx);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Generate statement with module context
+    fn generate_stmt_with_mod_ctx(
+        &self,
+        func: &mut Function,
+        stmt: &Stmt,
+        ctx: &mut FunctionContext,
+        mod_ctx: &ModuleContext,
+    ) {
+        match stmt {
+            Stmt::Expr(expr_stmt) => {
+                self.generate_expr_with_mod_ctx(func, &expr_stmt.expr, ctx, mod_ctx);
+            }
+            Stmt::Let(let_stmt) => {
+                let val_type = self.infer_expr_type(&let_stmt.value);
+                let local_idx = ctx.alloc_local(&let_stmt.name, val_type);
+                self.generate_expr_with_mod_ctx(func, &let_stmt.value, ctx, mod_ctx);
+                func.instruction(&Instruction::LocalSet(local_idx));
+            }
+            Stmt::Return(ret_stmt) => {
+                if let Some(value) = &ret_stmt.value {
+                    self.generate_expr_with_mod_ctx(func, value, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::Return);
+            }
+            Stmt::For(for_stmt) => {
+                // Generate init
+                if let Some(init) = &for_stmt.init {
+                    self.generate_stmt_with_mod_ctx(func, init, ctx, mod_ctx);
+                }
+                // block $break
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+                // loop $continue
+                func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+                // Check condition
+                if let Some(condition) = &for_stmt.condition {
+                    self.generate_expr_with_mod_ctx(func, condition, ctx, mod_ctx);
+                    func.instruction(&Instruction::I32Eqz);
+                    func.instruction(&Instruction::BrIf(1));
+                }
+                // Body
+                for s in &for_stmt.body.stmts {
+                    self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                }
+                // Update
+                if let Some(update) = &for_stmt.update {
+                    self.generate_expr_with_mod_ctx(func, update, ctx, mod_ctx);
+                    func.instruction(&Instruction::Drop);
+                }
+                func.instruction(&Instruction::Br(0));
+                func.instruction(&Instruction::End);
+                func.instruction(&Instruction::End);
+            }
+            Stmt::While(while_stmt) => {
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+                func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+                self.generate_expr_with_mod_ctx(func, &while_stmt.condition, ctx, mod_ctx);
+                func.instruction(&Instruction::I32Eqz);
+                func.instruction(&Instruction::BrIf(1));
+                for s in &while_stmt.body.stmts {
+                    self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::Br(0));
+                func.instruction(&Instruction::End);
+                func.instruction(&Instruction::End);
+            }
+            Stmt::If(if_stmt) => {
+                self.generate_expr_with_mod_ctx(func, &if_stmt.condition, ctx, mod_ctx);
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                for s in &if_stmt.then_block.stmts {
+                    self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                }
+                if let Some(else_block) = &if_stmt.else_block {
+                    func.instruction(&Instruction::Else);
+                    for s in &else_block.stmts {
+                        self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                    }
+                }
+                func.instruction(&Instruction::End);
+            }
+        }
+    }
+
+    /// Generate expression with module context
+    fn generate_expr_with_mod_ctx(
+        &self,
+        func: &mut Function,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        mod_ctx: &ModuleContext,
+    ) {
+        match expr {
+            Expr::Call(call) => {
+                self.generate_call_with_mod_ctx(func, call, ctx, mod_ctx);
+            }
+            Expr::Ident(ident) => {
+                if let Some(local_idx) = ctx.get_local(&ident.name) {
+                    func.instruction(&Instruction::LocalGet(local_idx));
+                }
+            }
+            Expr::Literal(lit) => {
+                self.generate_literal_p3(func, &lit.value);
+            }
+            Expr::Binary(bin) => {
+                self.generate_expr_with_mod_ctx(func, &bin.left, ctx, mod_ctx);
+                self.generate_expr_with_mod_ctx(func, &bin.right, ctx, mod_ctx);
+                match bin.op {
+                    crate::ast::BinaryOp::Add => func.instruction(&Instruction::I32Add),
+                    crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I32Sub),
+                    crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I32Mul),
+                    crate::ast::BinaryOp::Div => func.instruction(&Instruction::I32DivS),
+                    crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I32RemS),
+                    crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I32Eq),
+                    crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
+                    crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I32LtS),
+                    crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I32LeS),
+                    crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I32GtS),
+                    crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
+                    crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
+                    crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
+                };
+            }
+            Expr::Assign(assign) => {
+                self.generate_expr_with_mod_ctx(func, &assign.value, ctx, mod_ctx);
+                if let Expr::Ident(ident) = &assign.target
+                    && let Some(local_idx) = ctx.get_local(&ident.name)
+                {
+                    func.instruction(&Instruction::LocalTee(local_idx));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Generate call with module context (for user-defined functions)
+    fn generate_call_with_mod_ctx(
+        &self,
+        func: &mut Function,
+        call: &CallExpr,
+        ctx: &mut FunctionContext,
+        mod_ctx: &ModuleContext,
+    ) {
+        if let Expr::Ident(ident) = &call.callee {
+            // First try builtins
+            if self.is_builtin(&ident.name) {
+                self.generate_builtin_call_with_mod_ctx(func, &ident.name, call, ctx, mod_ctx);
+                return;
+            }
+
+            // Then try user-defined functions
+            if let Some(func_idx) = mod_ctx.get_func_index(&ident.name) {
+                // Generate arguments
+                for arg in &call.args {
+                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::Call(func_idx));
+            }
+        }
+    }
+
+    /// Check if a function name is a builtin
+    fn is_builtin(&self, name: &str) -> bool {
+        matches!(
+            name,
+            "println"
+                | "stream_new"
+                | "stream_write"
+                | "stream_write_string"
+                | "stream_drop_writable"
+                | "stream_drop_readable"
+                | "i64_low32"
+                | "i64_high32"
+                | "array_len"
+                | "string_ptr"
+                | "string_len"
+        )
+    }
+
+    /// Generate builtin call with module context
+    fn generate_builtin_call_with_mod_ctx(
+        &self,
+        func: &mut Function,
+        name: &str,
+        call: &CallExpr,
+        ctx: &mut FunctionContext,
+        mod_ctx: &ModuleContext,
+    ) {
+        match name {
+            "println" => {
+                // println is at function index 11 (after 10 WASI imports + realloc)
+                // Takes a GC array<u8> reference
+                if call.args.len() == 1 {
+                    if let Expr::Literal(lit) = &call.args[0]
+                        && let Literal::String(s) = &lit.value
+                    {
+                        // String literal with newline appended
+                        let with_newline = format!("{s}\n");
+                        let str_offset = self.get_string_offset(&with_newline);
+                        let str_len = with_newline.len();
+                        // Create GC array from data segment
+                        func.instruction(&Instruction::I32Const(str_offset as i32));
+                        func.instruction(&Instruction::I32Const(str_len as i32));
+                        func.instruction(&Instruction::ArrayNewData {
+                            array_type_index: 11,
+                            array_data_index: 0,
+                        });
+                    } else {
+                        // Non-literal string - evaluate expression (produces GC array ref)
+                        self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                    }
+                    func.instruction(&Instruction::Call(11));
+                }
+            }
+            "stream_new" => {
+                func.instruction(&Instruction::Call(0));
+            }
+            "stream_write" => {
+                for arg in &call.args {
+                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::Call(1));
+            }
+            "stream_write_string" => {
+                // stream_write_string(tx: i32, data: string) -> i32
+                //
+                // GC string implementation:
+                // 1. string is ref to GC array (type 11 = array<u8>)
+                // 2. array.len to get string length
+                // 3. Call realloc(0, 0, 1, len) to allocate buffer (func 10)
+                // 4. Loop: array.get_u + i32.store8 to copy bytes
+                // 5. Call stream.write(tx, ptr, len) (func 1)
+                //
+                // Uses 4 scratch locals: arr_ref (ref), len (i32), ptr (i32), i (i32)
+                // These are allocated at fixed positions after function params/locals
+
+                if call.args.len() == 2 {
+                    // We need scratch locals for this operation
+                    // Allocate them: arr_ref, len, ptr, i
+                    let arr_ref_local = ctx.alloc_local(
+                        "__arr_ref",
+                        ValType::Ref(RefType {
+                            nullable: false,
+                            heap_type: HeapType::Concrete(11),
+                        }),
+                    );
+                    let len_local = ctx.alloc_local("__len", ValType::I32);
+                    let ptr_local = ctx.alloc_local("__ptr", ValType::I32);
+                    let i_local = ctx.alloc_local("__i", ValType::I32);
+
+                    // Evaluate tx and save for later
+                    self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                    // tx is on stack
+
+                    // Evaluate string argument - produces GC array ref
+                    self.generate_expr_with_mod_ctx(func, &call.args[1], ctx, mod_ctx);
+                    func.instruction(&Instruction::LocalSet(arr_ref_local));
+
+                    // Get length: array.len
+                    func.instruction(&Instruction::LocalGet(arr_ref_local));
+                    func.instruction(&Instruction::ArrayLen);
+                    func.instruction(&Instruction::LocalTee(len_local));
+
+                    // Allocate buffer: realloc(0, 0, 1, len) -> ptr
+                    // Stack: tx, len
+                    // We need to save tx, call realloc, then restore tx
+                    // Reorder: save tx to a temp, then do realloc
+                    // Actually tx is already consumed, let me re-read the logic
+
+                    // Let me restructure: first collect all values, then call stream.write
+                    // 1. Evaluate tx -> save to stack or local
+                    // 2. Evaluate arr_ref -> save to local
+                    // 3. Get len from arr_ref
+                    // 4. Allocate buffer
+                    // 5. Copy bytes
+                    // 6. Call stream.write(tx, ptr, len)
+
+                    // Current stack: tx (from earlier), len (from tee)
+                    // Need: realloc(0, 0, 1, len) for ptr
+
+                    // Drop len from stack temporarily, save tx
+                    func.instruction(&Instruction::Drop); // drop len (we have it in local)
+                    // tx is on stack, save it
+                    let tx_local = ctx.alloc_local("__tx", ValType::I32);
+                    func.instruction(&Instruction::LocalSet(tx_local));
+
+                    // Call realloc(0, 0, 1, len) to allocate buffer
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(1)); // align
+                    func.instruction(&Instruction::LocalGet(len_local)); // new_size
+                    func.instruction(&Instruction::Call(10)); // realloc
+                    func.instruction(&Instruction::LocalSet(ptr_local));
+
+                    // Initialize loop counter: i = 0
+                    func.instruction(&Instruction::I32Const(0));
+                    func.instruction(&Instruction::LocalSet(i_local));
+
+                    // Loop to copy bytes: while (i < len) { mem[ptr+i] = arr[i]; i++; }
+                    func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $break
+                    func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // $continue
+
+                    // Check condition: i < len
+                    func.instruction(&Instruction::LocalGet(i_local));
+                    func.instruction(&Instruction::LocalGet(len_local));
+                    func.instruction(&Instruction::I32GeU); // i >= len
+                    func.instruction(&Instruction::BrIf(1)); // break if i >= len
+
+                    // Store byte: mem[ptr + i] = arr[i]
+                    func.instruction(&Instruction::LocalGet(ptr_local));
+                    func.instruction(&Instruction::LocalGet(i_local));
+                    func.instruction(&Instruction::I32Add); // ptr + i (address)
+                    func.instruction(&Instruction::LocalGet(arr_ref_local));
+                    func.instruction(&Instruction::LocalGet(i_local));
+                    func.instruction(&Instruction::ArrayGetU(11)); // arr[i] (unsigned)
+                    func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
+                        offset: 0,
+                        align: 0,
+                        memory_index: 0,
+                    }));
+
+                    // Increment: i++
+                    func.instruction(&Instruction::LocalGet(i_local));
+                    func.instruction(&Instruction::I32Const(1));
+                    func.instruction(&Instruction::I32Add);
+                    func.instruction(&Instruction::LocalSet(i_local));
+
+                    // Continue loop
+                    func.instruction(&Instruction::Br(0));
+                    func.instruction(&Instruction::End); // end loop
+                    func.instruction(&Instruction::End); // end block
+
+                    // Call stream-write(tx, ptr, len) (function index 1)
+                    func.instruction(&Instruction::LocalGet(tx_local));
+                    func.instruction(&Instruction::LocalGet(ptr_local));
+                    func.instruction(&Instruction::LocalGet(len_local));
+                    func.instruction(&Instruction::Call(1)); // stream-write
+                }
+            }
+            "stream_drop_writable" => {
+                for arg in &call.args {
+                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::Call(2));
+            }
+            "stream_drop_readable" => {
+                for arg in &call.args {
+                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::Call(3));
+            }
+            "i64_low32" => {
+                for arg in &call.args {
+                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            "i64_high32" => {
+                for arg in &call.args {
+                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::I64Const(32));
+                func.instruction(&Instruction::I64ShrU);
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            "array_len" => {
+                // array_len<T>(arr: Array<T>) -> i32
+                // For GC arrays, uses Wasm GC array.len instruction
+                for arg in &call.args {
+                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                }
+                func.instruction(&Instruction::ArrayLen);
+            }
+            "string_ptr" => {
+                // string_ptr(s: string) -> i32
+                // Returns pointer to string data in linear memory
+                //
+                // Current: works with string literals (compile-time offset)
+                // Future GC: will extract ptr from (ptr, len) pair or copy GC array
+                if call.args.len() == 1 {
+                    if let Expr::Literal(lit) = &call.args[0]
+                        && let Literal::String(s) = &lit.value
+                    {
+                        let str_offset = self.get_string_offset(s);
+                        func.instruction(&Instruction::I32Const(str_offset as i32));
+                    } else {
+                        // Non-literal - evaluate and assume first element is ptr
+                        self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                        // TODO: for GC strings, copy to linear memory and return ptr
+                    }
+                }
+            }
+            "string_len" => {
+                // string_len(s: string) -> i32
+                // Returns length of string in bytes
+                //
+                // Current: works with string literals (compile-time length)
+                // Future GC: will use array.len on GC array
+                if call.args.len() == 1 {
+                    if let Expr::Literal(lit) = &call.args[0]
+                        && let Literal::String(s) = &lit.value
+                    {
+                        let str_len = s.len() as i32;
+                        func.instruction(&Instruction::I32Const(str_len));
+                    } else {
+                        // Non-literal - for GC arrays use array.len
+                        self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                        func.instruction(&Instruction::ArrayLen);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Generate run body with module context
+    fn generate_run_body_instructions_p3_with_ctx(
         &self,
         func: &mut Function,
         ast_module: &crate::ast::Module,
+        mod_ctx: &ModuleContext,
     ) {
         // Find main function
         let main_func = ast_module.items.iter().find_map(|item| {
@@ -607,141 +1319,221 @@ impl Codegen {
         });
 
         if let Some(main) = main_func {
-            // Main function must have a body
             if let Some(body) = &main.body {
+                let mut ctx = FunctionContext::new(main.params.len() as u32);
+                for param in &main.params {
+                    ctx.add_param(&param.name);
+                }
                 for stmt in &body.stmts {
-                    self.generate_stmt_instructions_p3(func, stmt);
+                    self.generate_stmt_with_mod_ctx(func, stmt, &mut ctx, mod_ctx);
                 }
             }
         }
     }
 
-    fn generate_stmt_instructions_p3(&self, func: &mut Function, stmt: &Stmt) {
-        if let Stmt::Expr(expr_stmt) = stmt {
-            self.generate_expr_instructions_p3(func, &expr_stmt.expr);
-        }
+    /// Generate println function body
+    /// Implements: pub fn println(message: string) from core::cli
+    /// Parameter: str_arr (param 0: ref array<u8>)
+    /// Locals:
+    ///   local 1: len (i32) - string length
+    ///   local 2: ptr (i32) - allocated buffer pointer
+    ///   local 3: i (i32) - loop counter
+    ///   local 4: ret64 (i64) - stream.new result
+    ///   local 5: rx (i32) - readable stream handle
+    ///   local 6: tx (i32) - writable stream handle
+    ///   local 7: status (i32) - subtask status
+    fn generate_println_body(&self, func: &mut Function) {
+        // ============================================
+        // Phase 1: Copy GC array to linear memory
+        // ============================================
+
+        // Get length from GC array: array.len
+        func.instruction(&Instruction::LocalGet(0)); // str_arr
+        func.instruction(&Instruction::ArrayLen);
+        func.instruction(&Instruction::LocalSet(1)); // len
+
+        // Allocate buffer: realloc(0, 0, 1, len) -> ptr
+        func.instruction(&Instruction::I32Const(0)); // old_ptr
+        func.instruction(&Instruction::I32Const(0)); // old_size
+        func.instruction(&Instruction::I32Const(1)); // align
+        func.instruction(&Instruction::LocalGet(1)); // new_size = len
+        func.instruction(&Instruction::Call(10)); // realloc (func 10)
+        func.instruction(&Instruction::LocalSet(2)); // ptr
+
+        // Initialize loop counter: i = 0
+        func.instruction(&Instruction::I32Const(0));
+        func.instruction(&Instruction::LocalSet(3)); // i = 0
+
+        // Loop to copy bytes: while (i < len) { mem[ptr+i] = arr[i]; i++; }
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $break
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // $continue
+
+        // Check condition: i >= len -> break
+        func.instruction(&Instruction::LocalGet(3)); // i
+        func.instruction(&Instruction::LocalGet(1)); // len
+        func.instruction(&Instruction::I32GeU); // i >= len
+        func.instruction(&Instruction::BrIf(1)); // break if i >= len
+
+        // Store byte: mem[ptr + i] = arr[i]
+        func.instruction(&Instruction::LocalGet(2)); // ptr
+        func.instruction(&Instruction::LocalGet(3)); // i
+        func.instruction(&Instruction::I32Add); // ptr + i (address)
+        func.instruction(&Instruction::LocalGet(0)); // str_arr
+        func.instruction(&Instruction::LocalGet(3)); // i
+        func.instruction(&Instruction::ArrayGetU(11)); // arr[i] (unsigned)
+        func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
+            offset: 0,
+            align: 0,
+            memory_index: 0,
+        }));
+
+        // Increment: i++
+        func.instruction(&Instruction::LocalGet(3)); // i
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32Add);
+        func.instruction(&Instruction::LocalSet(3)); // i = i + 1
+
+        // Continue loop
+        func.instruction(&Instruction::Br(0));
+        func.instruction(&Instruction::End); // end loop
+        func.instruction(&Instruction::End); // end block
+
+        // ============================================
+        // Phase 2: Stream operations (ptr and len now in locals 2 and 1)
+        // ============================================
+
+        // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
+        func.instruction(&Instruction::Call(0)); // stream-new
+        func.instruction(&Instruction::LocalSet(4)); // ret64
+
+        // Extract rx (low 32 bits)
+        func.instruction(&Instruction::LocalGet(4)); // ret64
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(5)); // rx
+
+        // Extract tx (high 32 bits)
+        func.instruction(&Instruction::LocalGet(4)); // ret64
+        func.instruction(&Instruction::I64Const(32));
+        func.instruction(&Instruction::I64ShrU);
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(6)); // tx
+
+        // 2. Call write-via-stream(rx, outptr) to start consuming from the stream
+        func.instruction(&Instruction::LocalGet(5)); // rx
+        func.instruction(&Instruction::I32Const(2048)); // outptr for result
+        func.instruction(&Instruction::Call(4)); // write-via-stream (func 4)
+        func.instruction(&Instruction::LocalSet(7)); // status
+
+        // 3. Write string to stream: stream-write(tx, ptr, len) -> status
+        func.instruction(&Instruction::LocalGet(6)); // tx
+        func.instruction(&Instruction::LocalGet(2)); // ptr
+        func.instruction(&Instruction::LocalGet(1)); // len
+        func.instruction(&Instruction::Call(1)); // stream-write
+        func.instruction(&Instruction::Drop); // ignore write status
+
+        // 4. Close writable end to signal EOF: stream-drop-writable(tx)
+        func.instruction(&Instruction::LocalGet(6)); // tx
+        func.instruction(&Instruction::Call(2)); // stream-drop-writable
+
+        // 5. Wait for write-via-stream subtask to complete if still pending
+        func.instruction(&Instruction::LocalGet(7)); // status
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32And);
+        func.instruction(&Instruction::I32Eqz); // true if pending
+        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+
+        // Create waitable-set
+        func.instruction(&Instruction::Call(6)); // waitable-set-new
+        func.instruction(&Instruction::I64ExtendI32U);
+        func.instruction(&Instruction::LocalSet(4)); // reuse ret64 for waitable-set
+
+        // Join subtask to waitable-set
+        func.instruction(&Instruction::LocalGet(4));
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalGet(7)); // status (subtask handle)
+        func.instruction(&Instruction::Call(7)); // waitable-join
+
+        // Wait for completion
+        func.instruction(&Instruction::LocalGet(4));
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::I32Const(2048));
+        func.instruction(&Instruction::Call(8)); // waitable-set-wait
+        func.instruction(&Instruction::Drop);
+
+        // Drop subtask
+        func.instruction(&Instruction::LocalGet(7)); // status (subtask handle)
+        func.instruction(&Instruction::Call(9)); // subtask-drop
+
+        func.instruction(&Instruction::End); // end if
     }
 
-    fn generate_expr_instructions_p3(&self, func: &mut Function, expr: &Expr) {
-        if let Expr::Call(call) = expr {
-            self.generate_call_instructions_p3(func, call);
-        }
-    }
-
-    fn generate_call_instructions_p3(&self, func: &mut Function, call: &CallExpr) {
-        if let Expr::Ident(ident) = &call.callee {
-            // Look up the function in the symbol table
-            if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                if let SymbolKind::Function(func_sym) = &symbol.kind {
-                    // Check if it's a builtin function
-                    if func_sym.is_builtin {
-                        self.generate_builtin_call(func, &ident.name, call);
+    /// Infer the Wasm type of an expression (simplified type inference)
+    fn infer_expr_type(&self, expr: &Expr) -> ValType {
+        match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::Int(_) => ValType::I32,
+                Literal::Float(_) => ValType::F64,
+                Literal::Bool(_) => ValType::I32,
+                // String is a GC array<u8> reference (type index 11)
+                Literal::String(_) => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(11),
+                }),
+                Literal::Unit => ValType::I32,
+            },
+            Expr::Call(call) => {
+                // Look up return type from symbol table or builtin
+                if let Expr::Ident(ident) = &call.callee {
+                    match ident.name.as_str() {
+                        "stream_new" => ValType::I64,
+                        "i64_low32" | "i64_high32" | "string_len" | "array_len" => ValType::I32,
+                        _ => ValType::I32, // Default
                     }
-                    // TODO: handle user-defined function calls
+                } else {
+                    ValType::I32
                 }
-            } else {
-                // Symbol not found - for now, try as builtin (backwards compatibility)
-                self.generate_builtin_call(func, &ident.name, call);
             }
+            Expr::Binary(_) => ValType::I32, // Most binary ops return i32
+            Expr::Ident(ident) => {
+                // For now, default to i32
+                // A proper implementation would look up the variable's type
+                if ident.name.contains("64") || ident.name == "handles" {
+                    ValType::I64
+                } else {
+                    ValType::I32
+                }
+            }
+            _ => ValType::I32,
         }
     }
 
-    /// Generate code for calling a library function
-    /// Library functions (like println from core::cli) are statically linked into the wasm module
-    ///
-    /// Core Wasm import function indices (in main module):
-    /// 0 = stream-new
-    /// 1 = stream-write
-    /// 2 = stream-drop-writable
-    /// 3 = stream-drop-readable
-    /// 4 = write-via-stream
-    /// 5 = task-return
-    /// 6 = waitable-set-new
-    /// 7 = waitable-join
-    /// 8 = waitable-set-wait
-    /// 9 = subtask-drop
-    /// 10 = println (generated library function)
-    fn generate_builtin_call(&self, func: &mut Function, name: &str, call: &CallExpr) {
-        match name {
-            "println" => {
-                // println is at function index 10
-                // It takes (ptr: i32, len: i32)
-                if call.args.len() == 1
-                    && let Expr::Literal(lit) = &call.args[0]
-                    && let Literal::String(s) = &lit.value
-                {
-                    // Get the string with newline appended
-                    let with_newline = format!("{s}\n");
-                    let str_offset = self.get_string_offset(&with_newline);
-                    let str_len = with_newline.len() as i32;
-
-                    // Push arguments: ptr, len
-                    func.instruction(&Instruction::I32Const(str_offset as i32));
-                    func.instruction(&Instruction::I32Const(str_len));
-                    // Call println (function index 10)
-                    func.instruction(&Instruction::Call(10));
-                }
+    /// Generate literal value
+    fn generate_literal_p3(&self, func: &mut Function, lit: &Literal) {
+        match lit {
+            Literal::Int(n) => {
+                func.instruction(&Instruction::I32Const(*n as i32));
             }
-
-            // ========================================
-            // Stream intrinsics (Component Model canonical built-ins)
-            // ========================================
-            "stream_new" => {
-                // stream_new() -> i64 (rx in low 32 bits, tx in high 32 bits)
-                func.instruction(&Instruction::Call(0));
+            Literal::Float(f) => {
+                func.instruction(&Instruction::F64Const((*f).into()));
             }
-            "stream_write" => {
-                // stream_write(tx: i32, ptr: i32, len: i32) -> i32
-                // Arguments should be on stack from caller
-                func.instruction(&Instruction::Call(1));
+            Literal::Bool(b) => {
+                func.instruction(&Instruction::I32Const(if *b { 1 } else { 0 }));
             }
-            "stream_drop_writable" => {
-                // stream_drop_writable(tx: i32)
-                func.instruction(&Instruction::Call(2));
+            Literal::String(s) => {
+                // Create GC array from data segment
+                // ArrayNewData { type_index, data_index } pops (offset, length) from stack
+                let offset = self.get_string_offset(s);
+                let len = s.len();
+                func.instruction(&Instruction::I32Const(offset as i32)); // offset in data segment
+                func.instruction(&Instruction::I32Const(len as i32)); // length
+                func.instruction(&Instruction::ArrayNewData {
+                    array_type_index: 11, // GC array<u8> type
+                    array_data_index: 0,  // Data segment 0
+                });
             }
-            "stream_drop_readable" => {
-                // stream_drop_readable(rx: i32)
-                func.instruction(&Instruction::Call(3));
-            }
-
-            // ========================================
-            // Bit manipulation intrinsics
-            // ========================================
-            "i64_low32" => {
-                // i64_low32(value: i64) -> i32
-                // Extracts low 32 bits using i32.wrap_i64
-                // Argument should be on stack from caller
-                func.instruction(&Instruction::I32WrapI64);
-            }
-            "i64_high32" => {
-                // i64_high32(value: i64) -> i32
-                // Extracts high 32 bits: (value >> 32) as i32
-                // Argument should be on stack from caller
-                func.instruction(&Instruction::I64Const(32));
-                func.instruction(&Instruction::I64ShrU);
-                func.instruction(&Instruction::I32WrapI64);
-            }
-
-            // ========================================
-            // String memory intrinsics
-            // ========================================
-            "string_ptr" => {
-                // string_ptr(s: string) -> i32
-                // Returns pointer to string data
-                // For now, string is passed as (ptr, len) tuple
-                // The ptr should already be on stack from caller
-                // TODO: proper string representation
-            }
-            "string_len" => {
-                // string_len(s: string) -> i32
-                // Returns length of string in bytes
-                // For now, string is passed as (ptr, len) tuple
-                // The len should be accessible from string representation
-                // TODO: proper string representation
-            }
-
-            _ => {
-                // Unknown function - ignore for now
+            Literal::Unit => {
+                // Unit type - represented as i32 0
+                func.instruction(&Instruction::I32Const(0));
             }
         }
     }
@@ -817,6 +1609,7 @@ mod tests {
     use crate::analyze::Analyzer;
     use crate::lexer::Lexer;
     use crate::parser::Parser;
+    use crate::symbol::SymbolTable;
 
     fn parse(source: &str) -> crate::ast::Module {
         let mut lexer = Lexer::new(source);
@@ -843,8 +1636,8 @@ mod tests {
         "#,
         );
 
-        let symbols = analyze(&ast);
-        let mut codegen = Codegen::new(symbols);
+        let _symbols = analyze(&ast);
+        let mut codegen = Codegen::new();
         codegen.collect_strings(&ast);
 
         // println appends newline to string literals
@@ -864,8 +1657,8 @@ mod tests {
         "#,
         );
 
-        let symbols = analyze(&ast);
-        let mut codegen = Codegen::new(symbols);
+        let _symbols = analyze(&ast);
+        let mut codegen = Codegen::new();
         let wasm = codegen.generate_wasm(&ast);
 
         // Verify it starts with Wasm magic number
@@ -892,8 +1685,8 @@ mod tests {
         "#,
         );
 
-        let symbols = analyze(&ast);
-        let mut codegen = Codegen::new(symbols);
+        let _symbols = analyze(&ast);
+        let mut codegen = Codegen::new();
         let wat = codegen.generate_wat(&ast);
 
         // Verify it produces valid WAT

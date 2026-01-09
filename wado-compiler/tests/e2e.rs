@@ -32,6 +32,7 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     config.wasm_component_model_async(true);
     config.wasm_component_model_async_builtins(true);
     config.wasm_component_model_async_stackful(true); // stack switching
+    config.wasm_gc(true); // Enable GC for GC string arrays
 
     let engine = Engine::new(&config)?;
 

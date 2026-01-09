@@ -468,6 +468,14 @@ impl Parser {
     }
 
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
+        let stmt = self.parse_let_stmt_inner()?;
+        self.expect(&TokenKind::Semicolon)?;
+        Ok(stmt)
+    }
+
+    /// Parse let statement without consuming trailing semicolon
+    /// Used in for loop init: `for (let mut i = 0; ...)`
+    fn parse_let_stmt_inner(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
 
         let is_reactive = if self.check(&TokenKind::Reactive) {
@@ -497,7 +505,6 @@ impl Parser {
 
         self.expect(&TokenKind::Eq)?;
         let value = self.parse_expr()?;
-        self.expect(&TokenKind::Semicolon)?;
 
         Ok(Stmt::Let(LetStmt {
             name,
@@ -563,23 +570,54 @@ impl Parser {
         }))
     }
 
+    /// Parse C-style for loop: `for (init; condition; update) { body }`
     fn parse_for_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::For)?;
+        self.expect(&TokenKind::LParen)?;
 
-        let pattern = self.parse_pattern()?;
-        self.expect(&TokenKind::In)?;
-        let iter = self.parse_expr()?;
+        // Parse init (optional): `let i = 0` or expression statement
+        let init = if self.check(&TokenKind::Semicolon) {
+            None
+        } else if self.check(&TokenKind::Let) || self.check(&TokenKind::Reactive) {
+            Some(Box::new(self.parse_let_stmt_inner()?))
+        } else {
+            let expr = self.parse_expr()?;
+            Some(Box::new(Stmt::Expr(ExprStmt {
+                expr,
+                span: start_span,
+            })))
+        };
+        self.expect(&TokenKind::Semicolon)?;
+
+        // Parse condition (optional): `i < 10`
+        let condition = if self.check(&TokenKind::Semicolon) {
+            None
+        } else {
+            Some(self.parse_expr()?)
+        };
+        self.expect(&TokenKind::Semicolon)?;
+
+        // Parse update (optional): `i = i + 1`
+        let update = if self.check(&TokenKind::RParen) {
+            None
+        } else {
+            Some(self.parse_expr()?)
+        };
+        self.expect(&TokenKind::RParen)?;
+
         let body = self.parse_block()?;
 
         Ok(Stmt::For(ForStmt {
-            pattern,
-            iter,
+            init,
+            condition,
+            update,
             body,
             span: start_span,
         }))
     }
 
+    #[allow(dead_code)]
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::LParen) {
             // Tuple pattern: (a, b, c)
@@ -626,7 +664,26 @@ impl Parser {
     // Expression parsing with precedence climbing
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
-        self.parse_or_expr()
+        self.parse_assignment_expr()
+    }
+
+    /// Parse assignment expression: `target = value`
+    /// Assignment has lowest precedence and is right-associative
+    fn parse_assignment_expr(&mut self) -> ParseResult<Expr> {
+        let start_span = self.peek().span;
+        let expr = self.parse_or_expr()?;
+
+        if self.check(&TokenKind::Eq) {
+            self.advance();
+            let value = self.parse_assignment_expr()?; // Right-associative
+            return Ok(Expr::Assign(Box::new(AssignExpr {
+                target: expr,
+                value,
+                span: start_span,
+            })));
+        }
+
+        Ok(expr)
     }
 
     fn parse_or_expr(&mut self) -> ParseResult<Expr> {
@@ -1730,6 +1787,72 @@ mod tests {
             assert_eq!(body.stmts.len(), 1);
         } else {
             panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_c_style_for_loop() {
+        let source = r#"
+            fn test() {
+                for (let mut i = 0; i < 10; i = i + 1) {
+                    println("hello");
+                }
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 1);
+
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().expect("function should have body");
+            assert_eq!(body.stmts.len(), 1);
+
+            if let Stmt::For(for_stmt) = &body.stmts[0] {
+                // Check init
+                assert!(for_stmt.init.is_some());
+                if let Stmt::Let(let_stmt) = for_stmt.init.as_ref().unwrap().as_ref() {
+                    assert_eq!(let_stmt.name, "i");
+                    assert!(let_stmt.is_mut);
+                }
+
+                // Check condition
+                assert!(for_stmt.condition.is_some());
+
+                // Check update
+                assert!(for_stmt.update.is_some());
+
+                // Check body
+                assert_eq!(for_stmt.body.stmts.len(), 1);
+            } else {
+                panic!("expected for statement");
+            }
+        } else {
+            panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_for_loop_empty_parts() {
+        // Test for loop with empty parts: for (;;) { }
+        let source = r#"
+            fn test() {
+                for (;;) {
+                    println("infinite");
+                }
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            if let Stmt::For(for_stmt) = &body.stmts[0] {
+                assert!(for_stmt.init.is_none());
+                assert!(for_stmt.condition.is_none());
+                assert!(for_stmt.update.is_none());
+            } else {
+                panic!("expected for statement");
+            }
         }
     }
 }

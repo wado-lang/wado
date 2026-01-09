@@ -2,6 +2,11 @@
 //
 // This module provides low-level stream operations that map to Component Model
 // canonical intrinsics. These are used to implement higher-level I/O functions.
+//
+// Note on string representation:
+// - `string` and `Array<u8>` have the same Wasm-level representation: GC array of u8
+// - A string is a single reference value (not a ptr+len pair)
+// - Use `array_len` to get the length of a string or array
 
 // ============================================================================
 // Stream Intrinsics (Component Model canonical built-ins)
@@ -10,8 +15,10 @@
 /// Create a new stream, returns i64 with rx in low 32 bits, tx in high 32 bits
 pub fn stream_new() -> i64;
 
-/// Write data to stream, returns status
-pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
+/// Write a string/array to stream, returns status
+/// Converts GC array to linear memory and calls stream.write
+/// Note: Implementation blocked on loop codegen
+pub fn stream_write_string(tx: i32, data: string) -> i32;
 
 /// Close the writable end of the stream
 pub fn stream_drop_writable(tx: i32);
@@ -30,13 +37,15 @@ pub fn i64_low32(value: i64) -> i32;
 pub fn i64_high32(value: i64) -> i32;
 
 // ============================================================================
-// String Memory Intrinsics
+// Array/String Intrinsics (Wasm GC)
 // ============================================================================
 
-/// Get pointer to string data
-pub fn string_ptr(s: string) -> i32;
+/// Get length of an array
+/// Maps to Wasm GC `array.len` instruction
+pub fn array_len<T>(arr: Array<T>) -> i32;
 
-/// Get length of string in bytes
+/// Get length of a string in bytes (UTF-8)
+/// Maps to Wasm GC `array.len` instruction
 pub fn string_len(s: string) -> i32;
 
 // ============================================================================
@@ -49,7 +58,7 @@ pub fn string_to_stream(s: string) -> Stream<u8> {
     let rx = i64_low32(handles);
     let tx = i64_high32(handles);
 
-    stream_write(tx, string_ptr(s), string_len(s));
+    stream_write_string(tx, s);
     stream_drop_writable(tx);
 
     return rx;

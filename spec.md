@@ -337,13 +337,13 @@ Wado uses an ESM-like import syntax with `use {...} from "source"`. This aligns 
 
 ### Module Source Types
 
-| Source Type       | Syntax                              | Example                                        |
-| ----------------- | ----------------------------------- | ---------------------------------------------- |
-| WASI standard     | `"wasi:<package>"`                  | `"wasi:cli"`, `"wasi:filesystem"`              |
-| Core library      | `"core:<module>"`                   | `"core:cli"`, `"core:fmt"`                     |
-| Remote (HTTP)     | `"https://..."`                     | `"https://example.com/lib.wado"`               |
-| Local file        | `"./<path>"` or `"../<path>"`       | `"./utils.wado"`, `"../config.wado"`           |
-| Package           | `"<package-name>"`                  | `"parser-lib"`, `"json-utils"`                 |
+| Source Type   | Syntax                        | Example                              |
+| ------------- | ----------------------------- | ------------------------------------ |
+| WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
+| Core library  | `"core:<module>"`             | `"core:cli"`, `"core:fmt"`           |
+| Remote (HTTP) | `"https://..."`               | `"https://example.com/lib.wado"`     |
+| Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
+| Package       | `"<package-name>"`            | `"parser-lib"`, `"json-utils"`       |
 
 ### Import Syntax
 

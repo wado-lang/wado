@@ -264,10 +264,15 @@ pub struct WhileStmt {
     pub span: Span,
 }
 
+/// C-style for loop: `for (init; condition; update) { body }`
 #[derive(Debug, Clone)]
 pub struct ForStmt {
-    pub pattern: Pattern,
-    pub iter: Expr,
+    /// Initialization statement (e.g., `let i = 0`)
+    pub init: Option<Box<Stmt>>,
+    /// Loop condition (e.g., `i < 10`)
+    pub condition: Option<Expr>,
+    /// Update expression (e.g., `i = i + 1`)
+    pub update: Option<Expr>,
     pub body: Block,
     pub span: Span,
 }
@@ -278,6 +283,7 @@ pub enum Expr {
     Literal(LiteralExpr),
     Binary(Box<BinaryExpr>),
     Unary(Box<UnaryExpr>),
+    Assign(Box<AssignExpr>),
     Call(Box<CallExpr>),
     MethodCall(Box<MethodCallExpr>),
     FieldAccess(Box<FieldAccessExpr>),
@@ -286,6 +292,14 @@ pub enum Expr {
     If(Box<IfExpr>),
     Match(Box<MatchExpr>),
     Closure(Box<ClosureExpr>),
+}
+
+/// Assignment expression: `x = value` or `x.field = value`
+#[derive(Debug, Clone)]
+pub struct AssignExpr {
+    pub target: Expr,
+    pub value: Expr,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

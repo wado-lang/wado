@@ -78,6 +78,7 @@ async fn run_wasm(wasm: Vec<u8>) -> Result<()> {
     config.wasm_component_model_async(true);
     config.wasm_component_model_async_builtins(true);
     config.wasm_component_model_async_stackful(true); // stack switching
+    config.wasm_gc(true); // Enable GC for GC string arrays
 
     let engine = Engine::new(&config)?;
 

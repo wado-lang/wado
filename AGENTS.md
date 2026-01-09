@@ -50,26 +50,26 @@ This project relays on the following features:
 
 ## General Rules
 
-* All the documents and comments must be written in English.
-* Everything is under discussion. We can change the spec at any time.
-* When referring to WAT, use folded style syntax.
+- All the documents and comments must be written in English.
+- Everything is under discussion. We can change the spec at any time.
+- When referring to WAT, use folded style syntax.
 
 ## Terminology
 
-* Wasm: WebAssembly (not WASM)
-* WASI: WebAssembly System Interface
-* module: a Wado file
-* project: a collection of modules
-* Wado standard library: consists of the core library and the WASI library
+- Wasm: WebAssembly (not WASM)
+- WASI: WebAssembly System Interface
+- module: a Wado file
+- project: a collection of modules
+- Wado standard library: consists of the core library and the WASI library
 
 ## Rules for Rust Code
 
-* Do not use wildcard imports (`use ...::*;`).
-* Write tests in implementation files just for examples. For complete tests, write them in the `tests/` directory.
+- Do not use wildcard imports (`use ...::*;`).
+- Write tests in implementation files just for examples. For complete tests, write them in the `tests/` directory.
 
 ## Rules for Markdown
 
-* Format markdown files with `prettier`.
+- Format markdown files with `prettier`.
 
 ## Project Development
 
@@ -78,7 +78,8 @@ cargo build
 cargo test
 cargo fmt
 
+make hello # generates example/hello.wat
 make hello-run # simple smoke test
+
+make format # format code and documents
 ```
-
-

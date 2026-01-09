@@ -18,11 +18,13 @@ impl OutputFormat {
     }
 
     fn from_extension(path: &Path) -> Option<Self> {
-        path.extension().and_then(|ext| ext.to_str()).and_then(|ext| match ext {
-            "wasm" => Some(OutputFormat::Wasm),
-            "wat" => Some(OutputFormat::Wat),
-            _ => None,
-        })
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .and_then(|ext| match ext {
+                "wasm" => Some(OutputFormat::Wasm),
+                "wat" => Some(OutputFormat::Wat),
+                _ => None,
+            })
     }
 }
 
@@ -69,7 +71,10 @@ pub fn parse_args(args: &[String]) -> CompileOptions {
                 match OutputFormat::from_str(&args[i + 1]) {
                     Some(f) => format = Some(f),
                     None => {
-                        eprintln!("Error: unknown format '{}'. Use 'wasm' or 'wat'", args[i + 1]);
+                        eprintln!(
+                            "Error: unknown format '{}'. Use 'wasm' or 'wat'",
+                            args[i + 1]
+                        );
                         process::exit(1);
                     }
                 }
@@ -111,7 +116,11 @@ pub fn parse_args(args: &[String]) -> CompileOptions {
         }
     };
 
-    CompileOptions { input, output, format }
+    CompileOptions {
+        input,
+        output,
+        format,
+    }
 }
 
 /// Compile a Wado source file and return the Wasm binary
@@ -149,22 +158,21 @@ pub fn run(opts: CompileOptions) {
     };
 
     // Determine format: explicit > guessed from extension > default (wasm)
-    let format = opts.format
+    let format = opts
+        .format
         .or_else(|| OutputFormat::from_extension(&output_path))
         .unwrap_or(OutputFormat::Wasm);
 
     match format {
-        OutputFormat::Wasm => {
-            match fs::write(&output_path, &wasm) {
-                Ok(_) => {
-                    eprintln!("Generated: {}", output_path.display());
-                }
-                Err(e) => {
-                    eprintln!("Error writing output file: {e}");
-                    process::exit(1);
-                }
+        OutputFormat::Wasm => match fs::write(&output_path, &wasm) {
+            Ok(_) => {
+                eprintln!("Generated: {}", output_path.display());
             }
-        }
+            Err(e) => {
+                eprintln!("Error writing output file: {e}");
+                process::exit(1);
+            }
+        },
         OutputFormat::Wat => {
             let wat = wasm_to_wat(&wasm);
             match fs::write(&output_path, &wat) {

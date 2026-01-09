@@ -84,10 +84,10 @@ fn compile_impl(source: &str, filename: Option<String>) -> Result<Vec<u8>, Compi
             filename: filename.clone(),
         }
     })?;
-    let symbols = analyzer.into_symbols();
+    let _symbols = analyzer.into_symbols();
 
     // Codegen
-    let mut codegen = Codegen::new(symbols);
+    let mut codegen = Codegen::new();
     let wasm = codegen.generate_wasm(&ast);
 
     Ok(wasm)

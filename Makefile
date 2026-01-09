@@ -15,8 +15,9 @@ hello-run-wasmtime: hello
 test:
 	cargo test
 
-fmt:
+format:
 	cargo fmt
+	npx prettier --write spec.md compiler.md AGENTS.md
 
 clippy:
 	cargo clippy
