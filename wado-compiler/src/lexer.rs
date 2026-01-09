@@ -303,6 +303,7 @@ impl<'a> Lexer<'a> {
 
         match text {
             "use" => TokenKind::Use,
+            "as" => TokenKind::As,
             "fn" => TokenKind::Fn,
             "with" => TokenKind::With,
             "let" => TokenKind::Let,

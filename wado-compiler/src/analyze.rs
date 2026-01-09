@@ -5,7 +5,7 @@
 //! 2. Symbol table construction
 //! 3. Name resolution (binding identifiers to their definitions)
 
-use crate::ast::{Item, Module};
+use crate::ast::{Item, Module, UseTarget};
 use crate::resolver::{ModuleResolver, ResolveError};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
@@ -149,6 +149,30 @@ impl Analyzer {
 
                     self.symbols
                         .define(&effect.name, kind, module_path, Some(effect.span));
+
+                    // Also register each effect method as a function symbol
+                    // with the fully qualified name "{Effect}.{method}"
+                    // This allows importing them via use statements
+                    for method in &effect.methods {
+                        let wasi_import = method.attrs.first().and_then(|a| a.wasi_import.clone());
+
+                        let func_kind = SymbolKind::Function(FunctionSymbol {
+                            params: method.params.iter().map(|p| p.name.clone()).collect(),
+                            return_type: method.return_type.as_ref().map(|_| "unknown".to_string()),
+                            effects: vec![effect.name.clone()], // Effect methods implicitly require their effect
+                            is_builtin: module_path.first().map(|s| s == "core").unwrap_or(false),
+                            wasi_import,
+                        });
+
+                        // Register as "{Effect}.{method}"
+                        let qualified_name = format!("{}.{}", effect.name, method.name);
+                        self.symbols.define(
+                            &qualified_name,
+                            func_kind,
+                            module_path,
+                            Some(method.span),
+                        );
+                    }
                 }
 
                 Item::Struct(struct_decl) => {
@@ -244,9 +268,27 @@ impl Analyzer {
     ) -> Result<(), Vec<AnalyzeError>> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                // Load the imported module
-                let imported_module = match self.resolver.load_module(&use_decl.path) {
-                    Ok(m) => m.clone(),
+                // Try to load as a module first
+                let (final_path, final_target, imported_module) = match self.resolver.load_module(&use_decl.path) {
+                    Ok(m) => {
+                        // Module found - use as-is
+                        (use_decl.path.clone(), use_decl.target.clone(), m.clone())
+                    }
+                    Err(_) if use_decl.path.len() > 1 => {
+                        // Module not found - try treating last segment as Effect name
+                        let mut path_without_last = use_decl.path.clone();
+                        let potential_effect = path_without_last.pop().unwrap();
+
+                        match self.resolver.load_module(&path_without_last) {
+                            Ok(m) => {
+                                (path_without_last, UseTarget::Effect(potential_effect), m.clone())
+                            }
+                            Err(e) => {
+                                self.errors.push(AnalyzeError::ResolveError(e));
+                                continue;
+                            }
+                        }
+                    }
                     Err(e) => {
                         self.errors.push(AnalyzeError::ResolveError(e));
                         continue;
@@ -254,21 +296,37 @@ impl Analyzer {
                 };
 
                 // Collect definitions from the imported module (if not already done)
-                if !self.symbols.get_module_symbols(&use_decl.path).is_empty() {
+                if !self.symbols.get_module_symbols(&final_path).is_empty() {
                     // Already collected
                 } else {
-                    self.collect_definitions(&imported_module, &use_decl.path);
+                    self.collect_definitions(&imported_module, &final_path);
                 }
 
                 // Register each imported item
-                for item_name in &use_decl.items {
-                    if let Some(symbol) = self.symbols.lookup_in_module(&use_decl.path, item_name) {
+                for use_item in &use_decl.items {
+                    let lookup_name = match &final_target {
+                        UseTarget::Module => {
+                            // use module::{item}
+                            use_item.name.clone()
+                        }
+                        UseTarget::Effect(effect_name) => {
+                            // use module::Effect::{function}
+                            // Look up as "{Effect}.{function}"
+                            format!("{}.{}", effect_name, use_item.name)
+                        }
+                    };
+
+                    if let Some(symbol) =
+                        self.symbols.lookup_in_module(&final_path, &lookup_name)
+                    {
                         let symbol_id = symbol.id;
-                        self.symbols.register_import(item_name, symbol_id);
+                        // Register with the alias if provided, otherwise use the original name
+                        let import_name = use_item.alias.as_ref().unwrap_or(&use_item.name);
+                        self.symbols.register_import(import_name, symbol_id);
                     } else {
                         self.errors.push(AnalyzeError::ImportNotFound {
-                            module_path: use_decl.path.clone(),
-                            name: item_name.clone(),
+                            module_path: final_path.clone(),
+                            name: lookup_name,
                             span: use_decl.span,
                         });
                     }

@@ -1,0 +1,24 @@
+// Test Effect function import feature
+// Use the new import syntax to import effect functions
+
+use core::cli::Stdout::{write_via_stream};
+use core::cli::Stderr::{write_via_stream as stderr_write};
+use core::cli::Environment::{get_arguments, get_environment};
+
+pub fn test_imports() with Stdout, Stderr, Environment {
+    // Test using imported function without prefix
+    let stream = string_to_stream("Hello from imported function!\n");
+    let _ = write_via_stream(stream);
+
+    // Test using renamed function
+    let err_stream = string_to_stream("Error message\n");
+    let _ = stderr_write(err_stream);
+
+    // Test multiple imports from same effect
+    let args = get_arguments();
+    let env = get_environment();
+}
+
+fn string_to_stream(s: string) -> Stream<u8> {
+    // Placeholder
+}
