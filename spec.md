@@ -70,6 +70,7 @@ All Wado types map directly to WebAssembly Component Model types:
 | `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                 |
 | `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                           |
 | `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)                   |
+| `f16`                     | -                                    | TODO: Wasm half-precision proposal (Phase 1)      |
 | `Array<T>`                | `list<T>`                            | GC array in Wado, list at CM boundary             |
 | `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary                  |
 | `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types (UpperCamel in Wado)                  |
