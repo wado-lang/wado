@@ -2,14 +2,14 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
-use crate::ast::{Block, CallExpr, Expr, Item, Literal, Stmt};
+use crate::ast::{Block, CallExpr, Expr, IdentExpr, Item, Literal, Stmt};
 use crate::symbol::{SymbolKind, SymbolTable};
 use wasm_encoder::{
     Alias, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
     ComponentOuterAliasKind, ComponentValType, ConstExpr, DataSection, DataSegment,
     DataSegmentMode, EntityType, ExportKind, ExportSection, Function, FunctionSection,
     ImportSection, InstanceType, Instruction, MemorySection, MemoryType, Module, ModuleArg,
-    PrimitiveValType, TypeBounds, TypeSection, ValType,
+    NameMap, NameSection, PrimitiveValType, TypeBounds, TypeSection, ValType,
 };
 
 /// Code generator that produces Component Model components
@@ -95,7 +95,24 @@ impl Codegen {
             }
             Expr::Call(call) => {
                 self.collect_strings_from_expr(&call.callee);
+                // Check if this is a println call - if so, append newline to string args
+                let is_println = matches!(
+                    &call.callee,
+                    Expr::Ident(IdentExpr { name, .. }) if name == "println"
+                );
                 for arg in &call.args {
+                    if is_println {
+                        if let Expr::Literal(lit) = arg {
+                            if let Literal::String(s) = &lit.value {
+                                // println appends newline - store the string with \n
+                                let with_newline = format!("{s}\n");
+                                if !self.string_literals.contains(&with_newline) {
+                                    self.string_literals.push(with_newline);
+                                }
+                                continue;
+                            }
+                        }
+                    }
                     self.collect_strings_from_expr(arg);
                 }
             }
@@ -124,6 +141,18 @@ impl Codegen {
             }
             _ => {}
         }
+    }
+
+    /// Get the offset of a string in the string data section
+    fn get_string_offset(&self, s: &str) -> u32 {
+        let mut offset = 0u32;
+        for lit in &self.string_literals {
+            if lit == s {
+                return offset;
+            }
+            offset += lit.len() as u32;
+        }
+        panic!("String not found in literals: {s}");
     }
 
     /// Generate component for WASI P3
@@ -346,7 +375,6 @@ impl Codegen {
 
         // Export run function (func 1)
         builder.export("run", ComponentExportKind::Func, 1, None);
-
         builder.finish()
     }
 
@@ -384,7 +412,12 @@ impl Codegen {
             .function([ValType::I32, ValType::I32], [ValType::I32]);
         // Type 9: subtask-drop (subtask) -> ()
         types.ty().function([ValType::I32], []);
-        // Type 10: run () -> ()
+        // Type 10: println (ptr: i32, len: i32) -> ()
+        // Library function: writes string to stdout with stream
+        types
+            .ty()
+            .function([ValType::I32, ValType::I32], []);
+        // Type 11: run () -> ()
         // Async entry point - uses task.return to provide result
         types.ty().function([], []);
         module.section(&types);
@@ -416,24 +449,34 @@ impl Codegen {
 
         // Function section
         let mut functions = FunctionSection::new();
-        functions.function(10); // run function uses type 10 (no return value, uses task.return)
+        functions.function(10); // println function uses type 10 (ptr, len) -> ()
+        functions.function(11); // run function uses type 11 () -> ()
         module.section(&functions);
 
         // Export section
         let mut exports = ExportSection::new();
-        exports.export("run", ExportKind::Func, 10); // function index 10 (after 10 imports)
+        exports.export("run", ExportKind::Func, 11); // function index 11 (after 10 imports + println)
         module.section(&exports);
 
         // Code section
         let mut code = CodeSection::new();
-        // Locals:
-        // 0: $ret64 (i64) - for stream.new result / waitable-set handle (i64 but used as i32)
-        // 1: $rx (i32) - readable stream handle
-        // 2: $tx (i32) - writable stream handle
-        // 3: $status (i32) - write status / waitable handle
-        let mut run_func = Function::new([(1, ValType::I64), (3, ValType::I32)]);
 
-        // Generate body from AST
+        // ============================================
+        // println function (index 10) - library function from core::cli
+        // Parameters: ptr (param 0), len (param 1)
+        // Locals: ret64 (local 0), rx (local 1), tx (local 2), status (local 3)
+        // ============================================
+        let mut println_func = Function::new([(1, ValType::I64), (3, ValType::I32)]);
+        self.generate_println_body(&mut println_func);
+        println_func.instruction(&Instruction::End);
+        code.function(&println_func);
+
+        // ============================================
+        // run function (index 11) - user entry point
+        // ============================================
+        let mut run_func = Function::new([]);
+
+        // Generate body from AST (calls to println, etc.)
         self.generate_run_body_instructions_p3(&mut run_func, ast_module);
 
         // Call task.return to complete the async task
@@ -446,7 +489,106 @@ impl Codegen {
         code.function(&run_func);
         module.section(&code);
 
+        // Name section (for debugging - preserves function names in WAT output)
+        let mut names = NameSection::new();
+        let mut func_names = NameMap::new();
+        // Imported functions (indices 0-9)
+        func_names.append(0, "stream-new");
+        func_names.append(1, "stream-write");
+        func_names.append(2, "stream-drop-writable");
+        func_names.append(3, "stream-drop-readable");
+        func_names.append(4, "write-via-stream");
+        func_names.append(5, "task-return");
+        func_names.append(6, "waitable-set-new");
+        func_names.append(7, "waitable-join");
+        func_names.append(8, "waitable-set-wait");
+        func_names.append(9, "subtask-drop");
+        // Library function (index 10)
+        func_names.append(10, "println");
+        // User function (index 11)
+        func_names.append(11, "run");
+        names.functions(&func_names);
+        module.section(&names);
+
         module.finish()
+    }
+
+    /// Generate println function body
+    /// Implements: pub fn println(message: string) from core::cli
+    /// Parameters: ptr (param 0), len (param 1)
+    /// Locals: ret64 (local 0), rx (local 1), tx (local 2), status (local 3)
+    fn generate_println_body(&self, func: &mut Function) {
+        // Local indices (after 2 params):
+        // param 0: $ptr (i32) - string pointer
+        // param 1: $len (i32) - string length
+        // local 0: $ret64 (i64) - stream.new result / waitable-set handle
+        // local 1: $rx (i32) - readable stream handle
+        // local 2: $tx (i32) - writable stream handle
+        // local 3: $status (i32) - subtask handle / status
+
+        // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
+        func.instruction(&Instruction::Call(0)); // stream-new
+        func.instruction(&Instruction::LocalSet(2)); // store i64 result in local 0 (offset by params)
+
+        // Extract rx (low 32 bits)
+        func.instruction(&Instruction::LocalGet(2));
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(3)); // $rx in local 1
+
+        // Extract tx (high 32 bits)
+        func.instruction(&Instruction::LocalGet(2));
+        func.instruction(&Instruction::I64Const(32));
+        func.instruction(&Instruction::I64ShrU);
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(4)); // $tx in local 2
+
+        // 2. Call write-via-stream(rx, outptr) to start consuming from the stream
+        func.instruction(&Instruction::LocalGet(3)); // rx
+        func.instruction(&Instruction::I32Const(2048)); // outptr for result
+        func.instruction(&Instruction::Call(4)); // write-via-stream (func 4)
+        func.instruction(&Instruction::LocalSet(5)); // save subtask/status in local 3
+
+        // 3. Write string to stream: stream-write(tx, ptr, len) -> status
+        func.instruction(&Instruction::LocalGet(4)); // tx
+        func.instruction(&Instruction::LocalGet(0)); // ptr (param 0)
+        func.instruction(&Instruction::LocalGet(1)); // len (param 1)
+        func.instruction(&Instruction::Call(1)); // stream-write
+        func.instruction(&Instruction::Drop); // ignore write status
+
+        // 4. Close writable end to signal EOF: stream-drop-writable(tx)
+        func.instruction(&Instruction::LocalGet(4)); // tx
+        func.instruction(&Instruction::Call(2)); // stream-drop-writable
+
+        // 5. Wait for write-via-stream subtask to complete if still pending
+        func.instruction(&Instruction::LocalGet(5));
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32And);
+        func.instruction(&Instruction::I32Eqz); // true if pending
+        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+
+        // Create waitable-set
+        func.instruction(&Instruction::Call(6)); // waitable-set-new
+        func.instruction(&Instruction::I64ExtendI32U);
+        func.instruction(&Instruction::LocalSet(2));
+
+        // Join subtask to waitable-set
+        func.instruction(&Instruction::LocalGet(2));
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalGet(5)); // subtask handle
+        func.instruction(&Instruction::Call(7)); // waitable-join
+
+        // Wait for completion
+        func.instruction(&Instruction::LocalGet(2));
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::I32Const(2048));
+        func.instruction(&Instruction::Call(8)); // waitable-set-wait
+        func.instruction(&Instruction::Drop);
+
+        // Drop subtask
+        func.instruction(&Instruction::LocalGet(5));
+        func.instruction(&Instruction::Call(9)); // subtask-drop
+
+        func.instruction(&Instruction::End); // end if
     }
 
     fn generate_run_body_instructions_p3(
@@ -501,12 +643,34 @@ impl Codegen {
         }
     }
 
-    /// Generate code for a builtin function call
-    /// Note: println is not a builtin - it's defined in core::cli and should be
-    /// compiled from cli.wado. This function handles true compiler intrinsics only.
-    fn generate_builtin_call(&self, _func: &mut Function, _name: &str, _call: &CallExpr) {
-        // Currently no intrinsic builtins implemented
-        // println, print, etc. are library functions defined in core::cli
+    /// Generate code for calling a library function
+    /// Library functions (like println from core::cli) are statically linked into the wasm module
+    fn generate_builtin_call(&self, func: &mut Function, name: &str, call: &CallExpr) {
+        match name {
+            "println" => {
+                // println is at function index 10
+                // It takes (ptr: i32, len: i32)
+                if call.args.len() == 1 {
+                    if let Expr::Literal(lit) = &call.args[0] {
+                        if let Literal::String(s) = &lit.value {
+                            // Get the string with newline appended
+                            let with_newline = format!("{s}\n");
+                            let str_offset = self.get_string_offset(&with_newline);
+                            let str_len = with_newline.len() as i32;
+
+                            // Push arguments: ptr, len
+                            func.instruction(&Instruction::I32Const(str_offset as i32));
+                            func.instruction(&Instruction::I32Const(str_len));
+                            // Call println (function index 10)
+                            func.instruction(&Instruction::Call(10));
+                        }
+                    }
+                }
+            }
+            _ => {
+                // Unknown function - ignore for now
+            }
+        }
     }
 
     fn build_memory_module(&self, string_data: &[u8]) -> Vec<u8> {
@@ -563,6 +727,13 @@ impl Codegen {
             module.section(&data);
         }
 
+        // Name section (for debugging)
+        let mut names = NameSection::new();
+        let mut func_names = NameMap::new();
+        func_names.append(0, "realloc");
+        names.functions(&func_names);
+        module.section(&names);
+
         module.finish()
     }
 }
@@ -603,9 +774,9 @@ mod tests {
         let mut codegen = Codegen::new(symbols);
         codegen.collect_strings(&ast);
 
-        // String literals are collected as-is from the source
+        // println appends newline to string literals
         assert_eq!(codegen.string_literals.len(), 1);
-        assert_eq!(codegen.string_literals[0], "Hello, world!");
+        assert_eq!(codegen.string_literals[0], "Hello, world!\n");
     }
 
     #[test]
