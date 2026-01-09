@@ -199,7 +199,8 @@ pub struct Function {
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub effects: Vec<String>,
-    pub body: Block,
+    /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
+    pub body: Option<Block>,
     pub span: Span,
 }
 

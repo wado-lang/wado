@@ -5,6 +5,7 @@
 // For raw WASI CLI interfaces, use "wasi:cli" instead.
 
 use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
+use {string_to_stream} from "core:stream";
 
 // Re-export commonly used effects for convenience
 pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
@@ -81,15 +82,3 @@ pub fn exit(code: u8) -> ! with Exit {
     Exit::exit_with_code(code);
 }
 
-// ============================================================================
-// Internal Helper Functions
-// ============================================================================
-
-/// Convert a string to a stream of bytes (UTF-8 encoded)
-/// This is a built-in function that the compiler handles specially.
-fn string_to_stream(s: string) -> Stream<u8> {
-    // The compiler generates code to:
-    // 1. Get the UTF-8 bytes of the string
-    // 2. Create a stream<u8> with those bytes
-    // This is implemented as a compiler intrinsic.
-}

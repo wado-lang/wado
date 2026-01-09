@@ -376,7 +376,14 @@ impl Parser {
             Vec::new()
         };
 
-        let body = self.parse_block()?;
+        // Check for bodyless function declaration (compiler built-in)
+        // e.g., `pub fn stream_new() -> i64;`
+        let body = if self.check(&TokenKind::Semicolon) {
+            self.advance();
+            None
+        } else {
+            Some(self.parse_block()?)
+        };
 
         Ok(Function {
             name,
@@ -1479,8 +1486,9 @@ mod tests {
         let module = parse(r#"fn main() { println("hello"); }"#).unwrap();
 
         if let Item::Function(func) = &module.items[0] {
-            assert_eq!(func.body.stmts.len(), 1);
-            if let Stmt::Expr(expr_stmt) = &func.body.stmts[0]
+            let body = func.body.as_ref().expect("function should have body");
+            assert_eq!(body.stmts.len(), 1);
+            if let Stmt::Expr(expr_stmt) = &body.stmts[0]
                 && let Expr::Call(call) = &expr_stmt.expr
                 && let Expr::Ident(ident) = &call.callee
             {
@@ -1654,6 +1662,74 @@ mod tests {
             assert_eq!(export.params[1].name, "count");
         } else {
             panic!("expected world declaration");
+        }
+    }
+
+    #[test]
+    fn test_bodyless_function_declaration() {
+        // Bodyless functions are compiler built-ins
+        let source = r#"
+            pub fn stream_new() -> i64;
+            pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
+            fn internal_helper();
+        "#;
+
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 3);
+
+        // First function: pub fn stream_new() -> i64;
+        if let Item::Function(func) = &module.items[0] {
+            assert_eq!(func.name, "stream_new");
+            assert!(func.is_pub);
+            assert!(func.params.is_empty());
+            assert!(func.return_type.is_some());
+            assert!(func.body.is_none(), "bodyless function should have no body");
+        } else {
+            panic!("expected function");
+        }
+
+        // Second function: pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
+        if let Item::Function(func) = &module.items[1] {
+            assert_eq!(func.name, "stream_write");
+            assert!(func.is_pub);
+            assert_eq!(func.params.len(), 3);
+            assert!(func.return_type.is_some());
+            assert!(func.body.is_none(), "bodyless function should have no body");
+        } else {
+            panic!("expected function");
+        }
+
+        // Third function: fn internal_helper();
+        if let Item::Function(func) = &module.items[2] {
+            assert_eq!(func.name, "internal_helper");
+            assert!(!func.is_pub);
+            assert!(func.params.is_empty());
+            assert!(func.return_type.is_none());
+            assert!(func.body.is_none(), "bodyless function should have no body");
+        } else {
+            panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_function_with_body_still_works() {
+        // Make sure regular functions with bodies still parse correctly
+        let source = r#"
+            pub fn hello() -> string {
+                return "hello";
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 1);
+
+        if let Item::Function(func) = &module.items[0] {
+            assert_eq!(func.name, "hello");
+            assert!(func.body.is_some(), "function with body should have body");
+            let body = func.body.as_ref().unwrap();
+            assert_eq!(body.stmts.len(), 1);
+        } else {
+            panic!("expected function");
         }
     }
 }

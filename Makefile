@@ -4,7 +4,7 @@ build:
 	cargo build
 
 hello: build
-	cargo run --quiet -- compile example/hello.wado
+	cargo run --quiet -- compile -o example/hello.wat example/hello.wado
 
 hello-run: build
 	cargo run --quiet -- run example/hello.wado

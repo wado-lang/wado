@@ -1,0 +1,56 @@
+// Stream module - Component Model stream intrinsics and helpers
+//
+// This module provides low-level stream operations that map to Component Model
+// canonical intrinsics. These are used to implement higher-level I/O functions.
+
+// ============================================================================
+// Stream Intrinsics (Component Model canonical built-ins)
+// ============================================================================
+
+/// Create a new stream, returns i64 with rx in low 32 bits, tx in high 32 bits
+pub fn stream_new() -> i64;
+
+/// Write data to stream, returns status
+pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
+
+/// Close the writable end of the stream
+pub fn stream_drop_writable(tx: i32);
+
+/// Close the readable end of the stream
+pub fn stream_drop_readable(rx: i32);
+
+// ============================================================================
+// Bit Manipulation Intrinsics
+// ============================================================================
+
+/// Extract low 32 bits from i64
+pub fn i64_low32(value: i64) -> i32;
+
+/// Extract high 32 bits from i64
+pub fn i64_high32(value: i64) -> i32;
+
+// ============================================================================
+// String Memory Intrinsics
+// ============================================================================
+
+/// Get pointer to string data
+pub fn string_ptr(s: string) -> i32;
+
+/// Get length of string in bytes
+pub fn string_len(s: string) -> i32;
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Convert a string to a stream of bytes (UTF-8 encoded)
+pub fn string_to_stream(s: string) -> Stream<u8> {
+    let handles = stream_new();
+    let rx = i64_low32(handles);
+    let tx = i64_high32(handles);
+
+    stream_write(tx, string_ptr(s), string_len(s));
+    stream_drop_writable(tx);
+
+    return rx;
+}

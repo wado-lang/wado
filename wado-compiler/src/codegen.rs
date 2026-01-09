@@ -46,7 +46,10 @@ impl Codegen {
     fn collect_strings(&mut self, module: &crate::ast::Module) {
         for item in &module.items {
             if let Item::Function(func) = item {
-                self.collect_strings_from_block(&func.body);
+                // Skip bodyless functions (compiler built-ins)
+                if let Some(body) = &func.body {
+                    self.collect_strings_from_block(body);
+                }
             }
         }
     }
@@ -604,8 +607,11 @@ impl Codegen {
         });
 
         if let Some(main) = main_func {
-            for stmt in &main.body.stmts {
-                self.generate_stmt_instructions_p3(func, stmt);
+            // Main function must have a body
+            if let Some(body) = &main.body {
+                for stmt in &body.stmts {
+                    self.generate_stmt_instructions_p3(func, stmt);
+                }
             }
         }
     }
@@ -642,6 +648,19 @@ impl Codegen {
 
     /// Generate code for calling a library function
     /// Library functions (like println from core::cli) are statically linked into the wasm module
+    ///
+    /// Core Wasm import function indices (in main module):
+    /// 0 = stream-new
+    /// 1 = stream-write
+    /// 2 = stream-drop-writable
+    /// 3 = stream-drop-readable
+    /// 4 = write-via-stream
+    /// 5 = task-return
+    /// 6 = waitable-set-new
+    /// 7 = waitable-join
+    /// 8 = waitable-set-wait
+    /// 9 = subtask-drop
+    /// 10 = println (generated library function)
     fn generate_builtin_call(&self, func: &mut Function, name: &str, call: &CallExpr) {
         match name {
             "println" => {
@@ -663,6 +682,64 @@ impl Codegen {
                     func.instruction(&Instruction::Call(10));
                 }
             }
+
+            // ========================================
+            // Stream intrinsics (Component Model canonical built-ins)
+            // ========================================
+            "stream_new" => {
+                // stream_new() -> i64 (rx in low 32 bits, tx in high 32 bits)
+                func.instruction(&Instruction::Call(0));
+            }
+            "stream_write" => {
+                // stream_write(tx: i32, ptr: i32, len: i32) -> i32
+                // Arguments should be on stack from caller
+                func.instruction(&Instruction::Call(1));
+            }
+            "stream_drop_writable" => {
+                // stream_drop_writable(tx: i32)
+                func.instruction(&Instruction::Call(2));
+            }
+            "stream_drop_readable" => {
+                // stream_drop_readable(rx: i32)
+                func.instruction(&Instruction::Call(3));
+            }
+
+            // ========================================
+            // Bit manipulation intrinsics
+            // ========================================
+            "i64_low32" => {
+                // i64_low32(value: i64) -> i32
+                // Extracts low 32 bits using i32.wrap_i64
+                // Argument should be on stack from caller
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            "i64_high32" => {
+                // i64_high32(value: i64) -> i32
+                // Extracts high 32 bits: (value >> 32) as i32
+                // Argument should be on stack from caller
+                func.instruction(&Instruction::I64Const(32));
+                func.instruction(&Instruction::I64ShrU);
+                func.instruction(&Instruction::I32WrapI64);
+            }
+
+            // ========================================
+            // String memory intrinsics
+            // ========================================
+            "string_ptr" => {
+                // string_ptr(s: string) -> i32
+                // Returns pointer to string data
+                // For now, string is passed as (ptr, len) tuple
+                // The ptr should already be on stack from caller
+                // TODO: proper string representation
+            }
+            "string_len" => {
+                // string_len(s: string) -> i32
+                // Returns length of string in bytes
+                // For now, string is passed as (ptr, len) tuple
+                // The len should be accessible from string representation
+                // TODO: proper string representation
+            }
+
             _ => {
                 // Unknown function - ignore for now
             }

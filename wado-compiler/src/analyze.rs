@@ -127,8 +127,11 @@ impl Analyzer {
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    // Check if this is a builtin (functions in core::* are builtins)
-                    let is_builtin = module_path.first().map(|s| s == "core").unwrap_or(false);
+                    // A function is a builtin if:
+                    // 1. It has no body (bodyless declaration like `pub fn foo();`)
+                    // 2. Or it's defined in a core::* module
+                    let is_builtin = func.body.is_none()
+                        || module_path.first().map(|s| s == "core").unwrap_or(false);
 
                     let kind = SymbolKind::Function(FunctionSymbol {
                         params: func.params.iter().map(|p| p.name.clone()).collect(),

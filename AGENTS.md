@@ -10,6 +10,8 @@ Read @spec.md to understand the new language.
 
 The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
 
+Standard libraries are implemented in `wado-compiler/lib`, whre `wasi/` for WASI and `core/` for the core library.
+
 ## The CLI
 
 The CLI is implemented in `wado-cli/` with sub-command style CLI:
@@ -52,6 +54,9 @@ This project relays on the following features:
 
 * Wasm: WebAssembly (not WASM)
 * WASI: WebAssembly System Interface
+* module: a Wado file
+* project: a collection of modules
+* Wado standard library: consists of the core library and the WASI library
 
 ## Rules for Rust Code
 
