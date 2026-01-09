@@ -27,6 +27,10 @@ pub enum TokenKind {
     Type,
     Impl,
     Resource,
+    World,
+    Async,
+    Import,
+    Export,
 
     // Literals
     Ident(String),

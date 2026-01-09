@@ -18,6 +18,7 @@ pub enum Item {
     Type(TypeAlias),
     Impl(ImplBlock),
     Resource(ResourceDecl),
+    World(WorldDecl),
 }
 
 /// Attribute like #[wasi("...")]
@@ -97,6 +98,51 @@ impl WasiImport {
 pub struct ResourceDecl {
     pub name: String,
     pub attrs: Vec<Attribute>,
+    pub span: Span,
+}
+
+/// World declaration
+/// ```wado
+/// world CliCommand {
+///     import Stdout {
+///         write_via_stream,
+///     }
+///     export async fn run() -> Result<(), ()>;
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct WorldDecl {
+    pub name: String,
+    pub imports: Vec<WorldImport>,
+    pub exports: Vec<WorldExport>,
+    pub span: Span,
+}
+
+/// A world import group
+/// ```wado
+/// import EffectName {
+///     function_name_1,
+///     function_name_2,
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct WorldImport {
+    pub effect_name: String,
+    pub functions: Vec<String>,
+    pub span: Span,
+}
+
+/// A world export declaration
+/// ```wado
+/// export async fn run() -> Result<(), ()>;
+/// export fn get_version() -> string;
+/// ```
+#[derive(Debug, Clone)]
+pub struct WorldExport {
+    pub name: String,
+    pub is_async: bool,
+    pub params: Vec<Param>,
+    pub return_type: Option<Type>,
     pub span: Span,
 }
 
@@ -376,6 +422,8 @@ pub struct EffectDecl {
 #[derive(Debug, Clone)]
 pub struct EffectMethod {
     pub name: String,
+    pub is_async: bool,
+    pub attrs: Vec<Attribute>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub span: Span,

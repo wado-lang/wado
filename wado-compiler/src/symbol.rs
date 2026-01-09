@@ -28,6 +28,8 @@ pub enum SymbolKind {
     Variable(VariableSymbol),
     /// A resource definition
     Resource(ResourceSymbol),
+    /// A world definition
+    World(WorldSymbol),
 }
 
 /// Function symbol data
@@ -89,6 +91,37 @@ pub struct ResourceSymbol {
     pub methods: Vec<String>,
     /// WASI import metadata if this resource maps to a WASI resource
     pub wasi_import: Option<WasiImport>,
+}
+
+/// World symbol data
+#[derive(Debug, Clone)]
+pub struct WorldSymbol {
+    /// Imported effects and their functions
+    pub imports: Vec<WorldImportSymbol>,
+    /// Exported functions
+    pub exports: Vec<WorldExportSymbol>,
+}
+
+/// An imported effect in a world
+#[derive(Debug, Clone)]
+pub struct WorldImportSymbol {
+    /// The effect name
+    pub effect_name: String,
+    /// The imported function names
+    pub functions: Vec<String>,
+}
+
+/// An exported function in a world
+#[derive(Debug, Clone)]
+pub struct WorldExportSymbol {
+    /// The function name
+    pub name: String,
+    /// Whether this is an async function
+    pub is_async: bool,
+    /// Parameter names
+    pub params: Vec<String>,
+    /// Return type (if specified)
+    pub return_type: Option<String>,
 }
 
 /// A symbol in the symbol table

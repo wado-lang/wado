@@ -103,6 +103,7 @@ impl Parser {
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
+            TokenKind::World => self.parse_world_decl().map(Item::World),
             _ => Err(ParseError {
                 message: format!("expected item, found {:?}", self.peek_kind()),
                 span: self.peek().span,
@@ -906,10 +907,19 @@ impl Parser {
     }
 
     fn parse_effect_method(&mut self) -> ParseResult<EffectMethod> {
-        // Skip any attributes on the method
-        let _attrs = self.parse_attributes()?;
+        // Parse any attributes on the method (e.g., #[wasi("...")])
+        let attrs = self.parse_attributes()?;
 
         let start_span = self.peek().span;
+
+        // Check for async keyword
+        let is_async = if self.check(&TokenKind::Async) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
         self.expect(&TokenKind::Fn)?;
         let name = self.consume_ident()?;
 
@@ -937,6 +947,8 @@ impl Parser {
 
         Ok(EffectMethod {
             name,
+            is_async,
+            attrs,
             params,
             return_type,
             span: start_span,
@@ -1091,6 +1103,138 @@ impl Parser {
             span: start_span,
         })
     }
+
+    /// Parse a world declaration
+    /// ```wado
+    /// world CliCommand {
+    ///     import Stdout {
+    ///         write_via_stream,
+    ///     }
+    ///     export async fn run() -> Result<(), ()>;
+    /// }
+    /// ```
+    fn parse_world_decl(&mut self) -> ParseResult<WorldDecl> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::World)?;
+        let name = self.consume_ident()?;
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut imports = Vec::new();
+        let mut exports = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            match self.peek_kind() {
+                TokenKind::Import => {
+                    imports.push(self.parse_world_import()?);
+                }
+                TokenKind::Export => {
+                    exports.push(self.parse_world_export()?);
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: format!(
+                            "expected 'import' or 'export' in world declaration, found {:?}",
+                            self.peek_kind()
+                        ),
+                        span: self.peek().span,
+                    });
+                }
+            }
+        }
+
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(WorldDecl {
+            name,
+            imports,
+            exports,
+            span: start_span,
+        })
+    }
+
+    /// Parse a world import group
+    /// ```wado
+    /// import Stdout {
+    ///     write_via_stream,
+    /// }
+    /// ```
+    fn parse_world_import(&mut self) -> ParseResult<WorldImport> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Import)?;
+        let effect_name = self.consume_ident()?;
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut functions = Vec::new();
+        if !self.check(&TokenKind::RBrace) {
+            functions.push(self.consume_ident()?);
+            while self.check(&TokenKind::Comma) {
+                self.advance();
+                if self.check(&TokenKind::RBrace) {
+                    break;
+                }
+                functions.push(self.consume_ident()?);
+            }
+        }
+
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(WorldImport {
+            effect_name,
+            functions,
+            span: start_span,
+        })
+    }
+
+    /// Parse a world export declaration
+    /// ```wado
+    /// export async fn run() -> Result<(), ()>;
+    /// export fn get_version() -> string;
+    /// ```
+    fn parse_world_export(&mut self) -> ParseResult<WorldExport> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Export)?;
+
+        // Check for async keyword
+        let is_async = if self.check(&TokenKind::Async) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
+        self.expect(&TokenKind::Fn)?;
+        let name = self.consume_ident()?;
+
+        // Skip generic parameters like <T, E>
+        if self.check(&TokenKind::Lt) {
+            self.advance();
+            while !self.check(&TokenKind::Gt) && !self.is_at_end() {
+                self.advance();
+            }
+            self.expect(&TokenKind::Gt)?;
+        }
+
+        self.expect(&TokenKind::LParen)?;
+        let params = self.parse_param_list()?;
+        self.expect(&TokenKind::RParen)?;
+
+        let return_type = if self.check(&TokenKind::Arrow) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(WorldExport {
+            name,
+            is_async,
+            params,
+            return_type,
+            span: start_span,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1157,6 +1301,174 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_world_decl() {
+        let source = r#"
+            world CliCommand {
+                import Stdout {
+                    write_via_stream,
+                }
+
+                export async fn run() -> Result<(), ()>;
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 1);
+
+        if let Item::World(world) = &module.items[0] {
+            assert_eq!(world.name, "CliCommand");
+            assert_eq!(world.imports.len(), 1);
+            assert_eq!(world.exports.len(), 1);
+
+            // Check import
+            let import = &world.imports[0];
+            assert_eq!(import.effect_name, "Stdout");
+            assert_eq!(import.functions, vec!["write_via_stream"]);
+
+            // Check export
+            let export = &world.exports[0];
+            assert_eq!(export.name, "run");
+            assert!(export.is_async);
+            assert!(export.params.is_empty());
+            assert!(export.return_type.is_some());
+        } else {
+            panic!("expected world declaration");
+        }
+    }
+
+    #[test]
+    fn test_world_multiple_imports_exports() {
+        let source = r#"
+            world TestWorld {
+                import Stdout {
+                    write_via_stream,
+                }
+
+                import Stderr {
+                    write_via_stream,
+                }
+
+                import Environment {
+                    get_arguments,
+                    get_environment,
+                }
+
+                export async fn run() -> Result<(), ()>;
+                export fn get_version() -> string;
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::World(world) = &module.items[0] {
+            assert_eq!(world.name, "TestWorld");
+            assert_eq!(world.imports.len(), 3);
+            assert_eq!(world.exports.len(), 2);
+
+            // Check Environment import has multiple functions
+            let env_import = &world.imports[2];
+            assert_eq!(env_import.effect_name, "Environment");
+            assert_eq!(env_import.functions.len(), 2);
+            assert_eq!(
+                env_import.functions,
+                vec!["get_arguments", "get_environment"]
+            );
+
+            // Check sync export
+            let sync_export = &world.exports[1];
+            assert_eq!(sync_export.name, "get_version");
+            assert!(!sync_export.is_async);
+        } else {
+            panic!("expected world declaration");
+        }
+    }
+
+    #[test]
+    fn test_effect_with_async_method() {
+        let source = r#"
+            effect Http {
+                async fn get(url: string) -> Response;
+                fn status() -> i32;
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::Effect(effect) = &module.items[0] {
+            assert_eq!(effect.name, "Http");
+            assert_eq!(effect.methods.len(), 2);
+
+            // First method is async
+            assert!(effect.methods[0].is_async);
+            assert_eq!(effect.methods[0].name, "get");
+
+            // Second method is sync
+            assert!(!effect.methods[1].is_async);
+            assert_eq!(effect.methods[1].name, "status");
+        } else {
+            panic!("expected effect declaration");
+        }
+    }
+
+    #[test]
+    fn test_effect_with_wasi_attribute() {
+        let source = r#"
+            pub effect Stdout {
+                #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
+                async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::Effect(effect) = &module.items[0] {
+            assert_eq!(effect.name, "Stdout");
+            assert!(effect.is_pub);
+            assert_eq!(effect.methods.len(), 1);
+
+            let method = &effect.methods[0];
+            assert!(method.is_async);
+            assert_eq!(method.name, "write_via_stream");
+            assert_eq!(method.attrs.len(), 1);
+
+            let attr = &method.attrs[0];
+            assert_eq!(attr.name, "wasi");
+            assert!(attr.wasi_import.is_some());
+
+            let wasi = attr.wasi_import.as_ref().unwrap();
+            assert_eq!(wasi.namespace, "wasi");
+            assert_eq!(wasi.package, "cli");
+            assert_eq!(wasi.interface, "stdout");
+            assert_eq!(wasi.function.as_deref(), Some("write-via-stream"));
+        } else {
+            panic!("expected effect declaration");
+        }
+    }
+
+    #[test]
+    fn test_export_with_params() {
+        let source = r#"
+            world TestWorld {
+                export fn process(input: string, count: i32) -> Result<string, Error>;
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::World(world) = &module.items[0] {
+            assert_eq!(world.exports.len(), 1);
+            let export = &world.exports[0];
+            assert_eq!(export.name, "process");
+            assert!(!export.is_async);
+            assert_eq!(export.params.len(), 2);
+            assert_eq!(export.params[0].name, "input");
+            assert_eq!(export.params[1].name, "count");
+        } else {
+            panic!("expected world declaration");
         }
     }
 }

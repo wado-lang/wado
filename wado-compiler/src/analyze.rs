@@ -9,7 +9,7 @@ use crate::ast::{Item, Module};
 use crate::resolver::{ModuleResolver, ResolveError};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
-    SymbolTable, TypeAliasSymbol,
+    SymbolTable, TypeAliasSymbol, WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
 use crate::token::Span;
 
@@ -200,6 +200,32 @@ impl Analyzer {
 
                     self.symbols
                         .define(&resource.name, kind, module_path, Some(resource.span));
+                }
+
+                Item::World(world) => {
+                    let kind = SymbolKind::World(WorldSymbol {
+                        imports: world
+                            .imports
+                            .iter()
+                            .map(|i| WorldImportSymbol {
+                                effect_name: i.effect_name.clone(),
+                                functions: i.functions.clone(),
+                            })
+                            .collect(),
+                        exports: world
+                            .exports
+                            .iter()
+                            .map(|e| WorldExportSymbol {
+                                name: e.name.clone(),
+                                is_async: e.is_async,
+                                params: e.params.iter().map(|p| p.name.clone()).collect(),
+                                return_type: e.return_type.as_ref().map(|_| "unknown".to_string()),
+                            })
+                            .collect(),
+                    });
+
+                    self.symbols
+                        .define(&world.name, kind, module_path, Some(world.span));
                 }
 
                 Item::Use(_) | Item::Impl(_) => {
