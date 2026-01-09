@@ -111,7 +111,7 @@ resource Pollable {
 /// This is the Component Model's equivalent of select/epoll.
 /// WASI: `wasi:io/poll@0.2.9#poll`
 #[wasi("wasi:io/poll@0.2.9#poll")]
-pub fn poll(pollables: &List<Pollable>) -> List<u32>;
+pub fn poll(pollables: &Array<Pollable>) -> Array<u32>;
 
 // ============================================================================
 // Resource Handle Ownership
@@ -141,18 +141,19 @@ pub type Borrow<T> = &T;
 //   u8..u64           -> u8..u64
 //   f32, f64          -> f32, f64
 //
-// Containers:
-//   List<T>           -> List<T>
+// Containers (GC array in Wado, list at CM boundary):
+//   Array<T>          -> list<T>
 //   tuple<T1, T2, ...> -> tuple<T1, T2, ...>
 //   Option<T>         -> option<T>
 //   Result<T, E>      -> result<T, E>
 //
 // User-defined:
-//   record { ... }    -> record { ... } (Component Model primitive)
-//   struct { ... }    -> Wasm-GC struct (not Component Model)
+//   struct { ... }    -> record { ... } (GC struct in Wado, record at CM boundary)
+//   enum { ... }      -> enum { ... } (enumeration without payloads)
 //   variant { ... }   -> variant { ... } (sum type with payloads)
+//   flags { ... }     -> flags { ... } (bit flags)
 //   resource          -> resource
 //
-// Extensions (not in Component Model):
-//   i128, u128        -> Wasm wide-arithmetic proposal
-//   dict<K, V>        -> Key-value map
+// Extensions (Wado-specific, mapped at CM boundary):
+//   i128, u128        -> tuple<s64, s64>, tuple<u64, u64>
+//   Dict<K, V>        -> list<tuple<K, V>>

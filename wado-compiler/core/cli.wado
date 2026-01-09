@@ -58,11 +58,11 @@ pub effect Environment {
     /// Each environment variable is provided as a pair of string variable names
     /// and string value.
     #[wasi("wasi:cli/environment@0.3.0-rc-2025-09-16#get-environment")]
-    fn get_environment() -> List<Tuple<string, string>>;
+    fn get_environment() -> Array<Tuple<string, string>>;
 
     /// Get the POSIX-style arguments to the program.
     #[wasi("wasi:cli/environment@0.3.0-rc-2025-09-16#get-arguments")]
-    fn get_arguments() -> List<string>;
+    fn get_arguments() -> Array<string>;
 
     /// Return a path that programs should use as their initial current working
     /// directory, interpreting `.` as shorthand for this.
@@ -150,7 +150,7 @@ pub fn env(name: string) -> Option<string> with Environment {
 }
 
 /// Get all command-line arguments
-pub fn args() -> List<string> with Environment {
+pub fn args() -> Array<string> with Environment {
     return Environment.get_arguments();
 }
 

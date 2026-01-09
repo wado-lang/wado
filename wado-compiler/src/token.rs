@@ -23,7 +23,6 @@ pub enum TokenKind {
     Move,
     Unique,
     Struct,
-    Record,
     Enum,
     Type,
     Impl,

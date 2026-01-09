@@ -13,7 +13,6 @@ pub enum Item {
     Function(Function),
     Effect(EffectDecl),
     Struct(StructDecl),
-    Record(RecordDecl),
     Enum(EnumDecl),
     Type(TypeAlias),
     Impl(ImplBlock),
@@ -458,14 +457,6 @@ pub struct StructDecl {
 pub struct StructField {
     pub name: String,
     pub ty: Type,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct RecordDecl {
-    pub name: String,
-    pub is_pub: bool,
-    pub fields: Vec<StructField>,
     pub span: Span,
 }
 

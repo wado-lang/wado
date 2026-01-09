@@ -4,12 +4,12 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ## Overview
 
-| Item | Description |
-|------|-------------|
-| Name | Wado |
-| Extension | `.wado` |
-| Target | Wasm/WASI only |
-| Paradigm | Reactive, Effect System |
+| Item      | Description             |
+| --------- | ----------------------- |
+| Name      | Wado                    |
+| Extension | `.wado`                 |
+| Target    | Wasm/WASI only          |
+| Paradigm  | Reactive, Effect System |
 
 ## Design Philosophy
 
@@ -61,30 +61,33 @@ let other = move handle;  // OK: explicit move
 
 All Wado types map directly to WebAssembly Component Model types:
 
-| Wado Type | Component Model Type | Notes |
-|--------------|---------------------|-------|
-| `bool` | `bool` | Boolean |
-| `char` | `char` | Unicode scalar value |
-| `string` | `string` | UTF-8 string |
-| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers |
-| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers |
-| `i128`, `u128` | - | Wasm wide-arithmetic proposal |
-| `f32`, `f64` | `f32`, `f64` | Floating point (32-bit, 64-bit) |
-| `List<T>` | `list<T>` | Dynamic list (UpperCamel in Wado) |
-| `Dict<K, V>` | - | Wado extension, not in Component Model |
-| `Tuple<T1, T2, ...>` | `tuple<T1, T2, ...>` | Tuple types (UpperCamel in Wado) |
-| `Option<T>` | `option<T>` | Optional value (UpperCamel in Wado) |
-| `Result<T, E>` | `result<T, E>` | Result type (UpperCamel in Wado) |
-| `record { ... }` | `record { ... }` | Record type (component model primitive) |
-| `struct { ... }` | - | GC struct (Wasm-GC, not Component Model) |
-| `variant { ... }` | `variant { ... }` | Variant/sum type with payloads |
-| `resource` | `resource` | Resource handle |
-| `Stream<T>` | `stream<T>` | Component Model async stream (UpperCamel in Wado) |
-| `Future<T>` | `future<T>` | Component Model async future (UpperCamel in Wado) |
+| Wado Type                 | Component Model Type                 | Notes                                             |
+| ------------------------- | ------------------------------------ | ------------------------------------------------- |
+| `bool`                    | `bool`                               | Boolean                                           |
+| `char`                    | `char`                               | Unicode scalar value                              |
+| `string`                  | `string`                             | UTF-8 string                                      |
+| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64`            | Signed integers                                   |
+| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                 |
+| `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                           |
+| `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)                   |
+| `f16`                     | -                                    | TODO: Wasm half-precision proposal (Phase 1)      |
+| `Array<T>`                | `list<T>`                            | GC array in Wado, list at CM boundary             |
+| `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary                  |
+| `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types (UpperCamel in Wado)                  |
+| `Option<T>`               | `option<T>`                          | Optional value (UpperCamel in Wado)               |
+| `Result<T, E>`            | `result<T, E>`                       | Result type (UpperCamel in Wado)                  |
+| `struct { ... }`          | `record { ... }`                     | GC struct in Wado, record at CM boundary          |
+| `enum { ... }`            | `enum { ... }`                       | Enumeration without payloads                      |
+| `variant { ... }`         | `variant { ... }`                    | Variant/sum type with payloads                    |
+| `flags { ... }`           | `flags { ... }`                      | Bit flags (maps to u8/u16/u32/u64)                |
+| `resource`                | `resource`                           | Resource handle                                   |
+| `Stream<T>`               | `stream<T>`                          | Component Model async stream (UpperCamel in Wado) |
+| `Future<T>`               | `future<T>`                          | Component Model async future (UpperCamel in Wado) |
 
 **Type Naming Convention:**
+
 - Built-in primitive types use lowercase: `bool`, `char`, `string`, `i32`, `f64`
-- Generic container types use UpperCamelCase: `List<T>`, `Dict<K, V>`, `Tuple<T1, T2, ...>`, `Option<T>`, `Result<T, E>`, `Stream<T>`, `Future<T>`
+- Generic container types use UpperCamelCase: `Array<T>`, `Dict<K, V>`, `Tuple<T1, T2, ...>`, `Option<T>`, `Result<T, E>`, `Stream<T>`, `Future<T>`
 - User-defined types follow UpperCamelCase convention
 
 ### The Prelude
@@ -92,6 +95,7 @@ All Wado types map directly to WebAssembly Component Model types:
 The **prelude** (`core::prelude`) is automatically imported into every module, providing access to fundamental types without requiring explicit imports:
 
 **Automatically Available:**
+
 - `Option<T>` and its variants: `Some(x)`, `None`
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
 - `Stream<T>` - Component Model async stream
@@ -99,6 +103,7 @@ The **prelude** (`core::prelude`) is automatically imported into every module, p
 - `Pollable` - WASI I/O polling resource
 
 **Disabling the Prelude:**
+
 ```rust
 #![no_prelude]  // At the top of a module
 
@@ -120,8 +125,8 @@ char
 string
 
 // Collections (UpperCamelCase)
-List<T>           // Component Model List<T>
-Dict<K, V>        // Extension, not in Component Model
+Array<T>          // GC array in Wado, list at CM boundary
+Dict<K, V>        // As list<tuple<K, V>> at CM boundary
 Tuple<T1, T2, ...> // Component Model tuple<T1, T2, ...>
 
 // Language core (UpperCamelCase)
@@ -133,12 +138,14 @@ Reactive<T>  // Reactive value
 ### String Literals
 
 **Regular strings** use double quotes:
+
 ```rust
 let name = "Alice";
 let path = "path/to/file.txt";
 ```
 
 **Template strings** (interpolation) use backticks:
+
 ```rust
 let name = "Alice";
 let greeting = `Hello, {name}!`;  // "Hello, Alice!"
@@ -167,34 +174,100 @@ type Status = {
 };
 ```
 
-### Records and Structs
+### Structs
 
-**Records** (Component Model primitive):
+Wado uses `struct` for structured data types. Internally they are implemented as Wasm-GC structs, and automatically converted to Component Model `record` at component boundaries.
+
 ```rust
-// Record type (maps to Component Model record)
-record User {
+// Struct definition
+struct User {
     name: string,
     age: i32,
     active: bool,
 }
 
-// Inline record type
-type UserData = record {
+// Struct with recursive type (enabled by GC)
+struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
+// Inline struct type
+type UserData = struct {
     name: string,
     age: i32,
 };
 ```
 
-**Structs** (Wasm-GC):
+**Implementation Notes:**
+
+- Internally: Wasm-GC `struct` type with GC-managed memory
+- At CM boundary: Automatically converted to/from `record`
+- Enables recursive types, self-referential structures, and efficient field access
+
+### Enums, Variants, and Flags
+
+Wado follows Component Model's distinction between enums and variants (unlike Rust):
+
+**Enums** (no payloads - Component Model `enum`):
+
 ```rust
-// GC struct (Wasm-GC feature, not Component Model)
-struct Node {
-    value: i32,
-    next: Option<Node>,
+// Simple enumeration - all variants have no data
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// Used as:
+let c = Color::Red;
+```
+
+**Variants** (with payloads - Component Model `variant`):
+
+```rust
+// Sum type where variants can carry data
+variant Shape {
+    Circle(f64),           // radius
+    Rectangle(f64, f64),   // width, height
+    Point,                 // no payload
+}
+
+// Used as:
+let s = Shape::Circle(5.0);
+
+match s {
+    Shape::Circle(r) => calculate_circle_area(r),
+    Shape::Rectangle(w, h) => w * h,
+    Shape::Point => 0.0,
 }
 ```
 
-**Note**: For Component Model interfaces, use `record`. For internal data structures with GC, use `struct`.
+**Flags** (bit flags - Component Model `flags`):
+
+```rust
+// Bit flags - can be combined with | operator
+flags Permissions {
+    Read,
+    Write,
+    Execute,
+}
+
+// Used as:
+let perms = Permissions::Read | Permissions::Write;
+
+if perms.contains(Permissions::Read) {
+    // ...
+}
+
+// Empty flags
+let none = Permissions::none();
+
+// All flags
+let all = Permissions::all();
+```
+
+**Note**: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
 
 ---
 
@@ -417,8 +490,8 @@ effect Http {
 }
 
 effect FileSystem {
-    async fn read(path: string) -> Result<List<u8>, IoError>;
-    async fn write(path: string, data: List<u8>) -> Result<(), IoError>;
+    async fn read(path: string) -> Result<Array<u8>, IoError>;
+    async fn write(path: string, data: Array<u8>) -> Result<(), IoError>;
     fn exists(path: string) -> bool;  // Synchronous
 }
 
@@ -429,8 +502,9 @@ effect Dom {
 ```
 
 **Note on async in Effect Declarations:**
+
 - Effect declarations use the `async` keyword to match WIT's `async func` signatures
-- Function *implementations* don't use `async` (colorless async via stack switching)
+- Function _implementations_ don't use `async` (colorless async via stack switching)
 - This separation allows accurate WIT mapping while maintaining colorless async in code
 
 **2. Methods with effect requirements**:
@@ -438,8 +512,8 @@ effect Dom {
 ```rust
 // Methods can declare required effects
 impl TcpStream {
-    fn read(&mut self, buffer: &mut List<u8>) -> Result<i32, IoError> with Network;
-    fn write(&mut self, data: &List<u8>) -> Result<i32, IoError> with Network;
+    fn read(&mut self, buffer: &mut Array<u8>) -> Result<i32, IoError> with Network;
+    fn write(&mut self, data: &Array<u8>) -> Result<i32, IoError> with Network;
     fn close(&mut self) with Network;
 }
 
@@ -499,6 +573,7 @@ pub fn env(name: string) -> Option<string> with Environment {
 ```
 
 **Import Rules:**
+
 - Effect functions are imported using the full module path: `use module::path::Effect::{function}`
 - Multiple functions can be imported: `use Effect::{func1, func2}`
 - Function renaming is supported: `use Effect::{function as renamed}`
@@ -506,6 +581,7 @@ pub fn env(name: string) -> Option<string> with Environment {
 - The `with` declaration is still required for effect tracking
 
 **Name Resolution:**
+
 - Imported effect functions can be called directly without the `Effect.` prefix
 - If a function name is ambiguous, use the fully qualified `Effect.function()` syntax
 - Non-imported effect functions must always use the `Effect.function()` syntax
@@ -567,7 +643,7 @@ with handler Console {
 
 ```rust
 handler MockConsole for Console {
-    let mut output: List<string> = [];
+    let mut output: Array<string> = [];
 
     print(msg) => {
         output.push(msg);
@@ -598,8 +674,8 @@ fn range(start: i32, end: i32) with Generator<i32> {
     }
 }
 
-fn collect_all() -> List<i32> {
-    let mut result: List<i32> = [];
+fn collect_all() -> Array<i32> {
+    let mut result: Array<i32> = [];
 
     with handler Generator<i32> {
         yield(value) => |resume| {
@@ -655,9 +731,10 @@ world WorldName {
     export fn synchronous_function() -> i32;
 }
 
-// Declare which world this component implements
-#![world(WorldName)]
 ```
+
+> **TBD: Component/Module Structure**
+> The relationship between files, modules, and components is still under discussion. The intended design is "1 file = 1 module, 1 component = multiple modules", but the exact syntax for declaring which modules compose a component has not been finalized.
 
 **Note:** The `async` keyword in world export/import declarations indicates correspondence with WIT's `async func`. Function implementations remain colorless (no `async` keyword needed).
 
@@ -838,29 +915,29 @@ Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `
 
 ### WASI P3 Type Mapping
 
-| WIT Type | Wado Type | Notes |
-|----------|-----------|-------|
-| `stream<u8>` | `Stream<u8>` | First-class async stream |
-| `future<T>` | `Future<T>` | First-class async future |
-| `result<T, E>` | `Result<T, E>` | Error handling |
-| `result` | `Result<(), ()>` | Unit result (no payload) |
-| `option<T>` | `Option<T>` | Optional value |
-| `list<T>` | `List<T>` | Dynamic list |
-| `tuple<A, B>` | `Tuple<A, B>` | Tuple types |
-| `string` | `string` | UTF-8 string |
-| `enum { a, b }` | `enum { A, B }` | Variants use UpperCamelCase in Wado |
+| WIT Type        | Wado Type        | Notes                               |
+| --------------- | ---------------- | ----------------------------------- |
+| `stream<u8>`    | `Stream<u8>`     | First-class async stream            |
+| `future<T>`     | `Future<T>`      | First-class async future            |
+| `result<T, E>`  | `Result<T, E>`   | Error handling                      |
+| `result`        | `Result<(), ()>` | Unit result (no payload)            |
+| `option<T>`     | `Option<T>`      | Optional value                      |
+| `list<T>`       | `Array<T>`       | Dynamic list                        |
+| `tuple<A, B>`   | `Tuple<A, B>`    | Tuple types                         |
+| `string`        | `string`         | UTF-8 string                        |
+| `enum { a, b }` | `enum { A, B }`  | Variants use UpperCamelCase in Wado |
 
 ### WASI P3 CLI Interfaces
 
 Wado effects map to WASI P3 interfaces:
 
-| Wado Effect | WASI Interface | Key Functions |
-|-------------|----------------|---------------|
-| `Stdout` | `wasi:cli/stdout` | `write-via-stream(stream<u8>)` |
-| `Stderr` | `wasi:cli/stderr` | `write-via-stream(stream<u8>)` |
-| `Stdin` | `wasi:cli/stdin` | `read-via-stream() -> tuple<stream<u8>, future<...>>` |
-| `Environment` | `wasi:cli/environment` | `get-arguments()`, `get-environment()` |
-| `Exit` | `wasi:cli/exit` | `exit(result)`, `exit-with-code(u8)` |
+| Wado Effect   | WASI Interface         | Key Functions                                         |
+| ------------- | ---------------------- | ----------------------------------------------------- |
+| `Stdout`      | `wasi:cli/stdout`      | `write-via-stream(stream<u8>)`                        |
+| `Stderr`      | `wasi:cli/stderr`      | `write-via-stream(stream<u8>)`                        |
+| `Stdin`       | `wasi:cli/stdin`       | `read-via-stream() -> tuple<stream<u8>, future<...>>` |
+| `Environment` | `wasi:cli/environment` | `get-arguments()`, `get-environment()`                |
+| `Exit`        | `wasi:cli/exit`        | `exit(result)`, `exit-with-code(u8)`                  |
 
 ### Async Functions in WASI P3
 

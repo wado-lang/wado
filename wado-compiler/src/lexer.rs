@@ -322,7 +322,6 @@ impl<'a> Lexer<'a> {
             "move" => TokenKind::Move,
             "unique" => TokenKind::Unique,
             "struct" => TokenKind::Struct,
-            "record" => TokenKind::Record,
             "enum" => TokenKind::Enum,
             "type" => TokenKind::Type,
             "impl" => TokenKind::Impl,
