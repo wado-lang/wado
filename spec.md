@@ -362,9 +362,9 @@ fn Counter() -> Element with Dom {
 ### Stack Switching Based (Colorless)
 
 ```rust
-// No async keyword needed
+// No async keyword needed in function implementations
 fn fetch_user(id: i32) -> Result<User, HttpError> with Http {
-    let response = Http.get("users/{id}")?;
+    let response = Http.get("users/{id}")?;  // Even if Http.get is async in WIT
     let user = response.json()?;
     return Ok(user);
 }
@@ -383,6 +383,8 @@ fn load_data() -> Data with Http {
     return Data { users, posts };
 }
 ```
+
+**Important:** While function implementations are colorless (no `async` keyword), effect and world declarations must use `async` to accurately match WIT's `async func` signatures. This enables proper Component Model compilation while maintaining colorless async in user code.
 
 ---
 
@@ -409,14 +411,15 @@ effect Console {
 }
 
 effect Http {
-    fn get(url: string) -> Response;
-    fn post(url: string, body: string) -> Response;
+    // async keyword required when corresponding to WIT's "async func"
+    async fn get(url: string) -> Response;
+    async fn post(url: string, body: string) -> Response;
 }
 
 effect FileSystem {
-    fn read(path: string) -> Result<List<u8>, IoError>;
-    fn write(path: string, data: List<u8>) -> Result<(), IoError>;
-    fn exists(path: string) -> bool;
+    async fn read(path: string) -> Result<List<u8>, IoError>;
+    async fn write(path: string, data: List<u8>) -> Result<(), IoError>;
+    fn exists(path: string) -> bool;  // Synchronous
 }
 
 effect Dom {
@@ -424,6 +427,11 @@ effect Dom {
     fn create_element(tag: string) -> Element;
 }
 ```
+
+**Note on async in Effect Declarations:**
+- Effect declarations use the `async` keyword to match WIT's `async func` signatures
+- Function *implementations* don't use `async` (colorless async via stack switching)
+- This separation allows accurate WIT mapping while maintaining colorless async in code
 
 **2. Methods with effect requirements**:
 
@@ -567,6 +575,141 @@ fn main() {
     }
 }
 ```
+
+---
+
+## World System
+
+### What is a World?
+
+A **world** in Wado corresponds directly to the Component Model's `world` concept. A world defines:
+
+1. **Imports**: Which effects and their functions the component requires from the host
+2. **Exports**: Which functions the component provides to the host
+
+Worlds are the contract between a Wasm component and its runtime environment.
+
+### World Declaration
+
+```rust
+world WorldName {
+    import EffectName {
+        function_name_1,
+        function_name_2,
+    }
+
+    import AnotherEffect {
+        function_name_3,
+    }
+
+    // Use async when exporting functions that map to WIT's "async func"
+    export async fn exported_function(arg: Type) -> ReturnType;
+    export fn synchronous_function() -> i32;
+}
+
+// Declare which world this component implements
+#![world(WorldName)]
+```
+
+**Note:** The `async` keyword in world export/import declarations indicates correspondence with WIT's `async func`. Function implementations remain colorless (no `async` keyword needed).
+
+### WASI CLI World Example
+
+The standard WASI CLI `command` world in Wado syntax:
+
+```rust
+// Based on wasi:cli@0.3.0-rc-2025-09-16 command world
+// Effect definitions are in core::cli (see cli.wado)
+
+world CliCommand {
+    // Standard I/O streams
+    import Stdout {
+        write_via_stream,
+    }
+
+    import Stderr {
+        write_via_stream,
+    }
+
+    import Stdin {
+        read_via_stream,
+    }
+
+    // Environment access
+    import Environment {
+        get_arguments,
+        get_environment,
+        get_initial_cwd,
+    }
+
+    // Process control
+    import Exit {
+        exit,
+        exit_with_code,
+    }
+
+    // Terminal interaction (optional)
+    import TerminalStdin {
+        get_terminal_stdin,
+    }
+
+    import TerminalStdout {
+        get_terminal_stdout,
+    }
+
+    import TerminalStderr {
+        get_terminal_stderr,
+    }
+
+    // Entry point: maps to WIT's "run: async func() -> result"
+    // The async keyword is required in world declarations to match WIT signatures.
+    // Function implementations don't need async (colorless async via stack switching).
+    export async fn run() -> Result<(), ()>;
+}
+
+// Declare this component implements the CLI command world
+#![world(CliCommand)]
+
+// Implementation
+pub fn run() -> Result<(), ()> {
+    println("Hello, WASI world!");
+    return Ok(());
+}
+```
+
+### Multiple Worlds
+
+A single codebase can define multiple worlds for different deployment targets:
+
+```rust
+world BrowserApp {
+    import Dom {
+        query_selector,
+        create_element,
+    }
+
+    export fn mount(root: string);
+}
+
+world CliApp {
+    import Stdout {
+        write_via_stream,
+    }
+
+    export fn run() -> Result<(), ()>;
+}
+
+// Select world at compile time
+#![world(CliApp)]  // or BrowserApp
+```
+
+### Design Notes
+
+- **Explicit function listing**: Unlike WIT's `include` directive, Wado requires listing each imported function explicitly for clarity
+- **Effect-based imports**: Imports are organized by effect, which maps to WIT interfaces
+- **Type signatures on exports**: Export declarations include full function signatures
+- **async keyword in declarations**: Effect and world declarations use `async` to match WIT's `async func`, but function implementations don't (colorless async via stack switching)
+- **Versioning**: Version information (`@0.3.0-rc-2025-09-16`) is specified in the effect definitions (e.g., `cli.wado`), not in the world declaration
 
 ---
 

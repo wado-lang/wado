@@ -36,17 +36,19 @@ pub effect Stdin {
 pub effect Stdout {
     /// Write the given stream to stdout.
     ///
-    /// This is an async function in WIT. In Wado, async is handled via
-    /// stack switching, so no async keyword is needed.
+    /// This is an async function in WIT (async func).
+    /// In Wado, function implementations don't use the async keyword
+    /// (colorless async via stack switching), but effect declarations
+    /// must specify async to match WIT signatures accurately.
     #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
-    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
 // Effect interface for wasi:cli/stderr@0.3.0-rc-2025-09-16
 pub effect Stderr {
     /// Write the given stream to stderr.
     #[wasi("wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream")]
-    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
 // Effect interface for wasi:cli/environment@0.3.0-rc-2025-09-16
@@ -183,4 +185,56 @@ fn string_to_stream(s: string) -> Stream<u8> {
     // 1. Get the UTF-8 bytes of the string
     // 2. Create a stream<u8> with those bytes
     // This is implemented as a compiler intrinsic.
+}
+
+// ============================================
+// WASI CLI Command World
+// ============================================
+
+/// The standard WASI CLI command world
+/// Maps to wasi:cli@0.3.0-rc-2025-09-16 command world
+world CliCommand {
+    // Standard I/O streams
+    import Stdout {
+        write_via_stream,
+    }
+
+    import Stderr {
+        write_via_stream,
+    }
+
+    import Stdin {
+        read_via_stream,
+    }
+
+    // Environment access
+    import Environment {
+        get_arguments,
+        get_environment,
+        get_initial_cwd,
+    }
+
+    // Process control
+    import Exit {
+        exit,
+        exit_with_code,
+    }
+
+    // Terminal interaction (optional)
+    import TerminalStdin {
+        get_terminal_stdin,
+    }
+
+    import TerminalStdout {
+        get_terminal_stdout,
+    }
+
+    import TerminalStderr {
+        get_terminal_stderr,
+    }
+
+    // Entry point: maps to WIT's "run: async func() -> result"
+    // The async keyword is required in world declarations to match WIT signatures.
+    // Function implementations don't need async (colorless async via stack switching).
+    export async fn run() -> Result<(), ()>;
 }
