@@ -41,7 +41,8 @@ Embedded `.wado` files in `wado-compiler/core/`:
 ### Lexer
 
 - [x] Keywords (`fn`, `let`, `use`, `if`, `while`, `for`, `match`, `return`, etc.)
-- [x] Keywords (`pub`, `effect`, `struct`, `record`, `enum`, `type`, `impl`, `resource`, `world`)
+- [x] Keywords (`pub`, `effect`, `struct`, `enum`, `type`, `impl`, `resource`, `world`)
+- [x] Keywords (`record` - legacy, to be removed)
 - [x] Keywords (`async`, `import`, `export`, `with`, `mut`, `reactive`, `move`, `unique`)
 - [x] Identifiers
 - [x] Integer literals
@@ -63,7 +64,7 @@ Embedded `.wado` files in `wado-compiler/core/`:
 - [x] `pub` modifier
 - [x] `effect` declarations
 - [x] `struct` declarations
-- [x] `record` declarations
+- [x] `record` declarations (legacy, to be unified with struct)
 - [x] `enum` declarations (payload-free, CM semantics)
 - [x] `type` aliases
 - [x] `impl` blocks
@@ -103,8 +104,8 @@ Embedded `.wado` files in `wado-compiler/core/`:
 - [ ] `if` expressions
 - [ ] `match` expressions
 - [ ] Block expressions
-- [ ] Struct/record literals (`{ field: value }`)
-- [ ] Array/list literals
+- [ ] Struct literals (`{ field: value }`)
+- [ ] Array literals
 - [ ] Tuple expressions
 - [ ] Range expressions
 - [ ] `?` operator (error propagation)
@@ -113,7 +114,7 @@ Embedded `.wado` files in `wado-compiler/core/`:
 #### Types
 
 - [x] Named types
-- [x] Generic types (`List<T>`, `Result<T, E>`)
+- [x] Generic types (`Array<T>`, `Result<T, E>`)
 - [x] Reference types (`&T`)
 - [x] Tuple types (`(T, U)`)
 - [x] Unit type `()`
@@ -157,7 +158,7 @@ Embedded `.wado` files in `wado-compiler/core/`:
 - [ ] Control flow (`if`, `while`, `for`)
 - [ ] Binary/unary operations
 - [ ] User-defined functions
-- [ ] Struct/record construction
+- [ ] Struct construction
 - [ ] Enum/variant construction
 - [ ] Pattern matching
 - [ ] Closures
@@ -212,6 +213,7 @@ fn main() with Stdout {
 4. **Template strings not interpolated**: Backtick strings are parsed as plain strings
 5. **No type checking**: The analyzer doesn't perform type checking yet
 6. **Limited codegen**: Only `println` with string literals works
+7. **Spec divergence**: Parser still supports `record` keyword separately from `struct` (spec unified them)
 
 ---
 

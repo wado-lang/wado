@@ -573,6 +573,7 @@ pub fn env(name: string) -> Option<string> with Environment {
 ```
 
 **Import Rules:**
+
 - Effect functions are imported using the full module path: `use module::path::Effect::{function}`
 - Multiple functions can be imported: `use Effect::{func1, func2}`
 - Function renaming is supported: `use Effect::{function as renamed}`
@@ -580,6 +581,7 @@ pub fn env(name: string) -> Option<string> with Environment {
 - The `with` declaration is still required for effect tracking
 
 **Name Resolution:**
+
 - Imported effect functions can be called directly without the `Effect.` prefix
 - If a function name is ambiguous, use the fully qualified `Effect.function()` syntax
 - Non-imported effect functions must always use the `Effect.function()` syntax
