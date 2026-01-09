@@ -126,17 +126,6 @@ impl Codegen {
         }
     }
 
-    fn get_string_offset(&self, s: &str) -> u32 {
-        let mut offset = 0u32;
-        for lit in &self.string_literals {
-            if lit == s {
-                return offset;
-            }
-            offset += lit.len() as u32;
-        }
-        panic!("String not found: {s}");
-    }
-
     /// Generate component for WASI P3
     /// Uses native stream<T> types and imports wasi:cli/stdout
     fn generate_component(&self, ast_module: &crate::ast::Module) -> Vec<u8> {
@@ -513,112 +502,11 @@ impl Codegen {
     }
 
     /// Generate code for a builtin function call
-    fn generate_builtin_call(&self, func: &mut Function, name: &str, call: &CallExpr) {
-        match name {
-            "println" => self.generate_println_instructions_p3(func, call),
-            // Add more builtins here as needed
-            _ => {
-                // Unknown builtin - ignore for now
-            }
-        }
-    }
-
-    /// Generate println using WASI P3 write-via-stream
-    /// Pattern:
-    /// 1. Create stream with stream.new (returns rx and tx)
-    /// 2. Call write-via-stream(rx) to connect readable end to stdout (starts consumer)
-    /// 3. Write data to tx with stream.write
-    /// 4. Drop tx to signal EOF (stream.drop-writable)
-    /// 5. Wait for write-via-stream subtask to complete
-    /// 6. Drop subtask
-    fn generate_println_instructions_p3(&self, func: &mut Function, call: &CallExpr) {
-        if call.args.len() != 1 {
-            return;
-        }
-
-        if let Expr::Literal(lit) = &call.args[0] {
-            if let Literal::String(s) = &lit.value {
-                let str_offset = self.get_string_offset(s);
-                let str_len = s.len() as i32;
-
-                // Local indices (defined in build_main_module_p3):
-                // 0: $ret64 (i64) - stream.new result / waitable-set handle
-                // 1: $rx (i32) - readable stream handle
-                // 2: $tx (i32) - writable stream handle
-                // 3: $status (i32) - subtask handle / status
-
-                // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
-                func.instruction(&Instruction::Call(0)); // stream-new
-                func.instruction(&Instruction::LocalSet(0)); // store i64 result
-
-                // Extract rx (low 32 bits)
-                func.instruction(&Instruction::LocalGet(0));
-                func.instruction(&Instruction::I32WrapI64);
-                func.instruction(&Instruction::LocalSet(1)); // $rx
-
-                // Extract tx (high 32 bits)
-                func.instruction(&Instruction::LocalGet(0));
-                func.instruction(&Instruction::I64Const(32));
-                func.instruction(&Instruction::I64ShrU);
-                func.instruction(&Instruction::I32WrapI64);
-                func.instruction(&Instruction::LocalSet(2)); // $tx
-
-                // 2. Call write-via-stream(rx, outptr) to start consuming from the stream
-                // Async lowered: takes stream handle + outptr, returns status
-                // Status: bit 0 set (odd) = completed, bit 0 clear (even) = subtask handle
-                func.instruction(&Instruction::LocalGet(1)); // rx (readable end goes to stdout)
-                func.instruction(&Instruction::I32Const(2048)); // outptr for result
-                func.instruction(&Instruction::Call(4)); // write-via-stream (func 4)
-                func.instruction(&Instruction::LocalSet(3)); // save subtask/status
-
-                // 3. Write string to stream: stream-write(tx, ptr, len) -> status
-                func.instruction(&Instruction::LocalGet(2)); // tx
-                func.instruction(&Instruction::I32Const(str_offset as i32)); // ptr
-                func.instruction(&Instruction::I32Const(str_len)); // len
-                func.instruction(&Instruction::Call(1)); // stream-write
-                func.instruction(&Instruction::Drop); // ignore write status for now
-
-                // 4. Close writable end to signal EOF: stream-drop-writable(tx)
-                func.instruction(&Instruction::LocalGet(2)); // tx
-                func.instruction(&Instruction::Call(2)); // stream-drop-writable
-
-                // 5. Wait for write-via-stream subtask to complete if still pending
-                // Check if pending (bit 0 clear = even means subtask handle)
-                func.instruction(&Instruction::LocalGet(3));
-                func.instruction(&Instruction::I32Const(1));
-                func.instruction(&Instruction::I32And);
-                func.instruction(&Instruction::I32Eqz); // true if pending (subtask handle)
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-                // Pending - wait for write-via-stream to complete
-                // local 3 contains the subtask handle
-
-                // Create waitable-set: waitable-set-new() -> i32
-                func.instruction(&Instruction::Call(6)); // waitable-set-new (func 6)
-                // Store set handle in local 0 (as i64)
-                func.instruction(&Instruction::I64ExtendI32U);
-                func.instruction(&Instruction::LocalSet(0));
-
-                // Join subtask to waitable-set: waitable-join(set, waitable)
-                func.instruction(&Instruction::LocalGet(0));
-                func.instruction(&Instruction::I32WrapI64); // set handle
-                func.instruction(&Instruction::LocalGet(3)); // subtask handle
-                func.instruction(&Instruction::Call(7)); // waitable-join (func 7)
-
-                // Wait for completion: waitable-set-wait(set, outptr) -> i32
-                func.instruction(&Instruction::LocalGet(0));
-                func.instruction(&Instruction::I32WrapI64); // set handle
-                func.instruction(&Instruction::I32Const(2048)); // outptr
-                func.instruction(&Instruction::Call(8)); // waitable-set-wait (func 8)
-                func.instruction(&Instruction::Drop); // ignore result
-
-                // 6. Drop subtask: subtask-drop(subtask)
-                func.instruction(&Instruction::LocalGet(3)); // subtask handle
-                func.instruction(&Instruction::Call(9)); // subtask-drop (func 9)
-
-                func.instruction(&Instruction::End);
-            }
-        }
+    /// Note: println is not a builtin - it's defined in core::cli and should be
+    /// compiled from cli.wado. This function handles true compiler intrinsics only.
+    fn generate_builtin_call(&self, _func: &mut Function, _name: &str, _call: &CallExpr) {
+        // Currently no intrinsic builtins implemented
+        // println, print, etc. are library functions defined in core::cli
     }
 
     fn build_memory_module(&self, string_data: &[u8]) -> Vec<u8> {
@@ -706,7 +594,7 @@ mod tests {
             use core::cli::{println, Stdout};
 
             fn main() with Stdout {
-                println("Hello, world!\n");
+                println("Hello, world!");
             }
         "#,
         );
@@ -715,8 +603,9 @@ mod tests {
         let mut codegen = Codegen::new(symbols);
         codegen.collect_strings(&ast);
 
+        // String literals are collected as-is from the source
         assert_eq!(codegen.string_literals.len(), 1);
-        assert_eq!(codegen.string_literals[0], "Hello, world!\n");
+        assert_eq!(codegen.string_literals[0], "Hello, world!");
     }
 
     #[test]
@@ -726,7 +615,7 @@ mod tests {
             use core::cli::{println, Stdout};
 
             fn main() with Stdout {
-                println("Hello!\n");
+                println("Hello!");
             }
         "#,
         );
@@ -754,7 +643,7 @@ mod tests {
             use core::cli::{println, Stdout};
 
             fn main() with Stdout {
-                println("Hello!\n");
+                println("Hello!");
             }
         "#,
         );
