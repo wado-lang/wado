@@ -70,13 +70,12 @@ All Wado types map directly to WebAssembly Component Model types:
 | `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                 |
 | `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                           |
 | `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)                   |
-| `List<T>`                 | `list<T>`                            | Dynamic list (UpperCamel in Wado)                 |
+| `Array<T>`                | `list<T>`                            | GC array in Wado, list at CM boundary             |
 | `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary                  |
 | `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types (UpperCamel in Wado)                  |
 | `Option<T>`               | `option<T>`                          | Optional value (UpperCamel in Wado)               |
 | `Result<T, E>`            | `result<T, E>`                       | Result type (UpperCamel in Wado)                  |
-| `record { ... }`          | `record { ... }`                     | Record type (component model primitive)           |
-| `struct { ... }`          | -                                    | GC struct (Wasm-GC, not Component Model)          |
+| `struct { ... }`          | `record { ... }`                     | GC struct in Wado, record at CM boundary          |
 | `enum { ... }`            | `enum { ... }`                       | Enumeration without payloads                      |
 | `variant { ... }`         | `variant { ... }`                    | Variant/sum type with payloads                    |
 | `flags { ... }`           | `flags { ... }`                      | Bit flags (maps to u8/u16/u32/u64)                |
@@ -87,7 +86,7 @@ All Wado types map directly to WebAssembly Component Model types:
 **Type Naming Convention:**
 
 - Built-in primitive types use lowercase: `bool`, `char`, `string`, `i32`, `f64`
-- Generic container types use UpperCamelCase: `List<T>`, `Dict<K, V>`, `Tuple<T1, T2, ...>`, `Option<T>`, `Result<T, E>`, `Stream<T>`, `Future<T>`
+- Generic container types use UpperCamelCase: `Array<T>`, `Dict<K, V>`, `Tuple<T1, T2, ...>`, `Option<T>`, `Result<T, E>`, `Stream<T>`, `Future<T>`
 - User-defined types follow UpperCamelCase convention
 
 ### The Prelude
@@ -125,8 +124,8 @@ char
 string
 
 // Collections (UpperCamelCase)
-List<T>           // Component Model List<T>
-Dict<K, V>        // Extension, not in Component Model
+Array<T>          // GC array in Wado, list at CM boundary
+Dict<K, V>        // As list<tuple<K, V>> at CM boundary
 Tuple<T1, T2, ...> // Component Model tuple<T1, T2, ...>
 
 // Language core (UpperCamelCase)
@@ -174,36 +173,36 @@ type Status = {
 };
 ```
 
-### Records and Structs
+### Structs
 
-**Records** (Component Model primitive):
+Wado uses `struct` for structured data types. Internally they are implemented as Wasm-GC structs, and automatically converted to Component Model `record` at component boundaries.
 
 ```rust
-// Record type (maps to Component Model record)
-record User {
+// Struct definition
+struct User {
     name: string,
     age: i32,
     active: bool,
 }
 
-// Inline record type
-type UserData = record {
+// Struct with recursive type (enabled by GC)
+struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
+// Inline struct type
+type UserData = struct {
     name: string,
     age: i32,
 };
 ```
 
-**Structs** (Wasm-GC):
+**Implementation Notes:**
 
-```rust
-// GC struct (Wasm-GC feature, not Component Model)
-struct Node {
-    value: i32,
-    next: Option<Node>,
-}
-```
-
-**Note**: For Component Model interfaces, use `record`. For internal data structures with GC, use `struct`.
+- Internally: Wasm-GC `struct` type with GC-managed memory
+- At CM boundary: Automatically converted to/from `record`
+- Enables recursive types, self-referential structures, and efficient field access
 
 ### Enums, Variants, and Flags
 
@@ -490,8 +489,8 @@ effect Http {
 }
 
 effect FileSystem {
-    async fn read(path: string) -> Result<List<u8>, IoError>;
-    async fn write(path: string, data: List<u8>) -> Result<(), IoError>;
+    async fn read(path: string) -> Result<Array<u8>, IoError>;
+    async fn write(path: string, data: Array<u8>) -> Result<(), IoError>;
     fn exists(path: string) -> bool;  // Synchronous
 }
 
@@ -512,8 +511,8 @@ effect Dom {
 ```rust
 // Methods can declare required effects
 impl TcpStream {
-    fn read(&mut self, buffer: &mut List<u8>) -> Result<i32, IoError> with Network;
-    fn write(&mut self, data: &List<u8>) -> Result<i32, IoError> with Network;
+    fn read(&mut self, buffer: &mut Array<u8>) -> Result<i32, IoError> with Network;
+    fn write(&mut self, data: &Array<u8>) -> Result<i32, IoError> with Network;
     fn close(&mut self) with Network;
 }
 
@@ -593,7 +592,7 @@ with handler Console {
 
 ```rust
 handler MockConsole for Console {
-    let mut output: List<string> = [];
+    let mut output: Array<string> = [];
 
     print(msg) => {
         output.push(msg);
@@ -624,8 +623,8 @@ fn range(start: i32, end: i32) with Generator<i32> {
     }
 }
 
-fn collect_all() -> List<i32> {
-    let mut result: List<i32> = [];
+fn collect_all() -> Array<i32> {
+    let mut result: Array<i32> = [];
 
     with handler Generator<i32> {
         yield(value) => |resume| {
@@ -872,7 +871,7 @@ Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `
 | `result<T, E>`  | `Result<T, E>`   | Error handling                      |
 | `result`        | `Result<(), ()>` | Unit result (no payload)            |
 | `option<T>`     | `Option<T>`      | Optional value                      |
-| `list<T>`       | `List<T>`        | Dynamic list                        |
+| `list<T>`       | `Array<T>`       | Dynamic list                        |
 | `tuple<A, B>`   | `Tuple<A, B>`    | Tuple types                         |
 | `string`        | `string`         | UTF-8 string                        |
 | `enum { a, b }` | `enum { A, B }`  | Variants use UpperCamelCase in Wado |

@@ -231,7 +231,7 @@ effect FileSystem {
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.read-directory")]
     fn read_directory(
         descriptor: &Descriptor,
-    ) -> Result<List<DirectoryEntry>, ErrorCode>;
+    ) -> Result<Array<DirectoryEntry>, ErrorCode>;
 
     /// Create directory
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.create-directory-at")]
@@ -283,7 +283,7 @@ effect FileSystem {
 effect Preopens {
     /// Get preopened directories
     #[wasi("wasi:filesystem/preopens@0.2.9#get-directories")]
-    fn get_directories() -> List<Tuple<Descriptor, string>>;
+    fn get_directories() -> Array<Tuple<Descriptor, string>>;
 }
 
 // ============================================================================
