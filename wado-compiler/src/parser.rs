@@ -177,25 +177,65 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Use)?;
 
-        let mut path = vec![self.consume_ident()?];
+        // Read all path segments (module path or module::Effect)
+        let mut all_segments = vec![self.consume_ident()?];
 
         while self.check(&TokenKind::ColonColon) {
-            self.advance();
+            let saved_pos = self.pos;
+            self.advance(); // consume `::`
             if self.check(&TokenKind::LBrace) {
+                // End of path, `::` followed by `{`
+                // Restore the `::` so the next section can process it
+                self.pos = saved_pos;
                 break;
             }
-            path.push(self.consume_ident()?);
+            all_segments.push(self.consume_ident()?);
         }
+
+        // Determine if this is module import or effect import
+        // Pattern 1: `use module::path::{items}`     -> all_segments = module path, then ::{
+        // Pattern 2: `use module::path::Effect::{items}` -> all_segments includes Effect, then ::{
+        let (path, target) = if self.check(&TokenKind::ColonColon) {
+            self.advance(); // consume the final `::`
+
+            if self.check(&TokenKind::LBrace) {
+                // `::` followed by `{` - all segments are module path
+                (all_segments, UseTarget::Module)
+            } else {
+                // `::` followed by identifier - that's the Effect name
+                let effect_name = self.consume_ident()?;
+                self.expect(&TokenKind::ColonColon)?; // must be followed by `::`
+                // all_segments is the module path
+                (all_segments, UseTarget::Effect(effect_name))
+            }
+        } else {
+            // No final `::` - all segments are module path
+            (all_segments, UseTarget::Module)
+        };
 
         self.expect(&TokenKind::LBrace)?;
 
-        let mut items = vec![self.consume_ident()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            if self.check(&TokenKind::RBrace) {
-                break;
+        // Parse items with optional renaming (as alias)
+        let mut items = vec![];
+        if !self.check(&TokenKind::RBrace) {
+            loop {
+                let name = self.consume_ident()?;
+                let alias = if self.check(&TokenKind::As) {
+                    self.advance();
+                    Some(self.consume_ident()?)
+                } else {
+                    None
+                };
+                items.push(UseItem { name, alias });
+
+                if !self.check(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+                if self.check(&TokenKind::RBrace) {
+                    break;
+                }
             }
-            items.push(self.consume_ident()?);
         }
 
         self.expect(&TokenKind::RBrace)?;
@@ -203,6 +243,7 @@ impl Parser {
 
         Ok(UseDecl {
             path,
+            target,
             items,
             span: start_span,
         })
@@ -1256,7 +1297,12 @@ mod tests {
 
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.path, vec!["core", "cli"]);
-            assert_eq!(use_decl.items, vec!["println", "Stdout"]);
+            assert_eq!(use_decl.items.len(), 2);
+            assert_eq!(use_decl.items[0].name, "println");
+            assert_eq!(use_decl.items[0].alias, None);
+            assert_eq!(use_decl.items[1].name, "Stdout");
+            assert_eq!(use_decl.items[1].alias, None);
+            assert!(matches!(use_decl.target, UseTarget::Module));
         } else {
             panic!("expected use declaration");
         }

@@ -1,7 +1,7 @@
-//! End-to-end test for hello world program
+//! End-to-end tests for Wado compiler
 //!
-//! This test compiles a hello world Wado program and runs it with wasmtime,
-//! verifying the output matches "Hello, world!\n".
+//! These tests compile Wado programs and run them with wasmtime,
+//! verifying the output matches expected values.
 
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
@@ -69,15 +69,13 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     Ok(output)
 }
 
+// ============================================================================
+// Basic hello world tests
+// ============================================================================
+
 #[tokio::test]
 async fn test_hello_world() {
-    let source = r#"
-use core::cli::{println, Stdout};
-
-fn main() with Stdout {
-    println("Hello, world!");
-}
-"#;
+    let source = include_str!("fixtures/hello.wado");
 
     // Compile the source
     let wasm = compile(source).expect("compilation failed");
@@ -91,15 +89,7 @@ fn main() with Stdout {
 
 #[tokio::test]
 async fn test_multiple_println() {
-    let source = r#"
-use core::cli::{println, Stdout};
-
-fn main() with Stdout {
-    println("Line 1");
-    println("Line 2");
-    println("Line 3");
-}
-"#;
+    let source = include_str!("fixtures/multiple_println.wado");
 
     // Compile the source
     let wasm = compile(source).expect("compilation failed");
@@ -109,4 +99,51 @@ fn main() with Stdout {
 
     // Verify output
     assert_eq!(output, "Line 1\nLine 2\nLine 3\n");
+}
+
+// ============================================================================
+// Effect function import tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_effect_import_demo() {
+    let source = include_str!("fixtures/effect-import-demo.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify stdout
+    assert_eq!(output, "Hello from imported Stdout!\n");
+}
+
+#[tokio::test]
+async fn test_effect_import_with_aliasing() {
+    let source = include_str!("fixtures/effect_import_aliasing.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output
+    assert!(output.contains("Aliased import works!"));
+    assert!(output.contains("Direct import also works!"));
+}
+
+#[tokio::test]
+async fn test_multiple_effect_imports() {
+    let source = include_str!("fixtures/multiple_effect_imports.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output
+    assert_eq!(output, "Testing multiple imports\n");
 }
