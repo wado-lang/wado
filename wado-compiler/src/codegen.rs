@@ -88,9 +88,10 @@ impl Codegen {
         match expr {
             Expr::Literal(lit) => {
                 if let Literal::String(s) = &lit.value
-                    && !self.string_literals.contains(s) {
-                        self.string_literals.push(s.clone());
-                    }
+                    && !self.string_literals.contains(s)
+                {
+                    self.string_literals.push(s.clone());
+                }
             }
             Expr::Call(call) => {
                 self.collect_strings_from_expr(&call.callee);
@@ -102,14 +103,15 @@ impl Codegen {
                 for arg in &call.args {
                     if is_println
                         && let Expr::Literal(lit) = arg
-                            && let Literal::String(s) = &lit.value {
-                                // println appends newline - store the string with \n
-                                let with_newline = format!("{s}\n");
-                                if !self.string_literals.contains(&with_newline) {
-                                    self.string_literals.push(with_newline);
-                                }
-                                continue;
-                            }
+                        && let Literal::String(s) = &lit.value
+                    {
+                        // println appends newline - store the string with \n
+                        let with_newline = format!("{s}\n");
+                        if !self.string_literals.contains(&with_newline) {
+                            self.string_literals.push(with_newline);
+                        }
+                        continue;
+                    }
                     self.collect_strings_from_expr(arg);
                 }
             }
@@ -594,9 +596,10 @@ impl Codegen {
         // Find main function
         let main_func = ast_module.items.iter().find_map(|item| {
             if let Item::Function(f) = item
-                && f.name == "main" {
-                    return Some(f);
-                }
+                && f.name == "main"
+            {
+                return Some(f);
+            }
             None
         });
 
@@ -646,18 +649,19 @@ impl Codegen {
                 // It takes (ptr: i32, len: i32)
                 if call.args.len() == 1
                     && let Expr::Literal(lit) = &call.args[0]
-                        && let Literal::String(s) = &lit.value {
-                            // Get the string with newline appended
-                            let with_newline = format!("{s}\n");
-                            let str_offset = self.get_string_offset(&with_newline);
-                            let str_len = with_newline.len() as i32;
+                    && let Literal::String(s) = &lit.value
+                {
+                    // Get the string with newline appended
+                    let with_newline = format!("{s}\n");
+                    let str_offset = self.get_string_offset(&with_newline);
+                    let str_len = with_newline.len() as i32;
 
-                            // Push arguments: ptr, len
-                            func.instruction(&Instruction::I32Const(str_offset as i32));
-                            func.instruction(&Instruction::I32Const(str_len));
-                            // Call println (function index 10)
-                            func.instruction(&Instruction::Call(10));
-                        }
+                    // Push arguments: ptr, len
+                    func.instruction(&Instruction::I32Const(str_offset as i32));
+                    func.instruction(&Instruction::I32Const(str_len));
+                    // Call println (function index 10)
+                    func.instruction(&Instruction::Call(10));
+                }
             }
             _ => {
                 // Unknown function - ignore for now

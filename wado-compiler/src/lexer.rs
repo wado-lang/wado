@@ -354,22 +354,23 @@ impl<'a> Lexer<'a> {
             let mut chars = self.chars.clone();
             chars.next();
             if let Some((_, ch)) = chars.peek()
-                && ch.is_ascii_digit() {
-                    self.advance(); // consume '.'
-                    while let Some((_, ch)) = self.peek() {
-                        if ch.is_ascii_digit() {
-                            self.advance();
-                        } else {
-                            break;
-                        }
+                && ch.is_ascii_digit()
+            {
+                self.advance(); // consume '.'
+                while let Some((_, ch)) = self.peek() {
+                    if ch.is_ascii_digit() {
+                        self.advance();
+                    } else {
+                        break;
                     }
-                    let text = &self.input[start..self.pos];
-                    let value: f64 = text.parse().map_err(|_| LexError {
-                        message: format!("invalid float literal: {text}"),
-                        span: Span::new(start, self.pos, start_line, start_column),
-                    })?;
-                    return Ok(TokenKind::FloatLit(value));
                 }
+                let text = &self.input[start..self.pos];
+                let value: f64 = text.parse().map_err(|_| LexError {
+                    message: format!("invalid float literal: {text}"),
+                    span: Span::new(start, self.pos, start_line, start_column),
+                })?;
+                return Ok(TokenKind::FloatLit(value));
+            }
         }
 
         let text = &self.input[start..self.pos];

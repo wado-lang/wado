@@ -1294,12 +1294,11 @@ mod tests {
 
         if let Item::Function(func) = &module.items[0] {
             assert_eq!(func.body.stmts.len(), 1);
-            if let Stmt::Expr(expr_stmt) = &func.body.stmts[0] {
-                if let Expr::Call(call) = &expr_stmt.expr {
-                    if let Expr::Ident(ident) = &call.callee {
-                        assert_eq!(ident.name, "println");
-                    }
-                }
+            if let Stmt::Expr(expr_stmt) = &func.body.stmts[0]
+                && let Expr::Call(call) = &expr_stmt.expr
+                && let Expr::Ident(ident) = &call.callee
+            {
+                assert_eq!(ident.name, "println");
             }
         }
     }
