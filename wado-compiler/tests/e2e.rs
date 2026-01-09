@@ -148,3 +148,117 @@ async fn test_multiple_effect_imports() {
     // Verify output
     assert_eq!(output, "Testing multiple imports\n");
 }
+
+// ============================================================================
+// Local variable tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_local_let() {
+    let source = include_str!("fixtures/local_let.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output
+    assert_eq!(output, "Hello from let!\n");
+}
+
+#[tokio::test]
+async fn test_local_let_mut() {
+    let source = include_str!("fixtures/local_let_mut.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output
+    assert_eq!(output, "First message\nSecond message\n");
+}
+
+// ============================================================================
+// For loop tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_for_loop() {
+    let source = include_str!("fixtures/for_loop.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - loop runs 3 times, then "done"
+    assert_eq!(output, "loop\nloop\nloop\ndone\n");
+}
+
+// ============================================================================
+// Integer variable tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_local_integers() {
+    let source = include_str!("fixtures/local_integers.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - integer arithmetic works
+    assert_eq!(output, "integers work\n");
+}
+
+#[tokio::test]
+async fn test_local_integers_mut() {
+    let source = include_str!("fixtures/local_integers_mut.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - mutable integers with reassignment
+    assert_eq!(output, "x is 5\nx is 10\nx is 15\n");
+}
+
+// ============================================================================
+// Floating point variable tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_local_floats() {
+    let source = include_str!("fixtures/local_floats.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - float arithmetic works
+    assert_eq!(output, "floats work\n");
+}
+
+#[tokio::test]
+async fn test_local_floats_mut() {
+    let source = include_str!("fixtures/local_floats_mut.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - mutable floats with reassignment
+    assert_eq!(output, "x is 1.0\nx is 2.5\nx is 3.0\n");
+}

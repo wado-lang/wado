@@ -24,6 +24,8 @@ pub struct Codegen {
 struct FunctionContext {
     /// Map from variable name to local index
     locals: HashMap<String, u32>,
+    /// Map from variable name to type (for type inference)
+    local_type_map: HashMap<String, ValType>,
     /// Number of parameters (locals 0..param_count are parameters)
     #[allow(dead_code)]
     param_count: u32,
@@ -55,6 +57,7 @@ impl FunctionContext {
     fn new(param_count: u32) -> Self {
         Self {
             locals: HashMap::new(),
+            local_type_map: HashMap::new(),
             param_count,
             next_local: param_count,
             local_types: Vec::new(),
@@ -71,6 +74,7 @@ impl FunctionContext {
     fn alloc_local(&mut self, name: &str, ty: ValType) -> u32 {
         let index = self.next_local;
         self.locals.insert(name.to_string(), index);
+        self.local_type_map.insert(name.to_string(), ty);
         self.local_types.push(ty);
         self.next_local += 1;
         index
@@ -79,6 +83,11 @@ impl FunctionContext {
     /// Get local index by name
     fn get_local(&self, name: &str) -> Option<u32> {
         self.locals.get(name).copied()
+    }
+
+    /// Get local type by name
+    fn get_local_type(&self, name: &str) -> Option<ValType> {
+        self.local_type_map.get(name).copied()
     }
 
     /// Get local types for function declaration (after params)
@@ -279,6 +288,10 @@ impl Codegen {
             }
             Expr::Closure(closure) => {
                 self.collect_strings_from_expr(&closure.body);
+            }
+            Expr::Assign(assign) => {
+                self.collect_strings_from_expr(&assign.target);
+                self.collect_strings_from_expr(&assign.value);
             }
             _ => {}
         }
@@ -733,7 +746,33 @@ impl Codegen {
         // ============================================
         // run function - user entry point
         // ============================================
-        let mut run_func = Function::new([]);
+        // Find main function to collect locals
+        let main_func = ast_module.items.iter().find_map(|item| {
+            if let Item::Function(f) = item
+                && f.name == "main"
+            {
+                return Some(f);
+            }
+            None
+        });
+
+        // Collect locals from main function body
+        let local_decls = if let Some(main) = main_func {
+            if let Some(body) = &main.body {
+                let mut func_ctx = FunctionContext::new(main.params.len() as u32);
+                for param in &main.params {
+                    func_ctx.add_param(&param.name);
+                }
+                self.collect_locals_from_block(body, &mut func_ctx);
+                func_ctx.get_local_decls()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        let mut run_func = Function::new(local_decls);
 
         // Generate body from AST (calls to println, etc.)
         self.generate_run_body_instructions_p3_with_ctx(&mut run_func, ast_module, &mod_ctx);
@@ -866,7 +905,7 @@ impl Codegen {
     fn collect_locals_from_stmt(&self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
             Stmt::Let(let_stmt) => {
-                let val_type = self.infer_expr_type(&let_stmt.value);
+                let val_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx);
                 ctx.alloc_local(&let_stmt.name, val_type);
             }
             Stmt::For(for_stmt) => {
@@ -899,9 +938,14 @@ impl Codegen {
         match stmt {
             Stmt::Expr(expr_stmt) => {
                 self.generate_expr_with_mod_ctx(func, &expr_stmt.expr, ctx, mod_ctx);
+                // Drop any value left on stack by expression statements
+                // (e.g., assignment expressions use LocalTee)
+                if self.expr_produces_value(&expr_stmt.expr) {
+                    func.instruction(&Instruction::Drop);
+                }
             }
             Stmt::Let(let_stmt) => {
-                let val_type = self.infer_expr_type(&let_stmt.value);
+                let val_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx);
                 let local_idx = ctx.alloc_local(&let_stmt.name, val_type);
                 self.generate_expr_with_mod_ctx(func, &let_stmt.value, ctx, mod_ctx);
                 func.instruction(&Instruction::LocalSet(local_idx));
@@ -993,21 +1037,45 @@ impl Codegen {
             Expr::Binary(bin) => {
                 self.generate_expr_with_mod_ctx(func, &bin.left, ctx, mod_ctx);
                 self.generate_expr_with_mod_ctx(func, &bin.right, ctx, mod_ctx);
-                match bin.op {
-                    crate::ast::BinaryOp::Add => func.instruction(&Instruction::I32Add),
-                    crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I32Sub),
-                    crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I32Mul),
-                    crate::ast::BinaryOp::Div => func.instruction(&Instruction::I32DivS),
-                    crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I32RemS),
-                    crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I32Eq),
-                    crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
-                    crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I32LtS),
-                    crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I32LeS),
-                    crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I32GtS),
-                    crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
-                    crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
-                    crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
-                };
+
+                // Infer operand type to select correct instructions
+                let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx);
+                let is_float = matches!(operand_type, ValType::F32 | ValType::F64);
+
+                if is_float {
+                    // Float operations (f64)
+                    match bin.op {
+                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::F64Add),
+                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::F64Sub),
+                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::F64Mul),
+                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::F64Div),
+                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::F64Eq),
+                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::F64Ne),
+                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::F64Lt),
+                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::F64Le),
+                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::F64Gt),
+                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::F64Ge),
+                        // Mod, And, Or not supported for floats - fall back to i32
+                        _ => func.instruction(&Instruction::I32Const(0)),
+                    };
+                } else {
+                    // Integer operations (i32)
+                    match bin.op {
+                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::I32Add),
+                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I32Sub),
+                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I32Mul),
+                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::I32DivS),
+                        crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I32RemS),
+                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I32Eq),
+                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
+                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I32LtS),
+                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I32LeS),
+                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I32GtS),
+                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
+                        crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
+                        crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
+                    };
+                }
             }
             Expr::Assign(assign) => {
                 self.generate_expr_with_mod_ctx(func, &assign.value, ctx, mod_ctx);
@@ -1467,43 +1535,97 @@ impl Codegen {
         func.instruction(&Instruction::End); // end if
     }
 
-    /// Infer the Wasm type of an expression (simplified type inference)
-    fn infer_expr_type(&self, expr: &Expr) -> ValType {
+    /// Infer expression type with function context (for looking up variable types)
+    fn infer_expr_type_with_ctx(&self, expr: &Expr, ctx: &FunctionContext) -> ValType {
         match expr {
             Expr::Literal(lit) => match &lit.value {
                 Literal::Int(_) => ValType::I32,
                 Literal::Float(_) => ValType::F64,
                 Literal::Bool(_) => ValType::I32,
-                // String is a GC array<u8> reference (type index 11)
                 Literal::String(_) => ValType::Ref(RefType {
                     nullable: false,
                     heap_type: HeapType::Concrete(11),
                 }),
                 Literal::Unit => ValType::I32,
             },
+            Expr::Ident(ident) => {
+                // Look up variable type from context
+                if let Some(ty) = ctx.get_local_type(&ident.name) {
+                    ty
+                } else {
+                    ValType::I32 // Default
+                }
+            }
+            Expr::Binary(bin) => {
+                // For comparison ops, result is always i32
+                match bin.op {
+                    crate::ast::BinaryOp::Eq
+                    | crate::ast::BinaryOp::NotEq
+                    | crate::ast::BinaryOp::Lt
+                    | crate::ast::BinaryOp::LtEq
+                    | crate::ast::BinaryOp::Gt
+                    | crate::ast::BinaryOp::GtEq
+                    | crate::ast::BinaryOp::And
+                    | crate::ast::BinaryOp::Or => ValType::I32,
+                    // Arithmetic ops return the operand type
+                    _ => self.infer_expr_type_with_ctx(&bin.left, ctx),
+                }
+            }
             Expr::Call(call) => {
-                // Look up return type from symbol table or builtin
                 if let Expr::Ident(ident) = &call.callee {
                     match ident.name.as_str() {
                         "stream_new" => ValType::I64,
                         "i64_low32" | "i64_high32" | "string_len" | "array_len" => ValType::I32,
-                        _ => ValType::I32, // Default
+                        _ => ValType::I32,
                     }
                 } else {
                     ValType::I32
                 }
             }
-            Expr::Binary(_) => ValType::I32, // Most binary ops return i32
-            Expr::Ident(ident) => {
-                // For now, default to i32
-                // A proper implementation would look up the variable's type
-                if ident.name.contains("64") || ident.name == "handles" {
-                    ValType::I64
-                } else {
-                    ValType::I32
-                }
-            }
             _ => ValType::I32,
+        }
+    }
+
+    /// Check if an expression produces a value on the stack
+    /// Used to determine if we need to drop the result in expression statements
+    fn expr_produces_value(&self, expr: &Expr) -> bool {
+        match expr {
+            // Literals always produce values
+            Expr::Literal(_) => true,
+            // Identifiers produce values
+            Expr::Ident(_) => true,
+            // Binary ops produce values
+            Expr::Binary(_) => true,
+            // Unary ops produce values
+            Expr::Unary(_) => true,
+            // Assignments produce values (via LocalTee)
+            Expr::Assign(_) => true,
+            // Calls may or may not produce values - for now assume they don't
+            // (println returns unit which we don't push)
+            Expr::Call(call) => {
+                // Check if it's a builtin that returns void
+                if let Expr::Ident(ident) = &call.callee {
+                    // println doesn't produce a value
+                    if ident.name == "println" {
+                        return false;
+                    }
+                    // stream intrinsics that return values
+                    if matches!(
+                        ident.name.as_str(),
+                        "stream_new"
+                            | "stream_write"
+                            | "stream_write_string"
+                            | "i64_low32"
+                            | "i64_high32"
+                            | "array_len"
+                            | "string_len"
+                    ) {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => false,
         }
     }
 
