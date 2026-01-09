@@ -12,6 +12,8 @@ The compiler is implemented in `wado-compiler/` with a hand-written recursive de
 
 Standard libraries are implemented in `wado-compiler/lib`, whre `wasi/` for WASI and `core/` for the core library.
 
+See also `compiler.md` for the implementation details and the feature checklist.
+
 ## The CLI
 
 The CLI is implemented in `wado-cli/` with sub-command style CLI:
@@ -21,6 +23,8 @@ wado compile -o file.wasm file.wado # generates Wasm
 wado compile -o file.wat file.wado  # generates WAT
 wado run file.wado
 ```
+
+The CLI can run a Wado module directly using wasmtime as a library.
 
 ## Wasm and WASI
 
@@ -72,9 +76,9 @@ This project relays on the following features:
 ```sh
 cargo build
 cargo test
-cargo fmt    # formatting
-cargo clippy # linting
+cargo fmt
 
 make hello-run # simple smoke test
 ```
+
 

@@ -135,7 +135,8 @@ Embedded `.wado` files in `wado-compiler/core/`:
 - [x] Module resolution (core library)
 - [x] Import resolution
 - [x] Builtin function detection
-- [ ] Type checking
+- [ ] Simple type checking
+- [ ] Generic type checking
 - [ ] Type inference
 - [ ] Effect checking
 - [ ] Borrow checking / move analysis
