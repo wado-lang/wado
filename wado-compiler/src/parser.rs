@@ -98,7 +98,6 @@ impl Parser {
             TokenKind::Fn => self.parse_function(is_pub).map(Item::Function),
             TokenKind::Effect => self.parse_effect_decl(is_pub).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
-            TokenKind::Record => self.parse_record_decl(is_pub).map(Item::Record),
             TokenKind::Enum => self.parse_enum_decl(is_pub).map(Item::Enum),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
@@ -1007,24 +1006,6 @@ impl Parser {
         self.expect(&TokenKind::RBrace)?;
 
         Ok(StructDecl {
-            name,
-            is_pub,
-            fields,
-            span: start_span,
-        })
-    }
-
-    fn parse_record_decl(&mut self, is_pub: bool) -> ParseResult<RecordDecl> {
-        let start_span = self.peek().span;
-        self.expect(&TokenKind::Record)?;
-        let name = self.consume_ident()?;
-        self.expect(&TokenKind::LBrace)?;
-
-        let fields = self.parse_struct_fields()?;
-
-        self.expect(&TokenKind::RBrace)?;
-
-        Ok(RecordDecl {
             name,
             is_pub,
             fields,

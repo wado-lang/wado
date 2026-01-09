@@ -42,7 +42,6 @@ Embedded `.wado` files in `wado-compiler/core/`:
 
 - [x] Keywords (`fn`, `let`, `use`, `if`, `while`, `for`, `match`, `return`, etc.)
 - [x] Keywords (`pub`, `effect`, `struct`, `enum`, `type`, `impl`, `resource`, `world`)
-- [x] Keywords (`record` - legacy, to be removed)
 - [x] Keywords (`async`, `import`, `export`, `with`, `mut`, `reactive`, `move`, `unique`)
 - [x] Identifiers
 - [x] Integer literals
@@ -63,8 +62,7 @@ Embedded `.wado` files in `wado-compiler/core/`:
 - [x] `fn` declarations (with params, return type, effects)
 - [x] `pub` modifier
 - [x] `effect` declarations
-- [x] `struct` declarations
-- [x] `record` declarations (legacy, to be unified with struct)
+- [x] `struct` declarations (GC struct in Wado, maps to record at CM boundary)
 - [x] `enum` declarations (payload-free, CM semantics)
 - [x] `type` aliases
 - [x] `impl` blocks
@@ -213,7 +211,6 @@ fn main() with Stdout {
 4. **Template strings not interpolated**: Backtick strings are parsed as plain strings
 5. **No type checking**: The analyzer doesn't perform type checking yet
 6. **Limited codegen**: Only `println` with string literals works
-7. **Spec divergence**: Parser still supports `record` keyword separately from `struct` (spec unified them)
 
 ---
 

@@ -188,16 +188,6 @@ impl Analyzer {
                     );
                 }
 
-                Item::Record(record) => {
-                    // Records are similar to structs
-                    let kind = SymbolKind::Struct(StructSymbol {
-                        fields: record.fields.iter().map(|f| f.name.clone()).collect(),
-                    });
-
-                    self.symbols
-                        .define(&record.name, kind, module_path, Some(record.span));
-                }
-
                 Item::Enum(enum_decl) => {
                     let kind = SymbolKind::Enum(EnumSymbol {
                         variants: enum_decl.variants.iter().map(|v| v.name.clone()).collect(),
