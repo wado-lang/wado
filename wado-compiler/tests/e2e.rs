@@ -1,7 +1,7 @@
-//! End-to-end tests for Effect function import feature
+//! End-to-end tests for Wado compiler
 //!
-//! These tests verify that Effect functions can be imported and used
-//! without the `Effect.` prefix.
+//! These tests compile Wado programs and run them with wasmtime,
+//! verifying the output matches expected values.
 
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
@@ -24,7 +24,7 @@ impl WasiView for TestWasiState {
     }
 }
 
-async fn run_wasm_capture_output(wasm: Vec<u8>) -> anyhow::Result<(String, String)> {
+async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     // Configure engine with async and component model support
     let mut config = Config::new();
     config.async_support(true);
@@ -42,17 +42,12 @@ async fn run_wasm_capture_output(wasm: Vec<u8>) -> anyhow::Result<(String, Strin
     let mut linker: Linker<TestWasiState> = Linker::new(&engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
 
-    // Create stdout and stderr capture pipes
+    // Create stdout capture pipe
     let stdout_pipe = MemoryOutputPipe::new(4096);
     let stdout_clone = stdout_pipe.clone();
-    let stderr_pipe = MemoryOutputPipe::new(4096);
-    let stderr_clone = stderr_pipe.clone();
 
-    // Create WASI state with captured stdout and stderr
-    let ctx = WasiCtxBuilder::new()
-        .stdout(stdout_pipe)
-        .stderr(stderr_pipe)
-        .build();
+    // Create WASI state with captured stdout
+    let ctx = WasiCtxBuilder::new().stdout(stdout_pipe).build();
     let table = ResourceTable::new();
 
     let state = TestWasiState { ctx, table };
@@ -67,14 +62,48 @@ async fn run_wasm_capture_output(wasm: Vec<u8>) -> anyhow::Result<(String, Strin
     let (result,) = run_func.call_async(&mut store, ()).await?;
     result.map_err(|()| anyhow::anyhow!("Component returned error"))?;
 
-    // Get captured stdout and stderr
-    let stdout_bytes = stdout_clone.contents();
-    let stdout = String::from_utf8(stdout_bytes.to_vec())?;
-    let stderr_bytes = stderr_clone.contents();
-    let stderr = String::from_utf8(stderr_bytes.to_vec())?;
+    // Get captured stdout using contents() method
+    let output_bytes = stdout_clone.contents();
+    let output = String::from_utf8(output_bytes.to_vec())?;
 
-    Ok((stdout, stderr))
+    Ok(output)
 }
+
+// ============================================================================
+// Basic hello world tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_hello_world() {
+    let source = include_str!("fixtures/hello.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output
+    assert_eq!(output, "Hello, world!\n");
+}
+
+#[tokio::test]
+async fn test_multiple_println() {
+    let source = include_str!("fixtures/multiple_println.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output
+    assert_eq!(output, "Line 1\nLine 2\nLine 3\n");
+}
+
+// ============================================================================
+// Effect function import tests
+// ============================================================================
 
 #[tokio::test]
 async fn test_effect_import_demo() {
@@ -84,58 +113,37 @@ async fn test_effect_import_demo() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let (stdout, _stderr) = run_wasm_capture_output(wasm)
-        .await
-        .expect("runtime error");
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
 
     // Verify stdout
-    assert_eq!(stdout, "Hello from imported Stdout!\n");
+    assert_eq!(output, "Hello from imported Stdout!\n");
 }
 
 #[tokio::test]
 async fn test_effect_import_with_aliasing() {
-    // Test that importing with 'as' aliasing works correctly
-    let source = r#"
-use core::cli::{println, Stdout};
-
-fn main() with Stdout {
-    println("Aliased import works!");
-    println("Direct import also works!");
-}
-"#;
+    let source = include_str!("fixtures/effect_import_aliasing.wado");
 
     // Compile the source
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let (stdout, _stderr) = run_wasm_capture_output(wasm)
-        .await
-        .expect("runtime error");
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
 
     // Verify output
-    assert!(stdout.contains("Aliased import works!"));
-    assert!(stdout.contains("Direct import also works!"));
+    assert!(output.contains("Aliased import works!"));
+    assert!(output.contains("Direct import also works!"));
 }
 
 #[tokio::test]
 async fn test_multiple_effect_imports() {
-    // Test importing from multiple effects
-    let source = r#"
-use core::cli::{println, Stdout};
-
-fn main() with Stdout {
-    println("Testing multiple imports");
-}
-"#;
+    let source = include_str!("fixtures/multiple_effect_imports.wado");
 
     // Compile the source
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let (stdout, _stderr) = run_wasm_capture_output(wasm)
-        .await
-        .expect("runtime error");
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
 
     // Verify output
-    assert_eq!(stdout, "Testing multiple imports\n");
+    assert_eq!(output, "Testing multiple imports\n");
 }
