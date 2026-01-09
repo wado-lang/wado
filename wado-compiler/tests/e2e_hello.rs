@@ -71,13 +71,7 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
 
 #[tokio::test]
 async fn test_hello_world() {
-    let source = r#"
-use core::cli::{println, Stdout};
-
-fn main() with Stdout {
-    println("Hello, world!");
-}
-"#;
+    let source = include_str!("fixtures/hello.wado");
 
     // Compile the source
     let wasm = compile(source).expect("compilation failed");
@@ -91,15 +85,7 @@ fn main() with Stdout {
 
 #[tokio::test]
 async fn test_multiple_println() {
-    let source = r#"
-use core::cli::{println, Stdout};
-
-fn main() with Stdout {
-    println("Line 1");
-    println("Line 2");
-    println("Line 3");
-}
-"#;
+    let source = include_str!("fixtures/multiple_println.wado");
 
     // Compile the source
     let wasm = compile(source).expect("compilation failed");
