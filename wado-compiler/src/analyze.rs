@@ -269,31 +269,34 @@ impl Analyzer {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
                 // Try to load as a module first
-                let (final_path, final_target, imported_module) = match self.resolver.load_module(&use_decl.path) {
-                    Ok(m) => {
-                        // Module found - use as-is
-                        (use_decl.path.clone(), use_decl.target.clone(), m.clone())
-                    }
-                    Err(_) if use_decl.path.len() > 1 => {
-                        // Module not found - try treating last segment as Effect name
-                        let mut path_without_last = use_decl.path.clone();
-                        let potential_effect = path_without_last.pop().unwrap();
+                let (final_path, final_target, imported_module) =
+                    match self.resolver.load_module(&use_decl.path) {
+                        Ok(m) => {
+                            // Module found - use as-is
+                            (use_decl.path.clone(), use_decl.target.clone(), m.clone())
+                        }
+                        Err(_) if use_decl.path.len() > 1 => {
+                            // Module not found - try treating last segment as Effect name
+                            let mut path_without_last = use_decl.path.clone();
+                            let potential_effect = path_without_last.pop().unwrap();
 
-                        match self.resolver.load_module(&path_without_last) {
-                            Ok(m) => {
-                                (path_without_last, UseTarget::Effect(potential_effect), m.clone())
-                            }
-                            Err(e) => {
-                                self.errors.push(AnalyzeError::ResolveError(e));
-                                continue;
+                            match self.resolver.load_module(&path_without_last) {
+                                Ok(m) => (
+                                    path_without_last,
+                                    UseTarget::Effect(potential_effect),
+                                    m.clone(),
+                                ),
+                                Err(e) => {
+                                    self.errors.push(AnalyzeError::ResolveError(e));
+                                    continue;
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        self.errors.push(AnalyzeError::ResolveError(e));
-                        continue;
-                    }
-                };
+                        Err(e) => {
+                            self.errors.push(AnalyzeError::ResolveError(e));
+                            continue;
+                        }
+                    };
 
                 // Collect definitions from the imported module (if not already done)
                 if !self.symbols.get_module_symbols(&final_path).is_empty() {
@@ -316,9 +319,7 @@ impl Analyzer {
                         }
                     };
 
-                    if let Some(symbol) =
-                        self.symbols.lookup_in_module(&final_path, &lookup_name)
-                    {
+                    if let Some(symbol) = self.symbols.lookup_in_module(&final_path, &lookup_name) {
                         let symbol_id = symbol.id;
                         // Register with the alias if provided, otherwise use the original name
                         let import_name = use_item.alias.as_ref().unwrap_or(&use_item.name);

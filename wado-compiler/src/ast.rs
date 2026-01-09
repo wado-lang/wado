@@ -150,7 +150,7 @@ pub struct WorldExport {
 #[derive(Debug, Clone)]
 pub struct UseItem {
     pub name: String,
-    pub alias: Option<String>,  // for "as" renaming
+    pub alias: Option<String>, // for "as" renaming
 }
 
 /// Target of a use declaration
