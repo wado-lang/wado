@@ -64,7 +64,7 @@ This project relays on the following features:
 - project: a collection of modules
 - Wado standard library: consists of the core library and the WASI library
 
-## Rules for Rust Code
+## Rules for Rust
 
 - Do not use wildcard imports (`use ...::*;`).
 - Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/` directory.

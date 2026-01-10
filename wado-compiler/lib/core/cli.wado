@@ -5,7 +5,7 @@
 // For raw WASI CLI interfaces, use "wasi:cli" instead.
 
 use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
-use {string_to_stream} from "core:stream";
+use {string_to_stream, string_to_stream_with_trailing_newline} from "core:stream";
 
 // Re-export commonly used effects for convenience
 pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
@@ -16,26 +16,26 @@ pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 
 /// Print a line to stdout (adds newline)
 pub fn println(message: String) with Stdout {
-    let stream = string_to_stream(`{message}\n`);
-    let _ = Stdout::write_via_stream(stream);
+    let stream = string_to_stream_with_trailing_newline(message);
+    Stdout::write_via_stream(stream);
 }
 
 /// Print a line to stderr (adds newline)
 pub fn eprintln(message: String) with Stderr {
-    let stream = string_to_stream(`{message}\n`);
-    let _ = Stderr::write_via_stream(stream);
+    let stream = string_to_stream_with_trailing_newline(message);
+    Stderr::write_via_stream(stream);
 }
 
 /// Print to stdout without newline
 pub fn print(message: String) with Stdout {
     let stream = string_to_stream(message);
-    let _ = Stdout::write_via_stream(stream);
+    Stdout::write_via_stream(stream);
 }
 
 /// Print to stderr without newline
 pub fn eprint(message: String) with Stderr {
     let stream = string_to_stream(message);
-    let _ = Stderr::write_via_stream(stream);
+    Stderr::write_via_stream(stream);
 }
 
 // ============================================================================

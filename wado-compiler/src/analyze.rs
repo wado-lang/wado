@@ -176,8 +176,8 @@ impl Analyzer {
                             wasi_import,
                         });
 
-                        // Register as "{Effect}.{method}"
-                        let qualified_name = format!("{}.{}", effect.name, method.name);
+                        // Register as "{Effect}::{method}"
+                        let qualified_name = format!("{}::{}", effect.name, method.name);
                         self.symbols.define(
                             &qualified_name,
                             func_kind,
@@ -308,7 +308,7 @@ impl Analyzer {
                                     // Re-export effect functions
                                     for func_item in functions {
                                         let lookup_name =
-                                            format!("{}.{}", effect_name, func_item.name);
+                                            format!("{}::{}", effect_name, func_item.name);
                                         if let Some(symbol) = self
                                             .symbols
                                             .lookup_in_module(&source_path, &lookup_name)
@@ -402,8 +402,8 @@ impl Analyzer {
                         } => {
                             // Effect function import: `Effect::{func1, func2}`
                             for func_item in functions {
-                                // Look up as "{Effect}.{function}"
-                                let lookup_name = format!("{}.{}", effect_name, func_item.name);
+                                // Look up as "{Effect}::{function}"
+                                let lookup_name = format!("{}::{}", effect_name, func_item.name);
                                 if let Some(symbol) =
                                     self.symbols.lookup_in_module(&module_path, &lookup_name)
                                 {

@@ -2,7 +2,7 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
-use crate::ast::{Block, CallExpr, Expr, IdentExpr, Item, Literal, Module as AstModule, Stmt};
+use crate::ast::{Block, CallExpr, Expr, Item, Literal, Module as AstModule, Stmt};
 use crate::symbol::SymbolTable;
 use std::collections::HashMap;
 use wasm_encoder::{
@@ -53,8 +53,12 @@ impl FunctionContext {
         self.locals.insert(name.to_string(), index);
     }
 
-    /// Allocate a new local variable
+    /// Allocate a new local variable, or return existing if already allocated
     fn alloc_local(&mut self, name: &str, ty: ValType) -> u32 {
+        // Return existing local if already allocated (for pre-allocated scratch locals)
+        if let Some(&existing) = self.locals.get(name) {
+            return existing;
+        }
         let index = self.next_local;
         self.locals.insert(name.to_string(), index);
         self.local_type_map.insert(name.to_string(), ty);
@@ -111,6 +115,8 @@ struct CoreModuleBuilder {
 
     // Function tracking
     func_names: HashMap<String, u32>,
+    func_type_names: HashMap<String, String>, // func_name -> type_name
+    type_has_return: HashMap<String, bool>,   // type_name -> has_return
     next_func_idx: u32,
 
     // Memory tracking
@@ -129,6 +135,8 @@ impl CoreModuleBuilder {
             type_names: HashMap::new(),
             next_type_idx: 0,
             func_names: HashMap::new(),
+            func_type_names: HashMap::new(),
+            type_has_return: HashMap::new(),
             next_func_idx: 0,
             has_memory: false,
         }
@@ -141,6 +149,8 @@ impl CoreModuleBuilder {
             .ty()
             .function(params.iter().copied(), results.iter().copied());
         self.type_names.insert(name.to_string(), idx);
+        self.type_has_return
+            .insert(name.to_string(), !results.is_empty());
         self.next_type_idx += 1;
         idx
     }
@@ -173,6 +183,8 @@ impl CoreModuleBuilder {
             .import(module, name, EntityType::Function(type_idx));
         let func_idx = self.next_func_idx;
         self.func_names.insert(name.to_string(), func_idx);
+        self.func_type_names
+            .insert(name.to_string(), type_name.to_string());
         self.next_func_idx += 1;
         func_idx
     }
@@ -199,6 +211,8 @@ impl CoreModuleBuilder {
         self.functions.function(type_idx);
         let func_idx = self.next_func_idx;
         self.func_names.insert(name.to_string(), func_idx);
+        self.func_type_names
+            .insert(name.to_string(), type_name.to_string());
         self.next_func_idx += 1;
         func_idx
     }
@@ -234,6 +248,15 @@ impl CoreModuleBuilder {
     /// Try to get function index by name, returns None if not found
     fn try_func_idx(&self, name: &str) -> Option<u32> {
         self.func_names.get(name).copied()
+    }
+
+    /// Check if a function has a return type
+    fn func_has_return(&self, name: &str) -> bool {
+        self.func_type_names
+            .get(name)
+            .and_then(|type_name| self.type_has_return.get(type_name))
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Add a function name to the name section (names are automatically tracked)
@@ -567,23 +590,7 @@ impl Codegen {
             }
             Expr::Call(call) => {
                 self.collect_strings_from_expr(&call.callee);
-                // Check if this is a println call - if so, append newline to string args
-                let is_println = matches!(
-                    &call.callee,
-                    Expr::Ident(IdentExpr { name, .. }) if name == "println"
-                );
                 for arg in &call.args {
-                    if is_println
-                        && let Expr::Literal(lit) = arg
-                        && let Literal::String(s) = &lit.value
-                    {
-                        // println appends newline - store the string with \n
-                        let with_newline = format!("{s}\n");
-                        if !self.string_literals.contains(&with_newline) {
-                            self.string_literals.push(with_newline);
-                        }
-                        continue;
-                    }
                     self.collect_strings_from_expr(arg);
                 }
             }
@@ -1019,10 +1026,11 @@ impl Codegen {
 
         // Collect from imported modules (with qualified names)
         for (module_path, module) in loaded_modules {
-            // Skip stdlib modules (they're handled specially)
+            // Skip wasi:* modules (they only contain effect declarations, no function bodies)
+            // Include core:* modules (they contain user-defined helper functions)
             if module_path
                 .first()
-                .map(|s| s == "core" || s == "wasi")
+                .map(|s| s == "wasi")
                 .unwrap_or(false)
             {
                 continue;
@@ -1040,6 +1048,16 @@ impl Codegen {
                     }
                     // Skip bodyless functions
                     if f.body.is_none() {
+                        continue;
+                    }
+                    // Skip all core:cli and core:stream functions
+                    // - I/O functions (println, etc.) require specific ordering for WASI P3 async
+                    //   streams: write-via-stream must be called BEFORE stream-write
+                    // - Other functions (args, cwd, etc.) call effect functions that aren't
+                    //   fully supported in codegen yet
+                    // These functions are either implemented as builtins or not yet supported.
+                    // TODO: Implement full effect function support to enable user-defined impls
+                    if module_path.first() == Some(&"core".to_string()) {
                         continue;
                     }
                     // Create qualified name: "module_path::func_name"
@@ -1905,15 +1923,17 @@ impl Codegen {
             self.collect_locals_from_block(body, &mut func_ctx);
         }
 
-        // Create Wasm function with collected locals
+        // Pre-allocate scratch locals that builtins might need
+        // These are needed by string_to_stream and other builtins that allocate locals at runtime
+        let string_array_type = builder.type_idx("string-array");
+        self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+
+        // Create Wasm function with collected locals (including pre-allocated scratch locals)
         let local_decls = func_ctx.get_local_decls();
         let mut wasm_func = Function::new(local_decls);
 
-        // Reset context for code generation (keep param mappings, reset locals)
-        let mut gen_ctx = FunctionContext::new(ast_func.params.len() as u32);
-        for param in &ast_func.params {
-            gen_ctx.add_param(&param.name);
-        }
+        // Use the same context for code generation (so local indices match)
+        let mut gen_ctx = func_ctx;
 
         // Generate function body
         if let Some(body) = &ast_func.body {
@@ -1924,6 +1944,93 @@ impl Codegen {
 
         wasm_func.instruction(&Instruction::End);
         wasm_func
+    }
+
+    /// Generate write-via-stream call with async wait
+    ///
+    /// write-via-stream is an async operation that returns a subtask handle.
+    /// We need to wait for the subtask to complete before continuing.
+    fn generate_write_via_stream_with_wait(
+        &self,
+        func: &mut Function,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+        write_via_stream_idx: u32,
+    ) {
+        let waitable_set_new_idx = builder.func_idx("waitable-set-new");
+        let waitable_join_idx = builder.func_idx("waitable-join");
+        let waitable_set_wait_idx = builder.func_idx("waitable-set-wait");
+        let subtask_drop_idx = builder.func_idx("subtask-drop");
+
+        // Allocate locals for async handling
+        let subtask_local = ctx.alloc_local("__subtask", ValType::I32);
+        let waitable_set_local = ctx.alloc_local("__waitable_set", ValType::I32);
+
+        // Stack has: stream handle (rx)
+        // Call write-via-stream(rx, outptr) - returns subtask handle
+        func.instruction(&Instruction::I32Const(2048)); // outptr for result
+        func.instruction(&Instruction::Call(write_via_stream_idx));
+        func.instruction(&Instruction::LocalSet(subtask_local));
+
+        // Check if subtask is pending
+        // If (status & 1) == 0, the operation is still pending and we need to wait
+        // (matching the original generate_println_body logic)
+        func.instruction(&Instruction::LocalGet(subtask_local));
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32And);
+        func.instruction(&Instruction::I32Eqz);
+        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+
+        // Subtask is pending - need to wait for it
+        // Create waitable-set
+        func.instruction(&Instruction::Call(waitable_set_new_idx));
+        func.instruction(&Instruction::LocalSet(waitable_set_local));
+
+        // Join subtask to waitable-set
+        func.instruction(&Instruction::LocalGet(waitable_set_local));
+        func.instruction(&Instruction::LocalGet(subtask_local));
+        func.instruction(&Instruction::Call(waitable_join_idx));
+
+        // Wait for completion
+        func.instruction(&Instruction::LocalGet(waitable_set_local));
+        func.instruction(&Instruction::I32Const(2048)); // outptr
+        func.instruction(&Instruction::Call(waitable_set_wait_idx));
+        func.instruction(&Instruction::Drop); // drop wait result
+
+        // Drop subtask
+        func.instruction(&Instruction::LocalGet(subtask_local));
+        func.instruction(&Instruction::Call(subtask_drop_idx));
+
+        func.instruction(&Instruction::End); // end if
+
+        // Push dummy value so all effect function calls uniformly produce a value
+        // This gets dropped by the expression statement handler
+        func.instruction(&Instruction::I32Const(0));
+    }
+
+    /// Pre-allocate scratch locals that builtins might need during code generation
+    ///
+    /// Some builtins like string_to_stream allocate temporary locals at runtime.
+    /// These need to be declared in the function's local declarations.
+    fn preallocate_builtin_scratch_locals(&self, ctx: &mut FunctionContext, string_array_type: u32) {
+        // Scratch locals for string_to_stream and string_to_stream_with_trailing_newline
+        ctx.alloc_local(
+            "__arr_ref",
+            ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(string_array_type),
+            }),
+        );
+        ctx.alloc_local("__len", ValType::I32);
+        ctx.alloc_local("__ptr", ValType::I32);
+        ctx.alloc_local("__i", ValType::I32);
+        ctx.alloc_local("__ret64", ValType::I64);
+        ctx.alloc_local("__rx", ValType::I32);
+        ctx.alloc_local("__tx", ValType::I32);
+        ctx.alloc_local("__alloc_size", ValType::I32);
+        // Scratch locals for write_via_stream async handling
+        ctx.alloc_local("__subtask", ValType::I32);
+        ctx.alloc_local("__waitable_set", ValType::I32);
     }
 
     /// Collect local variables from a block
@@ -1972,7 +2079,7 @@ impl Codegen {
                 self.generate_expr_with_builder(func, &expr_stmt.expr, ctx, builder);
                 // Drop any value left on stack by expression statements
                 // (e.g., assignment expressions use LocalTee)
-                if self.expr_produces_value(&expr_stmt.expr) {
+                if self.expr_produces_value(&expr_stmt.expr, builder) {
                     func.instruction(&Instruction::Drop);
                 }
             }
@@ -2139,6 +2246,22 @@ impl Codegen {
                 return;
             }
 
+            // Check for effect function calls (Effect::method syntax)
+            if let Some(wasi_func_name) = self.resolve_effect_function(&ident.name)
+                && let Some(func_idx) = builder.try_func_idx(&wasi_func_name) {
+                    // Generate arguments
+                    for arg in &call.args {
+                        self.generate_expr_with_builder(func, arg, ctx, builder);
+                    }
+                    // For write-via-stream, we need special handling with async wait
+                    if wasi_func_name == "write-via-stream" {
+                        self.generate_write_via_stream_with_wait(func, ctx, builder, func_idx);
+                    } else {
+                        func.instruction(&Instruction::Call(func_idx));
+                    }
+                    return;
+                }
+
             // Then try user-defined functions
             if let Some(func_idx) = builder.try_func_idx(&ident.name) {
                 // Generate arguments
@@ -2150,12 +2273,42 @@ impl Codegen {
         }
     }
 
+    /// Resolve an effect function call to its WASI import name
+    ///
+    /// Maps Wado effect function syntax (Effect::method) to WASI function names.
+    /// The mapping is based on the `#[wasi(...)]` attributes in wasi/*.wado modules.
+    fn resolve_effect_function(&self, name: &str) -> Option<String> {
+        // Check if this is an effect function call (contains ::)
+        if !name.contains("::") {
+            return None;
+        }
+
+        // Map known effect functions to their WASI import names
+        // These correspond to the #[wasi(...)] attributes in wasi/cli.wado
+        match name {
+            // wasi:cli/stdout
+            "Stdout::write_via_stream" => Some("write-via-stream".to_string()),
+            // wasi:cli/stderr - TODO: use separate stderr write function
+            // For now, use the same write-via-stream (stderr goes to stdout)
+            "Stderr::write_via_stream" => Some("write-via-stream".to_string()),
+            // wasi:cli/stdin
+            "Stdin::read_via_stream" => Some("stdin-read-via-stream".to_string()),
+            // wasi:cli/environment
+            "Environment::get_arguments" => Some("get-arguments".to_string()),
+            "Environment::get_environment" => Some("get-environment".to_string()),
+            "Environment::get_initial_cwd" => Some("get-initial-cwd".to_string()),
+            // wasi:cli/exit
+            "Exit::exit" => Some("exit".to_string()),
+            "Exit::exit_with_code" => Some("exit-with-code".to_string()),
+            _ => None,
+        }
+    }
+
     /// Check if a function name is a builtin
     fn is_builtin(&self, name: &str) -> bool {
         matches!(
             name,
-            "println"
-                | "stream_new"
+            "stream_new"
                 | "stream_write"
                 | "stream_write_string"
                 | "stream_drop_writable"
@@ -2165,6 +2318,8 @@ impl Codegen {
                 | "array_len"
                 | "string_ptr"
                 | "string_len"
+                | "string_to_stream"
+                | "string_to_stream_with_trailing_newline"
         )
     }
 
@@ -2385,6 +2540,20 @@ impl Codegen {
                     }
                 }
             }
+            "string_to_stream" => {
+                // string_to_stream(s: String) -> Stream<u8>
+                // Creates a stream, writes the string data, returns rx handle
+                if call.args.len() == 1 {
+                    self.generate_string_to_stream(func, call, ctx, builder, false);
+                }
+            }
+            "string_to_stream_with_trailing_newline" => {
+                // string_to_stream_with_trailing_newline(s: String) -> Stream<u8>
+                // Same as string_to_stream but appends '\n' after the string
+                if call.args.len() == 1 {
+                    self.generate_string_to_stream(func, call, ctx, builder, true);
+                }
+            }
             _ => {}
         }
     }
@@ -2452,11 +2621,13 @@ impl Codegen {
         func.instruction(&Instruction::ArrayLen);
         func.instruction(&Instruction::LocalSet(1)); // len
 
-        // Allocate buffer: realloc(0, 0, 1, len) -> ptr
+        // Allocate buffer: realloc(0, 0, 1, len + 1) -> ptr (extra byte for newline)
         func.instruction(&Instruction::I32Const(0)); // old_ptr
         func.instruction(&Instruction::I32Const(0)); // old_size
         func.instruction(&Instruction::I32Const(1)); // align
-        func.instruction(&Instruction::LocalGet(1)); // new_size = len
+        func.instruction(&Instruction::LocalGet(1)); // len
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32Add); // new_size = len + 1
         func.instruction(&Instruction::Call(realloc_idx));
         func.instruction(&Instruction::LocalSet(2)); // ptr
 
@@ -2498,8 +2669,19 @@ impl Codegen {
         func.instruction(&Instruction::End); // end loop
         func.instruction(&Instruction::End); // end block
 
+        // Add newline at position len: mem[ptr + len] = '\n'
+        func.instruction(&Instruction::LocalGet(2)); // ptr
+        func.instruction(&Instruction::LocalGet(1)); // len
+        func.instruction(&Instruction::I32Add); // ptr + len
+        func.instruction(&Instruction::I32Const(b'\n' as i32)); // '\n'
+        func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
+            offset: 0,
+            align: 0,
+            memory_index: 0,
+        }));
+
         // ============================================
-        // Phase 2: Stream operations (ptr and len now in locals 2 and 1)
+        // Phase 2: Stream operations (ptr and len+1 now in locals 2 and 1)
         // ============================================
 
         // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
@@ -2524,10 +2706,12 @@ impl Codegen {
         func.instruction(&Instruction::Call(write_via_stream_idx));
         func.instruction(&Instruction::LocalSet(7)); // status
 
-        // 3. Write string to stream: stream-write(tx, ptr, len) -> status
+        // 3. Write string to stream: stream-write(tx, ptr, len + 1) -> status
         func.instruction(&Instruction::LocalGet(6)); // tx
         func.instruction(&Instruction::LocalGet(2)); // ptr
         func.instruction(&Instruction::LocalGet(1)); // len
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32Add); // len + 1 (includes newline)
         func.instruction(&Instruction::Call(stream_write_idx));
         func.instruction(&Instruction::Drop); // ignore write status
 
@@ -2565,6 +2749,152 @@ impl Codegen {
         func.instruction(&Instruction::Call(subtask_drop_idx));
 
         func.instruction(&Instruction::End); // end if
+    }
+
+    /// Generate string_to_stream builtin
+    ///
+    /// Converts a String (GC array<u8>) to a Stream<u8> by:
+    /// 1. Creating a new stream
+    /// 2. Copying the GC array to linear memory (with optional trailing newline)
+    /// 3. Writing the data to the stream
+    /// 4. Dropping the writable end
+    /// 5. Returning the readable end (rx)
+    fn generate_string_to_stream(
+        &self,
+        func: &mut Function,
+        call: &CallExpr,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+        with_trailing_newline: bool,
+    ) {
+        let string_array_type = builder.type_idx("string-array");
+        let realloc_idx = builder.func_idx("realloc");
+        let stream_new_idx = builder.func_idx("stream-new");
+        let stream_write_idx = builder.func_idx("stream-write");
+        let stream_drop_writable_idx = builder.func_idx("stream-drop-writable");
+
+        // Allocate scratch locals
+        let arr_ref_local = ctx.alloc_local(
+            "__arr_ref",
+            ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(string_array_type),
+            }),
+        );
+        let len_local = ctx.alloc_local("__len", ValType::I32);
+        let ptr_local = ctx.alloc_local("__ptr", ValType::I32);
+        let i_local = ctx.alloc_local("__i", ValType::I32);
+        let ret64_local = ctx.alloc_local("__ret64", ValType::I64);
+        let rx_local = ctx.alloc_local("__rx", ValType::I32);
+        let tx_local = ctx.alloc_local("__tx", ValType::I32);
+
+        // Evaluate string argument - produces GC array ref
+        self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
+        func.instruction(&Instruction::LocalSet(arr_ref_local));
+
+        // Get length: array.len
+        func.instruction(&Instruction::LocalGet(arr_ref_local));
+        func.instruction(&Instruction::ArrayLen);
+        func.instruction(&Instruction::LocalSet(len_local));
+
+        // Calculate allocation size (len + 1 if with_trailing_newline)
+        func.instruction(&Instruction::LocalGet(len_local));
+        if with_trailing_newline {
+            func.instruction(&Instruction::I32Const(1));
+            func.instruction(&Instruction::I32Add);
+        }
+
+        // Call realloc(0, 0, 1, size) to allocate buffer
+        // Stack: [size]
+        let alloc_size_local = ctx.alloc_local("__alloc_size", ValType::I32);
+        func.instruction(&Instruction::LocalSet(alloc_size_local));
+        func.instruction(&Instruction::I32Const(0)); // old_ptr
+        func.instruction(&Instruction::I32Const(0)); // old_size
+        func.instruction(&Instruction::I32Const(1)); // align
+        func.instruction(&Instruction::LocalGet(alloc_size_local)); // new_size
+        func.instruction(&Instruction::Call(realloc_idx));
+        func.instruction(&Instruction::LocalSet(ptr_local));
+
+        // Initialize loop counter: i = 0
+        func.instruction(&Instruction::I32Const(0));
+        func.instruction(&Instruction::LocalSet(i_local));
+
+        // Loop to copy bytes: while (i < len) { mem[ptr+i] = arr[i]; i++; }
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $break
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // $continue
+
+        // Check condition: i >= len -> break
+        func.instruction(&Instruction::LocalGet(i_local));
+        func.instruction(&Instruction::LocalGet(len_local));
+        func.instruction(&Instruction::I32GeU);
+        func.instruction(&Instruction::BrIf(1)); // break if i >= len
+
+        // Store byte: mem[ptr + i] = arr[i]
+        func.instruction(&Instruction::LocalGet(ptr_local));
+        func.instruction(&Instruction::LocalGet(i_local));
+        func.instruction(&Instruction::I32Add);
+        func.instruction(&Instruction::LocalGet(arr_ref_local));
+        func.instruction(&Instruction::LocalGet(i_local));
+        func.instruction(&Instruction::ArrayGetU(string_array_type));
+        func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
+            offset: 0,
+            align: 0,
+            memory_index: 0,
+        }));
+
+        // Increment: i++
+        func.instruction(&Instruction::LocalGet(i_local));
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32Add);
+        func.instruction(&Instruction::LocalSet(i_local));
+
+        // Continue loop
+        func.instruction(&Instruction::Br(0));
+        func.instruction(&Instruction::End); // end loop
+        func.instruction(&Instruction::End); // end block
+
+        // If with_trailing_newline, write '\n' at position len
+        if with_trailing_newline {
+            func.instruction(&Instruction::LocalGet(ptr_local));
+            func.instruction(&Instruction::LocalGet(len_local));
+            func.instruction(&Instruction::I32Add);
+            func.instruction(&Instruction::I32Const(b'\n' as i32));
+            func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
+                offset: 0,
+                align: 0,
+                memory_index: 0,
+            }));
+        }
+
+        // Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
+        func.instruction(&Instruction::Call(stream_new_idx));
+        func.instruction(&Instruction::LocalSet(ret64_local));
+
+        // Extract rx (low 32 bits)
+        func.instruction(&Instruction::LocalGet(ret64_local));
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(rx_local));
+
+        // Extract tx (high 32 bits)
+        func.instruction(&Instruction::LocalGet(ret64_local));
+        func.instruction(&Instruction::I64Const(32));
+        func.instruction(&Instruction::I64ShrU);
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(tx_local));
+
+        // Write to stream: stream-write(tx, ptr, alloc_size) -> status
+        func.instruction(&Instruction::LocalGet(tx_local));
+        func.instruction(&Instruction::LocalGet(ptr_local));
+        func.instruction(&Instruction::LocalGet(alloc_size_local));
+        func.instruction(&Instruction::Call(stream_write_idx));
+        func.instruction(&Instruction::Drop); // ignore write status
+
+        // Close writable end: stream-drop-writable(tx)
+        func.instruction(&Instruction::LocalGet(tx_local));
+        func.instruction(&Instruction::Call(stream_drop_writable_idx));
+
+        // Return rx (readable stream handle)
+        func.instruction(&Instruction::LocalGet(rx_local));
     }
 
     /// Infer expression type with function context (for looking up variable types)
@@ -2629,7 +2959,7 @@ impl Codegen {
 
     /// Check if an expression produces a value on the stack
     /// Used to determine if we need to drop the result in expression statements
-    fn expr_produces_value(&self, expr: &Expr) -> bool {
+    fn expr_produces_value(&self, expr: &Expr, builder: &CoreModuleBuilder) -> bool {
         match expr {
             // Literals always produce values
             Expr::Literal(_) => true,
@@ -2641,27 +2971,17 @@ impl Codegen {
             Expr::Unary(_) => true,
             // Assignments produce values (via LocalTee)
             Expr::Assign(_) => true,
-            // Calls may or may not produce values - for now assume they don't
-            // (println returns unit which we don't push)
+            // Calls produce values based on their return type
             Expr::Call(call) => {
-                // Check if it's a builtin that returns void
                 if let Expr::Ident(ident) = &call.callee {
-                    // println doesn't produce a value
-                    if ident.name == "println" {
-                        return false;
-                    }
-                    // stream intrinsics that return values
-                    if matches!(
-                        ident.name.as_str(),
-                        "stream_new"
-                            | "stream_write"
-                            | "stream_write_string"
-                            | "i64_low32"
-                            | "i64_high32"
-                            | "array_len"
-                            | "string_len"
-                    ) {
+                    // Effect function calls always produce values
+                    // (either subtask handles or dummy values from special handling)
+                    if ident.name.contains("::") {
                         return true;
+                    }
+                    // Look up function in builder to check return type
+                    if builder.try_func_idx(&ident.name).is_some() {
+                        return builder.func_has_return(&ident.name);
                     }
                 }
                 false
@@ -2922,9 +3242,9 @@ mod tests {
         let mut codegen = Codegen::new();
         codegen.collect_strings(&ast);
 
-        // println appends newline to string literals
+        // String literals are collected as-is
         assert_eq!(codegen.string_literals.len(), 1);
-        assert_eq!(codegen.string_literals[0], "Hello, world!\n");
+        assert_eq!(codegen.string_literals[0], "Hello, world!");
     }
 
     #[test]
