@@ -765,32 +765,126 @@ unreachable();
 
 ## Reactive System
 
+Wado has built-in reactive signals (called "signals" in other frameworks like SolidJS, Svelte 5). The compiler analyzes dependencies at compile-time and generates efficient update code.
+
 ### reactive Keyword
 
+**Source** values are mutable reactive state:
+
 ```wado
-// Source (mutable reactive value)
 let reactive mut count = 0;
 
-// Derived (computed value)
-let reactive doubled = || count * 2;
-
-// Read and write
-let x = count;      // Read
-count = 5;          // Write (change propagates)
-
-// Pass reactive reference
-some_function(&reactive count);
+count = 5;          // Mutation triggers updates
+count += 1;         // Also triggers updates
 ```
+
+**Derived** values are computed from other reactive values:
+
+```wado
+let reactive doubled = || count * 2;
+let reactive quadrupled = || doubled * 2;
+
+// Reading derived values
+let x = doubled;    // Returns current computed value
+```
+
+Derived values are recomputed when their dependencies change. The compiler builds a dependency graph and updates values in topological order.
 
 ### Effect Block
 
+Effect blocks run when their dependencies change:
+
 ```wado
+let reactive mut count = 0;
+
 effect {
-    println(`Count changed: {count}`);
+    println(`Count is now: {count}`);
+}
+
+count = 5;  // Effect runs, prints "Count is now: 5"
+count = 10; // Effect runs again, prints "Count is now: 10"
+```
+
+### Reactive References
+
+Reactive values can be passed by reference to functions:
+
+```wado
+fn increment(counter: &reactive mut i32) {
+    *counter += 1;  // Triggers updates in caller's scope
+}
+
+let reactive mut count = 0;
+let reactive doubled = || count * 2;
+
+increment(&reactive count);  // count becomes 1, doubled becomes 2
+```
+
+### Execution Semantics
+
+Reactive behavior differs between execution contexts:
+
+#### CLI World (Synchronous)
+
+In CLI programs, reactive updates are **synchronous and immediate**:
+
+```wado
+let reactive mut count = 0;
+let reactive doubled = || count * 2;
+
+effect {
+    println(`doubled = {doubled}`);
+}
+
+count = 5;
+// Effect runs immediately here, before next line
+// Output: "doubled = 10"
+
+println("after mutation");
+// Output: "after mutation"
+```
+
+- Updates propagate immediately when a source is mutated
+- Effects run synchronously before execution continues
+- Effect blocks live for the duration of their enclosing scope
+
+#### Event-Looped World (Browser/GUI)
+
+In event-driven contexts, reactive updates are triggered by **external events**:
+
+```wado
+fn Counter() -> Element with Dom {
+    let reactive mut count = 0;
+    let reactive doubled = || count * 2;
+
+    effect {
+        println(`Count changed to {count}`);
+    }
+
+    return <div>
+        <p>{doubled}</p>
+        <button onclick={|_| count += 1}>+1</button>
+    </div>;
 }
 ```
 
+- Updates are triggered by events (clicks, timers, network responses)
+- Multiple mutations within a single event handler may be **batched**
+- Effects and UI bindings persist for the component's lifetime
+- The event loop keeps the program alive to receive future events
+
+#### Comparison
+
+| Aspect           | CLI                       | Event-looped                    |
+| ---------------- | ------------------------- | ------------------------------- |
+| Trigger          | Direct assignment in code | External events                 |
+| Propagation      | Synchronous, immediate    | May be batched per event        |
+| Effect lifetime  | Enclosing scope duration  | Component/subscription lifetime |
+| Primary use case | Computed dependencies     | UI binding, subscriptions       |
+
 ### JSX Integration
+
+Reactive values integrate seamlessly with JSX:
 
 ```wado
 fn Counter() -> Element with Dom {
@@ -801,6 +895,8 @@ fn Counter() -> Element with Dom {
     </button>;
 }
 ```
+
+The compiler tracks that `{count}` depends on the reactive value and generates code to update only that text node when `count` changes—no virtual DOM diffing required.
 
 `Reactive` is built into the language; no `with` declaration required.
 

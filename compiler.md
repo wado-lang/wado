@@ -194,6 +194,10 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [ ] Pattern matching
 - [ ] Closures
 - [ ] Effect handlers
+- [ ] Reactive signals (source values)
+- [ ] Reactive signals (derived values)
+- [ ] Reactive effect blocks
+- [ ] Reactive references (`&reactive T`)
 - [ ] Multiple modules/files
 - [ ] Other WASI interfaces (filesystem, etc.)
 
@@ -244,6 +248,139 @@ fn main() with Stdout {
 4. **Template strings not interpolated**: Backtick strings are parsed as plain strings
 5. **No type checking**: The analyzer doesn't perform type checking yet
 6. **Limited codegen**: Only `println` with string literals works
+
+---
+
+## Reactive Signals Implementation
+
+Wado's `reactive` keyword compiles to efficient Wasm code with minimal runtime overhead.
+
+### Reactive Value Categories
+
+```wado
+let reactive mut count = 0;           // Source: mutable reactive state
+let reactive doubled = || count * 2;  // Derived: computed from sources
+```
+
+**Sources** are mutable reactive values that can be directly assigned.
+**Derived** values are computed from other reactive values (sources or other derived).
+
+### Compilation Strategy
+
+The compiler uses static analysis to build a dependency graph at compile-time:
+
+1. **Dependency Analysis**: Track which derived values read which sources
+2. **Topological Sort**: Order updates so dependencies are computed before dependents
+3. **Inline Update Code**: At each mutation site, generate code to update all affected derived values
+
+**Example transformation:**
+
+```wado
+// Source code
+let reactive mut count = 0;
+let reactive doubled = || count * 2;
+let reactive quadrupled = || doubled * 2;
+
+count = 5;  // Mutation site
+```
+
+```wat
+;; Conceptual WAT output (simplified)
+;; Mutation site: count = 5
+(local.set $count (i32.const 5))
+;; Update doubled (depends on count)
+(local.set $doubled (i32.mul (local.get $count) (i32.const 2)))
+;; Update quadrupled (depends on doubled)
+(local.set $quadrupled (i32.mul (local.get $doubled) (i32.const 2)))
+```
+
+### Effect Blocks
+
+Effect blocks subscribe to reactive values read within them:
+
+```wado
+effect {
+    println(`Count is {count}`);
+}
+```
+
+The compiler:
+
+1. Analyzes which reactive values are read inside the effect block
+2. Generates a closure for the effect body
+3. Inserts calls to this closure after any mutation of its dependencies
+
+### Execution Context
+
+The compiler generates different code depending on the target world:
+
+**CLI World (Synchronous):**
+
+- Updates propagate immediately at each mutation site
+- Effect closures are called inline, synchronously
+- No event loop or scheduler needed
+
+```wat
+;; CLI: Synchronous update at mutation site
+(local.set $count (i32.const 5))
+(call $effect_0)  ;; Effect runs immediately
+;; Next statement executes after effect completes
+```
+
+**Event-looped World (Browser/GUI):**
+
+- Updates may be batched within an event handler
+- Compiler generates a scheduler that collects mutations and flushes at end of event
+- Effect closures are registered with the reactive runtime
+
+```wat
+;; Event-loop: Batched updates
+(call $reactive_set (local.get $count_ref) (i32.const 5))  ;; Queues update
+(call $reactive_set (local.get $count_ref) (i32.const 6))  ;; Queues another
+;; At end of event handler:
+(call $reactive_flush)  ;; Runs all effects once with final values
+```
+
+### Wasm Representation
+
+| Wado Construct            | Wasm Representation                             |
+| ------------------------- | ----------------------------------------------- |
+| `reactive mut` source     | Local variable + generated update dispatch      |
+| `reactive` derived        | Local variable, recomputed on dependency change |
+| `effect { ... }`          | Closure called after dependency mutations       |
+| `&reactive T` (reference) | Wasm GC struct ref with getter/setter           |
+
+### Dynamic Dependencies (Future)
+
+For cases where dependencies aren't statically known:
+
+```wado
+let reactive computed = || {
+    if condition {
+        return a + b;
+    } else {
+        return c + d;
+    }
+};
+```
+
+The compiler may generate runtime tracking when static analysis is insufficient. This uses a lightweight subscription mechanism stored in Wasm GC structs.
+
+### Reactive References
+
+Passing reactive values by reference:
+
+```wado
+fn increment(counter: &reactive mut i32) {
+    *counter += 1;  // Triggers updates in caller's scope
+}
+
+let reactive mut count = 0;
+let reactive doubled = || count * 2;
+increment(&reactive count);  // doubled gets updated
+```
+
+This requires the reactive reference to carry update callback information, implemented as a Wasm GC struct containing the value and a reference to the update dispatcher.
 
 ---
 

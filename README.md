@@ -2,7 +2,7 @@
 
 Wado is a new programming language targeting **Wasm/WASI** - Wasm in plain sight.
 
-## Why Wado?
+## Motivation
 
 ### Effect System = WASI Capabilities
 
@@ -40,6 +40,28 @@ Types are designed around the WebAssembly Component Model (CM):
 - `struct` is Wasm GC internally, becomes CM `record` at boundaries
 - `enum` vs `variant` distinction matches CM exactly
 - Native `Stream<T>` and `Future<T>` types for WASI P3
+
+### Built-in Reactive Signals
+
+Wado has built-in support for reactive state (often called "signals" in other frameworks):
+
+```wado
+let reactive mut count = 0;           // Mutable reactive state
+let reactive doubled = || count * 2;  // Derived value
+
+effect {
+    println(`count = {count}`);       // Runs when count changes
+}
+
+count += 1;  // Propagates to `doubled`, runs effect
+```
+
+Why built-in instead of a library?
+
+- **Compiler optimization**: Dependencies are analyzed at compile-time, generating precise Wasm update code with no runtime tracking overhead
+- **Ergonomics**: No wrapper functions like `useState()`, `ref()`, or `createSignal()`
+- **No virtual DOM**: Updates compile to direct mutations, not diffing
+- **Context-aware**: In CLI, updates are synchronous; in event-looped environments (browser/GUI), updates may be batched for efficiency
 
 ## Hello World
 
