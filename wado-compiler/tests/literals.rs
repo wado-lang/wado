@@ -149,12 +149,12 @@ fn test_integer_octal() {
 
 #[test]
 fn test_float_simple() {
-    let module = parse_expr("3.14").expect("parse failed");
+    let module = parse_expr("3.25").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
         wado_compiler::ast::Literal::Float(f) => {
-            assert!((f - 3.14).abs() < 1e-10, "expected 3.14, got {}", f);
+            assert!((f - 3.25).abs() < 1e-10, "expected 3.25, got {}", f);
         }
         other => panic!("expected Float, got {:?}", other),
     }
@@ -188,14 +188,14 @@ fn test_float_leading_zero() {
 
 #[test]
 fn test_float_many_decimals() {
-    let module = parse_expr("3.14159265358979").expect("parse failed");
+    let module = parse_expr("1.23456789012345").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
         wado_compiler::ast::Literal::Float(f) => {
             assert!(
-                (f - 3.14159265358979).abs() < 1e-14,
-                "expected 3.14159265358979, got {}",
+                (f - 1.23456789012345).abs() < 1e-14,
+                "expected 1.23456789012345, got {}",
                 f
             );
         }
