@@ -21,7 +21,7 @@ test:
 .PHONY: format
 format:
 	cargo fmt
-	npx prettier --write spec.md compiler.md AGENTS.md
+	npx prettier --write spec.md AGENTS.md README.md docs/*.md
 
 .PHONY: clippy
 clippy:
