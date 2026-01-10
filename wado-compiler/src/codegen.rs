@@ -1046,15 +1046,14 @@ impl Codegen {
                     if f.body.is_none() {
                         continue;
                     }
-                    // Skip all core:cli and core:stream functions
-                    // - I/O functions (println, etc.) require specific ordering for WASI P3 async
-                    //   streams: write-via-stream must be called BEFORE stream-write
-                    // - Other functions (args, cwd, etc.) call effect functions that aren't
-                    //   fully supported in codegen yet
-                    // These functions are either implemented as builtins or not yet supported.
-                    // TODO: Implement full effect function support to enable user-defined impls
-                    if module_path.first() == Some(&"core".to_string()) {
-                        continue;
+                    // Skip functions that have unsupported effects
+                    // Currently only Stdout and Stderr effects are supported (or no effects)
+                    if !f.effects.is_empty() {
+                        let has_unsupported_effects =
+                            f.effects.iter().any(|e| e != "Stdout" && e != "Stderr");
+                        if has_unsupported_effects {
+                            continue;
+                        }
                     }
                     // Create qualified name: "module_path::func_name"
                     let qualified_name = format!("{}::{}", module_path.join("::"), f.name);
@@ -1500,10 +1499,6 @@ impl Codegen {
         // GC string array type (array<u8>)
         builder.define_gc_array_type("string-array", StorageType::I8, false);
 
-        // println type - takes a ref to string array
-        let string_ref = builder.string_ref_type();
-        builder.define_func_type("println", &[ValType::Ref(string_ref)], &[]);
-
         // Types for user-defined functions
         let string_array_idx = builder.type_idx("string-array");
         for (_, func, qualified_name) in &all_funcs {
@@ -1512,8 +1507,8 @@ impl Codegen {
                 .iter()
                 .map(|p| self.wado_type_to_wasm_with_idx(&p.ty, string_array_idx))
                 .collect();
-            let return_types: Vec<ValType> = if func.return_type.is_some() {
-                vec![ValType::I32]
+            let return_types: Vec<ValType> = if let Some(ret_ty) = &func.return_type {
+                vec![self.wado_type_to_wasm_with_idx(ret_ty, string_array_idx)]
             } else {
                 vec![]
             };
@@ -1546,7 +1541,6 @@ impl Codegen {
         // ========================================
         // Function section
         // ========================================
-        builder.define_func("println", "println");
 
         // Register all user-defined functions
         for (_, func, qualified_name) in &all_funcs {
@@ -1573,13 +1567,6 @@ impl Codegen {
 
         // Code section
         let mut code = CodeSection::new();
-
-        // println function
-        let mut println_func =
-            Function::new([(3, ValType::I32), (1, ValType::I64), (3, ValType::I32)]);
-        self.generate_println_body(&mut println_func, &builder);
-        println_func.instruction(&Instruction::End);
-        code.function(&println_func);
 
         // User-defined functions from all modules
         for (_, func, _) in &all_funcs {
@@ -1683,10 +1670,6 @@ impl Codegen {
         // GC string array type (array<u8>)
         builder.define_gc_array_type("string-array", StorageType::I8, false);
 
-        // println type - takes a ref to string array
-        let string_ref = builder.string_ref_type();
-        builder.define_func_type("println", &[ValType::Ref(string_ref)], &[]);
-
         // Types for user-defined functions
         for func in &user_funcs {
             // Convert Wado params to Wasm types
@@ -1696,9 +1679,8 @@ impl Codegen {
                 .iter()
                 .map(|p| self.wado_type_to_wasm_with_idx(&p.ty, string_array_idx))
                 .collect();
-            // Return type (default to i32 if specified, empty if none)
-            let return_types: Vec<ValType> = if func.return_type.is_some() {
-                vec![ValType::I32] // Simplified: all returns are i32 for now
+            let return_types: Vec<ValType> = if let Some(ret_ty) = &func.return_type {
+                vec![self.wado_type_to_wasm_with_idx(ret_ty, string_array_idx)]
             } else {
                 vec![]
             };
@@ -1731,7 +1713,6 @@ impl Codegen {
         // ========================================
         // Function section
         // ========================================
-        builder.define_func("println", "println");
 
         // Register user-defined functions
         for func in &user_funcs {
@@ -1756,30 +1737,7 @@ impl Codegen {
         // Code section
         let mut code = CodeSection::new();
 
-        // ============================================
-        // println function (index 11) - library function from core::cli
-        // Parameters: str_arr (param 0: ref array<u8>)
-        // Locals:
-        //   local 1: len (i32) - string length
-        //   local 2: ptr (i32) - allocated buffer pointer
-        //   local 3: i (i32) - loop counter
-        //   local 4: ret64 (i64) - stream.new result
-        //   local 5: rx (i32) - readable stream handle
-        //   local 6: tx (i32) - writable stream handle
-        //   local 7: status (i32) - subtask status
-        // ============================================
-        let mut println_func = Function::new([
-            (3, ValType::I32), // len, ptr, i
-            (1, ValType::I64), // ret64
-            (3, ValType::I32), // rx, tx, status
-        ]);
-        self.generate_println_body(&mut println_func, &builder);
-        println_func.instruction(&Instruction::End);
-        code.function(&println_func);
-
-        // ============================================
         // User-defined functions
-        // ============================================
         for func in &user_funcs {
             let wasm_func = self.generate_user_function(func, &builder);
             code.function(&wasm_func);
@@ -1938,29 +1896,34 @@ impl Codegen {
             }
         }
 
+        // For functions with Stdout/Stderr effects, wait for pending async operations
+        // This ensures write-via-stream completes before the function returns
+        if ast_func
+            .effects
+            .iter()
+            .any(|e| e == "Stdout" || e == "Stderr")
+        {
+            self.generate_effect_wait(&mut wasm_func, &gen_ctx, builder);
+        }
+
         wasm_func.instruction(&Instruction::End);
         wasm_func
     }
 
-    /// Generate write-via-stream call with async wait
+    /// Generate write-via-stream call (START only, no wait)
     ///
     /// write-via-stream is an async operation that returns a subtask handle.
-    /// We need to wait for the subtask to complete before continuing.
-    fn generate_write_via_stream_with_wait(
+    /// This function only starts the operation; wait is generated separately
+    /// at the end of the function via generate_effect_wait.
+    fn generate_write_via_stream_start(
         &self,
         func: &mut Function,
         ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
+        _builder: &CoreModuleBuilder,
         write_via_stream_idx: u32,
     ) {
-        let waitable_set_new_idx = builder.func_idx("waitable-set-new");
-        let waitable_join_idx = builder.func_idx("waitable-join");
-        let waitable_set_wait_idx = builder.func_idx("waitable-set-wait");
-        let subtask_drop_idx = builder.func_idx("subtask-drop");
-
-        // Allocate locals for async handling
+        // Allocate local for subtask handle (reused by generate_effect_wait)
         let subtask_local = ctx.alloc_local("__subtask", ValType::I32);
-        let waitable_set_local = ctx.alloc_local("__waitable_set", ValType::I32);
 
         // Stack has: stream handle (rx)
         // Call write-via-stream(rx, outptr) - returns subtask handle
@@ -1968,9 +1931,35 @@ impl Codegen {
         func.instruction(&Instruction::Call(write_via_stream_idx));
         func.instruction(&Instruction::LocalSet(subtask_local));
 
+        // Push dummy value so all effect function calls uniformly produce a value
+        // This gets dropped by the expression statement handler
+        func.instruction(&Instruction::I32Const(0));
+    }
+
+    /// Generate wait logic for pending effect subtasks
+    ///
+    /// This should be called at the end of functions that use Stdout/Stderr effects.
+    /// It waits for the subtask started by write-via-stream to complete.
+    fn generate_effect_wait(
+        &self,
+        func: &mut Function,
+        ctx: &FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Check if we have a subtask to wait for
+        let subtask_local = match ctx.get_local("__subtask") {
+            Some(idx) => idx,
+            None => return, // No pending subtask
+        };
+
+        let waitable_set_new_idx = builder.func_idx("waitable-set-new");
+        let waitable_join_idx = builder.func_idx("waitable-join");
+        let waitable_set_wait_idx = builder.func_idx("waitable-set-wait");
+        let subtask_drop_idx = builder.func_idx("subtask-drop");
+        let waitable_set_local = ctx.get_local("__waitable_set").unwrap_or(subtask_local + 1);
+
         // Check if subtask is pending
         // If (status & 1) == 0, the operation is still pending and we need to wait
-        // (matching the original generate_println_body logic)
         func.instruction(&Instruction::LocalGet(subtask_local));
         func.instruction(&Instruction::I32Const(1));
         func.instruction(&Instruction::I32And);
@@ -1998,10 +1987,6 @@ impl Codegen {
         func.instruction(&Instruction::Call(subtask_drop_idx));
 
         func.instruction(&Instruction::End); // end if
-
-        // Push dummy value so all effect function calls uniformly produce a value
-        // This gets dropped by the expression statement handler
-        func.instruction(&Instruction::I32Const(0));
     }
 
     /// Pre-allocate scratch locals that builtins might need during code generation
@@ -2254,9 +2239,9 @@ impl Codegen {
                 for arg in &call.args {
                     self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
-                // For write-via-stream, we need special handling with async wait
+                // For write-via-stream, we start the operation but defer wait to function end
                 if wasi_func_name == "write-via-stream" {
-                    self.generate_write_via_stream_with_wait(func, ctx, builder, func_idx);
+                    self.generate_write_via_stream_start(func, ctx, builder, func_idx);
                 } else {
                     func.instruction(&Instruction::Call(func_idx));
                 }
@@ -2488,169 +2473,6 @@ impl Codegen {
         }
     }
 
-    /// Generate println function body
-    /// Implements: pub fn println(message: String) from core::cli
-    /// Parameter: str_arr (param 0: ref array<u8>)
-    /// Locals:
-    ///   local 1: len (i32) - string length
-    ///   local 2: ptr (i32) - allocated buffer pointer
-    ///   local 3: i (i32) - loop counter
-    ///   local 4: ret64 (i64) - stream.new result
-    ///   local 5: rx (i32) - readable stream handle
-    ///   local 6: tx (i32) - writable stream handle
-    ///   local 7: status (i32) - subtask status
-    fn generate_println_body(&self, func: &mut Function, builder: &CoreModuleBuilder) {
-        // Get indices from builder (no more hardcoded numbers)
-        let string_array_type = builder.type_idx("string-array");
-        let realloc_idx = builder.func_idx("realloc");
-        let stream_new_idx = builder.func_idx("stream-new");
-        let stream_write_idx = builder.func_idx("stream-write");
-        let stream_drop_writable_idx = builder.func_idx("stream-drop-writable");
-        let write_via_stream_idx = builder.func_idx("write-via-stream");
-        let waitable_set_new_idx = builder.func_idx("waitable-set-new");
-        let waitable_join_idx = builder.func_idx("waitable-join");
-        let waitable_set_wait_idx = builder.func_idx("waitable-set-wait");
-        let subtask_drop_idx = builder.func_idx("subtask-drop");
-
-        // ============================================
-        // Phase 1: Copy GC array to linear memory
-        // ============================================
-
-        // Get length from GC array: array.len
-        func.instruction(&Instruction::LocalGet(0)); // str_arr
-        func.instruction(&Instruction::ArrayLen);
-        func.instruction(&Instruction::LocalSet(1)); // len
-
-        // Allocate buffer: realloc(0, 0, 1, len + 1) -> ptr (extra byte for newline)
-        func.instruction(&Instruction::I32Const(0)); // old_ptr
-        func.instruction(&Instruction::I32Const(0)); // old_size
-        func.instruction(&Instruction::I32Const(1)); // align
-        func.instruction(&Instruction::LocalGet(1)); // len
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::I32Add); // new_size = len + 1
-        func.instruction(&Instruction::Call(realloc_idx));
-        func.instruction(&Instruction::LocalSet(2)); // ptr
-
-        // Initialize loop counter: i = 0
-        func.instruction(&Instruction::I32Const(0));
-        func.instruction(&Instruction::LocalSet(3)); // i = 0
-
-        // Loop to copy bytes: while (i < len) { mem[ptr+i] = arr[i]; i++; }
-        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $break
-        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // $continue
-
-        // Check condition: i >= len -> break
-        func.instruction(&Instruction::LocalGet(3)); // i
-        func.instruction(&Instruction::LocalGet(1)); // len
-        func.instruction(&Instruction::I32GeU); // i >= len
-        func.instruction(&Instruction::BrIf(1)); // break if i >= len
-
-        // Store byte: mem[ptr + i] = arr[i]
-        func.instruction(&Instruction::LocalGet(2)); // ptr
-        func.instruction(&Instruction::LocalGet(3)); // i
-        func.instruction(&Instruction::I32Add); // ptr + i (address)
-        func.instruction(&Instruction::LocalGet(0)); // str_arr
-        func.instruction(&Instruction::LocalGet(3)); // i
-        func.instruction(&Instruction::ArrayGetU(string_array_type)); // arr[i] (unsigned)
-        func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
-            offset: 0,
-            align: 0,
-            memory_index: 0,
-        }));
-
-        // Increment: i++
-        func.instruction(&Instruction::LocalGet(3)); // i
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::I32Add);
-        func.instruction(&Instruction::LocalSet(3)); // i = i + 1
-
-        // Continue loop
-        func.instruction(&Instruction::Br(0));
-        func.instruction(&Instruction::End); // end loop
-        func.instruction(&Instruction::End); // end block
-
-        // Add newline at position len: mem[ptr + len] = '\n'
-        func.instruction(&Instruction::LocalGet(2)); // ptr
-        func.instruction(&Instruction::LocalGet(1)); // len
-        func.instruction(&Instruction::I32Add); // ptr + len
-        func.instruction(&Instruction::I32Const(b'\n' as i32)); // '\n'
-        func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
-            offset: 0,
-            align: 0,
-            memory_index: 0,
-        }));
-
-        // ============================================
-        // Phase 2: Stream operations (ptr and len+1 now in locals 2 and 1)
-        // ============================================
-
-        // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
-        func.instruction(&Instruction::Call(stream_new_idx));
-        func.instruction(&Instruction::LocalSet(4)); // ret64
-
-        // Extract rx (low 32 bits)
-        func.instruction(&Instruction::LocalGet(4)); // ret64
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(5)); // rx
-
-        // Extract tx (high 32 bits)
-        func.instruction(&Instruction::LocalGet(4)); // ret64
-        func.instruction(&Instruction::I64Const(32));
-        func.instruction(&Instruction::I64ShrU);
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(6)); // tx
-
-        // 2. Call write-via-stream(rx, outptr) to start consuming from the stream
-        func.instruction(&Instruction::LocalGet(5)); // rx
-        func.instruction(&Instruction::I32Const(2048)); // outptr for result
-        func.instruction(&Instruction::Call(write_via_stream_idx));
-        func.instruction(&Instruction::LocalSet(7)); // status
-
-        // 3. Write string to stream: stream-write(tx, ptr, len + 1) -> status
-        func.instruction(&Instruction::LocalGet(6)); // tx
-        func.instruction(&Instruction::LocalGet(2)); // ptr
-        func.instruction(&Instruction::LocalGet(1)); // len
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::I32Add); // len + 1 (includes newline)
-        func.instruction(&Instruction::Call(stream_write_idx));
-        func.instruction(&Instruction::Drop); // ignore write status
-
-        // 4. Close writable end to signal EOF: stream-drop-writable(tx)
-        func.instruction(&Instruction::LocalGet(6)); // tx
-        func.instruction(&Instruction::Call(stream_drop_writable_idx));
-
-        // 5. Wait for write-via-stream subtask to complete if still pending
-        func.instruction(&Instruction::LocalGet(7)); // status
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::I32And);
-        func.instruction(&Instruction::I32Eqz); // true if pending
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-        // Create waitable-set
-        func.instruction(&Instruction::Call(waitable_set_new_idx));
-        func.instruction(&Instruction::I64ExtendI32U);
-        func.instruction(&Instruction::LocalSet(4)); // reuse ret64 for waitable-set
-
-        // Join subtask to waitable-set
-        func.instruction(&Instruction::LocalGet(4));
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalGet(7)); // status (subtask handle)
-        func.instruction(&Instruction::Call(waitable_join_idx));
-
-        // Wait for completion
-        func.instruction(&Instruction::LocalGet(4));
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::I32Const(2048));
-        func.instruction(&Instruction::Call(waitable_set_wait_idx));
-        func.instruction(&Instruction::Drop);
-
-        // Drop subtask
-        func.instruction(&Instruction::LocalGet(7)); // status (subtask handle)
-        func.instruction(&Instruction::Call(subtask_drop_idx));
-
-        func.instruction(&Instruction::End); // end if
-    }
-
     /// Infer expression type with function context (for looking up variable types)
     fn infer_expr_type_with_ctx(&self, expr: &Expr, ctx: &FunctionContext) -> ValType {
         match expr {
@@ -2738,6 +2560,10 @@ impl Codegen {
             // Calls produce values based on their return type
             Expr::Call(call) => {
                 if let Expr::Ident(ident) = &call.callee {
+                    // Handle builtin:: namespace - check if builtin returns a value
+                    if ident.name.starts_with("builtin::") {
+                        return self.builtin_produces_value(&ident.name);
+                    }
                     // Effect function calls always produce values
                     // (either subtask handles or dummy values from special handling)
                     if ident.name.contains("::") {
@@ -2754,6 +2580,21 @@ impl Codegen {
             Expr::TemplateString(_) => true,
             _ => false,
         }
+    }
+
+    /// Check if a builtin:: function produces a value
+    /// Void builtins return false, all others return true
+    fn builtin_produces_value(&self, name: &str) -> bool {
+        let builtin_name = name.strip_prefix("builtin::").unwrap_or(name);
+        // These builtins are void (no return value)
+        !matches!(
+            builtin_name,
+            "stream_drop_writable"
+                | "stream_drop_readable"
+                | "waitable_join"
+                | "subtask_drop"
+                | "memory_store8"
+        )
     }
 
     /// Generate literal value

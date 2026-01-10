@@ -110,4 +110,5 @@ make format # format code and documents
 Use `wasm-tools validate` to check generated WAT/Wasm files:
 
 ```sh
+
 ```

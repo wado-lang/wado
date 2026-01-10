@@ -31,6 +31,9 @@ pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
 /// Embedded source for core:cli
 pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
 
+/// Embedded source for core:stream
+pub const CORE_STREAM: &str = include_str!("../lib/core/stream.wado");
+
 /// Embedded source for core:filesystem
 pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 
@@ -62,6 +65,7 @@ pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
 /// Supports the new ESM-like import syntax:
 /// - `"core:prelude"` -> core library prelude
 /// - `"core:cli"` -> core library CLI helpers
+/// - `"core:stream"` -> core library stream utilities
 /// - `"core:filesystem"` -> core library filesystem helpers
 /// - `"wasi:cli"` -> WASI CLI interfaces
 /// - `"wasi:filesystem"` -> WASI filesystem interfaces
@@ -79,6 +83,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         // Core library
         "core:prelude" => Some(CORE_PRELUDE),
         "core:cli" => Some(CORE_CLI),
+        "core:stream" => Some(CORE_STREAM),
         "core:filesystem" => Some(CORE_FILESYSTEM),
 
         // WASI library

@@ -376,6 +376,9 @@ impl Analyzer {
                 // Collect definitions from the imported module (if not already done)
                 if self.symbols.get_module_symbols(&module_path).is_empty() {
                     self.collect_definitions(&imported_module, &module_path);
+                    // Recursively resolve imports of the imported module
+                    // This ensures transitive dependencies are loaded
+                    let _ = self.resolve_imports(&imported_module, &module_path);
                 }
 
                 // Register each imported item

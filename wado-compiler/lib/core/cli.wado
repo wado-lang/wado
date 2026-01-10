@@ -3,9 +3,16 @@
 //
 // This module provides convenient functions like println(), eprintln(), args(), etc.
 // For raw WASI CLI interfaces, use "wasi:cli" instead.
+//
+// IMPORTANT: WASI P3 async streams require specific ordering:
+// 1. Create stream (get rx, tx)
+// 2. Start consumer (write_via_stream) with rx FIRST
+// 3. Write data to tx
+// 4. Close tx (stream_drop_writable)
+// 5. Wait for consumer to complete
+// This ordering cannot be abstracted into helper functions like string_to_stream.
 
 use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
-use {string_to_stream, string_to_stream_with_trailing_newline} from "core:stream";
 
 // Re-export commonly used effects for convenience
 pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
@@ -15,27 +22,86 @@ pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 // ============================================================================
 
 /// Print a line to stdout (adds newline)
+/// Uses WASI P3 async stream with correct ordering: consumer starts before producer writes
 pub fn println(message: String) with Stdout {
-    let stream = string_to_stream_with_trailing_newline(message);
-    Stdout::write_via_stream(stream);
+    // 1. Create stream
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    // 2. Start consumer FIRST (this is critical for WASI P3 async streams)
+    Stdout::write_via_stream(rx);
+
+    // 3. Copy string to linear memory and write to stream
+    let len = builtin::array_len(message);
+    let alloc_size = len + 1;
+    let ptr = builtin::realloc(0, 0, 1, alloc_size);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(message, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    builtin::memory_store8(ptr + len, 10); // newline
+    builtin::stream_write(tx, ptr, alloc_size);
+
+    // 4. Close writable end to signal EOF
+    builtin::stream_drop_writable(tx);
+    // Note: wait for consumer is handled by the effect system in write_via_stream
 }
 
 /// Print a line to stderr (adds newline)
 pub fn eprintln(message: String) with Stderr {
-    let stream = string_to_stream_with_trailing_newline(message);
-    Stderr::write_via_stream(stream);
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    Stderr::write_via_stream(rx);
+
+    let len = builtin::array_len(message);
+    let alloc_size = len + 1;
+    let ptr = builtin::realloc(0, 0, 1, alloc_size);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(message, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    builtin::memory_store8(ptr + len, 10);
+    builtin::stream_write(tx, ptr, alloc_size);
+    builtin::stream_drop_writable(tx);
 }
 
 /// Print to stdout without newline
 pub fn print(message: String) with Stdout {
-    let stream = string_to_stream(message);
-    Stdout::write_via_stream(stream);
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    Stdout::write_via_stream(rx);
+
+    let len = builtin::array_len(message);
+    let ptr = builtin::realloc(0, 0, 1, len);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(message, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    builtin::stream_write(tx, ptr, len);
+    builtin::stream_drop_writable(tx);
 }
 
 /// Print to stderr without newline
 pub fn eprint(message: String) with Stderr {
-    let stream = string_to_stream(message);
-    Stderr::write_via_stream(stream);
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    Stderr::write_via_stream(rx);
+
+    let len = builtin::array_len(message);
+    let ptr = builtin::realloc(0, 0, 1, len);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(message, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    builtin::stream_write(tx, ptr, len);
+    builtin::stream_drop_writable(tx);
 }
 
 // ============================================================================
