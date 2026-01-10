@@ -29,9 +29,14 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     let mut config = Config::new();
     config.async_support(true);
     config.wasm_component_model(true);
+    config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
     config.wasm_component_model_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
+    config.wasm_simd(true);
+    config.wasm_wide_arithmetic(true);
+    config.wasm_threads(true);
+    // config.wasm_stack_switching(true); // "runtime error: the wasm_stack_switching feature is not supported on this compiler configuration" on macos
     config.wasm_gc(true);
 
     let engine = Engine::new(&config)?;
