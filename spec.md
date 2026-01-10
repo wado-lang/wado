@@ -649,11 +649,18 @@ use {Parser} from "parser-lib";
 Use `with { ... }` to specify import metadata:
 
 ```wado
-// Version specification
+// Version specification (optional for standard namespaces)
 use {Stdout} from "wasi:cli" with { version: "0.3.0" };
 
-// Type hint for non-code imports
-use config from "https://example.com/data.json" with { type: "json" };
+// Type attribute (REQUIRED for non-.wado imports)
+use config from "./config.json" with { type: "json" };
+use {sin, cos} from "./libm.wasm" with { type: "wasm" };
+
+// WIT specification for Wasm imports (optional)
+use {foo} from "./external.wasm" with {
+    type: "wasm",
+    wit: "./external.wit",
+};
 
 // Future: integrity hash for security
 use {Parser} from "parser-lib" with { integrity: "sha384-..." };
@@ -664,6 +671,19 @@ use {ApiClient} from "https://example.com/api.wado" with {
     version: "1.0.0",
 };
 ```
+
+**Type Attribute Requirement**:
+
+| Import Source        | `type` Attribute | Notes                          |
+| -------------------- | ---------------- | ------------------------------ |
+| `.wado` files        | Optional         | Type inferred from Wado source |
+| `.wasm` files        | **Required**     | `type: "wasm"`                 |
+| `.json` files        | **Required**     | `type: "json"`                 |
+| `core:*`, `wasi:*`   | Not applicable   | Special namespace handling     |
+| `https:` URLs        | **Required**     | Must specify content type      |
+| Package dependencies | Optional         | Type inferred from package     |
+
+**Rationale**: Explicit type annotations prevent ambiguity and make dependencies clear, aligning with Wado's design philosophy of explicit imports.
 
 ### Namespace Import
 
