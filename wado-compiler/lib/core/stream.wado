@@ -87,17 +87,52 @@ pub fn subtask_drop(subtask: i32) {
 }
 
 // ============================================================================
-// Helper Functions (built-in implementations)
+// String to Stream Conversion
 // ============================================================================
 
 /// Convert a String to a Stream of bytes (UTF-8 encoded)
-/// Built-in: creates stream, writes string, closes writable end
-pub fn string_to_stream(s: String) -> Stream<u8>;
+/// Creates stream, copies GC string to linear memory, writes to stream, closes writable end
+pub fn string_to_stream(s: String) -> i32 {
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    // Copy GC string to linear memory and write to stream
+    let len = builtin::array_len(s);
+    let ptr = builtin::realloc(0, 0, 1, len);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(s, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    builtin::stream_write(tx, ptr, len);
+    builtin::stream_drop_writable(tx);
+
+    return rx;
+}
 
 /// Convert a String to a Stream with a trailing newline appended
-/// Built-in: creates stream, writes string + '\n', closes writable end
 /// Used by println() to avoid string concatenation overhead
-pub fn string_to_stream_with_trailing_newline(s: String) -> Stream<u8>;
+pub fn string_to_stream_with_trailing_newline(s: String) -> i32 {
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    // Copy GC string to linear memory with extra byte for newline
+    let len = builtin::array_len(s);
+    let alloc_size = len + 1;
+    let ptr = builtin::realloc(0, 0, 1, alloc_size);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(s, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    // Append newline
+    builtin::memory_store8(ptr + len, 10);
+
+    builtin::stream_write(tx, ptr, alloc_size);
+    builtin::stream_drop_writable(tx);
+
+    return rx;
+}
 
 // ============================================================================
 // Async Wait Helper
@@ -115,30 +150,4 @@ pub fn wait_for_subtask(subtask: i32) {
         builtin::waitable_set_wait(waitable_set, 2048);
         builtin::subtask_drop(subtask);
     }
-}
-
-// ============================================================================
-// Reference Implementation (for documentation)
-// ============================================================================
-
-/// Reference implementation showing how string_to_stream could be implemented
-/// The actual implementation is a built-in for efficiency (avoids loop overhead)
-fn string_to_stream_ref(s: String) -> i32 {
-    let handles = builtin::stream_new();
-    let rx = builtin::i64_low32(handles);
-    let tx = builtin::i64_high32(handles);
-
-    // Copy GC string to linear memory and write to stream
-    let len = builtin::array_len(s);
-    let ptr = builtin::realloc(0, 0, 1, len);
-    let mut i = 0;
-    while i < len {
-        let byte = builtin::array_get_u8(s, i);
-        builtin::memory_store8(ptr + i, byte);
-        i = i + 1;
-    }
-    builtin::stream_write(tx, ptr, len);
-    builtin::stream_drop_writable(tx);
-
-    return rx;
 }
