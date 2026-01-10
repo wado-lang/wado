@@ -283,10 +283,10 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Multiple function calls
 - [x] Async function lifting/lowering
 - [x] Template strings (partial - literals only, no type conversion/formatting)
-- [ ] Variables and locals
-- [ ] Control flow (`if`, `while`, `for`)
-- [ ] Binary/unary operations
-- [ ] User-defined functions
+- [x] Variables and locals (`let`, `let mut`)
+- [x] Control flow (`if` statements, `while`, `for`)
+- [x] Binary/unary operations
+- [x] User-defined functions (from core:: modules)
 - [ ] Struct construction
 - [ ] Enum/variant construction
 - [ ] Pattern matching
@@ -358,6 +358,7 @@ fn main() with Stdout {
 5. **No type checking**: The analyzer doesn't perform type checking yet
 6. **Limited codegen**: Only `println` with string literals works
 7. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
+8. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
 
 ---
 

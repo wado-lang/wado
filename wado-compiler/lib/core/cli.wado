@@ -18,6 +18,31 @@ use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 
 // ============================================================================
+// Internal Helpers
+// ============================================================================
+
+// Write string to stream tx handle
+// Called AFTER write_via_stream has started the consumer
+// add_newline: if true, appends '\n' after the message
+pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
+    let len = builtin::array_len(message);
+    let mut alloc_size = len;
+    if add_newline {
+        alloc_size = len + 1;
+    }
+    let ptr = builtin::realloc(0, 0, 1, alloc_size);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(message, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    if add_newline {
+        builtin::memory_store8(ptr + len, '\n');
+    }
+    builtin::stream_write(tx, ptr, alloc_size);
+    builtin::stream_drop_writable(tx);
+}
+
+// ============================================================================
 // Output Functions
 // ============================================================================
 
@@ -29,23 +54,11 @@ pub fn println(message: String) with Stdout {
     let rx = builtin::i64_low32(handles);
     let tx = builtin::i64_high32(handles);
 
-    // 2. Start consumer FIRST (this is critical for WASI P3 async streams)
+    // 2. Start consumer FIRST (critical for WASI P3 async streams)
     Stdout::write_via_stream(rx);
 
-    // 3. Copy string to linear memory and write to stream
-    let len = builtin::array_len(message);
-    let alloc_size = len + 1;
-    let ptr = builtin::realloc(0, 0, 1, alloc_size);
-    for (let mut i = 0; i < len; i = i + 1) {
-        let byte = builtin::array_get_u8(message, i);
-        builtin::memory_store8(ptr + i, byte);
-    }
-    builtin::memory_store8(ptr + len, 10); // newline
-    builtin::stream_write(tx, ptr, alloc_size);
-
-    // 4. Close writable end to signal EOF
-    builtin::stream_drop_writable(tx);
-    // Note: wait for consumer is handled by the effect system in write_via_stream
+    // 3-4. Write data and close stream
+    write_to_stream(tx, message, true);
 }
 
 /// Print a line to stderr (adds newline)
@@ -55,17 +68,7 @@ pub fn eprintln(message: String) with Stderr {
     let tx = builtin::i64_high32(handles);
 
     Stderr::write_via_stream(rx);
-
-    let len = builtin::array_len(message);
-    let alloc_size = len + 1;
-    let ptr = builtin::realloc(0, 0, 1, alloc_size);
-    for (let mut i = 0; i < len; i = i + 1) {
-        let byte = builtin::array_get_u8(message, i);
-        builtin::memory_store8(ptr + i, byte);
-    }
-    builtin::memory_store8(ptr + len, 10);
-    builtin::stream_write(tx, ptr, alloc_size);
-    builtin::stream_drop_writable(tx);
+    write_to_stream(tx, message, true);
 }
 
 /// Print to stdout without newline
@@ -75,15 +78,7 @@ pub fn print(message: String) with Stdout {
     let tx = builtin::i64_high32(handles);
 
     Stdout::write_via_stream(rx);
-
-    let len = builtin::array_len(message);
-    let ptr = builtin::realloc(0, 0, 1, len);
-    for (let mut i = 0; i < len; i = i + 1) {
-        let byte = builtin::array_get_u8(message, i);
-        builtin::memory_store8(ptr + i, byte);
-    }
-    builtin::stream_write(tx, ptr, len);
-    builtin::stream_drop_writable(tx);
+    write_to_stream(tx, message, false);
 }
 
 /// Print to stderr without newline
@@ -93,15 +88,7 @@ pub fn eprint(message: String) with Stderr {
     let tx = builtin::i64_high32(handles);
 
     Stderr::write_via_stream(rx);
-
-    let len = builtin::array_len(message);
-    let ptr = builtin::realloc(0, 0, 1, len);
-    for (let mut i = 0; i < len; i = i + 1) {
-        let byte = builtin::array_get_u8(message, i);
-        builtin::memory_store8(ptr + i, byte);
-    }
-    builtin::stream_write(tx, ptr, len);
-    builtin::stream_drop_writable(tx);
+    write_to_stream(tx, message, false);
 }
 
 // ============================================================================
