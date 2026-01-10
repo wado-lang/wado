@@ -49,11 +49,54 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 
 **Primitive Layer (`builtin::`):**
 
-The `builtin` namespace provides raw Wasm GC types with no abstraction:
+The `builtin` namespace provides direct access to Wasm primitives. These types and functions map 1:1 to Wasm instructions with no abstraction. The namespace is always available without import, but is intended primarily for standard library implementation.
 
-- `builtin::array<T>` - Wasm GC array (no methods)
-- `builtin::i31ref` - Wasm GC i31ref (31-bit integer reference)
-- Intrinsic functions: `array_new`, `array_len`, `array_get`, `array_set`, `i31ref_new`, `i31ref_get_s`, `i31ref_get_u`, `eqref`, `unreachable`
+**Wasm GC Types:**
+
+```wado
+builtin::array<T>    // Wasm GC array (no methods)
+builtin::i31ref      // Wasm GC i31ref (31-bit integer reference)
+```
+
+**Intrinsic Functions:**
+
+```wado
+// Array operations
+builtin::array_new<T>(len: i32) -> builtin::array<T>
+builtin::array_len<T>(arr: builtin::array<T>) -> i32
+builtin::array_get<T>(arr: builtin::array<T>, idx: i32) -> T
+builtin::array_set<T>(arr: builtin::array<T>, idx: i32, value: T)
+
+// i31ref operations
+builtin::i31ref_new(value: i32) -> builtin::i31ref
+builtin::i31ref_get_s(ref: builtin::i31ref) -> i32   // Signed extraction
+builtin::i31ref_get_u(ref: builtin::i31ref) -> u32   // Unsigned extraction
+
+// Reference comparison (Wasm ref.eq)
+builtin::eqref<T, U>(a: T, b: U) -> bool   // Compare any GC references
+
+// Control
+builtin::unreachable() -> !   // Wasm trap instruction
+```
+
+**Usage in Standard Library:**
+
+```wado
+// Standard library uses builtin primitives internally
+// In core/string.wado
+pub struct String {
+    buf: builtin::array<u8>,
+
+    pub fn length(&self) -> i32 {
+        return builtin::array_len(self.buf);
+    }
+}
+
+// In core/prelude.wado
+pub fn unreachable() -> ! {
+    builtin::unreachable()
+}
+```
 
 **Standard Library Types:**
 
@@ -62,9 +105,33 @@ Standard library types wrap builtins with methods:
 - `String` - Struct wrapping `builtin::array<u8>` (maps to CM `string`)
 - `Array<T>` - Struct wrapping `builtin::array<T>` (maps to CM `list<T>`)
 
+**Struct Implementation:**
+
+- Internally: Wasm-GC `struct` type with GC-managed memory
+- At CM boundary: Automatically converted to/from `record`
+- Enables recursive types, self-referential structures, and efficient field access
+
 **Single-Field Optimization:**
 
-Structs with exactly one GC field compile directly to that field's Wasm type (zero overhead).
+If a struct contains exactly one GC object field (a `builtin::array` or another struct), the compiler skips generating the outer Wasm GC struct. This means wrapper types like `String` and `Array<T>` have **zero runtime overhead**:
+
+```wado
+// String wraps builtin::array<u8>
+struct String {
+    buf: builtin::array<u8>,
+    // ... methods
+}
+// At Wasm level: compiles to just (ref (array u8)), no wrapper struct
+
+// Array<T> wraps builtin::array<T>
+struct Array<T> {
+    repr: builtin::array<T>,
+    // ... methods
+}
+// At Wasm level: compiles to just (ref (array T)), no wrapper struct
+```
+
+This optimization enables ergonomic APIs with methods while maintaining direct Wasm GC representation.
 
 ---
 
