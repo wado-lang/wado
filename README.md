@@ -46,16 +46,23 @@ Types are designed around the WebAssembly Component Model (CM):
 Wado has built-in support for reactive state (often called "signals" in other frameworks):
 
 ```wado
+use {observe} from "core:reactive";
+
 let reactive mut count = 0;           // Mutable reactive state
 let reactive doubled = || count * 2;  // Derived value
 
-count += 1;  // Automatically propagates to `doubled`
+observe(|| {
+    println(`Count: {count}, Doubled: {doubled}`);
+});
+
+count += 1;  // Automatically propagates to `doubled` and triggers observe()
 ```
 
 Why built-in instead of a library?
 
 - **Compiler optimization**: Dependencies are analyzed at compile-time, generating precise Wasm update code with no runtime tracking overhead
 - **Ergonomics**: No wrapper functions like `useState()`, `ref()`, or `createSignal()`
+- **Automatic dependency tracking**: `observe()` automatically tracks reactive values accessed within the closure—no manual subscription needed
 - **No virtual DOM**: Updates compile to direct mutations, not diffing
 - **Context-aware**: In CLI, updates are synchronous; in event-looped environments (browser/GUI), updates may be batched for efficiency
 

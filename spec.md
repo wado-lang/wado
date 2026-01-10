@@ -790,25 +790,57 @@ let x = doubled;    // Returns current computed value
 
 Derived values are recomputed when their dependencies change. The compiler builds a dependency graph and updates values in topological order.
 
-### Effect Block (TBD)
+### observe Function
 
-> **To be discussed**: The syntax and semantics for reactive side effects are under discussion. The `effect` keyword conflicts with the Effect System terminology. Alternatives being considered include `watch { }`, explicit dependency syntax, or method-based subscriptions.
+The `observe` function (from `core:reactive`) executes side effects when reactive dependencies change. Dependencies are automatically tracked—any reactive value read within the closure becomes a dependency.
 
 ```wado
-// Current proposal (may change)
-effect {
-    println(`Count is now: {count}`);
-}
+use {observe} from "core:reactive";
 
-// Alternative: explicit dependency
-watch count {
-    println(`Count is now: {count}`);
-}
+let reactive mut count = 0;
+let reactive doubled = || count * 2;
 
-// Alternative: method-based
-count.watch(|value| {
-    println(`Count is now: {value}`);
+observe(|| {
+    println(`Count is now: {count}`);
+    // Dependencies: count
 });
+
+observe(|| {
+    println(`Doubled is now: {doubled}`);
+    // Dependencies: doubled (and transitively, count)
+});
+```
+
+**Cleanup:**
+
+Return a cleanup function to run when the observation is disposed or before re-running:
+
+```wado
+observe(|| {
+    let subscription = external_api.subscribe(`event-{count}`);
+    println(`Subscribed to event-{count}`);
+
+    return || {
+        subscription.unsubscribe();
+        println(`Cleaned up subscription for event-{count}`);
+    };
+});
+```
+
+The cleanup function runs:
+- Before the effect re-runs (when dependencies change)
+- When the enclosing scope ends
+- When the component unmounts (in UI contexts)
+
+**Manual disposal:**
+
+```wado
+let dispose = observe(|| {
+    println(`Count: {count}`);
+});
+
+// Later, stop observing
+dispose();
 ```
 
 ### Reactive References
@@ -835,15 +867,17 @@ Reactive behavior differs between execution contexts:
 In CLI programs, reactive updates are **synchronous and immediate**:
 
 ```wado
+use {observe} from "core:reactive";
+
 let reactive mut count = 0;
 let reactive doubled = || count * 2;
 
-effect {
+observe(|| {
     println(`doubled = {doubled}`);
-}
+});
 
 count = 5;
-// Effect runs immediately here, before next line
+// observe() callback runs immediately here, before next line
 // Output: "doubled = 10"
 
 println("after mutation");
@@ -851,21 +885,23 @@ println("after mutation");
 ```
 
 - Updates propagate immediately when a source is mutated
-- Effects run synchronously before execution continues
-- Effect blocks live for the duration of their enclosing scope
+- observe() callbacks run synchronously before execution continues
+- Observations live for the duration of their enclosing scope
 
 #### Event-Looped World (Browser/GUI)
 
 In event-driven contexts, reactive updates are triggered by **external events**:
 
 ```wado
+use {observe} from "core:reactive";
+
 fn Counter() -> Element with Dom {
     let reactive mut count = 0;
     let reactive doubled = || count * 2;
 
-    effect {
+    observe(|| {
         println(`Count changed to {count}`);
-    }
+    });
 
     return <div>
         <p>{doubled}</p>
@@ -876,17 +912,17 @@ fn Counter() -> Element with Dom {
 
 - Updates are triggered by events (clicks, timers, network responses)
 - Multiple mutations within a single event handler may be **batched**
-- Effects and UI bindings persist for the component's lifetime
+- observe() callbacks and UI bindings persist for the component's lifetime
 - The event loop keeps the program alive to receive future events
 
 #### Comparison
 
-| Aspect           | CLI                       | Event-looped                    |
-| ---------------- | ------------------------- | ------------------------------- |
-| Trigger          | Direct assignment in code | External events                 |
-| Propagation      | Synchronous, immediate    | May be batched per event        |
-| Effect lifetime  | Enclosing scope duration  | Component/subscription lifetime |
-| Primary use case | Computed dependencies     | UI binding, subscriptions       |
+| Aspect              | CLI                       | Event-looped                    |
+| ------------------- | ------------------------- | ------------------------------- |
+| Trigger             | Direct assignment in code | External events                 |
+| Propagation         | Synchronous, immediate    | May be batched per event        |
+| observe() lifetime  | Enclosing scope duration  | Component/subscription lifetime |
+| Primary use case    | Computed dependencies     | UI binding, subscriptions       |
 
 ### JSX Integration
 
