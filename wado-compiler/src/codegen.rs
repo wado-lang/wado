@@ -17,6 +17,8 @@ use wasm_encoder::{
 /// Targets WASI P3 (0.3.0-rc-2025-09-16)
 pub struct Codegen {
     string_literals: Vec<String>,
+    /// Parsed stdlib modules (to extend their lifetime during compilation)
+    stdlib_modules: Vec<crate::ast::Module>,
 }
 
 /// Context for tracking local variables during function code generation
@@ -165,13 +167,24 @@ impl Codegen {
     pub fn new() -> Self {
         Self {
             string_literals: Vec::new(),
+            stdlib_modules: Vec::new(),
         }
     }
 
     /// Generate Component Model binary Wasm
     pub fn generate_wasm(&mut self, module: &crate::ast::Module) -> Vec<u8> {
-        // First pass: collect string literals
+        // Load stdlib modules first
+        self.load_stdlib_modules(module);
+
+        // First pass: collect string literals from user module
         self.collect_strings(module);
+
+        // Also collect strings from stdlib modules
+        // Clone the modules to avoid borrow checker issues
+        let stdlib_modules = self.stdlib_modules.clone();
+        for stdlib_module in &stdlib_modules {
+            self.collect_strings(stdlib_module);
+        }
 
         // Generate binary Wasm
         self.generate_component(module)
@@ -329,7 +342,7 @@ impl Codegen {
 
     /// Generate component for WASI P3
     /// Uses native stream<T> types and imports wasi:cli/stdout
-    fn generate_component(&self, ast_module: &crate::ast::Module) -> Vec<u8> {
+    fn generate_component(&mut self, ast_module: &crate::ast::Module) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
 
         // Build string data for memory
@@ -553,12 +566,31 @@ impl Codegen {
         builder.finish()
     }
 
+    /// Load and parse stdlib modules that are imported
+    /// This must be called before collect_user_functions
+    fn load_stdlib_modules(&mut self, ast_module: &crate::ast::Module) {
+        for item in &ast_module.items {
+            if let Item::Use(use_decl) = item {
+                if use_decl.source == "core:internals" {
+                    // Parse and store functions from core:internals
+                    if let Some(internals_src) = crate::stdlib::get_stdlib_module("core:internals") {
+                        if let Ok(internals_module) = self.parse_stdlib_module(internals_src) {
+                            self.stdlib_modules.push(internals_module);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     /// Collect user-defined functions from the AST (excluding main and builtins)
+    /// Also includes functions from imported core:* modules that have Wado implementations
     fn collect_user_functions<'a>(
-        &self,
+        &'a self,
         ast_module: &'a crate::ast::Module,
     ) -> Vec<&'a crate::ast::Function> {
-        ast_module
+        let mut functions: Vec<&crate::ast::Function> = ast_module
             .items
             .iter()
             .filter_map(|item| {
@@ -573,15 +605,39 @@ impl Codegen {
                 }
                 None
             })
-            .collect()
+            .collect();
+
+        // Include functions from loaded stdlib modules
+        for stdlib_module in &self.stdlib_modules {
+            for item in &stdlib_module.items {
+                if let Item::Function(f) = item {
+                    if f.body.is_some() {
+                        functions.push(f);
+                    }
+                }
+            }
+        }
+
+        functions
+    }
+
+    /// Parse a stdlib module from source
+    fn parse_stdlib_module(&self, source: &str) -> Result<crate::ast::Module, ()> {
+        use crate::lexer::Lexer;
+        use crate::parser::Parser;
+
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().map_err(|_| ())?;
+        let mut parser = Parser::new(tokens);
+        parser.parse().map_err(|_| ())
     }
 
     /// Build main module for WASI P3 with write-via-stream
-    fn build_main_module_p3(&self, ast_module: &crate::ast::Module, string_data: &[u8]) -> Vec<u8> {
+    fn build_main_module_p3(&mut self, ast_module: &crate::ast::Module, string_data: &[u8]) -> Vec<u8> {
         let mut module = Module::new();
         let mut mod_ctx = ModuleContext::new();
 
-        // Collect user-defined functions
+        // Collect user-defined functions (stdlib modules already loaded in generate_wasm)
         let user_funcs = self.collect_user_functions(ast_module);
 
         // Type section
@@ -658,9 +714,9 @@ impl Codegen {
                 .iter()
                 .map(|p| self.wado_type_to_wasm(&p.ty))
                 .collect();
-            // Return type (default to i32 if specified, empty if none)
-            let return_types: Vec<ValType> = if func.return_type.is_some() {
-                vec![ValType::I32] // Simplified: all returns are i32 for now
+            // Return type (convert from Wado type to Wasm type)
+            let return_types: Vec<ValType> = if let Some(ref ret_ty) = func.return_type {
+                vec![self.wado_type_to_wasm(ret_ty)]
             } else {
                 vec![]
             };
@@ -1090,6 +1146,12 @@ impl Codegen {
                         crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
                         crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
                         crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
+                        // Bitwise operations
+                        crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I32And),
+                        crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I32Or),
+                        crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
+                        crate::ast::BinaryOp::Shl => func.instruction(&Instruction::I32Shl),
+                        crate::ast::BinaryOp::Shr => func.instruction(&Instruction::I32ShrS), // Signed shift
                     };
                 }
             }

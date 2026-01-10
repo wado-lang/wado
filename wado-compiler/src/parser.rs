@@ -705,15 +705,69 @@ impl Parser {
     }
 
     fn parse_and_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_equality_expr()?;
+        let mut left = self.parse_bitor_expr()?;
 
         while self.check(&TokenKind::And) {
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_bitor_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op: BinaryOp::And,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_bitor_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_bitxor_expr()?;
+
+        while self.check(&TokenKind::Pipe) {
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_bitxor_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op: BinaryOp::BitOr,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_bitxor_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_bitand_expr()?;
+
+        while self.check(&TokenKind::Caret) {
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_bitand_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op: BinaryOp::BitXor,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_bitand_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_equality_expr()?;
+
+        while self.check(&TokenKind::Ampersand) {
             let start_span = self.peek().span;
             self.advance();
             let right = self.parse_equality_expr()?;
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
-                op: BinaryOp::And,
+                op: BinaryOp::BitAnd,
                 right,
                 span: start_span,
             }));
@@ -746,7 +800,7 @@ impl Parser {
     }
 
     fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_additive_expr()?;
+        let mut left = self.parse_shift_expr()?;
 
         loop {
             let op = match self.peek_kind() {
@@ -754,6 +808,29 @@ impl Parser {
                 TokenKind::LtEq => BinaryOp::LtEq,
                 TokenKind::Gt => BinaryOp::Gt,
                 TokenKind::GtEq => BinaryOp::GtEq,
+                _ => break,
+            };
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_shift_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_shift_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_additive_expr()?;
+
+        loop {
+            let op = match self.peek_kind() {
+                TokenKind::Shl => BinaryOp::Shl,
+                TokenKind::Shr => BinaryOp::Shr,
                 _ => break,
             };
             let start_span = self.peek().span;
@@ -1097,7 +1174,14 @@ impl Parser {
             return Ok(Type::Tuple(types));
         }
 
-        let name = self.consume_ident()?;
+        // Parse qualified name (e.g., builtin::array)
+        let mut name = self.consume_ident()?;
+        while self.check(&TokenKind::ColonColon) {
+            self.advance();
+            let next_part = self.consume_ident()?;
+            name.push_str("::");
+            name.push_str(&next_part);
+        }
 
         if self.check(&TokenKind::Lt) {
             self.advance();
@@ -1106,6 +1190,17 @@ impl Parser {
                 self.advance();
                 args.push(self.parse_type()?);
             }
+
+            // Handle >> as two > tokens for nested generics (e.g., Array<Tuple<T, U>>)
+            if self.check(&TokenKind::Shr) {
+                // Split >> into > >
+                // Replace current Shr token with Gt
+                let current_token = self.peek().clone();
+                self.tokens[self.pos] = Token::new(TokenKind::Gt, current_token.span);
+                // Insert another Gt token after current position
+                self.tokens.insert(self.pos + 1, Token::new(TokenKind::Gt, current_token.span));
+            }
+
             self.expect(&TokenKind::Gt)?;
 
             Ok(Type::Generic(GenericType {

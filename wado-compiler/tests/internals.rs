@@ -80,9 +80,8 @@ async fn test_stringify_bool_true() {
 use {println} from "core:cli";
 use {stringify_bool} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_bool(true));
-    return Ok(());
 }
 "#;
 
@@ -97,9 +96,8 @@ async fn test_stringify_bool_false() {
 use {println} from "core:cli";
 use {stringify_bool} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_bool(false));
-    return Ok(());
 }
 "#;
 
@@ -118,9 +116,8 @@ async fn test_stringify_char_ascii() {
 use {println} from "core:cli";
 use {stringify_char} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_char('A'));
-    return Ok(());
 }
 "#;
 
@@ -135,9 +132,8 @@ async fn test_stringify_char_unicode_2byte() {
 use {println} from "core:cli";
 use {stringify_char} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_char('é'));
-    return Ok(());
 }
 "#;
 
@@ -152,9 +148,8 @@ async fn test_stringify_char_unicode_3byte() {
 use {println} from "core:cli";
 use {stringify_char} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_char('日'));
-    return Ok(());
 }
 "#;
 
@@ -169,9 +164,8 @@ async fn test_stringify_char_unicode_4byte() {
 use {println} from "core:cli";
 use {stringify_char} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_char('😀'));
-    return Ok(());
 }
 "#;
 
@@ -190,9 +184,8 @@ async fn test_stringify_i32_zero() {
 use {println} from "core:cli";
 use {stringify_i32} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i32(0));
-    return Ok(());
 }
 "#;
 
@@ -207,9 +200,8 @@ async fn test_stringify_i32_positive() {
 use {println} from "core:cli";
 use {stringify_i32} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i32(42));
-    return Ok(());
 }
 "#;
 
@@ -224,9 +216,8 @@ async fn test_stringify_i32_negative() {
 use {println} from "core:cli";
 use {stringify_i32} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i32(-123));
-    return Ok(());
 }
 "#;
 
@@ -241,9 +232,8 @@ async fn test_stringify_i32_max() {
 use {println} from "core:cli";
 use {stringify_i32} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i32(2147483647));
-    return Ok(());
 }
 "#;
 
@@ -258,9 +248,8 @@ async fn test_stringify_i32_min() {
 use {println} from "core:cli";
 use {stringify_i32} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i32(-2147483648));
-    return Ok(());
 }
 "#;
 
@@ -279,9 +268,8 @@ async fn test_stringify_i64_positive() {
 use {println} from "core:cli";
 use {stringify_i64} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i64(9223372036854775807));
-    return Ok(());
 }
 "#;
 
@@ -296,9 +284,8 @@ async fn test_stringify_i64_negative() {
 use {println} from "core:cli";
 use {stringify_i64} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i64(-9223372036854775808));
-    return Ok(());
 }
 "#;
 
@@ -317,9 +304,8 @@ async fn test_stringify_u32_zero() {
 use {println} from "core:cli";
 use {stringify_u32} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_u32(0));
-    return Ok(());
 }
 "#;
 
@@ -334,9 +320,8 @@ async fn test_stringify_u32_max() {
 use {println} from "core:cli";
 use {stringify_u32} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_u32(4294967295));
-    return Ok(());
 }
 "#;
 
@@ -355,9 +340,8 @@ async fn test_stringify_u64_max() {
 use {println} from "core:cli";
 use {stringify_u64} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_u64(18446744073709551615));
-    return Ok(());
 }
 "#;
 
@@ -376,9 +360,8 @@ async fn test_stringify_i8() {
 use {println} from "core:cli";
 use {stringify_i8} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i8(127));
-    return Ok(());
 }
 "#;
 
@@ -393,9 +376,8 @@ async fn test_stringify_i16() {
 use {println} from "core:cli";
 use {stringify_i16} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_i16(-32768));
-    return Ok(());
 }
 "#;
 
@@ -410,9 +392,8 @@ async fn test_stringify_u8() {
 use {println} from "core:cli";
 use {stringify_u8} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_u8(255));
-    return Ok(());
 }
 "#;
 
@@ -427,9 +408,8 @@ async fn test_stringify_u16() {
 use {println} from "core:cli";
 use {stringify_u16} from "core:internals";
 
-pub fn run() -> Result<(), ()> {
+fn main() {
     println(stringify_u16(65535));
-    return Ok(());
 }
 "#;
 
