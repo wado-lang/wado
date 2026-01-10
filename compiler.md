@@ -56,6 +56,19 @@ The `builtin` namespace provides raw Wasm GC types with no abstraction:
 - `builtin::i31ref` - Wasm GC i31ref (31-bit integer reference)
 - Intrinsic functions: `array_new`, `array_len`, `array_get`, `array_set`, `i31ref_new`, `i31ref_get_s`, `i31ref_get_u`, `eqref`, `unreachable`
 
+**Compiler Utilities Layer (`core:internals`):**
+
+The `core:internals` module provides utility functions implemented in Wado for compiler use:
+
+- String conversion: `stringify_bool`, `stringify_i32`, `stringify_u64`, etc.
+- Used internally by the compiler for template string interpolation
+- **Key difference from `builtin::`**: These have Wado-level implementations (not Wasm intrinsics)
+
+**Why the distinction?**
+
+- **`builtin::`**: No Wado implementation - compiler directly generates Wasm instructions (e.g., `array.new`, `array.get`)
+- **`core:internals`**: Has Wado implementation - avoids complexity of implementing algorithms (like itoa) in raw Wasm
+
 **Standard Library Types:**
 
 Standard library types wrap builtins with methods:
@@ -273,7 +286,14 @@ Wado supports template strings with interpolation using backticks and `{expr}` s
 
 ### String Conversion Utilities
 
-The `core:internals` module provides Wado-level implementations for converting primitive types to strings. Unlike `builtin::` functions (which have no Wado representation), these are actual Wado functions that can be called and tested.
+The `core:internals` module provides Wado-level implementations for converting primitive types to strings.
+
+**Key Design Decision:**
+
+- **`builtin::` functions**: Have no Wado implementation - compiler directly generates Wasm instructions
+- **`core:internals` functions**: Implemented in Wado - avoids the complexity of writing algorithms like itoa/dtoa in raw Wasm
+
+This separation allows the standard library to use `builtin::` primitives (like `array_new`, `array_get`) while implementing higher-level logic in readable Wado code.
 
 **Stringify Functions (in `core/internals.wado`):**
 
@@ -313,7 +333,52 @@ stringify_f64(value: f64) -> String
 - ⚠️ `stringify_i128, u128`: Placeholder (needs 128-bit arithmetic)
 - ⚠️ `stringify_f32, f64`: Placeholder (needs dtoa algorithm)
 
-These functions are implemented in Wado using `builtin::array_*` operations, avoiding the complexity of implementing string conversion in raw Wasm codegen.
+**Implementation Example:**
+
+```wado
+// From core/internals.wado - stringify_i32 implementation
+pub fn stringify_i32(value: i32) -> String {
+    if value == 0 {
+        return "0";
+    }
+
+    let mut n = value;
+    let is_negative = n < 0;
+    if is_negative {
+        n = -n;
+    }
+
+    // Convert to decimal digits using builtin::array operations
+    let mut digits: builtin::array<u8> = builtin::array_new<u8>(11);
+    let mut len = 0;
+
+    while n > 0 {
+        let digit = (n % 10) as u8;
+        builtin::array_set(digits, len, digit + 48); // '0' = 48
+        n = n / 10;
+        len = len + 1;
+    }
+
+    // Add minus sign if negative
+    if is_negative {
+        builtin::array_set(digits, len, 45); // '-' = 45
+        len = len + 1;
+    }
+
+    // Reverse the digits
+    let mut result = builtin::array_new<u8>(len);
+    let mut i = 0;
+    while i < len {
+        let digit = builtin::array_get(digits, len - 1 - i);
+        builtin::array_set(result, i, digit);
+        i = i + 1;
+    }
+
+    return result as String;
+}
+```
+
+These functions are implemented in Wado using `builtin::array_*` operations, avoiding the complexity of implementing string conversion algorithms in raw Wasm codegen.
 
 ### Syntax
 
