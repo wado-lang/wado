@@ -28,15 +28,12 @@ The CLI can run a Wado module directly using wasmtime as a library.
 
 ## Wasm and WASI
 
-Because this language is only targeting Wasm with WASI, this project has git submodules for wasi and wasm.
+There are external references in the module for convenience:
 
-Wasm: `wasm/`
-WASI: `wasi/`
-
-Also you can access the toolchains:
-
-wasmtime: `../../bytecodealliance/wasmtime/`
-wasm-tools: `../../bytecodealliance/wasm-tools/`
+- `vendor/wasm/` - WebAssembly/spec
+- `vendor/wasi/` - WebAssembly/WASI
+- `vendor/wasmtime/` - wasmtime, a Wasm runtime
+- `vendor/wasm-tools/` - the backend of wasmtime, handling Wasm, WAT, and WIT format
 
 ### Wasm and WASI Features
 
@@ -51,7 +48,7 @@ This project relays on the following features:
 - WASI
   - Current target: WASI 0.3 (P3) with native stream/future types
   - P3 (`0.3.0-rc-2025-09-16`) is supported by wasmtime v40 with `-W component-model-async=y`
-  - See wasmtime P3 support: `find ../../bytecodealliance/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
+  - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
 ## General Rules
 
