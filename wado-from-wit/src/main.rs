@@ -115,9 +115,11 @@ fn run_directory_mode(
     skip_unstable: bool,
 ) -> Result<()> {
     // Parse WIT files from directory
-    let mut resolve = Resolve::default();
     // Include @unstable items by default (unless --skip-unstable is specified)
-    resolve.all_features = !skip_unstable;
+    let mut resolve = Resolve {
+        all_features: !skip_unstable,
+        ..Default::default()
+    };
     let (_pkg_id, _) = resolve
         .push_dir(wit_dir)
         .with_context(|| format!("Failed to parse WIT files from {}", wit_dir.display()))?;
