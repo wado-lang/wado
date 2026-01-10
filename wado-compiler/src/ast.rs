@@ -292,6 +292,7 @@ pub enum Expr {
     If(Box<IfExpr>),
     Match(Box<MatchExpr>),
     Closure(Box<ClosureExpr>),
+    TemplateString(Box<TemplateStringExpr>),
 }
 
 /// Assignment expression: `x = value` or `x.field = value`
@@ -435,6 +436,32 @@ pub struct ClosureExpr {
 pub struct ClosureParam {
     pub name: String,
     pub ty: Option<Type>,
+}
+
+/// Template string expression: `Hello, {name}!`
+#[derive(Debug, Clone)]
+pub struct TemplateStringExpr {
+    pub parts: Vec<TemplatePart>,
+    pub span: Span,
+}
+
+/// A part of a template string - either a literal string or an interpolation
+#[derive(Debug, Clone)]
+pub enum TemplatePart {
+    /// A literal string part
+    String(String),
+    /// An interpolated expression with optional format specifier
+    Interpolation {
+        expr: Box<Expr>,
+        format: Option<FormatSpec>,
+    },
+}
+
+/// Format specifier for template string interpolation
+/// Examples: ".2f", "0.3f", "10", "d"
+#[derive(Debug, Clone)]
+pub struct FormatSpec {
+    pub spec: String,
 }
 
 #[derive(Debug, Clone)]
