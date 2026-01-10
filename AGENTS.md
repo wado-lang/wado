@@ -98,5 +98,16 @@ cargo fmt
 make hello # generates example/hello.wat
 make hello-run # simple smoke test
 
+# to validate wat file
+wasm-tools validate --features=cm-async,cm-async-stackful,cm-async-builtins,gc example/hello.wat
+wasm-tools validate --features=cm-async,cm-async-stackful,cm-async-builtins,gc example/hello.wasm
+
 make format # format code and documents
+```
+
+### Validating Generated Wasm
+
+Use `wasm-tools validate` to check generated WAT/Wasm files:
+
+```sh
 ```

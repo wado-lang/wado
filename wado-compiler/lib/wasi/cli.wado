@@ -27,7 +27,7 @@ pub resource TerminalInput;
 #[wasi("wasi:cli/terminal-output@0.3.0-rc-2025-09-16#terminal-output")]
 pub resource TerminalOutput;
 
-/// Effect interface for wasi:cli/environment@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/environment@0.3.0-rc-2025-09-16")]
 pub effect Environment {
     /// Get the POSIX-style environment variables.
     /// 
@@ -48,7 +48,7 @@ pub effect Environment {
     fn get_initial_cwd() -> Option<String>;
 }
 
-/// Effect interface for wasi:cli/exit@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/exit@0.3.0-rc-2025-09-16")]
 pub effect Exit {
     /// Exit the current instance and any linked instances.
     #[wasi("wasi:cli/exit@0.3.0-rc-2025-09-16#exit")]
@@ -65,14 +65,14 @@ pub effect Exit {
     fn exit_with_code(status_code: u8);
 }
 
-/// Effect interface for wasi:cli/run@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/run@0.3.0-rc-2025-09-16")]
 pub effect Run {
     /// Run the program.
     #[wasi("wasi:cli/run@0.3.0-rc-2025-09-16#run")]
     fn run() -> Result<(), ()>;
 }
 
-/// Effect interface for wasi:cli/stdin@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/stdin@0.3.0-rc-2025-09-16")]
 pub effect Stdin {
     /// Return a stream for reading from stdin.
     /// 
@@ -91,7 +91,7 @@ pub effect Stdin {
     fn read_via_stream() -> Tuple<Stream<u8>, Future<Result<(), ErrorCode>>>;
 }
 
-/// Effect interface for wasi:cli/stdout@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16")]
 pub effect Stdout {
     /// Write the given stream to stdout.
     /// 
@@ -105,7 +105,7 @@ pub effect Stdout {
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-/// Effect interface for wasi:cli/stderr@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/stderr@0.3.0-rc-2025-09-16")]
 pub effect Stderr {
     /// Write the given stream to stderr.
     /// 
@@ -121,7 +121,7 @@ pub effect Stderr {
 
 /// An interface providing an optional `terminal-input` for stdin as a
 /// link-time authority.
-/// Effect interface for wasi:cli/terminal-stdin@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/terminal-stdin@0.3.0-rc-2025-09-16")]
 pub effect TerminalStdin {
     /// If stdin is connected to a terminal, return a `terminal-input` handle
     /// allowing further interaction with it.
@@ -131,7 +131,7 @@ pub effect TerminalStdin {
 
 /// An interface providing an optional `terminal-output` for stdout as a
 /// link-time authority.
-/// Effect interface for wasi:cli/terminal-stdout@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/terminal-stdout@0.3.0-rc-2025-09-16")]
 pub effect TerminalStdout {
     /// If stdout is connected to a terminal, return a `terminal-output` handle
     /// allowing further interaction with it.
@@ -141,7 +141,7 @@ pub effect TerminalStdout {
 
 /// An interface providing an optional `terminal-output` for stderr as a
 /// link-time authority.
-/// Effect interface for wasi:cli/terminal-stderr@0.3.0-rc-2025-09-16
+#[wasi("wasi:cli/terminal-stderr@0.3.0-rc-2025-09-16")]
 pub effect TerminalStderr {
     /// If stderr is connected to a terminal, return a `terminal-output` handle
     /// allowing further interaction with it.

@@ -179,10 +179,7 @@ impl WadoCodeGenerator {
 
     fn write_effect(&mut self, effect: &WadoEffect) {
         self.write_doc_comment(&effect.doc_comment);
-        self.writeln(&format!(
-            "/// Effect interface for {}",
-            effect.wasi_interface
-        ));
+        self.writeln(&format!("#[wasi(\"{}\")]", effect.wasi_interface));
         self.writeln(&format!("pub effect {} {{", effect.name));
         self.indent += 1;
 

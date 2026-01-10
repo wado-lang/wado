@@ -5,6 +5,7 @@ build:
 .PHONY: hello
 hello: build
 	cargo run -p wado-cli --quiet -- compile -o example/hello.wat example/hello.wado
+	cargo run -p wado-cli --quiet -- compile -o example/hello.wasm example/hello.wado
 
 .PHONY: hello-run
 hello-run: build
@@ -13,6 +14,12 @@ hello-run: build
 .PHONY: hello-run-wasmtime
 hello-run-wasmtime: hello
 	wasmtime run -S p3=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' example/hello.wasm
+
+.PHONEY: hello-validate
+hello-validate: hello
+	wasm-tools validate --verbose --features=cm-async,cm-async-stackful,cm-async-builtins,gc example/hello.wat
+	wasm-tools validate --verbose --features=cm-async,cm-async-stackful,cm-async-builtins,gc example/hello.wasm
+
 
 .PHONY: test
 test:
