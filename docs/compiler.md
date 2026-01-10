@@ -175,6 +175,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Character literals (single quotes)
 - [x] Template strings (backticks with interpolation `{expr}`)
 - [x] Operators (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`)
+- [x] Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
 - [x] Punctuation (`(`, `)`, `{`, `}`, `[`, `]`, `,`, `:`, `;`, `::`, `.`, `->`, `=>`, `|`, `&`, `#`, `?`)
 - [x] Comments (`//`)
 - [ ] Block comments (`/* */`)
@@ -205,6 +206,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `let` statements (with `mut`, `reactive`, type annotation)
 - [x] Expression statements
 - [x] `return` statements
+- [x] `assert` statements (condition check, unreachable on failure)
 - [x] `if` statements
 - [x] `while` loops
 - [x] C-style `for` loops
@@ -222,8 +224,9 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Null literal (`null`)
 - [x] Unit `()`
 - [x] Template string interpolation (`` `Hello, {name}!` ``)
-- [x] Binary operators (arithmetic, comparison, logical)
-- [x] Unary operators (`-`, `!`, `&`, `*`)
+- [x] Binary operators (arithmetic, comparison, logical, bitwise)
+- [x] Unary operators (`-`, `!`, `~`, `&`, `*`)
+- [x] Parentheses for grouping `(expr)`
 - [x] Function calls
 - [x] Method calls
 - [x] Field access
@@ -285,7 +288,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Template strings (partial - literals only, no type conversion/formatting)
 - [x] Variables and locals (`let`, `let mut`)
 - [x] Control flow (`if` statements, `while`, `for`)
-- [x] Binary/unary operations
+- [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
+- [x] Assert statements (condition check, unreachable on failure)
 - [x] User-defined functions (from core:: modules)
 - [ ] Struct construction
 - [ ] Enum/variant construction
@@ -311,6 +315,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Template string tests (20 comprehensive tests)
 - [x] E2E test: hello world (with wasmtime)
 - [x] E2E test: multiple println
+- [x] E2E test: bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
+- [x] E2E test: parentheses for precedence grouping
 - [ ] Compile error tests (partial)
 - [ ] Template string E2E tests (runtime execution)
 - [ ] More E2E tests

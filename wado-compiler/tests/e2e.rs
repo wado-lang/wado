@@ -339,3 +339,88 @@ async fn test_use_local_module() {
     // Verify output - add(40, 2) from imported module should return 42
     assert_eq!(output, "success\n");
 }
+
+// ============================================================================
+// Bitwise operator tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_bitwise_and() {
+    let source = include_str!("fixtures/bitwise_and.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run - test passes if no unreachable trap (assertion uses unreachable on failure)
+    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+}
+
+#[tokio::test]
+async fn test_bitwise_or() {
+    let source = include_str!("fixtures/bitwise_or.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run - test passes if no unreachable trap
+    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+}
+
+#[tokio::test]
+async fn test_bitwise_xor() {
+    let source = include_str!("fixtures/bitwise_xor.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run - test passes if no unreachable trap
+    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+}
+
+#[tokio::test]
+async fn test_bitwise_shift() {
+    let source = include_str!("fixtures/bitwise_shift.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run - test passes if no unreachable trap
+    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+}
+
+#[tokio::test]
+async fn test_bitwise_not() {
+    let source = include_str!("fixtures/bitwise_not.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run - test passes if no unreachable trap
+    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+}
+
+#[tokio::test]
+async fn test_bitwise_combined() {
+    let source = include_str!("fixtures/bitwise_combined.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run - test passes if no unreachable trap
+    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+}
+
+// ============================================================================
+// Parentheses precedence tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_parentheses_precedence() {
+    let source = include_str!("fixtures/parentheses_precedence.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run - test passes if no unreachable trap
+    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+}

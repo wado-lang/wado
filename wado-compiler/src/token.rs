@@ -32,6 +32,7 @@ pub enum TokenKind {
     Async,
     Import,
     Export,
+    Assert,
 
     // Literals
     Ident(String),
@@ -70,6 +71,8 @@ pub enum TokenKind {
     LtEq,     // <=
     Gt,       // >
     GtEq,     // >=
+    LtLt,     // <<
+    GtGt,     // >>
     Plus,     // +
     Minus,    // -
     Star,     // *
@@ -78,6 +81,8 @@ pub enum TokenKind {
     Not,      // !
     And,      // &&
     Or,       // ||
+    Caret,    // ^
+    Tilde,    // ~
     PlusEq,   // +=
     MinusEq,  // -=
     Question, // ?

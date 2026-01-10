@@ -65,6 +65,55 @@ name123
 
 Identifiers are case-sensitive. Unicode letters are not permitted in identifiers.
 
+### Operators
+
+**Binary Operators** (in order of precedence, lowest to highest):
+
+| Precedence | Operators            | Description    | Associativity |
+| ---------- | -------------------- | -------------- | ------------- |
+| 1          | `=`                  | Assignment     | Right         |
+| 2          | `\|\|`               | Logical OR     | Left          |
+| 3          | `&&`                 | Logical AND    | Left          |
+| 4          | `\|`                 | Bitwise OR     | Left          |
+| 5          | `^`                  | Bitwise XOR    | Left          |
+| 6          | `&`                  | Bitwise AND    | Left          |
+| 7          | `==`, `!=`           | Equality       | Left          |
+| 8          | `<`, `<=`, `>`, `>=` | Comparison     | Left          |
+| 9          | `<<`, `>>`           | Bitwise shift  | Left          |
+| 10         | `+`, `-`             | Additive       | Left          |
+| 11         | `*`, `/`, `%`        | Multiplicative | Left          |
+
+**Unary Operators** (highest precedence):
+
+| Operator | Description |
+| -------- | ----------- |
+| `-`      | Negation    |
+| `!`      | Logical NOT |
+| `~`      | Bitwise NOT |
+| `&`      | Reference   |
+| `*`      | Dereference |
+
+**Postfix Operators** (highest precedence):
+
+| Operator | Description      |
+| -------- | ---------------- |
+| `.`      | Field access     |
+| `[]`     | Index access     |
+| `()`     | Function call    |
+| `::`     | Namespace access |
+
+**Parentheses for Grouping:**
+
+Parentheses `()` can be used to override operator precedence:
+
+```wado
+let a = 2 + 3 * 4;      // 14 (multiplication first)
+let b = (2 + 3) * 4;    // 20 (addition first due to parentheses)
+
+let c = 3 | 4 & 6;      // 7 (& has higher precedence than |)
+let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
+```
+
 ---
 
 ## Memory Model
@@ -795,7 +844,7 @@ unreachable();
 
 ## The `assert` Keyword
 
-The `assert` keyword is used to assert that a condition is true. If the condition is false, the program will panic with the power-assert style message.
+The `assert` keyword is used to assert that a condition is true. If the condition is false, the program will terminate with the power-assert style message.
 
 ```wado
 // if x is not greater than 0, the program will panic, printing x (if x is a struct, the fields of the struct will be printed).

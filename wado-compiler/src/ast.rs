@@ -225,6 +225,15 @@ pub enum Stmt {
     If(IfStmt),
     While(WhileStmt),
     For(ForStmt),
+    Assert(AssertStmt),
+}
+
+/// Assert statement: `assert expr;`
+/// If the expression is false, prints an error message and calls unreachable
+#[derive(Debug, Clone)]
+pub struct AssertStmt {
+    pub condition: Expr,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -349,6 +358,11 @@ pub enum BinaryOp {
     GtEq,
     And,
     Or,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 #[derive(Debug, Clone)]
@@ -362,6 +376,7 @@ pub struct UnaryExpr {
 pub enum UnaryOp {
     Neg,
     Not,
+    BitNot,
     Ref,
     Deref,
 }

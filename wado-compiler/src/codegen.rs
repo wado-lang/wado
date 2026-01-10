@@ -576,6 +576,9 @@ impl Codegen {
                 }
                 self.collect_strings_from_block(&for_stmt.body);
             }
+            Stmt::Assert(assert_stmt) => {
+                self.collect_strings_from_expr(&assert_stmt.condition);
+            }
         }
     }
 
@@ -2135,6 +2138,14 @@ impl Codegen {
                 }
                 func.instruction(&Instruction::End);
             }
+            Stmt::Assert(assert_stmt) => {
+                // Generate: if (!condition) { unreachable(); }
+                self.generate_expr_with_builder(func, &assert_stmt.condition, ctx, builder);
+                func.instruction(&Instruction::I32Eqz);
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                func.instruction(&Instruction::Unreachable);
+                func.instruction(&Instruction::End);
+            }
         }
     }
 
@@ -2198,6 +2209,11 @@ impl Codegen {
                         crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
                         crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
                         crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
+                        crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I32And),
+                        crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I32Or),
+                        crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
+                        crate::ast::BinaryOp::Shl => func.instruction(&Instruction::I32Shl),
+                        crate::ast::BinaryOp::Shr => func.instruction(&Instruction::I32ShrS),
                     };
                 }
             }
@@ -2211,6 +2227,36 @@ impl Codegen {
             }
             Expr::TemplateString(template) => {
                 self.generate_template_string(func, template, ctx, builder);
+            }
+            Expr::Unary(un) => {
+                self.generate_expr_with_builder(func, &un.expr, ctx, builder);
+                match un.op {
+                    crate::ast::UnaryOp::Neg => {
+                        // Negate: 0 - value
+                        // First push 0, swap, then subtract
+                        // But simpler: i32.const 0, local.get, i32.sub
+                        // Actually we already have the value on stack, so we can do:
+                        // i32.const -1, i32.mul or push 0, swap, sub
+                        // Easiest: i32.const 0 before expr, then i32.sub
+                        // But expr is already generated, so we need to handle differently
+                        // For i32: we can use (0 - value) but value is on stack
+                        // Let's use: i32.const -1, i32.mul
+                        func.instruction(&Instruction::I32Const(-1));
+                        func.instruction(&Instruction::I32Mul);
+                    }
+                    crate::ast::UnaryOp::Not => {
+                        // Logical not: value == 0
+                        func.instruction(&Instruction::I32Eqz);
+                    }
+                    crate::ast::UnaryOp::BitNot => {
+                        // Bitwise not: value xor -1 (all bits set)
+                        func.instruction(&Instruction::I32Const(-1));
+                        func.instruction(&Instruction::I32Xor);
+                    }
+                    crate::ast::UnaryOp::Ref | crate::ast::UnaryOp::Deref => {
+                        // References not yet implemented
+                    }
+                }
             }
             _ => {}
         }
@@ -2506,7 +2552,12 @@ impl Codegen {
                     | crate::ast::BinaryOp::Gt
                     | crate::ast::BinaryOp::GtEq
                     | crate::ast::BinaryOp::And
-                    | crate::ast::BinaryOp::Or => ValType::I32,
+                    | crate::ast::BinaryOp::Or
+                    | crate::ast::BinaryOp::BitAnd
+                    | crate::ast::BinaryOp::BitOr
+                    | crate::ast::BinaryOp::BitXor
+                    | crate::ast::BinaryOp::Shl
+                    | crate::ast::BinaryOp::Shr => ValType::I32,
                     // Arithmetic ops return the operand type
                     _ => self.infer_expr_type_with_ctx(&bin.left, ctx),
                 }

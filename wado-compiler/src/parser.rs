@@ -6,6 +6,9 @@ use crate::token::{Span, Token, TokenKind};
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    /// Tracks when we've split a GtGt into two Gt tokens for nested generics.
+    /// When true, the next expect_gt call should succeed without consuming a token.
+    pending_gt: bool,
 }
 
 #[derive(Debug)]
@@ -18,7 +21,11 @@ type ParseResult<T> = Result<T, ParseError>;
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            pending_gt: false,
+        }
     }
 
     pub fn parse(&mut self) -> ParseResult<Module> {
@@ -65,6 +72,35 @@ impl Parser {
                 span: self.peek().span,
             })
         }
+    }
+
+    /// Expect a > token for closing generic type arguments.
+    /// Handles the case where >> is lexed as GtGt instead of two separate Gt tokens.
+    /// This is necessary for nested generics like Array<Tuple<String, String>>.
+    fn expect_gt(&mut self) -> ParseResult<()> {
+        // First check if we have a pending > from a previous GtGt split
+        if self.pending_gt {
+            self.pending_gt = false;
+            return Ok(());
+        }
+
+        // Check for a regular Gt token
+        if self.check(&TokenKind::Gt) {
+            self.advance();
+            return Ok(());
+        }
+
+        // Check for GtGt (>>) - split it into two Gt tokens
+        if self.check(&TokenKind::GtGt) {
+            self.advance();
+            self.pending_gt = true; // Remember we have one more > to consume
+            return Ok(());
+        }
+
+        Err(ParseError {
+            message: format!("expected Gt, found {:?}", self.peek_kind()),
+            span: self.peek().span,
+        })
     }
 
     fn consume_ident(&mut self) -> ParseResult<String> {
@@ -463,8 +499,22 @@ impl Parser {
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
             TokenKind::For => self.parse_for_stmt(),
+            TokenKind::Assert => self.parse_assert_stmt(),
             _ => self.parse_expr_stmt(),
         }
+    }
+
+    fn parse_assert_stmt(&mut self) -> ParseResult<Stmt> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Assert)?;
+
+        let condition = self.parse_expr()?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(Stmt::Assert(AssertStmt {
+            condition,
+            span: start_span,
+        }))
     }
 
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
@@ -705,15 +755,69 @@ impl Parser {
     }
 
     fn parse_and_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_equality_expr()?;
+        let mut left = self.parse_bitor_expr()?;
 
         while self.check(&TokenKind::And) {
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_bitor_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op: BinaryOp::And,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_bitor_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_bitxor_expr()?;
+
+        while self.check(&TokenKind::Pipe) {
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_bitxor_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op: BinaryOp::BitOr,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_bitxor_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_bitand_expr()?;
+
+        while self.check(&TokenKind::Caret) {
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_bitand_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op: BinaryOp::BitXor,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_bitand_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_equality_expr()?;
+
+        while self.check(&TokenKind::Ampersand) {
             let start_span = self.peek().span;
             self.advance();
             let right = self.parse_equality_expr()?;
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
-                op: BinaryOp::And,
+                op: BinaryOp::BitAnd,
                 right,
                 span: start_span,
             }));
@@ -746,7 +850,7 @@ impl Parser {
     }
 
     fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_additive_expr()?;
+        let mut left = self.parse_shift_expr()?;
 
         loop {
             let op = match self.peek_kind() {
@@ -754,6 +858,29 @@ impl Parser {
                 TokenKind::LtEq => BinaryOp::LtEq,
                 TokenKind::Gt => BinaryOp::Gt,
                 TokenKind::GtEq => BinaryOp::GtEq,
+                _ => break,
+            };
+            let start_span = self.peek().span;
+            self.advance();
+            let right = self.parse_shift_expr()?;
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op,
+                right,
+                span: start_span,
+            }));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_shift_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_additive_expr()?;
+
+        loop {
+            let op = match self.peek_kind() {
+                TokenKind::LtLt => BinaryOp::Shl,
+                TokenKind::GtGt => BinaryOp::Shr,
                 _ => break,
             };
             let start_span = self.peek().span;
@@ -821,6 +948,7 @@ impl Parser {
         let op = match self.peek_kind() {
             TokenKind::Minus => Some(UnaryOp::Neg),
             TokenKind::Not => Some(UnaryOp::Not),
+            TokenKind::Tilde => Some(UnaryOp::BitNot),
             TokenKind::Ampersand => Some(UnaryOp::Ref),
             TokenKind::Star => Some(UnaryOp::Deref),
             _ => None,
@@ -1096,7 +1224,8 @@ impl Parser {
                 self.advance();
                 args.push(self.parse_type()?);
             }
-            self.expect(&TokenKind::Gt)?;
+            // Handle >> being lexed as GtGt instead of two Gt tokens (for nested generics)
+            self.expect_gt()?;
 
             Ok(Type::Generic(GenericType {
                 name,

@@ -161,21 +161,39 @@ impl<'a> Lexer<'a> {
             }
             '<' => {
                 self.advance();
-                if self.peek_char() == Some('=') {
-                    self.advance();
-                    TokenKind::LtEq
-                } else {
-                    TokenKind::Lt
+                match self.peek_char() {
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::LtEq
+                    }
+                    Some('<') => {
+                        self.advance();
+                        TokenKind::LtLt
+                    }
+                    _ => TokenKind::Lt,
                 }
             }
             '>' => {
                 self.advance();
-                if self.peek_char() == Some('=') {
-                    self.advance();
-                    TokenKind::GtEq
-                } else {
-                    TokenKind::Gt
+                match self.peek_char() {
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::GtEq
+                    }
+                    Some('>') => {
+                        self.advance();
+                        TokenKind::GtGt
+                    }
+                    _ => TokenKind::Gt,
                 }
+            }
+            '^' => {
+                self.advance();
+                TokenKind::Caret
+            }
+            '~' => {
+                self.advance();
+                TokenKind::Tilde
             }
             '+' => {
                 self.advance();
@@ -334,6 +352,7 @@ impl<'a> Lexer<'a> {
             "async" => TokenKind::Async,
             "import" => TokenKind::Import,
             "export" => TokenKind::Export,
+            "assert" => TokenKind::Assert,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "null" => TokenKind::Null,
