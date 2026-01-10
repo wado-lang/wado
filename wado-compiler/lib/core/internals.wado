@@ -8,113 +8,289 @@
 // Since Wado has no function overloading, we provide separate stringify functions
 // for each primitive type.
 //
-// These functions are compiler intrinsics - their implementations are generated
-// directly by the compiler (codegen.rs) rather than being written in Wado.
+// Unlike builtin:: functions, these have Wado-level implementations.
+// This avoids the complexity of implementing string conversion in raw Wasm.
 
 // ============================================================================
-// String Conversion Functions (Compiler Intrinsics)
+// String Conversion Functions
 // ============================================================================
 
 /// Convert a boolean value to a string
 /// Returns "true" or "false"
 ///
-/// Compiler intrinsic for template interpolation: `{bool_value}`
-pub fn stringify_bool(value: bool) -> String;
+/// Used in template interpolation: `{bool_value}`
+pub fn stringify_bool(value: bool) -> String {
+    if value {
+        return "true";
+    } else {
+        return "false";
+    }
+}
 
 /// Convert a char to a string
 /// Returns a string containing the single character
 ///
-/// Compiler intrinsic for template interpolation: `{char_value}`
-pub fn stringify_char(value: char) -> String;
+/// Used in template interpolation: `{char_value}`
+pub fn stringify_char(value: char) -> String {
+    // For now, return a placeholder
+    // TODO: Implement proper char to string conversion
+    // Need to encode the Unicode code point as UTF-8 bytes
+    return "?";
+}
 
 /// Convert an i8 to a string
 /// Returns the decimal representation with optional minus sign
 ///
-/// Compiler intrinsic for template interpolation: `{i8_value}`
-pub fn stringify_i8(value: i8) -> String;
+/// Used in template interpolation: `{i8_value}`
+pub fn stringify_i8(value: i8) -> String {
+    return stringify_i32(value as i32);
+}
 
 /// Convert an i16 to a string
 /// Returns the decimal representation with optional minus sign
 ///
-/// Compiler intrinsic for template interpolation: `{i16_value}`
-pub fn stringify_i16(value: i16) -> String;
+/// Used in template interpolation: `{i16_value}`
+pub fn stringify_i16(value: i16) -> String {
+    return stringify_i32(value as i32);
+}
 
 /// Convert an i32 to a string
 /// Returns the decimal representation with optional minus sign
 ///
-/// Compiler intrinsic for template interpolation: `{i32_value}`
-pub fn stringify_i32(value: i32) -> String;
+/// Used in template interpolation: `{i32_value}`
+pub fn stringify_i32(value: i32) -> String {
+    // Handle zero
+    if value == 0 {
+        return "0";
+    }
+
+    // Handle negative numbers
+    let mut n = value;
+    let is_negative = n < 0;
+    if is_negative {
+        n = -n;
+    }
+
+    // Convert to decimal digits (in reverse)
+    let mut digits: builtin::array<u8> = builtin::array_new<u8>(11); // max i32 is 10 digits + sign
+    let mut len = 0;
+
+    while n > 0 {
+        let digit = (n % 10) as u8;
+        builtin::array_set(digits, len, digit + 48); // '0' = 48
+        n = n / 10;
+        len = len + 1;
+    }
+
+    // Add minus sign if negative
+    if is_negative {
+        builtin::array_set(digits, len, 45); // '-' = 45
+        len = len + 1;
+    }
+
+    // Reverse the digits
+    let mut result = builtin::array_new<u8>(len);
+    let mut i = 0;
+    while i < len {
+        let digit = builtin::array_get(digits, len - 1 - i);
+        builtin::array_set(result, i, digit);
+        i = i + 1;
+    }
+
+    // Wrap in String struct
+    // TODO: This assumes String is just a wrapper around builtin::array<u8>
+    // Need proper String constructor once the type system supports it
+    return result as String;
+}
 
 /// Convert an i64 to a string
 /// Returns the decimal representation with optional minus sign
 ///
-/// Compiler intrinsic for template interpolation: `{i64_value}`
-pub fn stringify_i64(value: i64) -> String;
+/// Used in template interpolation: `{i64_value}`
+pub fn stringify_i64(value: i64) -> String {
+    // Handle zero
+    if value == 0 {
+        return "0";
+    }
+
+    // Handle negative numbers
+    let mut n = value;
+    let is_negative = n < 0;
+    if is_negative {
+        n = -n;
+    }
+
+    // Convert to decimal digits (in reverse)
+    let mut digits: builtin::array<u8> = builtin::array_new<u8>(20); // max i64 is 19 digits + sign
+    let mut len = 0;
+
+    while n > 0 {
+        let digit = (n % 10) as u8;
+        builtin::array_set(digits, len, digit + 48); // '0' = 48
+        n = n / 10;
+        len = len + 1;
+    }
+
+    // Add minus sign if negative
+    if is_negative {
+        builtin::array_set(digits, len, 45); // '-' = 45
+        len = len + 1;
+    }
+
+    // Reverse the digits
+    let mut result = builtin::array_new<u8>(len);
+    let mut i = 0;
+    while i < len {
+        let digit = builtin::array_get(digits, len - 1 - i);
+        builtin::array_set(result, i, digit);
+        i = i + 1;
+    }
+
+    return result as String;
+}
 
 /// Convert an i128 to a string
 /// Returns the decimal representation with optional minus sign
 ///
-/// Compiler intrinsic for template interpolation: `{i128_value}`
-pub fn stringify_i128(value: i128) -> String;
+/// Used in template interpolation: `{i128_value}`
+pub fn stringify_i128(value: i128) -> String {
+    // TODO: Implement i128 to string conversion
+    // For now, return placeholder
+    return "[i128]";
+}
 
 /// Convert a u8 to a string
 /// Returns the decimal representation
 ///
-/// Compiler intrinsic for template interpolation: `{u8_value}`
-pub fn stringify_u8(value: u8) -> String;
+/// Used in template interpolation: `{u8_value}`
+pub fn stringify_u8(value: u8) -> String {
+    return stringify_u32(value as u32);
+}
 
 /// Convert a u16 to a string
 /// Returns the decimal representation
 ///
-/// Compiler intrinsic for template interpolation: `{u16_value}`
-pub fn stringify_u16(value: u16) -> String;
+/// Used in template interpolation: `{u16_value}`
+pub fn stringify_u16(value: u16) -> String {
+    return stringify_u32(value as u32);
+}
 
 /// Convert a u32 to a string
 /// Returns the decimal representation
 ///
-/// Compiler intrinsic for template interpolation: `{u32_value}`
-pub fn stringify_u32(value: u32) -> String;
+/// Used in template interpolation: `{u32_value}`
+pub fn stringify_u32(value: u32) -> String {
+    // Handle zero
+    if value == 0 {
+        return "0";
+    }
+
+    // Convert to decimal digits (in reverse)
+    let mut digits: builtin::array<u8> = builtin::array_new<u8>(10); // max u32 is 10 digits
+    let mut len = 0;
+    let mut n = value;
+
+    while n > 0 {
+        let digit = (n % 10) as u8;
+        builtin::array_set(digits, len, digit + 48); // '0' = 48
+        n = n / 10;
+        len = len + 1;
+    }
+
+    // Reverse the digits
+    let mut result = builtin::array_new<u8>(len);
+    let mut i = 0;
+    while i < len {
+        let digit = builtin::array_get(digits, len - 1 - i);
+        builtin::array_set(result, i, digit);
+        i = i + 1;
+    }
+
+    return result as String;
+}
 
 /// Convert a u64 to a string
 /// Returns the decimal representation
 ///
-/// Compiler intrinsic for template interpolation: `{u64_value}`
-pub fn stringify_u64(value: u64) -> String;
+/// Used in template interpolation: `{u64_value}`
+pub fn stringify_u64(value: u64) -> String {
+    // Handle zero
+    if value == 0 {
+        return "0";
+    }
+
+    // Convert to decimal digits (in reverse)
+    let mut digits: builtin::array<u8> = builtin::array_new<u8>(20); // max u64 is 20 digits
+    let mut len = 0;
+    let mut n = value;
+
+    while n > 0 {
+        let digit = (n % 10) as u8;
+        builtin::array_set(digits, len, digit + 48); // '0' = 48
+        n = n / 10;
+        len = len + 1;
+    }
+
+    // Reverse the digits
+    let mut result = builtin::array_new<u8>(len);
+    let mut i = 0;
+    while i < len {
+        let digit = builtin::array_get(digits, len - 1 - i);
+        builtin::array_set(result, i, digit);
+        i = i + 1;
+    }
+
+    return result as String;
+}
 
 /// Convert a u128 to a string
 /// Returns the decimal representation
 ///
-/// Compiler intrinsic for template interpolation: `{u128_value}`
-pub fn stringify_u128(value: u128) -> String;
+/// Used in template interpolation: `{u128_value}`
+pub fn stringify_u128(value: u128) -> String {
+    // TODO: Implement u128 to string conversion
+    // For now, return placeholder
+    return "[u128]";
+}
 
 /// Convert an f32 to a string
 /// Returns the decimal representation (e.g., "3.14")
 ///
-/// Compiler intrinsic for template interpolation: `{f32_value}`
-pub fn stringify_f32(value: f32) -> String;
+/// Used in template interpolation: `{f32_value}`
+pub fn stringify_f32(value: f32) -> String {
+    // TODO: Implement proper f32 to string conversion (dtoa algorithm)
+    // For now, return placeholder
+    return "[f32]";
+}
 
 /// Convert an f64 to a string
 /// Returns the decimal representation (e.g., "3.14159")
 ///
-/// Compiler intrinsic for template interpolation: `{f64_value}`
-pub fn stringify_f64(value: f64) -> String;
+/// Used in template interpolation: `{f64_value}`
+pub fn stringify_f64(value: f64) -> String {
+    // TODO: Implement proper f64 to string conversion (dtoa algorithm)
+    // For now, return placeholder
+    return "[f64]";
+}
 
 // ============================================================================
-// Notes on Implementation
+// Implementation Notes
 // ============================================================================
 
-// These functions have no body because they are compiler intrinsics.
-// The code generator (codegen.rs) recognizes calls to these functions
-// and generates the appropriate Wasm instructions directly.
+// These functions are implemented in Wado (unlike builtin:: functions).
+// This makes maintenance easier and avoids low-level Wasm complexity.
 //
-// Implementation strategy (in codegen.rs):
-// 1. Recognize calls to core:internals::stringify_*
-// 2. Generate appropriate string conversion code:
-//    - For integers: Use itoa-style algorithm
-//    - For floats: Use dtoa-style algorithm (or Wasm f32.to_string if available)
-//    - For bool: Generate "true" or "false" literal
-//    - For char: Create single-character string
+// Current implementation status:
+// - ✅ stringify_bool: Complete
+// - ✅ stringify_i8, i16, i32: Complete (delegate to i32)
+// - ✅ stringify_i64: Complete
+// - ✅ stringify_u8, u16, u32: Complete (delegate to u32)
+// - ✅ stringify_u64: Complete
+// - ⚠️ stringify_char: Placeholder (needs UTF-8 encoding)
+// - ⚠️ stringify_i128, u128: Placeholder (needs 128-bit arithmetic)
+// - ⚠️ stringify_f32, f64: Placeholder (needs dtoa algorithm)
 //
 // Future extensions:
 // - Format specifiers: stringify_i32_fmt(value: i32, fmt: FormatSpec) -> String
 // - Custom Debug/Display traits: stringify_debug<T>(value: T) -> String
+// - Proper float formatting with precision control
