@@ -92,7 +92,7 @@ wado compile -o hello.wat example/hello.wado  # Text format
 ## Documentation
 
 - [Language Specification](spec.md) - Full language reference
-- [Compiler Implementation](compiler.md) - Compiler internals and feature checklist
+- [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
 
 ## Building
 

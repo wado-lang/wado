@@ -116,8 +116,8 @@ All Wado types map directly to WebAssembly Component Model types:
 | `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                      |
 | `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)              |
 | `f16`                     | -                                    | TODO: Wasm half-precision proposal (Phase 1) |
-| `String`                  | `string`                             | Struct wrapping `builtin::array<u8>`         |
-| `Array<T>`                | `list<T>`                            | Struct wrapping `builtin::array<T>`          |
+| `String`                  | `string`                             | UTF-8 string type                            |
+| `Array<T>`                | `list<T>`                            | Dynamic array type                           |
 | `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary             |
 | `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types                                  |
 | `Option<T>`               | `option<T>`                          | Optional value                               |
@@ -133,7 +133,6 @@ All Wado types map directly to WebAssembly Component Model types:
 **Type Naming Convention:**
 
 - Wasm primitive types use lowercase: `bool`, `char`, `i32`, `f64`, etc.
-- Wasm GC primitives in `builtin::` use lowercase: `builtin::array<T>`, `builtin::i31ref`
 - Standard library types use UpperCamelCase: `String`, `Array<T>`, `Option<T>`, `Result<T, E>`, etc.
 - User-defined types follow UpperCamelCase convention
 
@@ -143,8 +142,8 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 
 **Automatically Available:**
 
-- `String` - UTF-8 string (struct wrapping `builtin::array<u8>`)
-- `Array<T>` - Dynamic array (struct wrapping `builtin::array<T>`)
+- `String` - UTF-8 string type
+- `Array<T>` - Dynamic array type
 - `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
 - `Stream<T>` - Component Model async stream
@@ -159,59 +158,6 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 // Now you must explicitly import everything
 use {String, Array, Option, Result, Stream} from "core:prelude";
 ```
-
-### The `builtin` Namespace
-
-The `builtin` namespace provides direct access to Wasm primitives. These types and functions map 1:1 to Wasm instructions with no abstraction.
-
-**Wasm GC Types:**
-
-```wado
-builtin::array<T>    // Wasm GC array (no methods)
-builtin::i31ref      // Wasm GC i31ref (31-bit integer reference)
-```
-
-**Intrinsic Functions:**
-
-```wado
-// Array operations
-builtin::array_new<T>(len: i32) -> builtin::array<T>
-builtin::array_len<T>(arr: builtin::array<T>) -> i32
-builtin::array_get<T>(arr: builtin::array<T>, idx: i32) -> T
-builtin::array_set<T>(arr: builtin::array<T>, idx: i32, value: T)
-
-// i31ref operations
-builtin::i31ref_new(value: i32) -> builtin::i31ref
-builtin::i31ref_get_s(ref: builtin::i31ref) -> i32   // Signed extraction
-builtin::i31ref_get_u(ref: builtin::i31ref) -> u32   // Unsigned extraction
-
-// Reference comparison (Wasm ref.eq)
-builtin::eqref<T, U>(a: T, b: U) -> bool   // Compare any GC references
-
-// Control
-builtin::unreachable() -> !   // Wasm trap instruction
-```
-
-**Usage:**
-
-```wado
-// Standard library uses builtin primitives internally
-// In core/string.wado
-pub struct String {
-    buf: builtin::array<u8>,
-
-    pub fn length(&self) -> i32 {
-        return builtin::array_len(self.buf);
-    }
-}
-
-// In core/prelude.wado
-pub fn unreachable() -> ! {
-    builtin::unreachable()
-}
-```
-
-The `builtin` namespace is always available without import, but is intended primarily for standard library implementation. User code typically uses the ergonomic wrapper types (`String`, `Array<T>`, etc.).
 
 ### Built-in Types (No Import Required)
 
@@ -231,8 +177,8 @@ char
 **Standard library types** (UpperCamelCase, defined in `core/`):
 
 ```wado
-String             // Struct wrapping builtin::array<u8>
-Array<T>           // Struct wrapping builtin::array<T>
+String             // UTF-8 string type
+Array<T>           // Dynamic array type
 Dict<K, V>         // As list<tuple<K, V>> at CM boundary
 Tuple<T1, T2, ...> // Component Model tuple<T1, T2, ...>
 Reactive<T>        // Reactive value
@@ -340,7 +286,7 @@ let double: f64 = 3.14159265358979f64;
 
 #### String Literals
 
-String literals create `String` values (not `builtin::array<u8>`).
+String literals create `String` values.
 
 **Regular strings** use double quotes:
 
@@ -389,7 +335,7 @@ let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
 
 #### Array Literals
 
-Array literals create `Array<T>` values (not `builtin::array<T>`).
+Array literals create `Array<T>` values.
 
 ```wado
 let numbers = [1, 2, 3, 4, 5];  // Type: Array<i32>
@@ -550,34 +496,6 @@ type UserData = struct {
     age: i32,
 };
 ```
-
-**Implementation Notes:**
-
-- Internally: Wasm-GC `struct` type with GC-managed memory
-- At CM boundary: Automatically converted to/from `record`
-- Enables recursive types, self-referential structures, and efficient field access
-
-**Single-Field Optimization:**
-
-If a struct contains exactly one GC object field (a `builtin::array` or another struct), the compiler skips generating the outer Wasm GC struct. This means wrapper types like `String` and `Array<T>` have **zero runtime overhead**:
-
-```wado
-// String wraps builtin::array<u8>
-struct String {
-    buf: builtin::array<u8>,
-    // ... methods
-}
-// At Wasm level: compiles to just (ref (array u8)), no wrapper struct
-
-// Array<T> wraps builtin::array<T>
-struct Array<T> {
-    repr: builtin::array<T>,
-    // ... methods
-}
-// At Wasm level: compiles to just (ref (array T)), no wrapper struct
-```
-
-This optimization enables ergonomic APIs with methods while maintaining direct Wasm GC representation.
 
 ### Enums, Variants, and Flags
 
@@ -1630,49 +1548,3 @@ let output = plugin.execute(input);
 ```
 
 TBD.
-
-## JSON Compatibility
-
-Wado's literal syntax is a **superset of JSON**. Any valid JSON document can be parsed as Wado code, producing `Dict`, `Array`, and primitive values.
-
-### What's Shared with JSON
-
-- Whitespace: Space (`\u0020`), LF (`\u000A`), CR (`\u000D`), Tab (`\u0009`)
-- String escapes: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uHHHH`
-- Surrogate pairs: `"\uD83D\uDE00"` for non-BMP characters
-- Number format: Decimal integers and floating-point with scientific notation
-- Literals: `true`, `false`, `null`
-- Object syntax: `{ "key": value }` with quoted keys
-- Array syntax: `[value, value, ...]`
-
-### Wado Extensions (Beyond JSON)
-
-- Unquoted keys: `{ name: "Alice" }` instead of `{ "name": "Alice" }`
-- Shorthand properties: `{ name, age }` when variable names match keys
-- Trailing commas: `[1, 2, 3,]` is valid
-- Comments: `//` and `/* */`
-- Extended Unicode escapes: `\u{1F600}` for full Unicode range
-- Single-quoted characters: `'A'` for `char` type
-- Numeric separators: `1_000_000`
-- Numeric prefixes: `0x`, `0o`, `0b` for hex, octal, binary
-
-### Importing JSON Files
-
-Use namespace import to load JSON files directly:
-
-```wado
-use config from "./config.json" with { type: "json" };
-
-// config is a namespace, so we use :: to access the fields
-let name = config::name;
-```
-
-JSONC is also supported:
-
-```wado
-use config from "./config.jsonc" with { type: "jsonc" };
-
-let name = config::name;
-```
-
-JSON and JSONC is loaded at compile time and bundled into the wasm binary.

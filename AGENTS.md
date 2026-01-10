@@ -12,7 +12,7 @@ The compiler is implemented in `wado-compiler/` with a hand-written recursive de
 
 Standard libraries are implemented in `wado-compiler/lib`, whre `wasi/` for WASI and `core/` for the core library.
 
-See also `compiler.md` for the implementation details and the feature checklist.
+See also `docs/compiler.md` for the implementation details and the feature checklist.
 
 ## The CLI
 
