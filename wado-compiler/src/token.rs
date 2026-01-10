@@ -60,6 +60,7 @@ pub enum TokenKind {
     FatArrow,   // =>
     Pipe,       // |
     Ampersand,  // &
+    Caret,      // ^
     Hash,       // #
 
     // Operators
@@ -68,8 +69,10 @@ pub enum TokenKind {
     NotEq,    // !=
     Lt,       // <
     LtEq,     // <=
+    Shl,      // <<
     Gt,       // >
     GtEq,     // >=
+    Shr,      // >>
     Plus,     // +
     Minus,    // -
     Star,     // *
