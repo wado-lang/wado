@@ -293,3 +293,28 @@ async fn test_local_bools_mut() {
     // Verify output - mutable booleans with reassignment
     assert_eq!(output, "flag is false\nflag is true\n");
 }
+
+// ============================================================================
+// User-defined function tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_user_defined_function() {
+    let source = include_str!("fixtures/user_defined_function.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Debug: print WAT for inspection
+    if let Ok(wat) = wasmprinter::print_bytes(&wasm) {
+        eprintln!("=== Generated WAT ===");
+        eprintln!("{}", wat);
+        eprintln!("=== End WAT ===");
+    }
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - user-defined function call
+    assert_eq!(output, "User-defined function works!\n");
+}

@@ -550,7 +550,7 @@ impl Codegen {
         builder.finish()
     }
 
-    /// Collect user-defined functions from the AST (excluding main and builtins)
+    /// Collect user-defined functions from the AST (excluding main, run, and builtins)
     fn collect_user_functions<'a>(
         &self,
         ast_module: &'a crate::ast::Module,
@@ -560,8 +560,8 @@ impl Codegen {
             .iter()
             .filter_map(|item| {
                 if let Item::Function(f) = item {
-                    // Skip main (handled separately as run)
-                    if f.name == "main" {
+                    // Skip main and run (handled separately as entry point)
+                    if f.name == "main" || f.name == "run" {
                         return None;
                     }
                     // Skip bodyless functions (builtins)
@@ -759,21 +759,21 @@ impl Codegen {
         // ============================================
         // run function - user entry point
         // ============================================
-        // Find main function to collect locals
-        let main_func = ast_module.items.iter().find_map(|item| {
+        // Find main or run function to collect locals
+        let entry_func = ast_module.items.iter().find_map(|item| {
             if let Item::Function(f) = item
-                && f.name == "main"
+                && (f.name == "main" || f.name == "run")
             {
                 return Some(f);
             }
             None
         });
 
-        // Collect locals from main function body
-        let local_decls = if let Some(main) = main_func {
-            if let Some(body) = &main.body {
-                let mut func_ctx = FunctionContext::new(main.params.len() as u32);
-                for param in &main.params {
+        // Collect locals from entry function body
+        let local_decls = if let Some(entry) = entry_func {
+            if let Some(body) = &entry.body {
+                let mut func_ctx = FunctionContext::new(entry.params.len() as u32);
+                for param in &entry.params {
                     func_ctx.add_param(&param.name);
                 }
                 self.collect_locals_from_block(body, &mut func_ctx);
@@ -890,16 +890,10 @@ impl Codegen {
         let local_decls = func_ctx.get_local_decls();
         let mut wasm_func = Function::new(local_decls);
 
-        // Reset context for code generation (keep param mappings, reset locals)
-        let mut gen_ctx = FunctionContext::new(ast_func.params.len() as u32);
-        for param in &ast_func.params {
-            gen_ctx.add_param(&param.name);
-        }
-
-        // Generate function body
+        // Generate function body using the same context (which has both params and locals)
         if let Some(body) = &ast_func.body {
             for stmt in &body.stmts {
-                self.generate_stmt_with_mod_ctx(&mut wasm_func, stmt, &mut gen_ctx, mod_ctx);
+                self.generate_stmt_with_mod_ctx(&mut wasm_func, stmt, &mut func_ctx, mod_ctx);
             }
         }
 
@@ -918,23 +912,77 @@ impl Codegen {
     fn collect_locals_from_stmt(&self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
             Stmt::Let(let_stmt) => {
+                // Collect locals from the value expression first (for template strings, etc.)
+                self.collect_locals_from_expr(&let_stmt.value, ctx);
                 let val_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx);
                 ctx.alloc_local(&let_stmt.name, val_type);
+            }
+            Stmt::Expr(expr_stmt) => {
+                self.collect_locals_from_expr(&expr_stmt.expr, ctx);
+            }
+            Stmt::Return(ret_stmt) => {
+                if let Some(value) = &ret_stmt.value {
+                    self.collect_locals_from_expr(value, ctx);
+                }
             }
             Stmt::For(for_stmt) => {
                 if let Some(init) = &for_stmt.init {
                     self.collect_locals_from_stmt(init, ctx);
                 }
+                if let Some(condition) = &for_stmt.condition {
+                    self.collect_locals_from_expr(condition, ctx);
+                }
+                if let Some(update) = &for_stmt.update {
+                    self.collect_locals_from_expr(update, ctx);
+                }
                 self.collect_locals_from_block(&for_stmt.body, ctx);
             }
             Stmt::While(while_stmt) => {
+                self.collect_locals_from_expr(&while_stmt.condition, ctx);
                 self.collect_locals_from_block(&while_stmt.body, ctx);
             }
             Stmt::If(if_stmt) => {
+                self.collect_locals_from_expr(&if_stmt.condition, ctx);
                 self.collect_locals_from_block(&if_stmt.then_block, ctx);
                 if let Some(else_block) = &if_stmt.else_block {
                     self.collect_locals_from_block(else_block, ctx);
                 }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect local variables from an expression (for template strings, etc.)
+    fn collect_locals_from_expr(&self, expr: &Expr, ctx: &mut FunctionContext) {
+        match expr {
+            Expr::TemplateString(template) => {
+                // Allocate a local for template result
+                let temp_name = format!("__template_result_{}", ctx.next_local);
+                ctx.alloc_local(
+                    &temp_name,
+                    ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(11), // array<u8>
+                    }),
+                );
+                // Recursively collect locals from interpolated expressions
+                for part in &template.parts {
+                    if let crate::ast::TemplatePart::Interpolation { expr, .. } = part {
+                        self.collect_locals_from_expr(expr, ctx);
+                    }
+                }
+            }
+            Expr::Binary(bin) => {
+                self.collect_locals_from_expr(&bin.left, ctx);
+                self.collect_locals_from_expr(&bin.right, ctx);
+            }
+            Expr::Call(call) => {
+                for arg in &call.args {
+                    self.collect_locals_from_expr(arg, ctx);
+                }
+            }
+            Expr::Assign(assign) => {
+                self.collect_locals_from_expr(&assign.value, ctx);
             }
             _ => {}
         }
@@ -958,8 +1006,11 @@ impl Codegen {
                 }
             }
             Stmt::Let(let_stmt) => {
-                let val_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx);
-                let local_idx = ctx.alloc_local(&let_stmt.name, val_type);
+                // Local variable was already allocated during collect_locals_from_block
+                // Just get its index
+                let local_idx = ctx
+                    .get_local(&let_stmt.name)
+                    .expect("local variable should have been allocated during collection");
                 self.generate_expr_with_mod_ctx(func, &let_stmt.value, ctx, mod_ctx);
                 func.instruction(&Instruction::LocalSet(local_idx));
             }
@@ -1392,24 +1443,31 @@ impl Codegen {
         ast_module: &crate::ast::Module,
         mod_ctx: &ModuleContext,
     ) {
-        // Find main function
-        let main_func = ast_module.items.iter().find_map(|item| {
+        // Find main function or run function
+        let entry_func = ast_module.items.iter().find_map(|item| {
             if let Item::Function(f) = item
-                && f.name == "main"
+                && (f.name == "main" || f.name == "run")
             {
                 return Some(f);
             }
             None
         });
 
-        if let Some(main) = main_func
-            && let Some(body) = &main.body
+        if let Some(entry) = entry_func
+            && let Some(body) = &entry.body
         {
-            let mut ctx = FunctionContext::new(main.params.len() as u32);
-            for param in &main.params {
+            let mut ctx = FunctionContext::new(entry.params.len() as u32);
+            for param in &entry.params {
                 ctx.add_param(&param.name);
             }
+            // Collect locals from the body first
+            self.collect_locals_from_block(body, &mut ctx);
+            // Generate statements (skip return statements in run function)
             for stmt in &body.stmts {
+                // Skip return statements in run function - task.return will be added later
+                if matches!(stmt, Stmt::Return(_)) {
+                    continue;
+                }
                 self.generate_stmt_with_mod_ctx(func, stmt, &mut ctx, mod_ctx);
             }
         }
@@ -1729,15 +1787,12 @@ impl Codegen {
         // - For each part, generate the string representation
         // - Use array operations to concatenate
 
-        // Allocate a local to accumulate the result
-        let temp_name = format!("__template_result_{}", ctx.next_local);
-        let result_local = ctx.alloc_local(
-            &temp_name,
-            ValType::Ref(RefType {
-                nullable: false,
-                heap_type: HeapType::Concrete(11), // array<u8>
-            }),
-        );
+        // Get the local that was already allocated during collection
+        // Find the template result local by checking which temp var has the right type
+        let result_local = ctx.locals.iter()
+            .find(|(name, _)| name.starts_with("__template_result_"))
+            .map(|(_, &idx)| idx)
+            .expect("template result local should have been allocated during collection");
 
         // Start with empty array or first part
         if let Some(first_part) = template.parts.first() {
