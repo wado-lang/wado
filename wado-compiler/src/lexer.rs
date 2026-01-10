@@ -586,8 +586,8 @@ impl<'a> Lexer<'a> {
                             }
                             pending_high_surrogate = Some(code_unit);
                             continue;
-                        } else if is_low_surrogate(code_unit) {
-                            if let Some(high) = pending_high_surrogate.take() {
+                        } else if is_low_surrogate(code_unit)
+                            && let Some(high) = pending_high_surrogate.take() {
                                 let combined = decode_surrogate_pair(high, code_unit);
                                 if let Some(c) = char::from_u32(combined) {
                                     value.push(c);
@@ -599,7 +599,6 @@ impl<'a> Lexer<'a> {
                                     });
                                 }
                             }
-                        }
                     }
 
                     // If we had a pending high surrogate but didn't get a low surrogate, error

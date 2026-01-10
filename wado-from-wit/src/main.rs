@@ -81,9 +81,11 @@ fn run_filter_mode(package_name: &str, package_version: &str, skip_unstable: boo
     };
 
     // Parse WIT
-    let mut resolve = Resolve::default();
     // Include @unstable items by default (unless --skip-unstable is specified)
-    resolve.all_features = !skip_unstable;
+    let mut resolve = Resolve {
+        all_features: !skip_unstable,
+        ..Default::default()
+    };
     resolve
         .push_str("<stdin>", &input)
         .context("Failed to parse WIT")?;
@@ -244,11 +246,10 @@ fn build_interface_map_recursive(
                             if let Some(name) = rest.split_whitespace().next() {
                                 map.insert(name.to_string(), rel_path.clone());
                             }
-                        } else if let Some(rest) = line.strip_prefix("world ") {
-                            if let Some(name) = rest.split_whitespace().next() {
+                        } else if let Some(rest) = line.strip_prefix("world ")
+                            && let Some(name) = rest.split_whitespace().next() {
                                 map.insert(name.to_string(), rel_path.clone());
                             }
-                        }
                     }
                 }
             }

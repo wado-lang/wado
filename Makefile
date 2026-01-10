@@ -27,6 +27,10 @@ format:
 clippy:
 	cargo clippy
 
+.PHONY: clippy-fix
+clippy-fix:
+	cargo clippy --fix --allow-dirty --allow-staged
+
 .PHONY: clean
 clean:
 	cargo clean

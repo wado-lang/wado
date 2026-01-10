@@ -550,9 +550,7 @@ impl Codegen {
                         return None;
                     }
                     // Skip bodyless functions (builtins)
-                    if f.body.is_none() {
-                        return None;
-                    }
+                    f.body.as_ref()?;
                     return Some(f);
                 }
                 None
@@ -1386,8 +1384,8 @@ impl Codegen {
             None
         });
 
-        if let Some(main) = main_func {
-            if let Some(body) = &main.body {
+        if let Some(main) = main_func
+            && let Some(body) = &main.body {
                 let mut ctx = FunctionContext::new(main.params.len() as u32);
                 for param in &main.params {
                     ctx.add_param(&param.name);
@@ -1396,7 +1394,6 @@ impl Codegen {
                     self.generate_stmt_with_mod_ctx(func, stmt, &mut ctx, mod_ctx);
                 }
             }
-        }
     }
 
     /// Generate println function body
