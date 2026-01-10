@@ -110,9 +110,8 @@ fn compile_impl(
     let (symbols, loaded_modules) = analyzer.into_parts();
 
     // Convert HashMap to Vec of references for codegen
-    let loaded_modules_vec: Vec<(&Vec<String>, &crate::ast::Module)> = loaded_modules
-        .iter()
-        .collect();
+    let loaded_modules_vec: Vec<(&Vec<String>, &crate::ast::Module)> =
+        loaded_modules.iter().collect();
 
     // Codegen (pass loaded modules so it can generate code for all of them)
     let mut codegen = Codegen::new();

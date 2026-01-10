@@ -36,24 +36,6 @@ struct FunctionContext {
     local_types: Vec<ValType>,
 }
 
-/// Module-level context for tracking function indices and GC types
-struct ModuleContext {
-    /// Map from function name to Wasm function index
-    func_indices: HashMap<String, u32>,
-    /// Next type index
-    next_type_idx: u32,
-    /// Next function index (after imports)
-    next_func_idx: u32,
-    /// Type index for GC string array (array<u8>)
-    /// Used when copying GC strings to linear memory
-    #[allow(dead_code)]
-    string_array_type_idx: u32,
-    /// Function index for realloc import
-    /// Used for allocating linear memory buffers for GC string copies
-    #[allow(dead_code)]
-    realloc_func_idx: u32,
-}
-
 impl FunctionContext {
     fn new(param_count: u32) -> Self {
         Self {
@@ -108,59 +90,6 @@ impl FunctionContext {
     }
 }
 
-#[allow(dead_code)] // Being replaced by CoreModuleBuilder
-impl ModuleContext {
-    /// Create a new module context
-    /// Initialize module context with GC type and function indices
-    ///
-    /// Type layout:
-    /// - 0-9: WASI import function types
-    /// - 10: realloc type (i32, i32, i32, i32) -> i32
-    /// - 11: GC string array type (array<u8>)
-    /// - 12: println type (ptr, len) -> ()
-    /// - 13+: user-defined function types
-    ///
-    /// Function layout:
-    /// - 0-9: WASI imports
-    /// - 10: realloc import from env
-    /// - 11: println (internal)
-    /// - 12+: user-defined functions
-    fn new() -> Self {
-        Self {
-            func_indices: HashMap::new(),
-            next_type_idx: 13,         // Types 0-12 are reserved
-            next_func_idx: 11,         // Functions 0-10 are imports
-            string_array_type_idx: 11, // GC array<u8> type
-            realloc_func_idx: 10,      // realloc import
-        }
-    }
-
-    /// Register a function and return its index
-    fn register_func(&mut self, name: &str, _type_idx: u32) -> u32 {
-        let func_idx = self.next_func_idx;
-        self.func_indices.insert(name.to_string(), func_idx);
-        self.next_func_idx += 1;
-        func_idx
-    }
-
-    /// Register an alias for an already registered function (same index, different name)
-    fn register_func_alias(&mut self, alias_name: &str, func_idx: u32) {
-        self.func_indices.insert(alias_name.to_string(), func_idx);
-    }
-
-    /// Get function index by name
-    fn get_func_index(&self, name: &str) -> Option<u32> {
-        self.func_indices.get(name).copied()
-    }
-
-    /// Allocate a new type index
-    fn alloc_type(&mut self) -> u32 {
-        let idx = self.next_type_idx;
-        self.next_type_idx += 1;
-        idx
-    }
-}
-
 // ============================================================================
 // CoreModuleBuilder - Builder for Wasm core modules with dynamic index allocation
 // ============================================================================
@@ -208,7 +137,9 @@ impl CoreModuleBuilder {
     /// Define a function type and return its index
     fn define_func_type(&mut self, name: &str, params: &[ValType], results: &[ValType]) -> u32 {
         let idx = self.next_type_idx;
-        self.types.ty().function(params.iter().copied(), results.iter().copied());
+        self.types
+            .ty()
+            .function(params.iter().copied(), results.iter().copied());
         self.type_names.insert(name.to_string(), idx);
         self.next_type_idx += 1;
         idx
@@ -238,7 +169,8 @@ impl CoreModuleBuilder {
     /// Import a function and return its function index
     fn import_func(&mut self, module: &str, name: &str, type_name: &str) -> u32 {
         let type_idx = self.type_idx(type_name);
-        self.imports.import(module, name, EntityType::Function(type_idx));
+        self.imports
+            .import(module, name, EntityType::Function(type_idx));
         let func_idx = self.next_func_idx;
         self.func_names.insert(name.to_string(), func_idx);
         self.next_func_idx += 1;
@@ -285,12 +217,23 @@ impl CoreModuleBuilder {
 
     /// Get type index by name
     fn type_idx(&self, name: &str) -> u32 {
-        *self.type_names.get(name).unwrap_or_else(|| panic!("unknown type: {name}"))
+        *self
+            .type_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown type: {name}"))
     }
 
     /// Get function index by name
     fn func_idx(&self, name: &str) -> u32 {
-        *self.func_names.get(name).unwrap_or_else(|| panic!("unknown function: {name}"))
+        *self
+            .func_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown function: {name}"))
+    }
+
+    /// Try to get function index by name, returns None if not found
+    fn try_func_idx(&self, name: &str) -> Option<u32> {
+        self.func_names.get(name).copied()
     }
 
     /// Add a function name to the name section (names are automatically tracked)
@@ -415,7 +358,10 @@ impl ComponentContext {
 
     /// Get component type index by name
     fn type_idx(&self, name: &str) -> u32 {
-        *self.type_names.get(name).unwrap_or_else(|| panic!("unknown component type: {name}"))
+        *self
+            .type_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown component type: {name}"))
     }
 
     /// Register a component instance and return its index
@@ -428,7 +374,10 @@ impl ComponentContext {
 
     /// Get component instance index by name
     fn instance_idx(&self, name: &str) -> u32 {
-        *self.instance_names.get(name).unwrap_or_else(|| panic!("unknown component instance: {name}"))
+        *self
+            .instance_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown component instance: {name}"))
     }
 
     /// Register a core function (at component level) and return its index
@@ -441,7 +390,10 @@ impl ComponentContext {
 
     /// Get core function index by name
     fn core_func_idx(&self, name: &str) -> u32 {
-        *self.core_func_names.get(name).unwrap_or_else(|| panic!("unknown core function: {name}"))
+        *self
+            .core_func_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown core function: {name}"))
     }
 
     /// Set the core memory index
@@ -464,7 +416,10 @@ impl ComponentContext {
 
     /// Get component-level function index by name
     fn comp_func_idx(&self, name: &str) -> u32 {
-        *self.comp_func_names.get(name).unwrap_or_else(|| panic!("unknown component function: {name}"))
+        *self
+            .comp_func_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown component function: {name}"))
     }
 
     /// Register a core module and return its index
@@ -477,7 +432,10 @@ impl ComponentContext {
 
     /// Get core module index by name
     fn core_module_idx(&self, name: &str) -> u32 {
-        *self.core_module_names.get(name).unwrap_or_else(|| panic!("unknown core module: {name}"))
+        *self
+            .core_module_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown core module: {name}"))
     }
 
     /// Register a core instance and return its index
@@ -490,7 +448,10 @@ impl ComponentContext {
 
     /// Get core instance index by name
     fn core_instance_idx(&self, name: &str) -> u32 {
-        *self.core_instance_names.get(name).unwrap_or_else(|| panic!("unknown core instance: {name}"))
+        *self
+            .core_instance_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown core instance: {name}"))
     }
 }
 
@@ -725,7 +686,11 @@ impl Codegen {
 
         // Alias error-code from types instance
         ctx.register_type("error-code");
-        builder.alias_export(ctx.instance_idx("types"), "error-code", ComponentExportKind::Type);
+        builder.alias_export(
+            ctx.instance_idx("types"),
+            "error-code",
+            ComponentExportKind::Type,
+        );
 
         // ========================================
         // Type: stdout instance type
@@ -772,7 +737,11 @@ impl Codegen {
 
         // Alias write-via-stream from stdout instance (component func)
         ctx.register_comp_func("write-via-stream");
-        builder.alias_export(ctx.instance_idx("stdout"), "write-via-stream", ComponentExportKind::Func);
+        builder.alias_export(
+            ctx.instance_idx("stdout"),
+            "write-via-stream",
+            ComponentExportKind::Func,
+        );
 
         // ========================================
         // Type: stream<u8> for stream intrinsics
@@ -802,13 +771,27 @@ impl Codegen {
 
         // Instantiate memory module
         ctx.register_core_instance("mem");
-        builder.core_instantiate(Some("mem"), ctx.core_module_idx("mem-mod"), Vec::<(&str, ModuleArg)>::new());
+        builder.core_instantiate(
+            Some("mem"),
+            ctx.core_module_idx("mem-mod"),
+            Vec::<(&str, ModuleArg)>::new(),
+        );
 
         // Alias memory and realloc from mem instance
         ctx.set_memory(0); // memory is always index 0 at core level
-        builder.core_alias_export(Some("memory"), ctx.core_instance_idx("mem"), "memory", ExportKind::Memory);
+        builder.core_alias_export(
+            Some("memory"),
+            ctx.core_instance_idx("mem"),
+            "memory",
+            ExportKind::Memory,
+        );
         ctx.register_core_func("realloc");
-        builder.core_alias_export(Some("realloc"), ctx.core_instance_idx("mem"), "realloc", ExportKind::Func);
+        builder.core_alias_export(
+            Some("realloc"),
+            ctx.core_instance_idx("mem"),
+            "realloc",
+            ExportKind::Func,
+        );
 
         // ========================================
         // Stream canonical intrinsics for stream<u8>
@@ -817,7 +800,13 @@ impl Codegen {
         builder.stream_new(stream_u8_type);
 
         ctx.register_core_func("stream-write");
-        builder.stream_write(stream_u8_type, [CanonicalOption::Memory(ctx.memory_idx()), CanonicalOption::Realloc(ctx.core_func_idx("realloc"))]);
+        builder.stream_write(
+            stream_u8_type,
+            [
+                CanonicalOption::Memory(ctx.memory_idx()),
+                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+            ],
+        );
 
         ctx.register_core_func("stream-drop-writable");
         builder.stream_drop_writable(stream_u8_type);
@@ -866,16 +855,56 @@ impl Codegen {
 
         // Create wasi instance with stream intrinsics + lowered WASI function + async intrinsics
         let wasi_exports = [
-            ("stream-new", ExportKind::Func, ctx.core_func_idx("stream-new")),
-            ("stream-write", ExportKind::Func, ctx.core_func_idx("stream-write")),
-            ("stream-drop-writable", ExportKind::Func, ctx.core_func_idx("stream-drop-writable")),
-            ("stream-drop-readable", ExportKind::Func, ctx.core_func_idx("stream-drop-readable")),
-            ("write-via-stream", ExportKind::Func, ctx.core_func_idx("write-via-stream-core")),
-            ("task-return", ExportKind::Func, ctx.core_func_idx("task-return")),
-            ("waitable-set-new", ExportKind::Func, ctx.core_func_idx("waitable-set-new")),
-            ("waitable-join", ExportKind::Func, ctx.core_func_idx("waitable-join")),
-            ("waitable-set-wait", ExportKind::Func, ctx.core_func_idx("waitable-set-wait")),
-            ("subtask-drop", ExportKind::Func, ctx.core_func_idx("subtask-drop")),
+            (
+                "stream-new",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-new"),
+            ),
+            (
+                "stream-write",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-write"),
+            ),
+            (
+                "stream-drop-writable",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-drop-writable"),
+            ),
+            (
+                "stream-drop-readable",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-drop-readable"),
+            ),
+            (
+                "write-via-stream",
+                ExportKind::Func,
+                ctx.core_func_idx("write-via-stream-core"),
+            ),
+            (
+                "task-return",
+                ExportKind::Func,
+                ctx.core_func_idx("task-return"),
+            ),
+            (
+                "waitable-set-new",
+                ExportKind::Func,
+                ctx.core_func_idx("waitable-set-new"),
+            ),
+            (
+                "waitable-join",
+                ExportKind::Func,
+                ctx.core_func_idx("waitable-join"),
+            ),
+            (
+                "waitable-set-wait",
+                ExportKind::Func,
+                ctx.core_func_idx("waitable-set-wait"),
+            ),
+            (
+                "subtask-drop",
+                ExportKind::Func,
+                ctx.core_func_idx("subtask-drop"),
+            ),
         ];
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
         ctx.register_core_instance("wasi");
@@ -901,7 +930,12 @@ impl Codegen {
 
         // Alias run function from main instance
         ctx.register_core_func("run-core");
-        builder.core_alias_export(Some("run-core"), ctx.core_instance_idx("main"), "run", ExportKind::Func);
+        builder.core_alias_export(
+            Some("run-core"),
+            ctx.core_instance_idx("main"),
+            "run",
+            ExportKind::Func,
+        );
 
         // Type: async run function type () -> result
         let run_func_type = ctx.register_type("run-func-type");
@@ -919,11 +953,19 @@ impl Codegen {
             Some("run"),
             ctx.core_func_idx("run-core"),
             run_func_type,
-            [CanonicalOption::Async, CanonicalOption::Memory(ctx.memory_idx())],
+            [
+                CanonicalOption::Async,
+                CanonicalOption::Memory(ctx.memory_idx()),
+            ],
         );
 
         // Export run function
-        builder.export("run", ComponentExportKind::Func, ctx.comp_func_idx("run"), None);
+        builder.export(
+            "run",
+            ComponentExportKind::Func,
+            ctx.comp_func_idx("run"),
+            None,
+        );
         builder.finish()
     }
 
@@ -1055,7 +1097,11 @@ impl Codegen {
 
         // Alias error-code from types instance
         ctx.register_type("error-code");
-        builder.alias_export(ctx.instance_idx("types"), "error-code", ComponentExportKind::Type);
+        builder.alias_export(
+            ctx.instance_idx("types"),
+            "error-code",
+            ComponentExportKind::Type,
+        );
 
         // ========================================
         // Type: stdout instance type
@@ -1097,7 +1143,11 @@ impl Codegen {
 
         // Alias write-via-stream from stdout instance (component func)
         ctx.register_comp_func("write-via-stream");
-        builder.alias_export(ctx.instance_idx("stdout"), "write-via-stream", ComponentExportKind::Func);
+        builder.alias_export(
+            ctx.instance_idx("stdout"),
+            "write-via-stream",
+            ComponentExportKind::Func,
+        );
 
         // Type: stream<u8>
         let stream_u8_type = ctx.register_type("stream-u8");
@@ -1184,13 +1234,27 @@ impl Codegen {
 
         // Instantiate memory module
         ctx.register_core_instance("mem");
-        builder.core_instantiate(Some("mem-instance"), ctx.core_module_idx("memory-mod"), Vec::<(&str, ModuleArg)>::new());
+        builder.core_instantiate(
+            Some("mem-instance"),
+            ctx.core_module_idx("memory-mod"),
+            Vec::<(&str, ModuleArg)>::new(),
+        );
 
         // Alias memory and realloc from memory instance
         ctx.set_memory(0);
-        builder.core_alias_export(Some("memory"), ctx.core_instance_idx("mem"), "memory", ExportKind::Memory);
+        builder.core_alias_export(
+            Some("memory"),
+            ctx.core_instance_idx("mem"),
+            "memory",
+            ExportKind::Memory,
+        );
         ctx.register_core_func("realloc");
-        builder.core_alias_export(Some("realloc"), ctx.core_instance_idx("mem"), "realloc", ExportKind::Func);
+        builder.core_alias_export(
+            Some("realloc"),
+            ctx.core_instance_idx("mem"),
+            "realloc",
+            ExportKind::Func,
+        );
 
         // Stream intrinsics
         ctx.register_core_func("stream-new");
@@ -1248,16 +1312,56 @@ impl Codegen {
 
         // Create wasi instance with stream intrinsics + lowered WASI function + async intrinsics
         let wasi_exports = [
-            ("stream-new", ExportKind::Func, ctx.core_func_idx("stream-new")),
-            ("stream-write", ExportKind::Func, ctx.core_func_idx("stream-write")),
-            ("stream-drop-writable", ExportKind::Func, ctx.core_func_idx("stream-drop-writable")),
-            ("stream-drop-readable", ExportKind::Func, ctx.core_func_idx("stream-drop-readable")),
-            ("write-via-stream", ExportKind::Func, ctx.core_func_idx("write-via-stream-core")),
-            ("task-return", ExportKind::Func, ctx.core_func_idx("task-return")),
-            ("waitable-set-new", ExportKind::Func, ctx.core_func_idx("waitable-set-new")),
-            ("waitable-join", ExportKind::Func, ctx.core_func_idx("waitable-join")),
-            ("waitable-set-wait", ExportKind::Func, ctx.core_func_idx("waitable-set-wait")),
-            ("subtask-drop", ExportKind::Func, ctx.core_func_idx("subtask-drop")),
+            (
+                "stream-new",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-new"),
+            ),
+            (
+                "stream-write",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-write"),
+            ),
+            (
+                "stream-drop-writable",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-drop-writable"),
+            ),
+            (
+                "stream-drop-readable",
+                ExportKind::Func,
+                ctx.core_func_idx("stream-drop-readable"),
+            ),
+            (
+                "write-via-stream",
+                ExportKind::Func,
+                ctx.core_func_idx("write-via-stream-core"),
+            ),
+            (
+                "task-return",
+                ExportKind::Func,
+                ctx.core_func_idx("task-return"),
+            ),
+            (
+                "waitable-set-new",
+                ExportKind::Func,
+                ctx.core_func_idx("waitable-set-new"),
+            ),
+            (
+                "waitable-join",
+                ExportKind::Func,
+                ctx.core_func_idx("waitable-join"),
+            ),
+            (
+                "waitable-set-wait",
+                ExportKind::Func,
+                ctx.core_func_idx("waitable-set-wait"),
+            ),
+            (
+                "subtask-drop",
+                ExportKind::Func,
+                ctx.core_func_idx("subtask-drop"),
+            ),
         ];
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
         ctx.register_core_instance("wasi");
@@ -1282,7 +1386,12 @@ impl Codegen {
 
         // Alias run function from main instance
         ctx.register_core_func("run-core");
-        builder.core_alias_export(Some("run-core"), ctx.core_instance_idx("main"), "run", ExportKind::Func);
+        builder.core_alias_export(
+            Some("run-core"),
+            ctx.core_instance_idx("main"),
+            "run",
+            ExportKind::Func,
+        );
 
         // Type: async run function type
         let run_func_type = ctx.register_type("run-func-type");
@@ -1300,11 +1409,19 @@ impl Codegen {
             Some("run"),
             ctx.core_func_idx("run-core"),
             run_func_type,
-            [CanonicalOption::Async, CanonicalOption::Memory(ctx.memory_idx())],
+            [
+                CanonicalOption::Async,
+                CanonicalOption::Memory(ctx.memory_idx()),
+            ],
         );
 
         // Export run function
-        builder.export("run", ComponentExportKind::Func, ctx.comp_func_idx("run"), None);
+        builder.export(
+            "run",
+            ComponentExportKind::Func,
+            ctx.comp_func_idx("run"),
+            None,
+        );
         builder.finish()
     }
 
@@ -1337,18 +1454,34 @@ impl Codegen {
 
         // WASI function types
         builder.define_func_type("stream-new", &[], &[ValType::I64]);
-        builder.define_func_type("stream-write", &[ValType::I32, ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "stream-write",
+            &[ValType::I32, ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
         builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
         builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        builder.define_func_type("write-via-stream", &[ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "write-via-stream",
+            &[ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
         builder.define_func_type("task-return", &[ValType::I32], &[]);
         builder.define_func_type("waitable-set-new", &[], &[ValType::I32]);
         builder.define_func_type("waitable-join", &[ValType::I32, ValType::I32], &[]);
-        builder.define_func_type("waitable-set-wait", &[ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "waitable-set-wait",
+            &[ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
         builder.define_func_type("subtask-drop", &[ValType::I32], &[]);
 
         // realloc type
-        builder.define_func_type("realloc", &[ValType::I32, ValType::I32, ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "realloc",
+            &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
 
         // GC string array type (array<u8>)
         builder.define_gc_array_type("string-array", StorageType::I8, false);
@@ -1430,25 +1563,13 @@ impl Codegen {
         // println function
         let mut println_func =
             Function::new([(3, ValType::I32), (1, ValType::I64), (3, ValType::I32)]);
-        self.generate_println_body(&mut println_func);
+        self.generate_println_body(&mut println_func, &builder);
         println_func.instruction(&Instruction::End);
         code.function(&println_func);
 
-        // ============================================
-        // Create compatibility ModuleContext from builder data
-        // (temporary bridge until all methods are migrated to use builder)
-        // ============================================
-        let mod_ctx = ModuleContext {
-            func_indices: builder.func_names.clone(),
-            next_type_idx: builder.next_type_idx,
-            next_func_idx: builder.next_func_idx,
-            string_array_type_idx: builder.type_idx("string-array"),
-            realloc_func_idx: builder.func_idx("realloc"),
-        };
-
         // User-defined functions from all modules
         for (_, func, _) in &all_funcs {
-            let wasm_func = self.generate_user_function(func, &mod_ctx);
+            let wasm_func = self.generate_user_function(func, &builder);
             code.function(&wasm_func);
         }
 
@@ -1478,7 +1599,7 @@ impl Codegen {
         };
 
         let mut run_func = Function::new(local_decls);
-        self.generate_run_body_instructions_p3_with_ctx(&mut run_func, main_module, &mod_ctx);
+        self.generate_run_body_instructions_p3_with_builder(&mut run_func, main_module, &builder);
 
         // Call task.return to complete the async task
         let task_return_idx = builder.func_idx("task-return");
@@ -1516,18 +1637,34 @@ impl Codegen {
 
         // WASI function types
         builder.define_func_type("stream-new", &[], &[ValType::I64]);
-        builder.define_func_type("stream-write", &[ValType::I32, ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "stream-write",
+            &[ValType::I32, ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
         builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
         builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        builder.define_func_type("write-via-stream", &[ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "write-via-stream",
+            &[ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
         builder.define_func_type("task-return", &[ValType::I32], &[]);
         builder.define_func_type("waitable-set-new", &[], &[ValType::I32]);
         builder.define_func_type("waitable-join", &[ValType::I32, ValType::I32], &[]);
-        builder.define_func_type("waitable-set-wait", &[ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "waitable-set-wait",
+            &[ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
         builder.define_func_type("subtask-drop", &[ValType::I32], &[]);
 
         // realloc type
-        builder.define_func_type("realloc", &[ValType::I32, ValType::I32, ValType::I32, ValType::I32], &[ValType::I32]);
+        builder.define_func_type(
+            "realloc",
+            &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
 
         // GC string array type (array<u8>)
         builder.define_gc_array_type("string-array", StorageType::I8, false);
@@ -1622,27 +1759,15 @@ impl Codegen {
             (1, ValType::I64), // ret64
             (3, ValType::I32), // rx, tx, status
         ]);
-        self.generate_println_body(&mut println_func);
+        self.generate_println_body(&mut println_func, &builder);
         println_func.instruction(&Instruction::End);
         code.function(&println_func);
-
-        // ============================================
-        // Create compatibility ModuleContext from builder data
-        // (temporary bridge until all methods are migrated to use builder)
-        // ============================================
-        let mod_ctx = ModuleContext {
-            func_indices: builder.func_names.clone(),
-            next_type_idx: builder.next_type_idx,
-            next_func_idx: builder.next_func_idx,
-            string_array_type_idx: builder.type_idx("string-array"),
-            realloc_func_idx: builder.func_idx("realloc"),
-        };
 
         // ============================================
         // User-defined functions
         // ============================================
         for func in &user_funcs {
-            let wasm_func = self.generate_user_function(func, &mod_ctx);
+            let wasm_func = self.generate_user_function(func, &builder);
             code.function(&wasm_func);
         }
 
@@ -1678,7 +1803,7 @@ impl Codegen {
         let mut run_func = Function::new(local_decls);
 
         // Generate body from AST (calls to println, etc.)
-        self.generate_run_body_instructions_p3_with_ctx(&mut run_func, ast_module, &mod_ctx);
+        self.generate_run_body_instructions_p3_with_builder(&mut run_func, ast_module, &builder);
 
         // Call task.return to complete the async task
         // For result unit with no payload, pass discriminant directly (0 = ok)
@@ -1765,7 +1890,7 @@ impl Codegen {
     fn generate_user_function(
         &self,
         ast_func: &crate::ast::Function,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) -> Function {
         // First pass: analyze function body to collect locals
         let mut func_ctx = FunctionContext::new(ast_func.params.len() as u32);
@@ -1793,7 +1918,7 @@ impl Codegen {
         // Generate function body
         if let Some(body) = &ast_func.body {
             for stmt in &body.stmts {
-                self.generate_stmt_with_mod_ctx(&mut wasm_func, stmt, &mut gen_ctx, mod_ctx);
+                self.generate_stmt_with_builder(&mut wasm_func, stmt, &mut gen_ctx, builder);
             }
         }
 
@@ -1834,17 +1959,17 @@ impl Codegen {
         }
     }
 
-    /// Generate statement with module context
-    fn generate_stmt_with_mod_ctx(
+    /// Generate statement with builder context
+    fn generate_stmt_with_builder(
         &self,
         func: &mut Function,
         stmt: &Stmt,
         ctx: &mut FunctionContext,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) {
         match stmt {
             Stmt::Expr(expr_stmt) => {
-                self.generate_expr_with_mod_ctx(func, &expr_stmt.expr, ctx, mod_ctx);
+                self.generate_expr_with_builder(func, &expr_stmt.expr, ctx, builder);
                 // Drop any value left on stack by expression statements
                 // (e.g., assignment expressions use LocalTee)
                 if self.expr_produces_value(&expr_stmt.expr) {
@@ -1854,19 +1979,19 @@ impl Codegen {
             Stmt::Let(let_stmt) => {
                 let val_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx);
                 let local_idx = ctx.alloc_local(&let_stmt.name, val_type);
-                self.generate_expr_with_mod_ctx(func, &let_stmt.value, ctx, mod_ctx);
+                self.generate_expr_with_builder(func, &let_stmt.value, ctx, builder);
                 func.instruction(&Instruction::LocalSet(local_idx));
             }
             Stmt::Return(ret_stmt) => {
                 if let Some(value) = &ret_stmt.value {
-                    self.generate_expr_with_mod_ctx(func, value, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, value, ctx, builder);
                 }
                 func.instruction(&Instruction::Return);
             }
             Stmt::For(for_stmt) => {
                 // Generate init
                 if let Some(init) = &for_stmt.init {
-                    self.generate_stmt_with_mod_ctx(func, init, ctx, mod_ctx);
+                    self.generate_stmt_with_builder(func, init, ctx, builder);
                 }
                 // block $break
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
@@ -1874,17 +1999,17 @@ impl Codegen {
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
                 // Check condition
                 if let Some(condition) = &for_stmt.condition {
-                    self.generate_expr_with_mod_ctx(func, condition, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, condition, ctx, builder);
                     func.instruction(&Instruction::I32Eqz);
                     func.instruction(&Instruction::BrIf(1));
                 }
                 // Body
                 for s in &for_stmt.body.stmts {
-                    self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                    self.generate_stmt_with_builder(func, s, ctx, builder);
                 }
                 // Update
                 if let Some(update) = &for_stmt.update {
-                    self.generate_expr_with_mod_ctx(func, update, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, update, ctx, builder);
                     func.instruction(&Instruction::Drop);
                 }
                 func.instruction(&Instruction::Br(0));
@@ -1894,26 +2019,26 @@ impl Codegen {
             Stmt::While(while_stmt) => {
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
-                self.generate_expr_with_mod_ctx(func, &while_stmt.condition, ctx, mod_ctx);
+                self.generate_expr_with_builder(func, &while_stmt.condition, ctx, builder);
                 func.instruction(&Instruction::I32Eqz);
                 func.instruction(&Instruction::BrIf(1));
                 for s in &while_stmt.body.stmts {
-                    self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                    self.generate_stmt_with_builder(func, s, ctx, builder);
                 }
                 func.instruction(&Instruction::Br(0));
                 func.instruction(&Instruction::End);
                 func.instruction(&Instruction::End);
             }
             Stmt::If(if_stmt) => {
-                self.generate_expr_with_mod_ctx(func, &if_stmt.condition, ctx, mod_ctx);
+                self.generate_expr_with_builder(func, &if_stmt.condition, ctx, builder);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 for s in &if_stmt.then_block.stmts {
-                    self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                    self.generate_stmt_with_builder(func, s, ctx, builder);
                 }
                 if let Some(else_block) = &if_stmt.else_block {
                     func.instruction(&Instruction::Else);
                     for s in &else_block.stmts {
-                        self.generate_stmt_with_mod_ctx(func, s, ctx, mod_ctx);
+                        self.generate_stmt_with_builder(func, s, ctx, builder);
                     }
                 }
                 func.instruction(&Instruction::End);
@@ -1921,17 +2046,17 @@ impl Codegen {
         }
     }
 
-    /// Generate expression with module context
-    fn generate_expr_with_mod_ctx(
+    /// Generate expression with builder context
+    fn generate_expr_with_builder(
         &self,
         func: &mut Function,
         expr: &Expr,
         ctx: &mut FunctionContext,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) {
         match expr {
             Expr::Call(call) => {
-                self.generate_call_with_mod_ctx(func, call, ctx, mod_ctx);
+                self.generate_call_with_builder(func, call, ctx, builder);
             }
             Expr::Ident(ident) => {
                 if let Some(local_idx) = ctx.get_local(&ident.name) {
@@ -1942,8 +2067,8 @@ impl Codegen {
                 self.generate_literal_p3(func, &lit.value);
             }
             Expr::Binary(bin) => {
-                self.generate_expr_with_mod_ctx(func, &bin.left, ctx, mod_ctx);
-                self.generate_expr_with_mod_ctx(func, &bin.right, ctx, mod_ctx);
+                self.generate_expr_with_builder(func, &bin.left, ctx, builder);
+                self.generate_expr_with_builder(func, &bin.right, ctx, builder);
 
                 // Infer operand type to select correct instructions
                 let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx);
@@ -1985,7 +2110,7 @@ impl Codegen {
                 }
             }
             Expr::Assign(assign) => {
-                self.generate_expr_with_mod_ctx(func, &assign.value, ctx, mod_ctx);
+                self.generate_expr_with_builder(func, &assign.value, ctx, builder);
                 if let Expr::Ident(ident) = &assign.target
                     && let Some(local_idx) = ctx.get_local(&ident.name)
                 {
@@ -1993,32 +2118,32 @@ impl Codegen {
                 }
             }
             Expr::TemplateString(template) => {
-                self.generate_template_string(func, template, ctx, mod_ctx);
+                self.generate_template_string(func, template, ctx, builder);
             }
             _ => {}
         }
     }
 
-    /// Generate call with module context (for user-defined functions)
-    fn generate_call_with_mod_ctx(
+    /// Generate call with builder context (for user-defined functions)
+    fn generate_call_with_builder(
         &self,
         func: &mut Function,
         call: &CallExpr,
         ctx: &mut FunctionContext,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) {
         if let Expr::Ident(ident) = &call.callee {
             // First try builtins
             if self.is_builtin(&ident.name) {
-                self.generate_builtin_call_with_mod_ctx(func, &ident.name, call, ctx, mod_ctx);
+                self.generate_builtin_call_with_builder(func, &ident.name, call, ctx, builder);
                 return;
             }
 
             // Then try user-defined functions
-            if let Some(func_idx) = mod_ctx.get_func_index(&ident.name) {
+            if let Some(func_idx) = builder.try_func_idx(&ident.name) {
                 // Generate arguments
                 for arg in &call.args {
-                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 func.instruction(&Instruction::Call(func_idx));
             }
@@ -2043,18 +2168,20 @@ impl Codegen {
         )
     }
 
-    /// Generate builtin call with module context
-    fn generate_builtin_call_with_mod_ctx(
+    /// Generate builtin call with builder context
+    fn generate_builtin_call_with_builder(
         &self,
         func: &mut Function,
         name: &str,
         call: &CallExpr,
         ctx: &mut FunctionContext,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) {
+        // Get type/function indices from builder (no more hardcoded numbers)
+        let string_array_type = builder.type_idx("string-array");
+
         match name {
             "println" => {
-                // println is at function index 11 (after 10 WASI imports + realloc)
                 // Takes a GC array<u8> reference
                 if call.args.len() == 1 {
                     if let Expr::Literal(lit) = &call.args[0]
@@ -2068,34 +2195,34 @@ impl Codegen {
                         func.instruction(&Instruction::I32Const(str_offset as i32));
                         func.instruction(&Instruction::I32Const(str_len as i32));
                         func.instruction(&Instruction::ArrayNewData {
-                            array_type_index: 11,
+                            array_type_index: string_array_type,
                             array_data_index: 0,
                         });
                     } else {
                         // Non-literal string - evaluate expression (produces GC array ref)
-                        self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                        self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
                     }
-                    func.instruction(&Instruction::Call(11));
+                    func.instruction(&Instruction::Call(builder.func_idx("println")));
                 }
             }
             "stream_new" => {
-                func.instruction(&Instruction::Call(0));
+                func.instruction(&Instruction::Call(builder.func_idx("stream-new")));
             }
             "stream_write" => {
                 for arg in &call.args {
-                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
-                func.instruction(&Instruction::Call(1));
+                func.instruction(&Instruction::Call(builder.func_idx("stream-write")));
             }
             "stream_write_string" => {
                 // stream_write_string(tx: i32, data: String) -> i32
                 //
                 // GC string implementation:
-                // 1. string is ref to GC array (type 11 = array<u8>)
+                // 1. string is ref to GC array (string-array type)
                 // 2. array.len to get string length
-                // 3. Call realloc(0, 0, 1, len) to allocate buffer (func 10)
+                // 3. Call realloc(0, 0, 1, len) to allocate buffer
                 // 4. Loop: array.get_u + i32.store8 to copy bytes
-                // 5. Call stream.write(tx, ptr, len) (func 1)
+                // 5. Call stream.write(tx, ptr, len)
                 //
                 // Uses 4 scratch locals: arr_ref (ref), len (i32), ptr (i32), i (i32)
                 // These are allocated at fixed positions after function params/locals
@@ -2107,7 +2234,7 @@ impl Codegen {
                         "__arr_ref",
                         ValType::Ref(RefType {
                             nullable: false,
-                            heap_type: HeapType::Concrete(11),
+                            heap_type: HeapType::Concrete(string_array_type),
                         }),
                     );
                     let len_local = ctx.alloc_local("__len", ValType::I32);
@@ -2115,34 +2242,17 @@ impl Codegen {
                     let i_local = ctx.alloc_local("__i", ValType::I32);
 
                     // Evaluate tx and save for later
-                    self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
                     // tx is on stack
 
                     // Evaluate string argument - produces GC array ref
-                    self.generate_expr_with_mod_ctx(func, &call.args[1], ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, &call.args[1], ctx, builder);
                     func.instruction(&Instruction::LocalSet(arr_ref_local));
 
                     // Get length: array.len
                     func.instruction(&Instruction::LocalGet(arr_ref_local));
                     func.instruction(&Instruction::ArrayLen);
                     func.instruction(&Instruction::LocalTee(len_local));
-
-                    // Allocate buffer: realloc(0, 0, 1, len) -> ptr
-                    // Stack: tx, len
-                    // We need to save tx, call realloc, then restore tx
-                    // Reorder: save tx to a temp, then do realloc
-                    // Actually tx is already consumed, let me re-read the logic
-
-                    // Let me restructure: first collect all values, then call stream.write
-                    // 1. Evaluate tx -> save to stack or local
-                    // 2. Evaluate arr_ref -> save to local
-                    // 3. Get len from arr_ref
-                    // 4. Allocate buffer
-                    // 5. Copy bytes
-                    // 6. Call stream.write(tx, ptr, len)
-
-                    // Current stack: tx (from earlier), len (from tee)
-                    // Need: realloc(0, 0, 1, len) for ptr
 
                     // Drop len from stack temporarily, save tx
                     func.instruction(&Instruction::Drop); // drop len (we have it in local)
@@ -2155,7 +2265,7 @@ impl Codegen {
                     func.instruction(&Instruction::I32Const(0)); // old_size
                     func.instruction(&Instruction::I32Const(1)); // align
                     func.instruction(&Instruction::LocalGet(len_local)); // new_size
-                    func.instruction(&Instruction::Call(10)); // realloc
+                    func.instruction(&Instruction::Call(builder.func_idx("realloc")));
                     func.instruction(&Instruction::LocalSet(ptr_local));
 
                     // Initialize loop counter: i = 0
@@ -2178,7 +2288,7 @@ impl Codegen {
                     func.instruction(&Instruction::I32Add); // ptr + i (address)
                     func.instruction(&Instruction::LocalGet(arr_ref_local));
                     func.instruction(&Instruction::LocalGet(i_local));
-                    func.instruction(&Instruction::ArrayGetU(11)); // arr[i] (unsigned)
+                    func.instruction(&Instruction::ArrayGetU(string_array_type)); // arr[i] (unsigned)
                     func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
                         offset: 0,
                         align: 0,
@@ -2196,34 +2306,34 @@ impl Codegen {
                     func.instruction(&Instruction::End); // end loop
                     func.instruction(&Instruction::End); // end block
 
-                    // Call stream-write(tx, ptr, len) (function index 1)
+                    // Call stream-write(tx, ptr, len)
                     func.instruction(&Instruction::LocalGet(tx_local));
                     func.instruction(&Instruction::LocalGet(ptr_local));
                     func.instruction(&Instruction::LocalGet(len_local));
-                    func.instruction(&Instruction::Call(1)); // stream-write
+                    func.instruction(&Instruction::Call(builder.func_idx("stream-write")));
                 }
             }
             "stream_drop_writable" => {
                 for arg in &call.args {
-                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
-                func.instruction(&Instruction::Call(2));
+                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-writable")));
             }
             "stream_drop_readable" => {
                 for arg in &call.args {
-                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
-                func.instruction(&Instruction::Call(3));
+                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-readable")));
             }
             "i64_low32" => {
                 for arg in &call.args {
-                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 func.instruction(&Instruction::I32WrapI64);
             }
             "i64_high32" => {
                 for arg in &call.args {
-                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 func.instruction(&Instruction::I64Const(32));
                 func.instruction(&Instruction::I64ShrU);
@@ -2233,7 +2343,7 @@ impl Codegen {
                 // array_len<T>(arr: Array<T>) -> i32
                 // For GC arrays, uses Wasm GC array.len instruction
                 for arg in &call.args {
-                    self.generate_expr_with_mod_ctx(func, arg, ctx, mod_ctx);
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 func.instruction(&Instruction::ArrayLen);
             }
@@ -2251,7 +2361,7 @@ impl Codegen {
                         func.instruction(&Instruction::I32Const(str_offset as i32));
                     } else {
                         // Non-literal - evaluate and assume first element is ptr
-                        self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                        self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
                         // TODO: for GC strings, copy to linear memory and return ptr
                     }
                 }
@@ -2270,7 +2380,7 @@ impl Codegen {
                         func.instruction(&Instruction::I32Const(str_len));
                     } else {
                         // Non-literal - for GC arrays use array.len
-                        self.generate_expr_with_mod_ctx(func, &call.args[0], ctx, mod_ctx);
+                        self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
                         func.instruction(&Instruction::ArrayLen);
                     }
                 }
@@ -2279,12 +2389,12 @@ impl Codegen {
         }
     }
 
-    /// Generate run body with module context
-    fn generate_run_body_instructions_p3_with_ctx(
+    /// Generate run body with builder context
+    fn generate_run_body_instructions_p3_with_builder(
         &self,
         func: &mut Function,
         ast_module: &crate::ast::Module,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) {
         // Find run function (WASI CLI Command world entry point)
         let run_func_ast = ast_module.items.iter().find_map(|item| {
@@ -2304,7 +2414,7 @@ impl Codegen {
                 ctx.add_param(&param.name);
             }
             for stmt in &body.stmts {
-                self.generate_stmt_with_mod_ctx(func, stmt, &mut ctx, mod_ctx);
+                self.generate_stmt_with_builder(func, stmt, &mut ctx, builder);
             }
         }
     }
@@ -2320,7 +2430,19 @@ impl Codegen {
     ///   local 5: rx (i32) - readable stream handle
     ///   local 6: tx (i32) - writable stream handle
     ///   local 7: status (i32) - subtask status
-    fn generate_println_body(&self, func: &mut Function) {
+    fn generate_println_body(&self, func: &mut Function, builder: &CoreModuleBuilder) {
+        // Get indices from builder (no more hardcoded numbers)
+        let string_array_type = builder.type_idx("string-array");
+        let realloc_idx = builder.func_idx("realloc");
+        let stream_new_idx = builder.func_idx("stream-new");
+        let stream_write_idx = builder.func_idx("stream-write");
+        let stream_drop_writable_idx = builder.func_idx("stream-drop-writable");
+        let write_via_stream_idx = builder.func_idx("write-via-stream");
+        let waitable_set_new_idx = builder.func_idx("waitable-set-new");
+        let waitable_join_idx = builder.func_idx("waitable-join");
+        let waitable_set_wait_idx = builder.func_idx("waitable-set-wait");
+        let subtask_drop_idx = builder.func_idx("subtask-drop");
+
         // ============================================
         // Phase 1: Copy GC array to linear memory
         // ============================================
@@ -2335,7 +2457,7 @@ impl Codegen {
         func.instruction(&Instruction::I32Const(0)); // old_size
         func.instruction(&Instruction::I32Const(1)); // align
         func.instruction(&Instruction::LocalGet(1)); // new_size = len
-        func.instruction(&Instruction::Call(10)); // realloc (func 10)
+        func.instruction(&Instruction::Call(realloc_idx));
         func.instruction(&Instruction::LocalSet(2)); // ptr
 
         // Initialize loop counter: i = 0
@@ -2358,7 +2480,7 @@ impl Codegen {
         func.instruction(&Instruction::I32Add); // ptr + i (address)
         func.instruction(&Instruction::LocalGet(0)); // str_arr
         func.instruction(&Instruction::LocalGet(3)); // i
-        func.instruction(&Instruction::ArrayGetU(11)); // arr[i] (unsigned)
+        func.instruction(&Instruction::ArrayGetU(string_array_type)); // arr[i] (unsigned)
         func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
             offset: 0,
             align: 0,
@@ -2381,7 +2503,7 @@ impl Codegen {
         // ============================================
 
         // 1. Create stream: stream-new() -> i64 (rx in low 32, tx in high 32)
-        func.instruction(&Instruction::Call(0)); // stream-new
+        func.instruction(&Instruction::Call(stream_new_idx));
         func.instruction(&Instruction::LocalSet(4)); // ret64
 
         // Extract rx (low 32 bits)
@@ -2399,19 +2521,19 @@ impl Codegen {
         // 2. Call write-via-stream(rx, outptr) to start consuming from the stream
         func.instruction(&Instruction::LocalGet(5)); // rx
         func.instruction(&Instruction::I32Const(2048)); // outptr for result
-        func.instruction(&Instruction::Call(4)); // write-via-stream (func 4)
+        func.instruction(&Instruction::Call(write_via_stream_idx));
         func.instruction(&Instruction::LocalSet(7)); // status
 
         // 3. Write string to stream: stream-write(tx, ptr, len) -> status
         func.instruction(&Instruction::LocalGet(6)); // tx
         func.instruction(&Instruction::LocalGet(2)); // ptr
         func.instruction(&Instruction::LocalGet(1)); // len
-        func.instruction(&Instruction::Call(1)); // stream-write
+        func.instruction(&Instruction::Call(stream_write_idx));
         func.instruction(&Instruction::Drop); // ignore write status
 
         // 4. Close writable end to signal EOF: stream-drop-writable(tx)
         func.instruction(&Instruction::LocalGet(6)); // tx
-        func.instruction(&Instruction::Call(2)); // stream-drop-writable
+        func.instruction(&Instruction::Call(stream_drop_writable_idx));
 
         // 5. Wait for write-via-stream subtask to complete if still pending
         func.instruction(&Instruction::LocalGet(7)); // status
@@ -2421,7 +2543,7 @@ impl Codegen {
         func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
 
         // Create waitable-set
-        func.instruction(&Instruction::Call(6)); // waitable-set-new
+        func.instruction(&Instruction::Call(waitable_set_new_idx));
         func.instruction(&Instruction::I64ExtendI32U);
         func.instruction(&Instruction::LocalSet(4)); // reuse ret64 for waitable-set
 
@@ -2429,18 +2551,18 @@ impl Codegen {
         func.instruction(&Instruction::LocalGet(4));
         func.instruction(&Instruction::I32WrapI64);
         func.instruction(&Instruction::LocalGet(7)); // status (subtask handle)
-        func.instruction(&Instruction::Call(7)); // waitable-join
+        func.instruction(&Instruction::Call(waitable_join_idx));
 
         // Wait for completion
         func.instruction(&Instruction::LocalGet(4));
         func.instruction(&Instruction::I32WrapI64);
         func.instruction(&Instruction::I32Const(2048));
-        func.instruction(&Instruction::Call(8)); // waitable-set-wait
+        func.instruction(&Instruction::Call(waitable_set_wait_idx));
         func.instruction(&Instruction::Drop);
 
         // Drop subtask
         func.instruction(&Instruction::LocalGet(7)); // status (subtask handle)
-        func.instruction(&Instruction::Call(9)); // subtask-drop
+        func.instruction(&Instruction::Call(subtask_drop_idx));
 
         func.instruction(&Instruction::End); // end if
     }
@@ -2597,17 +2719,19 @@ impl Codegen {
         func: &mut Function,
         template: &crate::ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) {
         // For now, implement a simple concatenation without format specifiers
         // TODO: Implement proper format specifiers (.2f, etc.)
+
+        let string_array_type = builder.type_idx("string-array");
 
         if template.parts.is_empty() {
             // Empty template string -> empty string
             func.instruction(&Instruction::I32Const(0)); // offset
             func.instruction(&Instruction::I32Const(0)); // length
             func.instruction(&Instruction::ArrayNewData {
-                array_type_index: 11, // GC array<u8> type
+                array_type_index: string_array_type,
                 array_data_index: 0,
             });
             return;
@@ -2629,20 +2753,20 @@ impl Codegen {
             &temp_name,
             ValType::Ref(RefType {
                 nullable: false,
-                heap_type: HeapType::Concrete(11), // array<u8>
+                heap_type: HeapType::Concrete(string_array_type),
             }),
         );
 
         // Start with empty array or first part
         if let Some(first_part) = template.parts.first() {
-            self.generate_template_part(func, first_part, ctx, mod_ctx);
+            self.generate_template_part(func, first_part, ctx, builder);
             func.instruction(&Instruction::LocalSet(result_local));
         }
 
         // Concatenate remaining parts
         for part in template.parts.iter().skip(1) {
             // Generate the next part
-            self.generate_template_part(func, part, ctx, mod_ctx);
+            self.generate_template_part(func, part, ctx, builder);
 
             // Concatenate with result
             // For now, we'll use a simple approach: TODO implement proper concatenation
@@ -2664,9 +2788,11 @@ impl Codegen {
         func: &mut Function,
         part: &crate::ast::TemplatePart,
         ctx: &mut FunctionContext,
-        mod_ctx: &ModuleContext,
+        builder: &CoreModuleBuilder,
     ) {
         use crate::ast::TemplatePart;
+
+        let string_array_type = builder.type_idx("string-array");
 
         match part {
             TemplatePart::String(s) => {
@@ -2676,7 +2802,7 @@ impl Codegen {
                 func.instruction(&Instruction::I32Const(offset as i32));
                 func.instruction(&Instruction::I32Const(len as i32));
                 func.instruction(&Instruction::ArrayNewData {
-                    array_type_index: 11, // GC array<u8> type
+                    array_type_index: string_array_type,
                     array_data_index: 0,
                 });
             }
@@ -2685,7 +2811,7 @@ impl Codegen {
                 // For now, just generate the expression
                 // We need to convert the expression to a string
 
-                self.generate_expr_with_mod_ctx(func, expr, ctx, mod_ctx);
+                self.generate_expr_with_builder(func, expr, ctx, builder);
 
                 // TODO: Convert expression result to string based on its type
                 // For now, assume it's already a string (ref (array u8))

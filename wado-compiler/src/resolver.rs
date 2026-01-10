@@ -56,8 +56,7 @@ impl std::error::Error for ResolveError {}
 /// Loads and parses modules, caching the results.
 /// Core library modules are loaded from embedded sources in the compiler binary.
 /// Local .wado files are loaded from the filesystem relative to base_path.
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ModuleResolver {
     /// Cache of already parsed modules (module path → parsed AST)
     parsed_modules: HashMap<Vec<String>, Module>,
@@ -69,7 +68,6 @@ pub struct ModuleResolver {
     #[allow(dead_code)]
     file_to_module: HashMap<PathBuf, Vec<String>>,
 }
-
 
 impl ModuleResolver {
     /// Create a new module resolver
