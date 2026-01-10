@@ -2,7 +2,8 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
-use crate::ast::{Block, CallExpr, Expr, IdentExpr, Item, Literal, Stmt};
+use crate::ast::{Block, CallExpr, Expr, IdentExpr, Item, Literal, Module as AstModule, Stmt};
+use crate::symbol::SymbolTable;
 use std::collections::HashMap;
 use wasm_encoder::{
     Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
@@ -141,6 +142,11 @@ impl ModuleContext {
         func_idx
     }
 
+    /// Register an alias for an already registered function (same index, different name)
+    fn register_func_alias(&mut self, alias_name: &str, func_idx: u32) {
+        self.func_indices.insert(alias_name.to_string(), func_idx);
+    }
+
     /// Get function index by name
     fn get_func_index(&self, name: &str) -> Option<u32> {
         self.func_indices.get(name).copied()
@@ -169,7 +175,7 @@ impl Codegen {
     }
 
     /// Generate Component Model binary Wasm
-    pub fn generate_wasm(&mut self, module: &crate::ast::Module) -> Vec<u8> {
+    pub fn generate_wasm(&mut self, module: &AstModule) -> Vec<u8> {
         // First pass: collect string literals
         self.collect_strings(module);
 
@@ -177,8 +183,28 @@ impl Codegen {
         self.generate_component(module)
     }
 
+    /// Generate Component Model binary Wasm with support for multiple modules
+    ///
+    /// This version supports compiling multiple Wado modules into a single Wasm component.
+    /// Functions from imported local modules are included in the generated code.
+    pub fn generate_wasm_with_modules(
+        &mut self,
+        main_module: &AstModule,
+        loaded_modules: &[(&Vec<String>, &AstModule)],
+        symbols: &SymbolTable,
+    ) -> Vec<u8> {
+        // First pass: collect string literals from all modules
+        self.collect_strings(main_module);
+        for (_, module) in loaded_modules {
+            self.collect_strings(module);
+        }
+
+        // Generate binary Wasm with multi-module support
+        self.generate_component_with_modules(main_module, loaded_modules, symbols)
+    }
+
     /// Generate WAT text format (for debugging)
-    pub fn generate_wat(&mut self, module: &crate::ast::Module) -> String {
+    pub fn generate_wat(&mut self, module: &AstModule) -> String {
         let wasm = self.generate_wasm(module);
         wasmprinter::print_bytes(&wasm).unwrap_or_else(|e| format!("Error: {e}"))
     }
@@ -550,7 +576,7 @@ impl Codegen {
         builder.finish()
     }
 
-    /// Collect user-defined functions from the AST (excluding main and builtins)
+    /// Collect user-defined functions from the AST (excluding run and builtins)
     fn collect_user_functions<'a>(
         &self,
         ast_module: &'a crate::ast::Module,
@@ -571,6 +597,570 @@ impl Codegen {
                 None
             })
             .collect()
+    }
+
+    /// Collect user-defined functions from all modules with their qualified names
+    /// Returns (module_path, function, qualified_name)
+    fn collect_all_user_functions<'a>(
+        &self,
+        main_module: &'a AstModule,
+        loaded_modules: &'a [(&'a Vec<String>, &'a AstModule)],
+    ) -> Vec<(Vec<String>, &'a crate::ast::Function, String)> {
+        let mut all_funcs = Vec::new();
+
+        // Collect from main module (empty path)
+        for item in &main_module.items {
+            if let Item::Function(f) = item {
+                // Skip run (handled separately)
+                if f.name == "run" {
+                    continue;
+                }
+                // Skip bodyless functions (builtins)
+                if f.body.is_none() {
+                    continue;
+                }
+                // Main module functions use unqualified names
+                all_funcs.push((vec![], f, f.name.clone()));
+            }
+        }
+
+        // Collect from imported modules (with qualified names)
+        for (module_path, module) in loaded_modules {
+            // Skip stdlib modules (they're handled specially)
+            if module_path
+                .first()
+                .map(|s| s == "core" || s == "wasi")
+                .unwrap_or(false)
+            {
+                continue;
+            }
+
+            for item in &module.items {
+                if let Item::Function(f) = item {
+                    // Skip run
+                    if f.name == "run" {
+                        continue;
+                    }
+                    // Skip non-pub functions from other modules
+                    if !f.is_pub {
+                        continue;
+                    }
+                    // Skip bodyless functions
+                    if f.body.is_none() {
+                        continue;
+                    }
+                    // Create qualified name: "module_path::func_name"
+                    let qualified_name = format!("{}::{}", module_path.join("::"), f.name);
+                    all_funcs.push((module_path.to_vec(), f, qualified_name));
+                }
+            }
+        }
+
+        all_funcs
+    }
+
+    /// Generate component with multi-module support
+    fn generate_component_with_modules(
+        &self,
+        main_module: &AstModule,
+        loaded_modules: &[(&Vec<String>, &AstModule)],
+        symbols: &SymbolTable,
+    ) -> Vec<u8> {
+        let mut builder = ComponentBuilder::default();
+
+        // Build string data for memory
+        let string_data: Vec<u8> = self
+            .string_literals
+            .iter()
+            .flat_map(|s| s.bytes())
+            .collect();
+
+        // ========================================
+        // Type 0: types instance type (for wasi:cli/types)
+        // Contains error-code enum definition
+        // ========================================
+        {
+            let (_, enc) = builder.ty(Some("types-instance-type"));
+            let mut instance_type = InstanceType::new();
+            instance_type
+                .ty()
+                .defined_type()
+                .enum_type(["io", "illegal-byte-sequence", "pipe"]);
+            instance_type.export(
+                "error-code",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+            );
+            enc.instance(&instance_type);
+        }
+
+        // Import types instance from WASI P3 (instance 0)
+        builder.import(
+            "wasi:cli/types@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(0),
+        );
+
+        // Alias error-code from types instance (type 1)
+        builder.alias_export(0, "error-code", ComponentExportKind::Type);
+
+        // ========================================
+        // Type 2: stdout instance type
+        // ========================================
+        {
+            let (_, enc) = builder.ty(Some("stdout-instance-type"));
+            let mut instance_type = InstanceType::new();
+            instance_type
+                .ty()
+                .defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+            // Type 1 within instance: outer alias to type 1 (error-code)
+            // count=1 means go up 1 level (to parent component), index=1 is the error-code type
+            instance_type.alias(Alias::Outer {
+                kind: ComponentOuterAliasKind::Type,
+                count: 1,
+                index: 1,
+            });
+            instance_type
+                .ty()
+                .defined_type()
+                .result(None, Some(ComponentValType::Type(1)));
+            instance_type
+                .ty()
+                .function()
+                .async_(true)
+                .params([("data", ComponentValType::Type(0))])
+                .result(Some(ComponentValType::Type(2)));
+            instance_type.export("write-via-stream", wasm_encoder::ComponentTypeRef::Func(3));
+            enc.instance(&instance_type);
+        }
+
+        // Import stdout instance from WASI P3
+        builder.import(
+            "wasi:cli/stdout@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(2),
+        );
+
+        // Alias write-via-stream from stdout instance (func 0)
+        builder.alias_export(1, "write-via-stream", ComponentExportKind::Func);
+
+        // Type 3: stream<u8>
+        {
+            let (_, enc) = builder.ty(Some("stream-u8"));
+            enc.defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+        }
+
+        // Type 4: result (for run return type)
+        {
+            let (_, enc) = builder.ty(Some("result-unit"));
+            enc.defined_type().result(None, None);
+        }
+
+        // ========================================
+        // Memory module
+        // ========================================
+        {
+            let mut memory_module = Module::new();
+            let mut types = TypeSection::new();
+            // Type 0: realloc (old_ptr, old_size, align, new_size) -> new_ptr
+            types.ty().function(
+                [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+                [ValType::I32],
+            );
+            memory_module.section(&types);
+
+            let mut functions = FunctionSection::new();
+            functions.function(0);
+            memory_module.section(&functions);
+
+            let mut memory = MemorySection::new();
+            memory.memory(MemoryType {
+                minimum: 1,
+                maximum: None,
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            });
+            memory_module.section(&memory);
+
+            let mut exports = ExportSection::new();
+            exports.export("memory", ExportKind::Memory, 0);
+            exports.export("realloc", ExportKind::Func, 0);
+            memory_module.section(&exports);
+
+            // Simple realloc - just bump allocate
+            let mut code = CodeSection::new();
+            let mut realloc_func = Function::new([(1, ValType::I32)]);
+            // Bump allocator using global counter (simplified)
+            realloc_func.instruction(&Instruction::I32Const(0));
+            realloc_func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                offset: 0,
+                align: 2,
+                memory_index: 0,
+            }));
+            realloc_func.instruction(&Instruction::LocalTee(4));
+            realloc_func.instruction(&Instruction::LocalGet(3));
+            realloc_func.instruction(&Instruction::I32Add);
+            realloc_func.instruction(&Instruction::I32Const(0));
+            realloc_func.instruction(&Instruction::I32Store(wasm_encoder::MemArg {
+                offset: 0,
+                align: 2,
+                memory_index: 0,
+            }));
+            realloc_func.instruction(&Instruction::LocalGet(4));
+            realloc_func.instruction(&Instruction::End);
+            code.function(&realloc_func);
+            memory_module.section(&code);
+
+            // Data section to initialize bump pointer
+            let mut data = DataSection::new();
+            let init_ptr: [u8; 4] = 1024i32.to_le_bytes();
+            data.segment(DataSegment {
+                mode: DataSegmentMode::Active {
+                    memory_index: 0,
+                    offset: &ConstExpr::i32_const(0),
+                },
+                data: init_ptr.iter().copied(),
+            });
+            memory_module.section(&data);
+
+            builder.core_module_raw(Some("memory-mod"), &memory_module.finish());
+        }
+
+        // Instantiate memory module (no imports)
+        builder.core_instantiate(Some("mem-instance"), 0, Vec::<(&str, ModuleArg)>::new());
+
+        // Alias memory and realloc from memory instance
+        builder.core_alias_export(Some("memory"), 0, "memory", ExportKind::Memory);
+        builder.core_alias_export(Some("realloc"), 0, "realloc", ExportKind::Func);
+
+        // Intrinsic lowerings for streams
+        builder.stream_new(3);
+        builder.stream_write(3, [CanonicalOption::Memory(0)]);
+        builder.stream_drop_writable(3);
+        builder.stream_drop_readable(3);
+
+        // Lower write-via-stream
+        builder.lower_func(
+            Some("write-via-stream-core"),
+            0,
+            [
+                CanonicalOption::Async,
+                CanonicalOption::Memory(0),
+                CanonicalOption::Realloc(0),
+            ],
+        );
+
+        // Core func 6: task.return
+        builder.task_return(Some(ComponentValType::Type(4)), []);
+
+        // Core func 7-10: async intrinsics
+        builder.waitable_set_new();
+        builder.waitable_join();
+        builder.waitable_set_wait(false, 0);
+        builder.subtask_drop();
+
+        // ========================================
+        // Main core module for P3 with multi-module support
+        // ========================================
+        let main_core_module = self.build_main_module_p3_with_modules(
+            main_module,
+            loaded_modules,
+            symbols,
+            &string_data,
+        );
+        builder.core_module_raw(Some("main-mod"), &main_core_module);
+
+        // Create instances for WASI exports
+        let wasi_exports = [
+            ("stream-new", ExportKind::Func, 1),
+            ("stream-write", ExportKind::Func, 2),
+            ("stream-drop-writable", ExportKind::Func, 3),
+            ("stream-drop-readable", ExportKind::Func, 4),
+            ("write-via-stream", ExportKind::Func, 5),
+            ("task-return", ExportKind::Func, 6),
+            ("waitable-set-new", ExportKind::Func, 7),
+            ("waitable-join", ExportKind::Func, 8),
+            ("waitable-set-wait", ExportKind::Func, 9),
+            ("subtask-drop", ExportKind::Func, 10),
+        ];
+        let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
+
+        let env_exports = [
+            ("memory", ExportKind::Memory, 0),
+            ("realloc", ExportKind::Func, 0),
+        ];
+        let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
+
+        // Instantiate main module
+        builder.core_instantiate(
+            Some("main"),
+            1,
+            [
+                ("wasi", ModuleArg::Instance(wasi_instance)),
+                ("env", ModuleArg::Instance(env_instance)),
+            ],
+        );
+
+        // Alias run function from main instance
+        builder.core_alias_export(Some("run-core"), 3, "run", ExportKind::Func);
+
+        // Type 5: async run function type
+        {
+            let (_, enc) = builder.ty(Some("run-func-type"));
+            enc.function()
+                .async_(true)
+                .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                .result(Some(ComponentValType::Type(4)));
+        }
+
+        // Lift run function
+        builder.lift_func(
+            Some("run"),
+            11,
+            5,
+            [CanonicalOption::Async, CanonicalOption::Memory(0)],
+        );
+
+        // Export run function
+        builder.export("run", ComponentExportKind::Func, 1, None);
+        builder.finish()
+    }
+
+    /// Build main module for WASI P3 with multi-module support
+    fn build_main_module_p3_with_modules(
+        &self,
+        main_module: &AstModule,
+        loaded_modules: &[(&Vec<String>, &AstModule)],
+        _symbols: &SymbolTable,
+        string_data: &[u8],
+    ) -> Vec<u8> {
+        let mut module = Module::new();
+        let mut mod_ctx = ModuleContext::new();
+
+        // Collect all user-defined functions from all modules
+        let all_funcs = self.collect_all_user_functions(main_module, loaded_modules);
+
+        // Build import name → qualified name lookup table
+        let mut import_lookup: HashMap<String, String> = HashMap::new();
+        for (module_path, func, qualified_name) in &all_funcs {
+            if !module_path.is_empty() {
+                // This is from an imported module - register the function name → qualified name
+                import_lookup.insert(func.name.clone(), qualified_name.clone());
+            }
+        }
+
+        // Type section (same as single-module version)
+        let mut types = TypeSection::new();
+        // Types 0-10: WASI/stream types
+        types.ty().function([], [ValType::I64]);
+        types
+            .ty()
+            .function([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32], []);
+        types.ty().function([ValType::I32], []);
+        types
+            .ty()
+            .function([ValType::I32, ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32], []);
+        types.ty().function([], [ValType::I32]);
+        types.ty().function([ValType::I32, ValType::I32], []);
+        types
+            .ty()
+            .function([ValType::I32, ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32], []);
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I32],
+        );
+
+        // Type 11: GC string array type (array<u8>)
+        // This is a GC array of bytes for UTF-8 strings
+        types.ty().subtype(&SubType {
+            is_final: true,
+            supertype_idx: None,
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Array(ArrayType(FieldType {
+                    element_type: StorageType::I8,
+                    mutable: false, // Strings are immutable
+                })),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
+        });
+
+        // Type 12: println type
+        types.ty().function(
+            [ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(11),
+            })],
+            [],
+        );
+        mod_ctx.register_func("println", 12);
+
+        // Types for user-defined functions
+        let mut user_func_type_indices = Vec::new();
+        for (_, func, _) in &all_funcs {
+            let type_idx = mod_ctx.alloc_type();
+            let param_types: Vec<ValType> = func
+                .params
+                .iter()
+                .map(|p| self.wado_type_to_wasm(&p.ty))
+                .collect();
+            let return_types: Vec<ValType> = if func.return_type.is_some() {
+                vec![ValType::I32]
+            } else {
+                vec![]
+            };
+            types.ty().function(param_types, return_types);
+            user_func_type_indices.push(type_idx);
+        }
+
+        // Type for run () -> ()
+        let run_type_idx = mod_ctx.alloc_type();
+        types.ty().function([], []);
+        module.section(&types);
+
+        // Import section
+        let mut imports = ImportSection::new();
+        imports.import("wasi", "stream-new", EntityType::Function(0));
+        imports.import("wasi", "stream-write", EntityType::Function(1));
+        imports.import("wasi", "stream-drop-writable", EntityType::Function(2));
+        imports.import("wasi", "stream-drop-readable", EntityType::Function(3));
+        imports.import("wasi", "write-via-stream", EntityType::Function(4));
+        imports.import("wasi", "task-return", EntityType::Function(5));
+        imports.import("wasi", "waitable-set-new", EntityType::Function(6));
+        imports.import("wasi", "waitable-join", EntityType::Function(7));
+        imports.import("wasi", "waitable-set-wait", EntityType::Function(8));
+        imports.import("wasi", "subtask-drop", EntityType::Function(9));
+        imports.import("env", "realloc", EntityType::Function(10));
+        imports.import(
+            "env",
+            "memory",
+            EntityType::Memory(MemoryType {
+                minimum: 1,
+                maximum: None,
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            }),
+        );
+        module.section(&imports);
+
+        // Function section
+        let mut functions = FunctionSection::new();
+        functions.function(12); // println function uses type 12
+
+        // Register and add all user-defined functions
+        for (i, (_, func, qualified_name)) in all_funcs.iter().enumerate() {
+            let type_idx = user_func_type_indices[i];
+            // Register with qualified name (primary registration)
+            let func_idx = mod_ctx.register_func(qualified_name, type_idx);
+            // Also register with simple name as an alias for same-module lookup
+            if qualified_name != &func.name {
+                mod_ctx.register_func_alias(&func.name, func_idx);
+            }
+            functions.function(type_idx);
+        }
+
+        // run function
+        mod_ctx.register_func("run", run_type_idx);
+        functions.function(run_type_idx);
+        module.section(&functions);
+
+        // Export section
+        let run_func_idx = mod_ctx.get_func_index("run").unwrap();
+        let mut exports = ExportSection::new();
+        exports.export("run", ExportKind::Func, run_func_idx);
+        module.section(&exports);
+
+        // Data count section
+        let data_count = if string_data.is_empty() { 0 } else { 1 };
+        module.section(&DataCountSection { count: data_count });
+
+        // Code section
+        let mut code = CodeSection::new();
+
+        // println function
+        let mut println_func =
+            Function::new([(3, ValType::I32), (1, ValType::I64), (3, ValType::I32)]);
+        self.generate_println_body(&mut println_func);
+        println_func.instruction(&Instruction::End);
+        code.function(&println_func);
+
+        // User-defined functions from all modules
+        for (_, func, _) in &all_funcs {
+            let wasm_func = self.generate_user_function(func, &mod_ctx);
+            code.function(&wasm_func);
+        }
+
+        // run function
+        let run_func_ast = main_module.items.iter().find_map(|item| {
+            if let Item::Function(f) = item
+                && f.name == "run"
+            {
+                return Some(f);
+            }
+            None
+        });
+
+        let local_decls = if let Some(run_ast) = run_func_ast {
+            if let Some(body) = &run_ast.body {
+                let mut func_ctx = FunctionContext::new(run_ast.params.len() as u32);
+                for param in &run_ast.params {
+                    func_ctx.add_param(&param.name);
+                }
+                self.collect_locals_from_block(body, &mut func_ctx);
+                func_ctx.get_local_decls()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        let mut run_func = Function::new(local_decls);
+        self.generate_run_body_instructions_p3_with_ctx(&mut run_func, main_module, &mod_ctx);
+        run_func.instruction(&Instruction::I32Const(0));
+        run_func.instruction(&Instruction::Call(5));
+        run_func.instruction(&Instruction::End);
+        code.function(&run_func);
+        module.section(&code);
+
+        // Data section
+        if !string_data.is_empty() {
+            let mut data = DataSection::new();
+            data.passive(string_data.iter().copied());
+            module.section(&data);
+        }
+
+        // Name section
+        let mut names = NameSection::new();
+        let mut func_names = NameMap::new();
+        func_names.append(0, "stream-new");
+        func_names.append(1, "stream-write");
+        func_names.append(2, "stream-drop-writable");
+        func_names.append(3, "stream-drop-readable");
+        func_names.append(4, "write-via-stream");
+        func_names.append(5, "task-return");
+        func_names.append(6, "waitable-set-new");
+        func_names.append(7, "waitable-join");
+        func_names.append(8, "waitable-set-wait");
+        func_names.append(9, "subtask-drop");
+        func_names.append(10, "realloc");
+        func_names.append(11, "println");
+
+        let mut idx = 12u32;
+        for (_, func, _) in &all_funcs {
+            func_names.append(idx, &func.name);
+            idx += 1;
+        }
+        func_names.append(idx, "run");
+        names.functions(&func_names);
+        module.section(&names);
+
+        module.finish()
     }
 
     /// Build main module for WASI P3 with write-via-stream

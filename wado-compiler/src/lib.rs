@@ -36,22 +36,39 @@ use std::path::Path;
 /// assert_eq!(&wasm[0..4], b"\0asm");
 /// ```
 pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None)
+    compile_impl(source, None, None)
+}
+
+/// Compile Wado source code with a base path for relative imports.
+pub fn compile_with_base_path(source: &str, base_path: &Path) -> Result<Vec<u8>, CompileError> {
+    compile_impl(source, None, Some(base_path))
 }
 
 /// Compile a Wado source file to Component Model WebAssembly bytes.
 ///
 /// Like [`compile`], but reads source from a file and includes the filename
-/// in error messages.
+/// in error messages. Also supports relative imports from the file's directory.
 pub fn compile_file(path: &Path) -> Result<Vec<u8>, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
         path: path.display().to_string(),
         message: e.to_string(),
     })?;
-    compile_impl(&source, Some(path.display().to_string()))
+
+    // Get the directory containing the file for relative imports
+    let base_path = path.parent().map(|p| p.to_path_buf());
+
+    compile_impl(
+        &source,
+        Some(path.display().to_string()),
+        base_path.as_deref(),
+    )
 }
 
-fn compile_impl(source: &str, filename: Option<String>) -> Result<Vec<u8>, CompileError> {
+fn compile_impl(
+    source: &str,
+    filename: Option<String>,
+    base_path: Option<&Path>,
+) -> Result<Vec<u8>, CompileError> {
     // Lexer
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
@@ -70,8 +87,12 @@ fn compile_impl(source: &str, filename: Option<String>) -> Result<Vec<u8>, Compi
         filename: filename.clone(),
     })?;
 
-    // Analyzer
-    let mut analyzer = Analyzer::new();
+    // Analyzer (with base path for local imports if provided)
+    let mut analyzer = if let Some(base) = base_path {
+        Analyzer::with_base_path(base)
+    } else {
+        Analyzer::new()
+    };
     analyzer.analyze(&ast, &[]).map_err(|errors| {
         // Take the first error for now
         let msg = errors
@@ -84,11 +105,18 @@ fn compile_impl(source: &str, filename: Option<String>) -> Result<Vec<u8>, Compi
             filename: filename.clone(),
         }
     })?;
-    let _symbols = analyzer.into_symbols();
 
-    // Codegen
+    // Get loaded modules and symbols for codegen
+    let (symbols, loaded_modules) = analyzer.into_parts();
+
+    // Convert HashMap to Vec of references for codegen
+    let loaded_modules_vec: Vec<(&Vec<String>, &crate::ast::Module)> = loaded_modules
+        .iter()
+        .collect();
+
+    // Codegen (pass loaded modules so it can generate code for all of them)
     let mut codegen = Codegen::new();
-    let wasm = codegen.generate_wasm(&ast);
+    let wasm = codegen.generate_wasm_with_modules(&ast, &loaded_modules_vec, &symbols);
 
     Ok(wasm)
 }
