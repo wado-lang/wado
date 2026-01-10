@@ -1655,7 +1655,7 @@ mod tests {
     fn test_effect_with_async_method() {
         let source = r#"
             effect Http {
-                async fn get(url: string) -> Response;
+                async fn get(url: String) -> Response;
                 fn status() -> i32;
             }
         "#;
@@ -1717,7 +1717,7 @@ mod tests {
     fn test_export_with_params() {
         let source = r#"
             world TestWorld {
-                export fn process(input: string, count: i32) -> Result<string, Error>;
+                export fn process(input: String, count: i32) -> Result<String, Error>;
             }
         "#;
 

@@ -33,6 +33,11 @@ Because this language is only targeting Wasm with WASI, this project has git sub
 Wasm: `wasm/`
 WASI: `wasi/`
 
+Also you can access the toolchains:
+
+wasmtime: `../../bytecodealliance/wasmtime/`
+wasm-tools: `../../bytecodealliance/wasm-tools/`
+
 ### Wasm and WASI Features
 
 This project relays on the following features:

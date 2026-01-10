@@ -169,7 +169,7 @@ pub struct DirectoryEntry {
     /// File type
     type: DescriptorType,
     /// File name
-    name: string,
+    name: String,
 }
 
 // ============================================================================
@@ -183,7 +183,7 @@ pub effect FileSystem {
     fn open_at(
         descriptor: &Descriptor,
         path_flags: u32,
-        path: string,
+        path: String,
         open_flags: OpenFlags,
         flags: DescriptorFlags,
     ) -> Result<Descriptor, ErrorCode>;
@@ -217,7 +217,7 @@ pub effect FileSystem {
     fn stat_at(
         descriptor: &Descriptor,
         path_flags: u32,
-        path: string,
+        path: String,
     ) -> Result<DescriptorStat, ErrorCode>;
 
     /// Set file size
@@ -242,51 +242,51 @@ pub effect FileSystem {
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.create-directory-at")]
     fn create_directory_at(
         descriptor: &Descriptor,
-        path: string,
+        path: String,
     ) -> Result<(), ErrorCode>;
 
     /// Remove directory
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.remove-directory-at")]
     fn remove_directory_at(
         descriptor: &Descriptor,
-        path: string,
+        path: String,
     ) -> Result<(), ErrorCode>;
 
     /// Rename file or directory
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.rename-at")]
     fn rename_at(
         descriptor: &Descriptor,
-        old_path: string,
+        old_path: String,
         new_descriptor: &Descriptor,
-        new_path: string,
+        new_path: String,
     ) -> Result<(), ErrorCode>;
 
     /// Remove file
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.unlink-file-at")]
     fn unlink_file_at(
         descriptor: &Descriptor,
-        path: string,
+        path: String,
     ) -> Result<(), ErrorCode>;
 
     /// Create symbolic link
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.symlink-at")]
     fn symlink_at(
         descriptor: &Descriptor,
-        old_path: string,
-        new_path: string,
+        old_path: String,
+        new_path: String,
     ) -> Result<(), ErrorCode>;
 
     /// Read symbolic link
     #[wasi("wasi:filesystem/types@0.2.9#[method]descriptor.readlink-at")]
     fn readlink_at(
         descriptor: &Descriptor,
-        path: string,
-    ) -> Result<string, ErrorCode>;
+        path: String,
+    ) -> Result<String, ErrorCode>;
 }
 
 /// Effect interface for wasi:filesystem/preopens@0.2.9
 pub effect Preopens {
     /// Get preopened directories
     #[wasi("wasi:filesystem/preopens@0.2.9#get-directories")]
-    fn get_directories() -> Array<Tuple<Descriptor, string>>;
+    fn get_directories() -> Array<Tuple<Descriptor, String>>;
 }

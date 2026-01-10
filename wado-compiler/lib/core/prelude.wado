@@ -109,17 +109,21 @@ pub type Borrow<T> = &T;
 
 // The following types are built into Wado and map to Component Model types:
 //
-// Primitives:
+// Wasm Primitives:
 //   bool              -> bool
 //   char              -> char
-//   string            -> string
 //   i8..i64           -> s8..s64
 //   u8..u64           -> u8..u64
 //   f32, f64          -> f32, f64
 //
-// Containers (GC array in Wado, list at CM boundary):
-//   Array<T>          -> list<T>
-//   tuple<T1, T2, ...> -> tuple<T1, T2, ...>
+// builtin:: Namespace (Wasm GC primitives, lowercase):
+//   builtin::array<T> -> Wasm GC array (no methods)
+//   builtin::i31ref   -> Wasm GC i31ref
+//
+// Standard Library Types (UpperCamelCase, structs wrapping builtins):
+//   String            -> string (struct wrapping builtin::array<u8>)
+//   Array<T>          -> list<T> (struct wrapping builtin::array<T>)
+//   Tuple<T1, T2, ...> -> tuple<T1, T2, ...>
 //   Option<T>         -> option<T>
 //   Result<T, E>      -> result<T, E>
 //

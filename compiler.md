@@ -24,15 +24,47 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 | Stdlib   | `stdlib.rs`   | Embedded core library sources                   |
 | Codegen  | `codegen.rs`  | Generates Component Model Wasm via wasm-encoder |
 
-### Core Library
+### Standard Library
 
-Embedded `.wado` files in `wado-compiler/core/`:
+Embedded `.wado` files in `wado-compiler/lib/`:
 
-| Module             | File              | Status                                             |
-| ------------------ | ----------------- | -------------------------------------------------- |
-| `core::prelude`    | `prelude.wado`    | Partial (parser doesn't support generic resources) |
-| `core::cli`        | `cli.wado`        | Complete                                           |
-| `core::filesystem` | `filesystem.wado` | Complete                                           |
+**Core Library (`core/`):**
+
+| Module            | File              | Status                                             |
+| ----------------- | ----------------- | -------------------------------------------------- |
+| `core:prelude`    | `prelude.wado`    | Partial (parser doesn't support generic resources) |
+| `core:cli`        | `cli.wado`        | Complete                                           |
+| `core:filesystem` | `filesystem.wado` | Complete                                           |
+| `core:stream`     | `stream.wado`     | Complete                                           |
+
+**WASI Library (`wasi/`):**
+
+| Module            | File              | Status   |
+| ----------------- | ----------------- | -------- |
+| `wasi:io`         | `io.wado`         | Complete |
+| `wasi:cli`        | `cli.wado`        | Complete |
+| `wasi:filesystem` | `filesystem.wado` | Complete |
+
+### Type System
+
+**Primitive Layer (`builtin::`):**
+
+The `builtin` namespace provides raw Wasm GC types with no abstraction:
+
+- `builtin::array<T>` - Wasm GC array (no methods)
+- `builtin::i31ref` - Wasm GC i31ref (31-bit integer reference)
+- Intrinsic functions: `array_new`, `array_len`, `array_get`, `array_set`, `i31ref_new`, `i31ref_get_s`, `i31ref_get_u`, `eqref`, `unreachable`
+
+**Standard Library Types:**
+
+Standard library types wrap builtins with methods:
+
+- `String` - Struct wrapping `builtin::array<u8>` (maps to CM `string`)
+- `Array<T>` - Struct wrapping `builtin::array<T>` (maps to CM `list<T>`)
+
+**Single-Field Optimization:**
+
+Structs with exactly one GC field compile directly to that field's Wasm type (zero overhead).
 
 ---
 
@@ -195,7 +227,7 @@ The compiler can currently:
 ### Example Working Program
 
 ```wado
-use core::cli::{println, Stdout};
+use {println, Stdout} from "core:cli";
 
 fn main() with Stdout {
     println("Hello, world!");

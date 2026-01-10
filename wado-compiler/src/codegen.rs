@@ -834,8 +834,8 @@ impl Codegen {
                 "i64" | "u64" => ValType::I64,
                 "f32" => ValType::F32,
                 "f64" => ValType::F64,
-                // String is a GC array<u8> (type index 11)
-                "string" => ValType::Ref(RefType {
+                // String is a struct wrapping builtin::array<u8> (type index 11)
+                "String" => ValType::Ref(RefType {
                     nullable: false,
                     heap_type: HeapType::Concrete(11),
                 }),
@@ -1178,7 +1178,7 @@ impl Codegen {
                 func.instruction(&Instruction::Call(1));
             }
             "stream_write_string" => {
-                // stream_write_string(tx: i32, data: string) -> i32
+                // stream_write_string(tx: i32, data: String) -> i32
                 //
                 // GC string implementation:
                 // 1. string is ref to GC array (type 11 = array<u8>)
@@ -1328,7 +1328,7 @@ impl Codegen {
                 func.instruction(&Instruction::ArrayLen);
             }
             "string_ptr" => {
-                // string_ptr(s: string) -> i32
+                // string_ptr(s: String) -> i32
                 // Returns pointer to string data in linear memory
                 //
                 // Current: works with string literals (compile-time offset)
@@ -1347,7 +1347,7 @@ impl Codegen {
                 }
             }
             "string_len" => {
-                // string_len(s: string) -> i32
+                // string_len(s: String) -> i32
                 // Returns length of string in bytes
                 //
                 // Current: works with string literals (compile-time length)
@@ -1400,7 +1400,7 @@ impl Codegen {
     }
 
     /// Generate println function body
-    /// Implements: pub fn println(message: string) from core::cli
+    /// Implements: pub fn println(message: String) from core::cli
     /// Parameter: str_arr (param 0: ref array<u8>)
     /// Locals:
     ///   local 1: len (i32) - string length

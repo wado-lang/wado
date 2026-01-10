@@ -34,7 +34,7 @@ pub use {
 // ============================================================================
 
 /// Open a file for reading
-pub fn open_read(path: string) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
+pub fn open_read(path: String) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -53,7 +53,7 @@ pub fn open_read(path: string) -> Result<Descriptor, ErrorCode> with Preopens, F
 }
 
 /// Open a file for writing (create if doesn't exist, truncate if exists)
-pub fn open_write(path: string) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
+pub fn open_write(path: String) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -72,7 +72,7 @@ pub fn open_write(path: string) -> Result<Descriptor, ErrorCode> with Preopens, 
 }
 
 /// Open a file for appending (create if doesn't exist)
-pub fn open_append(path: string) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
+pub fn open_append(path: String) -> Result<Descriptor, ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -91,13 +91,13 @@ pub fn open_append(path: string) -> Result<Descriptor, ErrorCode> with Preopens,
 }
 
 /// Read entire file contents as stream
-pub fn read_file(path: string) -> Result<Stream<u8>, ErrorCode> with Preopens, FileSystem {
+pub fn read_file(path: String) -> Result<Stream<u8>, ErrorCode> with Preopens, FileSystem {
     let descriptor = open_read(path)?;
     return FileSystem::read_via_stream(&descriptor, 0);
 }
 
 /// Write stream to file
-pub fn write_file(path: string, data: Stream<u8>) -> Result<(), ErrorCode> with Preopens, FileSystem {
+pub fn write_file(path: String, data: Stream<u8>) -> Result<(), ErrorCode> with Preopens, FileSystem {
     let descriptor = open_write(path)?;
     let output_stream = FileSystem::write_via_stream(&descriptor, 0)?;
 
@@ -112,7 +112,7 @@ pub fn write_file(path: string, data: Stream<u8>) -> Result<(), ErrorCode> with 
 // ============================================================================
 
 /// Check if file exists
-pub fn exists(path: string) -> bool with Preopens, FileSystem {
+pub fn exists(path: String) -> bool with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -128,7 +128,7 @@ pub fn exists(path: string) -> bool with Preopens, FileSystem {
 }
 
 /// Check if path is a directory
-pub fn is_directory(path: string) -> bool with Preopens, FileSystem {
+pub fn is_directory(path: String) -> bool with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -144,7 +144,7 @@ pub fn is_directory(path: string) -> bool with Preopens, FileSystem {
 }
 
 /// Check if path is a regular file
-pub fn is_file(path: string) -> bool with Preopens, FileSystem {
+pub fn is_file(path: String) -> bool with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -160,7 +160,7 @@ pub fn is_file(path: string) -> bool with Preopens, FileSystem {
 }
 
 /// Get file size in bytes
-pub fn file_size(path: string) -> Result<u64, ErrorCode> with Preopens, FileSystem {
+pub fn file_size(path: String) -> Result<u64, ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -177,7 +177,7 @@ pub fn file_size(path: string) -> Result<u64, ErrorCode> with Preopens, FileSyst
 // ============================================================================
 
 /// List directory contents
-pub fn read_dir(path: string) -> Result<Array<DirectoryEntry>, ErrorCode> with Preopens, FileSystem {
+pub fn read_dir(path: String) -> Result<Array<DirectoryEntry>, ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -197,7 +197,7 @@ pub fn read_dir(path: string) -> Result<Array<DirectoryEntry>, ErrorCode> with P
 }
 
 /// Create a directory
-pub fn create_dir(path: string) -> Result<(), ErrorCode> with Preopens, FileSystem {
+pub fn create_dir(path: String) -> Result<(), ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -209,7 +209,7 @@ pub fn create_dir(path: string) -> Result<(), ErrorCode> with Preopens, FileSyst
 }
 
 /// Remove a directory (must be empty)
-pub fn remove_dir(path: string) -> Result<(), ErrorCode> with Preopens, FileSystem {
+pub fn remove_dir(path: String) -> Result<(), ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -221,7 +221,7 @@ pub fn remove_dir(path: string) -> Result<(), ErrorCode> with Preopens, FileSyst
 }
 
 /// Remove a file
-pub fn remove_file(path: string) -> Result<(), ErrorCode> with Preopens, FileSystem {
+pub fn remove_file(path: String) -> Result<(), ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {
@@ -233,7 +233,7 @@ pub fn remove_file(path: string) -> Result<(), ErrorCode> with Preopens, FileSys
 }
 
 /// Rename a file or directory
-pub fn rename(old_path: string, new_path: string) -> Result<(), ErrorCode> with Preopens, FileSystem {
+pub fn rename(old_path: String, new_path: String) -> Result<(), ErrorCode> with Preopens, FileSystem {
     let preopens = Preopens::get_directories();
 
     if preopens.len() == 0 {

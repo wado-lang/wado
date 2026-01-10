@@ -71,14 +71,13 @@ impl WasiView for WasiState {
 }
 
 async fn run_wasm(wasm: Vec<u8>) -> Result<()> {
-    // Configure engine with async and component model support
     let mut config = Config::new();
     config.async_support(true);
     config.wasm_component_model(true);
     config.wasm_component_model_async(true);
     config.wasm_component_model_async_builtins(true);
-    config.wasm_component_model_async_stackful(true); // stack switching
-    config.wasm_gc(true); // Enable GC for GC string arrays
+    config.wasm_component_model_async_stackful(true);
+    config.wasm_gc(true);
 
     let engine = Engine::new(&config)?;
 

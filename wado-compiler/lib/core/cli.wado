@@ -15,25 +15,25 @@ pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 // ============================================================================
 
 /// Print a line to stdout (adds newline)
-pub fn println(message: string) with Stdout {
+pub fn println(message: String) with Stdout {
     let stream = string_to_stream(`{message}\n`);
     let _ = Stdout::write_via_stream(stream);
 }
 
 /// Print a line to stderr (adds newline)
-pub fn eprintln(message: string) with Stderr {
+pub fn eprintln(message: String) with Stderr {
     let stream = string_to_stream(`{message}\n`);
     let _ = Stderr::write_via_stream(stream);
 }
 
 /// Print to stdout without newline
-pub fn print(message: string) with Stdout {
+pub fn print(message: String) with Stdout {
     let stream = string_to_stream(message);
     let _ = Stdout::write_via_stream(stream);
 }
 
 /// Print to stderr without newline
-pub fn eprint(message: string) with Stderr {
+pub fn eprint(message: String) with Stderr {
     let stream = string_to_stream(message);
     let _ = Stderr::write_via_stream(stream);
 }
@@ -44,15 +44,15 @@ pub fn eprint(message: string) with Stderr {
 
 /// Get environment variable by name
 /// TODO: Implement when for-in loops are supported
-pub fn env(name: string) -> Option<string> with Environment;
+pub fn env(name: String) -> Option<String> with Environment;
 
 /// Get all command-line arguments
-pub fn args() -> Array<string> with Environment {
+pub fn args() -> Array<String> with Environment {
     return Environment::get_arguments();
 }
 
 /// Get current working directory
-pub fn cwd() -> Option<string> with Environment {
+pub fn cwd() -> Option<String> with Environment {
     return Environment::get_initial_cwd();
 }
 

@@ -27,12 +27,12 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 The lexer recognizes exactly four whitespace characters:
 
-| Code Point | Name            |
-| ---------- | --------------- |
-| `\u0020`   | Space           |
-| `\u000A`   | Line Feed (LF)  |
+| Code Point | Name                 |
+| ---------- | -------------------- |
+| `\u0020`   | Space                |
+| `\u000A`   | Line Feed (LF)       |
 | `\u000D`   | Carriage Return (CR) |
-| `\u0009`   | Tab             |
+| `\u0009`   | Tab                  |
 
 The lexer skips whitespace between tokens. Other Unicode whitespace characters (e.g., `\u00A0` non-breaking space) are not recognized as whitespace and will cause a lexer error if used outside strings.
 
@@ -108,33 +108,34 @@ let other = move handle;  // OK: explicit move
 
 All Wado types map directly to WebAssembly Component Model types:
 
-| Wado Type                 | Component Model Type                 | Notes                                             |
-| ------------------------- | ------------------------------------ | ------------------------------------------------- |
-| `bool`                    | `bool`                               | Boolean                                           |
-| `char`                    | `char`                               | Unicode scalar value                              |
-| `string`                  | `string`                             | UTF-8 string                                      |
-| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64`            | Signed integers                                   |
-| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                 |
-| `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                           |
-| `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)                   |
-| `f16`                     | -                                    | TODO: Wasm half-precision proposal (Phase 1)      |
-| `Array<T>`                | `list<T>`                            | GC array in Wado, list at CM boundary             |
-| `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary                  |
-| `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types (UpperCamel in Wado)                  |
-| `Option<T>`               | `option<T>`                          | Optional value (UpperCamel in Wado)               |
-| `Result<T, E>`            | `result<T, E>`                       | Result type (UpperCamel in Wado)                  |
-| `struct { ... }`          | `record { ... }`                     | GC struct in Wado, record at CM boundary          |
-| `enum { ... }`            | `enum { ... }`                       | Enumeration without payloads                      |
-| `variant { ... }`         | `variant { ... }`                    | Variant/sum type with payloads                    |
-| `flags { ... }`           | `flags { ... }`                      | Bit flags (maps to u8/u16/u32/u64)                |
-| `resource`                | `resource`                           | Resource handle                                   |
-| `Stream<T>`               | `stream<T>`                          | Component Model async stream (UpperCamel in Wado) |
-| `Future<T>`               | `future<T>`                          | Component Model async future (UpperCamel in Wado) |
+| Wado Type                 | Component Model Type                 | Notes                                        |
+| ------------------------- | ------------------------------------ | -------------------------------------------- |
+| `bool`                    | `bool`                               | Boolean                                      |
+| `char`                    | `char`                               | Unicode scalar value                         |
+| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64`            | Signed integers                              |
+| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                            |
+| `i128`, `u128`            | `tuple<s64, s64>`, `tuple<u64, u64>` | As tuple at CM boundary                      |
+| `f32`, `f64`              | `f32`, `f64`                         | Floating point (32-bit, 64-bit)              |
+| `f16`                     | -                                    | TODO: Wasm half-precision proposal (Phase 1) |
+| `String`                  | `string`                             | Struct wrapping `builtin::array<u8>`         |
+| `Array<T>`                | `list<T>`                            | Struct wrapping `builtin::array<T>`          |
+| `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary             |
+| `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types                                  |
+| `Option<T>`               | `option<T>`                          | Optional value                               |
+| `Result<T, E>`            | `result<T, E>`                       | Result type                                  |
+| `struct { ... }`          | `record { ... }`                     | GC struct in Wado, record at CM boundary     |
+| `enum { ... }`            | `enum { ... }`                       | Enumeration without payloads                 |
+| `variant { ... }`         | `variant { ... }`                    | Variant/sum type with payloads               |
+| `flags { ... }`           | `flags { ... }`                      | Bit flags (maps to u8/u16/u32/u64)           |
+| `resource`                | `resource`                           | Resource handle                              |
+| `Stream<T>`               | `stream<T>`                          | Component Model async stream                 |
+| `Future<T>`               | `future<T>`                          | Component Model async future                 |
 
 **Type Naming Convention:**
 
-- Built-in primitive types use lowercase: `bool`, `char`, `string`, `i32`, `f64`
-- Generic container types use UpperCamelCase: `Array<T>`, `Dict<K, V>`, `Tuple<T1, T2, ...>`, `Option<T>`, `Result<T, E>`, `Stream<T>`, `Future<T>`
+- Wasm primitive types use lowercase: `bool`, `char`, `i32`, `f64`, etc.
+- Wasm GC primitives in `builtin::` use lowercase: `builtin::array<T>`, `builtin::i31ref`
+- Standard library types use UpperCamelCase: `String`, `Array<T>`, `Option<T>`, `Result<T, E>`, etc.
 - User-defined types follow UpperCamelCase convention
 
 ### The Prelude
@@ -143,6 +144,8 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 
 **Automatically Available:**
 
+- `String` - UTF-8 string (struct wrapping `builtin::array<u8>`)
+- `Array<T>` - Dynamic array (struct wrapping `builtin::array<T>`)
 - `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
 - `Stream<T>` - Component Model async stream
@@ -155,12 +158,65 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use {Option, Result, Stream} from "core:prelude";
+use {String, Array, Option, Result, Stream} from "core:prelude";
 ```
+
+### The `builtin` Namespace
+
+The `builtin` namespace provides direct access to Wasm primitives. These types and functions map 1:1 to Wasm instructions with no abstraction.
+
+**Wasm GC Types:**
+
+```wado
+builtin::array<T>    // Wasm GC array (no methods)
+builtin::i31ref      // Wasm GC i31ref (31-bit integer reference)
+```
+
+**Intrinsic Functions:**
+
+```wado
+// Array operations
+builtin::array_new<T>(len: i32) -> builtin::array<T>
+builtin::array_len<T>(arr: builtin::array<T>) -> i32
+builtin::array_get<T>(arr: builtin::array<T>, idx: i32) -> T
+builtin::array_set<T>(arr: builtin::array<T>, idx: i32, value: T)
+
+// i31ref operations
+builtin::i31ref_new(value: i32) -> builtin::i31ref
+builtin::i31ref_get_s(ref: builtin::i31ref) -> i32   // Signed extraction
+builtin::i31ref_get_u(ref: builtin::i31ref) -> u32   // Unsigned extraction
+
+// Reference comparison (Wasm ref.eq)
+builtin::eqref<T, U>(a: T, b: U) -> bool   // Compare any GC references
+
+// Control
+builtin::unreachable() -> !   // Wasm trap instruction
+```
+
+**Usage:**
+
+```wado
+// Standard library uses builtin primitives internally
+// In core/string.wado
+pub struct String {
+    buf: builtin::array<u8>,
+
+    pub fn length(&self) -> i32 {
+        return builtin::array_len(self.buf);
+    }
+}
+
+// In core/prelude.wado
+pub fn unreachable() -> ! {
+    builtin::unreachable()
+}
+```
+
+The `builtin` namespace is always available without import, but is intended primarily for standard library implementation. User code typically uses the ergonomic wrapper types (`String`, `Array<T>`, etc.).
 
 ### Built-in Types (No Import Required)
 
-**Primitive types** (lowercase, built into the language):
+**Wasm primitive types** (lowercase):
 
 ```wado
 // Numeric
@@ -171,13 +227,13 @@ f32, f64
 // Basic
 bool
 char
-string
 ```
 
-**Built-in generic types** (UpperCamelCase):
+**Standard library types** (UpperCamelCase, defined in `core/`):
 
 ```wado
-Array<T>           // GC array in Wado, list at CM boundary
+String             // Struct wrapping builtin::array<u8>
+Array<T>           // Struct wrapping builtin::array<T>
 Dict<K, V>         // As list<tuple<K, V>> at CM boundary
 Tuple<T1, T2, ...> // Component Model tuple<T1, T2, ...>
 Reactive<T>        // Reactive value
@@ -217,7 +273,7 @@ assert(null == None);
 
 #### Character Literals
 
-Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `string` differs from `Array<u8>`:
+Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `String` differs from `Array<u8>`:
 
 ```wado
 let letter = 'A';
@@ -229,18 +285,18 @@ let newline = '\n';
 
 **Escape sequences** (shared with string literals, except `\'` instead of `\"`):
 
-| Escape     | Character                   |
-| ---------- | --------------------------- |
-| `\'`       | Single quote                |
-| `\\`       | Backslash                   |
-| `\/`       | Forward slash               |
-| `\b`       | Backspace                   |
-| `\f`       | Form feed                   |
-| `\n`       | Newline                     |
-| `\r`       | Carriage return             |
-| `\t`       | Tab                         |
-| `\uHHHH`   | Unicode BMP (4 hex digits)  |
-| `\u{H+}`   | Unicode full range          |
+| Escape   | Character                  |
+| -------- | -------------------------- |
+| `\'`     | Single quote               |
+| `\\`     | Backslash                  |
+| `\/`     | Forward slash              |
+| `\b`     | Backspace                  |
+| `\f`     | Form feed                  |
+| `\n`     | Newline                    |
+| `\r`     | Carriage return            |
+| `\t`     | Tab                        |
+| `\uHHHH` | Unicode BMP (4 hex digits) |
+| `\u{H+}` | Unicode full range         |
 
 ```wado
 let a = '\u0041';         // 'A' (BMP)
@@ -285,28 +341,30 @@ let double: f64 = 3.14159265358979f64;
 
 #### String Literals
 
+String literals create `String` values (not `builtin::array<u8>`).
+
 **Regular strings** use double quotes:
 
 ```wado
-let name = "Alice";
+let name = "Alice";           // Type: String
 let path = "path/to/file.txt";
 let escaped = "Line 1\nLine 2\tTabbed";
 ```
 
 **Escape sequences:**
 
-| Escape     | Character                   |
-| ---------- | --------------------------- |
-| `\"`       | Double quote                |
-| `\\`       | Backslash                   |
-| `\/`       | Forward slash               |
-| `\b`       | Backspace                   |
-| `\f`       | Form feed                   |
-| `\n`       | Newline                     |
-| `\r`       | Carriage return             |
-| `\t`       | Tab                         |
-| `\uHHHH`   | Unicode BMP (4 hex digits)  |
-| `\u{H+}`   | Unicode full range          |
+| Escape   | Character                  |
+| -------- | -------------------------- |
+| `\"`     | Double quote               |
+| `\\`     | Backslash                  |
+| `\/`     | Forward slash              |
+| `\b`     | Backspace                  |
+| `\f`     | Form feed                  |
+| `\n`     | Newline                    |
+| `\r`     | Carriage return            |
+| `\t`     | Tab                        |
+| `\uHHHH` | Unicode BMP (4 hex digits) |
+| `\u{H+}` | Unicode full range         |
 
 For characters outside BMP (U+10000 and above), use either:
 
@@ -332,17 +390,19 @@ let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
 
 #### Array Literals
 
+Array literals create `Array<T>` values (not `builtin::array<T>`).
+
 ```wado
-let numbers = [1, 2, 3, 4, 5];
+let numbers = [1, 2, 3, 4, 5];  // Type: Array<i32>
 let empty: Array<i32> = [];
-let mixed = [1, 2, 3,];  // Trailing comma allowed
+let mixed = [1, 2, 3,];          // Trailing comma allowed
 ```
 
 #### Tuple Literals
 
 ```wado
 let pair = (1, "hello");
-let triple: Tuple<i32, string, bool> = (42, "answer", true);
+let triple: Tuple<i32, String, bool> = (42, "answer", true);
 ```
 
 ### Literal Types
@@ -357,7 +417,7 @@ type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 // Object literal types
 type Status = {
     status: "loading" | "success" | "error",
-    message: string,
+    message: String,
 };
 ```
 
@@ -368,7 +428,7 @@ Wado uses `struct` for structured data types. Internally they are implemented as
 ```wado
 // Struct definition
 struct User {
-    name: string,
+    name: String,
     age: i32,
     active: bool,
 }
@@ -381,7 +441,7 @@ struct Node {
 
 // Inline struct type
 type UserData = struct {
-    name: string,
+    name: String,
     age: i32,
 };
 ```
@@ -391,6 +451,28 @@ type UserData = struct {
 - Internally: Wasm-GC `struct` type with GC-managed memory
 - At CM boundary: Automatically converted to/from `record`
 - Enables recursive types, self-referential structures, and efficient field access
+
+**Single-Field Optimization:**
+
+If a struct contains exactly one GC object field (a `builtin::array` or another struct), the compiler skips generating the outer Wasm GC struct. This means wrapper types like `String` and `Array<T>` have **zero runtime overhead**:
+
+```wado
+// String wraps builtin::array<u8>
+struct String {
+    buf: builtin::array<u8>,
+    // ... methods
+}
+// At Wasm level: compiles to just (ref (array u8)), no wrapper struct
+
+// Array<T> wraps builtin::array<T>
+struct Array<T> {
+    repr: builtin::array<T>,
+    // ... methods
+}
+// At Wasm level: compiles to just (ref (array T)), no wrapper struct
+```
+
+This optimization enables ergonomic APIs with methods while maintaining direct Wasm GC representation.
 
 ### Enums, Variants, and Flags
 
@@ -488,19 +570,19 @@ let bob: User = { name, age, active: false };
 ### Dictionaries
 
 ```wado
-// string keys
-let d: Dict<string, i32> = { x: 10, y: 20 };
+// String keys
+let d: Dict<String, i32> = { x: 10, y: 20 };
 
 // Computed key
 let key = "dynamic";
-let d: Dict<string, i32> = {
+let d: Dict<String, i32> = {
     static_key: 1,
     [key]: 2,
     [get_key()]: 3,
 };
 
-// Non-string keys
-let nums: Dict<i32, string> = {
+// Non-String keys
+let nums: Dict<i32, String> = {
     [1]: "one",
     [2]: "two",
 };
@@ -784,25 +866,25 @@ Effects can be defined in two ways:
 
 ```wado
 effect Console {
-    fn print(msg: string);
-    fn read_line() -> string;
+    fn print(msg: String);
+    fn read_line() -> String;
 }
 
 effect Http {
     // async keyword required when corresponding to WIT's "async func"
-    async fn get(url: string) -> Response;
-    async fn post(url: string, body: string) -> Response;
+    async fn get(url: String) -> Response;
+    async fn post(url: String, body: String) -> Response;
 }
 
 effect FileSystem {
-    async fn read(path: string) -> Result<Array<u8>, IoError>;
-    async fn write(path: string, data: Array<u8>) -> Result<(), IoError>;
-    fn exists(path: string) -> bool;  // Synchronous
+    async fn read(path: String) -> Result<Array<u8>, IoError>;
+    async fn write(path: String, data: Array<u8>) -> Result<(), IoError>;
+    fn exists(path: String) -> bool;  // Synchronous
 }
 
 effect Dom {
-    fn query(selector: string) -> Option<Element>;
-    fn create_element(tag: string) -> Element;
+    fn query(selector: String) -> Option<Element>;
+    fn create_element(tag: String) -> Element;
 }
 ```
 
@@ -827,7 +909,7 @@ impl TcpListener {
 }
 
 // Free functions can also require effects
-fn listen(addr: string) -> Result<TcpListener, IoError> with Network;
+fn listen(addr: String) -> Result<TcpListener, IoError> with Network;
 ```
 
 This approach makes effect requirements explicit and visible in method signatures, maintaining consistency with the language's design philosophy of being clear and explicit.
@@ -836,12 +918,12 @@ This approach makes effect requirements explicit and visible in method signature
 
 ```wado
 // Declare effects used with `with`
-fn greet(name: string) with Console {
+fn greet(name: String) with Console {
     Console::print(`Hello, {name}!`);
 }
 
 // Multiple effects
-fn download_and_save(url: string, path: string) with Http, FileSystem {
+fn download_and_save(url: String, path: String) with Http, FileSystem {
     let data = Http::get(url).body;
     FileSystem::write(path, data);
 }
@@ -861,12 +943,12 @@ To avoid the verbosity of `Effect::function()` calls, you can explicitly import 
 use {Stdout::{write_via_stream}} from "wasi:cli";
 use {Environment::{get_environment, get_arguments}} from "wasi:cli";
 
-pub fn println(message: string) with Stdout {
+pub fn println(message: String) with Stdout {
     let stream = string_to_stream(`{message}\n`);
     write_via_stream(stream);  // No need for Stdout:: prefix
 }
 
-pub fn env(name: string) -> Option<string> with Environment {
+pub fn env(name: String) -> Option<String> with Environment {
     let vars = get_environment();  // No need for Environment:: prefix
     for (key, value) in vars {
         if key == name {
@@ -896,7 +978,7 @@ pub fn env(name: string) -> Option<string> with Environment {
 use {Stdout::{write_via_stream}} from "wasi:cli";
 use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
 
-pub fn log(message: string) with Stdout, Stderr {
+pub fn log(message: String) with Stdout, Stderr {
     write_via_stream(stdout_stream);  // Calls Stdout::write_via_stream
     stderr_write(stderr_stream);      // Calls Stderr::write_via_stream (renamed)
 }
@@ -948,7 +1030,7 @@ with handler Console {
 
 ```wado
 handler MockConsole for Console {
-    let mut output: Array<string> = [];
+    let mut output: Array<String> = [];
 
     print(msg) => {
         output.push(msg);
@@ -1118,7 +1200,7 @@ world BrowserApp {
         create_element,
     }
 
-    export fn mount(root: string);
+    export fn mount(root: String);
 }
 
 world CliApp {
@@ -1158,11 +1240,11 @@ These cannot be caught; the program terminates.
 ### Recoverable Errors (Result Type)
 
 ```wado
-fn parse_int(s: string) -> Result<i32, ParseError> {
+fn parse_int(s: String) -> Result<i32, ParseError> {
     // ...
 }
 
-fn read_config(path: string) -> Result<Config, ConfigError> with FileSystem {
+fn read_config(path: String) -> Result<Config, ConfigError> with FileSystem {
     let content = FileSystem::read(path)
         .map_err(|e| ConfigError::Io(e))?;
     let config = parse_config(content)?;
@@ -1229,7 +1311,7 @@ Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `
 | `option<T>`     | `Option<T>`      | Optional value                      |
 | `list<T>`       | `Array<T>`       | Dynamic list                        |
 | `tuple<A, B>`   | `Tuple<A, B>`    | Tuple types                         |
-| `string`        | `string`         | UTF-8 string                        |
+| `string`        | `String`         | UTF-8 string (struct in Wado)       |
 | `enum { a, b }` | `enum { A, B }`  | Variants use UpperCamelCase in Wado |
 
 ### WASI P3 CLI Interfaces
@@ -1255,7 +1337,7 @@ write-via-stream: async func(data: stream<u8>) -> result<_, error-code>;
 
 ```wado
 // Wado usage - no async keyword needed
-fn println(message: string) with Stdout {
+fn println(message: String) with Stdout {
     let stream = string_to_stream(`{message}\n`);
     Stdout::write_via_stream(stream);  // Colorless async
 }
@@ -1302,7 +1384,7 @@ use {load_wasm} from "core:wasm";
 world Transform {
     // ...
 
-    export fn execute(input: string) with FileSystem -> string;
+    export fn execute(input: String) with FileSystem -> String;
 }
 
 let plugin: Transform = load_wasm("./transform.wasm", world: Transform);
@@ -1349,4 +1431,3 @@ let name = config["name"];
 ```
 
 **Note:** This uses namespace import syntax (`use name from`) rather than named import (`use {name} from`).
-
