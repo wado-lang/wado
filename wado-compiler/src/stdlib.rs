@@ -38,14 +38,20 @@ pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 // WASI Library (wasi:*)
 // ============================================================================
 
-/// Embedded source for wasi:io
-pub const WASI_IO: &str = include_str!("../lib/wasi/io.wado");
-
 /// Embedded source for wasi:cli
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
 
 /// Embedded source for wasi:filesystem
 pub const WASI_FILESYSTEM: &str = include_str!("../lib/wasi/filesystem.wado");
+
+/// Embedded source for wasi:clocks
+pub const WASI_CLOCKS: &str = include_str!("../lib/wasi/clocks.wado");
+
+/// Embedded source for wasi:random
+pub const WASI_RANDOM: &str = include_str!("../lib/wasi/random.wado");
+
+/// Embedded source for wasi:sockets
+pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
 
 // ============================================================================
 // Module Resolution
@@ -57,9 +63,11 @@ pub const WASI_FILESYSTEM: &str = include_str!("../lib/wasi/filesystem.wado");
 /// - `"core:prelude"` -> core library prelude
 /// - `"core:cli"` -> core library CLI helpers
 /// - `"core:filesystem"` -> core library filesystem helpers
-/// - `"wasi:io"` -> WASI I/O (poll, Pollable)
 /// - `"wasi:cli"` -> WASI CLI interfaces
 /// - `"wasi:filesystem"` -> WASI filesystem interfaces
+/// - `"wasi:clocks"` -> WASI clocks interfaces
+/// - `"wasi:random"` -> WASI random interfaces
+/// - `"wasi:sockets"` -> WASI sockets interfaces
 ///
 /// # Arguments
 /// * `import_path` - Import path string, e.g., `"core:cli"` or `"wasi:filesystem"`
@@ -74,9 +82,11 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:filesystem" => Some(CORE_FILESYSTEM),
 
         // WASI library
-        "wasi:io" => Some(WASI_IO),
         "wasi:cli" => Some(WASI_CLI),
         "wasi:filesystem" => Some(WASI_FILESYSTEM),
+        "wasi:clocks" => Some(WASI_CLOCKS),
+        "wasi:random" => Some(WASI_RANDOM),
+        "wasi:sockets" => Some(WASI_SOCKETS),
 
         _ => None,
     }
@@ -122,13 +132,6 @@ mod tests {
     }
 
     #[test]
-    fn test_get_wasi_io() {
-        let source = get_stdlib_module("wasi:io");
-        assert!(source.is_some());
-        assert!(source.unwrap().contains("Pollable"));
-    }
-
-    #[test]
     fn test_get_wasi_cli() {
         let source = get_stdlib_module("wasi:cli");
         assert!(source.is_some());
@@ -140,6 +143,27 @@ mod tests {
         let source = get_stdlib_module("wasi:filesystem");
         assert!(source.is_some());
         assert!(source.unwrap().contains("Descriptor"));
+    }
+
+    #[test]
+    fn test_get_wasi_clocks() {
+        let source = get_stdlib_module("wasi:clocks");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("MonotonicClock"));
+    }
+
+    #[test]
+    fn test_get_wasi_random() {
+        let source = get_stdlib_module("wasi:random");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("Random"));
+    }
+
+    #[test]
+    fn test_get_wasi_sockets() {
+        let source = get_stdlib_module("wasi:sockets");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("TcpSocket"));
     }
 
     #[test]

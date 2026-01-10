@@ -221,7 +221,11 @@ fn test_float_with_separator() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Float(f) => {
-            assert!((f - 1_000_000.5).abs() < 1e-10, "expected 1000000.5, got {}", f);
+            assert!(
+                (f - 1_000_000.5).abs() < 1e-10,
+                "expected 1000000.5, got {}",
+                f
+            );
         }
         other => panic!("expected Float, got {:?}", other),
     }
@@ -316,7 +320,11 @@ fn test_string_escape_backslash() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "path\\to\\file", "expected backslash escape, got {:?}", s);
+            assert_eq!(
+                s, "path\\to\\file",
+                "expected backslash escape, got {:?}",
+                s
+            );
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -452,7 +460,10 @@ fn test_string_unterminated() {
 #[test]
 fn test_string_invalid_escape() {
     let result = parse_expr(r#""invalid\x""#);
-    assert!(result.is_err(), "expected error for invalid escape sequence");
+    assert!(
+        result.is_err(),
+        "expected error for invalid escape sequence"
+    );
 }
 
 // ============================================================================

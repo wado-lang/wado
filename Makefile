@@ -4,11 +4,11 @@ build:
 
 .PHONY: hello
 hello: build
-	cargo run --quiet -- compile -o example/hello.wat example/hello.wado
+	cargo run -p wado-cli --quiet -- compile -o example/hello.wat example/hello.wado
 
 .PHONY: hello-run
 hello-run: build
-	cargo run --quiet -- run example/hello.wado
+	cargo run -p wado-cli --quiet -- run example/hello.wado
 
 .PHONY: hello-run-wasmtime
 hello-run-wasmtime: hello
@@ -35,3 +35,10 @@ clean:
 .PHONY: update-vendor
 update-vendor:
 	git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime vendor/wasm-tools
+
+.PHONY: stdlib-wasi
+stdlib-wasi: build
+	rm -f wado-compiler/lib/wasi/*.wado
+	cargo run -p wado-from-wit -- \
+		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
+		--output-dir wado-compiler/lib/wasi

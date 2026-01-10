@@ -196,7 +196,7 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [ ] Effect handlers
 - [ ] Reactive signals (source values)
 - [ ] Reactive signals (derived values)
-- [ ] Reactive effect blocks
+- [ ] Reactive effect blocks (syntax TBD)
 - [ ] Reactive references (`&reactive T`)
 - [ ] Multiple modules/files
 - [ ] Other WASI interfaces (filesystem, etc.)
@@ -294,7 +294,9 @@ count = 5;  // Mutation site
 (local.set $quadrupled (i32.mul (local.get $doubled) (i32.const 2)))
 ```
 
-### Effect Blocks
+### Effect Blocks (TBD)
+
+> **Note**: The syntax for reactive side effects is under discussion. See spec.md for alternatives.
 
 Effect blocks subscribe to reactive values read within them:
 

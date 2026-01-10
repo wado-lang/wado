@@ -790,19 +790,25 @@ let x = doubled;    // Returns current computed value
 
 Derived values are recomputed when their dependencies change. The compiler builds a dependency graph and updates values in topological order.
 
-### Effect Block
+### Effect Block (TBD)
 
-Effect blocks run when their dependencies change:
+> **To be discussed**: The syntax and semantics for reactive side effects are under discussion. The `effect` keyword conflicts with the Effect System terminology. Alternatives being considered include `watch { }`, explicit dependency syntax, or method-based subscriptions.
 
 ```wado
-let reactive mut count = 0;
-
+// Current proposal (may change)
 effect {
     println(`Count is now: {count}`);
 }
 
-count = 5;  // Effect runs, prints "Count is now: 5"
-count = 10; // Effect runs again, prints "Count is now: 10"
+// Alternative: explicit dependency
+watch count {
+    println(`Count is now: {count}`);
+}
+
+// Alternative: method-based
+count.watch(|value| {
+    println(`Count is now: {value}`);
+});
 ```
 
 ### Reactive References

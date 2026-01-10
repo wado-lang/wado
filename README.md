@@ -49,11 +49,7 @@ Wado has built-in support for reactive state (often called "signals" in other fr
 let reactive mut count = 0;           // Mutable reactive state
 let reactive doubled = || count * 2;  // Derived value
 
-effect {
-    println(`count = {count}`);       // Runs when count changes
-}
-
-count += 1;  // Propagates to `doubled`, runs effect
+count += 1;  // Automatically propagates to `doubled`
 ```
 
 Why built-in instead of a library?
