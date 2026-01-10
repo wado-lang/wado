@@ -1403,15 +1403,16 @@ impl Codegen {
         });
 
         if let Some(main) = main_func
-            && let Some(body) = &main.body {
-                let mut ctx = FunctionContext::new(main.params.len() as u32);
-                for param in &main.params {
-                    ctx.add_param(&param.name);
-                }
-                for stmt in &body.stmts {
-                    self.generate_stmt_with_mod_ctx(func, stmt, &mut ctx, mod_ctx);
-                }
+            && let Some(body) = &main.body
+        {
+            let mut ctx = FunctionContext::new(main.params.len() as u32);
+            for param in &main.params {
+                ctx.add_param(&param.name);
             }
+            for stmt in &body.stmts {
+                self.generate_stmt_with_mod_ctx(func, stmt, &mut ctx, mod_ctx);
+            }
+        }
     }
 
     /// Generate println function body

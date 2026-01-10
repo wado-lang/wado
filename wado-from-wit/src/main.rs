@@ -249,9 +249,10 @@ fn build_interface_map_recursive(
                                 map.insert(name.to_string(), rel_path.clone());
                             }
                         } else if let Some(rest) = line.strip_prefix("world ")
-                            && let Some(name) = rest.split_whitespace().next() {
-                                map.insert(name.to_string(), rel_path.clone());
-                            }
+                            && let Some(name) = rest.split_whitespace().next()
+                        {
+                            map.insert(name.to_string(), rel_path.clone());
+                        }
                     }
                 }
             }

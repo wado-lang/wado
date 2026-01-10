@@ -299,6 +299,7 @@ let outer = `Outer {`Inner {x}`}`;
 #### ✅ Fully Implemented (Lexer & Parser)
 
 **Lexer (`lexer.rs`)**:
+
 - Backtick string tokenization with `TemplateStringLit` token
 - Brace depth tracking to handle nested `{}` in interpolations
 - String literal tracking inside interpolations
@@ -306,6 +307,7 @@ let outer = `Outer {`Inner {x}`}`;
 - Nested template string support
 
 **Parser (`parser.rs`)**:
+
 - Template string AST nodes (`TemplateStringExpr`, `TemplatePart`, `FormatSpec`)
 - Interpolation expression parsing (any valid expression)
 - Format specifier extraction after `:`
@@ -316,6 +318,7 @@ let outer = `Outer {`Inner {x}`}`;
 - Comprehensive error handling
 
 **Test Coverage**:
+
 - 20 comprehensive test cases covering:
   - Basic interpolation
   - Complex expressions
@@ -327,30 +330,37 @@ let outer = `Outer {`Inner {x}`}`;
 #### ⚠️ Partial Implementation (Codegen)
 
 **What Works (`codegen.rs`)**:
+
 - String literal parts are collected and embedded in data section
 - Interpolation expressions are evaluated
 - Template strings recognized as producing `ref (array u8)` type
 - Basic structure for concatenation (locals allocated)
 
 **What's Missing (TODO)**:
+
 1. **Type-to-String Conversion**:
+
    ```wado
    `Count: {42}`    // Need i32 → string
    `Pi: {3.14}`     // Need f64 → string
    `Flag: {true}`   // Need bool → string
    ```
+
    Currently assumes all interpolated expressions are already strings.
 
 2. **Format Specifiers**:
+
    ```wado
    `{pi:.2f}`       // Decimal precision
    `{x:0.3f}`       // Zero padding
    `{n:d}`          // Integer formatting
    ```
+
    Format specs are parsed but ignored in codegen.
 
 3. **String Concatenation**:
    Currently uses placeholder that only keeps the last part:
+
    ```rust
    // TODO: Implement proper array concatenation
    // Current: just overwrites with each part (incorrect)
@@ -386,6 +396,7 @@ pub struct FormatSpec {
 ### Next Steps for Full Implementation
 
 1. **Add `to_string()` intrinsics** for primitive types:
+
    ```wado
    builtin::i32_to_string(value: i32) -> builtin::array<u8>
    builtin::f64_to_string(value: f64) -> builtin::array<u8>
@@ -397,6 +408,7 @@ pub struct FormatSpec {
    - Pass to appropriate formatting intrinsic
 
 3. **Implement efficient array concatenation**:
+
    ```wat
    ;; Calculate total length
    (i32.add (array.len $part1) (i32.add (array.len $part2) ...))

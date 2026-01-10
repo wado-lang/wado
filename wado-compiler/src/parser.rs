@@ -1449,11 +1449,7 @@ impl Parser {
     /// Parse template string and extract parts (string literals and interpolations)
     /// Input: raw template string content (without backticks)
     /// Example: "Hello, {name}!" -> [String("Hello, "), Interpolation(name), String("!")]
-    fn parse_template_string_parts(
-        &mut self,
-        content: String,
-        span: Span,
-    ) -> ParseResult<Expr> {
+    fn parse_template_string_parts(&mut self, content: String, span: Span) -> ParseResult<Expr> {
         use crate::ast::{TemplatePart, TemplateStringExpr};
 
         let mut parts = Vec::new();
