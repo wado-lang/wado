@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   integrity:
@@ -29,7 +30,7 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features
+        run: cargo clippy --locked --all-targets --all-features
 
   test:
     name: Test
@@ -48,4 +49,4 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       - name: Run tests
-        run: cargo test --all
+        run: cargo test --locked --all
