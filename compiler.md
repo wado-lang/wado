@@ -36,6 +36,7 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:cli`        | `cli.wado`        | Complete                                           |
 | `core:filesystem` | `filesystem.wado` | Complete                                           |
 | `core:stream`     | `stream.wado`     | Complete                                           |
+| `core:internals`  | `internals.wado`  | Complete (compiler intrinsics for codegen)         |
 
 **WASI Library (`wasi/`):**
 
@@ -270,6 +271,39 @@ fn main() with Stdout {
 
 Wado supports template strings with interpolation using backticks and `{expr}` syntax, similar to JavaScript but with Python-like format specifiers.
 
+### Compiler Intrinsics for Type Conversion
+
+The `core:internals` module provides compiler intrinsics for converting primitive types to strings. These functions are used by the code generator when compiling template string interpolations.
+
+**Stringify Functions (in `core/internals.wado`):**
+
+```wado
+// Boolean conversion
+stringify_bool(value: bool) -> String          // "true" or "false"
+
+// Character conversion
+stringify_char(value: char) -> String          // Single character
+
+// Integer conversions
+stringify_i8(value: i8) -> String
+stringify_i16(value: i16) -> String
+stringify_i32(value: i32) -> String
+stringify_i64(value: i64) -> String
+stringify_i128(value: i128) -> String
+
+stringify_u8(value: u8) -> String
+stringify_u16(value: u16) -> String
+stringify_u32(value: u32) -> String
+stringify_u64(value: u64) -> String
+stringify_u128(value: u128) -> String
+
+// Float conversions
+stringify_f32(value: f32) -> String
+stringify_f64(value: f64) -> String
+```
+
+These functions have no body in Wado - they are compiler intrinsics. The code generator (codegen.rs) recognizes calls to these functions and generates the appropriate Wasm instructions directly.
+
 ### Syntax
 
 ```wado
@@ -395,19 +429,22 @@ pub struct FormatSpec {
 
 ### Next Steps for Full Implementation
 
-1. **Add `to_string()` intrinsics** for primitive types:
+1. **✅ DONE: Add stringify intrinsics** for primitive types (in `core/internals.wado`):
+   - All primitive type conversions defined
+   - Functions declared as compiler intrinsics (no body)
+   - Ready for codegen.rs implementation
 
-   ```wado
-   builtin::i32_to_string(value: i32) -> builtin::array<u8>
-   builtin::f64_to_string(value: f64) -> builtin::array<u8>
-   builtin::bool_to_string(value: bool) -> builtin::array<u8>
-   ```
+2. **Implement codegen support** for stringify intrinsics:
+   - Recognize calls to `core:internals::stringify_*` functions
+   - Generate appropriate Wasm code for type-to-string conversion
+   - Use itoa/dtoa algorithms for integers/floats
+   - Generate string literals for bool ("true"/"false")
 
-2. **Implement format specifier handling**:
+3. **Implement format specifier handling**:
    - Parse format spec (precision, padding, alignment)
    - Pass to appropriate formatting intrinsic
 
-3. **Implement efficient array concatenation**:
+4. **Implement efficient array concatenation**:
 
    ```wat
    ;; Calculate total length
@@ -424,7 +461,7 @@ pub struct FormatSpec {
    ;; Repeat for each part at appropriate offset
    ```
 
-4. **Add E2E tests** for runtime execution with wasmtime
+5. **Add E2E tests** for runtime execution with wasmtime
 
 ---
 

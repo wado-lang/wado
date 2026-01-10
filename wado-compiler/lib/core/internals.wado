@@ -1,0 +1,120 @@
+// Wado Compiler Internals Module
+//
+// This module provides low-level functions used by the compiler for code generation.
+// These functions are NOT intended for direct use by user code.
+//
+// Primary use case: String template interpolation
+// When compiling `Hello, {value}!`, the compiler needs to convert `value` to a string.
+// Since Wado has no function overloading, we provide separate stringify functions
+// for each primitive type.
+//
+// These functions are compiler intrinsics - their implementations are generated
+// directly by the compiler (codegen.rs) rather than being written in Wado.
+
+// ============================================================================
+// String Conversion Functions (Compiler Intrinsics)
+// ============================================================================
+
+/// Convert a boolean value to a string
+/// Returns "true" or "false"
+///
+/// Compiler intrinsic for template interpolation: `{bool_value}`
+pub fn stringify_bool(value: bool) -> String;
+
+/// Convert a char to a string
+/// Returns a string containing the single character
+///
+/// Compiler intrinsic for template interpolation: `{char_value}`
+pub fn stringify_char(value: char) -> String;
+
+/// Convert an i8 to a string
+/// Returns the decimal representation with optional minus sign
+///
+/// Compiler intrinsic for template interpolation: `{i8_value}`
+pub fn stringify_i8(value: i8) -> String;
+
+/// Convert an i16 to a string
+/// Returns the decimal representation with optional minus sign
+///
+/// Compiler intrinsic for template interpolation: `{i16_value}`
+pub fn stringify_i16(value: i16) -> String;
+
+/// Convert an i32 to a string
+/// Returns the decimal representation with optional minus sign
+///
+/// Compiler intrinsic for template interpolation: `{i32_value}`
+pub fn stringify_i32(value: i32) -> String;
+
+/// Convert an i64 to a string
+/// Returns the decimal representation with optional minus sign
+///
+/// Compiler intrinsic for template interpolation: `{i64_value}`
+pub fn stringify_i64(value: i64) -> String;
+
+/// Convert an i128 to a string
+/// Returns the decimal representation with optional minus sign
+///
+/// Compiler intrinsic for template interpolation: `{i128_value}`
+pub fn stringify_i128(value: i128) -> String;
+
+/// Convert a u8 to a string
+/// Returns the decimal representation
+///
+/// Compiler intrinsic for template interpolation: `{u8_value}`
+pub fn stringify_u8(value: u8) -> String;
+
+/// Convert a u16 to a string
+/// Returns the decimal representation
+///
+/// Compiler intrinsic for template interpolation: `{u16_value}`
+pub fn stringify_u16(value: u16) -> String;
+
+/// Convert a u32 to a string
+/// Returns the decimal representation
+///
+/// Compiler intrinsic for template interpolation: `{u32_value}`
+pub fn stringify_u32(value: u32) -> String;
+
+/// Convert a u64 to a string
+/// Returns the decimal representation
+///
+/// Compiler intrinsic for template interpolation: `{u64_value}`
+pub fn stringify_u64(value: u64) -> String;
+
+/// Convert a u128 to a string
+/// Returns the decimal representation
+///
+/// Compiler intrinsic for template interpolation: `{u128_value}`
+pub fn stringify_u128(value: u128) -> String;
+
+/// Convert an f32 to a string
+/// Returns the decimal representation (e.g., "3.14")
+///
+/// Compiler intrinsic for template interpolation: `{f32_value}`
+pub fn stringify_f32(value: f32) -> String;
+
+/// Convert an f64 to a string
+/// Returns the decimal representation (e.g., "3.14159")
+///
+/// Compiler intrinsic for template interpolation: `{f64_value}`
+pub fn stringify_f64(value: f64) -> String;
+
+// ============================================================================
+// Notes on Implementation
+// ============================================================================
+
+// These functions have no body because they are compiler intrinsics.
+// The code generator (codegen.rs) recognizes calls to these functions
+// and generates the appropriate Wasm instructions directly.
+//
+// Implementation strategy (in codegen.rs):
+// 1. Recognize calls to core:internals::stringify_*
+// 2. Generate appropriate string conversion code:
+//    - For integers: Use itoa-style algorithm
+//    - For floats: Use dtoa-style algorithm (or Wasm f32.to_string if available)
+//    - For bool: Generate "true" or "false" literal
+//    - For char: Create single-character string
+//
+// Future extensions:
+// - Format specifiers: stringify_i32_fmt(value: i32, fmt: FormatSpec) -> String
+// - Custom Debug/Display traits: stringify_debug<T>(value: T) -> String

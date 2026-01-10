@@ -34,6 +34,10 @@ pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
 /// Embedded source for core:filesystem
 pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 
+/// Embedded source for core:internals
+/// Compiler intrinsics for codegen (string conversion, etc.)
+pub const CORE_INTERNALS: &str = include_str!("../lib/core/internals.wado");
+
 // ============================================================================
 // WASI Library (wasi:*)
 // ============================================================================
@@ -63,6 +67,7 @@ pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
 /// - `"core:prelude"` -> core library prelude
 /// - `"core:cli"` -> core library CLI helpers
 /// - `"core:filesystem"` -> core library filesystem helpers
+/// - `"core:internals"` -> compiler intrinsics for codegen
 /// - `"wasi:cli"` -> WASI CLI interfaces
 /// - `"wasi:filesystem"` -> WASI filesystem interfaces
 /// - `"wasi:clocks"` -> WASI clocks interfaces
@@ -80,6 +85,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:prelude" => Some(CORE_PRELUDE),
         "core:cli" => Some(CORE_CLI),
         "core:filesystem" => Some(CORE_FILESYSTEM),
+        "core:internals" => Some(CORE_INTERNALS),
 
         // WASI library
         "wasi:cli" => Some(WASI_CLI),
@@ -129,6 +135,15 @@ mod tests {
         let source = get_stdlib_module("core:filesystem");
         assert!(source.is_some());
         assert!(source.unwrap().contains("read_file"));
+    }
+
+    #[test]
+    fn test_get_core_internals() {
+        let source = get_stdlib_module("core:internals");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("stringify_bool"));
+        assert!(source.unwrap().contains("stringify_i32"));
+        assert!(source.unwrap().contains("stringify_f64"));
     }
 
     #[test]
