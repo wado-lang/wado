@@ -32,10 +32,40 @@ pub fn stringify_bool(value: bool) -> String {
 ///
 /// Used in template interpolation: `{char_value}`
 pub fn stringify_char(value: char) -> String {
-    // For now, return a placeholder
-    // TODO: Implement proper char to string conversion
-    // Need to encode the Unicode code point as UTF-8 bytes
-    return "?";
+    // char is a Unicode code point (u32), convert to UTF-8 bytes
+    let codepoint = value as u32;
+
+    // 1-byte sequence (U+0000..U+007F)
+    if codepoint <= 0x7F {
+        let mut result = builtin::array_new<u8>(1);
+        builtin::array_set(result, 0, codepoint as u8);
+        return result as String;
+    }
+
+    // 2-byte sequence (U+0080..U+07FF)
+    if codepoint <= 0x7FF {
+        let mut result = builtin::array_new<u8>(2);
+        builtin::array_set(result, 0, (0xC0 | (codepoint >> 6)) as u8);
+        builtin::array_set(result, 1, (0x80 | (codepoint & 0x3F)) as u8);
+        return result as String;
+    }
+
+    // 3-byte sequence (U+0800..U+FFFF)
+    if codepoint <= 0xFFFF {
+        let mut result = builtin::array_new<u8>(3);
+        builtin::array_set(result, 0, (0xE0 | (codepoint >> 12)) as u8);
+        builtin::array_set(result, 1, (0x80 | ((codepoint >> 6) & 0x3F)) as u8);
+        builtin::array_set(result, 2, (0x80 | (codepoint & 0x3F)) as u8);
+        return result as String;
+    }
+
+    // 4-byte sequence (U+10000..U+10FFFF)
+    let mut result = builtin::array_new<u8>(4);
+    builtin::array_set(result, 0, (0xF0 | (codepoint >> 18)) as u8);
+    builtin::array_set(result, 1, (0x80 | ((codepoint >> 12) & 0x3F)) as u8);
+    builtin::array_set(result, 2, (0x80 | ((codepoint >> 6) & 0x3F)) as u8);
+    builtin::array_set(result, 3, (0x80 | (codepoint & 0x3F)) as u8);
+    return result as String;
 }
 
 /// Convert an i8 to a string
@@ -90,11 +120,9 @@ pub fn stringify_i32(value: i32) -> String {
 
     // Reverse the digits
     let mut result = builtin::array_new<u8>(len);
-    let mut i = 0;
-    while i < len {
+    for let mut i = 0; i < len; i = i + 1 {
         let digit = builtin::array_get(digits, len - 1 - i);
         builtin::array_set(result, i, digit);
-        i = i + 1;
     }
 
     // Wrap in String struct
@@ -139,11 +167,9 @@ pub fn stringify_i64(value: i64) -> String {
 
     // Reverse the digits
     let mut result = builtin::array_new<u8>(len);
-    let mut i = 0;
-    while i < len {
+    for let mut i = 0; i < len; i = i + 1 {
         let digit = builtin::array_get(digits, len - 1 - i);
         builtin::array_set(result, i, digit);
-        i = i + 1;
     }
 
     return result as String;
@@ -154,9 +180,8 @@ pub fn stringify_i64(value: i64) -> String {
 ///
 /// Used in template interpolation: `{i128_value}`
 pub fn stringify_i128(value: i128) -> String {
-    // TODO: Implement i128 to string conversion
-    // For now, return placeholder
-    return "[i128]";
+    // TODO: Implement i128 to string conversion (needs 128-bit arithmetic)
+    builtin::unreachable();
 }
 
 /// Convert a u8 to a string
@@ -199,11 +224,9 @@ pub fn stringify_u32(value: u32) -> String {
 
     // Reverse the digits
     let mut result = builtin::array_new<u8>(len);
-    let mut i = 0;
-    while i < len {
+    for let mut i = 0; i < len; i = i + 1 {
         let digit = builtin::array_get(digits, len - 1 - i);
         builtin::array_set(result, i, digit);
-        i = i + 1;
     }
 
     return result as String;
@@ -233,11 +256,9 @@ pub fn stringify_u64(value: u64) -> String {
 
     // Reverse the digits
     let mut result = builtin::array_new<u8>(len);
-    let mut i = 0;
-    while i < len {
+    for let mut i = 0; i < len; i = i + 1 {
         let digit = builtin::array_get(digits, len - 1 - i);
         builtin::array_set(result, i, digit);
-        i = i + 1;
     }
 
     return result as String;
@@ -248,9 +269,8 @@ pub fn stringify_u64(value: u64) -> String {
 ///
 /// Used in template interpolation: `{u128_value}`
 pub fn stringify_u128(value: u128) -> String {
-    // TODO: Implement u128 to string conversion
-    // For now, return placeholder
-    return "[u128]";
+    // TODO: Implement u128 to string conversion (needs 128-bit arithmetic)
+    builtin::unreachable();
 }
 
 /// Convert an f32 to a string
@@ -259,8 +279,7 @@ pub fn stringify_u128(value: u128) -> String {
 /// Used in template interpolation: `{f32_value}`
 pub fn stringify_f32(value: f32) -> String {
     // TODO: Implement proper f32 to string conversion (dtoa algorithm)
-    // For now, return placeholder
-    return "[f32]";
+    builtin::unreachable();
 }
 
 /// Convert an f64 to a string
@@ -269,8 +288,7 @@ pub fn stringify_f32(value: f32) -> String {
 /// Used in template interpolation: `{f64_value}`
 pub fn stringify_f64(value: f64) -> String {
     // TODO: Implement proper f64 to string conversion (dtoa algorithm)
-    // For now, return placeholder
-    return "[f64]";
+    builtin::unreachable();
 }
 
 // ============================================================================
@@ -282,15 +300,17 @@ pub fn stringify_f64(value: f64) -> String {
 //
 // Current implementation status:
 // - ✅ stringify_bool: Complete
-// - ✅ stringify_i8, i16, i32: Complete (delegate to i32)
-// - ✅ stringify_i64: Complete
-// - ✅ stringify_u8, u16, u32: Complete (delegate to u32)
-// - ✅ stringify_u64: Complete
-// - ⚠️ stringify_char: Placeholder (needs UTF-8 encoding)
-// - ⚠️ stringify_i128, u128: Placeholder (needs 128-bit arithmetic)
-// - ⚠️ stringify_f32, f64: Placeholder (needs dtoa algorithm)
+// - ✅ stringify_char: Complete (UTF-8 encoding)
+// - ✅ stringify_i8, i16, i32: Complete (itoa algorithm)
+// - ✅ stringify_i64: Complete (itoa algorithm)
+// - ✅ stringify_u8, u16, u32: Complete (itoa algorithm)
+// - ✅ stringify_u64: Complete (itoa algorithm)
+// - ❌ stringify_i128, u128: Not implemented (calls builtin::unreachable)
+// - ❌ stringify_f32, f64: Not implemented (calls builtin::unreachable)
 //
 // Future extensions:
 // - Format specifiers: stringify_i32_fmt(value: i32, fmt: FormatSpec) -> String
 // - Custom Debug/Display traits: stringify_debug<T>(value: T) -> String
 // - Proper float formatting with precision control
+// - 128-bit integer arithmetic for i128/u128
+// - dtoa algorithm for floating-point conversion
