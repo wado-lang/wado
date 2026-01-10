@@ -73,6 +73,25 @@ This project relays on the following features:
 
 - Format markdown files with `prettier`.
 
+## Architecture Decision Records (ARD)
+
+Significant architectural decisions are documented as ARDs in `docs/ard-{yyyy-mm-dd}-{feature}.md`.
+
+**Format**: `docs/ard-YYYY-MM-DD-feature-name.md`
+
+**Structure**:
+
+- **Title**: Short description of the decision
+- **Status**: Proposed | Accepted | Deprecated | Superseded
+- **Context**: Background and problem statement
+- **Decision**: What was decided and why
+- **Consequences**: Impact and trade-offs
+
+**Examples**:
+
+- `docs/ard-2026-01-10-wasm-import.md` - WebAssembly module import support
+- `docs/ard-2026-01-10-deterministic-libm.md` - Bundling Rust libm for deterministic math
+
 ## Project Development
 
 ```sh
