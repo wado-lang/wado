@@ -828,6 +828,7 @@ observe(|| {
 ```
 
 The cleanup function runs:
+
 - Before the effect re-runs (when dependencies change)
 - When the enclosing scope ends
 - When the component unmounts (in UI contexts)
@@ -917,12 +918,12 @@ fn Counter() -> Element with Dom {
 
 #### Comparison
 
-| Aspect              | CLI                       | Event-looped                    |
-| ------------------- | ------------------------- | ------------------------------- |
-| Trigger             | Direct assignment in code | External events                 |
-| Propagation         | Synchronous, immediate    | May be batched per event        |
-| observe() lifetime  | Enclosing scope duration  | Component/subscription lifetime |
-| Primary use case    | Computed dependencies     | UI binding, subscriptions       |
+| Aspect             | CLI                       | Event-looped                    |
+| ------------------ | ------------------------- | ------------------------------- |
+| Trigger            | Direct assignment in code | External events                 |
+| Propagation        | Synchronous, immediate    | May be batched per event        |
+| observe() lifetime | Enclosing scope duration  | Component/subscription lifetime |
+| Primary use case   | Computed dependencies     | UI binding, subscriptions       |
 
 ### JSX Integration
 

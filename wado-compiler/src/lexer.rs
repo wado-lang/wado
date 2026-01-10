@@ -587,18 +587,19 @@ impl<'a> Lexer<'a> {
                             pending_high_surrogate = Some(code_unit);
                             continue;
                         } else if is_low_surrogate(code_unit)
-                            && let Some(high) = pending_high_surrogate.take() {
-                                let combined = decode_surrogate_pair(high, code_unit);
-                                if let Some(c) = char::from_u32(combined) {
-                                    value.push(c);
-                                    continue;
-                                } else {
-                                    return Err(LexError {
-                                        message: "invalid surrogate pair".to_string(),
-                                        span: Span::new(start, self.pos, start_line, start_column),
-                                    });
-                                }
+                            && let Some(high) = pending_high_surrogate.take()
+                        {
+                            let combined = decode_surrogate_pair(high, code_unit);
+                            if let Some(c) = char::from_u32(combined) {
+                                value.push(c);
+                                continue;
+                            } else {
+                                return Err(LexError {
+                                    message: "invalid surrogate pair".to_string(),
+                                    span: Span::new(start, self.pos, start_line, start_column),
+                                });
                             }
+                        }
                     }
 
                     // If we had a pending high surrogate but didn't get a low surrogate, error
@@ -784,8 +785,6 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_template_string(&mut self) -> Result<TokenKind, LexError> {
-        // For now, treat template strings as regular strings
-        // TODO: Handle interpolation properly
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -793,6 +792,8 @@ impl<'a> Lexer<'a> {
         self.advance(); // consume opening `
 
         let mut value = String::new();
+        let mut brace_depth = 0; // Track { } nesting to handle nested template strings
+        let mut in_string = false;
 
         loop {
             match self.peek() {
@@ -802,7 +803,32 @@ impl<'a> Lexer<'a> {
                         span: Span::new(start, self.pos, start_line, start_column),
                     });
                 }
-                Some((_, '`')) => {
+                Some((_, '\\')) => {
+                    // Handle escape sequences in template strings
+                    self.advance();
+                    let ch = self.parse_escape_sequence(start, start_line, start_column)?;
+                    value.push(ch);
+                }
+                Some((_, '"')) if !in_string || brace_depth > 0 => {
+                    // Track string literals inside interpolations
+                    self.advance();
+                    value.push('"');
+                    in_string = !in_string;
+                }
+                Some((_, '{')) if !in_string => {
+                    // Entering an interpolation
+                    self.advance();
+                    value.push('{');
+                    brace_depth += 1;
+                }
+                Some((_, '}')) if !in_string && brace_depth > 0 => {
+                    // Exiting an interpolation
+                    self.advance();
+                    value.push('}');
+                    brace_depth -= 1;
+                }
+                Some((_, '`')) if brace_depth == 0 => {
+                    // Only end template if we're not inside an interpolation
                     self.advance();
                     break;
                 }
@@ -813,7 +839,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Ok(TokenKind::StringLit(value))
+        Ok(TokenKind::TemplateStringLit(value))
     }
 
     fn lex_char(&mut self) -> Result<TokenKind, LexError> {

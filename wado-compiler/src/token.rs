@@ -36,6 +36,7 @@ pub enum TokenKind {
     // Literals
     Ident(String),
     StringLit(String),
+    TemplateStringLit(String), // Raw template string content (without backticks)
     CharLit(char),
     IntLit(i64),
     FloatLit(f64),

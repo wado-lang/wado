@@ -940,6 +940,10 @@ impl Parser {
                     span: start_span,
                 }))
             }
+            TokenKind::TemplateStringLit(value) => {
+                self.advance();
+                self.parse_template_string_parts(value, start_span)
+            }
             TokenKind::True => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
@@ -1440,6 +1444,200 @@ impl Parser {
             return_type,
             span: start_span,
         })
+    }
+
+    /// Parse template string and extract parts (string literals and interpolations)
+    /// Input: raw template string content (without backticks)
+    /// Example: "Hello, {name}!" -> [String("Hello, "), Interpolation(name), String("!")]
+    fn parse_template_string_parts(&mut self, content: String, span: Span) -> ParseResult<Expr> {
+        use crate::ast::{TemplatePart, TemplateStringExpr};
+
+        let mut parts = Vec::new();
+        let mut chars = content.chars().peekable();
+        let mut current_string = String::new();
+
+        while let Some(ch) = chars.next() {
+            if ch == '{' {
+                // Check if it's an escaped brace or interpolation start
+                if chars.peek() == Some(&'{') {
+                    // Escaped {{ -> single {
+                    chars.next();
+                    current_string.push('{');
+                } else {
+                    // Save current string part if not empty
+                    if !current_string.is_empty() {
+                        parts.push(TemplatePart::String(current_string.clone()));
+                        current_string.clear();
+                    }
+
+                    // Extract interpolation expression and optional format spec
+                    let (expr_str, format_spec) = self.extract_interpolation(&mut chars, span)?;
+
+                    // Parse the expression
+                    let expr = self.parse_interpolation_expr(&expr_str, span)?;
+
+                    parts.push(TemplatePart::Interpolation {
+                        expr: Box::new(expr),
+                        format: format_spec,
+                    });
+                }
+            } else if ch == '}' {
+                // Check if it's an escaped brace
+                if chars.peek() == Some(&'}') {
+                    // Escaped }} -> single }
+                    chars.next();
+                    current_string.push('}');
+                } else {
+                    // Unmatched closing brace - error
+                    return Err(ParseError {
+                        message: "unmatched '}' in template string".to_string(),
+                        span,
+                    });
+                }
+            } else {
+                current_string.push(ch);
+            }
+        }
+
+        // Add final string part if not empty
+        if !current_string.is_empty() {
+            parts.push(TemplatePart::String(current_string));
+        }
+
+        Ok(Expr::TemplateString(Box::new(TemplateStringExpr {
+            parts,
+            span,
+        })))
+    }
+
+    /// Extract interpolation expression and format specifier from template string
+    /// Returns (expression_string, optional_format_spec)
+    fn extract_interpolation(
+        &mut self,
+        chars: &mut std::iter::Peekable<std::str::Chars>,
+        span: Span,
+    ) -> ParseResult<(String, Option<FormatSpec>)> {
+        let mut expr_str = String::new();
+        let mut brace_depth = 1;
+        let mut in_string = false;
+        let mut backtick_depth = 0; // Track nested template strings
+        let mut escape_next = false;
+
+        while let Some(ch) = chars.next() {
+            if escape_next {
+                expr_str.push(ch);
+                escape_next = false;
+                continue;
+            }
+
+            match ch {
+                '\\' => {
+                    expr_str.push(ch);
+                    escape_next = true;
+                }
+                '"' if backtick_depth == 0 => {
+                    in_string = !in_string;
+                    expr_str.push(ch);
+                }
+                '`' if !in_string => {
+                    expr_str.push(ch);
+                    // Toggle backtick depth: odd = inside template, even = outside
+                    if backtick_depth == 0 {
+                        backtick_depth = 1;
+                    } else {
+                        backtick_depth = 0;
+                    }
+                }
+                '{' if !in_string && backtick_depth == 0 => {
+                    brace_depth += 1;
+                    expr_str.push(ch);
+                }
+                '}' if !in_string && backtick_depth == 0 => {
+                    brace_depth -= 1;
+                    if brace_depth == 0 {
+                        break;
+                    }
+                    expr_str.push(ch);
+                }
+                ':' if !in_string && backtick_depth == 0 && brace_depth == 1 => {
+                    // Check if it's :: (scope resolution) or : (format spec)
+                    if chars.peek() == Some(&':') {
+                        // It's ::, part of the expression
+                        expr_str.push(ch);
+                        expr_str.push(chars.next().unwrap());
+                    } else {
+                        // It's a format specifier - extract it
+                        let format_spec = self.extract_format_spec(chars, span)?;
+                        // Consume the closing }
+                        if chars.next() != Some('}') {
+                            return Err(ParseError {
+                                message: "expected '}' after format specifier".to_string(),
+                                span,
+                            });
+                        }
+                        return Ok((expr_str.trim().to_string(), Some(format_spec)));
+                    }
+                }
+                _ => {
+                    expr_str.push(ch);
+                }
+            }
+        }
+
+        if brace_depth != 0 {
+            return Err(ParseError {
+                message: "unclosed '{' in template string interpolation".to_string(),
+                span,
+            });
+        }
+
+        Ok((expr_str.trim().to_string(), None))
+    }
+
+    /// Extract format specifier (everything after : until })
+    fn extract_format_spec(
+        &mut self,
+        chars: &mut std::iter::Peekable<std::str::Chars>,
+        span: Span,
+    ) -> ParseResult<FormatSpec> {
+        let mut spec = String::new();
+
+        while let Some(&ch) = chars.peek() {
+            if ch == '}' {
+                break;
+            }
+            spec.push(ch);
+            chars.next();
+        }
+
+        if spec.is_empty() {
+            return Err(ParseError {
+                message: "empty format specifier in template string".to_string(),
+                span,
+            });
+        }
+
+        Ok(FormatSpec { spec })
+    }
+
+    /// Parse an interpolation expression string
+    fn parse_interpolation_expr(&mut self, expr_str: &str, span: Span) -> ParseResult<Expr> {
+        if expr_str.is_empty() {
+            return Err(ParseError {
+                message: "empty interpolation expression in template string".to_string(),
+                span,
+            });
+        }
+
+        // Create a new lexer and parser for the interpolation expression
+        let mut lexer = crate::lexer::Lexer::new(expr_str);
+        let tokens = lexer.tokenize().map_err(|e| ParseError {
+            message: format!("error parsing template interpolation: {}", e.message),
+            span,
+        })?;
+
+        let mut parser = Parser::new(tokens);
+        parser.parse_expr()
     }
 }
 
