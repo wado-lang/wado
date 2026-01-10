@@ -1542,10 +1542,12 @@ impl Codegen {
                 Literal::Int(_) => ValType::I32,
                 Literal::Float(_) => ValType::F64,
                 Literal::Bool(_) => ValType::I32,
+                Literal::Char(_) => ValType::I32, // Unicode code point as i32
                 Literal::String(_) => ValType::Ref(RefType {
                     nullable: false,
                     heap_type: HeapType::Concrete(11),
                 }),
+                Literal::Null => ValType::I32, // TODO: proper Option type
                 Literal::Unit => ValType::I32,
             },
             Expr::Ident(ident) => {
@@ -1652,6 +1654,15 @@ impl Codegen {
                     array_type_index: 11, // GC array<u8> type
                     array_data_index: 0,  // Data segment 0
                 });
+            }
+            Literal::Char(c) => {
+                // Char is a Unicode code point, represented as i32
+                func.instruction(&Instruction::I32Const(*c as i32));
+            }
+            Literal::Null => {
+                // Null is equivalent to None, represented as i32 0 for now
+                // TODO: proper Option type representation
+                func.instruction(&Instruction::I32Const(0));
             }
             Literal::Unit => {
                 // Unit type - represented as i32 0

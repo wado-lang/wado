@@ -21,6 +21,53 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ---
 
+## Lexical Structure
+
+### Whitespace
+
+The lexer recognizes exactly four whitespace characters:
+
+| Code Point | Name            |
+| ---------- | --------------- |
+| `\u0020`   | Space           |
+| `\u000A`   | Line Feed (LF)  |
+| `\u000D`   | Carriage Return (CR) |
+| `\u0009`   | Tab             |
+
+The lexer skips whitespace between tokens. Other Unicode whitespace characters (e.g., `\u00A0` non-breaking space) are not recognized as whitespace and will cause a lexer error if used outside strings.
+
+### Comments
+
+```wado
+// Line comment (extends to end of line)
+
+/* Block comment */
+
+/*
+ * Multi-line
+ * block comment
+ */
+```
+
+Block comments do not nest. The lexer discards all comments.
+
+### Identifiers
+
+Identifiers match the pattern `[a-zA-Z_][a-zA-Z0-9_]*`:
+
+```wado
+foo
+_private
+camelCase
+PascalCase
+SCREAMING_CASE
+name123
+```
+
+Identifiers are case-sensitive. Unicode letters are not permitted in identifiers.
+
+---
+
 ## Memory Model
 
 ### Core Principles
@@ -38,7 +85,7 @@ let b = a;          // a is still usable
 
 // Explicit move
 let b = move a;     // a is invalidated
-use(a);             // Compile error
+println(a);         // Compile error: a has been moved
 
 // Move to function
 consume(move data);
@@ -96,7 +143,7 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 
 **Automatically Available:**
 
-- `Option<T>` and its variants: `Some(x)`, `None`
+- `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
 - `Stream<T>` - Component Model async stream
 - `Future<T>` - Component Model async future
@@ -111,7 +158,9 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 use {Option, Result, Stream} from "core:prelude";
 ```
 
-### Primitive Types (No Import Required)
+### Built-in Types (No Import Required)
+
+**Primitive types** (lowercase, built into the language):
 
 ```wado
 // Numeric
@@ -123,25 +172,148 @@ f32, f64
 bool
 char
 string
-
-// Collections (UpperCamelCase)
-Array<T>          // GC array in Wado, list at CM boundary
-Dict<K, V>        // As list<tuple<K, V>> at CM boundary
-Tuple<T1, T2, ...> // Component Model tuple<T1, T2, ...>
-
-// Language core (UpperCamelCase)
-Option<T>    // Some(x), None
-Result<T, E> // Ok(x), Err(e)
-Reactive<T>  // Reactive value
 ```
 
-### String Literals
+**Built-in generic types** (UpperCamelCase):
+
+```wado
+Array<T>           // GC array in Wado, list at CM boundary
+Dict<K, V>         // As list<tuple<K, V>> at CM boundary
+Tuple<T1, T2, ...> // Component Model tuple<T1, T2, ...>
+Reactive<T>        // Reactive value
+```
+
+**Prelude types** (from `core:prelude`, auto-imported):
+
+```wado
+Option<T>    // Some(x), None (also accessible via `null` keyword)
+Result<T, E> // Ok(x), Err(e)
+Stream<T>    // Component Model async stream
+Future<T>    // Component Model async future
+```
+
+### Primitive Literals
+
+#### Boolean Literals
+
+```wado
+let active = true;
+let disabled = false;
+```
+
+#### Null Literal
+
+The `null` keyword is equivalent to `None` and represents the absence of a value:
+
+```wado
+let missing: Option<i32> = null;  // Same as None
+let also_missing = None;          // Standard library identifier
+
+// Both are equivalent
+assert(null == None);
+```
+
+**Note:** `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same value.
+
+#### Character Literals
+
+Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `string` differs from `Array<u8>`:
+
+```wado
+let letter = 'A';
+let digit = '9';
+let unicode = '\u0041';  // Unicode escape (same as 'A')
+let emoji = '😀';        // Direct Unicode character
+let newline = '\n';
+```
+
+**Escape sequences** (shared with string literals, except `\'` instead of `\"`):
+
+| Escape     | Character                   |
+| ---------- | --------------------------- |
+| `\'`       | Single quote                |
+| `\\`       | Backslash                   |
+| `\/`       | Forward slash               |
+| `\b`       | Backspace                   |
+| `\f`       | Form feed                   |
+| `\n`       | Newline                     |
+| `\r`       | Carriage return             |
+| `\t`       | Tab                         |
+| `\uHHHH`   | Unicode BMP (4 hex digits)  |
+| `\u{H+}`   | Unicode full range          |
+
+```wado
+let a = '\u0041';         // 'A' (BMP)
+let smiley = '\u{1F600}'; // '😀' (non-BMP)
+```
+
+#### Integer Literals
+
+```wado
+let decimal = 42;
+let negative = -17;
+let with_separator = 1_000_000;    // Underscores for readability
+let binary = 0b1010_1100;          // Binary
+let octal = 0o755;                 // Octal
+let hex = 0xFF_AA_BB;              // Hexadecimal
+```
+
+**Type suffixes** (optional):
+
+```wado
+let byte: i8 = 127i8;
+let long: i64 = 9_223_372_036_854_775_807i64;
+let unsigned: u32 = 4_294_967_295u32;
+```
+
+#### Floating-Point Literals
+
+```wado
+let pi = 3.14159;
+let with_separator = 1_000_000.5;
+let scientific = 6.022e23;         // 6.022 × 10²³
+let negative_exp = 1.6e-19;        // 1.6 × 10⁻¹⁹
+let explicit_positive = 2.5e+10;
+```
+
+**Type suffixes** (optional):
+
+```wado
+let single: f32 = 3.14f32;
+let double: f64 = 3.14159265358979f64;
+```
+
+#### String Literals
 
 **Regular strings** use double quotes:
 
 ```wado
 let name = "Alice";
 let path = "path/to/file.txt";
+let escaped = "Line 1\nLine 2\tTabbed";
+```
+
+**Escape sequences:**
+
+| Escape     | Character                   |
+| ---------- | --------------------------- |
+| `\"`       | Double quote                |
+| `\\`       | Backslash                   |
+| `\/`       | Forward slash               |
+| `\b`       | Backspace                   |
+| `\f`       | Form feed                   |
+| `\n`       | Newline                     |
+| `\r`       | Carriage return             |
+| `\t`       | Tab                         |
+| `\uHHHH`   | Unicode BMP (4 hex digits)  |
+| `\u{H+}`   | Unicode full range          |
+
+For characters outside BMP (U+10000 and above), use either:
+
+```wado
+"\uD83D\uDE00"   // Surrogate pair
+"\u{1F600}"      // Variable-length escape
+"😀"             // Direct Unicode character
 ```
 
 **Template strings** (interpolation) use backticks:
@@ -156,6 +328,21 @@ let message = `Count: {count}`;   // "Count: 42"
 // With formatting
 let pi = 3.14159;
 let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
+```
+
+#### Array Literals
+
+```wado
+let numbers = [1, 2, 3, 4, 5];
+let empty: Array<i32> = [];
+let mixed = [1, 2, 3,];  // Trailing comma allowed
+```
+
+#### Tuple Literals
+
+```wado
+let pair = (1, "hello");
+let triple: Tuple<i32, string, bool> = (42, "answer", true);
 ```
 
 ### Literal Types
@@ -261,10 +448,10 @@ if perms.contains(Permissions::Read) {
 }
 
 // Empty flags
-let none = Permissions::none();
+let empty_perms = Permissions::none();
 
 // All flags
-let all = Permissions::all();
+let all_perms = Permissions::all();
 ```
 
 Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
@@ -273,7 +460,7 @@ Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `
 
 ## Object Literals
 
-Object literal syntax is compatible with JSON.
+Object literal syntax supports unquoted keys and shorthand properties.
 
 ### Syntax Rules
 
@@ -287,7 +474,7 @@ Object literal syntax is compatible with JSON.
 ```wado
 let user: User = { name: "Alice", age: 30, active: true };
 
-// With quotes (JSON compatible)
+// With quoted keys
 let user: User = { "name": "Alice", "age": 30, "active": true };
 
 // Shorthand
@@ -301,7 +488,7 @@ let bob: User = { name, age, active: false };
 ### Dictionaries
 
 ```wado
-// str keys
+// string keys
 let d: Dict<string, i32> = { x: 10, y: 20 };
 
 // Computed key
@@ -312,7 +499,7 @@ let d: Dict<string, i32> = {
     [get_key()]: 3,
 };
 
-// Non-str keys
+// Non-string keys
 let nums: Dict<i32, string> = {
     [1]: "one",
     [2]: "two",
@@ -366,7 +553,7 @@ use {format} from "core:fmt";
 
 // 3. Remote modules (https:)
 use {ApiClient} from "https://example.com/api.wado";
-use {config} from "https://example.com/data.json" with { type: "json" };
+use config from "https://example.com/data.json" with { type: "json" };
 
 // 4. Local files (relative path, extension required)
 use {Helper} from "./utils.wado";
@@ -385,7 +572,7 @@ Use `with { ... }` to specify import metadata:
 use {Stdout} from "wasi:cli" with { version: "0.3.0" };
 
 // Type hint for non-code imports
-use {config} from "https://example.com/data.json" with { type: "json" };
+use config from "https://example.com/data.json" with { type: "json" };
 
 // Future: integrity hash for security
 use {Parser} from "parser-lib" with { integrity: "sha384-..." };
@@ -397,26 +584,44 @@ use {ApiClient} from "https://example.com/api.wado" with {
 };
 ```
 
+### Namespace Import
+
+Use `use name from "..."` (without curly braces) to import an entire module as a namespace:
+
+```wado
+// Import JSON file as a namespace
+use config from "./config.json" with { type: "json" };
+let value = config["key"];
+
+// Import a module as a namespace
+use utils from "./utils.wado";
+utils::helper_function();
+```
+
+**Note:** Wado does not support `use * as name` or default imports. Use namespace import instead.
+
 ### Import Rules
 
-- Always use curly braces: `use {x} from "..."`
+- Named imports use curly braces: `use {x, y} from "..."`
+- Namespace imports omit curly braces: `use name from "..."`
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - All imports must be explicit (except the prelude)
 - Use `::` for effect function access: `Effect::{func1, func2}`
 
 ```wado
 // Valid patterns
-use {println, eprintln} from "core:cli";
+use {println, eprintln} from "core:cli";        // Named import
 use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+use utils from "./utils.wado";                   // Namespace import
 
 // Prohibited patterns
 use * from "core:cli";           // Wildcard not allowed
-use println from "core:cli";     // Missing curly braces
+use println from "core:cli";     // Named items require curly braces
 ```
 
 ### Calling Effect Functions
 
-Effect functions use `::` syntax (not `.`):
+Effect functions use `::` syntax:
 
 ```wado
 use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
@@ -473,7 +678,6 @@ core
 Built-in functions provided instead of macros:
 
 ```wado
-vec(1, 2, 3);             // Rust: vec![1, 2, 3]
 println("hello");         // Rust: println!("hello")
 panic("error");           // Rust: panic!("error")
 assert(x > 0);            // Rust: assert!(x > 0)
@@ -481,6 +685,8 @@ dbg(value);               // Rust: dbg!(value)
 todo();                   // Rust: todo!()
 unreachable();            // Rust: unreachable!()
 ```
+
+Note: Use array literal syntax `[1, 2, 3]` instead of Rust's `vec![]` macro.
 
 Note: Use string interpolation with backticks instead of `format()`: `` `x = {x}` `` or `` `x = {x:0.3f}` ``
 
@@ -509,7 +715,7 @@ some_function(&reactive count);
 
 ```wado
 effect {
-    console.log("Count changed:", count);
+    println(`Count changed: {count}`);
 }
 ```
 
@@ -536,7 +742,7 @@ fn Counter() -> Element with Dom {
 ```wado
 // No async keyword needed in function implementations
 fn fetch_user(id: i32) -> Result<User, HttpError> with Http {
-    let response = Http::get("users/{id}")?;  // Even if Http::get is async in WIT
+    let response = Http::get(`users/{id}`)?;  // Even if Http::get is async in WIT
     let user = response.json()?;
     return Ok(user);
 }
@@ -631,7 +837,7 @@ This approach makes effect requirements explicit and visible in method signature
 ```wado
 // Declare effects used with `with`
 fn greet(name: string) with Console {
-    Console::print("Hello, {name}!");
+    Console::print(`Hello, {name}!`);
 }
 
 // Multiple effects
@@ -965,7 +1171,7 @@ fn read_config(path: string) -> Result<Config, ConfigError> with FileSystem {
 
 // Handle with pattern matching
 match result {
-    Ok(value) => use(value),
+    Ok(value) => process(value),
     Err(e) => handle_error(e),
 }
 ```
@@ -1057,17 +1263,9 @@ fn println(message: string) with Stdout {
 
 ### Entry Points
 
-```wado
-// For WASI CLI
-fn main() with Stdout {
-    println("Hello, world!");
-}
+Entry points are integrated in World system.
 
-// For browser
-fn main() with Dom {
-    mount(App, "#root");
-}
-```
+TBD.
 
 ### Attribute Syntax for WASI Linking
 
@@ -1093,13 +1291,62 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 }
 ```
 
-### Security Model (Plugin System)
+### The Wasm Loader (Security Model for external plugins)
 
 Effect declaration = Wasm import = WASI capability:
 
 ```wado
-// Restrict plugin capabilities
-let plugin = load_plugin("transform.wasm");
-plugin.grant(FileSystem);  // Allow
-plugin.deny(Http);         // Deny
+use {load_wasm} from "core:wasm";
+
+// Restrict plugin capabilities with world and effect declarations
+world Transform {
+    // ...
+
+    export fn execute(input: string) with FileSystem -> string;
+}
+
+let plugin: Transform = load_wasm("./transform.wasm", world: Transform);
+
+let output = plugin.execute(input);
 ```
+
+TBD.
+
+## JSON Compatibility
+
+Wado's literal syntax is a **superset of JSON**. Any valid JSON document can be parsed as Wado code, producing `Dict`, `Array`, and primitive values.
+
+### What's Shared with JSON
+
+- **Whitespace**: Space (`\u0020`), LF (`\u000A`), CR (`\u000D`), Tab (`\u0009`)
+- **String escapes**: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uHHHH`
+- **Surrogate pairs**: `"\uD83D\uDE00"` for non-BMP characters
+- **Number format**: Decimal integers and floating-point with scientific notation
+- **Literals**: `true`, `false`, `null`
+- **Object syntax**: `{ "key": value }` with quoted keys
+- **Array syntax**: `[value, value, ...]`
+
+### Wado Extensions (Beyond JSON)
+
+- **Unquoted keys**: `{ name: "Alice" }` instead of `{ "name": "Alice" }`
+- **Shorthand properties**: `{ name, age }` when variable names match keys
+- **Trailing commas**: `[1, 2, 3,]` is valid
+- **Comments**: `//` and `/* */`
+- **Extended Unicode escapes**: `\u{1F600}` for full Unicode range (JavaScript-style)
+- **Single-quoted characters**: `'A'` for `char` type
+- **Numeric separators**: `1_000_000`
+- **Numeric prefixes**: `0x`, `0o`, `0b` for hex, octal, binary
+
+### Importing JSON Files
+
+Use namespace import to load JSON files directly:
+
+```wado
+use config from "./config.json" with { type: "json" };
+
+// config is now a Dict or Array depending on the JSON root
+let name = config["name"];
+```
+
+**Note:** This uses namespace import syntax (`use name from`) rather than named import (`use {name} from`).
+

@@ -36,10 +36,12 @@ pub enum TokenKind {
     // Literals
     Ident(String),
     StringLit(String),
+    CharLit(char),
     IntLit(i64),
     FloatLit(f64),
     True,
     False,
+    Null,
 
     // Punctuation
     LParen,     // (

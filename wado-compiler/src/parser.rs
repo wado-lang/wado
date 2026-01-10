@@ -954,6 +954,20 @@ impl Parser {
                     span: start_span,
                 }))
             }
+            TokenKind::Null => {
+                self.advance();
+                Ok(Expr::Literal(LiteralExpr {
+                    value: Literal::Null,
+                    span: start_span,
+                }))
+            }
+            TokenKind::CharLit(value) => {
+                self.advance();
+                Ok(Expr::Literal(LiteralExpr {
+                    value: Literal::Char(value),
+                    span: start_span,
+                }))
+            }
             TokenKind::LParen => {
                 self.advance();
                 // Unit expression: ()
