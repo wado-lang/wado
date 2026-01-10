@@ -293,6 +293,7 @@ pub enum Expr {
     Match(Box<MatchExpr>),
     Closure(Box<ClosureExpr>),
     TemplateString(Box<TemplateStringExpr>),
+    Cast(Box<CastExpr>),
 }
 
 /// Assignment expression: `x = value` or `x.field = value`
@@ -462,6 +463,14 @@ pub enum TemplatePart {
 #[derive(Debug, Clone)]
 pub struct FormatSpec {
     pub spec: String,
+}
+
+/// Type cast expression: `value as Type`
+#[derive(Debug, Clone)]
+pub struct CastExpr {
+    pub expr: Box<Expr>,
+    pub target_type: Type,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

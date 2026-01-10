@@ -308,6 +308,9 @@ impl Codegen {
                     }
                 }
             }
+            Expr::Cast(cast) => {
+                self.collect_strings_from_expr(&cast.expr);
+            }
             _ => {}
         }
     }
@@ -1101,6 +1104,9 @@ impl Codegen {
             Expr::TemplateString(template) => {
                 self.generate_template_string(func, template, ctx, mod_ctx);
             }
+            Expr::Cast(cast) => {
+                self.generate_cast(func, cast, ctx, mod_ctx);
+            }
             _ => {}
         }
     }
@@ -1607,6 +1613,26 @@ impl Codegen {
                     heap_type: HeapType::Concrete(11),
                 })
             }
+            Expr::Cast(cast) => {
+                // Infer type from the target type
+                use crate::ast::Type;
+                match &cast.target_type {
+                    Type::Named(named) => {
+                        match named.name.as_str() {
+                            "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "char" => ValType::I32,
+                            "i64" | "u64" => ValType::I64,
+                            "f32" => ValType::F32,
+                            "f64" => ValType::F64,
+                            "String" => ValType::Ref(RefType {
+                                nullable: false,
+                                heap_type: HeapType::Concrete(11), // array<u8>
+                            }),
+                            _ => ValType::I32, // Default
+                        }
+                    }
+                    _ => ValType::I32,
+                }
+            }
             _ => ValType::I32,
         }
     }
@@ -1652,6 +1678,8 @@ impl Codegen {
             }
             // Template strings always produce values (GC array<u8>)
             Expr::TemplateString(_) => true,
+            // Type casts always produce values
+            Expr::Cast(_) => true,
             _ => false,
         }
     }
@@ -1796,6 +1824,69 @@ impl Codegen {
                 // TODO: Convert expression result to string based on its type
                 // For now, assume it's already a string (ref (array u8))
                 // This is incorrect for non-string types but allows compilation
+            }
+        }
+    }
+
+    /// Generate code for type cast expression: `value as Type`
+    fn generate_cast(
+        &self,
+        func: &mut Function,
+        cast: &crate::ast::CastExpr,
+        ctx: &mut FunctionContext,
+        mod_ctx: &ModuleContext,
+    ) {
+        use crate::ast::Type;
+
+        // First, generate the expression to be casted
+        self.generate_expr_with_mod_ctx(func, &cast.expr, ctx, mod_ctx);
+
+        // Determine the source and target types
+        // For now, we handle primitive numeric conversions
+        match &cast.target_type {
+            Type::Named(named) => {
+                // Handle primitive type casts
+                // Note: Wado's char is u32, and most numeric types map to Wasm i32/i64/f32/f64
+                match named.name.as_str() {
+                    "u32" | "i32" | "char" => {
+                        // For numeric types that are already i32, this is a no-op at Wasm level
+                        // The type system tracks the semantic difference
+                    }
+                    "u8" | "i8" | "u16" | "i16" => {
+                        // These are also i32 at Wasm level, no conversion needed
+                        // The semantic constraints are enforced at the language level
+                    }
+                    "i64" => {
+                        // If source is i32, extend to i64
+                        // TODO: Proper type tracking to know source type
+                        // For now, assume i32 -> i64
+                        func.instruction(&Instruction::I64ExtendI32S);
+                    }
+                    "u64" => {
+                        // If source is u32, extend to u64
+                        func.instruction(&Instruction::I64ExtendI32U);
+                    }
+                    "f32" => {
+                        // Assume i32 -> f32
+                        func.instruction(&Instruction::F32ConvertI32S);
+                    }
+                    "f64" => {
+                        // Assume i32 -> f64
+                        func.instruction(&Instruction::F64ConvertI32S);
+                    }
+                    "String" => {
+                        // builtin::array<u8> -> String is a no-op (same representation)
+                        // The wrapper is just a type-level distinction
+                    }
+                    _ => {
+                        // Unknown type cast - for now, no-op
+                        // TODO: Proper error handling or support for more types
+                    }
+                }
+            }
+            _ => {
+                // Complex types - no-op for now
+                // TODO: Handle generic types, tuples, etc.
             }
         }
     }
