@@ -444,7 +444,7 @@ Tagged template functions are executed at compile time with the following constr
 
 **Design Rationale:**
 
-Tagged template literals provide a general mechanism for compile-time computation, avoiding the need for built-in syntax for each use case. This aligns with Wado's philosophy of minimal built-ins and explicit dependencies. See `docs/ard-2026-01-10-tagged-template-literals.md` for detailed design decisions.
+Tagged template literals provide a general mechanism for compile-time computation, avoiding the need for built-in syntax for each use case. This aligns with Wado's philosophy of minimal built-ins and explicit dependencies. See `docs/adr-2026-01-10-tagged-template-literals.md` for detailed design decisions.
 
 **Future Extensions:**
 
