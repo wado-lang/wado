@@ -737,21 +737,17 @@ fn log() with Stdout, Stderr {
 
 The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports. To opt out, use `#![no_prelude]`.
 
-### core Module Structure (Proposal)
+### Standard Library
 
 ```
-core
+core            # core: namespace for the core library
 ├── prelude     # Automatically imported (Option, Result, Stream, Future, Pollable)
 ├── cli         # WASI CLI (println, eprintln, args, env, exit, ...)
-├── filesystem  # WASI Filesystem (open, read, write, stat, ...)
-├── net         # Network
-├── dom         # DOM API
-├── fmt         # format, etc.
-├── collections # vec, set, etc.
-├── iter        # Iterators
-├── json        # parse, stringify
-├── math        # sin, cos, sqrt, ...
-└── test        # assert_eq, ...
+├── ...
+wasi            # wasi: namespace for system interfaces
+├── cli
+├── filesystem
+├── ...
 ```
 
 ### Global Functions defined in `core:prelude`
