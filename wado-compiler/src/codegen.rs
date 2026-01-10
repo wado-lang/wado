@@ -1028,11 +1028,7 @@ impl Codegen {
         for (module_path, module) in loaded_modules {
             // Skip wasi:* modules (they only contain effect declarations, no function bodies)
             // Include core:* modules (they contain user-defined helper functions)
-            if module_path
-                .first()
-                .map(|s| s == "wasi")
-                .unwrap_or(false)
-            {
+            if module_path.first().map(|s| s == "wasi").unwrap_or(false) {
                 continue;
             }
 
@@ -2012,7 +2008,11 @@ impl Codegen {
     ///
     /// Some builtins like string_to_stream allocate temporary locals at runtime.
     /// These need to be declared in the function's local declarations.
-    fn preallocate_builtin_scratch_locals(&self, ctx: &mut FunctionContext, string_array_type: u32) {
+    fn preallocate_builtin_scratch_locals(
+        &self,
+        ctx: &mut FunctionContext,
+        string_array_type: u32,
+    ) {
         // Scratch locals for string_to_stream and string_to_stream_with_trailing_newline
         ctx.alloc_local(
             "__arr_ref",
@@ -2248,19 +2248,20 @@ impl Codegen {
 
             // Check for effect function calls (Effect::method syntax)
             if let Some(wasi_func_name) = self.resolve_effect_function(&ident.name)
-                && let Some(func_idx) = builder.try_func_idx(&wasi_func_name) {
-                    // Generate arguments
-                    for arg in &call.args {
-                        self.generate_expr_with_builder(func, arg, ctx, builder);
-                    }
-                    // For write-via-stream, we need special handling with async wait
-                    if wasi_func_name == "write-via-stream" {
-                        self.generate_write_via_stream_with_wait(func, ctx, builder, func_idx);
-                    } else {
-                        func.instruction(&Instruction::Call(func_idx));
-                    }
-                    return;
+                && let Some(func_idx) = builder.try_func_idx(&wasi_func_name)
+            {
+                // Generate arguments
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
+                // For write-via-stream, we need special handling with async wait
+                if wasi_func_name == "write-via-stream" {
+                    self.generate_write_via_stream_with_wait(func, ctx, builder, func_idx);
+                } else {
+                    func.instruction(&Instruction::Call(func_idx));
+                }
+                return;
+            }
 
             // Then try user-defined functions
             if let Some(func_idx) = builder.try_func_idx(&ident.name) {
