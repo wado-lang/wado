@@ -10,7 +10,7 @@ use wasm_encoder::{
     ComponentOuterAliasKind, ComponentValType, CompositeInnerType, CompositeType, ConstExpr,
     DataCountSection, DataSection, DataSegment, DataSegmentMode, EntityType, ExportKind,
     ExportSection, FieldType, Function, FunctionSection, HeapType, ImportSection, InstanceType,
-    Instruction, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
+    Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
     PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection, ValType,
 };
 
@@ -2306,20 +2306,14 @@ impl Codegen {
 
     /// Check if a function name is a builtin
     fn is_builtin(&self, name: &str) -> bool {
+        // All builtin:: namespace functions are builtins
+        if name.starts_with("builtin::") {
+            return true;
+        }
+        // Special built-ins that require complex code generation
         matches!(
             name,
-            "stream_new"
-                | "stream_write"
-                | "stream_write_string"
-                | "stream_drop_writable"
-                | "stream_drop_readable"
-                | "i64_low32"
-                | "i64_high32"
-                | "array_len"
-                | "string_ptr"
-                | "string_len"
-                | "string_to_stream"
-                | "string_to_stream_with_trailing_newline"
+            "string_to_stream" | "string_to_stream_with_trailing_newline"
         )
     }
 
@@ -2332,214 +2326,7 @@ impl Codegen {
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
     ) {
-        // Get type/function indices from builder (no more hardcoded numbers)
-        let string_array_type = builder.type_idx("string-array");
-
         match name {
-            "println" => {
-                // Takes a GC array<u8> reference
-                if call.args.len() == 1 {
-                    if let Expr::Literal(lit) = &call.args[0]
-                        && let Literal::String(s) = &lit.value
-                    {
-                        // String literal with newline appended
-                        let with_newline = format!("{s}\n");
-                        let str_offset = self.get_string_offset(&with_newline);
-                        let str_len = with_newline.len();
-                        // Create GC array from data segment
-                        func.instruction(&Instruction::I32Const(str_offset as i32));
-                        func.instruction(&Instruction::I32Const(str_len as i32));
-                        func.instruction(&Instruction::ArrayNewData {
-                            array_type_index: string_array_type,
-                            array_data_index: 0,
-                        });
-                    } else {
-                        // Non-literal string - evaluate expression (produces GC array ref)
-                        self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
-                    }
-                    func.instruction(&Instruction::Call(builder.func_idx("println")));
-                }
-            }
-            "stream_new" => {
-                func.instruction(&Instruction::Call(builder.func_idx("stream-new")));
-            }
-            "stream_write" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-write")));
-            }
-            "stream_write_string" => {
-                // stream_write_string(tx: i32, data: String) -> i32
-                //
-                // GC string implementation:
-                // 1. string is ref to GC array (string-array type)
-                // 2. array.len to get string length
-                // 3. Call realloc(0, 0, 1, len) to allocate buffer
-                // 4. Loop: array.get_u + i32.store8 to copy bytes
-                // 5. Call stream.write(tx, ptr, len)
-                //
-                // Uses 4 scratch locals: arr_ref (ref), len (i32), ptr (i32), i (i32)
-                // These are allocated at fixed positions after function params/locals
-
-                if call.args.len() == 2 {
-                    // We need scratch locals for this operation
-                    // Allocate them: arr_ref, len, ptr, i
-                    let arr_ref_local = ctx.alloc_local(
-                        "__arr_ref",
-                        ValType::Ref(RefType {
-                            nullable: false,
-                            heap_type: HeapType::Concrete(string_array_type),
-                        }),
-                    );
-                    let len_local = ctx.alloc_local("__len", ValType::I32);
-                    let ptr_local = ctx.alloc_local("__ptr", ValType::I32);
-                    let i_local = ctx.alloc_local("__i", ValType::I32);
-
-                    // Evaluate tx and save for later
-                    self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
-                    // tx is on stack
-
-                    // Evaluate string argument - produces GC array ref
-                    self.generate_expr_with_builder(func, &call.args[1], ctx, builder);
-                    func.instruction(&Instruction::LocalSet(arr_ref_local));
-
-                    // Get length: array.len
-                    func.instruction(&Instruction::LocalGet(arr_ref_local));
-                    func.instruction(&Instruction::ArrayLen);
-                    func.instruction(&Instruction::LocalTee(len_local));
-
-                    // Drop len from stack temporarily, save tx
-                    func.instruction(&Instruction::Drop); // drop len (we have it in local)
-                    // tx is on stack, save it
-                    let tx_local = ctx.alloc_local("__tx", ValType::I32);
-                    func.instruction(&Instruction::LocalSet(tx_local));
-
-                    // Call realloc(0, 0, 1, len) to allocate buffer
-                    func.instruction(&Instruction::I32Const(0)); // old_ptr
-                    func.instruction(&Instruction::I32Const(0)); // old_size
-                    func.instruction(&Instruction::I32Const(1)); // align
-                    func.instruction(&Instruction::LocalGet(len_local)); // new_size
-                    func.instruction(&Instruction::Call(builder.func_idx("realloc")));
-                    func.instruction(&Instruction::LocalSet(ptr_local));
-
-                    // Initialize loop counter: i = 0
-                    func.instruction(&Instruction::I32Const(0));
-                    func.instruction(&Instruction::LocalSet(i_local));
-
-                    // Loop to copy bytes: while (i < len) { mem[ptr+i] = arr[i]; i++; }
-                    func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $break
-                    func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // $continue
-
-                    // Check condition: i < len
-                    func.instruction(&Instruction::LocalGet(i_local));
-                    func.instruction(&Instruction::LocalGet(len_local));
-                    func.instruction(&Instruction::I32GeU); // i >= len
-                    func.instruction(&Instruction::BrIf(1)); // break if i >= len
-
-                    // Store byte: mem[ptr + i] = arr[i]
-                    func.instruction(&Instruction::LocalGet(ptr_local));
-                    func.instruction(&Instruction::LocalGet(i_local));
-                    func.instruction(&Instruction::I32Add); // ptr + i (address)
-                    func.instruction(&Instruction::LocalGet(arr_ref_local));
-                    func.instruction(&Instruction::LocalGet(i_local));
-                    func.instruction(&Instruction::ArrayGetU(string_array_type)); // arr[i] (unsigned)
-                    func.instruction(&Instruction::I32Store8(wasm_encoder::MemArg {
-                        offset: 0,
-                        align: 0,
-                        memory_index: 0,
-                    }));
-
-                    // Increment: i++
-                    func.instruction(&Instruction::LocalGet(i_local));
-                    func.instruction(&Instruction::I32Const(1));
-                    func.instruction(&Instruction::I32Add);
-                    func.instruction(&Instruction::LocalSet(i_local));
-
-                    // Continue loop
-                    func.instruction(&Instruction::Br(0));
-                    func.instruction(&Instruction::End); // end loop
-                    func.instruction(&Instruction::End); // end block
-
-                    // Call stream-write(tx, ptr, len)
-                    func.instruction(&Instruction::LocalGet(tx_local));
-                    func.instruction(&Instruction::LocalGet(ptr_local));
-                    func.instruction(&Instruction::LocalGet(len_local));
-                    func.instruction(&Instruction::Call(builder.func_idx("stream-write")));
-                }
-            }
-            "stream_drop_writable" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-writable")));
-            }
-            "stream_drop_readable" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-readable")));
-            }
-            "i64_low32" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::I32WrapI64);
-            }
-            "i64_high32" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::I64Const(32));
-                func.instruction(&Instruction::I64ShrU);
-                func.instruction(&Instruction::I32WrapI64);
-            }
-            "array_len" => {
-                // array_len<T>(arr: Array<T>) -> i32
-                // For GC arrays, uses Wasm GC array.len instruction
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::ArrayLen);
-            }
-            "string_ptr" => {
-                // string_ptr(s: String) -> i32
-                // Returns pointer to string data in linear memory
-                //
-                // Current: works with string literals (compile-time offset)
-                // Future GC: will extract ptr from (ptr, len) pair or copy GC array
-                if call.args.len() == 1 {
-                    if let Expr::Literal(lit) = &call.args[0]
-                        && let Literal::String(s) = &lit.value
-                    {
-                        let str_offset = self.get_string_offset(s);
-                        func.instruction(&Instruction::I32Const(str_offset as i32));
-                    } else {
-                        // Non-literal - evaluate and assume first element is ptr
-                        self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
-                        // TODO: for GC strings, copy to linear memory and return ptr
-                    }
-                }
-            }
-            "string_len" => {
-                // string_len(s: String) -> i32
-                // Returns length of string in bytes
-                //
-                // Current: works with string literals (compile-time length)
-                // Future GC: will use array.len on GC array
-                if call.args.len() == 1 {
-                    if let Expr::Literal(lit) = &call.args[0]
-                        && let Literal::String(s) = &lit.value
-                    {
-                        let str_len = s.len() as i32;
-                        func.instruction(&Instruction::I32Const(str_len));
-                    } else {
-                        // Non-literal - for GC arrays use array.len
-                        self.generate_expr_with_builder(func, &call.args[0], ctx, builder);
-                        func.instruction(&Instruction::ArrayLen);
-                    }
-                }
-            }
             "string_to_stream" => {
                 // string_to_stream(s: String) -> Stream<u8>
                 // Creates a stream, writes the string data, returns rx handle
@@ -2554,7 +2341,158 @@ impl Codegen {
                     self.generate_string_to_stream(func, call, ctx, builder, true);
                 }
             }
+            // builtin:: namespace functions
+            name if name.starts_with("builtin::") => {
+                self.generate_builtin_ns_call(func, name, call, ctx, builder);
+            }
             _ => {}
+        }
+    }
+
+    /// Generate builtin:: namespace function calls
+    fn generate_builtin_ns_call(
+        &self,
+        func: &mut Function,
+        name: &str,
+        call: &CallExpr,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        let builtin_name = name.strip_prefix("builtin::").unwrap_or(name);
+
+        match builtin_name {
+            // Stream intrinsics
+            "stream_new" => {
+                func.instruction(&Instruction::Call(builder.func_idx("stream-new")));
+            }
+            "stream_write" => {
+                // stream_write(tx: i32, ptr: i32, len: i32) -> i32
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("stream-write")));
+            }
+            "stream_drop_writable" => {
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-writable")));
+            }
+            "stream_drop_readable" => {
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-readable")));
+            }
+
+            // Async task intrinsics
+            "waitable_set_new" => {
+                func.instruction(&Instruction::Call(builder.func_idx("waitable-set-new")));
+            }
+            "waitable_join" => {
+                // waitable_join(set: i32, subtask: i32)
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("waitable-join")));
+            }
+            "waitable_set_wait" => {
+                // waitable_set_wait(set: i32, outptr: i32) -> i32
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("waitable-set-wait")));
+            }
+            "subtask_drop" => {
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("subtask-drop")));
+            }
+
+            // i64 bit manipulation
+            "i64_low32" => {
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            "i64_high32" => {
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::I64Const(32));
+                func.instruction(&Instruction::I64ShrU);
+                func.instruction(&Instruction::I32WrapI64);
+            }
+
+            // i32 operations
+            "i32_and" => {
+                // i32_and(a: i32, b: i32) -> i32
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::I32And);
+            }
+            "i32_eqz" => {
+                // i32_eqz(a: i32) -> i32 (0 or 1)
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::I32Eqz);
+            }
+
+            // GC array operations
+            "array_len" => {
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::ArrayLen);
+            }
+            "array_get_u8" => {
+                // array_get_u8(arr: Array<u8>, idx: i32) -> i32
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                let string_array_type = builder.type_idx("string-array");
+                func.instruction(&Instruction::ArrayGetU(string_array_type));
+            }
+
+            // Linear memory operations
+            "memory_store8" => {
+                // memory_store8(addr: i32, value: i32)
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::I32Store8(MemArg {
+                    offset: 0,
+                    align: 0,
+                    memory_index: 0,
+                }));
+            }
+            "memory_load8_u" => {
+                // memory_load8_u(addr: i32) -> i32
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::I32Load8U(MemArg {
+                    offset: 0,
+                    align: 0,
+                    memory_index: 0,
+                }));
+            }
+            "realloc" => {
+                // realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("realloc")));
+            }
+
+            _ => {
+                // Unknown builtin - generate error at runtime
+                func.instruction(&Instruction::Unreachable);
+            }
         }
     }
 
@@ -2938,8 +2876,18 @@ impl Codegen {
             Expr::Call(call) => {
                 if let Expr::Ident(ident) = &call.callee {
                     match ident.name.as_str() {
-                        "stream_new" => ValType::I64,
-                        "i64_low32" | "i64_high32" | "string_len" | "array_len" => ValType::I32,
+                        "builtin::stream_new" => ValType::I64,
+                        "builtin::i64_low32"
+                        | "builtin::i64_high32"
+                        | "builtin::array_len"
+                        | "builtin::array_get_u8"
+                        | "builtin::i32_and"
+                        | "builtin::i32_eqz"
+                        | "builtin::stream_write"
+                        | "builtin::waitable_set_new"
+                        | "builtin::waitable_set_wait"
+                        | "builtin::memory_load8_u"
+                        | "builtin::realloc" => ValType::I32,
                         _ => ValType::I32,
                     }
                 } else {

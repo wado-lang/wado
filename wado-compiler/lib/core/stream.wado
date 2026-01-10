@@ -6,47 +6,85 @@
 // Note on String representation:
 // - `String` and `Array<u8>` have the same Wasm-level representation: builtin::array<u8>
 // - A String is a single reference value (not a ptr+len pair)
-// - Use `array_len` to get the length of a String or Array
+// - Use `builtin::array_len` to get the length of a String or Array
 
 // ============================================================================
-// Stream Intrinsics (Component Model canonical built-ins)
+// Stream Intrinsics (wrappers around builtin::)
 // ============================================================================
 
 /// Create a new stream, returns i64 with rx in low 32 bits, tx in high 32 bits
-pub fn stream_new() -> i64;
+pub fn stream_new() -> i64 {
+    return builtin::stream_new();
+}
 
-/// Write a String/Array to stream, returns status
-/// Converts GC array to linear memory and calls stream.write
-/// Note: Implementation blocked on loop codegen
-pub fn stream_write_string(tx: i32, data: String) -> i32;
+/// Write bytes to stream from linear memory, returns status
+pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32 {
+    return builtin::stream_write(tx, ptr, len);
+}
 
 /// Close the writable end of the stream
-pub fn stream_drop_writable(tx: i32);
+pub fn stream_drop_writable(tx: i32) {
+    builtin::stream_drop_writable(tx);
+}
 
 /// Close the readable end of the stream
-pub fn stream_drop_readable(rx: i32);
+pub fn stream_drop_readable(rx: i32) {
+    builtin::stream_drop_readable(rx);
+}
 
 // ============================================================================
-// Bit Manipulation Intrinsics
+// Bit Manipulation (wrappers around builtin::)
 // ============================================================================
 
 /// Extract low 32 bits from i64
-pub fn i64_low32(value: i64) -> i32;
+pub fn i64_low32(value: i64) -> i32 {
+    return builtin::i64_low32(value);
+}
 
 /// Extract high 32 bits from i64
-pub fn i64_high32(value: i64) -> i32;
+pub fn i64_high32(value: i64) -> i32 {
+    return builtin::i64_high32(value);
+}
 
 // ============================================================================
-// Array/String Intrinsics (Wasm GC)
+// Array/String Intrinsics (wrappers around builtin::)
 // ============================================================================
 
 /// Get length of an array
 /// Maps to Wasm GC `array.len` instruction
-pub fn array_len<T>(arr: Array<T>) -> i32;
+pub fn array_len<T>(arr: Array<T>) -> i32 {
+    return builtin::array_len(arr);
+}
 
 /// Get length of a String in bytes (UTF-8)
 /// Maps to Wasm GC `array.len` instruction
-pub fn string_len(s: String) -> i32;
+pub fn string_len(s: String) -> i32 {
+    return builtin::array_len(s);
+}
+
+// ============================================================================
+// Async Task Intrinsics (wrappers around builtin::)
+// ============================================================================
+
+/// Create a new waitable set for async task management
+pub fn waitable_set_new() -> i32 {
+    return builtin::waitable_set_new();
+}
+
+/// Join a subtask to a waitable set
+pub fn waitable_join(set: i32, subtask: i32) {
+    builtin::waitable_join(set, subtask);
+}
+
+/// Wait for events on a waitable set
+pub fn waitable_set_wait(set: i32, out_addr: i32) -> i32 {
+    return builtin::waitable_set_wait(set, out_addr);
+}
+
+/// Drop a subtask handle
+pub fn subtask_drop(subtask: i32) {
+    builtin::subtask_drop(subtask);
+}
 
 // ============================================================================
 // Helper Functions (built-in implementations)
@@ -62,17 +100,45 @@ pub fn string_to_stream(s: String) -> Stream<u8>;
 pub fn string_to_stream_with_trailing_newline(s: String) -> Stream<u8>;
 
 // ============================================================================
+// Async Wait Helper
+// ============================================================================
+
+/// Wait for a write-via-stream subtask to complete if pending
+/// This is used after calling Stdout::write_via_stream or similar effect functions
+/// The subtask parameter is the return value from write-via-stream
+/// Scratch memory address (2048) is used for waitable-set-wait output
+pub fn wait_for_subtask(subtask: i32) {
+    // Check if subtask is pending: (status & 1) == 0
+    if builtin::i32_eqz(builtin::i32_and(subtask, 1)) {
+        let waitable_set = builtin::waitable_set_new();
+        builtin::waitable_join(waitable_set, subtask);
+        builtin::waitable_set_wait(waitable_set, 2048);
+        builtin::subtask_drop(subtask);
+    }
+}
+
+// ============================================================================
 // Reference Implementation (for documentation)
 // ============================================================================
 
-/// Reference implementation of string_to_stream (actual impl is built-in)
-fn string_to_stream_ref(s: String) -> Stream<u8> {
-    let handles = stream_new();
-    let rx = i64_low32(handles);
-    let tx = i64_high32(handles);
+/// Reference implementation showing how string_to_stream could be implemented
+/// The actual implementation is a built-in for efficiency (avoids loop overhead)
+fn string_to_stream_ref(s: String) -> i32 {
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
 
-    stream_write_string(tx, s);
-    stream_drop_writable(tx);
+    // Copy GC string to linear memory and write to stream
+    let len = builtin::array_len(s);
+    let ptr = builtin::realloc(0, 0, 1, len);
+    let mut i = 0;
+    while i < len {
+        let byte = builtin::array_get_u8(s, i);
+        builtin::memory_store8(ptr + i, byte);
+        i = i + 1;
+    }
+    builtin::stream_write(tx, ptr, len);
+    builtin::stream_drop_writable(tx);
 
     return rx;
 }

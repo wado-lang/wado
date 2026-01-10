@@ -66,6 +66,7 @@ builtin::array_new<T>(len: i32) -> builtin::array<T>
 builtin::array_len<T>(arr: builtin::array<T>) -> i32
 builtin::array_get<T>(arr: builtin::array<T>, idx: i32) -> T
 builtin::array_set<T>(arr: builtin::array<T>, idx: i32, value: T)
+builtin::array_get_u8(arr: builtin::array<u8>, idx: i32) -> i32  // Unsigned byte read
 
 // i31ref operations
 builtin::i31ref_new(value: i32) -> builtin::i31ref
@@ -77,6 +78,31 @@ builtin::eqref<T, U>(a: T, b: U) -> bool   // Compare any GC references
 
 // Control
 builtin::unreachable() -> !   // Wasm trap instruction
+
+// i64 bit manipulation
+builtin::i64_low32(value: i64) -> i32    // Extract low 32 bits
+builtin::i64_high32(value: i64) -> i32   // Extract high 32 bits
+
+// i32 operations
+builtin::i32_and(a: i32, b: i32) -> i32  // Bitwise AND
+builtin::i32_eqz(a: i32) -> i32          // Check if zero (returns 0 or 1)
+
+// Linear memory operations
+builtin::memory_store8(addr: i32, value: i32)  // Store byte to memory
+builtin::memory_load8_u(addr: i32) -> i32      // Load unsigned byte from memory
+builtin::realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
+
+// Stream intrinsics (Component Model)
+builtin::stream_new() -> i64              // Create stream, returns rx|tx packed
+builtin::stream_write(tx: i32, ptr: i32, len: i32) -> i32
+builtin::stream_drop_writable(tx: i32)
+builtin::stream_drop_readable(rx: i32)
+
+// Async task intrinsics (Component Model)
+builtin::waitable_set_new() -> i32
+builtin::waitable_join(set: i32, subtask: i32)
+builtin::waitable_set_wait(set: i32, outptr: i32) -> i32
+builtin::subtask_drop(subtask: i32)
 ```
 
 **Usage in Standard Library:**
@@ -181,7 +207,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `return` statements
 - [x] `if` statements
 - [x] `while` loops
-- [x] `for` loops (with pattern)
+- [x] C-style `for` loops
+- [ ] `for-of` loops
 - [ ] `match` statements
 
 #### Expressions
@@ -330,6 +357,7 @@ fn main() with Stdout {
    - ❌ String concatenation uses placeholder implementation
 5. **No type checking**: The analyzer doesn't perform type checking yet
 6. **Limited codegen**: Only `println` with string literals works
+7. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
 
 ---
 
