@@ -79,7 +79,8 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [x] Integer literals
 - [x] Float literals
 - [x] String literals (double quotes)
-- [x] Template strings (backticks) - parsed as regular strings for now
+- [x] Character literals (single quotes)
+- [x] Template strings (backticks with interpolation `{expr}`)
 - [x] Operators (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`)
 - [x] Punctuation (`(`, `)`, `{`, `}`, `[`, `]`, `,`, `:`, `;`, `::`, `.`, `->`, `=>`, `|`, `&`, `#`, `?`)
 - [x] Comments (`//`)
@@ -122,8 +123,11 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [x] Integer literals
 - [x] Float literals
 - [x] String literals
+- [x] Character literals
 - [x] Boolean literals (`true`, `false`)
+- [x] Null literal (`null`)
 - [x] Unit `()`
+- [x] Template string interpolation (`` `Hello, {name}!` ``)
 - [x] Binary operators (arithmetic, comparison, logical)
 - [x] Unary operators (`-`, `!`, `&`, `*`)
 - [x] Function calls
@@ -139,7 +143,6 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [ ] Tuple expressions
 - [ ] Range expressions
 - [ ] `?` operator (error propagation)
-- [ ] Template string interpolation
 
 #### Types
 
@@ -185,6 +188,7 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [x] `println` function (core::cli)
 - [x] Multiple function calls
 - [x] Async function lifting/lowering
+- [x] Template strings (partial - literals only, no type conversion/formatting)
 - [ ] Variables and locals
 - [ ] Control flow (`if`, `while`, `for`)
 - [ ] Binary/unary operations
@@ -194,6 +198,9 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [ ] Pattern matching
 - [ ] Closures
 - [ ] Effect handlers
+- [ ] Template string type conversion (i32/f64 → string)
+- [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
+- [ ] Template string array concatenation
 - [ ] Reactive signals (source values)
 - [ ] Reactive signals (derived values)
 - [ ] Reactive effect blocks (syntax TBD)
@@ -207,9 +214,11 @@ Structs with exactly one GC field compile directly to that field's Wasm type (ze
 - [x] Parser unit tests
 - [x] Analyzer unit tests
 - [x] Codegen unit tests
+- [x] Template string tests (20 comprehensive tests)
 - [x] E2E test: hello world (with wasmtime)
 - [x] E2E test: multiple println
 - [ ] Compile error tests (partial)
+- [ ] Template string E2E tests (runtime execution)
 - [ ] More E2E tests
 
 ---
@@ -245,9 +254,165 @@ fn main() with Stdout {
 1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
 2. **No `variant` keyword**: Parser doesn't recognize `variant` declarations (sum types with payloads)
 3. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags)
-4. **Template strings not interpolated**: Backtick strings are parsed as plain strings
+4. **Template strings - partial implementation**:
+   - ✅ Syntax parsing with interpolation `{expr}` works
+   - ✅ Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished
+   - ✅ Nested template strings supported
+   - ❌ No type conversion (i32/f64 → string) in codegen
+   - ❌ Format specifiers (`.2f`, etc.) not implemented in codegen
+   - ❌ String concatenation uses placeholder implementation
 5. **No type checking**: The analyzer doesn't perform type checking yet
 6. **Limited codegen**: Only `println` with string literals works
+
+---
+
+## Template String Interpolation
+
+Wado supports template strings with interpolation using backticks and `{expr}` syntax, similar to JavaScript but with Python-like format specifiers.
+
+### Syntax
+
+```wado
+let name = "Alice";
+let age = 30;
+
+// Basic interpolation
+let greeting = `Hello, {name}!`;
+
+// Complex expressions
+let message = `Sum: {a + b * c}`;
+
+// Format specifiers (Python-like)
+let pi = 3.14159;
+let formatted = `Pi: {pi:.2f}`;        // "Pi: 3.14"
+let padded = `Value: {x:0.3f}`;        // Zero padding
+
+// Method calls
+let text = `Length: {name.len()}`;
+
+// Nested templates
+let outer = `Outer {`Inner {x}`}`;
+```
+
+### Implementation Status
+
+#### ✅ Fully Implemented (Lexer & Parser)
+
+**Lexer (`lexer.rs`)**:
+- Backtick string tokenization with `TemplateStringLit` token
+- Brace depth tracking to handle nested `{}` in interpolations
+- String literal tracking inside interpolations
+- Escape sequence support (`\n`, `\t`, `\uHHHH`, etc.)
+- Nested template string support
+
+**Parser (`parser.rs`)**:
+- Template string AST nodes (`TemplateStringExpr`, `TemplatePart`, `FormatSpec`)
+- Interpolation expression parsing (any valid expression)
+- Format specifier extraction after `:`
+- **`:` vs `::` distinction**: Single-character lookahead to differentiate:
+  - `:` alone → format specifier start
+  - `::` → scope resolution (part of expression)
+- Recursive parsing for nested template strings
+- Comprehensive error handling
+
+**Test Coverage**:
+- 20 comprehensive test cases covering:
+  - Basic interpolation
+  - Complex expressions
+  - Format specifiers
+  - Nested templates
+  - Edge cases (empty, consecutive interpolations, etc.)
+  - Error cases (unterminated, empty interpolation, etc.)
+
+#### ⚠️ Partial Implementation (Codegen)
+
+**What Works (`codegen.rs`)**:
+- String literal parts are collected and embedded in data section
+- Interpolation expressions are evaluated
+- Template strings recognized as producing `ref (array u8)` type
+- Basic structure for concatenation (locals allocated)
+
+**What's Missing (TODO)**:
+1. **Type-to-String Conversion**:
+   ```wado
+   `Count: {42}`    // Need i32 → string
+   `Pi: {3.14}`     // Need f64 → string
+   `Flag: {true}`   // Need bool → string
+   ```
+   Currently assumes all interpolated expressions are already strings.
+
+2. **Format Specifiers**:
+   ```wado
+   `{pi:.2f}`       // Decimal precision
+   `{x:0.3f}`       // Zero padding
+   `{n:d}`          // Integer formatting
+   ```
+   Format specs are parsed but ignored in codegen.
+
+3. **String Concatenation**:
+   Currently uses placeholder that only keeps the last part:
+   ```rust
+   // TODO: Implement proper array concatenation
+   // Current: just overwrites with each part (incorrect)
+   func.instruction(&Instruction::LocalSet(result_local));
+   ```
+
+   Proper implementation needs:
+   - Calculate total length of all parts
+   - Allocate new GC array with total length
+   - Copy each part into correct offset using `array.copy`
+
+### AST Structure
+
+```rust
+pub struct TemplateStringExpr {
+    pub parts: Vec<TemplatePart>,
+    pub span: Span,
+}
+
+pub enum TemplatePart {
+    String(String),                    // Literal string
+    Interpolation {
+        expr: Box<Expr>,               // Expression to interpolate
+        format: Option<FormatSpec>,    // Optional format spec
+    },
+}
+
+pub struct FormatSpec {
+    pub spec: String,  // e.g., ".2f", "0.3f", "10"
+}
+```
+
+### Next Steps for Full Implementation
+
+1. **Add `to_string()` intrinsics** for primitive types:
+   ```wado
+   builtin::i32_to_string(value: i32) -> builtin::array<u8>
+   builtin::f64_to_string(value: f64) -> builtin::array<u8>
+   builtin::bool_to_string(value: bool) -> builtin::array<u8>
+   ```
+
+2. **Implement format specifier handling**:
+   - Parse format spec (precision, padding, alignment)
+   - Pass to appropriate formatting intrinsic
+
+3. **Implement efficient array concatenation**:
+   ```wat
+   ;; Calculate total length
+   (i32.add (array.len $part1) (i32.add (array.len $part2) ...))
+   ;; Allocate result array
+   (array.new_default $array_u8 (local.get $total_len))
+   ;; Copy each part
+   (array.copy $array_u8 $array_u8
+     (local.get $result)  ;; dest
+     (i32.const 0)        ;; dest offset
+     (local.get $part1)   ;; src
+     (i32.const 0)        ;; src offset
+     (array.len $part1))  ;; length
+   ;; Repeat for each part at appropriate offset
+   ```
+
+4. **Add E2E tests** for runtime execution with wasmtime
 
 ---
 
