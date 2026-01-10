@@ -742,7 +742,7 @@ The prelude is automatically imported into every module, making `Option`, `Resul
 ```
 core            # core: namespace for the core library
 ├── prelude     # Automatically imported (Option, Result, Stream, Future, Pollable)
-├── cli         # WASI CLI (println, eprintln, args, env, exit, ...)
+├── cli         # CLI helpers (println, eprintln, args, env, exit, ...)
 ├── ...
 wasi            # wasi: namespace for system interfaces
 ├── cli
