@@ -91,6 +91,7 @@ Significant architectural decisions are documented as ARDs in `docs/ard-{yyyy-mm
 
 - `docs/ard-2026-01-10-wasm-import.md` - WebAssembly module import support
 - `docs/ard-2026-01-10-deterministic-libm.md` - Bundling Rust libm for deterministic math
+- `docs/ard-2026-01-10-tagged-template-literals.md` - Tagged template literals for compile-time execution
 
 ## Project Development
 

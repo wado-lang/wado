@@ -404,6 +404,112 @@ let pair = (1, "hello");
 let triple: Tuple<i32, String, bool> = (42, "answer", true);
 ```
 
+### Tagged Template Literals
+
+Tagged template literals enable compile-time function execution on string literals, allowing zero-overhead binary encoding, DSL validation, and custom compile-time transformations.
+
+**Syntax:**
+
+```wado
+let result = tag`literal string`;
+```
+
+Where `tag` is an effect-free function that executes at compile time.
+
+**Requirements:**
+
+- The tag function must have no `with` clause (effect-free/pure function)
+- Function signature: `fn(String) -> T` where `T` is any type
+- The function is executed during compilation
+- If the function panics, it becomes a compile error
+- Only other effect-free functions can be called within the tag function
+
+**Example - Binary Literals:**
+
+```wado
+use {base64, hex} from "core:encoding";
+
+// base64 and hex are standard library functions, not keywords
+let embedded_image = base64`iVBORw0KGgoAAAANSUhEUgAAAAUA...`;  // Type: Array<u8>
+let crypto_key = hex`48656c6c6f20576f726c64`;                // Type: Array<u8>
+
+// Invalid base64 causes compile error
+let invalid = base64`!!!invalid!!!`;  // Compile error: Invalid base64 encoding
+```
+
+**Example - DSL Validation:**
+
+```wado
+// User-defined compile-time validation
+fn regex(pattern: String) -> Regex {
+    match compile_regex(pattern) {
+        Ok(r) => r,
+        Err(e) => panic(`Invalid regex pattern: {e}`),  // Compile error
+    }
+}
+
+let email_pattern = regex`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$`;
+
+// SQL query validation
+fn sql(query: String) -> SqlQuery {
+    match parse_sql(query) {
+        Ok(q) => q,
+        Err(e) => panic(`Invalid SQL syntax at {e.position}: {e.message}`),
+    }
+}
+
+let query = sql`SELECT * FROM users WHERE id = ?`;  // Validated at compile time
+```
+
+**Standard Library Support:**
+
+The `core:encoding` module provides common binary encodings:
+
+```wado
+use {base64, hex} from "core:encoding";
+
+// Base64 decoding (RFC 4648)
+pub fn base64(input: String) -> Array<u8> {
+    match decode_base64_impl(input) {
+        Ok(data) => data,
+        Err(e) => panic(`Invalid base64 encoding: {e}`),
+    }
+}
+
+// Hexadecimal decoding
+pub fn hex(input: String) -> Array<u8> {
+    match decode_hex_impl(input) {
+        Ok(data) => data,
+        Err(e) => panic(`Invalid hex encoding: {e}`),
+    }
+}
+```
+
+**Compile-Time Execution Constraints:**
+
+Tagged template functions are executed at compile time with the following constraints:
+
+- **Effect-free only**: Functions with `with` clauses cannot be used as tags
+- **Pure computation**: Only other effect-free functions can be called
+- **Deterministic**: Execution must be deterministic (guaranteed by Wado's deterministic libm)
+- **Heap allocation**: Allowed via Wasm GC (unlike Rust's `const fn`)
+- **Recursion**: Allowed with reasonable depth limits
+- **No I/O**: Functions requiring effects (FileSystem, Network, etc.) cannot be called
+
+**Design Rationale:**
+
+Tagged template literals provide a general mechanism for compile-time computation, avoiding the need for built-in syntax for each use case. This aligns with Wado's philosophy of minimal built-ins and explicit dependencies. See `docs/ard-2026-01-10-tagged-template-literals.md` for detailed design decisions.
+
+**Future Extensions:**
+
+Interpolation support may be added in future versions:
+
+```wado
+// Future: interpolation syntax (not yet implemented)
+let id = 42;
+let query = sql`SELECT * FROM users WHERE id = ${id}`;
+```
+
 ### Literal Types
 
 ```wado
