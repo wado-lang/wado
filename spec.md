@@ -14,7 +14,6 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 ## Design Philosophy
 
 - **Wasm only**: Zero abstraction to Wasm
-- **No macros**: Prioritizes tooling compatibility (formatter, syntax highlighter)
 - **Explicit imports**: All dependencies are explicit
 - **Colorless async**: Eliminates async/await "color" problem via Wasm Stack Switching
 - **Effect System**: Side effect tracking and control, swappable via Handlers
@@ -755,22 +754,16 @@ core
 └── test        # assert_eq, ...
 ```
 
-### Built-in Functions
-
-Built-in functions provided instead of macros:
+### Global Functions defined in `core:prelude`
 
 ```wado
-println("hello");         // Rust: println!("hello")
-panic("error");           // Rust: panic!("error")
-assert(x > 0);            // Rust: assert!(x > 0)
-dbg(value);               // Rust: dbg!(value)
-todo();                   // Rust: todo!()
-unreachable();            // Rust: unreachable!()
+println("hello");
+panic("error");
+assert(x > 0);
+dbg(value);
+todo();
+unreachable();
 ```
-
-Note: Use array literal syntax `[1, 2, 3]` instead of Rust's `vec![]` macro.
-
-Note: Use string interpolation with backticks instead of `format()`: `` `x = {x}` `` or `` `x = {x:0.3f}` ``
 
 ---
 
@@ -844,7 +837,7 @@ fn load_data() -> Data with Http {
 }
 ```
 
-**Important:** While function implementations are colorless (no `async` keyword), effect and world declarations must use `async` to accurately match WIT's `async func` signatures. This enables proper Component Model compilation while maintaining colorless async in user code.
+**Important:** Wado is fully colorless—the `async` keyword only appears in world declarations (the Component Model surface) to match WIT's `async func` signatures for exports. Effect declarations and function implementations never use `async`.
 
 ---
 
@@ -871,15 +864,14 @@ effect Console {
 }
 
 effect Http {
-    // async keyword required when corresponding to WIT's "async func"
-    async fn get(url: String) -> Response;
-    async fn post(url: String, body: String) -> Response;
+    fn get(url: String) -> Response;
+    fn post(url: String, body: String) -> Response;
 }
 
 effect FileSystem {
-    async fn read(path: String) -> Result<Array<u8>, IoError>;
-    async fn write(path: String, data: Array<u8>) -> Result<(), IoError>;
-    fn exists(path: String) -> bool;  // Synchronous
+    fn read(path: String) -> Result<Array<u8>, IoError>;
+    fn write(path: String, data: Array<u8>) -> Result<(), IoError>;
+    fn exists(path: String) -> bool;
 }
 
 effect Dom {
@@ -888,11 +880,11 @@ effect Dom {
 }
 ```
 
-**Note on async in Effect Declarations:**
+**Colorless Async:**
 
-- Effect declarations use the `async` keyword to match WIT's `async func` signatures
-- Function _implementations_ don't use `async` (colorless async via stack switching)
-- This separation allows accurate WIT mapping while maintaining colorless async in code
+- Effect declarations never use the `async` keyword—Wado is fully colorless
+- The `async` keyword only appears in world export declarations (the Component Model surface)
+- WIT's `async func` is handled transparently via Wasm Stack Switching at runtime
 
 **2. Methods with effect requirements**:
 
@@ -1113,7 +1105,7 @@ world WorldName {
         function_name_3,
     }
 
-    // Use async when exporting functions that map to WIT's "async func"
+    // Use async for exports that map to WIT's "async func" (CM surface only)
     export async fn exported_function(arg: Type) -> ReturnType;
     export fn synchronous_function() -> i32;
 }
@@ -1123,7 +1115,7 @@ world WorldName {
 > **TBD: Component/Module Structure**
 > The relationship between files, modules, and components is still under discussion. The intended design is "1 file = 1 module, 1 component = multiple modules", but the exact syntax for declaring which modules compose a component has not been finalized.
 
-**Note:** The `async` keyword in world export/import declarations indicates correspondence with WIT's `async func`. Function implementations remain colorless (no `async` keyword needed).
+**Note:** The `async` keyword only appears in world export declarations to indicate correspondence with WIT's `async func`. This is the only place `async` appears in Wado—effect declarations and function implementations are fully colorless.
 
 ### WASI CLI World Example
 
@@ -1174,8 +1166,7 @@ world CliCommand {
     }
 
     // Entry point: maps to WIT's "run: async func() -> result"
-    // The async keyword is required in world declarations to match WIT signatures.
-    // Function implementations don't need async (colorless async via stack switching).
+    // async keyword only appears here (world export) - the CM surface
     export async fn run() -> Result<(), ()>;
 }
 
@@ -1220,7 +1211,7 @@ world CliApp {
 - **Explicit function listing**: Unlike WIT's `include` directive, Wado requires listing each imported function explicitly for clarity
 - **Effect-based imports**: Imports are organized by effect, which maps to WIT interfaces
 - **Type signatures on exports**: Export declarations include full function signatures
-- **async keyword in declarations**: Effect and world declarations use `async` to match WIT's `async func`, but function implementations don't (colorless async via stack switching)
+- **async keyword**: Only appears in world export declarations (the Component Model surface); effect declarations and implementations are fully colorless
 - **Versioning**: Version information (`@0.3.0-rc-2025-09-16`) is specified in the effect definitions (e.g., `cli.wado`), not in the world declaration
 
 ---
@@ -1262,7 +1253,7 @@ match result {
 
 ## JSX
 
-Built into the language, no macros needed:
+JSX is built into the language:
 
 ```wado
 fn App() -> Element with Dom {
