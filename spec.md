@@ -767,15 +767,6 @@ use {foo} from "./external.wasm" with {
     type: "wasm",
     wit: "./external.wit",
 };
-
-// Future: integrity hash for security
-use {Parser} from "parser-lib" with { integrity: "sha384-..." };
-
-// Multiple attributes
-use {ApiClient} from "https://example.com/api.wado" with {
-    integrity: "sha384-...",
-    version: "1.0.0",
-};
 ```
 
 **Type Attribute Requirement**:
@@ -798,14 +789,14 @@ Use `use name from "..."` (without curly braces) to import an entire module as a
 ```wado
 // Import JSON file as a namespace
 use config from "./config.json" with { type: "json" };
-let value = config["key"];
+let value = config::key; // not config["key"], as it's analyzed at compile time
 
 // Import a module as a namespace
 use utils from "./utils.wado";
 utils::helper_function();
 ```
 
-**Note:** Wado does not support `use * as name` or default imports. Use namespace import instead.
+**Note:** Wado does not support `use * as name` or default imports.
 
 ### Import Rules
 
@@ -842,7 +833,7 @@ fn example() with Stdout {
 }
 ```
 
-**Notation distinction:**
+Notation distinction:
 
 - `.` → struct fields and methods (`user.name`, `stream.read()`)
 - `::` → effect functions and namespace access (`Stdout::write_via_stream()`)
@@ -859,7 +850,7 @@ fn log() with Stdout, Stderr {
 }
 ```
 
-**Exception: The Prelude**
+### Exception: The Prelude
 
 The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports. To opt out, use `#![no_prelude]`.
 
@@ -881,13 +872,17 @@ wasi            # wasi: namespace for system interfaces
 ```wado
 println("hello");
 panic("error");
-assert(x > 0);
-dbg(value);
-todo();
 unreachable();
 ```
 
----
+## The `assert` Keyword
+
+The `assert` keyword is used to assert that a condition is true. If the condition is false, the program will panic with the power-assert style message.
+
+```wado
+// if x is not greater than 0, the program will panic, printing x (if x is a struct, the fields of the struct will be printed).
+assert x > 0;
+```
 
 ## Reactive System
 
@@ -1098,9 +1093,7 @@ fn load_data() -> Data with Http {
 }
 ```
 
-**Important:** Wado is fully colorless—the `async` keyword only appears in world declarations (the Component Model surface) to match WIT's `async func` signatures for exports. Effect declarations and function implementations never use `async`.
-
----
+Note: Wado is fully colorless — the `async` keyword only appears in world declarations (the Component Model surface) to match WIT's `async func` signatures for exports. Effect declarations and function implementations never use `async`.
 
 ## Effect System
 
@@ -1340,8 +1333,6 @@ fn main() {
 }
 ```
 
----
-
 ## World System
 
 ### What is a World?
@@ -1376,7 +1367,7 @@ world WorldName {
 > **TBD: Component/Module Structure**
 > The relationship between files, modules, and components is still under discussion. The intended design is "1 file = 1 module, 1 component = multiple modules", but the exact syntax for declaring which modules compose a component has not been finalized.
 
-**Note:** The `async` keyword only appears in world export declarations to indicate correspondence with WIT's `async func`. This is the only place `async` appears in Wado—effect declarations and function implementations are fully colorless.
+Note: The `async` keyword only appears in world export declarations to indicate correspondence with WIT's `async func`. This is the only place `async` appears in Wado—effect declarations and function implementations are fully colorless.
 
 ### WASI CLI World Example
 
@@ -1386,7 +1377,7 @@ The standard WASI CLI `command` world in Wado syntax:
 // Based on wasi:cli@0.3.0-rc-2025-09-16 command world
 // Effect definitions are in "core:cli" (see cli.wado)
 
-world CliCommand {
+world Command {
     // Standard I/O streams
     import Stdout {
         write_via_stream,
@@ -1475,19 +1466,17 @@ world CliApp {
 - **async keyword**: Only appears in world export declarations (the Component Model surface); effect declarations and implementations are fully colorless
 - **Versioning**: Version information (`@0.3.0-rc-2025-09-16`) is specified in the effect definitions (e.g., `cli.wado`), not in the world declaration
 
----
-
 ## Error Handling
 
 ### Unrecoverable Errors (Wasm Exceptions)
 
 ```wado
 panic("Fatal error");      // Immediate termination
-assert(condition);         // Condition check, panic on failure
 unreachable();             // Unreachable code
+assert condition;          // Condition check, panic on failure
 ```
 
-These cannot be caught; the program terminates.
+These cannot be caught in Wado; the program terminates.
 
 ### Recoverable Errors (Result Type)
 
@@ -1509,8 +1498,6 @@ match result {
     Err(e) => handle_error(e),
 }
 ```
-
----
 
 ## JSX
 
@@ -1544,13 +1531,9 @@ fn App() -> Element with Dom {
 </ul>
 ```
 
----
-
 ## WASI / Browser Support
 
 Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
-
-> **Implementation Status**: The compiler currently generates WASI 0.2.x compatible code. WASI P3 with native `stream`/`future` types is pending Component Model async feature stabilization in wasmtime.
 
 ### WASI P3 Type Mapping
 
@@ -1583,12 +1566,12 @@ Wado effects map to WASI P3 interfaces:
 WASI P3 uses `async func` in WIT for non-blocking operations. In Wado, these are handled transparently via stack switching (colorless async):
 
 ```wit
-// WIT definition
+// WIT definition has async keyword
 write-via-stream: async func(data: stream<u8>) -> result<_, error-code>;
 ```
 
 ```wado
-// Wado usage - no async keyword needed
+// Wado has no async keyword in effect declarations or function implementations.
 fn println(message: String) with Stdout {
     let stream = string_to_stream(`{message}\n`);
     Stdout::write_via_stream(stream);  // Colorless async
@@ -1598,6 +1581,8 @@ fn println(message: String) with Stdout {
 ### Entry Points
 
 Entry points are integrated in World system.
+
+Currently, `run` is the only entry point, which confirms the `Command` world defined in wasi:cli.
 
 TBD.
 
@@ -1639,7 +1624,7 @@ world Transform {
     export fn execute(input: String) with FileSystem -> String;
 }
 
-let plugin: Transform = load_wasm("./transform.wasm", world: Transform);
+let plugin = load_wasm<Transform>("./transform.wasm");
 
 let output = plugin.execute(input);
 ```
@@ -1652,24 +1637,24 @@ Wado's literal syntax is a **superset of JSON**. Any valid JSON document can be 
 
 ### What's Shared with JSON
 
-- **Whitespace**: Space (`\u0020`), LF (`\u000A`), CR (`\u000D`), Tab (`\u0009`)
-- **String escapes**: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uHHHH`
-- **Surrogate pairs**: `"\uD83D\uDE00"` for non-BMP characters
-- **Number format**: Decimal integers and floating-point with scientific notation
-- **Literals**: `true`, `false`, `null`
-- **Object syntax**: `{ "key": value }` with quoted keys
-- **Array syntax**: `[value, value, ...]`
+- Whitespace: Space (`\u0020`), LF (`\u000A`), CR (`\u000D`), Tab (`\u0009`)
+- String escapes: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uHHHH`
+- Surrogate pairs: `"\uD83D\uDE00"` for non-BMP characters
+- Number format: Decimal integers and floating-point with scientific notation
+- Literals: `true`, `false`, `null`
+- Object syntax: `{ "key": value }` with quoted keys
+- Array syntax: `[value, value, ...]`
 
 ### Wado Extensions (Beyond JSON)
 
-- **Unquoted keys**: `{ name: "Alice" }` instead of `{ "name": "Alice" }`
-- **Shorthand properties**: `{ name, age }` when variable names match keys
-- **Trailing commas**: `[1, 2, 3,]` is valid
-- **Comments**: `//` and `/* */`
-- **Extended Unicode escapes**: `\u{1F600}` for full Unicode range (JavaScript-style)
-- **Single-quoted characters**: `'A'` for `char` type
-- **Numeric separators**: `1_000_000`
-- **Numeric prefixes**: `0x`, `0o`, `0b` for hex, octal, binary
+- Unquoted keys: `{ name: "Alice" }` instead of `{ "name": "Alice" }`
+- Shorthand properties: `{ name, age }` when variable names match keys
+- Trailing commas: `[1, 2, 3,]` is valid
+- Comments: `//` and `/* */`
+- Extended Unicode escapes: `\u{1F600}` for full Unicode range
+- Single-quoted characters: `'A'` for `char` type
+- Numeric separators: `1_000_000`
+- Numeric prefixes: `0x`, `0o`, `0b` for hex, octal, binary
 
 ### Importing JSON Files
 
@@ -1678,8 +1663,16 @@ Use namespace import to load JSON files directly:
 ```wado
 use config from "./config.json" with { type: "json" };
 
-// config is now a Dict or Array depending on the JSON root
-let name = config["name"];
+// config is a namespace, so we use :: to access the fields
+let name = config::name;
 ```
 
-**Note:** This uses namespace import syntax (`use name from`) rather than named import (`use {name} from`).
+JSONC is also supported:
+
+```wado
+use config from "./config.jsonc" with { type: "jsonc" };
+
+let name = config::name;
+```
+
+JSON and JSONC is loaded at compile time and bundled into the wasm binary.

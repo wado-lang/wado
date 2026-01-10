@@ -1726,11 +1726,11 @@ mod tests {
 
     #[test]
     fn test_simple_function() {
-        let module = parse("fn main() { }").unwrap();
+        let module = parse("fn run() { }").unwrap();
         assert_eq!(module.items.len(), 1);
 
         if let Item::Function(func) = &module.items[0] {
-            assert_eq!(func.name, "main");
+            assert_eq!(func.name, "run");
             assert!(func.params.is_empty());
             assert!(func.return_type.is_none());
             assert!(func.effects.is_empty());
@@ -1741,7 +1741,7 @@ mod tests {
 
     #[test]
     fn test_function_with_effects() {
-        let module = parse("fn main() with Stdout { }").unwrap();
+        let module = parse("fn run() with Stdout { }").unwrap();
 
         if let Item::Function(func) = &module.items[0] {
             assert_eq!(func.effects, vec!["Stdout"]);
@@ -1752,7 +1752,7 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        let module = parse(r#"fn main() { println("hello"); }"#).unwrap();
+        let module = parse(r#"fn run() { println("hello"); }"#).unwrap();
 
         if let Item::Function(func) = &module.items[0] {
             let body = func.body.as_ref().expect("function should have body");

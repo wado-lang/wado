@@ -8,7 +8,8 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
-use wado_compiler::compile;
+use std::path::PathBuf;
+use wado_compiler::{compile, compile_file};
 
 struct TestWasiState {
     ctx: WasiCtx,
@@ -263,6 +264,24 @@ async fn test_local_floats_mut() {
 }
 
 // ============================================================================
+// User-defined function tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_user_function_call() {
+    let source = include_str!("fixtures/user_function_call.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - add(40, 2) should return 42
+    assert_eq!(output, "success\n");
+}
+
+// ============================================================================
 // Boolean variable tests
 // ============================================================================
 
@@ -292,4 +311,26 @@ async fn test_local_bools_mut() {
 
     // Verify output - mutable booleans with reassignment
     assert_eq!(output, "flag is false\nflag is true\n");
+}
+
+// ============================================================================
+// Local module import tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_use_local_module() {
+    // Get the path to the test fixture
+    let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("use_local_module.wado");
+
+    // Compile using compile_file which handles local imports
+    let wasm = compile_file(&fixture_path).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - add(40, 2) from imported module should return 42
+    assert_eq!(output, "success\n");
 }

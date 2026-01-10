@@ -1,6 +1,6 @@
 # Wado
 
-Wado is a new programming language targeting **Wasm/WASI** - Wasm in plain sight.
+Wado is a programming language targeting **Wasm/WASI** - Wasm in plain sight.
 
 ## Motivation
 

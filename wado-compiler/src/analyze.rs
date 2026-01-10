@@ -96,6 +96,15 @@ impl Analyzer {
         }
     }
 
+    /// Create a new analyzer with a base path for resolving local imports
+    pub fn with_base_path(base_path: &std::path::Path) -> Self {
+        Self {
+            symbols: SymbolTable::new(),
+            resolver: ModuleResolver::with_base_path(base_path),
+            errors: Vec::new(),
+        }
+    }
+
     /// Analyze a module and all its imports
     ///
     /// # Arguments
@@ -442,6 +451,25 @@ impl Analyzer {
     pub fn get_symbols(&self) -> &SymbolTable {
         &self.symbols
     }
+
+    /// Get a reference to the module resolver (for accessing loaded modules)
+    pub fn get_resolver(&self) -> &ModuleResolver {
+        &self.resolver
+    }
+
+    /// Get all loaded modules from the resolver
+    pub fn loaded_modules(&self) -> Vec<(&Vec<String>, &Module)> {
+        self.resolver
+            .loaded_modules()
+            .into_iter()
+            .filter_map(|path| self.resolver.get_cached(path).map(|m| (path, m)))
+            .collect()
+    }
+
+    /// Consume the analyzer and return both the symbol table and loaded modules
+    pub fn into_parts(self) -> (SymbolTable, std::collections::HashMap<Vec<String>, Module>) {
+        (self.symbols, self.resolver.into_modules())
+    }
 }
 
 impl Default for Analyzer {
@@ -466,7 +494,7 @@ mod tests {
     #[test]
     fn test_analyze_simple_function() {
         let source = r#"
-            fn main() {
+            fn run() {
                 println("hello");
             }
         "#;
@@ -477,10 +505,10 @@ mod tests {
 
         assert!(result.is_ok());
 
-        // main should be defined
-        let main = analyzer.lookup_in_module(&[], "main");
-        assert!(main.is_some());
-        assert_eq!(main.unwrap().name, "main");
+        // run should be defined
+        let run = analyzer.lookup_in_module(&[], "run");
+        assert!(run.is_some());
+        assert_eq!(run.unwrap().name, "run");
     }
 
     #[test]
@@ -488,7 +516,7 @@ mod tests {
         let source = r#"
             use {println, Stdout} from "core:cli";
 
-            fn main() with Stdout {
+            fn run() with Stdout {
                 println("hello");
             }
         "#;
@@ -514,7 +542,7 @@ mod tests {
         let source = r#"
             use {nonexistent_function} from "core:cli";
 
-            fn main() {
+            fn run() {
             }
         "#;
 
@@ -536,7 +564,7 @@ mod tests {
         let source = r#"
             use {something} from "nonexistent:module";
 
-            fn main() {
+            fn run() {
             }
         "#;
 

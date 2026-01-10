@@ -1,6 +1,6 @@
 # Wado Project
 
-This is the specification and implementation of **Wado**, a new programming language targeting Wasm/WASI.
+This is the specification and implementation of Wado, a programming language targeting Wasm/WASI.
 
 ## The Spec
 
@@ -67,7 +67,7 @@ This project relays on the following features:
 ## Rules for Rust Code
 
 - Do not use wildcard imports (`use ...::*;`).
-- Write tests in implementation files just for examples. For complete tests, write them in the `tests/` directory.
+- Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/` directory.
 
 ## Rules for Markdown
 
@@ -87,17 +87,12 @@ Significant architectural decisions are documented as ARDs in `docs/ard-{yyyy-mm
 - **Decision**: What was decided and why
 - **Consequences**: Impact and trade-offs
 
-**Examples**:
-
-- `docs/ard-2026-01-10-wasm-import.md` - WebAssembly module import support
-- `docs/ard-2026-01-10-deterministic-libm.md` - Bundling Rust libm for deterministic math
-- `docs/ard-2026-01-10-tagged-template-literals.md` - Tagged template literals for compile-time execution
-
 ## Project Development
 
 ```sh
 cargo build
 cargo test
+cargo clippy --fix --allow-dirty --allow-staged
 cargo fmt
 
 make hello # generates example/hello.wat
