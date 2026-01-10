@@ -263,6 +263,24 @@ async fn test_local_floats_mut() {
 }
 
 // ============================================================================
+// User-defined function tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_user_function_call() {
+    let source = include_str!("fixtures/user_function_call.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - add(40, 2) should return 42
+    assert_eq!(output, "success\n");
+}
+
+// ============================================================================
 // Boolean variable tests
 // ============================================================================
 

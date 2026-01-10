@@ -560,8 +560,8 @@ impl Codegen {
             .iter()
             .filter_map(|item| {
                 if let Item::Function(f) = item {
-                    // Skip main (handled separately as run)
-                    if f.name == "main" {
+                    // Skip run (handled separately as the entry point)
+                    if f.name == "run" {
                         return None;
                     }
                     // Skip bodyless functions (builtins)
@@ -757,23 +757,23 @@ impl Codegen {
         }
 
         // ============================================
-        // run function - user entry point
+        // run function - user entry point (WASI CLI Command world)
         // ============================================
-        // Find main function to collect locals
-        let main_func = ast_module.items.iter().find_map(|item| {
+        // Find run function to collect locals
+        let run_func_ast = ast_module.items.iter().find_map(|item| {
             if let Item::Function(f) = item
-                && f.name == "main"
+                && f.name == "run"
             {
                 return Some(f);
             }
             None
         });
 
-        // Collect locals from main function body
-        let local_decls = if let Some(main) = main_func {
-            if let Some(body) = &main.body {
-                let mut func_ctx = FunctionContext::new(main.params.len() as u32);
-                for param in &main.params {
+        // Collect locals from run function body
+        let local_decls = if let Some(run_ast) = run_func_ast {
+            if let Some(body) = &run_ast.body {
+                let mut func_ctx = FunctionContext::new(run_ast.params.len() as u32);
+                for param in &run_ast.params {
                     func_ctx.add_param(&param.name);
                 }
                 self.collect_locals_from_block(body, &mut func_ctx);
@@ -1392,21 +1392,21 @@ impl Codegen {
         ast_module: &crate::ast::Module,
         mod_ctx: &ModuleContext,
     ) {
-        // Find main function
-        let main_func = ast_module.items.iter().find_map(|item| {
+        // Find run function (WASI CLI Command world entry point)
+        let run_func_ast = ast_module.items.iter().find_map(|item| {
             if let Item::Function(f) = item
-                && f.name == "main"
+                && f.name == "run"
             {
                 return Some(f);
             }
             None
         });
 
-        if let Some(main) = main_func
-            && let Some(body) = &main.body
+        if let Some(run_ast) = run_func_ast
+            && let Some(body) = &run_ast.body
         {
-            let mut ctx = FunctionContext::new(main.params.len() as u32);
-            for param in &main.params {
+            let mut ctx = FunctionContext::new(run_ast.params.len() as u32);
+            for param in &run_ast.params {
                 ctx.add_param(&param.name);
             }
             for stmt in &body.stmts {
@@ -1892,7 +1892,7 @@ mod tests {
             r#"
             use {println, Stdout} from "core:cli";
 
-            fn main() with Stdout {
+            fn run() with Stdout {
                 println("Hello, world!");
             }
         "#,
@@ -1913,7 +1913,7 @@ mod tests {
             r#"
             use {println, Stdout} from "core:cli";
 
-            fn main() with Stdout {
+            fn run() with Stdout {
                 println("Hello!");
             }
         "#,
@@ -1941,7 +1941,7 @@ mod tests {
             r#"
             use {println, Stdout} from "core:cli";
 
-            fn main() with Stdout {
+            fn run() with Stdout {
                 println("Hello!");
             }
         "#,

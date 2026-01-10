@@ -26,7 +26,7 @@ use std::path::Path;
 /// let wasm = wado_compiler::compile(r#"
 /// use {println, Stdout} from "core:cli";
 ///
-/// fn main() with Stdout {
+/// fn run() with Stdout {
 ///     println("Hello!");
 /// }
 /// "#).expect("compilation failed");

@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn test_analyze_simple_function() {
         let source = r#"
-            fn main() {
+            fn run() {
                 println("hello");
             }
         "#;
@@ -477,10 +477,10 @@ mod tests {
 
         assert!(result.is_ok());
 
-        // main should be defined
-        let main = analyzer.lookup_in_module(&[], "main");
-        assert!(main.is_some());
-        assert_eq!(main.unwrap().name, "main");
+        // run should be defined
+        let run = analyzer.lookup_in_module(&[], "run");
+        assert!(run.is_some());
+        assert_eq!(run.unwrap().name, "run");
     }
 
     #[test]
@@ -488,7 +488,7 @@ mod tests {
         let source = r#"
             use {println, Stdout} from "core:cli";
 
-            fn main() with Stdout {
+            fn run() with Stdout {
                 println("hello");
             }
         "#;
@@ -514,7 +514,7 @@ mod tests {
         let source = r#"
             use {nonexistent_function} from "core:cli";
 
-            fn main() {
+            fn run() {
             }
         "#;
 
@@ -536,7 +536,7 @@ mod tests {
         let source = r#"
             use {something} from "nonexistent:module";
 
-            fn main() {
+            fn run() {
             }
         "#;
 
