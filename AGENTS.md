@@ -73,11 +73,11 @@ This project relays on the following features:
 
 - Format markdown files with `prettier`.
 
-## Architecture Decision Records (ARD)
+## Architecture Decision Records (ADR)
 
-Significant architectural decisions are documented as ARDs in `docs/ard-{yyyy-mm-dd}-{feature}.md`.
+Significant architectural decisions are documented as ADRs in `docs/adr-{yyyy-mm-dd}-{feature}.md`.
 
-**Format**: `docs/ard-YYYY-MM-DD-feature-name.md`
+**Format**: `docs/adr-YYYY-MM-DD-feature-name.md`
 
 **Structure**:
 
