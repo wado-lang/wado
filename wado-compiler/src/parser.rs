@@ -81,7 +81,8 @@ impl Parser {
                 let span = self.peek().span;
                 self.advance();
                 // Insert a Gt token at the current position
-                self.tokens.insert(self.pos, Token::new(TokenKind::Gt, span));
+                self.tokens
+                    .insert(self.pos, Token::new(TokenKind::Gt, span));
                 Ok(())
             }
             _ => Err(ParseError {
@@ -747,31 +748,91 @@ impl Parser {
     }
 
     fn parse_equality_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_comparison_expr()?;
+        let left = self.parse_comparison_expr()?;
 
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::EqEq => BinaryOp::Eq,
-                TokenKind::NotEq => BinaryOp::NotEq,
-                _ => break,
-            };
-            let start_span = self.peek().span;
-            self.advance();
-            let right = self.parse_comparison_expr()?;
-            left = Expr::Binary(Box::new(BinaryExpr {
-                left,
-                op,
-                right,
+        // Check if there's an equality operator
+        let first_op = match self.peek_kind() {
+            TokenKind::EqEq => BinaryOp::Eq,
+            TokenKind::NotEq => BinaryOp::NotEq,
+            _ => return Ok(left),
+        };
+
+        let start_span = self.peek().span;
+        self.advance();
+        let mut middle = self.parse_comparison_expr()?;
+
+        // Create first comparison
+        let mut comparisons = vec![Expr::Binary(Box::new(BinaryExpr {
+            left: left.clone(),
+            op: first_op,
+            right: middle.clone(),
+            span: start_span,
+        }))];
+
+        // Check for chained equality (only == can chain, not !=)
+        if first_op == BinaryOp::Eq {
+            while let TokenKind::EqEq = self.peek_kind() {
+                let op = BinaryOp::Eq;
+                let span = self.peek().span;
+                self.advance();
+                let right = self.parse_comparison_expr()?;
+
+                // Add chained comparison
+                comparisons.push(Expr::Binary(Box::new(BinaryExpr {
+                    left: middle,
+                    op,
+                    right: right.clone(),
+                    span,
+                })));
+
+                middle = right;
+            }
+        }
+
+        // If there's only one comparison, return it
+        if comparisons.len() == 1 {
+            return Ok(comparisons.into_iter().next().unwrap());
+        }
+
+        // Combine multiple comparisons with &&
+        let mut result = comparisons[0].clone();
+        for comp in comparisons.into_iter().skip(1) {
+            result = Expr::Binary(Box::new(BinaryExpr {
+                left: result,
+                op: BinaryOp::And,
+                right: comp,
                 span: start_span,
             }));
         }
 
-        Ok(left)
+        Ok(result)
     }
 
     fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_bitor_expr()?;
+        let left = self.parse_bitor_expr()?;
 
+        // Check if there's a comparison operator
+        let first_op = match self.peek_kind() {
+            TokenKind::Lt => BinaryOp::Lt,
+            TokenKind::LtEq => BinaryOp::LtEq,
+            TokenKind::Gt => BinaryOp::Gt,
+            TokenKind::GtEq => BinaryOp::GtEq,
+            _ => return Ok(left),
+        };
+
+        let start_span = self.peek().span;
+        self.advance();
+        let mut middle = self.parse_bitor_expr()?;
+
+        // Create first comparison
+        let mut comparisons = vec![Expr::Binary(Box::new(BinaryExpr {
+            left: left.clone(),
+            op: first_op,
+            right: middle.clone(),
+            span: start_span,
+        }))];
+
+        // Check for chained comparisons
         loop {
             let op = match self.peek_kind() {
                 TokenKind::Lt => BinaryOp::Lt,
@@ -780,18 +841,38 @@ impl Parser {
                 TokenKind::GtEq => BinaryOp::GtEq,
                 _ => break,
             };
-            let start_span = self.peek().span;
+            let span = self.peek().span;
             self.advance();
             let right = self.parse_bitor_expr()?;
-            left = Expr::Binary(Box::new(BinaryExpr {
-                left,
+
+            // Add chained comparison
+            comparisons.push(Expr::Binary(Box::new(BinaryExpr {
+                left: middle,
                 op,
-                right,
+                right: right.clone(),
+                span,
+            })));
+
+            middle = right;
+        }
+
+        // If there's only one comparison, return it
+        if comparisons.len() == 1 {
+            return Ok(comparisons.into_iter().next().unwrap());
+        }
+
+        // Combine multiple comparisons with &&
+        let mut result = comparisons[0].clone();
+        for comp in comparisons.into_iter().skip(1) {
+            result = Expr::Binary(Box::new(BinaryExpr {
+                left: result,
+                op: BinaryOp::And,
+                right: comp,
                 span: start_span,
             }));
         }
 
-        Ok(left)
+        Ok(result)
     }
 
     fn parse_bitor_expr(&mut self) -> ParseResult<Expr> {

@@ -4,11 +4,11 @@
 use {println, Stdout} from "core:cli";
 
 fn run() with Stdout {
-    // Test 1: Shift operators have higher precedence than additive
-    // 1 + 2 << 3 should parse as 1 + (2 << 3) = 1 + 16 = 17
+    // Test 1: Additive operators have higher precedence than shift
+    // 1 + 2 << 3 should parse as (1 + 2) << 3 = 3 << 3 = 24
     let result1 = 1 + 2 << 3;
-    if result1 == 17 {
-        println("shift > additive works");
+    if result1 == 24 {
+        println("additive > shift works");
     }
 
     // Test 2: Bitwise AND has higher precedence than bitwise OR
