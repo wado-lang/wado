@@ -8,7 +8,7 @@ use crate::symbol::SymbolTable;
 use crate::wasm_postprocess;
 use std::collections::HashMap;
 use wasm_encoder::{
-    Alias, ArrayType, BlockType, CanonicalOption, CodeSection, ComponentBuilder,
+    Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder,
     ComponentExportKind, ComponentOuterAliasKind, ComponentValType, CompositeInnerType,
     CompositeType, ConstExpr, DataCountSection, DataSection, DataSegment, DataSegmentMode,
     EntityType, ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType,
@@ -2621,6 +2621,23 @@ impl Codegen {
                 let string_array_type = builder.type_idx("string-array");
                 func.instruction(&Instruction::ArrayGetU(string_array_type));
             }
+            "array_set_u8" => {
+                // array_set_u8(arr: Array<u8>, idx: i32, value: i32)
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                let string_array_type = builder.type_idx("string-array");
+                func.instruction(&Instruction::ArraySet(string_array_type));
+            }
+            "string_new" => {
+                // string_new(len: i32) -> String
+                // Creates a new String (GC array<u8>) with given length, initialized to zeros
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                let string_array_type = builder.type_idx("string-array");
+                func.instruction(&Instruction::ArrayNewDefault(string_array_type));
+            }
 
             // Linear memory operations
             "memory_store8" => {
@@ -2760,6 +2777,13 @@ impl Codegen {
                 if let Expr::Ident(ident) = &call.callee {
                     match ident.name.as_str() {
                         "builtin::stream_new" => ValType::I64,
+                        "builtin::string_new" => {
+                            // string_new returns String (ref array<u8>)
+                            ValType::Ref(RefType {
+                                nullable: false,
+                                heap_type: HeapType::Concrete(11), // string-array type index
+                            })
+                        }
                         "builtin::i64_low32"
                         | "builtin::i64_high32"
                         | "builtin::array_len"
@@ -2841,6 +2865,7 @@ impl Codegen {
                 | "waitable_join"
                 | "subtask_drop"
                 | "memory_store8"
+                | "array_set_u8"
         )
     }
 
@@ -2886,6 +2911,10 @@ impl Codegen {
 
     /// Generate code for template string expression
     /// Template strings are interpolated strings like `Hello, {name}!`
+    ///
+    /// Uses core:internals::string_concat for string concatenation instead of
+    /// inline Wasm instructions. This makes the generated code smaller and
+    /// the compiler more maintainable.
     fn generate_template_string(
         &self,
         func: &mut Function,
@@ -2909,15 +2938,9 @@ impl Codegen {
             return;
         }
 
-        // Strategy: Concatenate all parts into a single string
-        // 1. Generate each part as a GC array (ref (array u8))
-        // 2. Calculate total length
-        // 3. Create new array with total length
-        // 4. Copy each part into the new array
-
-        // For simplicity, we'll use a helper approach:
-        // - For each part, generate the string representation
-        // - Use array operations to concatenate
+        // Strategy: Use string_concat from core:internals for concatenation
+        // 1. Generate first part
+        // 2. For each subsequent part, call string_concat(result, part)
 
         // Use pre-allocated scratch local for template string accumulation
         let result_local = ctx.alloc_local(
@@ -2928,121 +2951,29 @@ impl Codegen {
             }),
         );
 
-        // Start with empty array or first part
+        // Start with first part
         if let Some(first_part) = template.parts.first() {
             self.generate_template_part(func, first_part, ctx, builder);
             func.instruction(&Instruction::LocalSet(result_local));
         }
 
-        // Concatenate remaining parts
-        // Get scratch locals for concatenation
-        let part_local = ctx.alloc_local(
-            "__arr_ref",
-            ValType::Ref(RefType {
-                nullable: false,
-                heap_type: HeapType::Concrete(string_array_type),
-            }),
-        );
-        let new_array_local = ctx.alloc_local(
-            "__concat_new",
-            ValType::Ref(RefType {
-                nullable: false,
-                heap_type: HeapType::Concrete(string_array_type),
-            }),
-        );
-        let result_len_local = ctx.alloc_local("__result_len", ValType::I32);
-        let part_len_local = ctx.alloc_local("__part_len", ValType::I32);
-        let i_local = ctx.alloc_local("__i", ValType::I32);
-
+        // Concatenate remaining parts using string_concat from core:internals
         for part in template.parts.iter().skip(1) {
-            // Generate the next part and store it
+            // Push result (first argument to string_concat)
+            func.instruction(&Instruction::LocalGet(result_local));
+
+            // Generate the next part (second argument to string_concat)
             self.generate_template_part(func, part, ctx, builder);
-            func.instruction(&Instruction::LocalSet(part_local));
 
-            // Get lengths
-            func.instruction(&Instruction::LocalGet(result_local));
-            func.instruction(&Instruction::ArrayLen);
-            func.instruction(&Instruction::LocalSet(result_len_local));
+            // Call string_concat(result, part) -> new result
+            // The function is registered as "string_concat" (alias) or "core::internals::string_concat" (qualified)
+            func.instruction(&Instruction::Call(builder.func_idx("string_concat")));
 
-            func.instruction(&Instruction::LocalGet(part_local));
-            func.instruction(&Instruction::ArrayLen);
-            func.instruction(&Instruction::LocalSet(part_len_local));
-
-            // Create new array with total length and store it
-            func.instruction(&Instruction::LocalGet(result_len_local));
-            func.instruction(&Instruction::LocalGet(part_len_local));
-            func.instruction(&Instruction::I32Add);
-            func.instruction(&Instruction::ArrayNewDefault(string_array_type));
-            func.instruction(&Instruction::LocalSet(new_array_local));
-
-            // Copy loop 1: copy result elements to new_array[0..result_len]
-            func.instruction(&Instruction::I32Const(0));
-            func.instruction(&Instruction::LocalSet(i_local));
-
-            func.instruction(&Instruction::Block(BlockType::Empty));
-            func.instruction(&Instruction::Loop(BlockType::Empty));
-
-            // if i >= result_len: break
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::LocalGet(result_len_local));
-            func.instruction(&Instruction::I32GeU);
-            func.instruction(&Instruction::BrIf(1));
-
-            // new_array[i] = result[i]
-            func.instruction(&Instruction::LocalGet(new_array_local));
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::LocalGet(result_local));
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::ArrayGetU(string_array_type));
-            func.instruction(&Instruction::ArraySet(string_array_type));
-
-            // i++
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::I32Const(1));
-            func.instruction(&Instruction::I32Add);
-            func.instruction(&Instruction::LocalSet(i_local));
-            func.instruction(&Instruction::Br(0)); // continue loop
-            func.instruction(&Instruction::End); // end loop
-            func.instruction(&Instruction::End); // end block
-
-            // Copy loop 2: copy part elements to new_array[result_len..result_len+part_len]
-            func.instruction(&Instruction::I32Const(0));
-            func.instruction(&Instruction::LocalSet(i_local));
-
-            func.instruction(&Instruction::Block(BlockType::Empty));
-            func.instruction(&Instruction::Loop(BlockType::Empty));
-
-            // if i >= part_len: break
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::LocalGet(part_len_local));
-            func.instruction(&Instruction::I32GeU);
-            func.instruction(&Instruction::BrIf(1));
-
-            // new_array[result_len + i] = part[i]
-            func.instruction(&Instruction::LocalGet(new_array_local));
-            func.instruction(&Instruction::LocalGet(result_len_local));
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::I32Add); // result_len + i
-            func.instruction(&Instruction::LocalGet(part_local));
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::ArrayGetU(string_array_type));
-            func.instruction(&Instruction::ArraySet(string_array_type));
-
-            // i++
-            func.instruction(&Instruction::LocalGet(i_local));
-            func.instruction(&Instruction::I32Const(1));
-            func.instruction(&Instruction::I32Add);
-            func.instruction(&Instruction::LocalSet(i_local));
-            func.instruction(&Instruction::Br(0)); // continue loop
-            func.instruction(&Instruction::End); // end loop
-            func.instruction(&Instruction::End); // end block
-
-            // Move new_array to result_local for next iteration
-            func.instruction(&Instruction::LocalGet(new_array_local));
+            // Store the result for next iteration
             func.instruction(&Instruction::LocalSet(result_local));
         }
 
-        // Load result
+        // Load final result
         func.instruction(&Instruction::LocalGet(result_local));
     }
 
@@ -3077,157 +3008,22 @@ impl Codegen {
 
                 match expr_type {
                     ValType::F64 => {
-                        // Float-to-string conversion
-                        // 1. Allocate buffer (24 bytes max for f64)
-                        let ptr_local = ctx.alloc_local("__ptr", ValType::I32);
-                        let len_local = ctx.alloc_local("__len", ValType::I32);
-                        let arr_local = ctx.alloc_local(
-                            "__arr_ref",
-                            ValType::Ref(RefType {
-                                nullable: false,
-                                heap_type: HeapType::Concrete(string_array_type),
-                            }),
-                        );
-                        let i_local = ctx.alloc_local("__i", ValType::I32);
-
-                        // realloc(0, 0, 1, 24) -> buffer pointer
-                        func.instruction(&Instruction::I32Const(0)); // old ptr
-                        func.instruction(&Instruction::I32Const(0)); // old size
-                        func.instruction(&Instruction::I32Const(1)); // align
-                        func.instruction(&Instruction::I32Const(24)); // new size (max for f64)
-                        func.instruction(&Instruction::Call(builder.func_idx("realloc")));
-                        func.instruction(&Instruction::LocalSet(ptr_local));
-
-                        // Generate the f64 value
+                        // Float-to-string conversion using core:internals::f64_to_string
+                        // Generate the f64 value (argument to f64_to_string)
                         self.generate_expr_with_builder(func, expr, ctx, builder);
-
-                        // Call f64_to_buffer(value, buffer_ptr) -> length
-                        func.instruction(&Instruction::LocalGet(ptr_local));
-                        func.instruction(&Instruction::Call(builder.func_idx("f64_to_buffer")));
-                        func.instruction(&Instruction::LocalSet(len_local));
-
-                        // Create GC array with ArrayNewDefault
-                        func.instruction(&Instruction::LocalGet(len_local));
-                        func.instruction(&Instruction::ArrayNewDefault(string_array_type));
-                        func.instruction(&Instruction::LocalSet(arr_local));
-
-                        // Copy loop: for i in 0..len: array[i] = memory[ptr + i]
-                        // Initialize i = 0
-                        func.instruction(&Instruction::I32Const(0));
-                        func.instruction(&Instruction::LocalSet(i_local));
-
-                        // Loop
-                        func.instruction(&Instruction::Block(BlockType::Empty));
-                        func.instruction(&Instruction::Loop(BlockType::Empty));
-
-                        // Check: i >= len? break
-                        func.instruction(&Instruction::LocalGet(i_local));
-                        func.instruction(&Instruction::LocalGet(len_local));
-                        func.instruction(&Instruction::I32GeU);
-                        func.instruction(&Instruction::BrIf(1)); // break outer block
-
-                        // array[i] = memory[ptr + i]
-                        func.instruction(&Instruction::LocalGet(arr_local));
-                        func.instruction(&Instruction::LocalGet(i_local));
-
-                        // Load byte from linear memory at (ptr + i)
-                        func.instruction(&Instruction::LocalGet(ptr_local));
-                        func.instruction(&Instruction::LocalGet(i_local));
-                        func.instruction(&Instruction::I32Add);
-                        func.instruction(&Instruction::I32Load8U(MemArg {
-                            offset: 0,
-                            align: 0,
-                            memory_index: 0,
-                        }));
-
-                        func.instruction(&Instruction::ArraySet(string_array_type));
-
-                        // i++
-                        func.instruction(&Instruction::LocalGet(i_local));
-                        func.instruction(&Instruction::I32Const(1));
-                        func.instruction(&Instruction::I32Add);
-                        func.instruction(&Instruction::LocalSet(i_local));
-
-                        // Continue loop
-                        func.instruction(&Instruction::Br(0));
-                        func.instruction(&Instruction::End); // end loop
-                        func.instruction(&Instruction::End); // end block
-
-                        // Push the array reference onto the stack
-                        func.instruction(&Instruction::LocalGet(arr_local));
+                        // Call f64_to_string(value) -> String
+                        func.instruction(&Instruction::Call(builder.func_idx("f64_to_string")));
                     }
                     ValType::F32 => {
-                        // Float-to-string conversion (f32 version)
-                        let ptr_local = ctx.alloc_local("__ptr", ValType::I32);
-                        let len_local = ctx.alloc_local("__len", ValType::I32);
-                        let arr_local = ctx.alloc_local(
-                            "__arr_ref",
-                            ValType::Ref(RefType {
-                                nullable: false,
-                                heap_type: HeapType::Concrete(string_array_type),
-                            }),
-                        );
-                        let i_local = ctx.alloc_local("__i", ValType::I32);
-
-                        // realloc(0, 0, 1, 16) -> buffer pointer (16 bytes max for f32)
-                        func.instruction(&Instruction::I32Const(0));
-                        func.instruction(&Instruction::I32Const(0));
-                        func.instruction(&Instruction::I32Const(1));
-                        func.instruction(&Instruction::I32Const(16));
-                        func.instruction(&Instruction::Call(builder.func_idx("realloc")));
-                        func.instruction(&Instruction::LocalSet(ptr_local));
-
-                        // Generate the f32 value
+                        // Float-to-string conversion using core:internals::f32_to_string
+                        // Generate the f32 value (argument to f32_to_string)
                         self.generate_expr_with_builder(func, expr, ctx, builder);
-
-                        // Call f32_to_buffer(value, buffer_ptr) -> length
-                        func.instruction(&Instruction::LocalGet(ptr_local));
-                        func.instruction(&Instruction::Call(builder.func_idx("f32_to_buffer")));
-                        func.instruction(&Instruction::LocalSet(len_local));
-
-                        // Create GC array with ArrayNewDefault
-                        func.instruction(&Instruction::LocalGet(len_local));
-                        func.instruction(&Instruction::ArrayNewDefault(string_array_type));
-                        func.instruction(&Instruction::LocalSet(arr_local));
-
-                        // Copy loop (same as f64)
-                        func.instruction(&Instruction::I32Const(0));
-                        func.instruction(&Instruction::LocalSet(i_local));
-
-                        func.instruction(&Instruction::Block(BlockType::Empty));
-                        func.instruction(&Instruction::Loop(BlockType::Empty));
-
-                        func.instruction(&Instruction::LocalGet(i_local));
-                        func.instruction(&Instruction::LocalGet(len_local));
-                        func.instruction(&Instruction::I32GeU);
-                        func.instruction(&Instruction::BrIf(1));
-
-                        func.instruction(&Instruction::LocalGet(arr_local));
-                        func.instruction(&Instruction::LocalGet(i_local));
-                        func.instruction(&Instruction::LocalGet(ptr_local));
-                        func.instruction(&Instruction::LocalGet(i_local));
-                        func.instruction(&Instruction::I32Add);
-                        func.instruction(&Instruction::I32Load8U(MemArg {
-                            offset: 0,
-                            align: 0,
-                            memory_index: 0,
-                        }));
-                        func.instruction(&Instruction::ArraySet(string_array_type));
-
-                        func.instruction(&Instruction::LocalGet(i_local));
-                        func.instruction(&Instruction::I32Const(1));
-                        func.instruction(&Instruction::I32Add);
-                        func.instruction(&Instruction::LocalSet(i_local));
-
-                        func.instruction(&Instruction::Br(0));
-                        func.instruction(&Instruction::End);
-                        func.instruction(&Instruction::End);
-
-                        func.instruction(&Instruction::LocalGet(arr_local));
+                        // Call f32_to_string(value) -> String
+                        func.instruction(&Instruction::Call(builder.func_idx("f32_to_string")));
                     }
                     _ => {
                         // For other types, assume it's already a string (ref (array u8))
-                        // TODO: Handle i32, bool, etc.
+                        // TODO: Handle i32, bool, etc. using core:internals functions
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                     }
                 }

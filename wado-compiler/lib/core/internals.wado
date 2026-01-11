@@ -1,0 +1,77 @@
+// Wado Core Internals Module
+//
+// This module provides internal functions used by the compiler for
+// operations like template string interpolation. These functions are
+// implemented in Wado itself rather than as inline Wasm instructions,
+// making the codegen simpler and the compiler more maintainable.
+
+/// Concatenate two strings into a new string
+/// This is the core operation for template string building
+pub fn string_concat(a: String, b: String) -> String {
+    let len_a = builtin::array_len(a);
+    let len_b = builtin::array_len(b);
+    let total = len_a + len_b;
+
+    // Create new array with total length
+    let result = builtin::string_new(total);
+
+    // Copy bytes from a
+    for (let mut i = 0; i < len_a; i = i + 1) {
+        let byte = builtin::array_get_u8(a, i);
+        builtin::array_set_u8(result, i, byte);
+    }
+
+    // Copy bytes from b
+    for (let mut i = 0; i < len_b; i = i + 1) {
+        let byte = builtin::array_get_u8(b, i);
+        builtin::array_set_u8(result, len_a + i, byte);
+    }
+
+    return result;
+}
+
+/// Convert f64 to String using the bundled float-to-string algorithm
+pub fn f64_to_string(value: f64) -> String {
+    // Allocate linear memory buffer (24 bytes max for f64)
+    let ptr = builtin::realloc(0, 0, 1, 24);
+
+    // Convert float to bytes in linear memory
+    let len = builtin::f64_to_buffer(value, ptr);
+
+    // Create GC array and copy from linear memory
+    let result = builtin::string_new(len);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::memory_load8_u(ptr + i);
+        builtin::array_set_u8(result, i, byte);
+    }
+
+    return result;
+}
+
+/// Convert f32 to String using the bundled float-to-string algorithm
+pub fn f32_to_string(value: f32) -> String {
+    // Allocate linear memory buffer (16 bytes max for f32)
+    let ptr = builtin::realloc(0, 0, 1, 16);
+
+    // Convert float to bytes in linear memory
+    let len = builtin::f32_to_buffer(value, ptr);
+
+    // Create GC array and copy from linear memory
+    let result = builtin::string_new(len);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::memory_load8_u(ptr + i);
+        builtin::array_set_u8(result, i, byte);
+    }
+
+    return result;
+}
+
+// TODO: bool_to_string requires proper if/else handling for reference types
+// pub fn bool_to_string(value: bool) -> String;
+
+// TODO: these functions require type casting from i32/i64 to i32 for array indices.
+// Currently Wado doesn't have explicit type casting, so these are stubbed out.
+//
+// pub fn i32_to_string(value: i32) -> String;
+// pub fn i64_to_string(value: i64) -> String;
+// pub fn char_to_string(value: char) -> String;

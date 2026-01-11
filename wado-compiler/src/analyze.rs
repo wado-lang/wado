@@ -124,11 +124,37 @@ impl Analyzer {
         // Second pass: resolve imports
         self.resolve_imports(module, module_path)?;
 
+        // Always load core:internals for compiler-generated code (e.g., template strings)
+        // This module provides internal helper functions like string_concat, f64_to_string, etc.
+        self.load_implicit_module(&["core".to_string(), "internals".to_string()]);
+
         if self.errors.is_empty() {
             Ok(())
         } else {
             Err(std::mem::take(&mut self.errors))
         }
+    }
+
+    /// Load a module implicitly (without a user import declaration)
+    /// Used for modules like core:internals that provide compiler-generated code support
+    fn load_implicit_module(&mut self, module_path: &[String]) {
+        // Skip if already loaded
+        if self.resolver.is_loaded(module_path) {
+            return;
+        }
+
+        // Try to load the module
+        let imported_module = match self.resolver.load_module(module_path) {
+            Ok(m) => m.clone(),
+            Err(e) => {
+                // Log but don't fail - implicit modules are optional
+                eprintln!("Warning: failed to load implicit module {:?}: {}", module_path, e);
+                return;
+            }
+        };
+
+        // Collect definitions from the implicit module
+        self.collect_definitions(&imported_module, module_path);
     }
 
     /// Collect all definitions from a module into the symbol table

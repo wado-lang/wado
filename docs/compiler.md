@@ -60,6 +60,7 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:cli`        | `cli.wado`        | Complete                                           |
 | `core:filesystem` | `filesystem.wado` | Complete                                           |
 | `core:stream`     | `stream.wado`     | Complete                                           |
+| `core:internals`  | `internals.wado`  | Internal (compiler-generated code support)         |
 
 **WASI Library (`wasi/`):**
 

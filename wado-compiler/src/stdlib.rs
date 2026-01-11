@@ -21,10 +21,6 @@
 //! use {FileSystem, Preopens} from "wasi:filesystem";
 //! ```
 
-// ============================================================================
-// Core Library (core:*)
-// ============================================================================
-
 /// Embedded source for core:prelude
 pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
 
@@ -37,9 +33,8 @@ pub const CORE_STREAM: &str = include_str!("../lib/core/stream.wado");
 /// Embedded source for core:filesystem
 pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 
-// ============================================================================
-// WASI Library (wasi:*)
-// ============================================================================
+/// Embedded source for core:internals
+pub const CORE_INTERNALS: &str = include_str!("../lib/core/internals.wado");
 
 /// Embedded source for wasi:cli
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
@@ -61,18 +56,7 @@ pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
 // ============================================================================
 
 /// Get embedded module source by import path.
-///
-/// Supports the new ESM-like import syntax:
-/// - `"core:prelude"` -> core library prelude
-/// - `"core:cli"` -> core library CLI helpers
-/// - `"core:stream"` -> core library stream utilities
-/// - `"core:filesystem"` -> core library filesystem helpers
-/// - `"wasi:cli"` -> WASI CLI interfaces
-/// - `"wasi:filesystem"` -> WASI filesystem interfaces
-/// - `"wasi:clocks"` -> WASI clocks interfaces
-/// - `"wasi:random"` -> WASI random interfaces
-/// - `"wasi:sockets"` -> WASI sockets interfaces
-///
+//
 /// # Arguments
 /// * `import_path` - Import path string, e.g., `"core:cli"` or `"wasi:filesystem"`
 ///
@@ -85,6 +69,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),
         "core:filesystem" => Some(CORE_FILESYSTEM),
+        "core:internals" => Some(CORE_INTERNALS),
 
         // WASI library
         "wasi:cli" => Some(WASI_CLI),
@@ -95,16 +80,6 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
 
         _ => None,
     }
-}
-
-/// Check if an import path refers to a standard library module.
-pub fn is_stdlib_module(import_path: &str) -> bool {
-    get_stdlib_module(import_path).is_some()
-}
-
-/// Check if an import path starts with a known namespace.
-pub fn is_stdlib_namespace(import_path: &str) -> bool {
-    import_path.starts_with("core:") || import_path.starts_with("wasi:")
 }
 
 // ============================================================================
@@ -181,22 +156,5 @@ mod tests {
     fn test_non_stdlib_module() {
         assert!(get_stdlib_module("myapp:utils").is_none());
         assert!(get_stdlib_module("https://example.com/lib.wado").is_none());
-    }
-
-    #[test]
-    fn test_is_stdlib_module() {
-        assert!(is_stdlib_module("core:cli"));
-        assert!(is_stdlib_module("wasi:filesystem"));
-        assert!(!is_stdlib_module("myapp:utils"));
-    }
-
-    #[test]
-    fn test_is_stdlib_namespace() {
-        assert!(is_stdlib_namespace("core:cli"));
-        assert!(is_stdlib_namespace("core:unknown"));
-        assert!(is_stdlib_namespace("wasi:cli"));
-        assert!(is_stdlib_namespace("wasi:unknown"));
-        assert!(!is_stdlib_namespace("myapp:utils"));
-        assert!(!is_stdlib_namespace("https://example.com"));
     }
 }
