@@ -391,7 +391,7 @@ async fn test_operator_precedence_comprehensive() {
     let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
 
     // Verify output - all comprehensive precedence tests should pass
-    assert!(output.contains("shift > additive works"));
+    assert!(output.contains("additive > shift works"));
     assert!(output.contains("bitwise and > bitwise or works"));
     assert!(output.contains("bitwise xor precedence works"));
     assert!(output.contains("multiplicative > additive works"));
