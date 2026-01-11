@@ -625,8 +625,8 @@ impl Codegen {
                         }
                         TemplatePart::Interpolation { expr, .. } => {
                             // Check if this is a float literal - format it with ryu and add to string literals
-                            if let Expr::Literal(lit_expr) = &**expr {
-                                if let Literal::Float(f) = lit_expr.value {
+                            if let Expr::Literal(lit_expr) = &**expr
+                                && let Literal::Float(f) = lit_expr.value {
                                     let mut buf = ryu::Buffer::new();
                                     let formatted = buf.format(f).to_string();
                                     if !self.string_literals.contains(&formatted) {
@@ -634,7 +634,6 @@ impl Codegen {
                                     }
                                     continue;
                                 }
-                            }
                             self.collect_strings_from_expr(expr);
                         }
                     }
@@ -2913,8 +2912,8 @@ impl Codegen {
                 // TODO: Handle format specifiers
 
                 // Check if this is a float literal - if so, use ryu for deterministic formatting
-                if let Expr::Literal(lit_expr) = &**expr {
-                    if let Literal::Float(f) = lit_expr.value {
+                if let Expr::Literal(lit_expr) = &**expr
+                    && let Literal::Float(f) = lit_expr.value {
                         // Use ryu to format the float at compile time
                         let mut buf = ryu::Buffer::new();
                         let formatted = buf.format(f);
@@ -2930,7 +2929,6 @@ impl Codegen {
                         });
                         return;
                     }
-                }
 
                 // For non-float expressions, generate the expression as-is
                 self.generate_expr_with_builder(func, expr, ctx, builder);

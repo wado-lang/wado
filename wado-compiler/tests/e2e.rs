@@ -423,5 +423,8 @@ async fn test_float_template_formatting() {
 
     // Verify ryu-formatted float output
     // ryu produces deterministic, minimal representations
-    assert_eq!(output, "Pi: 3.14159\n", "Expected 'Pi: 3.14159\\n', got: {output}");
+    assert_eq!(
+        output, "Pi: 3.14159\n",
+        "Expected 'Pi: 3.14159\\n', got: {output}"
+    );
 }
