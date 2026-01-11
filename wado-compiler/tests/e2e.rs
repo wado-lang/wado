@@ -421,8 +421,5 @@ async fn test_float_template_formatting() {
     // ryu produces deterministic, minimal representations
     // Single-part template strings work (e.g., `{3.14159}`)
     // Multi-part concatenation (e.g., `Pi: {3.14}`) is TODO
-    assert_eq!(
-        output, "3.14159\n",
-        "Expected '3.14159\\n', got: {output}"
-    );
+    assert_eq!(output, "3.14159\n", "Expected '3.14159\\n', got: {output}");
 }

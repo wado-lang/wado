@@ -68,6 +68,7 @@ This project relays on the following features:
 
 - Do not use wildcard imports (`use ...::*;`).
 - Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/` directory.
+- Avoid using well-known constants (PI, E, etc.) in tests to prevent `clippy::approx_constant` warnings. Use generic values instead (e.g., `1.23456` instead of `3.14159`).
 
 ## Rules for Markdown
 

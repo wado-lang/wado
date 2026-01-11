@@ -586,37 +586,33 @@ impl Codegen {
                         }
                         continue;
                     }
-                    if is_println
-                        && let Expr::TemplateString(template) = arg
-                    {
+                    if is_println && let Expr::TemplateString(template) = arg {
                         // Special handling for println with template strings
                         // Need to add newline-appended version for single-part float templates
                         use crate::ast::TemplatePart;
 
                         // Check if this is a single-part template with just a float literal
-                        if template.parts.len() == 1 {
-                            if let TemplatePart::Interpolation { expr, .. } = &template.parts[0] {
-                                if let Expr::Literal(lit_expr) = &**expr
-                                    && let Literal::Float(f) = lit_expr.value
-                                {
-                                    // Format with ryu and add both versions
-                                    let mut buf = ryu::Buffer::new();
-                                    let formatted = buf.format(f).to_string();
+                        if template.parts.len() == 1
+                            && let TemplatePart::Interpolation { expr, .. } = &template.parts[0]
+                            && let Expr::Literal(lit_expr) = &**expr
+                            && let Literal::Float(f) = lit_expr.value
+                        {
+                            // Format with ryu and add both versions
+                            let mut buf = ryu::Buffer::new();
+                            let formatted = buf.format(f).to_string();
 
-                                    // Add formatted version
-                                    if !self.string_literals.contains(&formatted) {
-                                        self.string_literals.push(formatted.clone());
-                                    }
-
-                                    // Add version with newline for println
-                                    let with_newline = format!("{formatted}\n");
-                                    if !self.string_literals.contains(&with_newline) {
-                                        self.string_literals.push(with_newline);
-                                    }
-
-                                    continue;
-                                }
+                            // Add formatted version
+                            if !self.string_literals.contains(&formatted) {
+                                self.string_literals.push(formatted.clone());
                             }
+
+                            // Add version with newline for println
+                            let with_newline = format!("{formatted}\n");
+                            if !self.string_literals.contains(&with_newline) {
+                                self.string_literals.push(with_newline);
+                            }
+
+                            continue;
                         }
 
                         // For other template strings, continue with normal processing
