@@ -1,0 +1,36 @@
+// Test type cast (as T) operator for primitive types
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test i32 -> f64 cast
+    let i = 42;
+    let f = i as f64;
+    if f == 42.0 {
+        println("i32 to f64 works");
+    }
+
+    // Test f64 -> i32 cast (truncation)
+    let pi = 3.14;
+    let truncated = pi as i32;
+    // truncated should be 3
+    let check = truncated as f64;
+    if check == 3.0 {
+        println("f64 to i32 works");
+    }
+
+    // Test chained casts
+    let x = 10;
+    let y = x as f64 as i32 as f64;
+    if y == 10.0 {
+        println("chained casts work");
+    }
+
+    // Test cast in arithmetic
+    let a = 5;
+    let b = 2.5;
+    let result = (a as f64) + b;
+    if result == 7.5 {
+        println("cast in arithmetic works");
+    }
+}

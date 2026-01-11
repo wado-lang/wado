@@ -93,12 +93,46 @@ Identifiers are case-sensitive. Unicode letters are not permitted in identifiers
 
 **Postfix Operators** (highest precedence):
 
-| Operator | Description      |
-| -------- | ---------------- |
-| `.`      | Field access     |
-| `[]`     | Index access     |
-| `()`     | Function call    |
-| `::`     | Namespace access |
+| Operator  | Description      |
+| --------- | ---------------- |
+| `.`       | Field access     |
+| `[]`      | Index access     |
+| `()`      | Function call    |
+| `::`      | Namespace access |
+| `as Type` | Type cast        |
+
+**Type Cast (`as`):**
+
+The `as` operator performs explicit type conversion between primitive types:
+
+```wado
+let i = 42;
+let f = i as f64;           // i32 to f64
+let truncated = 3.14 as i32; // f64 to i32 (truncates to 3)
+
+// Chained casts
+let x = 10 as f64 as i32 as f64;
+
+// Cast in expressions
+let result = (a as f64) + b;
+```
+
+**Supported primitive type casts:**
+
+| From  | To    | Wasm Instruction  | Notes                       |
+| ----- | ----- | ----------------- | --------------------------- |
+| i32   | i64   | `i64.extend_i32_s` | Sign-extended               |
+| i32   | f32   | `f32.convert_i32_s` | Signed conversion          |
+| i32   | f64   | `f64.convert_i32_s` | Signed conversion          |
+| i64   | i32   | `i32.wrap_i64`    | Truncates to low 32 bits    |
+| i64   | f32   | `f32.convert_i64_s` | Signed conversion          |
+| i64   | f64   | `f64.convert_i64_s` | Signed conversion          |
+| f32   | i32   | `i32.trunc_f32_s` | Truncates toward zero       |
+| f32   | i64   | `i64.trunc_f32_s` | Truncates toward zero       |
+| f32   | f64   | `f64.promote_f32` | Lossless promotion          |
+| f64   | i32   | `i32.trunc_f64_s` | Truncates toward zero       |
+| f64   | i64   | `i64.trunc_f64_s` | Truncates toward zero       |
+| f64   | f32   | `f32.demote_f64`  | May lose precision          |
 
 **Parentheses for Grouping:**
 

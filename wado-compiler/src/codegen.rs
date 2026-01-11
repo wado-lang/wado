@@ -2398,7 +2398,80 @@ impl Codegen {
                     }
                 }
             }
+            Expr::Cast(cast) => {
+                self.generate_expr_with_builder(func, &cast.expr, ctx, builder);
+                self.generate_type_cast(func, &cast.expr, &cast.target_type, ctx);
+            }
             _ => {}
+        }
+    }
+
+    /// Generate type cast instruction based on source and target types
+    fn generate_type_cast(
+        &self,
+        func: &mut Function,
+        source_expr: &Expr,
+        target_type: &crate::ast::Type,
+        ctx: &FunctionContext,
+    ) {
+        let source_wasm_type = self.infer_expr_type_with_ctx(source_expr, ctx);
+        let target_type_name = self.get_primitive_type_name(target_type);
+
+        match (source_wasm_type, target_type_name.as_str()) {
+            // i32 -> other types
+            (ValType::I32, "i64" | "u64") => {
+                func.instruction(&Instruction::I64ExtendI32S);
+            }
+            (ValType::I32, "f32") => {
+                func.instruction(&Instruction::F32ConvertI32S);
+            }
+            (ValType::I32, "f64") => {
+                func.instruction(&Instruction::F64ConvertI32S);
+            }
+
+            // i64 -> other types
+            (ValType::I64, "i32" | "u32") => {
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            (ValType::I64, "f32") => {
+                func.instruction(&Instruction::F32ConvertI64S);
+            }
+            (ValType::I64, "f64") => {
+                func.instruction(&Instruction::F64ConvertI64S);
+            }
+
+            // f32 -> other types
+            (ValType::F32, "i32" | "u32") => {
+                func.instruction(&Instruction::I32TruncF32S);
+            }
+            (ValType::F32, "i64" | "u64") => {
+                func.instruction(&Instruction::I64TruncF32S);
+            }
+            (ValType::F32, "f64") => {
+                func.instruction(&Instruction::F64PromoteF32);
+            }
+
+            // f64 -> other types
+            (ValType::F64, "i32" | "u32") => {
+                func.instruction(&Instruction::I32TruncF64S);
+            }
+            (ValType::F64, "i64" | "u64") => {
+                func.instruction(&Instruction::I64TruncF64S);
+            }
+            (ValType::F64, "f32") => {
+                func.instruction(&Instruction::F32DemoteF64);
+            }
+
+            // Same type or unsupported - no-op
+            _ => {}
+        }
+    }
+
+    /// Get primitive type name from a Wado Type
+    fn get_primitive_type_name(&self, ty: &crate::ast::Type) -> String {
+        match ty {
+            crate::ast::Type::Named(named) => named.name.clone(),
+            _ => String::new(),
         }
     }
 
@@ -2779,6 +2852,17 @@ impl Codegen {
                     heap_type: HeapType::Concrete(11),
                 })
             }
+            Expr::Cast(cast) => {
+                // Cast expressions return the target type
+                let target_name = self.get_primitive_type_name(&cast.target_type);
+                match target_name.as_str() {
+                    "i32" | "u32" | "bool" => ValType::I32,
+                    "i64" | "u64" => ValType::I64,
+                    "f32" => ValType::F32,
+                    "f64" => ValType::F64,
+                    _ => ValType::I32,
+                }
+            }
             _ => ValType::I32,
         }
     }
@@ -2818,6 +2902,8 @@ impl Codegen {
             }
             // Template strings always produce values (GC array<u8>)
             Expr::TemplateString(_) => true,
+            // Cast expressions always produce values
+            Expr::Cast(_) => true,
             _ => false,
         }
     }

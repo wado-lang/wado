@@ -515,3 +515,24 @@ async fn test_template_string_two_interp() {
     // Verify output - template: `{s1} a {s2} c`
     assert_eq!(output, "X a Y c\n");
 }
+
+// ============================================================================
+// Type cast tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_type_cast() {
+    let source = include_str!("fixtures/type_cast.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - all cast tests pass
+    assert_eq!(
+        output,
+        "i32 to f64 works\nf64 to i32 works\nchained casts work\ncast in arithmetic works\n"
+    );
+}
