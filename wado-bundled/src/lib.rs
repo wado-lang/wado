@@ -57,5 +57,5 @@ pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
 #[cfg(target_arch = "wasm32")]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+    core::arch::wasm32::unreachable();
 }
