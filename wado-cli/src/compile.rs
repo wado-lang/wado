@@ -154,7 +154,11 @@ pub fn run(opts: CompileOptions) {
     // Determine format: explicit > guessed from -o extension > default (wasm)
     let format = opts
         .format
-        .or_else(|| opts.output.as_ref().and_then(|p| OutputFormat::from_extension(Path::new(p))))
+        .or_else(|| {
+            opts.output
+                .as_ref()
+                .and_then(|p| OutputFormat::from_extension(Path::new(p)))
+        })
         .unwrap_or(OutputFormat::Wasm);
 
     // Determine output path, using format to pick extension if no -o specified
