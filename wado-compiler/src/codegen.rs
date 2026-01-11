@@ -2919,6 +2919,7 @@ impl Codegen {
     ) {
         // For now, implement a simple concatenation without format specifiers
         // TODO: Implement proper format specifiers (.2f, etc.)
+        // TODO: Integrate tagged template string literals (docs/adr-2026-01-10-tagged-template-literals.md)
 
         let string_array_type = builder.type_idx("string-array");
 
