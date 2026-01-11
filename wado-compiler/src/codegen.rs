@@ -2106,6 +2106,11 @@ impl Codegen {
                         crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
                         crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
                         crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
+                        crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I32And),
+                        crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I32Or),
+                        crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
+                        crate::ast::BinaryOp::LShift => func.instruction(&Instruction::I32Shl),
+                        crate::ast::BinaryOp::RShift => func.instruction(&Instruction::I32ShrS),
                     };
                 }
             }
@@ -2119,6 +2124,41 @@ impl Codegen {
             }
             Expr::TemplateString(template) => {
                 self.generate_template_string(func, template, ctx, builder);
+            }
+            Expr::Unary(un) => {
+                // Infer operand type to select correct instructions
+                let operand_type = self.infer_expr_type_with_ctx(&un.expr, ctx);
+                let is_float = matches!(operand_type, ValType::F32 | ValType::F64);
+
+                match un.op {
+                    crate::ast::UnaryOp::Neg => {
+                        if is_float {
+                            self.generate_expr_with_builder(func, &un.expr, ctx, builder);
+                            func.instruction(&Instruction::F64Neg);
+                        } else {
+                            // For integers: -x = 0 - x
+                            // Push 0 first, then x, then subtract
+                            func.instruction(&Instruction::I32Const(0));
+                            self.generate_expr_with_builder(func, &un.expr, ctx, builder);
+                            func.instruction(&Instruction::I32Sub);
+                        }
+                    }
+                    crate::ast::UnaryOp::Not => {
+                        self.generate_expr_with_builder(func, &un.expr, ctx, builder);
+                        // Logical NOT: convert to i32 (0 or 1), then XOR with 1
+                        func.instruction(&Instruction::I32Eqz);
+                    }
+                    crate::ast::UnaryOp::BitNot => {
+                        self.generate_expr_with_builder(func, &un.expr, ctx, builder);
+                        // Bitwise NOT: XOR with -1 (all bits set)
+                        func.instruction(&Instruction::I32Const(-1));
+                        func.instruction(&Instruction::I32Xor);
+                    }
+                    _ => {
+                        self.generate_expr_with_builder(func, &un.expr, ctx, builder);
+                        // Other unary operators (Ref, Deref) not yet implemented
+                    }
+                }
             }
             _ => {}
         }

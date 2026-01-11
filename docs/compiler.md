@@ -149,6 +149,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Character literals (single quotes)
 - [x] Template strings (backticks with interpolation `{expr}`)
 - [x] Operators (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`)
+- [x] Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
 - [x] Punctuation (`(`, `)`, `{`, `}`, `[`, `]`, `,`, `:`, `;`, `::`, `.`, `->`, `=>`, `|`, `&`, `#`, `?`)
 - [x] Comments (`//`)
 - [ ] Block comments (`/* */`)
@@ -195,8 +196,11 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Null literal (`null`)
 - [x] Unit `()`
 - [x] Template string interpolation (`` `Hello, {name}!` ``)
-- [x] Binary operators (arithmetic, comparison, logical)
-- [x] Unary operators (`-`, `!`, `&`, `*`)
+- [x] Binary operators (arithmetic, comparison, logical, bitwise)
+- [x] Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
+- [x] Unary operators (`-`, `!`, `~`, `&`, `*`)
+- [x] Operator precedence (Rust-style, bitwise > comparison)
+- [x] Comparison chaining (`a < b < c`, parser support only)
 - [x] Function calls
 - [x] Method calls
 - [x] Field access
@@ -244,6 +248,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Borrow checking / move analysis
 - [ ] Scope analysis for variables
 - [ ] Unused variable warnings
+- [ ] Comparison chaining validation (same-direction only, no `!=` chaining)
 
 ### Code Generation
 
@@ -256,10 +261,11 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Multiple function calls
 - [x] Async function lifting/lowering
 - [x] Template strings (partial - literals only, no type conversion/formatting)
-- [ ] Variables and locals
+- [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
+- [x] Bitwise operators (`&`, `|`, `^`, `<<`, `>>`, `~`)
+- [ ] Variables and locals (partial - only in specific contexts)
 - [ ] Control flow (`if`, `while`, `for`)
-- [ ] Binary/unary operations
-- [ ] User-defined functions
+- [ ] User-defined functions (partial - basic support)
 - [ ] Struct construction
 - [ ] Enum/variant construction
 - [ ] Pattern matching
@@ -284,6 +290,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Template string tests (20 comprehensive tests)
 - [x] E2E test: hello world (with wasmtime)
 - [x] E2E test: multiple println
+- [x] E2E test: operator precedence (bitwise operators)
+- [ ] E2E test: comparison chaining (needs semantic validation)
 - [ ] Compile error tests (partial)
 - [ ] Template string E2E tests (runtime execution)
 - [ ] More E2E tests
@@ -630,10 +638,131 @@ This requires the reactive reference to carry update callback information, imple
 
 ---
 
+## Operator Precedence Implementation
+
+### Status: ✅ Implemented (2026-01-11)
+
+Wado implements Rust-style operator precedence, which fixes C's historical design flaw where bitwise operators have lower precedence than comparison operators.
+
+### Implementation Details
+
+**Tokens (`token.rs`)**:
+- `LShift` (`<<`) - Left shift
+- `RShift` (`>>`) - Right shift
+- `Tilde` (`~`) - Bitwise NOT
+- `Caret` (`^`) - Bitwise XOR
+- Note: `Ampersand` (`&`) and `Pipe` (`|`) were already present for references and closures
+
+**Lexer (`lexer.rs`)**:
+- Split `<<` and `>>` from `<` and `>` with two-character lookahead
+- Added `~` and `^` tokenization
+- Special handling for `>>` in generic types (e.g., `Array<Tuple<String, String>>`)
+
+**AST (`ast.rs`)**:
+- Added `BinaryOp`: `BitAnd`, `BitOr`, `BitXor`, `LShift`, `RShift`
+- Added `UnaryOp`: `BitNot` (`~`)
+
+**Parser (`parser.rs`)**:
+
+Precedence chain (highest to lowest):
+```
+parse_expr
+  → parse_assignment_expr
+    → parse_or_expr (||)
+      → parse_and_expr (&&)
+        → parse_equality_expr (==, !=)
+          → parse_comparison_expr (<, <=, >, >=)
+            → parse_bitor_expr (|)
+              → parse_bitxor_expr (^)
+                → parse_bitand_expr (&)
+                  → parse_shift_expr (<<, >>)
+                    → parse_additive_expr (+, -)
+                      → parse_multiplicative_expr (*, /, %)
+                        → parse_unary_expr (!, ~, -, &, *)
+                          → parse_postfix_expr
+```
+
+Key features:
+- **Bitwise operators have higher precedence than comparison**: `flags & mask == expected` correctly parses as `(flags & mask) == expected`
+- **Comparison chaining supported**: `a < b < c` parses as left-associative chain
+- **`>>` token splitting**: `expect_gt()` helper splits `>>` into two `>` tokens for nested generics
+
+**Codegen (`codegen.rs`)**:
+- Maps bitwise operators to Wasm instructions:
+  - `BitAnd` → `i32.and`
+  - `BitOr` → `i32.or`
+  - `BitXor` → `i32.xor`
+  - `LShift` → `i32.shl`
+  - `RShift` → `i32.shr_s` (arithmetic right shift)
+  - `BitNot` → `i32.const -1` + `i32.xor`
+- Unary minus for integers: `i32.const 0` - value
+
+**Tests (`tests/e2e.rs`, `tests/fixtures/`)**:
+- ✅ `operator_precedence_bitwise.wado` - All bitwise operators and precedence
+- ⚠️ `operator_precedence_comparison_chaining.wado` - Parser support, needs semantic validation
+- ⚠️ `operator_precedence_comprehensive.wado` - Complex precedence tests, some need chaining validation
+
+### Test Results
+
+```bash
+cargo test --test e2e test_operator_precedence_bitwise
+# ✅ PASSED - All bitwise operator precedence tests pass
+```
+
+Example working code:
+```wado
+let flags = 0b1010;
+let mask = 0b0010;
+let expected = 0b0010;
+
+// Correctly parses as (flags & mask) == expected
+if flags & mask == expected {
+    println("bitwise and precedence works");  // ✅ Prints
+}
+```
+
+### Remaining Work
+
+**Semantic Analysis (TODO)**:
+
+Comparison chaining is currently parsed but not validated. Need to add semantic checks:
+
+1. **Same-direction validation**: Reject mixed chains like `a < b > c`
+2. **`!=` chaining rejection**: `a != b != c` should be a semantic error
+3. **Type consistency**: All operands in chain should have compatible types
+
+Example invalid code that currently parses:
+```wado
+if a < b > c {  // Should be semantic error: mixed directions
+    // ...
+}
+
+if a != b != c {  // Should be semantic error: != chaining not allowed
+    // ...
+}
+```
+
+### Design Documentation
+
+- **Research**: `docs/operator-precedence-research.md` - Comprehensive analysis across languages
+- **ADR**: `docs/adr-2026-01-11-operator-precedence.md` - Architectural decision record
+- **Spec**: `spec.md` - User-facing specification with examples
+
+### Key Design Decisions
+
+1. **Follow Rust's model**: Bitwise > Comparison (fixes C's flaw)
+2. **No `++`/`--` operators**: Avoid undefined behavior, use `+=`/`-=`
+3. **No `**` power operator**: Use explicit `pow()` function
+4. **Mathematical comparison chaining**: Similar to Python, with stricter validation
+5. **Arithmetic right shift**: `>>` for signed integers uses `i32.shr_s`
+
+---
+
 ## Next Steps (Priority Order)
 
-1. **Add `variant` and `flags` keywords** to lexer/parser
-2. **Support generic resources** in parser for `prelude.wado`
-3. **Add variable support** in codegen (locals, let bindings)
-4. **Add control flow** in codegen (if, while)
-5. **Type checking** in analyzer
+1. **Comparison chaining semantic validation** - Add validation for same-direction chains and reject `!=` chaining
+2. **Add `variant` and `flags` keywords** to lexer/parser
+3. **Support generic resources** in parser for `prelude.wado`
+4. **Add variable support** in codegen (locals, let bindings)
+5. **Add control flow** in codegen (if, while)
+6. **Type checking** in analyzer

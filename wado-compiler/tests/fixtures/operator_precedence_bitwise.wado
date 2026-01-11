@@ -1,0 +1,77 @@
+// Test bitwise operator precedence
+// Bitwise operators should have higher precedence than comparison operators
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test 1: Bitwise AND (&) has higher precedence than comparison (==)
+    // flags & mask == expected should parse as (flags & mask) == expected
+    let flags = 0b1010;
+    let mask = 0b0010;
+    let expected = 0b0010;
+
+    if flags & mask == expected {
+        println("bitwise and precedence works");
+    }
+
+    // Test 2: Bitwise OR (|) has higher precedence than comparison
+    // a | b == c should parse as (a | b) == c
+    let a = 0b0001;
+    let b = 0b0010;
+    let c = 0b0011;
+
+    if a | b == c {
+        println("bitwise or precedence works");
+    }
+
+    // Test 3: Bitwise XOR (^) has higher precedence than comparison
+    // x ^ y == z should parse as (x ^ y) == z
+    let x = 0b1100;
+    let y = 0b1010;
+    let z = 0b0110;
+
+    if x ^ y == z {
+        println("bitwise xor precedence works");
+    }
+
+    // Test 4: Shift operators have higher precedence than comparison
+    // n << 2 == m should parse as (n << 2) == m
+    let n = 3;
+    let m = 12;
+
+    if n << 2 == m {
+        println("left shift precedence works");
+    }
+
+    // Test 5: Right shift
+    // p >> 1 == q should parse as (p >> 1) == q
+    let p = 8;
+    let q = 4;
+
+    if p >> 1 == q {
+        println("right shift precedence works");
+    }
+
+    // Test 6: Bitwise NOT (~) as unary operator
+    let val = 0b1010;
+    let inverted = ~val;
+
+    // For 64-bit integers, ~0b1010 will be a large number
+    // We just test that the operator works
+    if inverted != val {
+        println("bitwise not works");
+    }
+
+    // Test 7: Combined bitwise operations
+    // (a & b) | (c ^ d) should work correctly
+    let r1 = 0b1100;
+    let r2 = 0b1010;
+    let r3 = 0b0011;
+    let r4 = 0b0101;
+    let result = (r1 & r2) | (r3 ^ r4);
+    let expected_result = 0b1110;
+
+    if result == expected_result {
+        println("combined bitwise operations work");
+    }
+}

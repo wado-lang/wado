@@ -1417,6 +1417,112 @@ match result {
 }
 ```
 
+## Operator Precedence
+
+Wado follows Rust's operator precedence model, which fixes C's historical design flaw where bitwise operators have lower precedence than comparison operators.
+
+### Precedence Table
+
+From highest to lowest precedence:
+
+| Level | Operators                     | Associativity | Description             |
+| ----- | ----------------------------- | ------------- | ----------------------- |
+| 1     | `::`, `.`, `()`, `[]`         | Left-to-right | Paths, field, call      |
+| 2     | `?`                           | N/A           | Error propagation       |
+| 3     | `!`, `~`, `-`, `*`, `&`       | Right-to-left | Unary operators         |
+| 4     | `as`                          | Left-to-right | Type cast               |
+| 5     | `*`, `/`, `%`                 | Left-to-right | Multiplicative          |
+| 6     | `+`, `-`                      | Left-to-right | Additive                |
+| 7     | `<<`, `>>`                    | Left-to-right | Bitwise shift           |
+| 8     | `&`                           | Left-to-right | Bitwise AND             |
+| 9     | `^`                           | Left-to-right | Bitwise XOR             |
+| 10    | `\|`                          | Left-to-right | Bitwise OR              |
+| 11    | `==`, `!=`, `<`, `>`, `<=`, `>=` | Special    | Comparison (chainable)  |
+| 12    | `&&`                          | Left-to-right | Logical AND             |
+| 13    | `\|\|`                        | Left-to-right | Logical OR              |
+| 14    | `..`, `..=`                   | N/A           | Range operators         |
+| 15    | `=`, `+=`, `-=`               | Right-to-left | Assignment              |
+
+### Key Features
+
+**✅ Bitwise operators have higher precedence than comparison**
+
+This fixes C's counterintuitive behavior:
+
+```wado
+// Wado (correct)
+if flags & mask == expected {  // Parses as: (flags & mask) == expected ✅
+    // ...
+}
+
+// C (incorrect)
+if (flags & mask == expected)  // Parses as: flags & (mask == expected) ❌
+```
+
+**✅ Comparison chaining**
+
+Mathematical comparison chaining is supported with validation:
+
+```wado
+// Valid: same-direction chains
+if a < b < c {           // OK: (a < b) AND (b < c)
+    println("ascending");
+}
+
+if 0 <= x <= 100 {       // OK: range check
+    println("in range");
+}
+
+if a == b == c {         // OK: all equal
+    println("all equal");
+}
+
+// Invalid: mixed directions (semantic error)
+if a < b > c {           // ERROR: mixed directions
+}
+
+if a != b != c {         // ERROR: != chaining not allowed
+}
+```
+
+**❌ No `++`/`--` operators**
+
+Use `+=` and `-=` instead to avoid undefined behavior:
+
+```wado
+count += 1;  // ✅ Clear and unambiguous
+count -= 1;  // ✅ Clear and unambiguous
+
+count++;     // ❌ Compile error
+++count;     // ❌ Compile error
+```
+
+**❌ No `**` power operator**
+
+Use explicit `pow()` function:
+
+```wado
+let result = pow(x, 2);  // ✅ Explicit
+let result = x ** 2;     // ❌ Compile error
+```
+
+### Bitwise Operators
+
+| Operator | Name        | Example   | Description                 |
+| -------- | ----------- | --------- | --------------------------- |
+| `&`      | Bitwise AND | `a & b`   | Bitwise AND                 |
+| `\|`     | Bitwise OR  | `a \| b`  | Bitwise OR                  |
+| `^`      | Bitwise XOR | `a ^ b`   | Bitwise exclusive OR        |
+| `~`      | Bitwise NOT | `~a`      | Bitwise complement (unary)  |
+| `<<`     | Left shift  | `a << 2`  | Left shift by 2 bits        |
+| `>>`     | Right shift | `a >> 2`  | Arithmetic right shift      |
+
+All bitwise operators work on integer types (`i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`).
+
+### Design Rationale
+
+See `docs/operator-precedence-research.md` for detailed analysis of operator precedence across languages, and `docs/adr-2026-01-11-operator-precedence.md` for the architectural decision record.
+
 ## JSX
 
 JSX is built into the language:

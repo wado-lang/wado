@@ -161,20 +161,30 @@ impl<'a> Lexer<'a> {
             }
             '<' => {
                 self.advance();
-                if self.peek_char() == Some('=') {
-                    self.advance();
-                    TokenKind::LtEq
-                } else {
-                    TokenKind::Lt
+                match self.peek_char() {
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::LtEq
+                    }
+                    Some('<') => {
+                        self.advance();
+                        TokenKind::LShift
+                    }
+                    _ => TokenKind::Lt,
                 }
             }
             '>' => {
                 self.advance();
-                if self.peek_char() == Some('=') {
-                    self.advance();
-                    TokenKind::GtEq
-                } else {
-                    TokenKind::Gt
+                match self.peek_char() {
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::GtEq
+                    }
+                    Some('>') => {
+                        self.advance();
+                        TokenKind::RShift
+                    }
+                    _ => TokenKind::Gt,
                 }
             }
             '+' => {
@@ -219,6 +229,14 @@ impl<'a> Lexer<'a> {
             '#' => {
                 self.advance();
                 TokenKind::Hash
+            }
+            '~' => {
+                self.advance();
+                TokenKind::Tilde
+            }
+            '^' => {
+                self.advance();
+                TokenKind::Caret
             }
 
             _ => {
