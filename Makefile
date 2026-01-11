@@ -25,6 +25,13 @@ hello-validate: hello
 test:
 	cargo test
 
+.PHONY: check-ci
+check-ci:
+	cargo fmt --all --check
+	cargo clippy --locked --all-targets --all-features
+	make check-bundled
+	cargo test --locked --all
+
 .PHONY: format
 format:
 	cargo fmt
