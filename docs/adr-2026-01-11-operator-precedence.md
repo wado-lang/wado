@@ -167,60 +167,48 @@ let result = pow(x, 2);   // ✅ Correct
 
 **Future note**: `**` is reserved for potential use as a dereference operator.
 
-### 6. Comparison Operator Chaining: Equality Only
+### 6. Comparison Operator Chaining: Mathematical Chaining
 
-**Equality operators** (`==`, `!=`) are **left-associative** and can be chained:
+Wado supports **mathematical comparison chaining** similar to Python, but with stricter rules.
 
-```wado
-a == b == c  // ✅ OK: (a == b) == c
-a != b != c  // ✅ OK: (a != b) != c
-```
-
-**Inequality operators** (`<`, `>`, `<=`, `>=`) are **non-associative** and chaining is a **semantic error**:
+**Valid chains** (same direction):
 
 ```wado
-a < b < c    // ❌ Semantic error
-a > b > c    // ❌ Semantic error
-a <= b <= c  // ❌ Semantic error
-a >= b >= c  // ❌ Semantic error
-a < b > c    // ❌ Semantic error (parser accepts, analyser rejects)
-a == b < c   // ❌ Semantic error (mixing equality and inequality)
+a < b < c     // ✅ OK: a < b AND b < c (ascending)
+a > b > c     // ✅ OK: a > b AND b > c (descending)
+a <= b <= c   // ✅ OK: a <= b AND b <= c
+a >= b >= c   // ✅ OK: a >= b AND b >= c
+a == b == c   // ✅ OK: a == b AND b == c
 ```
 
-**Correct way** to express range checks:
+**Invalid chains** (semantic error):
 
 ```wado
-// Use logical AND
-if a < b && b < c {  // ✅ Correct
-    // ...
-}
+a < b > c     // ❌ Semantic error: mixed directions
+a > b < c     // ❌ Semantic error: mixed directions
+a < b >= c    // ❌ Semantic error: mixing < and >=
+a == b < c    // ❌ Semantic error: mixing == and inequality
+a != b != c   // ❌ Semantic error: != chaining not allowed
 ```
+
+**Chaining Rules**:
+
+1. **Same-direction inequality**: `<`/`<=` can only chain with `<`/`<=`, and `>`/`>=` can only chain with `>`/`>=`
+2. **Equality chaining**: `==` can only chain with `==`
+3. **No `!=` chaining**: `!=` cannot be chained at all
+4. **No mixing**: Cannot mix equality operators with inequality operators
 
 **Rationale**:
 
-1. **Equality chaining is rare but sometimes useful**:
-   ```wado
-   if x == y == z {  // All three are equal
-       // ...
-   }
-   ```
+1. **Mathematical intuition**: Range checks like `0 <= x <= 100` are natural and common
+2. **Same as Python**: Developers familiar with Python will find this familiar
+3. **Clearer intent**: `a < b < c` is more readable than `a < b && b < c`
+4. **Reject ambiguous cases**: Mixed directions (`a < b > c`) are rarely intentional
+5. **`!=` is ambiguous**: The meaning of `a != b != c` is unclear (is it "a, b, c are all different" or "a != b AND b != c"?)
 
-2. **Inequality chaining is confusing**:
-   - Unlike Python's mathematical chaining (`a < b < c` means `a < b AND b < c`), most C-family languages parse it as `(a < b) < c`
-   - This creates confusion about whether `a < b < c` means "a less than b less than c" or "(a < b) less than c"
-   - Rejecting it forces explicit intent with `&&`
-
-3. **Consistency with the principle of explicitness**:
-   - Wado favors explicitness over convenience
-   - `a < b && b < c` is clearer than special chaining semantics
-   - No need to remember special rules for comparison chaining
-
-4. **Simpler implementation**:
-   - No need for special semantic analysis for inequality chains
-   - No need to distinguish between mathematical chaining and boolean chaining
-   - Easier to reason about and teach
-
-**Implementation**: The parser allows all comparison operators to be chained (left-associative). The semantic analyser then rejects chains containing inequality operators.
+**Implementation**: The parser allows comparison operators to be chained (left-associative). The semantic analyser validates:
+- All operators in the chain are in the same "group" (ascending, descending, or equality)
+- `!=` is never chained
 
 ## Consequences
 
@@ -230,18 +218,21 @@ if a < b && b < c {  // ✅ Correct
 2. **Avoids undefined behavior**: No `++`/`--` operators
 3. **Clear and explicit**: `pow(x, y)` instead of ambiguous `**`
 4. **Familiar to C/Java/Python developers**: `~` for bitwise NOT
-5. **Prevents confusing comparisons**: `a < b < c` is an error, forcing `a < b && b < c`
-6. **Consistent with Rust**: Minimal learning curve for Rust developers (except `~` vs `!`)
-7. **Battle-tested**: Rust's precedence has been proven in production
+5. **Mathematical comparison chaining**: `0 <= x <= 100` works naturally like Python
+6. **Rejects ambiguous chains**: `a < b > c` and `a != b != c` are errors
+7. **Consistent with Rust precedence**: Minimal learning curve (except `~` and chaining)
+8. **Battle-tested**: Rust's precedence has been proven in production
 
 ### Negative
 
 1. **Diverges from Rust on bitwise NOT**: Rust developers might use `!` by habit
    - **Mitigation**: Compiler error will catch this immediately
-2. **No mathematical comparison chaining**: `a < b < c` requires `a < b && b < c`
-   - **Mitigation**: Explicit is better than implicit; no ambiguity
-3. **Equality chaining is still left-associative**: `a == b == c` is `(a == b) == c`, which may surprise some developers
-   - **Mitigation**: This usage is rare; when needed, parentheses can clarify intent
+2. **Diverges from Rust on comparison chaining**: Rust rejects all chaining, Wado allows valid chains
+   - **Mitigation**: Well-documented feature; clearer than Rust's blanket rejection
+3. **Comparison chaining requires semantic analysis**: Parser accepts all chains, analyser validates
+   - **Mitigation**: Clear error messages guide developers to fix invalid chains
+4. **`!=` chaining is rejected**: Some developers might expect `a != b != c` to work
+   - **Mitigation**: Error message suggests alternatives like `a != b && b != c` or "all different" checks
 
 ### Precedence Table for Wado
 
@@ -259,7 +250,7 @@ From highest to lowest precedence:
 | 8     | `&`                                    | Left-to-right   | Bitwise AND                    |
 | 9     | `^`                                    | Left-to-right   | Bitwise XOR                    |
 | 10    | `\|`                                   | Left-to-right   | Bitwise OR                     |
-| 11    | `==`, `!=` (left-assoc), `<`, `>`, `<=`, `>=` (non-assoc) | **Mixed** | Comparison |
+| 11    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | **Restricted** | Comparison |
 | 12    | `&&`                                   | Left-to-right   | Logical AND                    |
 | 13    | `\|\|`                                 | Left-to-right   | Logical OR                     |
 | 14    | `..`, `..=`                            | N/A             | Range operators                |
@@ -267,7 +258,11 @@ From highest to lowest precedence:
 
 **Key differences from Rust**:
 - Level 3: Added `~` for bitwise NOT (Rust uses `!` only)
-- Level 11: `==` and `!=` are left-associative (can chain), but `<`, `>`, `<=`, `>=` are non-associative (semantic error when chained)
+- Level 11: Comparison chaining allowed with semantic validation:
+  - Same-direction chains OK: `a < b < c`, `a > b > c`, `a == b == c`
+  - Mixed-direction chains rejected: `a < b > c`
+  - `!=` cannot be chained
+  - Rust rejects all comparison chaining at parse level
 
 ## References
 
