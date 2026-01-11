@@ -18,8 +18,6 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 - **Colorless async**: Eliminates async/await "color" problem via Wasm Stack Switching
 - **Effect System**: Side effect tracking and control, swappable via Handlers
 
----
-
 ## Lexical Structure
 
 ### Whitespace
@@ -114,8 +112,6 @@ let c = 3 | 4 & 6;      // 7 (& has higher precedence than |)
 let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 ```
 
----
-
 ## Memory Model
 
 ### Core Principles
@@ -147,8 +143,6 @@ let unique handle = open_file("data.txt");
 let other = handle;       // Error: unique cannot be implicitly copied
 let other = move handle;  // OK: explicit move
 ```
-
----
 
 ## Type System
 
@@ -670,8 +664,6 @@ user.name
 d["key"]
 ```
 
----
-
 ## Module System
 
 Wado uses an ESM-like import syntax with `use {...} from "source"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
@@ -819,7 +811,7 @@ fn log() with Stdout, Stderr {
 
 ### Exception: The Prelude
 
-The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports. To opt out, use `#![no_prelude]`.
+The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports.
 
 ### Standard Library
 
@@ -1157,8 +1149,9 @@ use {Stdout::{write_via_stream}} from "wasi:cli";
 use {Environment::{get_environment, get_arguments}} from "wasi:cli";
 
 pub fn println(message: String) with Stdout {
-    let stream = string_to_stream(`{message}\n`);
-    write_via_stream(stream);  // No need for Stdout:: prefix
+    // Create stream, start consumer, write data, close stream
+    // (simplified - see core:cli for full implementation)
+    write_via_stream(...);
 }
 
 pub fn env(name: String) -> Option<String> with Environment {
@@ -1192,8 +1185,8 @@ use {Stdout::{write_via_stream}} from "wasi:cli";
 use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
 
 pub fn log(message: String) with Stdout, Stderr {
-    write_via_stream(stdout_stream);  // Calls Stdout::write_via_stream
-    stderr_write(stderr_stream);      // Calls Stderr::write_via_stream (renamed)
+    write_via_stream(...);  // Calls Stdout::write_via_stream
+    stderr_write(...);      // Calls Stderr::write_via_stream (renamed)
 }
 ```
 
@@ -1528,23 +1521,6 @@ Wado effects map to WASI P3 interfaces:
 | `Environment` | `wasi:cli/environment` | `get-arguments()`, `get-environment()`                |
 | `Exit`        | `wasi:cli/exit`        | `exit(result)`, `exit-with-code(u8)`                  |
 
-### Async Functions in WASI P3
-
-WASI P3 uses `async func` in WIT for non-blocking operations. In Wado, these are handled transparently via stack switching (colorless async):
-
-```wit
-// WIT definition has async keyword
-write-via-stream: async func(data: stream<u8>) -> result<_, error-code>;
-```
-
-```wado
-// Wado has no async keyword in effect declarations or function implementations.
-fn println(message: String) with Stdout {
-    let stream = string_to_stream(`{message}\n`);
-    Stdout::write_via_stream(stream);  // Colorless async
-}
-```
-
 ### Entry Points
 
 Entry points are integrated in World system.
@@ -1558,7 +1534,8 @@ TBD.
 Use `#[wasi(...)]` attributes to link Wado definitions to WASI interfaces:
 
 ```wado
-// Link an effect to a WASI interface
+// Link an effect interface to a WASI interface
+#[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16")]
 pub effect Stdout {
     #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
@@ -1577,23 +1554,3 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 }
 ```
 
-### The Wasm Loader (Security Model for external plugins)
-
-Effect declaration = Wasm import = WASI capability:
-
-```wado
-use {load_wasm} from "core:wasm";
-
-// Restrict plugin capabilities with world and effect declarations
-world Transform {
-    // ...
-
-    export fn execute(input: String) with FileSystem -> String;
-}
-
-let plugin = load_wasm<Transform>("./transform.wasm");
-
-let output = plugin.execute(input);
-```
-
-TBD.

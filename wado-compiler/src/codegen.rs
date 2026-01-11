@@ -2035,7 +2035,7 @@ impl Codegen {
         }
 
         // Pre-allocate scratch locals that builtins might need
-        // These are needed by string_to_stream and other builtins that allocate locals at runtime
+        // These are needed by builtins that allocate locals at runtime
         let string_array_type = builder.type_idx("string-array");
         self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
 
@@ -2148,14 +2148,14 @@ impl Codegen {
 
     /// Pre-allocate scratch locals that builtins might need during code generation
     ///
-    /// Some builtins like string_to_stream allocate temporary locals at runtime.
+    /// Some builtins allocate temporary locals at runtime.
     /// These need to be declared in the function's local declarations.
     fn preallocate_builtin_scratch_locals(
         &self,
         ctx: &mut FunctionContext,
         string_array_type: u32,
     ) {
-        // Scratch locals for string_to_stream and string_to_stream_with_trailing_newline
+        // Scratch locals for stream handling builtins
         ctx.alloc_local(
             "__arr_ref",
             ValType::Ref(RefType {
