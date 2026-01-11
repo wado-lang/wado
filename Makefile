@@ -25,6 +25,10 @@ hello-validate: hello
 test:
 	cargo test
 
+.PHONY: on-task-done
+on-task-done: format clippy-fix update-bundled test
+	@echo "All artifacts are up-to-date and tested."
+
 .PHONY: format
 format:
 	cargo fmt
@@ -36,7 +40,7 @@ clippy:
 
 .PHONY: clippy-fix
 clippy-fix:
-	cargo clippy --fix --allow-dirty --allow-staged
+	cargo clippy --fix --all-features --allow-dirty --allow-staged
 
 .PHONY: clean
 clean:

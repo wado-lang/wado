@@ -83,6 +83,7 @@ async fn run_wasm(wasm: Vec<u8>) -> Result<()> {
     config.wasm_threads(true);
     // config.wasm_stack_switching(true); // "runtime error: the wasm_stack_switching feature is not supported on this compiler configuration" on macos
     config.wasm_gc(true);
+    config.wasm_function_references(true);
 
     let engine = Engine::new(&config)?;
 
