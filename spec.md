@@ -119,20 +119,20 @@ let result = (a as f64) + b;
 
 **Supported primitive type casts:**
 
-| From  | To    | Wasm Instruction  | Notes                       |
-| ----- | ----- | ----------------- | --------------------------- |
-| i32   | i64   | `i64.extend_i32_s` | Sign-extended               |
-| i32   | f32   | `f32.convert_i32_s` | Signed conversion          |
-| i32   | f64   | `f64.convert_i32_s` | Signed conversion          |
-| i64   | i32   | `i32.wrap_i64`    | Truncates to low 32 bits    |
-| i64   | f32   | `f32.convert_i64_s` | Signed conversion          |
-| i64   | f64   | `f64.convert_i64_s` | Signed conversion          |
-| f32   | i32   | `i32.trunc_f32_s` | Truncates toward zero       |
-| f32   | i64   | `i64.trunc_f32_s` | Truncates toward zero       |
-| f32   | f64   | `f64.promote_f32` | Lossless promotion          |
-| f64   | i32   | `i32.trunc_f64_s` | Truncates toward zero       |
-| f64   | i64   | `i64.trunc_f64_s` | Truncates toward zero       |
-| f64   | f32   | `f32.demote_f64`  | May lose precision          |
+| From | To  | Wasm Instruction    | Notes                    |
+| ---- | --- | ------------------- | ------------------------ |
+| i32  | i64 | `i64.extend_i32_s`  | Sign-extended            |
+| i32  | f32 | `f32.convert_i32_s` | Signed conversion        |
+| i32  | f64 | `f64.convert_i32_s` | Signed conversion        |
+| i64  | i32 | `i32.wrap_i64`      | Truncates to low 32 bits |
+| i64  | f32 | `f32.convert_i64_s` | Signed conversion        |
+| i64  | f64 | `f64.convert_i64_s` | Signed conversion        |
+| f32  | i32 | `i32.trunc_f32_s`   | Truncates toward zero    |
+| f32  | i64 | `i64.trunc_f32_s`   | Truncates toward zero    |
+| f32  | f64 | `f64.promote_f32`   | Lossless promotion       |
+| f64  | i32 | `i32.trunc_f64_s`   | Truncates toward zero    |
+| f64  | i64 | `i64.trunc_f64_s`   | Truncates toward zero    |
+| f64  | f32 | `f32.demote_f64`    | May lose precision       |
 
 **Parentheses for Grouping:**
 

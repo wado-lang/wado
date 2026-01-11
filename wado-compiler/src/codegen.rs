@@ -2,7 +2,10 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
-use crate::ast::{Block, CallExpr, Expr, Item, Literal, Module as AstModule, Stmt, TemplatePart, Function as AstFunction};
+use crate::ast::{
+    Block, CallExpr, Expr, Function as AstFunction, Item, Literal, Module as AstModule, Stmt,
+    TemplatePart,
+};
 use crate::bundled::wado_bundled_wasm;
 use crate::symbol::SymbolTable;
 use crate::wasm_postprocess;
@@ -1032,10 +1035,7 @@ impl Codegen {
     }
 
     /// Collect user-defined functions from the AST (excluding run and builtins)
-    fn collect_user_functions<'a>(
-        &self,
-        ast_module: &'a AstModule,
-    ) -> Vec<&'a AstFunction> {
+    fn collect_user_functions<'a>(&self, ast_module: &'a AstModule) -> Vec<&'a AstFunction> {
         ast_module
             .items
             .iter()

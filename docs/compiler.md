@@ -256,6 +256,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Method calls
 - [x] Field access
 - [x] Index access (`[]`)
+- [x] Type cast (`as T`) for primitive types
 - [x] Closures (`|params| expr`)
 - [ ] `if` expressions
 - [ ] `match` expressions
@@ -314,6 +315,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Variables and locals (`let`, `let mut`)
 - [x] Control flow (`if` statements, `while`, `for`)
 - [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
+- [x] Type cast (`as T`) for primitive types (i32, i64, f32, f64)
 - [x] Assert statements (condition check, unreachable on failure)
 - [x] User-defined functions (from core:: modules)
 - [ ] Struct construction
@@ -343,6 +345,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] E2E test: bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
 - [x] E2E test: parentheses for precedence grouping
 - [x] E2E test: float-to-string template interpolation
+- [x] E2E test: type cast (`as T`) for primitive types
 - [ ] Compile error tests (partial)
 - [ ] More E2E tests
 
