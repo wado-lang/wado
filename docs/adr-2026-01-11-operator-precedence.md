@@ -165,8 +165,6 @@ let result = pow(x, 2);   // ✅ Correct
 - Explicit function call is clearer
 - Consistent with Rust, Go, C, and Java
 
-**Future note**: `**` is reserved for potential use as a dereference operator.
-
 ### 6. Comparison Operator Chaining: Mathematical Chaining
 
 Wado supports **mathematical comparison chaining** similar to Python, but with stricter rules.
