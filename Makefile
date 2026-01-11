@@ -1,5 +1,5 @@
 .PHONY: build
-build:
+build: wado-compiler/lib/builtins/wado-bundled.wat
 	cargo build
 
 .PHONY: hello
@@ -53,6 +53,9 @@ update-stdlib-wasi: build
 	cargo run -p wado-from-wit -- \
 		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
 		--output-dir wado-compiler/lib/wasi
+
+wado-compiler/lib/builtins/wado-bundled.wat: Cargo.lock wado-bundled/Cargo.toml wado-bundled/src/lib.rs
+	make update-bundled
 
 .PHONY: update-bundled
 update-bundled:

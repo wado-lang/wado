@@ -12,6 +12,18 @@
 #[cfg(target_arch = "wasm32")]
 use core::panic::PanicInfo;
 
+/// Copy bytes to a destination pointer in linear memory.
+///
+/// # Safety
+/// The destination must have enough space for `src.len()` bytes.
+unsafe fn copy_to_ptr(dest_ptr: i32, src: &[u8]) {
+    let dest = dest_ptr as *mut u8;
+    for (i, &byte) in src.iter().enumerate() {
+        // SAFETY: Caller guarantees dest has enough space
+        unsafe { dest.add(i).write(byte) };
+    }
+}
+
 /// Formats an f64 value to the provided buffer, returns the length
 ///
 /// # Safety
@@ -20,17 +32,8 @@ use core::panic::PanicInfo;
 pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
     let mut ryu_buffer = ryu::Buffer::new();
     let formatted = ryu_buffer.format(value);
-    let len = formatted.len();
-
-    unsafe {
-        let dest = buffer_ptr as *mut u8;
-        let src = formatted.as_bytes();
-        for (i, &byte) in src.iter().enumerate() {
-            dest.add(i).write(byte);
-        }
-    }
-
-    len as i32
+    unsafe { copy_to_ptr(buffer_ptr, formatted.as_bytes()) };
+    formatted.len() as i32
 }
 
 /// Formats an f32 value to the provided buffer, returns the length
@@ -41,17 +44,8 @@ pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
 pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
     let mut ryu_buffer = ryu::Buffer::new();
     let formatted = ryu_buffer.format(value);
-    let len = formatted.len();
-
-    unsafe {
-        let dest = buffer_ptr as *mut u8;
-        let src = formatted.as_bytes();
-        for (i, &byte) in src.iter().enumerate() {
-            dest.add(i).write(byte);
-        }
-    }
-
-    len as i32
+    unsafe { copy_to_ptr(buffer_ptr, formatted.as_bytes()) };
+    formatted.len() as i32
 }
 
 #[cfg(target_arch = "wasm32")]

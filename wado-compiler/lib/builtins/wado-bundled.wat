@@ -14,7 +14,7 @@
   (export "__data_end" (global 1))
   (export "__heap_base" (global 2))
   (func $f32_to_buffer (;0;) (type 0) (param f32 i32) (result i32)
-    (local i32 i32 i32 i32 i32 i32 i32 i32)
+    (local i32 i32 i32 i32)
     global.get $__stack_pointer
     i32.const 32
     i32.sub
@@ -23,169 +23,69 @@
     block ;; label = @1
       block ;; label = @2
         block ;; label = @3
-          block ;; label = @4
-            local.get 0
-            i32.reinterpret_f32
-            local.tee 3
-            i32.const 2147483647
-            i32.and
-            i32.const 2139095040
-            i32.lt_s
-            br_if 0 (;@4;)
-            i32.const 1048583
-            i32.const 1048576
-            i32.const 1048579
-            local.get 3
-            i32.const -1
-            i32.gt_s
-            local.tee 4
-            select
-            local.get 3
-            i32.const 8388607
-            i32.and
-            local.tee 5
-            select
-            local.tee 3
-            i32.const 3
-            i32.const 3
-            i32.const 4
-            local.get 4
-            select
-            local.get 5
-            select
-            local.tee 6
-            i32.add
-            local.set 5
-            br 1 (;@3;)
-          end
           local.get 0
-          local.get 2
-          i32.const 8
-          i32.add
-          call $_ZN3ryu6pretty8format3217h4211e32432cc127dE
-          local.tee 6
-          i32.eqz
-          br_if 1 (;@2;)
-          local.get 2
-          i32.const 8
-          i32.add
-          local.get 6
-          i32.add
-          local.set 5
-          local.get 2
-          i32.const 8
-          i32.add
-          local.set 3
-        end
-        local.get 5
-        local.get 3
-        i32.sub
-        local.tee 7
-        i32.const 3
-        i32.and
-        local.set 8
-        i32.const 0
-        local.set 4
-        block ;; label = @3
-          local.get 3
-          local.get 5
-          i32.sub
-          i32.const -4
-          i32.gt_u
-          br_if 0 (;@3;)
-          local.get 7
-          i32.const -4
+          i32.reinterpret_f32
+          local.tee 3
+          i32.const 2147483647
           i32.and
-          local.set 9
-          i32.const 0
-          local.set 4
-          loop ;; label = @4
-            local.get 1
-            local.get 4
-            i32.add
-            local.tee 5
-            local.get 3
-            local.get 4
-            i32.add
-            local.tee 7
-            i32.load8_u
-            i32.store8
-            local.get 5
-            i32.const 1
-            i32.add
-            local.get 7
-            i32.const 1
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get 5
-            i32.const 2
-            i32.add
-            local.get 7
-            i32.const 2
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get 5
-            i32.const 3
-            i32.add
-            local.get 7
-            i32.const 3
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get 9
-            local.get 4
-            i32.const 4
-            i32.add
-            local.tee 4
-            i32.ne
-            br_if 0 (;@4;)
-          end
-          local.get 3
-          local.get 4
-          i32.add
-          local.set 3
-        end
-        local.get 8
-        i32.eqz
-        br_if 1 (;@1;)
-        local.get 1
-        local.get 4
-        i32.add
-        local.set 4
-        loop ;; label = @3
-          local.get 4
-          local.get 3
-          i32.load8_u
-          i32.store8
-          local.get 4
-          i32.const 1
-          i32.add
-          local.set 4
-          local.get 3
-          i32.const 1
-          i32.add
-          local.set 3
-          local.get 8
-          i32.const -1
-          i32.add
-          local.tee 8
+          i32.const 2139095040
+          i32.lt_s
           br_if 0 (;@3;)
-          br 2 (;@1;)
+          i32.const 1048583
+          i32.const 1048576
+          i32.const 1048579
+          local.get 3
+          i32.const -1
+          i32.gt_s
+          local.tee 4
+          select
+          local.get 3
+          i32.const 8388607
+          i32.and
+          local.tee 3
+          select
+          local.set 5
+          i32.const 3
+          i32.const 3
+          i32.const 4
+          local.get 4
+          select
+          local.get 3
+          select
+          local.set 3
+          br 1 (;@2;)
         end
+        local.get 2
+        i32.const 8
+        i32.add
+        local.set 5
+        local.get 0
+        local.get 2
+        i32.const 8
+        i32.add
+        call $_ZN3ryu6pretty8format3217h4211e32432cc127dE
+        local.tee 3
+        br_if 0 (;@2;)
+        i32.const 0
+        local.set 3
+        br 1 (;@1;)
       end
-      i32.const 0
-      local.set 6
+      local.get 3
+      i32.eqz
+      br_if 0 (;@1;)
+      local.get 1
+      local.get 5
+      local.get 3
+      memory.copy
     end
     local.get 2
     i32.const 32
     i32.add
     global.set $__stack_pointer
-    local.get 6
+    local.get 3
   )
   (func $f64_to_buffer (;1;) (type 1) (param f64 i32) (result i32)
-    (local i32 i64 i32 i32 i32 i32 i32 i32 i32)
+    (local i32 i64 i32 i32 i32)
     global.get $__stack_pointer
     i32.const 32
     i32.sub
@@ -194,167 +94,67 @@
     block ;; label = @1
       block ;; label = @2
         block ;; label = @3
-          block ;; label = @4
-            local.get 0
-            i64.reinterpret_f64
-            local.tee 3
-            i64.const 9223372036854775807
-            i64.and
-            i64.const 9218868437227405312
-            i64.lt_s
-            br_if 0 (;@4;)
-            i32.const 1048576
-            i32.const 1048579
-            local.get 3
-            i64.const -1
-            i64.gt_s
-            local.tee 4
-            select
-            i32.const 1048583
-            local.get 3
-            i64.const 4503599627370495
-            i64.and
-            i64.eqz
-            local.tee 5
-            select
-            local.tee 6
-            i32.const 3
-            i32.const 4
-            local.get 4
-            select
-            i32.const 3
-            local.get 5
-            select
-            local.tee 7
-            i32.add
-            local.set 5
-            br 1 (;@3;)
-          end
           local.get 0
-          local.get 2
-          i32.const 8
-          i32.add
-          call $_ZN3ryu6pretty8format6417h331e83365314ddd1E
-          local.tee 7
-          i32.eqz
-          br_if 1 (;@2;)
-          local.get 2
-          i32.const 8
-          i32.add
-          local.get 7
-          i32.add
-          local.set 5
-          local.get 2
-          i32.const 8
-          i32.add
+          i64.reinterpret_f64
+          local.tee 3
+          i64.const 9223372036854775807
+          i64.and
+          i64.const 9218868437227405312
+          i64.lt_s
+          br_if 0 (;@3;)
+          i32.const 1048576
+          i32.const 1048579
+          local.get 3
+          i64.const -1
+          i64.gt_s
+          local.tee 4
+          select
+          i32.const 1048583
+          local.get 3
+          i64.const 4503599627370495
+          i64.and
+          i64.eqz
+          local.tee 5
+          select
           local.set 6
+          i32.const 3
+          i32.const 4
+          local.get 4
+          select
+          i32.const 3
+          local.get 5
+          select
+          local.set 4
+          br 1 (;@2;)
         end
-        local.get 5
-        local.get 6
-        i32.sub
-        local.tee 8
-        i32.const 3
-        i32.and
-        local.set 9
+        local.get 2
+        i32.const 8
+        i32.add
+        local.set 6
+        local.get 0
+        local.get 2
+        i32.const 8
+        i32.add
+        call $_ZN3ryu6pretty8format6417h331e83365314ddd1E
+        local.tee 4
+        br_if 0 (;@2;)
         i32.const 0
         local.set 4
-        block ;; label = @3
-          local.get 6
-          local.get 5
-          i32.sub
-          i32.const -4
-          i32.gt_u
-          br_if 0 (;@3;)
-          local.get 8
-          i32.const -4
-          i32.and
-          local.set 10
-          i32.const 0
-          local.set 4
-          loop ;; label = @4
-            local.get 1
-            local.get 4
-            i32.add
-            local.tee 5
-            local.get 6
-            local.get 4
-            i32.add
-            local.tee 8
-            i32.load8_u
-            i32.store8
-            local.get 5
-            i32.const 1
-            i32.add
-            local.get 8
-            i32.const 1
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get 5
-            i32.const 2
-            i32.add
-            local.get 8
-            i32.const 2
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get 5
-            i32.const 3
-            i32.add
-            local.get 8
-            i32.const 3
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get 10
-            local.get 4
-            i32.const 4
-            i32.add
-            local.tee 4
-            i32.ne
-            br_if 0 (;@4;)
-          end
-          local.get 6
-          local.get 4
-          i32.add
-          local.set 6
-        end
-        local.get 9
-        i32.eqz
-        br_if 1 (;@1;)
-        local.get 1
-        local.get 4
-        i32.add
-        local.set 4
-        loop ;; label = @3
-          local.get 4
-          local.get 6
-          i32.load8_u
-          i32.store8
-          local.get 4
-          i32.const 1
-          i32.add
-          local.set 4
-          local.get 6
-          i32.const 1
-          i32.add
-          local.set 6
-          local.get 9
-          i32.const -1
-          i32.add
-          local.tee 9
-          br_if 0 (;@3;)
-          br 2 (;@1;)
-        end
+        br 1 (;@1;)
       end
-      i32.const 0
-      local.set 7
+      local.get 4
+      i32.eqz
+      br_if 0 (;@1;)
+      local.get 1
+      local.get 6
+      local.get 4
+      memory.copy
     end
     local.get 2
     i32.const 32
     i32.add
     global.set $__stack_pointer
-    local.get 7
+    local.get 4
   )
   (func $_ZN3ryu6pretty8format3217h4211e32432cc127dE (;2;) (type 0) (param f32 i32) (result i32)
     (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i32 i64 i32)
