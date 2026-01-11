@@ -30,9 +30,9 @@ pub fn format_f32(value: f32) -> String;
 ```rust
 use wado_bundled::{format_f64, format_f32};
 
-assert_eq!(format_f64(3.14159), "3.14159");
-assert_eq!(format_f32(3.14_f32), "3.14");
-assert_eq!(format_f64(core::f64::consts::PI), "3.141592653589793");
+assert_eq!(format_f64(1.23456), "1.23456");
+assert_eq!(format_f32(1.234_f32), "1.234");
+assert_eq!(format_f64(1.2345678901234567), "1.2345678901234567");
 ```
 
 ## Building

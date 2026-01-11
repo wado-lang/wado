@@ -16,8 +16,8 @@
 ///
 /// # Example
 /// ```
-/// let result = wado_bundled::format_f64(3.14159);
-/// assert_eq!(result, "3.14159");
+/// let result = wado_bundled::format_f64(1.23456);
+/// assert_eq!(result, "1.23456");
 /// ```
 pub fn format_f64(value: f64) -> String {
     let mut buf = ryu::Buffer::new();
@@ -28,8 +28,8 @@ pub fn format_f64(value: f64) -> String {
 ///
 /// # Example
 /// ```
-/// let result = wado_bundled::format_f32(3.14_f32);
-/// assert_eq!(result, "3.14");
+/// let result = wado_bundled::format_f32(1.234_f32);
+/// assert_eq!(result, "1.234");
 /// ```
 pub fn format_f32(value: f32) -> String {
     let mut buf = ryu::Buffer::new();
@@ -42,7 +42,7 @@ mod tests {
 
     #[test]
     fn test_format_f64() {
-        assert_eq!(format_f64(3.14159), "3.14159");
+        assert_eq!(format_f64(1.23456), "1.23456");
         assert_eq!(format_f64(0.0), "0.0");
         assert_eq!(format_f64(-1.5), "-1.5");
         assert_eq!(format_f64(1e10), "10000000000.0");
@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_format_f32() {
-        assert_eq!(format_f32(3.14_f32), "3.14");
+        assert_eq!(format_f32(1.234_f32), "1.234");
         assert_eq!(format_f32(0.0_f32), "0.0");
         assert_eq!(format_f32(-1.5_f32), "-1.5");
     }
@@ -58,8 +58,9 @@ mod tests {
     #[test]
     fn test_determinism() {
         // Same value should always produce same string
+        let value = 1.2345678901234567_f64;
         for _ in 0..100 {
-            assert_eq!(format_f64(core::f64::consts::PI), "3.141592653589793");
+            assert_eq!(format_f64(value), "1.2345678901234567");
         }
     }
 }
