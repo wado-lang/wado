@@ -2,7 +2,9 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
-use crate::ast::{Block, CallExpr, Expr, IdentExpr, Item, Literal, Module as AstModule, Stmt};
+use crate::ast::{
+    Block, CallExpr, Expr, IdentExpr, Item, Literal, Module as AstModule, Stmt, TemplatePart,
+};
 use crate::symbol::SymbolTable;
 use std::collections::HashMap;
 use wasm_encoder::{
@@ -582,6 +584,43 @@ impl Codegen {
                         if !self.string_literals.contains(&with_newline) {
                             self.string_literals.push(with_newline);
                         }
+                        continue;
+                    }
+                    if is_println
+                        && let Expr::TemplateString(template) = arg
+                    {
+                        // Special handling for println with template strings
+                        // Need to add newline-appended version for single-part float templates
+                        use crate::ast::TemplatePart;
+
+                        // Check if this is a single-part template with just a float literal
+                        if template.parts.len() == 1 {
+                            if let TemplatePart::Interpolation { expr, .. } = &template.parts[0] {
+                                if let Expr::Literal(lit_expr) = &**expr
+                                    && let Literal::Float(f) = lit_expr.value
+                                {
+                                    // Format with ryu and add both versions
+                                    let mut buf = ryu::Buffer::new();
+                                    let formatted = buf.format(f).to_string();
+
+                                    // Add formatted version
+                                    if !self.string_literals.contains(&formatted) {
+                                        self.string_literals.push(formatted.clone());
+                                    }
+
+                                    // Add version with newline for println
+                                    let with_newline = format!("{formatted}\n");
+                                    if !self.string_literals.contains(&with_newline) {
+                                        self.string_literals.push(with_newline);
+                                    }
+
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // For other template strings, continue with normal processing
+                        self.collect_strings_from_expr(arg);
                         continue;
                     }
                     self.collect_strings_from_expr(arg);
@@ -2284,6 +2323,25 @@ impl Codegen {
                     {
                         // String literal with newline appended
                         let with_newline = format!("{s}\n");
+                        let str_offset = self.get_string_offset(&with_newline);
+                        let str_len = with_newline.len();
+                        // Create GC array from data segment
+                        func.instruction(&Instruction::I32Const(str_offset as i32));
+                        func.instruction(&Instruction::I32Const(str_len as i32));
+                        func.instruction(&Instruction::ArrayNewData {
+                            array_type_index: string_array_type,
+                            array_data_index: 0,
+                        });
+                    } else if let Expr::TemplateString(template) = &call.args[0]
+                        && template.parts.len() == 1
+                        && let TemplatePart::Interpolation { expr, .. } = &template.parts[0]
+                        && let Expr::Literal(lit_expr) = &**expr
+                        && let Literal::Float(f) = lit_expr.value
+                    {
+                        // Single-part template string with float literal - use newline-appended version
+                        let mut buf = ryu::Buffer::new();
+                        let formatted = buf.format(f).to_string();
+                        let with_newline = format!("{formatted}\n");
                         let str_offset = self.get_string_offset(&with_newline);
                         let str_len = with_newline.len();
                         // Create GC array from data segment

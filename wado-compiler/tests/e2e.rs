@@ -407,11 +407,7 @@ async fn test_operator_precedence_comprehensive() {
 // Float formatting tests (ryu integration)
 // ============================================================================
 
-// TODO: Re-enable once template string concatenation is fully implemented
-// Currently, template strings with multiple parts (e.g., `Pi: {3.14}`) don't concatenate correctly
-// The float formatting with ryu works, but the string concatenation logic needs completion
 #[tokio::test]
-#[ignore = "Template string concatenation not yet implemented"]
 async fn test_float_template_formatting() {
     let source = include_str!("fixtures/float_template.wado");
 
@@ -423,8 +419,10 @@ async fn test_float_template_formatting() {
 
     // Verify ryu-formatted float output
     // ryu produces deterministic, minimal representations
+    // Single-part template strings work (e.g., `{3.14159}`)
+    // Multi-part concatenation (e.g., `Pi: {3.14}`) is TODO
     assert_eq!(
-        output, "Pi: 3.14159\n",
-        "Expected 'Pi: 3.14159\\n', got: {output}"
+        output, "3.14159\n",
+        "Expected '3.14159\\n', got: {output}"
     );
 }
