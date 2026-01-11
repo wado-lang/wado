@@ -44,7 +44,6 @@ There are external references in the module for convenience:
 - `vendor/wasm/` - WebAssembly/spec
 - `vendor/wasi/` - WebAssembly/WASI
 - `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
-- `vendor/wasm-tools/` - the backend of wasmtime, providing Wasm, WAT, and WIT tools
 
 ### Wasm and WASI Features
 
@@ -93,30 +92,20 @@ Significant architectural decisions are documented as ADRs in `docs/adr-{yyyy-mm
 - **Decision**: What was decided and why
 - **Consequences**: Impact and trade-offs
 
-## Terminology
-
-- Wasm: WebAssembly (not WASM)
-- WASI: WebAssembly System Interface
-- module: a Wado file
-- project: a collection of modules
-- Wado standard library: consists of the core library and the WASI library
-
 ## Project Development
 
 ```sh
-cargo build
-cargo test
-cargo clippy --fix --allow-dirty --allow-staged
+make build
+make test
+make clippy-fix
 
-make hello # generates example/hello.wat
+make hello    # generates example/hello.wat
 make hello-run # simple smoke test
-
-# to validate wat file
-wasm-tools validate --features=cm-async,cm-async-stackful,cm-async-builtins,gc example/hello.wat
-wasm-tools validate --features=cm-async,cm-async-stackful,cm-async-builtins,gc example/hello.wasm
 
 make format # format code and documents
 ```
+
+See `Makefile` for all the development tasks.
 
 ## On Your Task Done
 

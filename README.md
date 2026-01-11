@@ -108,10 +108,9 @@ wado compile -o example/hello.wat example/hello.wado  # ditto
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-### Install `wasm-tools` and `wasmtime`
+### Install `wasmtime`
 
 ```sh
-cargo install wasm-tools
 cargo install wasmtime
 ```
 
@@ -130,7 +129,7 @@ make on-task-done # format, clippy-fix, update-bundled, test
 
 ### What's Done
 
-There are E2E test fixtures in [wado-compiler/tests/fixtures/*.wado](wado-compiler/tests/fixtures).
+There are E2E test fixtures in [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures).
 
 ## License
 

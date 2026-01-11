@@ -18,6 +18,7 @@ use wasm_encoder::{
     Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
     PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection, ValType,
 };
+use wasmparser::{Validator, WasmFeatures};
 
 /// Code generator that produces Component Model components
 /// Targets WASI P3 (0.3.0-rc-2025-09-16)
@@ -537,13 +538,33 @@ impl Codegen {
         }
     }
 
+    /// Validate generated Wasm binary using wasmparser
+    ///
+    /// This catches codegen bugs early by ensuring the output is valid Wasm.
+    /// Panics if validation fails, as this indicates a compiler bug.
+    fn validate_wasm(wasm: &[u8]) {
+        let mut validator = Validator::new_with_features(WasmFeatures::all());
+        if let Err(e) = validator.validate_all(wasm) {
+            panic!(
+                "Internal compiler error: generated invalid Wasm\n\
+                 This is a bug in the Wado compiler. Please report it.\n\
+                 Validation error: {e}"
+            );
+        }
+    }
+
     /// Generate Component Model binary Wasm
     pub fn generate_wasm(&mut self, module: &AstModule) -> Vec<u8> {
         // First pass: collect string literals
         self.collect_strings(module);
 
         // Generate binary Wasm
-        self.generate_component(module)
+        let wasm = self.generate_component(module);
+
+        // Validate the generated Wasm (catches codegen bugs early)
+        Self::validate_wasm(&wasm);
+
+        wasm
     }
 
     /// Generate Component Model binary Wasm with support for multiple modules
@@ -563,7 +584,12 @@ impl Codegen {
         }
 
         // Generate binary Wasm with multi-module support
-        self.generate_component_with_modules(main_module, loaded_modules, symbols)
+        let wasm = self.generate_component_with_modules(main_module, loaded_modules, symbols);
+
+        // Validate the generated Wasm (catches codegen bugs early)
+        Self::validate_wasm(&wasm);
+
+        wasm
     }
 
     /// Generate WAT text format (for debugging)
@@ -3496,18 +3522,12 @@ mod tests {
 
         let _symbols = analyze(&ast);
         let mut codegen = Codegen::new();
+        // generate_wasm() automatically validates the output
         let wasm = codegen.generate_wasm(&ast);
 
         // Verify it starts with Wasm magic number
         assert!(wasm.len() > 8);
         assert_eq!(&wasm[0..4], b"\0asm");
-
-        // Validate the generated Wasm using wasmparser
-        let mut validator =
-            wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
-        validator
-            .validate_all(&wasm)
-            .expect("Wasm validation failed");
     }
 
     #[test]

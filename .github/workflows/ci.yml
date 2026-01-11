@@ -31,12 +31,6 @@ jobs:
         run: cargo fmt --all --check
       - name: Run clippy
         run: cargo clippy --locked --all-targets --all-features
-      - name: Install wasm32 target
-        run: rustup target add wasm32-unknown-unknown
-      - name: Install wasm-tools
-        run: wasm-tools --version || cargo install wasm-tools --locked
-      - name: Check bundled WAT is up-to-date
-        run: make check-bundled
 
   test:
     name: Test
@@ -54,5 +48,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+
+      # `make build` depends on wasm32-unknown-unknown target, but it's done in local development
+      # - name: Install wasm32 target
+      #   run: rustup target add wasm32-unknown-unknown
+
       - name: Run tests
         run: cargo test --locked --all

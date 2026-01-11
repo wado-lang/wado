@@ -4,12 +4,13 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ## Overview
 
-| Item      | Description             |
-| --------- | ----------------------- |
-| Name      | Wado                    |
-| Extension | `.wado`                 |
-| Target    | Wasm/WASI only          |
-| Paradigm  | Reactive, Effect System |
+| Item      | Description                         |
+| --------- | ----------------------------------- |
+| Name      | Wado                                |
+| Extension | `.wado`                             |
+| Paradigm  | Imperative, Reactive, Effect System |
+| Typing    | Static, Strong, Inferred            |
+| Target    | Wasm/WASI                           |
 
 ## Design Philosophy
 
@@ -116,23 +117,6 @@ let x = 10 as f64 as i32 as f64;
 // Cast in expressions
 let result = (a as f64) + b;
 ```
-
-**Supported primitive type casts:**
-
-| From | To  | Wasm Instruction    | Notes                    |
-| ---- | --- | ------------------- | ------------------------ |
-| i32  | i64 | `i64.extend_i32_s`  | Sign-extended            |
-| i32  | f32 | `f32.convert_i32_s` | Signed conversion        |
-| i32  | f64 | `f64.convert_i32_s` | Signed conversion        |
-| i64  | i32 | `i32.wrap_i64`      | Truncates to low 32 bits |
-| i64  | f32 | `f32.convert_i64_s` | Signed conversion        |
-| i64  | f64 | `f64.convert_i64_s` | Signed conversion        |
-| f32  | i32 | `i32.trunc_f32_s`   | Truncates toward zero    |
-| f32  | i64 | `i64.trunc_f32_s`   | Truncates toward zero    |
-| f32  | f64 | `f64.promote_f32`   | Lossless promotion       |
-| f64  | i32 | `i32.trunc_f64_s`   | Truncates toward zero    |
-| f64  | i64 | `i64.trunc_f64_s`   | Truncates toward zero    |
-| f64  | f32 | `f32.demote_f64`    | May lose precision       |
 
 **Parentheses for Grouping:**
 
@@ -1587,3 +1571,13 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
     Pipe,             // Maps to WIT: pipe
 }
 ```
+
+## Appendix
+
+### Terminology
+
+- Wasm: WebAssembly (not WASM)
+- WASI: WebAssembly System Interface
+- module: a Wado file
+- project: a collection of modules
+- Wado standard library: consists of the core library and the WASI library
