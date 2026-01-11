@@ -23,6 +23,30 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 | Resolver | `resolver.rs` | Module resolution, loads core library           |
 | Stdlib   | `stdlib.rs`   | Embedded core library sources                   |
 | Codegen  | `codegen.rs`  | Generates Component Model Wasm via wasm-encoder |
+| Bundled  | `bundled.rs`  | Loads pre-compiled Wasm builtins (wado-bundled)  |
+| Postproc | `wasm_postprocess.rs` | Wasm binary transformations             |
+
+### Bundled Builtins (wado-bundled)
+
+The `wado-bundled` crate provides pre-compiled Wasm functions for operations that are complex to implement in pure Wasm instructions. These are statically linked into the generated component.
+
+**Location:** `wado-bundled/` (compiles to `wasm32-unknown-unknown`)
+
+**Current Functions:**
+
+| Function | Signature | Description |
+| -------- | --------- | ----------- |
+| `f64_to_buffer` | `(f64, i32) -> i32` | Format f64 to buffer, returns length |
+| `f32_to_buffer` | `(f32, i32) -> i32` | Format f32 to buffer, returns length |
+
+**Build Process:**
+
+```bash
+make update-bundled   # Rebuild wado-bundled.wat from Rust source
+make check-bundled    # Verify committed WAT is up-to-date (used in CI)
+```
+
+The bundled module is stored as WAT in `wado-compiler/lib/builtins/wado-bundled.wat` for version control visibility. It's parsed at compile time using the `wat` crate.
 
 ### Standard Library
 
@@ -285,7 +309,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `println` function (core::cli)
 - [x] Multiple function calls
 - [x] Async function lifting/lowering
-- [x] Template strings (partial - literals only, no type conversion/formatting)
+- [x] Template strings (literals, integer interpolation, float interpolation via wado-bundled)
 - [x] Variables and locals (`let`, `let mut`)
 - [x] Control flow (`if` statements, `while`, `for`)
 - [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
@@ -296,9 +320,9 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Pattern matching
 - [ ] Closures
 - [ ] Effect handlers
-- [ ] Template string type conversion (i32/f64 → string)
+- [x] Template string type conversion (i32/i64 → string, f32/f64 → string via wado-bundled)
 - [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
-- [ ] Template string array concatenation
+- [x] Template string array concatenation
 - [ ] Reactive signals (source values)
 - [ ] Reactive signals (derived values)
 - [ ] Reactive effect blocks (syntax TBD)
@@ -317,8 +341,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] E2E test: multiple println
 - [x] E2E test: bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
 - [x] E2E test: parentheses for precedence grouping
+- [x] E2E test: float-to-string template interpolation
 - [ ] Compile error tests (partial)
-- [ ] Template string E2E tests (runtime execution)
 - [ ] More E2E tests
 
 ---
@@ -354,13 +378,14 @@ fn main() with Stdout {
 1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
 2. **No `variant` keyword**: Parser doesn't recognize `variant` declarations (sum types with payloads)
 3. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags)
-4. **Template strings - partial implementation**:
+4. **Template strings - mostly implemented**:
    - ✅ Syntax parsing with interpolation `{expr}` works
    - ✅ Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished
    - ✅ Nested template strings supported
-   - ❌ No type conversion (i32/f64 → string) in codegen
+   - ✅ Integer interpolation (i32/i64 → string)
+   - ✅ Float interpolation (f32/f64 → string via wado-bundled)
+   - ✅ String concatenation with GC array copy
    - ❌ Format specifiers (`.2f`, etc.) not implemented in codegen
-   - ❌ String concatenation uses placeholder implementation
 5. **No type checking**: The analyzer doesn't perform type checking yet
 6. **Limited codegen**: Only `println` with string literals works
 7. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
@@ -429,28 +454,20 @@ let outer = `Outer {`Inner {x}`}`;
   - Edge cases (empty, consecutive interpolations, etc.)
   - Error cases (unterminated, empty interpolation, etc.)
 
-#### ⚠️ Partial Implementation (Codegen)
+#### ✅ Implemented (Codegen)
 
 **What Works (`codegen.rs`)**:
 
 - String literal parts are collected and embedded in data section
 - Interpolation expressions are evaluated
-- Template strings recognized as producing `ref (array u8)` type
-- Basic structure for concatenation (locals allocated)
+- Template strings produce `ref (array u8)` type
+- Integer interpolation (i32/i64 converted to decimal string in linear memory, then copied to GC array)
+- Float interpolation (f32/f64 via `wado-bundled` functions using the `ryu` algorithm)
+- String concatenation using GC array allocation and `array.copy`
 
 **What's Missing (TODO)**:
 
-1. **Type-to-String Conversion**:
-
-   ```wado
-   `Count: {42}`    // Need i32 → string
-   `Pi: {3.14}`     // Need f64 → string
-   `Flag: {true}`   // Need bool → string
-   ```
-
-   Currently assumes all interpolated expressions are already strings.
-
-2. **Format Specifiers**:
+1. **Format Specifiers**:
 
    ```wado
    `{pi:.2f}`       // Decimal precision
@@ -460,19 +477,11 @@ let outer = `Outer {`Inner {x}`}`;
 
    Format specs are parsed but ignored in codegen.
 
-3. **String Concatenation**:
-   Currently uses placeholder that only keeps the last part:
+2. **Boolean to String**:
 
-   ```rust
-   // TODO: Implement proper array concatenation
-   // Current: just overwrites with each part (incorrect)
-   func.instruction(&Instruction::LocalSet(result_local));
+   ```wado
+   `Flag: {true}`   // Need bool → string ("true"/"false")
    ```
-
-   Proper implementation needs:
-   - Calculate total length of all parts
-   - Allocate new GC array with total length
-   - Copy each part into correct offset using `array.copy`
 
 ### AST Structure
 
@@ -497,36 +506,12 @@ pub struct FormatSpec {
 
 ### Next Steps for Full Implementation
 
-1. **Add `to_string()` intrinsics** for primitive types:
-
-   ```wado
-   builtin::i32_to_string(value: i32) -> builtin::array<u8>
-   builtin::f64_to_string(value: f64) -> builtin::array<u8>
-   builtin::bool_to_string(value: bool) -> builtin::array<u8>
-   ```
-
-2. **Implement format specifier handling**:
+1. **Implement format specifier handling**:
    - Parse format spec (precision, padding, alignment)
-   - Pass to appropriate formatting intrinsic
+   - Pass to appropriate formatting function in wado-bundled
 
-3. **Implement efficient array concatenation**:
-
-   ```wat
-   ;; Calculate total length
-   (i32.add (array.len $part1) (i32.add (array.len $part2) ...))
-   ;; Allocate result array
-   (array.new_default $array_u8 (local.get $total_len))
-   ;; Copy each part
-   (array.copy $array_u8 $array_u8
-     (local.get $result)  ;; dest
-     (i32.const 0)        ;; dest offset
-     (local.get $part1)   ;; src
-     (i32.const 0)        ;; src offset
-     (array.len $part1))  ;; length
-   ;; Repeat for each part at appropriate offset
-   ```
-
-4. **Add E2E tests** for runtime execution with wasmtime
+2. **Add boolean to string conversion**:
+   - `true` → "true", `false` → "false"
 
 ---
 
