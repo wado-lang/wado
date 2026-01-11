@@ -2,7 +2,7 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
-use crate::ast::{Block, CallExpr, Expr, Item, Literal, Module as AstModule, Stmt, TemplatePart};
+use crate::ast::{Block, CallExpr, Expr, Item, Literal, Module as AstModule, Stmt, TemplatePart, Function as AstFunction};
 use crate::bundled::wado_bundled_wasm;
 use crate::symbol::SymbolTable;
 use crate::wasm_postprocess;
@@ -529,7 +529,7 @@ impl Codegen {
         wasmprinter::print_bytes(&wasm).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
-    fn collect_strings(&mut self, module: &crate::ast::Module) {
+    fn collect_strings(&mut self, module: &AstModule) {
         for item in &module.items {
             if let Item::Function(func) = item {
                 // Skip bodyless functions (compiler built-ins)
@@ -658,7 +658,7 @@ impl Codegen {
 
     /// Generate component for WASI P3
     /// Uses native stream<T> types and imports wasi:cli/stdout
-    fn generate_component(&self, ast_module: &crate::ast::Module) -> Vec<u8> {
+    fn generate_component(&self, ast_module: &AstModule) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
         let mut ctx = ComponentContext::new();
 
@@ -1034,8 +1034,8 @@ impl Codegen {
     /// Collect user-defined functions from the AST (excluding run and builtins)
     fn collect_user_functions<'a>(
         &self,
-        ast_module: &'a crate::ast::Module,
-    ) -> Vec<&'a crate::ast::Function> {
+        ast_module: &'a AstModule,
+    ) -> Vec<&'a AstFunction> {
         ast_module
             .items
             .iter()
@@ -1060,7 +1060,7 @@ impl Codegen {
         &self,
         main_module: &'a AstModule,
         loaded_modules: &'a [(&'a Vec<String>, &'a AstModule)],
-    ) -> Vec<(Vec<String>, &'a crate::ast::Function, String)> {
+    ) -> Vec<(Vec<String>, &'a AstFunction, String)> {
         let mut all_funcs = Vec::new();
 
         // Collect from main module (empty path)
@@ -1761,7 +1761,7 @@ impl Codegen {
     }
 
     /// Build main module for WASI P3 with write-via-stream
-    fn build_main_module_p3(&self, ast_module: &crate::ast::Module, string_data: &[u8]) -> Vec<u8> {
+    fn build_main_module_p3(&self, ast_module: &AstModule, string_data: &[u8]) -> Vec<u8> {
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
 
@@ -1956,35 +1956,6 @@ impl Codegen {
         module.section(&names);
 
         module.finish()
-    }
-
-    /// Convert Wado type to Wasm ValType
-    #[allow(dead_code)] // Being replaced by wado_type_to_wasm_with_idx
-    fn wado_type_to_wasm(&self, ty: &crate::ast::Type) -> ValType {
-        match ty {
-            crate::ast::Type::Named(named) => match named.name.as_str() {
-                "i32" | "u32" | "bool" => ValType::I32,
-                "i64" | "u64" => ValType::I64,
-                "f32" => ValType::F32,
-                "f64" => ValType::F64,
-                // String is a struct wrapping builtin::array<u8> (type index 11)
-                "String" => ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(11),
-                }),
-                _ => ValType::I32, // Default to i32
-            },
-            crate::ast::Type::Generic(generic) => match generic.name.as_str() {
-                "Stream" => ValType::I32, // Stream handle
-                // Array<T> is a GC array (type index 11 for Array<u8>)
-                "Array" => ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(11),
-                }),
-                _ => ValType::I32,
-            },
-            _ => ValType::I32,
-        }
     }
 
     /// Convert Wado type to Wasm ValType with explicit string array type index
@@ -2975,7 +2946,7 @@ impl Codegen {
     fn generate_template_part(
         &self,
         func: &mut Function,
-        part: &crate::ast::TemplatePart,
+        part: &TemplatePart,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
     ) {
