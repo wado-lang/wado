@@ -1,5 +1,6 @@
 pub mod analyze;
 pub mod ast;
+pub mod bundled;
 pub mod codegen;
 pub mod lexer;
 pub mod parser;
@@ -7,6 +8,7 @@ pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
 pub mod token;
+pub mod wasm_postprocess;
 
 pub use analyze::Analyzer;
 pub use codegen::Codegen;

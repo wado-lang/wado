@@ -3,15 +3,18 @@
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
 use crate::ast::{Block, CallExpr, Expr, Item, Literal, Module as AstModule, Stmt};
+use crate::bundled::wado_bundled_wasm;
 use crate::symbol::SymbolTable;
+use crate::wasm_postprocess;
 use std::collections::HashMap;
 use wasm_encoder::{
-    Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
-    ComponentOuterAliasKind, ComponentValType, CompositeInnerType, CompositeType, ConstExpr,
-    DataCountSection, DataSection, DataSegment, DataSegmentMode, EntityType, ExportKind,
-    ExportSection, FieldType, Function, FunctionSection, HeapType, ImportSection, InstanceType,
-    Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
-    PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection, ValType,
+    Alias, ArrayType, BlockType, CanonicalOption, CodeSection, ComponentBuilder,
+    ComponentExportKind, ComponentOuterAliasKind, ComponentValType, CompositeInnerType,
+    CompositeType, ConstExpr, DataCountSection, DataSection, DataSegment, DataSegmentMode,
+    EntityType, ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType,
+    ImportSection, InstanceType, Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg,
+    NameMap, NameSection, PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection,
+    ValType,
 };
 
 /// Code generator that produces Component Model components
@@ -804,6 +807,47 @@ impl Codegen {
         );
 
         // ========================================
+        // Float-to-string conversion module
+        // ========================================
+        let fts_module =
+            wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
+                .expect("Failed to process float-to-string module");
+        ctx.register_core_module("fts-mod");
+        builder.core_module_raw(Some("fts-mod"), &fts_module);
+
+        // Create env instance for float-to-string (just memory)
+        // Note: core_instantiate_exports creates an instance, so we must track it
+        ctx.register_core_instance("fts-env");
+        let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+        let fts_env_instance =
+            builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
+
+        // Instantiate float-to-string module with memory
+        ctx.register_core_instance("fts");
+        builder.core_instantiate(
+            Some("fts"),
+            ctx.core_module_idx("fts-mod"),
+            [("env", ModuleArg::Instance(fts_env_instance))],
+        );
+
+        // Alias float-to-string exports
+        ctx.register_core_func("f64-to-buffer");
+        builder.core_alias_export(
+            Some("f64-to-buffer"),
+            ctx.core_instance_idx("fts"),
+            "f64_to_buffer",
+            ExportKind::Func,
+        );
+
+        ctx.register_core_func("f32-to-buffer");
+        builder.core_alias_export(
+            Some("f32-to-buffer"),
+            ctx.core_instance_idx("fts"),
+            "f32_to_buffer",
+            ExportKind::Func,
+        );
+
+        // ========================================
         // Stream canonical intrinsics for stream<u8>
         // ========================================
         ctx.register_core_func("stream-new");
@@ -923,6 +967,16 @@ impl Codegen {
         let env_exports = [
             ("memory", ExportKind::Memory, ctx.memory_idx()),
             ("realloc", ExportKind::Func, ctx.core_func_idx("realloc")),
+            (
+                "f64_to_buffer",
+                ExportKind::Func,
+                ctx.core_func_idx("f64-to-buffer"),
+            ),
+            (
+                "f32_to_buffer",
+                ExportKind::Func,
+                ctx.core_func_idx("f32-to-buffer"),
+            ),
         ];
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
         ctx.register_core_instance("env");
@@ -1197,9 +1251,10 @@ impl Codegen {
             functions.function(0);
             memory_module.section(&functions);
 
+            // Minimum 17 pages to satisfy the float-to-string module's memory requirements
             let mut memory = MemorySection::new();
             memory.memory(MemoryType {
-                minimum: 1,
+                minimum: 17,
                 maximum: None,
                 memory64: false,
                 shared: false,
@@ -1212,34 +1267,44 @@ impl Codegen {
             exports.export("realloc", ExportKind::Func, 0);
             memory_module.section(&exports);
 
+            // Bump allocator: pointer is stored at 1060000 (after float-to-string data segment)
+            // Initial allocation starts at 1060004 (after the pointer)
+            const BUMP_PTR_ADDR: i32 = 1060000;
+            const BUMP_INIT_VALUE: i32 = 1060004;
+
             let mut code = CodeSection::new();
             let mut realloc_func = Function::new([(1, ValType::I32)]);
-            realloc_func.instruction(&Instruction::I32Const(0));
+            // Load current bump pointer
+            realloc_func.instruction(&Instruction::I32Const(BUMP_PTR_ADDR));
             realloc_func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
                 offset: 0,
                 align: 2,
                 memory_index: 0,
             }));
             realloc_func.instruction(&Instruction::LocalTee(4));
+            // Add requested size
             realloc_func.instruction(&Instruction::LocalGet(3));
             realloc_func.instruction(&Instruction::I32Add);
-            realloc_func.instruction(&Instruction::I32Const(0));
+            // Store updated bump pointer
+            realloc_func.instruction(&Instruction::I32Const(BUMP_PTR_ADDR));
             realloc_func.instruction(&Instruction::I32Store(wasm_encoder::MemArg {
                 offset: 0,
                 align: 2,
                 memory_index: 0,
             }));
+            // Return old pointer (allocation address)
             realloc_func.instruction(&Instruction::LocalGet(4));
             realloc_func.instruction(&Instruction::End);
             code.function(&realloc_func);
             memory_module.section(&code);
 
+            // Initialize bump allocator pointer at BUMP_PTR_ADDR
             let mut data = DataSection::new();
-            let init_ptr: [u8; 4] = 1024i32.to_le_bytes();
+            let init_ptr: [u8; 4] = BUMP_INIT_VALUE.to_le_bytes();
             data.segment(DataSegment {
                 mode: DataSegmentMode::Active {
                     memory_index: 0,
-                    offset: &ConstExpr::i32_const(0),
+                    offset: &ConstExpr::i32_const(BUMP_PTR_ADDR),
                 },
                 data: init_ptr.iter().copied(),
             });
@@ -1269,6 +1334,47 @@ impl Codegen {
             Some("realloc"),
             ctx.core_instance_idx("mem"),
             "realloc",
+            ExportKind::Func,
+        );
+
+        // ========================================
+        // Float-to-string conversion module
+        // ========================================
+        let fts_module =
+            wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
+                .expect("Failed to process float-to-string module");
+        ctx.register_core_module("fts-mod");
+        builder.core_module_raw(Some("fts-mod"), &fts_module);
+
+        // Create env instance for float-to-string (just memory)
+        // Note: core_instantiate_exports creates an instance, so we must track it
+        ctx.register_core_instance("fts-env");
+        let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+        let fts_env_instance =
+            builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
+
+        // Instantiate float-to-string module with memory
+        ctx.register_core_instance("fts");
+        builder.core_instantiate(
+            Some("fts"),
+            ctx.core_module_idx("fts-mod"),
+            [("env", ModuleArg::Instance(fts_env_instance))],
+        );
+
+        // Alias float-to-string exports
+        ctx.register_core_func("f64-to-buffer");
+        builder.core_alias_export(
+            Some("f64-to-buffer"),
+            ctx.core_instance_idx("fts"),
+            "f64_to_buffer",
+            ExportKind::Func,
+        );
+
+        ctx.register_core_func("f32-to-buffer");
+        builder.core_alias_export(
+            Some("f32-to-buffer"),
+            ctx.core_instance_idx("fts"),
+            "f32_to_buffer",
             ExportKind::Func,
         );
 
@@ -1385,6 +1491,16 @@ impl Codegen {
         let env_exports = [
             ("memory", ExportKind::Memory, ctx.memory_idx()),
             ("realloc", ExportKind::Func, ctx.core_func_idx("realloc")),
+            (
+                "f64_to_buffer",
+                ExportKind::Func,
+                ctx.core_func_idx("f64-to-buffer"),
+            ),
+            (
+                "f32_to_buffer",
+                ExportKind::Func,
+                ctx.core_func_idx("f32-to-buffer"),
+            ),
         ];
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
         ctx.register_core_instance("env");
@@ -1499,8 +1615,22 @@ impl Codegen {
             &[ValType::I32],
         );
 
-        // GC string array type (array<u8>)
-        builder.define_gc_array_type("string-array", StorageType::I8, false);
+        // GC string array type (array<u8>) - mutable to support float-to-string conversion
+        // IMPORTANT: This must be defined at this position to maintain type index 11
+        // for string-array (hardcoded in several places for type inference)
+        builder.define_gc_array_type("string-array", StorageType::I8, true);
+
+        // Float-to-buffer types (after GC types to preserve type indices)
+        builder.define_func_type(
+            "f64_to_buffer",
+            &[ValType::F64, ValType::I32],
+            &[ValType::I32],
+        );
+        builder.define_func_type(
+            "f32_to_buffer",
+            &[ValType::F32, ValType::I32],
+            &[ValType::I32],
+        );
 
         // Types for user-defined functions
         let string_array_idx = builder.type_idx("string-array");
@@ -1538,6 +1668,8 @@ impl Codegen {
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
         builder.import_func("env", "realloc", "realloc");
+        builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
+        builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
         builder.import_memory("env", "memory", 1);
         module.section(&builder.imports);
 
@@ -1594,6 +1726,9 @@ impl Codegen {
                     func_ctx.add_param(&param.name);
                 }
                 self.collect_locals_from_block(body, &mut func_ctx);
+                // Pre-allocate scratch locals for builtins (including float conversion)
+                let string_array_type = builder.type_idx("string-array");
+                self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
                 func_ctx.get_local_decls()
             } else {
                 vec![]
@@ -1670,8 +1805,22 @@ impl Codegen {
             &[ValType::I32],
         );
 
-        // GC string array type (array<u8>)
-        builder.define_gc_array_type("string-array", StorageType::I8, false);
+        // GC string array type (array<u8>) - mutable to support float-to-string conversion
+        // IMPORTANT: This must be defined at this position to maintain type index 11
+        // for string-array (hardcoded in several places for type inference)
+        builder.define_gc_array_type("string-array", StorageType::I8, true);
+
+        // Float-to-buffer types (after GC types to preserve type indices)
+        builder.define_func_type(
+            "f64_to_buffer",
+            &[ValType::F64, ValType::I32],
+            &[ValType::I32],
+        );
+        builder.define_func_type(
+            "f32_to_buffer",
+            &[ValType::F32, ValType::I32],
+            &[ValType::I32],
+        );
 
         // Types for user-defined functions
         for func in &user_funcs {
@@ -1710,6 +1859,8 @@ impl Codegen {
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
         builder.import_func("env", "realloc", "realloc");
+        builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
+        builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
         builder.import_memory("env", "memory", 1);
         module.section(&builder.imports);
 
@@ -1767,6 +1918,9 @@ impl Codegen {
                     func_ctx.add_param(&param.name);
                 }
                 self.collect_locals_from_block(body, &mut func_ctx);
+                // Pre-allocate scratch locals for builtins (including float conversion)
+                let string_array_type = builder.type_idx("string-array");
+                self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
                 func_ctx.get_local_decls()
             } else {
                 vec![]
@@ -2019,6 +2173,23 @@ impl Codegen {
         // Scratch locals for write_via_stream async handling
         ctx.alloc_local("__subtask", ValType::I32);
         ctx.alloc_local("__waitable_set", ValType::I32);
+        // Scratch locals for template string accumulation and concatenation
+        ctx.alloc_local(
+            "__template_result",
+            ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(string_array_type),
+            }),
+        );
+        ctx.alloc_local(
+            "__concat_new",
+            ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(string_array_type),
+            }),
+        );
+        ctx.alloc_local("__result_len", ValType::I32);
+        ctx.alloc_local("__part_len", ValType::I32);
     }
 
     /// Collect local variables from a block
@@ -2482,6 +2653,22 @@ impl Codegen {
                 func.instruction(&Instruction::Call(builder.func_idx("realloc")));
             }
 
+            // Float-to-string conversion
+            "f64_to_buffer" => {
+                // f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 (length)
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("f64_to_buffer")));
+            }
+            "f32_to_buffer" => {
+                // f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 (length)
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                func.instruction(&Instruction::Call(builder.func_idx("f32_to_buffer")));
+            }
+
             _ => {
                 // Unknown builtin - generate error at runtime
                 func.instruction(&Instruction::Unreachable);
@@ -2509,10 +2696,17 @@ impl Codegen {
         if let Some(run_ast) = run_func_ast
             && let Some(body) = &run_ast.body
         {
+            // Create context and populate it the same way as local collection phase
             let mut ctx = FunctionContext::new(run_ast.params.len() as u32);
             for param in &run_ast.params {
                 ctx.add_param(&param.name);
             }
+            // Collect locals from body (must match the local collection phase)
+            self.collect_locals_from_block(body, &mut ctx);
+            // Pre-allocate scratch locals for builtins (must match the local collection phase)
+            let string_array_type = builder.type_idx("string-array");
+            self.preallocate_builtin_scratch_locals(&mut ctx, string_array_type);
+
             for stmt in &body.stmts {
                 self.generate_stmt_with_builder(func, stmt, &mut ctx, builder);
             }
@@ -2576,7 +2770,9 @@ impl Codegen {
                         | "builtin::waitable_set_new"
                         | "builtin::waitable_set_wait"
                         | "builtin::memory_load8_u"
-                        | "builtin::realloc" => ValType::I32,
+                        | "builtin::realloc"
+                        | "builtin::f64_to_buffer"
+                        | "builtin::f32_to_buffer" => ValType::I32,
                         _ => ValType::I32,
                     }
                 } else {
@@ -2723,10 +2919,9 @@ impl Codegen {
         // - For each part, generate the string representation
         // - Use array operations to concatenate
 
-        // Allocate a local to accumulate the result
-        let temp_name = format!("__template_result_{}", ctx.next_local);
+        // Use pre-allocated scratch local for template string accumulation
         let result_local = ctx.alloc_local(
-            &temp_name,
+            "__template_result",
             ValType::Ref(RefType {
                 nullable: false,
                 heap_type: HeapType::Concrete(string_array_type),
@@ -2740,17 +2935,110 @@ impl Codegen {
         }
 
         // Concatenate remaining parts
+        // Get scratch locals for concatenation
+        let part_local = ctx.alloc_local(
+            "__arr_ref",
+            ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(string_array_type),
+            }),
+        );
+        let new_array_local = ctx.alloc_local(
+            "__concat_new",
+            ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(string_array_type),
+            }),
+        );
+        let result_len_local = ctx.alloc_local("__result_len", ValType::I32);
+        let part_len_local = ctx.alloc_local("__part_len", ValType::I32);
+        let i_local = ctx.alloc_local("__i", ValType::I32);
+
         for part in template.parts.iter().skip(1) {
-            // Generate the next part
+            // Generate the next part and store it
             self.generate_template_part(func, part, ctx, builder);
+            func.instruction(&Instruction::LocalSet(part_local));
 
-            // Concatenate with result
-            // For now, we'll use a simple approach: TODO implement proper concatenation
-            // Stack: [next_part]
-            // We need: result = concat(result, next_part)
+            // Get lengths
+            func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::ArrayLen);
+            func.instruction(&Instruction::LocalSet(result_len_local));
 
-            // TODO: Implement array concatenation
-            // For now, just replace result with the new part (incorrect but allows compilation)
+            func.instruction(&Instruction::LocalGet(part_local));
+            func.instruction(&Instruction::ArrayLen);
+            func.instruction(&Instruction::LocalSet(part_len_local));
+
+            // Create new array with total length and store it
+            func.instruction(&Instruction::LocalGet(result_len_local));
+            func.instruction(&Instruction::LocalGet(part_len_local));
+            func.instruction(&Instruction::I32Add);
+            func.instruction(&Instruction::ArrayNewDefault(string_array_type));
+            func.instruction(&Instruction::LocalSet(new_array_local));
+
+            // Copy loop 1: copy result elements to new_array[0..result_len]
+            func.instruction(&Instruction::I32Const(0));
+            func.instruction(&Instruction::LocalSet(i_local));
+
+            func.instruction(&Instruction::Block(BlockType::Empty));
+            func.instruction(&Instruction::Loop(BlockType::Empty));
+
+            // if i >= result_len: break
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::LocalGet(result_len_local));
+            func.instruction(&Instruction::I32GeU);
+            func.instruction(&Instruction::BrIf(1));
+
+            // new_array[i] = result[i]
+            func.instruction(&Instruction::LocalGet(new_array_local));
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::ArrayGetU(string_array_type));
+            func.instruction(&Instruction::ArraySet(string_array_type));
+
+            // i++
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::I32Const(1));
+            func.instruction(&Instruction::I32Add);
+            func.instruction(&Instruction::LocalSet(i_local));
+            func.instruction(&Instruction::Br(0)); // continue loop
+            func.instruction(&Instruction::End); // end loop
+            func.instruction(&Instruction::End); // end block
+
+            // Copy loop 2: copy part elements to new_array[result_len..result_len+part_len]
+            func.instruction(&Instruction::I32Const(0));
+            func.instruction(&Instruction::LocalSet(i_local));
+
+            func.instruction(&Instruction::Block(BlockType::Empty));
+            func.instruction(&Instruction::Loop(BlockType::Empty));
+
+            // if i >= part_len: break
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::LocalGet(part_len_local));
+            func.instruction(&Instruction::I32GeU);
+            func.instruction(&Instruction::BrIf(1));
+
+            // new_array[result_len + i] = part[i]
+            func.instruction(&Instruction::LocalGet(new_array_local));
+            func.instruction(&Instruction::LocalGet(result_len_local));
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::I32Add); // result_len + i
+            func.instruction(&Instruction::LocalGet(part_local));
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::ArrayGetU(string_array_type));
+            func.instruction(&Instruction::ArraySet(string_array_type));
+
+            // i++
+            func.instruction(&Instruction::LocalGet(i_local));
+            func.instruction(&Instruction::I32Const(1));
+            func.instruction(&Instruction::I32Add);
+            func.instruction(&Instruction::LocalSet(i_local));
+            func.instruction(&Instruction::Br(0)); // continue loop
+            func.instruction(&Instruction::End); // end loop
+            func.instruction(&Instruction::End); // end block
+
+            // Move new_array to result_local for next iteration
+            func.instruction(&Instruction::LocalGet(new_array_local));
             func.instruction(&Instruction::LocalSet(result_local));
         }
 
@@ -2784,14 +3072,165 @@ impl Codegen {
             }
             TemplatePart::Interpolation { expr, format: _ } => {
                 // TODO: Handle format specifiers
-                // For now, just generate the expression
-                // We need to convert the expression to a string
+                // Determine the expression type to decide on conversion
+                let expr_type = self.infer_expr_type_with_ctx(expr, ctx);
 
-                self.generate_expr_with_builder(func, expr, ctx, builder);
+                match expr_type {
+                    ValType::F64 => {
+                        // Float-to-string conversion
+                        // 1. Allocate buffer (24 bytes max for f64)
+                        let ptr_local = ctx.alloc_local("__ptr", ValType::I32);
+                        let len_local = ctx.alloc_local("__len", ValType::I32);
+                        let arr_local = ctx.alloc_local(
+                            "__arr_ref",
+                            ValType::Ref(RefType {
+                                nullable: false,
+                                heap_type: HeapType::Concrete(string_array_type),
+                            }),
+                        );
+                        let i_local = ctx.alloc_local("__i", ValType::I32);
 
-                // TODO: Convert expression result to string based on its type
-                // For now, assume it's already a string (ref (array u8))
-                // This is incorrect for non-string types but allows compilation
+                        // realloc(0, 0, 1, 24) -> buffer pointer
+                        func.instruction(&Instruction::I32Const(0)); // old ptr
+                        func.instruction(&Instruction::I32Const(0)); // old size
+                        func.instruction(&Instruction::I32Const(1)); // align
+                        func.instruction(&Instruction::I32Const(24)); // new size (max for f64)
+                        func.instruction(&Instruction::Call(builder.func_idx("realloc")));
+                        func.instruction(&Instruction::LocalSet(ptr_local));
+
+                        // Generate the f64 value
+                        self.generate_expr_with_builder(func, expr, ctx, builder);
+
+                        // Call f64_to_buffer(value, buffer_ptr) -> length
+                        func.instruction(&Instruction::LocalGet(ptr_local));
+                        func.instruction(&Instruction::Call(builder.func_idx("f64_to_buffer")));
+                        func.instruction(&Instruction::LocalSet(len_local));
+
+                        // Create GC array with ArrayNewDefault
+                        func.instruction(&Instruction::LocalGet(len_local));
+                        func.instruction(&Instruction::ArrayNewDefault(string_array_type));
+                        func.instruction(&Instruction::LocalSet(arr_local));
+
+                        // Copy loop: for i in 0..len: array[i] = memory[ptr + i]
+                        // Initialize i = 0
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::LocalSet(i_local));
+
+                        // Loop
+                        func.instruction(&Instruction::Block(BlockType::Empty));
+                        func.instruction(&Instruction::Loop(BlockType::Empty));
+
+                        // Check: i >= len? break
+                        func.instruction(&Instruction::LocalGet(i_local));
+                        func.instruction(&Instruction::LocalGet(len_local));
+                        func.instruction(&Instruction::I32GeU);
+                        func.instruction(&Instruction::BrIf(1)); // break outer block
+
+                        // array[i] = memory[ptr + i]
+                        func.instruction(&Instruction::LocalGet(arr_local));
+                        func.instruction(&Instruction::LocalGet(i_local));
+
+                        // Load byte from linear memory at (ptr + i)
+                        func.instruction(&Instruction::LocalGet(ptr_local));
+                        func.instruction(&Instruction::LocalGet(i_local));
+                        func.instruction(&Instruction::I32Add);
+                        func.instruction(&Instruction::I32Load8U(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+
+                        func.instruction(&Instruction::ArraySet(string_array_type));
+
+                        // i++
+                        func.instruction(&Instruction::LocalGet(i_local));
+                        func.instruction(&Instruction::I32Const(1));
+                        func.instruction(&Instruction::I32Add);
+                        func.instruction(&Instruction::LocalSet(i_local));
+
+                        // Continue loop
+                        func.instruction(&Instruction::Br(0));
+                        func.instruction(&Instruction::End); // end loop
+                        func.instruction(&Instruction::End); // end block
+
+                        // Push the array reference onto the stack
+                        func.instruction(&Instruction::LocalGet(arr_local));
+                    }
+                    ValType::F32 => {
+                        // Float-to-string conversion (f32 version)
+                        let ptr_local = ctx.alloc_local("__ptr", ValType::I32);
+                        let len_local = ctx.alloc_local("__len", ValType::I32);
+                        let arr_local = ctx.alloc_local(
+                            "__arr_ref",
+                            ValType::Ref(RefType {
+                                nullable: false,
+                                heap_type: HeapType::Concrete(string_array_type),
+                            }),
+                        );
+                        let i_local = ctx.alloc_local("__i", ValType::I32);
+
+                        // realloc(0, 0, 1, 16) -> buffer pointer (16 bytes max for f32)
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::I32Const(1));
+                        func.instruction(&Instruction::I32Const(16));
+                        func.instruction(&Instruction::Call(builder.func_idx("realloc")));
+                        func.instruction(&Instruction::LocalSet(ptr_local));
+
+                        // Generate the f32 value
+                        self.generate_expr_with_builder(func, expr, ctx, builder);
+
+                        // Call f32_to_buffer(value, buffer_ptr) -> length
+                        func.instruction(&Instruction::LocalGet(ptr_local));
+                        func.instruction(&Instruction::Call(builder.func_idx("f32_to_buffer")));
+                        func.instruction(&Instruction::LocalSet(len_local));
+
+                        // Create GC array with ArrayNewDefault
+                        func.instruction(&Instruction::LocalGet(len_local));
+                        func.instruction(&Instruction::ArrayNewDefault(string_array_type));
+                        func.instruction(&Instruction::LocalSet(arr_local));
+
+                        // Copy loop (same as f64)
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::LocalSet(i_local));
+
+                        func.instruction(&Instruction::Block(BlockType::Empty));
+                        func.instruction(&Instruction::Loop(BlockType::Empty));
+
+                        func.instruction(&Instruction::LocalGet(i_local));
+                        func.instruction(&Instruction::LocalGet(len_local));
+                        func.instruction(&Instruction::I32GeU);
+                        func.instruction(&Instruction::BrIf(1));
+
+                        func.instruction(&Instruction::LocalGet(arr_local));
+                        func.instruction(&Instruction::LocalGet(i_local));
+                        func.instruction(&Instruction::LocalGet(ptr_local));
+                        func.instruction(&Instruction::LocalGet(i_local));
+                        func.instruction(&Instruction::I32Add);
+                        func.instruction(&Instruction::I32Load8U(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+                        func.instruction(&Instruction::ArraySet(string_array_type));
+
+                        func.instruction(&Instruction::LocalGet(i_local));
+                        func.instruction(&Instruction::I32Const(1));
+                        func.instruction(&Instruction::I32Add);
+                        func.instruction(&Instruction::LocalSet(i_local));
+
+                        func.instruction(&Instruction::Br(0));
+                        func.instruction(&Instruction::End);
+                        func.instruction(&Instruction::End);
+
+                        func.instruction(&Instruction::LocalGet(arr_local));
+                    }
+                    _ => {
+                        // For other types, assume it's already a string (ref (array u8))
+                        // TODO: Handle i32, bool, etc.
+                        self.generate_expr_with_builder(func, expr, ctx, builder);
+                    }
+                }
             }
         }
     }
@@ -2813,9 +3252,11 @@ impl Codegen {
         module.section(&functions);
 
         // Memory section
+        // Minimum 17 pages to satisfy the float-to-string module's memory requirements
+        // (the bundled module needs ~1MB for its data segment)
         let mut memories = MemorySection::new();
         memories.memory(MemoryType {
-            minimum: 1,
+            minimum: 17,
             maximum: None,
             memory64: false,
             shared: false,

@@ -26,14 +26,23 @@ wado run file.wado
 
 The CLI can run a Wado module directly using wasmtime as a library.
 
+## Bundled Library
+
+`wado-bundled/` is a Rust crate that provides bundled Wasm modules for Wado, providing:
+
+- [x] float-to-string conversion (fts)
+- [ ] math functions (libm)
+- [ ] sort
+- [ ] hash map
+
 ## Wasm and WASI
 
 There are external references in the module for convenience:
 
 - `vendor/wasm/` - WebAssembly/spec
 - `vendor/wasi/` - WebAssembly/WASI
-- `vendor/wasmtime/` - wasmtime, a Wasm runtime
-- `vendor/wasm-tools/` - the backend of wasmtime, handling Wasm, WAT, and WIT format
+- `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
+- `vendor/wasm-tools/` - the backend of wasmtime, providing Wasm, WAT, and WIT tools
 
 ### Wasm and WASI Features
 
@@ -55,19 +64,14 @@ This project relays on the following features:
 - All the documents and comments must be written in English.
 - Everything is under discussion. We can change the spec at any time.
 - When referring to WAT, use folded style syntax.
-
-## Terminology
-
-- Wasm: WebAssembly (not WASM)
-- WASI: WebAssembly System Interface
-- module: a Wado file
-- project: a collection of modules
-- Wado standard library: consists of the core library and the WASI library
+- Avoid using well-known floating point number constants like PI, E, etc in order not to violate the Clippy `approx_constant` rule.
 
 ## Rules for Rust
 
 - Do not use wildcard imports (`use ...::*;`).
 - Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/` directory.
+- Manage dependencies in the workspace `Cargo.toml`.
+- Avoid using well-known floating point numbers in tests not to violate the Clippy `approx_constant` rule.
 
 ## Rules for Markdown
 
@@ -87,13 +91,21 @@ Significant architectural decisions are documented as ADRs in `docs/adr-{yyyy-mm
 - **Decision**: What was decided and why
 - **Consequences**: Impact and trade-offs
 
+
+## Terminology
+
+- Wasm: WebAssembly (not WASM)
+- WASI: WebAssembly System Interface
+- module: a Wado file
+- project: a collection of modules
+- Wado standard library: consists of the core library and the WASI library
+
 ## Project Development
 
 ```sh
 cargo build
 cargo test
 cargo clippy --fix --allow-dirty --allow-staged
-cargo fmt
 
 make hello # generates example/hello.wat
 make hello-run # simple smoke test
@@ -103,12 +115,4 @@ wasm-tools validate --features=cm-async,cm-async-stackful,cm-async-builtins,gc e
 wasm-tools validate --features=cm-async,cm-async-stackful,cm-async-builtins,gc example/hello.wasm
 
 make format # format code and documents
-```
-
-### Validating Generated Wasm
-
-Use `wasm-tools validate` to check generated WAT/Wasm files:
-
-```sh
-
 ```

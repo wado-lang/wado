@@ -1,5 +1,5 @@
 .PHONY: build
-build:
+build: wado-compiler/lib/builtins/wado-bundled.wat
 	cargo build
 
 .PHONY: hello
@@ -47,9 +47,26 @@ clean:
 update-vendor:
 	git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime vendor/wasm-tools
 
-.PHONY: stdlib-wasi
-stdlib-wasi: build
+.PHONY: update-stdlib-wasi
+update-stdlib-wasi: build
 	rm -f wado-compiler/lib/wasi/*.wado
 	cargo run -p wado-from-wit -- \
 		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
 		--output-dir wado-compiler/lib/wasi
+
+wado-compiler/lib/builtins/wado-bundled.wat: Cargo.toml Cargo.lock wado-bundled/Cargo.toml wado-bundled/src/lib.rs
+	make update-bundled
+
+.PHONY: update-bundled
+update-bundled:
+	cd wado-bundled && cargo build --release
+	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled.wasm > wado-compiler/lib/builtins/wado-bundled.wat
+
+.PHONY: check-bundled
+check-bundled:
+	@echo "Checking if wado-bundled.wat is up-to-date..."
+	@cd wado-bundled && cargo build --release --quiet
+	@wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled.wasm > /tmp/wado-bundled-check.wat
+	@diff -q wado-compiler/lib/builtins/wado-bundled.wat /tmp/wado-bundled-check.wat || \
+		(echo "ERROR: wado-bundled.wat is out of date. Run 'make update-bundled' to regenerate." && exit 1)
+	@echo "wado-bundled.wat is up-to-date."
