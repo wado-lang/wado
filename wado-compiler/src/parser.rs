@@ -1018,6 +1018,16 @@ impl Parser {
                         span: start_span,
                     }));
                 }
+                TokenKind::As => {
+                    let start_span = self.peek().span;
+                    self.advance();
+                    let target_type = self.parse_type()?;
+                    expr = Expr::Cast(Box::new(CastExpr {
+                        expr,
+                        target_type,
+                        span: start_span,
+                    }));
+                }
                 _ => break,
             }
         }
