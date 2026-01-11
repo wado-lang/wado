@@ -349,6 +349,12 @@ pub enum BinaryOp {
     GtEq,
     And,
     Or,
+    // Bitwise operators
+    BitAnd,  // &
+    BitOr,   // |
+    BitXor,  // ^
+    LShift,  // <<
+    RShift,  // >>
 }
 
 #[derive(Debug, Clone)]
@@ -364,6 +370,7 @@ pub enum UnaryOp {
     Not,
     Ref,
     Deref,
+    BitNot,  // ~
 }
 
 #[derive(Debug, Clone)]

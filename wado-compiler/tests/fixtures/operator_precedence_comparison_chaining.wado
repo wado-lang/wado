@@ -1,0 +1,64 @@
+// Test comparison operator chaining (mathematical chaining)
+// Valid: same-direction chains (a < b < c, a > b > c, a == b == c)
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test 1: Ascending chain (a < b < c)
+    // Should be parsed as (a < b) AND (b < c)
+    let a = 1;
+    let b = 5;
+    let c = 10;
+
+    if a < b < c {
+        println("ascending chain works");
+    }
+
+    // Test 2: Descending chain (a > b > c)
+    // Should be parsed as (a > b) AND (b > c)
+    let x = 10;
+    let y = 5;
+    let z = 1;
+
+    if x > y > z {
+        println("descending chain works");
+    }
+
+    // Test 3: Range check with <= (0 <= value <= 100)
+    let value = 50;
+
+    if 0 <= value <= 100 {
+        println("range check works");
+    }
+
+    // Test 4: Equality chain (a == b == c)
+    // Should be parsed as (a == b) AND (b == c)
+    let p = 42;
+    let q = 42;
+    let r = 42;
+
+    if p == q == r {
+        println("equality chain works");
+    }
+
+    // Test 5: Edge case - chain at boundaries
+    let min = 0;
+    let mid = 0;
+    let max = 100;
+
+    if min <= mid <= max {
+        println("boundary chain works");
+    }
+
+    // Test 6: False case - chain should fail when condition doesn't hold
+    let n1 = 1;
+    let n2 = 10;
+    let n3 = 5;
+
+    // n1 < n2 is true, but n2 < n3 is false, so whole expression is false
+    if n1 < n2 < n3 {
+        println("ERROR: should not print");
+    } else {
+        println("false chain works correctly");
+    }
+}

@@ -334,3 +334,71 @@ async fn test_use_local_module() {
     // Verify output - add(40, 2) from imported module should return 42
     assert_eq!(output, "success\n");
 }
+
+// ============================================================================
+// Operator precedence tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_operator_precedence_bitwise() {
+    let source = include_str!("fixtures/operator_precedence_bitwise.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - all bitwise precedence tests should pass
+    assert!(output.contains("bitwise and precedence works"));
+    assert!(output.contains("bitwise or precedence works"));
+    assert!(output.contains("bitwise xor precedence works"));
+    assert!(output.contains("left shift precedence works"));
+    assert!(output.contains("right shift precedence works"));
+    assert!(output.contains("bitwise not works"));
+    assert!(output.contains("combined bitwise operations work"));
+}
+
+#[tokio::test]
+async fn test_operator_precedence_comparison_chaining() {
+    let source = include_str!("fixtures/operator_precedence_comparison_chaining.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - all comparison chaining tests should pass
+    assert!(output.contains("ascending chain works"));
+    assert!(output.contains("descending chain works"));
+    assert!(output.contains("range check works"));
+    assert!(output.contains("equality chain works"));
+    assert!(output.contains("boundary chain works"));
+    assert!(output.contains("false chain works correctly"));
+    // Should not contain error message
+    assert!(!output.contains("ERROR"));
+}
+
+#[tokio::test]
+async fn test_operator_precedence_comprehensive() {
+    let source = include_str!("fixtures/operator_precedence_comprehensive.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - all comprehensive precedence tests should pass
+    assert!(output.contains("shift > additive works"));
+    assert!(output.contains("bitwise and > bitwise or works"));
+    assert!(output.contains("bitwise xor precedence works"));
+    assert!(output.contains("multiplicative > additive works"));
+    assert!(output.contains("unary > multiplicative works"));
+    assert!(output.contains("bitwise not unary works"));
+    assert!(output.contains("comparison > logical and works"));
+    assert!(output.contains("logical and > logical or works"));
+    assert!(output.contains("assignment has lowest precedence"));
+    assert!(output.contains("complex precedence works"));
+}

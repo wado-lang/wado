@@ -70,14 +70,18 @@ pub enum TokenKind {
     LtEq,     // <=
     Gt,       // >
     GtEq,     // >=
+    LShift,   // <<
+    RShift,   // >>
     Plus,     // +
     Minus,    // -
     Star,     // *
     Slash,    // /
     Percent,  // %
     Not,      // !
+    Tilde,    // ~
     And,      // &&
     Or,       // ||
+    Caret,    // ^
     PlusEq,   // +=
     MinusEq,  // -=
     Question, // ?
