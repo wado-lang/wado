@@ -1425,23 +1425,23 @@ Wado follows Rust's operator precedence model, which fixes C's historical design
 
 From highest to lowest precedence:
 
-| Level | Operators                     | Associativity | Description             |
-| ----- | ----------------------------- | ------------- | ----------------------- |
-| 1     | `::`, `.`, `()`, `[]`         | Left-to-right | Paths, field, call      |
-| 2     | `?`                           | N/A           | Error propagation       |
-| 3     | `!`, `~`, `-`, `*`, `&`       | Right-to-left | Unary operators         |
-| 4     | `as`                          | Left-to-right | Type cast               |
-| 5     | `*`, `/`, `%`                 | Left-to-right | Multiplicative          |
-| 6     | `+`, `-`                      | Left-to-right | Additive                |
-| 7     | `<<`, `>>`                    | Left-to-right | Bitwise shift           |
-| 8     | `&`                           | Left-to-right | Bitwise AND             |
-| 9     | `^`                           | Left-to-right | Bitwise XOR             |
-| 10    | `\|`                          | Left-to-right | Bitwise OR              |
-| 11    | `==`, `!=`, `<`, `>`, `<=`, `>=` | Special    | Comparison (chainable)  |
-| 12    | `&&`                          | Left-to-right | Logical AND             |
-| 13    | `\|\|`                        | Left-to-right | Logical OR              |
-| 14    | `..`, `..=`                   | N/A           | Range operators         |
-| 15    | `=`, `+=`, `-=`               | Right-to-left | Assignment              |
+| Level | Operators                        | Associativity | Description            |
+| ----- | -------------------------------- | ------------- | ---------------------- |
+| 1     | `::`, `.`, `()`, `[]`            | Left-to-right | Paths, field, call     |
+| 2     | `?`                              | N/A           | Error propagation      |
+| 3     | `!`, `~`, `-`, `*`, `&`          | Right-to-left | Unary operators        |
+| 4     | `as`                             | Left-to-right | Type cast              |
+| 5     | `*`, `/`, `%`                    | Left-to-right | Multiplicative         |
+| 6     | `+`, `-`                         | Left-to-right | Additive               |
+| 7     | `<<`, `>>`                       | Left-to-right | Bitwise shift          |
+| 8     | `&`                              | Left-to-right | Bitwise AND            |
+| 9     | `^`                              | Left-to-right | Bitwise XOR            |
+| 10    | `\|`                             | Left-to-right | Bitwise OR             |
+| 11    | `==`, `!=`, `<`, `>`, `<=`, `>=` | Special       | Comparison (chainable) |
+| 12    | `&&`                             | Left-to-right | Logical AND            |
+| 13    | `\|\|`                           | Left-to-right | Logical OR             |
+| 14    | `..`, `..=`                      | N/A           | Range operators        |
+| 15    | `=`, `+=`, `-=`                  | Right-to-left | Assignment             |
 
 ### Key Features
 
@@ -1497,7 +1497,7 @@ count++;     // ❌ Compile error
 ++count;     // ❌ Compile error
 ```
 
-**❌ No `**` power operator**
+**❌ No `**` power operator\*\*
 
 Use explicit `pow()` function:
 
@@ -1508,14 +1508,14 @@ let result = x ** 2;     // ❌ Compile error
 
 ### Bitwise Operators
 
-| Operator | Name        | Example   | Description                 |
-| -------- | ----------- | --------- | --------------------------- |
-| `&`      | Bitwise AND | `a & b`   | Bitwise AND                 |
-| `\|`     | Bitwise OR  | `a \| b`  | Bitwise OR                  |
-| `^`      | Bitwise XOR | `a ^ b`   | Bitwise exclusive OR        |
-| `~`      | Bitwise NOT | `~a`      | Bitwise complement (unary)  |
-| `<<`     | Left shift  | `a << 2`  | Left shift by 2 bits        |
-| `>>`     | Right shift | `a >> 2`  | Arithmetic right shift      |
+| Operator | Name        | Example  | Description                |
+| -------- | ----------- | -------- | -------------------------- |
+| `&`      | Bitwise AND | `a & b`  | Bitwise AND                |
+| `\|`     | Bitwise OR  | `a \| b` | Bitwise OR                 |
+| `^`      | Bitwise XOR | `a ^ b`  | Bitwise exclusive OR       |
+| `~`      | Bitwise NOT | `~a`     | Bitwise complement (unary) |
+| `<<`     | Left shift  | `a << 2` | Left shift by 2 bits       |
+| `>>`     | Right shift | `a >> 2` | Arithmetic right shift     |
 
 All bitwise operators work on integer types (`i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`).
 

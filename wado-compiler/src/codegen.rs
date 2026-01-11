@@ -626,14 +626,15 @@ impl Codegen {
                         TemplatePart::Interpolation { expr, .. } => {
                             // Check if this is a float literal - format it with ryu and add to string literals
                             if let Expr::Literal(lit_expr) = &**expr
-                                && let Literal::Float(f) = lit_expr.value {
-                                    let mut buf = ryu::Buffer::new();
-                                    let formatted = buf.format(f).to_string();
-                                    if !self.string_literals.contains(&formatted) {
-                                        self.string_literals.push(formatted);
-                                    }
-                                    continue;
+                                && let Literal::Float(f) = lit_expr.value
+                            {
+                                let mut buf = ryu::Buffer::new();
+                                let formatted = buf.format(f).to_string();
+                                if !self.string_literals.contains(&formatted) {
+                                    self.string_literals.push(formatted);
                                 }
+                                continue;
+                            }
                             self.collect_strings_from_expr(expr);
                         }
                     }
@@ -2913,22 +2914,23 @@ impl Codegen {
 
                 // Check if this is a float literal - if so, use ryu for deterministic formatting
                 if let Expr::Literal(lit_expr) = &**expr
-                    && let Literal::Float(f) = lit_expr.value {
-                        // Use ryu to format the float at compile time
-                        let mut buf = ryu::Buffer::new();
-                        let formatted = buf.format(f);
+                    && let Literal::Float(f) = lit_expr.value
+                {
+                    // Use ryu to format the float at compile time
+                    let mut buf = ryu::Buffer::new();
+                    let formatted = buf.format(f);
 
-                        // Generate string literal for the formatted float
-                        let offset = self.get_string_offset(formatted);
-                        let len = formatted.len();
-                        func.instruction(&Instruction::I32Const(offset as i32));
-                        func.instruction(&Instruction::I32Const(len as i32));
-                        func.instruction(&Instruction::ArrayNewData {
-                            array_type_index: string_array_type,
-                            array_data_index: 0,
-                        });
-                        return;
-                    }
+                    // Generate string literal for the formatted float
+                    let offset = self.get_string_offset(formatted);
+                    let len = formatted.len();
+                    func.instruction(&Instruction::I32Const(offset as i32));
+                    func.instruction(&Instruction::I32Const(len as i32));
+                    func.instruction(&Instruction::ArrayNewData {
+                        array_type_index: string_array_type,
+                        array_data_index: 0,
+                    });
+                    return;
+                }
 
                 // For non-float expressions, generate the expression as-is
                 self.generate_expr_with_builder(func, expr, ctx, builder);

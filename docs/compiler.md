@@ -647,6 +647,7 @@ Wado implements Rust-style operator precedence, which fixes C's historical desig
 ### Implementation Details
 
 **Tokens (`token.rs`)**:
+
 - `LShift` (`<<`) - Left shift
 - `RShift` (`>>`) - Right shift
 - `Tilde` (`~`) - Bitwise NOT
@@ -654,17 +655,20 @@ Wado implements Rust-style operator precedence, which fixes C's historical desig
 - Note: `Ampersand` (`&`) and `Pipe` (`|`) were already present for references and closures
 
 **Lexer (`lexer.rs`)**:
+
 - Split `<<` and `>>` from `<` and `>` with two-character lookahead
 - Added `~` and `^` tokenization
 - Special handling for `>>` in generic types (e.g., `Array<Tuple<String, String>>`)
 
 **AST (`ast.rs`)**:
+
 - Added `BinaryOp`: `BitAnd`, `BitOr`, `BitXor`, `LShift`, `RShift`
 - Added `UnaryOp`: `BitNot` (`~`)
 
 **Parser (`parser.rs`)**:
 
 Precedence chain (highest to lowest):
+
 ```
 parse_expr
   → parse_assignment_expr
@@ -683,11 +687,13 @@ parse_expr
 ```
 
 Key features:
+
 - **Bitwise operators have higher precedence than comparison**: `flags & mask == expected` correctly parses as `(flags & mask) == expected`
 - **Comparison chaining supported**: `a < b < c` parses as left-associative chain
 - **`>>` token splitting**: `expect_gt()` helper splits `>>` into two `>` tokens for nested generics
 
 **Codegen (`codegen.rs`)**:
+
 - Maps bitwise operators to Wasm instructions:
   - `BitAnd` → `i32.and`
   - `BitOr` → `i32.or`
@@ -698,6 +704,7 @@ Key features:
 - Unary minus for integers: `i32.const 0` - value
 
 **Tests (`tests/e2e.rs`, `tests/fixtures/`)**:
+
 - ✅ `operator_precedence_bitwise.wado` - All bitwise operators and precedence
 - ⚠️ `operator_precedence_comparison_chaining.wado` - Parser support, needs semantic validation
 - ⚠️ `operator_precedence_comprehensive.wado` - Complex precedence tests, some need chaining validation
@@ -710,6 +717,7 @@ cargo test --test e2e test_operator_precedence_bitwise
 ```
 
 Example working code:
+
 ```wado
 let flags = 0b1010;
 let mask = 0b0010;
@@ -732,6 +740,7 @@ Comparison chaining is currently parsed but not validated. Need to add semantic 
 3. **Type consistency**: All operands in chain should have compatible types
 
 Example invalid code that currently parses:
+
 ```wado
 if a < b > c {  // Should be semantic error: mixed directions
     // ...
@@ -752,7 +761,7 @@ if a != b != c {  // Should be semantic error: != chaining not allowed
 
 1. **Follow Rust's model**: Bitwise > Comparison (fixes C's flaw)
 2. **No `++`/`--` operators**: Avoid undefined behavior, use `+=`/`-=`
-3. **No `**` power operator**: Use explicit `pow()` function
+3. **No `**`power operator**: Use explicit`pow()` function
 4. **Mathematical comparison chaining**: Similar to Python, with stricter validation
 5. **Arithmetic right shift**: `>>` for signed integers uses `i32.shr_s`
 

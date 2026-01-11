@@ -56,40 +56,40 @@ This causes bugs that are caught by static analyzers with warnings like "compari
 
 ### 1. Bitwise vs Comparison Operators
 
-| Language   | Bitwise Precedence                 | Comparison Precedence | Which is Higher?          | Source                                                                                                  |
-| ---------- | ---------------------------------- | --------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **C**      | `&` (8), `^` (9), `\|` (10)        | `==`, `!=` (7)        | ❌ Comparison > Bitwise   | [cppreference](https://en.cppreference.com/w/c/language/operator_precedence.html)                       |
-| **Java**   | `&` (8), `^` (9), `\|` (10)        | `==`, `!=` (7)        | ❌ Comparison > Bitwise   | [Programiz Java](https://www.programiz.com/java-programming/operator-precedence)                        |
-| **Rust**   | `&` (8), `^` (9), `\|` (10)        | `==`, `!=` (11)       | ✅ Bitwise > Comparison   | [Rust Reference](https://doc.rust-lang.org/reference/expressions.html)                                  |
-| **Go**     | `&` (5), `^`/`\|` (4)              | `==`, `!=` (3)        | ✅ Bitwise > Comparison   | [Go 101](https://go101.org/article/operators.html)                                                      |
-| **JS**     | `&` (9), `^` (10), `\|` (11)       | `==`, `!=` (10)       | ❌ Mixed (& > ==, \| < =) | [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_precedence)  |
-| **Python** | `&` (9), `^` (10), `\|` (11)       | `==`, `!=` (7)        | ❌ Comparison > Bitwise   | [Python Docs](https://docs.python.org/3/reference/expressions.html)                                     |
+| Language   | Bitwise Precedence           | Comparison Precedence | Which is Higher?          | Source                                                                                                 |
+| ---------- | ---------------------------- | --------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **C**      | `&` (8), `^` (9), `\|` (10)  | `==`, `!=` (7)        | ❌ Comparison > Bitwise   | [cppreference](https://en.cppreference.com/w/c/language/operator_precedence.html)                      |
+| **Java**   | `&` (8), `^` (9), `\|` (10)  | `==`, `!=` (7)        | ❌ Comparison > Bitwise   | [Programiz Java](https://www.programiz.com/java-programming/operator-precedence)                       |
+| **Rust**   | `&` (8), `^` (9), `\|` (10)  | `==`, `!=` (11)       | ✅ Bitwise > Comparison   | [Rust Reference](https://doc.rust-lang.org/reference/expressions.html)                                 |
+| **Go**     | `&` (5), `^`/`\|` (4)        | `==`, `!=` (3)        | ✅ Bitwise > Comparison   | [Go 101](https://go101.org/article/operators.html)                                                     |
+| **JS**     | `&` (9), `^` (10), `\|` (11) | `==`, `!=` (10)       | ❌ Mixed (& > ==, \| < =) | [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_precedence) |
+| **Python** | `&` (9), `^` (10), `\|` (11) | `==`, `!=` (7)        | ❌ Comparison > Bitwise   | [Python Docs](https://docs.python.org/3/reference/expressions.html)                                    |
 
 **Note**: Lower precedence number = higher priority (evaluated first). Table uses common numbering where 1 is highest.
 
 ### 2. Unary Operators
 
-| Language   | Unary `-`, `+` | Bitwise NOT    | Notes                                            |
-| ---------- | -------------- | -------------- | ------------------------------------------------ |
-| **C**      | Level 2        | `~` (Level 2)  | All unary at same level, right-to-left           |
-| **Java**   | Level 2        | `~` (Level 2)  | Same as C                                        |
-| **Rust**   | Not applicable | `!` (Level 1)  | Rust uses `!` for bitwise NOT, highest precedence|
-| **Go**     | Level 2        | `^` (Level 2)  | Go uses `^` for bitwise NOT (XOR with 1s)        |
-| **JS**     | Level 3        | `~` (Level 3)  | All unary at same level                          |
-| **Python** | Level 3        | `~` (Level 3)  | All unary at same level                          |
+| Language   | Unary `-`, `+` | Bitwise NOT   | Notes                                             |
+| ---------- | -------------- | ------------- | ------------------------------------------------- |
+| **C**      | Level 2        | `~` (Level 2) | All unary at same level, right-to-left            |
+| **Java**   | Level 2        | `~` (Level 2) | Same as C                                         |
+| **Rust**   | Not applicable | `!` (Level 1) | Rust uses `!` for bitwise NOT, highest precedence |
+| **Go**     | Level 2        | `^` (Level 2) | Go uses `^` for bitwise NOT (XOR with 1s)         |
+| **JS**     | Level 3        | `~` (Level 3) | All unary at same level                           |
+| **Python** | Level 3        | `~` (Level 3) | All unary at same level                           |
 
 **Important**: Wado uses `~` for bitwise NOT (like C/Java/JS/Python), not `!` (Rust) or `^` (Go).
 
 ### 3. Increment/Decrement Operators (`++`, `--`)
 
-| Language   | Has ++/--? | Prefix/Postfix? | Notes                                    |
-| ---------- | ---------- | --------------- | ---------------------------------------- |
-| **C**      | ✅ Yes     | Both            | Side effects, undefined behavior risks   |
-| **Java**   | ✅ Yes     | Both            | Inherits C semantics                     |
-| **Rust**   | ❌ No      | N/A             | Removed to avoid side effect issues      |
-| **Go**     | ✅ Yes     | Postfix only    | Statements only, not expressions         |
-| **JS**     | ✅ Yes     | Both            | Inherits C semantics                     |
-| **Python** | ❌ No      | N/A             | Never had them, uses `+= 1` instead      |
+| Language   | Has ++/--? | Prefix/Postfix? | Notes                                  |
+| ---------- | ---------- | --------------- | -------------------------------------- |
+| **C**      | ✅ Yes     | Both            | Side effects, undefined behavior risks |
+| **Java**   | ✅ Yes     | Both            | Inherits C semantics                   |
+| **Rust**   | ❌ No      | N/A             | Removed to avoid side effect issues    |
+| **Go**     | ✅ Yes     | Postfix only    | Statements only, not expressions       |
+| **JS**     | ✅ Yes     | Both            | Inherits C semantics                   |
+| **Python** | ❌ No      | N/A             | Never had them, uses `+= 1` instead    |
 
 **Problems with `++`/`--`** ([Learn C++](https://www.learncpp.com/cpp-tutorial/increment-decrement-operators-and-side-effects/)):
 
@@ -102,24 +102,26 @@ This causes bugs that are caught by static analyzers with warnings like "compari
 
 ### 4. Power Operator (`**`)
 
-| Language   | Has **? | Precedence          | Notes                                          |
-| ---------- | ------- | ------------------- | ---------------------------------------------- |
-| **C**      | ❌ No   | N/A                 | Use `pow()` function                           |
-| **Java**   | ❌ No   | N/A                 | Use `Math.pow()`                               |
-| **Rust**   | ❌ No   | N/A                 | Use `.pow()` method                            |
-| **Go**     | ❌ No   | N/A                 | Use `math.Pow()`                               |
-| **JS**     | ✅ Yes  | Level 3 (very high) | Right-associative: `2**3**2` = `2**(3**2)` = 512|
-| **Python** | ✅ Yes  | Between unary       | `-1**2` = `-1` (unary binds looser on left)    |
+| Language   | Has \*\*? | Precedence          | Notes                                            |
+| ---------- | --------- | ------------------- | ------------------------------------------------ |
+| **C**      | ❌ No     | N/A                 | Use `pow()` function                             |
+| **Java**   | ❌ No     | N/A                 | Use `Math.pow()`                                 |
+| **Rust**   | ❌ No     | N/A                 | Use `.pow()` method                              |
+| **Go**     | ❌ No     | N/A                 | Use `math.Pow()`                                 |
+| **JS**     | ✅ Yes    | Level 3 (very high) | Right-associative: `2**3**2` = `2**(3**2)` = 512 |
+| **Python** | ✅ Yes    | Between unary       | `-1**2` = `-1` (unary binds looser on left)      |
 
 **Python's Quirk** ([Python Docs](https://docs.python.org/3/reference/expressions.html)):
 
 > The power operator binds more tightly than unary operators on its left; it binds less tightly than unary operators on its right.
 
 This means:
+
 - `-1**2` = `-(1**2)` = `-1` (not `(-1)**2` = `1`)
 - `2**-1` = `2**(-1)` = `0.5` (unary on right binds first)
 
-**Wado Decision**: ❌ **No `**` operator**. Reasons:
+**Wado Decision**: ❌ **No `**` operator\*\*. Reasons:
+
 1. Wasm has no native power instruction (would compile to function call anyway)
 2. Ambiguous precedence (Python's approach is confusing)
 3. Use explicit `pow(x, y)` function instead
@@ -131,25 +133,26 @@ This means:
 
 From highest to lowest ([Rust Reference](https://doc.rust-lang.org/reference/expressions.html)):
 
-| Level | Operators                            | Associativity   | Description                  |
-| ----- | ------------------------------------ | --------------- | ---------------------------- |
-| 1     | Paths, method calls, field access    | Left-to-right   | `::`, `.`, `()`              |
-| 2     | `?`                                  | N/A             | Error propagation            |
-| 3     | Unary: `!`, `-`, `*`, `&`, `&mut`    | Right-to-left   | Prefix operators             |
-| 4     | `as`                                 | Left-to-right   | Type cast                    |
-| 5     | `*`, `/`, `%`                        | Left-to-right   | Multiplicative               |
-| 6     | `+`, `-`                             | Left-to-right   | Additive                     |
-| 7     | `<<`, `>>`                           | Left-to-right   | Bitwise shift                |
-| 8     | `&`                                  | Left-to-right   | Bitwise AND                  |
-| 9     | `^`                                  | Left-to-right   | Bitwise XOR                  |
-| 10    | `\|`                                 | Left-to-right   | Bitwise OR                   |
-| 11    | `==`, `!=` (left-assoc), `<`, `>`, `<=`, `>=` (non-assoc) | **Mixed** | Comparison |
-| 12    | `&&`                                 | Left-to-right   | Logical AND                  |
-| 13    | `\|\|`                               | Left-to-right   | Logical OR                   |
-| 14    | `..`, `..=`                          | N/A             | Range operators              |
-| 15    | `=`, `+=`, etc.                      | Right-to-left   | Assignment                   |
+| Level | Operators                                                 | Associativity | Description       |
+| ----- | --------------------------------------------------------- | ------------- | ----------------- |
+| 1     | Paths, method calls, field access                         | Left-to-right | `::`, `.`, `()`   |
+| 2     | `?`                                                       | N/A           | Error propagation |
+| 3     | Unary: `!`, `-`, `*`, `&`, `&mut`                         | Right-to-left | Prefix operators  |
+| 4     | `as`                                                      | Left-to-right | Type cast         |
+| 5     | `*`, `/`, `%`                                             | Left-to-right | Multiplicative    |
+| 6     | `+`, `-`                                                  | Left-to-right | Additive          |
+| 7     | `<<`, `>>`                                                | Left-to-right | Bitwise shift     |
+| 8     | `&`                                                       | Left-to-right | Bitwise AND       |
+| 9     | `^`                                                       | Left-to-right | Bitwise XOR       |
+| 10    | `\|`                                                      | Left-to-right | Bitwise OR        |
+| 11    | `==`, `!=` (left-assoc), `<`, `>`, `<=`, `>=` (non-assoc) | **Mixed**     | Comparison        |
+| 12    | `&&`                                                      | Left-to-right | Logical AND       |
+| 13    | `\|\|`                                                    | Left-to-right | Logical OR        |
+| 14    | `..`, `..=`                                               | N/A           | Range operators   |
+| 15    | `=`, `+=`, etc.                                           | Right-to-left | Assignment        |
 
 **Key Points**:
+
 - ✅ Bitwise operators (8-10) have **higher** precedence than comparison (11)
 - ✅ Unary operators (3) are at the top, very high precedence
 - ⚠️ **Wado modification**: Mathematical comparison chaining with validation:
@@ -162,15 +165,16 @@ From highest to lowest ([Rust Reference](https://doc.rust-lang.org/reference/exp
 
 From highest to lowest ([Go 101](https://go101.org/article/operators.html)):
 
-| Level | Operators                  | Associativity | Description                  |
-| ----- | -------------------------- | ------------- | ---------------------------- |
+| Level | Operators                            | Associativity | Description              |
+| ----- | ------------------------------------ | ------------- | ------------------------ |
 | 5     | `*`, `/`, `%`, `<<`, `>>`, `&`, `&^` | Left-to-right | Multiplicative + bit ops |
-| 4     | `+`, `-`, `\|`, `^`        | Left-to-right | Additive + bit ops           |
-| 3     | `==`, `!=`, `<`, `<=`, `>`, `>=` | Left-to-right | Comparison               |
-| 2     | `&&`                       | Left-to-right | Logical AND                  |
-| 1     | `\|\|`                     | Left-to-right | Logical OR                   |
+| 4     | `+`, `-`, `\|`, `^`                  | Left-to-right | Additive + bit ops       |
+| 3     | `==`, `!=`, `<`, `<=`, `>`, `>=`     | Left-to-right | Comparison               |
+| 2     | `&&`                                 | Left-to-right | Logical AND              |
+| 1     | `\|\|`                               | Left-to-right | Logical OR               |
 
 **Key Points**:
+
 - ✅ Bitwise AND `&` is with multiplication (highest)
 - ✅ Bitwise OR/XOR `|`/`^` are with addition (middle)
 - ✅ Comparisons are separate and lower (level 3)
@@ -181,23 +185,24 @@ From highest to lowest ([Go 101](https://go101.org/article/operators.html)):
 
 From highest to lowest ([cppreference](https://en.cppreference.com/w/c/language/operator_precedence.html)):
 
-| Level | Operators                  | Associativity | Description          |
-| ----- | -------------------------- | ------------- | -------------------- |
-| 2     | `++`, `--`, `!`, `~`, `+`, `-`, `*`, `&` | Right-to-left | Unary          |
-| 3     | `*`, `/`, `%`              | Left-to-right | Multiplicative       |
-| 4     | `+`, `-`                   | Left-to-right | Additive             |
-| 5     | `<<`, `>>`                 | Left-to-right | Bitwise shift        |
-| 6     | `<`, `<=`, `>`, `>=`       | Left-to-right | Relational           |
-| 7     | `==`, `!=`                 | Left-to-right | Equality             |
-| 8     | `&`                        | Left-to-right | Bitwise AND          |
-| 9     | `^`                        | Left-to-right | Bitwise XOR          |
-| 10    | `\|`                       | Left-to-right | Bitwise OR           |
-| 11    | `&&`                       | Left-to-right | Logical AND          |
-| 12    | `\|\|`                     | Left-to-right | Logical OR           |
-| 13    | `?:`                       | Right-to-left | Ternary conditional  |
-| 14    | `=`, `+=`, etc.            | Right-to-left | Assignment           |
+| Level | Operators                                | Associativity | Description         |
+| ----- | ---------------------------------------- | ------------- | ------------------- |
+| 2     | `++`, `--`, `!`, `~`, `+`, `-`, `*`, `&` | Right-to-left | Unary               |
+| 3     | `*`, `/`, `%`                            | Left-to-right | Multiplicative      |
+| 4     | `+`, `-`                                 | Left-to-right | Additive            |
+| 5     | `<<`, `>>`                               | Left-to-right | Bitwise shift       |
+| 6     | `<`, `<=`, `>`, `>=`                     | Left-to-right | Relational          |
+| 7     | `==`, `!=`                               | Left-to-right | Equality            |
+| 8     | `&`                                      | Left-to-right | Bitwise AND         |
+| 9     | `^`                                      | Left-to-right | Bitwise XOR         |
+| 10    | `\|`                                     | Left-to-right | Bitwise OR          |
+| 11    | `&&`                                     | Left-to-right | Logical AND         |
+| 12    | `\|\|`                                   | Left-to-right | Logical OR          |
+| 13    | `?:`                                     | Right-to-left | Ternary conditional |
+| 14    | `=`, `+=`, etc.                          | Right-to-left | Assignment          |
 
 **Problems**:
+
 - ❌ Comparison (6-7) has **higher** precedence than bitwise (8-10)
 - ❌ `flags & MASK == VALUE` parses as `flags & (MASK == VALUE)`
 - ❌ Requires excessive parentheses: `(flags & MASK) == VALUE`
@@ -214,6 +219,7 @@ From highest to lowest ([cppreference](https://en.cppreference.com/w/c/language/
 | **Python** | **Chained comparisons**  | `a < b < c` = `(a < b) and (b < c)` ✅       |
 
 **Analysis**:
+
 - **C/Java/JS**: Allow meaningless chains like `1 < 2 < 3` which evaluate to `true < 3` → `1 < 3` → `true`
 - **Rust**: Rejects chained comparisons at compile time (best for correctness)
 - **Python**: Special syntax for chained comparisons (elegant but complex to implement)
@@ -223,6 +229,7 @@ From highest to lowest ([cppreference](https://en.cppreference.com/w/c/language/
 Wado supports **mathematical comparison chaining** similar to Python, with stricter validation rules.
 
 **Valid chains** (same direction):
+
 - `a < b < c` → `a < b AND b < c` ✅ (ascending)
 - `a > b > c` → `a > b AND b > c` ✅ (descending)
 - `a <= b <= c` → `a <= b AND b <= c` ✅
@@ -230,6 +237,7 @@ Wado supports **mathematical comparison chaining** similar to Python, with stric
 - `a == b == c` → `a == b AND b == c` ✅
 
 **Invalid chains** (semantic error):
+
 - `a < b > c` → **semantic error** ❌ (mixed directions)
 - `a > b < c` → **semantic error** ❌ (mixed directions)
 - `a < b >= c` → **semantic error** ❌ (mixing `<` and `>=`)
@@ -237,12 +245,14 @@ Wado supports **mathematical comparison chaining** similar to Python, with stric
 - `a != b != c` → **semantic error** ❌ (`!=` chaining not allowed)
 
 **Chaining rules**:
+
 1. Same-direction inequality: `<`/`<=` can only chain with `<`/`<=`, and `>`/`>=` can only chain with `>`/`>=`
 2. Equality chaining: `==` can only chain with `==`
 3. No `!=` chaining: `!=` cannot be chained (ambiguous meaning)
 4. No mixing: Cannot mix equality operators with inequality operators
 
 **Rationale**:
+
 - Mathematical intuition: `0 <= x <= 100` is natural and readable
 - Python-like: Familiar to Python developers
 - Rejects ambiguous cases: `a < b > c` and `a != b != c` are unclear
@@ -305,8 +315,8 @@ arr[i] = i++;  // UB! Order of evaluation not specified
 
 ```javascript
 // JavaScript - Logically wrong but syntactically valid
-console.log(1 < 2 < 3);  // true (seems right?)
-console.log(3 > 2 > 1);  // false (wait, what?)
+console.log(1 < 2 < 3); // true (seems right?)
+console.log(3 > 2 > 1); // false (wait, what?)
 
 // What's actually happening:
 // 1 < 2 < 3
@@ -327,6 +337,7 @@ console.log(3 > 2 > 1);  // false (wait, what?)
 ### ✅ Use Rust's Precedence as Baseline
 
 **Reasons**:
+
 1. **Fixes C's bitwise mistake**: Bitwise operators > Comparison operators
 2. **No increment/decrement**: Avoids undefined behavior and side effect issues
 3. **Non-associative comparisons**: Prevents `a < b < c` bugs at compile time
@@ -336,6 +347,7 @@ console.log(3 > 2 > 1);  // false (wait, what?)
 ### ✅ Wado-Specific Decisions Align Well
 
 From the spec, Wado has already decided:
+
 - ✅ Use `~` for bitwise NOT (like C/Java/Python, not Rust's `!`)
 - ✅ No `++`/`--` operators (like Rust/Python)
 - ✅ No `**` operator (like Rust/Go/C/Java)
@@ -345,13 +357,14 @@ From the spec, Wado has already decided:
 
 **The Issue**: Wado uses `~` for bitwise NOT, while Rust uses `!`.
 
-| Operation       | Rust  | Wado  | Issue                                   |
-| --------------- | ----- | ----- | --------------------------------------- |
-| Bitwise NOT     | `!x`  | `~x`  | Different symbol                        |
-| Logical NOT     | `!x`  | `!x`  | Same                                    |
-| Precedence      | Same  | Same  | Both are unary level 3                  |
+| Operation   | Rust | Wado | Issue                  |
+| ----------- | ---- | ---- | ---------------------- |
+| Bitwise NOT | `!x` | `~x` | Different symbol       |
+| Logical NOT | `!x` | `!x` | Same                   |
+| Precedence  | Same | Same | Both are unary level 3 |
 
 **Analysis**:
+
 - ✅ **Not a problem**: Precedence is the same (unary level)
 - ✅ `~` is familiar to C/Java/JS/Python developers
 - ✅ Clear distinction between logical (`!`) and bitwise (`~`)
@@ -361,25 +374,26 @@ From the spec, Wado has already decided:
 
 Based on Rust, with Wado-specific operators:
 
-| Level | Operators                            | Associativity   | Description                  |
-| ----- | ------------------------------------ | --------------- | ---------------------------- |
-| 1     | Paths, method calls, field access    | Left-to-right   | `::`, `.`, `()`              |
-| 2     | `?`                                  | N/A             | Error propagation            |
-| 3     | Unary: `!`, `~`, `-`, `*`, `&`, `&mut` | Right-to-left | Prefix operators           |
-| 4     | `as`                                 | Left-to-right   | Type cast                    |
-| 5     | `*`, `/`, `%`                        | Left-to-right   | Multiplicative               |
-| 6     | `+`, `-`                             | Left-to-right   | Additive                     |
-| 7     | `<<`, `>>`                           | Left-to-right   | Bitwise shift                |
-| 8     | `&`                                  | Left-to-right   | Bitwise AND                  |
-| 9     | `^`                                  | Left-to-right   | Bitwise XOR                  |
-| 10    | `\|`                                 | Left-to-right   | Bitwise OR                   |
-| 11    | `==`, `!=` (left-assoc), `<`, `>`, `<=`, `>=` (non-assoc) | **Mixed** | Comparison |
-| 12    | `&&`                                 | Left-to-right   | Logical AND                  |
-| 13    | `\|\|`                               | Left-to-right   | Logical OR                   |
-| 14    | `..`, `..=`                          | N/A             | Range operators              |
-| 15    | `=`, `+=`, etc.                      | Right-to-left   | Assignment                   |
+| Level | Operators                                                 | Associativity | Description       |
+| ----- | --------------------------------------------------------- | ------------- | ----------------- |
+| 1     | Paths, method calls, field access                         | Left-to-right | `::`, `.`, `()`   |
+| 2     | `?`                                                       | N/A           | Error propagation |
+| 3     | Unary: `!`, `~`, `-`, `*`, `&`, `&mut`                    | Right-to-left | Prefix operators  |
+| 4     | `as`                                                      | Left-to-right | Type cast         |
+| 5     | `*`, `/`, `%`                                             | Left-to-right | Multiplicative    |
+| 6     | `+`, `-`                                                  | Left-to-right | Additive          |
+| 7     | `<<`, `>>`                                                | Left-to-right | Bitwise shift     |
+| 8     | `&`                                                       | Left-to-right | Bitwise AND       |
+| 9     | `^`                                                       | Left-to-right | Bitwise XOR       |
+| 10    | `\|`                                                      | Left-to-right | Bitwise OR        |
+| 11    | `==`, `!=` (left-assoc), `<`, `>`, `<=`, `>=` (non-assoc) | **Mixed**     | Comparison        |
+| 12    | `&&`                                                      | Left-to-right | Logical AND       |
+| 13    | `\|\|`                                                    | Left-to-right | Logical OR        |
+| 14    | `..`, `..=`                                               | N/A           | Range operators   |
+| 15    | `=`, `+=`, etc.                                           | Right-to-left | Assignment        |
 
 **Key differences from Rust**:
+
 - Level 3: Added `~` for bitwise NOT (Rust uses `!` only)
 - Level 11: Mathematical comparison chaining allowed (Rust rejects all chaining):
   - Same-direction chains: `a < b < c`, `a > b > c`, `a == b == c`
@@ -433,14 +447,14 @@ let result = pow(x, 2);  // ✅ Use function instead
 
 ## Summary of Design Decisions
 
-| Feature                    | C/Java | Rust | Wado | Rationale                                    |
-| -------------------------- | ------ | ---- | ---- | -------------------------------------------- |
-| Bitwise > Comparison       | ❌     | ✅   | ✅   | Fixes C's counterintuitive precedence        |
-| Bitwise NOT symbol         | `~`    | `!`  | `~`  | Familiar to most developers                  |
-| Increment/decrement (`++`) | ✅     | ❌   | ❌   | Avoids undefined behavior & side effects     |
-| Power operator (`**`)      | ❌     | ❌   | ❌   | No native Wasm instruction, use `pow()`      |
+| Feature                    | C/Java | Rust | Wado     | Rationale                                     |
+| -------------------------- | ------ | ---- | -------- | --------------------------------------------- |
+| Bitwise > Comparison       | ❌     | ✅   | ✅       | Fixes C's counterintuitive precedence         |
+| Bitwise NOT symbol         | `~`    | `!`  | `~`      | Familiar to most developers                   |
+| Increment/decrement (`++`) | ✅     | ❌   | ❌       | Avoids undefined behavior & side effects      |
+| Power operator (`**`)      | ❌     | ❌   | ❌       | No native Wasm instruction, use `pow()`       |
 | Chained comparisons        | Left   | Non  | **Math** | Same-direction chains OK, mixed/`!=` rejected |
-| Unary precedence           | High   | High | High | Consistent across languages                  |
+| Unary precedence           | High   | High | High     | Consistent across languages                   |
 
 ## Sources
 
@@ -467,6 +481,7 @@ let result = pow(x, 2);  // ✅ Use function instead
 **Decision**: See `docs/adr-2026-01-11-operator-precedence.md` for the final decision
 
 **Summary**: ✅ Use Rust's precedence as baseline with the following modifications:
+
 - Use `~` for bitwise NOT (not Rust's `!`)
 - Mathematical comparison chaining (like Python):
   - Same-direction chains allowed: `a < b < c`, `a > b > c`, `a == b == c`
