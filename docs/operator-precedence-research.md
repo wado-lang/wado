@@ -143,7 +143,7 @@ From highest to lowest ([Rust Reference](https://doc.rust-lang.org/reference/exp
 | 8     | `&`                                  | Left-to-right   | Bitwise AND                  |
 | 9     | `^`                                  | Left-to-right   | Bitwise XOR                  |
 | 10    | `\|`                                 | Left-to-right   | Bitwise OR                   |
-| 11    | `==`, `!=`, `<`, `>`, `<=`, `>=`     | Non-associative | Comparison (can't chain)     |
+| 11    | `==`, `!=` (left-assoc), `<`, `>`, `<=`, `>=` (non-assoc) | **Mixed** | Comparison |
 | 12    | `&&`                                 | Left-to-right   | Logical AND                  |
 | 13    | `\|\|`                               | Left-to-right   | Logical OR                   |
 | 14    | `..`, `..=`                          | N/A             | Range operators              |
@@ -152,7 +152,7 @@ From highest to lowest ([Rust Reference](https://doc.rust-lang.org/reference/exp
 **Key Points**:
 - ✅ Bitwise operators (8-10) have **higher** precedence than comparison (11)
 - ✅ Unary operators (3) are at the top, very high precedence
-- ✅ Comparisons are **non-associative**: `a < b < c` is a compile error
+- ⚠️ **Wado modification**: Equality operators (`==`, `!=`) are left-associative (can chain), but inequality operators (`<`, `>`, `<=`, `>=`) are non-associative (semantic error when chained)
 - ✅ No `++`, `--`, or `**` operators
 
 ### Go Precedence (Alternative Approach)
@@ -214,7 +214,19 @@ From highest to lowest ([cppreference](https://en.cppreference.com/w/c/language/
 - **C/Java/JS**: Allow meaningless chains like `1 < 2 < 3` which evaluate to `true < 3` → `1 < 3` → `true`
 - **Rust**: Rejects chained comparisons at compile time (best for correctness)
 - **Python**: Special syntax for chained comparisons (elegant but complex to implement)
-- **Wado**: Should follow **Rust** (non-associative, compile error)
+
+### Wado's Decision (2026-01-11)
+
+**Equality operators** (`==`, `!=`) are **left-associative** (can chain):
+- `a == b == c` is parsed as `(a == b) == c` ✅
+- `a != b != c` is parsed as `(a != b) != c` ✅
+
+**Inequality operators** (`<`, `>`, `<=`, `>=`) are **non-associative** (semantic error):
+- `a < b < c` → **semantic error** ❌
+- `a > b > c` → **semantic error** ❌
+- Must use: `a < b && b < c` ✅
+
+**Rationale**: Prevents confusion about whether `a < b < c` means mathematical chaining (Python) or boolean chaining (C/JS). Equality chaining is occasionally useful (`x == y == z`), while inequality chaining is rare and confusing.
 
 ## Concrete Examples of Issues
 
@@ -341,7 +353,7 @@ Based on Rust, with Wado-specific operators:
 | 8     | `&`                                  | Left-to-right   | Bitwise AND                  |
 | 9     | `^`                                  | Left-to-right   | Bitwise XOR                  |
 | 10    | `\|`                                 | Left-to-right   | Bitwise OR                   |
-| 11    | `==`, `!=`, `<`, `>`, `<=`, `>=`     | **Non-assoc**   | Comparison (can't chain)     |
+| 11    | `==`, `!=` (left-assoc), `<`, `>`, `<=`, `>=` (non-assoc) | **Mixed** | Comparison |
 | 12    | `&&`                                 | Left-to-right   | Logical AND                  |
 | 13    | `\|\|`                               | Left-to-right   | Logical OR                   |
 | 14    | `..`, `..=`                          | N/A             | Range operators              |
@@ -349,7 +361,7 @@ Based on Rust, with Wado-specific operators:
 
 **Key differences from Rust**:
 - Level 3: Added `~` for bitwise NOT (Rust uses `!` only)
-- All other levels identical to Rust
+- Level 11: `==` and `!=` are left-associative (can chain), but `<`, `>`, `<=`, `>=` are non-associative (semantic error when chained)
 
 ### 🎯 Verification Examples
 
@@ -368,11 +380,15 @@ if flags & mask == mask {  // ✅ Parses as: (flags & mask) == mask
 let x = 0b1010;
 let y = ~x;  // ✅ Bitwise NOT (Wado uses ~, not !)
 
-// Example 3: No chained comparisons
-if a < b < c {  // ❌ Compile error (non-associative)
+// Example 3: Comparison chaining rules
+if a < b < c {  // ❌ Semantic error (inequality chaining not allowed)
 }
 
 if a < b && b < c {  // ✅ Correct way
+}
+
+if a == b == c {  // ✅ OK (equality chaining allowed)
+    // Parsed as: (a == b) == c
 }
 
 // Example 4: No increment operators
@@ -393,7 +409,7 @@ let result = pow(x, 2);  // ✅ Use function instead
 | Bitwise NOT symbol         | `~`    | `!`  | `~`  | Familiar to most developers                  |
 | Increment/decrement (`++`) | ✅     | ❌   | ❌   | Avoids undefined behavior & side effects     |
 | Power operator (`**`)      | ❌     | ❌   | ❌   | No native Wasm instruction, use `pow()`      |
-| Chained comparisons        | Left   | Non  | Non  | Prevents `a < b < c` bugs at compile time    |
+| Chained comparisons        | Left   | Non  | **Mixed** | `==`/`!=` left-assoc, `<`/`>`/etc non-assoc |
 | Unary precedence           | High   | High | High | Consistent across languages                  |
 
 ## Sources
@@ -418,4 +434,9 @@ let result = pow(x, 2);  // ✅ Use function instead
 
 **Date**: 2026-01-11
 **Status**: Research Complete
-**Recommendation**: ✅ Use Rust's precedence as baseline with `~` for bitwise NOT
+**Decision**: See `docs/adr-2026-01-11-operator-precedence.md` for the final decision
+
+**Summary**: ✅ Use Rust's precedence as baseline with the following modifications:
+- Use `~` for bitwise NOT (not Rust's `!`)
+- Equality operators (`==`, `!=`) are left-associative (can chain)
+- Inequality operators (`<`, `>`, `<=`, `>=`) are non-associative (semantic error when chained)
