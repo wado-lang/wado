@@ -323,7 +323,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Pattern matching
 - [ ] Closures
 - [ ] Effect handlers
-- [x] Template string type conversion (i32/i64 → string, f32/f64 → string via wado-bundled)
+- [x] Template string type conversion (i32/i64/bool/char → string, f32/f64 → string via wado-bundled)
 - [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
 - [x] Template string array concatenation
 - [ ] Reactive signals (source values)
@@ -345,6 +345,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] E2E test: bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
 - [x] E2E test: parentheses for precedence grouping
 - [x] E2E test: float-to-string template interpolation
+- [x] E2E test: bool/char/i32/i64 template interpolation
 - [x] E2E test: type cast (`as T`) for primitive types
 - [ ] Compile error tests (partial)
 - [ ] More E2E tests
@@ -388,6 +389,8 @@ fn main() with Stdout {
    - ✅ Nested template strings supported
    - ✅ Integer interpolation (i32/i64 → string)
    - ✅ Float interpolation (f32/f64 → string via wado-bundled)
+   - ✅ Boolean interpolation (bool → "true"/"false")
+   - ✅ Char interpolation (char → UTF-8 string)
    - ✅ String concatenation with GC array copy
    - ❌ Format specifiers (`.2f`, etc.) not implemented in codegen
 5. **No type checking**: The analyzer doesn't perform type checking yet
@@ -481,12 +484,6 @@ let outer = `Outer {`Inner {x}`}`;
 
    Format specs are parsed but ignored in codegen.
 
-2. **Boolean to String**:
-
-   ```wado
-   `Flag: {true}`   // Need bool → string ("true"/"false")
-   ```
-
 ### AST Structure
 
 ```rust
@@ -514,8 +511,11 @@ pub struct FormatSpec {
    - Parse format spec (precision, padding, alignment)
    - Pass to appropriate formatting function in wado-bundled
 
-2. **Add boolean to string conversion**:
+2. ~~**Add boolean to string conversion**~~: ✅ **Done** (bool_to_string in core/internals.wado)
    - `true` → "true", `false` → "false"
+
+3. ~~**Add char to string conversion**~~: ✅ **Done** (char_to_string in core/internals.wado)
+   - Char values converted to their UTF-8 string representation (supports full Unicode)
 
 ---
 

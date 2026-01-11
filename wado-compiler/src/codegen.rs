@@ -32,6 +32,8 @@ struct FunctionContext {
     locals: HashMap<String, u32>,
     /// Map from variable name to type (for type inference)
     local_type_map: HashMap<String, ValType>,
+    /// Map from variable name to semantic type (for bool/char detection in templates)
+    semantic_type_map: HashMap<String, SemanticType>,
     /// Number of parameters (locals 0..param_count are parameters)
     #[allow(dead_code)]
     param_count: u32,
@@ -39,6 +41,8 @@ struct FunctionContext {
     next_local: u32,
     /// Local types for non-parameter locals (for function declaration)
     local_types: Vec<ValType>,
+    /// Return type of the function (for ref.as_non_null handling)
+    return_type: Option<ValType>,
 }
 
 impl FunctionContext {
@@ -46,16 +50,33 @@ impl FunctionContext {
         Self {
             locals: HashMap::new(),
             local_type_map: HashMap::new(),
+            semantic_type_map: HashMap::new(),
             param_count,
             next_local: param_count,
             local_types: Vec::new(),
+            return_type: None,
         }
     }
 
+    fn set_return_type(&mut self, ty: ValType) {
+        self.return_type = Some(ty);
+    }
+
     /// Add a parameter (must be called before any locals)
-    fn add_param(&mut self, name: &str) {
+    fn add_param(&mut self, name: &str, ty: ValType) {
         let index = self.locals.len() as u32;
         self.locals.insert(name.to_string(), index);
+        self.local_type_map.insert(name.to_string(), ty);
+    }
+
+    /// Get semantic type for a variable
+    fn get_semantic_type(&self, name: &str) -> Option<SemanticType> {
+        self.semantic_type_map.get(name).copied()
+    }
+
+    /// Set semantic type for a variable
+    fn set_semantic_type(&mut self, name: &str, semantic: SemanticType) {
+        self.semantic_type_map.insert(name.to_string(), semantic);
     }
 
     /// Allocate a new local variable, or return existing if already allocated
@@ -64,6 +85,16 @@ impl FunctionContext {
         if let Some(&existing) = self.locals.get(name) {
             return existing;
         }
+        // Make reference types nullable so they don't require initialization at function entry.
+        // Wasm GC validation requires non-nullable ref locals to be definitely assigned before use,
+        // but variables declared in control flow branches can't satisfy this requirement.
+        let ty = match ty {
+            ValType::Ref(ref_type) if !ref_type.nullable => ValType::Ref(RefType {
+                nullable: true,
+                heap_type: ref_type.heap_type,
+            }),
+            _ => ty,
+        };
         let index = self.next_local;
         self.locals.insert(name.to_string(), index);
         self.local_type_map.insert(name.to_string(), ty);
@@ -97,6 +128,15 @@ impl FunctionContext {
         }
         decls
     }
+}
+
+/// Semantic type for distinguishing bool/char from i32 in template interpolation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SemanticType {
+    Bool,
+    Char,
+    I32,
+    Other,
 }
 
 // ============================================================================
@@ -1721,7 +1761,8 @@ impl Codegen {
             if let Some(body) = &run_ast.body {
                 let mut func_ctx = FunctionContext::new(run_ast.params.len() as u32);
                 for param in &run_ast.params {
-                    func_ctx.add_param(&param.name);
+                    let param_type = self.wado_type_to_wasm_primitive(&param.ty);
+                    func_ctx.add_param(&param.name, param_type);
                 }
                 self.collect_locals_from_block(body, &mut func_ctx);
                 // Pre-allocate scratch locals for builtins (including float conversion)
@@ -1913,7 +1954,8 @@ impl Codegen {
             if let Some(body) = &run_ast.body {
                 let mut func_ctx = FunctionContext::new(run_ast.params.len() as u32);
                 for param in &run_ast.params {
-                    func_ctx.add_param(&param.name);
+                    let param_type = self.wado_type_to_wasm_primitive(&param.ty);
+                    func_ctx.add_param(&param.name, param_type);
                 }
                 self.collect_locals_from_block(body, &mut func_ctx);
                 // Pre-allocate scratch locals for builtins (including float conversion)
@@ -1958,7 +2000,76 @@ impl Codegen {
         module.finish()
     }
 
-    /// Convert Wado type to Wasm ValType with explicit string array type index
+    /// Convert Wado type to Wasm ValType (primitive types only, for local collection)
+    fn wado_type_to_wasm_primitive(&self, ty: &crate::ast::Type) -> ValType {
+        match ty {
+            crate::ast::Type::Named(named) => match named.name.as_str() {
+                "i32" | "u32" | "bool" | "char" => ValType::I32,
+                "i64" | "u64" => ValType::I64,
+                "f32" => ValType::F32,
+                "f64" => ValType::F64,
+                // For complex types, use a ref type with hardcoded index 11 (string-array)
+                "String" => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(11),
+                }),
+                _ => ValType::I32,
+            },
+            crate::ast::Type::Generic(generic) => match generic.name.as_str() {
+                "Array" => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(11),
+                }),
+                _ => ValType::I32,
+            },
+            _ => ValType::I32,
+        }
+    }
+
+    /// Get semantic type from AST type (for bool/char detection in templates)
+    fn wado_type_to_semantic(&self, ty: &crate::ast::Type) -> SemanticType {
+        match ty {
+            crate::ast::Type::Named(named) => match named.name.as_str() {
+                "bool" => SemanticType::Bool,
+                "char" => SemanticType::Char,
+                "i32" | "u32" => SemanticType::I32,
+                _ => SemanticType::Other,
+            },
+            _ => SemanticType::Other,
+        }
+    }
+
+    /// Infer semantic type from expression
+    fn infer_semantic_type_from_expr(&self, expr: &Expr) -> SemanticType {
+        match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::Bool(_) => SemanticType::Bool,
+                Literal::Char(_) => SemanticType::Char,
+                Literal::Int(_) => SemanticType::I32,
+                _ => SemanticType::Other,
+            },
+            Expr::Binary(bin) => {
+                // Comparison and logical operations produce bool
+                match bin.op {
+                    crate::ast::BinaryOp::Eq
+                    | crate::ast::BinaryOp::NotEq
+                    | crate::ast::BinaryOp::Lt
+                    | crate::ast::BinaryOp::LtEq
+                    | crate::ast::BinaryOp::Gt
+                    | crate::ast::BinaryOp::GtEq
+                    | crate::ast::BinaryOp::And
+                    | crate::ast::BinaryOp::Or => SemanticType::Bool,
+                    _ => SemanticType::I32,
+                }
+            }
+            Expr::Unary(unary) => match unary.op {
+                crate::ast::UnaryOp::Not => SemanticType::Bool,
+                _ => SemanticType::I32,
+            },
+            _ => SemanticType::Other,
+        }
+    }
+
     fn wado_type_to_wasm_with_idx(&self, ty: &crate::ast::Type, string_array_idx: u32) -> ValType {
         match ty {
             crate::ast::Type::Named(named) => match named.name.as_str() {
@@ -1993,9 +2104,16 @@ impl Codegen {
         // First pass: analyze function body to collect locals
         let mut func_ctx = FunctionContext::new(ast_func.params.len() as u32);
 
+        // Set return type for ref.as_non_null handling in return statements
+        if let Some(ret_ty) = &ast_func.return_type {
+            let string_array_type = 11_u32; // Pre-known type index for string-array
+            func_ctx.set_return_type(self.wado_type_to_wasm_with_idx(ret_ty, string_array_type));
+        }
+
         // Add parameters to context
         for param in &ast_func.params {
-            func_ctx.add_param(&param.name);
+            let param_type = self.wado_type_to_wasm_primitive(&param.ty);
+            func_ctx.add_param(&param.name, param_type);
         }
 
         // Collect local variables from body
@@ -2030,6 +2148,13 @@ impl Codegen {
             .any(|e| e == "Stdout" || e == "Stderr")
         {
             self.generate_effect_wait(&mut wasm_func, &gen_ctx, builder);
+        }
+
+        // For functions with return types, add unreachable to indicate that
+        // falling through to the end is not a valid path - all returns must be explicit.
+        // This satisfies Wasm validation when all control flow paths use explicit return statements.
+        if ast_func.return_type.is_some() {
+            wasm_func.instruction(&Instruction::Unreachable);
         }
 
         wasm_func.instruction(&Instruction::End);
@@ -2125,10 +2250,11 @@ impl Codegen {
         string_array_type: u32,
     ) {
         // Scratch locals for stream handling builtins
+        // Use nullable refs so they default to ref.null and don't require initialization
         ctx.alloc_local(
             "__arr_ref",
             ValType::Ref(RefType {
-                nullable: false,
+                nullable: true,
                 heap_type: HeapType::Concrete(string_array_type),
             }),
         );
@@ -2143,17 +2269,18 @@ impl Codegen {
         ctx.alloc_local("__subtask", ValType::I32);
         ctx.alloc_local("__waitable_set", ValType::I32);
         // Scratch locals for template string accumulation and concatenation
+        // Use nullable refs so they default to ref.null and don't require initialization
         ctx.alloc_local(
             "__template_result",
             ValType::Ref(RefType {
-                nullable: false,
+                nullable: true,
                 heap_type: HeapType::Concrete(string_array_type),
             }),
         );
         ctx.alloc_local(
             "__concat_new",
             ValType::Ref(RefType {
-                nullable: false,
+                nullable: true,
                 heap_type: HeapType::Concrete(string_array_type),
             }),
         );
@@ -2172,8 +2299,20 @@ impl Codegen {
     fn collect_locals_from_stmt(&self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
             Stmt::Let(let_stmt) => {
-                let val_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx);
+                // Use explicit type annotation if present, otherwise infer from value
+                let val_type = if let Some(ty) = &let_stmt.ty {
+                    self.wado_type_to_wasm_primitive(ty)
+                } else {
+                    self.infer_expr_type_with_ctx(&let_stmt.value, ctx)
+                };
                 ctx.alloc_local(&let_stmt.name, val_type);
+                // Track semantic type for bool/char detection in template interpolation
+                let semantic_type = if let Some(ty) = &let_stmt.ty {
+                    self.wado_type_to_semantic(ty)
+                } else {
+                    self.infer_semantic_type_from_expr(&let_stmt.value)
+                };
+                ctx.set_semantic_type(&let_stmt.name, semantic_type);
             }
             Stmt::For(for_stmt) => {
                 if let Some(init) = &for_stmt.init {
@@ -2212,7 +2351,13 @@ impl Codegen {
                 }
             }
             Stmt::Let(let_stmt) => {
-                let val_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx);
+                // Use explicit type annotation if present, otherwise infer from value
+                let val_type = if let Some(ty) = &let_stmt.ty {
+                    let string_array_type = builder.type_idx("string-array");
+                    self.wado_type_to_wasm_with_idx(ty, string_array_type)
+                } else {
+                    self.infer_expr_type_with_ctx(&let_stmt.value, ctx)
+                };
                 let local_idx = ctx.alloc_local(&let_stmt.name, val_type);
                 self.generate_expr_with_builder(func, &let_stmt.value, ctx, builder);
                 func.instruction(&Instruction::LocalSet(local_idx));
@@ -2220,6 +2365,23 @@ impl Codegen {
             Stmt::Return(ret_stmt) => {
                 if let Some(value) = &ret_stmt.value {
                     self.generate_expr_with_builder(func, value, ctx, builder);
+                    // If the expression type is a nullable ref but return type expects non-nullable,
+                    // we need to add ref.as_non_null
+                    let expr_type = self.infer_expr_type_with_ctx(value, ctx);
+                    if let (
+                        ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type,
+                        }),
+                        Some(ValType::Ref(RefType {
+                            nullable: false, ..
+                        })),
+                    ) = (expr_type, ctx.return_type)
+                    {
+                        func.instruction(&Instruction::RefAsNonNull);
+                        // Silence warning about unused heap_type
+                        let _ = heap_type;
+                    }
                 }
                 func.instruction(&Instruction::Return);
             }
@@ -2304,6 +2466,13 @@ impl Codegen {
             Expr::Ident(ident) => {
                 if let Some(local_idx) = ctx.get_local(&ident.name) {
                     func.instruction(&Instruction::LocalGet(local_idx));
+                    // If the local is a nullable ref, convert to non-nullable
+                    // This is needed when passing to functions that expect non-nullable refs
+                    if let Some(ValType::Ref(RefType { nullable: true, .. })) =
+                        ctx.get_local_type(&ident.name)
+                    {
+                        func.instruction(&Instruction::RefAsNonNull);
+                    }
                 }
             }
             Expr::Literal(lit) => {
@@ -2315,46 +2484,88 @@ impl Codegen {
 
                 // Infer operand type to select correct instructions
                 let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx);
-                let is_float = matches!(operand_type, ValType::F32 | ValType::F64);
 
-                if is_float {
-                    // Float operations (f64)
-                    match bin.op {
-                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::F64Add),
-                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::F64Sub),
-                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::F64Mul),
-                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::F64Div),
-                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::F64Eq),
-                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::F64Ne),
-                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::F64Lt),
-                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::F64Le),
-                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::F64Gt),
-                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::F64Ge),
-                        // Mod, And, Or not supported for floats - fall back to i32
-                        _ => func.instruction(&Instruction::I32Const(0)),
-                    };
-                } else {
-                    // Integer operations (i32)
-                    match bin.op {
-                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::I32Add),
-                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I32Sub),
-                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I32Mul),
-                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::I32DivS),
-                        crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I32RemS),
-                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I32Eq),
-                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
-                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I32LtS),
-                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I32LeS),
-                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I32GtS),
-                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
-                        crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
-                        crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
-                        crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I32And),
-                        crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I32Or),
-                        crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
-                        crate::ast::BinaryOp::Shl => func.instruction(&Instruction::I32Shl),
-                        crate::ast::BinaryOp::Shr => func.instruction(&Instruction::I32ShrS),
-                    };
+                match operand_type {
+                    ValType::F64 => {
+                        // Float operations (f64)
+                        match bin.op {
+                            crate::ast::BinaryOp::Add => func.instruction(&Instruction::F64Add),
+                            crate::ast::BinaryOp::Sub => func.instruction(&Instruction::F64Sub),
+                            crate::ast::BinaryOp::Mul => func.instruction(&Instruction::F64Mul),
+                            crate::ast::BinaryOp::Div => func.instruction(&Instruction::F64Div),
+                            crate::ast::BinaryOp::Eq => func.instruction(&Instruction::F64Eq),
+                            crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::F64Ne),
+                            crate::ast::BinaryOp::Lt => func.instruction(&Instruction::F64Lt),
+                            crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::F64Le),
+                            crate::ast::BinaryOp::Gt => func.instruction(&Instruction::F64Gt),
+                            crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::F64Ge),
+                            // Mod, And, Or not supported for floats - fall back to i32
+                            _ => func.instruction(&Instruction::I32Const(0)),
+                        };
+                    }
+                    ValType::F32 => {
+                        // Float operations (f32)
+                        match bin.op {
+                            crate::ast::BinaryOp::Add => func.instruction(&Instruction::F32Add),
+                            crate::ast::BinaryOp::Sub => func.instruction(&Instruction::F32Sub),
+                            crate::ast::BinaryOp::Mul => func.instruction(&Instruction::F32Mul),
+                            crate::ast::BinaryOp::Div => func.instruction(&Instruction::F32Div),
+                            crate::ast::BinaryOp::Eq => func.instruction(&Instruction::F32Eq),
+                            crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::F32Ne),
+                            crate::ast::BinaryOp::Lt => func.instruction(&Instruction::F32Lt),
+                            crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::F32Le),
+                            crate::ast::BinaryOp::Gt => func.instruction(&Instruction::F32Gt),
+                            crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::F32Ge),
+                            // Mod, And, Or not supported for floats
+                            _ => func.instruction(&Instruction::I32Const(0)),
+                        };
+                    }
+                    ValType::I64 => {
+                        // i64 operations
+                        match bin.op {
+                            crate::ast::BinaryOp::Add => func.instruction(&Instruction::I64Add),
+                            crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I64Sub),
+                            crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I64Mul),
+                            crate::ast::BinaryOp::Div => func.instruction(&Instruction::I64DivS),
+                            crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I64RemS),
+                            crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I64Eq),
+                            crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I64Ne),
+                            crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I64LtS),
+                            crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I64LeS),
+                            crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I64GtS),
+                            crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I64GeS),
+                            crate::ast::BinaryOp::And => func.instruction(&Instruction::I64And),
+                            crate::ast::BinaryOp::Or => func.instruction(&Instruction::I64Or),
+                            crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I64And),
+                            crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I64Or),
+                            crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I64Xor),
+                            crate::ast::BinaryOp::Shl => func.instruction(&Instruction::I64Shl),
+                            crate::ast::BinaryOp::Shr => func.instruction(&Instruction::I64ShrS),
+                        };
+                    }
+                    _ => {
+                        // Integer operations (i32) - default for i32, bool, char, etc.
+                        match bin.op {
+                            crate::ast::BinaryOp::Add => func.instruction(&Instruction::I32Add),
+                            crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I32Sub),
+                            crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I32Mul),
+                            crate::ast::BinaryOp::Div => func.instruction(&Instruction::I32DivS),
+                            crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I32RemS),
+                            crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I32Eq),
+                            crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
+                            crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I32LtS),
+                            crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I32LeS),
+                            crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I32GtS),
+                            crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
+                            crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
+                            crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
+                            crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I32And),
+                            crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I32Or),
+                            crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
+                            crate::ast::BinaryOp::Shl => func.instruction(&Instruction::I32Shl),
+                            crate::ast::BinaryOp::Shr => func.instruction(&Instruction::I32ShrS),
+                        };
+                    }
                 }
             }
             Expr::Assign(assign) => {
@@ -2758,7 +2969,8 @@ impl Codegen {
             // Create context and populate it the same way as local collection phase
             let mut ctx = FunctionContext::new(run_ast.params.len() as u32);
             for param in &run_ast.params {
-                ctx.add_param(&param.name);
+                let param_type = self.wado_type_to_wasm_primitive(&param.ty);
+                ctx.add_param(&param.name, param_type);
             }
             // Collect locals from body (must match the local collection phase)
             self.collect_locals_from_block(body, &mut ctx);
@@ -2864,6 +3076,57 @@ impl Codegen {
                 }
             }
             _ => ValType::I32,
+        }
+    }
+
+    /// Infer the semantic type of an expression for template string interpolation
+    /// This is used to distinguish bool/char from i32 at the AST level
+    fn infer_semantic_type(&self, expr: &Expr, ctx: &FunctionContext) -> SemanticType {
+        match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::Bool(_) => SemanticType::Bool,
+                Literal::Char(_) => SemanticType::Char,
+                Literal::Int(_) => SemanticType::I32,
+                _ => SemanticType::Other,
+            },
+            Expr::Ident(ident) => {
+                // Look up variable's semantic type if tracked
+                if let Some(semantic) = ctx.get_semantic_type(&ident.name) {
+                    return semantic;
+                }
+                // Fall back to checking Wasm type
+                if let Some(ty) = ctx.get_local_type(&ident.name) {
+                    // If it's not I32, it's definitely not a bool/char
+                    if ty != ValType::I32 {
+                        return SemanticType::Other;
+                    }
+                }
+                // Default to I32 for identifiers (conservative choice)
+                SemanticType::I32
+            }
+            Expr::Binary(bin) => {
+                // Comparison and logical operations produce bool
+                match bin.op {
+                    crate::ast::BinaryOp::Eq
+                    | crate::ast::BinaryOp::NotEq
+                    | crate::ast::BinaryOp::Lt
+                    | crate::ast::BinaryOp::LtEq
+                    | crate::ast::BinaryOp::Gt
+                    | crate::ast::BinaryOp::GtEq
+                    | crate::ast::BinaryOp::And
+                    | crate::ast::BinaryOp::Or => SemanticType::Bool,
+                    // Arithmetic ops on i32 produce i32
+                    _ => SemanticType::I32,
+                }
+            }
+            Expr::Unary(unary) => {
+                // Logical NOT produces bool
+                match unary.op {
+                    crate::ast::UnaryOp::Not => SemanticType::Bool,
+                    _ => SemanticType::I32,
+                }
+            }
+            _ => SemanticType::I32,
         }
     }
 
@@ -3011,7 +3274,9 @@ impl Codegen {
         // Concatenate remaining parts using string_concat from core:internals
         for part in template.parts.iter().skip(1) {
             // Push result (first argument to string_concat)
+            // Convert nullable ref to non-nullable since string_concat expects non-nullable
             func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::RefAsNonNull);
 
             // Generate the next part (second argument to string_concat)
             self.generate_template_part(func, part, ctx, builder);
@@ -3024,8 +3289,9 @@ impl Codegen {
             func.instruction(&Instruction::LocalSet(result_local));
         }
 
-        // Load final result
+        // Load final result, converting nullable ref to non-nullable
         func.instruction(&Instruction::LocalGet(result_local));
+        func.instruction(&Instruction::RefAsNonNull);
     }
 
     /// Generate code for a single template part (string or interpolation)
@@ -3058,22 +3324,49 @@ impl Codegen {
                 match expr_type {
                     ValType::F64 => {
                         // Float-to-string conversion using core:internals::f64_to_string
-                        // Generate the f64 value (argument to f64_to_string)
                         self.generate_expr_with_builder(func, expr, ctx, builder);
-                        // Call f64_to_string(value) -> String
                         func.instruction(&Instruction::Call(builder.func_idx("f64_to_string")));
                     }
                     ValType::F32 => {
                         // Float-to-string conversion using core:internals::f32_to_string
-                        // Generate the f32 value (argument to f32_to_string)
                         self.generate_expr_with_builder(func, expr, ctx, builder);
-                        // Call f32_to_string(value) -> String
                         func.instruction(&Instruction::Call(builder.func_idx("f32_to_string")));
                     }
-                    _ => {
-                        // For other types, assume it's already a string (ref (array u8))
-                        // TODO: Handle i32, bool, etc. using core:internals functions
+                    ValType::I64 => {
+                        // i64-to-string conversion using core:internals::i64_to_string
                         self.generate_expr_with_builder(func, expr, ctx, builder);
+                        func.instruction(&Instruction::Call(builder.func_idx("i64_to_string")));
+                    }
+                    ValType::I32 => {
+                        // For i32, we need to check if it's actually a bool or char literal
+                        let semantic_type = self.infer_semantic_type(expr, ctx);
+                        self.generate_expr_with_builder(func, expr, ctx, builder);
+                        match semantic_type {
+                            SemanticType::Bool => {
+                                func.instruction(&Instruction::Call(
+                                    builder.func_idx("bool_to_string"),
+                                ));
+                            }
+                            SemanticType::Char => {
+                                func.instruction(&Instruction::Call(
+                                    builder.func_idx("char_to_string"),
+                                ));
+                            }
+                            SemanticType::I32 | SemanticType::Other => {
+                                func.instruction(&Instruction::Call(
+                                    builder.func_idx("i32_to_string"),
+                                ));
+                            }
+                        }
+                    }
+                    ValType::Ref(_) => {
+                        // Assume it's already a string (ref (array u8))
+                        self.generate_expr_with_builder(func, expr, ctx, builder);
+                    }
+                    ValType::V128 => {
+                        // V128 is not supported in template strings - treat as i32
+                        self.generate_expr_with_builder(func, expr, ctx, builder);
+                        func.instruction(&Instruction::Call(builder.func_idx("i32_to_string")));
                     }
                 }
             }

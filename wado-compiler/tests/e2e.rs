@@ -38,6 +38,7 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     config.wasm_threads(true);
     // config.wasm_stack_switching(true); // "runtime error: the wasm_stack_switching feature is not supported on this compiler configuration" on macos
     config.wasm_gc(true);
+    config.wasm_function_references(true);
 
     let engine = Engine::new(&config)?;
 
@@ -535,4 +536,81 @@ async fn test_type_cast() {
         output,
         "i32 to f64 works\nf64 to i32 works\nchained casts work\ncast in arithmetic works\n"
     );
+}
+
+// ============================================================================
+// Template string scalar interpolation tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_template_string_bool() {
+    let source = include_str!("fixtures/template_string_bool.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - bool values are converted to "true" and "false"
+    assert_eq!(output, "true: true\nfalse: false\n");
+}
+
+#[tokio::test]
+async fn test_template_string_char() {
+    let source = include_str!("fixtures/template_string_char.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - char values are converted to their string representation
+    assert_eq!(output, "char A: A\nchar Z: Z\n");
+}
+
+#[tokio::test]
+async fn test_template_string_i32() {
+    let source = include_str!("fixtures/template_string_i32.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - i32 values are converted to their string representation
+    assert_eq!(output, "positive: 42\nnegative: -17\nzero: 0\n");
+}
+
+#[tokio::test]
+async fn test_template_string_i64() {
+    let source = include_str!("fixtures/template_string_i64.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - i64 values are converted to their string representation
+    assert_eq!(
+        output,
+        "positive: 12345\nbig: 100000000000\nnegative: -9876\n"
+    );
+}
+
+#[tokio::test]
+async fn test_template_string_f64() {
+    let source = include_str!("fixtures/template_string_f64.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - f64 values are converted to their string representation
+    assert_eq!(output, "pi: 3.14159\nnegative: -2.5\n");
 }
