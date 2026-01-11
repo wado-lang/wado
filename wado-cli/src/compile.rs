@@ -151,17 +151,23 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 pub fn run(opts: CompileOptions) {
     let wasm = compile(&opts.input);
 
-    // Determine output path and format
-    let output_path = match &opts.output {
-        Some(path) => Path::new(path).to_path_buf(),
-        None => Path::new(&opts.input).with_extension("wasm"),
-    };
-
-    // Determine format: explicit > guessed from extension > default (wasm)
+    // Determine format: explicit > guessed from -o extension > default (wasm)
     let format = opts
         .format
-        .or_else(|| OutputFormat::from_extension(&output_path))
+        .or_else(|| opts.output.as_ref().and_then(|p| OutputFormat::from_extension(Path::new(p))))
         .unwrap_or(OutputFormat::Wasm);
+
+    // Determine output path, using format to pick extension if no -o specified
+    let output_path = match &opts.output {
+        Some(path) => Path::new(path).to_path_buf(),
+        None => {
+            let ext = match format {
+                OutputFormat::Wasm => "wasm",
+                OutputFormat::Wat => "wat",
+            };
+            Path::new(&opts.input).with_extension(ext)
+        }
+    };
 
     match format {
         OutputFormat::Wasm => match fs::write(&output_path, &wasm) {
