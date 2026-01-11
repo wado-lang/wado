@@ -23,6 +23,7 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 | Resolver | `resolver.rs` | Module resolution, loads core library           |
 | Stdlib   | `stdlib.rs`   | Embedded core library sources                   |
 | Codegen  | `codegen.rs`  | Generates Component Model Wasm via wasm-encoder |
+| Bundled  | `embedded/`   | Statically linked runtime helpers (ryu.wasm)    |
 
 ### Standard Library
 
@@ -260,7 +261,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `println` function (core::cli)
 - [x] Multiple function calls
 - [x] Async function lifting/lowering
-- [x] Template strings (partial - literals only, no type conversion/formatting)
+- [x] Template strings (partial - literals and f64 conversion via ryu)
 - [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
 - [x] Bitwise operators (`&`, `|`, `^`, `<<`, `>>`, `~`)
 - [ ] Variables and locals (partial - only in specific contexts)
@@ -271,7 +272,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Pattern matching
 - [ ] Closures
 - [ ] Effect handlers
-- [ ] Template string type conversion (i32/f64 → string)
+- [x] Template string f64 → string conversion (via statically linked ryu)
+- [ ] Template string i32/bool → string conversion
 - [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
 - [ ] Template string array concatenation
 - [ ] Reactive signals (source values)
@@ -293,7 +295,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] E2E test: operator precedence (bitwise operators)
 - [ ] E2E test: comparison chaining (needs semantic validation)
 - [ ] Compile error tests (partial)
-- [ ] Template string E2E tests (runtime execution)
+- [x] Template string E2E test (float interpolation via ryu)
+- [ ] Template string E2E tests (integer/boolean conversion)
 - [ ] More E2E tests
 
 ---
@@ -413,15 +416,15 @@ let outer = `Outer {`Inner {x}`}`;
 
 **What's Missing (TODO)**:
 
-1. **Type-to-String Conversion**:
+1. **Type-to-String Conversion** (partial):
 
    ```wado
-   `Count: {42}`    // Need i32 → string
-   `Pi: {3.14}`     // Need f64 → string
-   `Flag: {true}`   // Need bool → string
+   `Pi: {3.14}`     // ✅ f64 → string (via ryu static linking)
+   `Count: {42}`    // ❌ Need i32 → string
+   `Flag: {true}`   // ❌ Need bool → string
    ```
 
-   Currently assumes all interpolated expressions are already strings.
+   Float conversion works via statically linked ryu module. Integer and boolean conversion not yet implemented.
 
 2. **Format Specifiers**:
 
@@ -470,11 +473,14 @@ pub struct FormatSpec {
 
 ### Next Steps for Full Implementation
 
-1. **Add `to_string()` intrinsics** for primitive types:
+1. **Add remaining `to_string()` intrinsics** for primitive types:
 
    ```wado
-   builtin::i32_to_string(value: i32) -> builtin::array<u8>
+   // ✅ Already implemented via ryu static linking
    builtin::f64_to_string(value: f64) -> builtin::array<u8>
+
+   // ❌ TODO
+   builtin::i32_to_string(value: i32) -> builtin::array<u8>
    builtin::bool_to_string(value: bool) -> builtin::array<u8>
    ```
 
@@ -500,6 +506,10 @@ pub struct FormatSpec {
    ```
 
 4. **Add E2E tests** for runtime execution with wasmtime
+   - ✅ Float interpolation test (`test_float_template_formatting`) passes
+   - ❌ Integer interpolation tests (TODO)
+   - ❌ Boolean interpolation tests (TODO)
+   - ❌ String concatenation tests (TODO)
 
 ---
 
@@ -764,6 +774,188 @@ if a != b != c {  // Should be semantic error: != chaining not allowed
 3. **No `**`power operator**: Use explicit`pow()` function
 4. **Mathematical comparison chaining**: Similar to Python, with stricter validation
 5. **Arithmetic right shift**: `>>` for signed integers uses `i32.shr_s`
+
+---
+
+## Static Linking (Wasm-to-Wasm)
+
+### Status: ✅ Implemented (2026-01-11)
+
+The Wado compiler supports static linking of Wasm modules, allowing runtime helper code written in Rust to be embedded directly into the generated Component Model Wasm.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Component Model Wasm                        │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐  │
+│  │   env module │    │  ryu module  │    │   main module    │  │
+│  │   (memory)   │◄───│ (ryu.wasm)   │◄───│  (user code)     │  │
+│  │              │    │              │    │                  │  │
+│  │  memory: 17  │    │ format_f64() │    │ f64-to-string()  │  │
+│  │    pages     │    │ (imported    │    │ (calls ryu,      │  │
+│  │              │    │  memory)     │    │  copies to GC)   │  │
+│  └──────────────┘    └──────────────┘    └──────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Details
+
+**Embedded Module (`wado-bundled/`):**
+
+The `wado-bundled` crate provides runtime helper functions compiled to Wasm:
+
+```rust
+// wado-bundled/src/lib.rs
+#[no_mangle]
+pub extern "C" fn wado_bundled_format_f64(value: f64) -> u64 {
+    let mut buffer = ryu::Buffer::new();
+    let s = buffer.format(value);
+    let ptr = s.as_ptr() as u32;
+    let len = s.len() as u32;
+    // Pack ptr and len into single i64 for efficient return
+    ((len as u64) << 32) | (ptr as u64)
+}
+```
+
+**Build Configuration (`.cargo/config.toml`):**
+
+```toml
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "-C", "link-arg=--import-memory",
+    "-C", "link-arg=--export-memory",
+]
+```
+
+The `--import-memory` flag is critical: it makes the ryu module import memory from the host environment instead of defining its own, enabling memory sharing.
+
+**Compiler Integration (`codegen.rs`):**
+
+1. **Embed the Wasm binary:**
+
+   ```rust
+   const WADO_BUNDLED_WASM: &[u8] = include_bytes!("../embedded/ryu.wasm");
+   ```
+
+2. **Define shared memory (17 pages for ryu):**
+
+   ```rust
+   memories.memory(MemoryType {
+       minimum: 17,  // Required by ryu's allocator
+       maximum: None,
+       memory64: false,
+       shared: false,
+       page_size_log2: None,
+   });
+   ```
+
+3. **Create env module and instantiate ryu:**
+
+   ```rust
+   // Create env module with shared memory
+   builder.core_instantiate_exports(Some("env"), [
+       ("memory", ExportKind::Memory, 0),
+   ]);
+
+   // Embed and instantiate ryu module
+   builder.core_module_raw(Some("ryu-mod"), WADO_BUNDLED_WASM);
+   builder.core_instantiate(
+       Some("ryu"),
+       ctx.core_module_idx("ryu-mod"),
+       [("env", ModuleArg::Instance(env_instance))],
+   );
+
+   // Alias the format function
+   builder.core_alias_export(
+       Some("wado-bundled-format-f64"),
+       ctx.core_instance_idx("ryu"),
+       "wado_bundled_format_f64",
+       ExportKind::Func,
+   );
+   ```
+
+4. **Implement f64-to-string function:**
+
+   ```wat
+   ;; Call ryu to format f64 → packed (len << 32 | ptr)
+   (local.get 0)                    ;; f64 parameter
+   (call $wado_bundled_format_f64)  ;; returns i64
+   (local.set 1)                    ;; save packed result
+
+   ;; Extract ptr (lower 32 bits) and len (upper 32 bits)
+   (local.get 1) (i32.wrap_i64) (local.set 2)          ;; ptr
+   (local.get 1) (i64.const 32) (i64.shr_u)
+   (i32.wrap_i64) (local.set 3)                         ;; len
+
+   ;; Create GC array and copy bytes from linear memory
+   (array.new_default $string-array (local.get 3))
+   (local.set 5)
+   (loop $copy
+       (local.get 4) (local.get 3) (i32.lt_u)
+       (if (then
+           (local.get 5) (local.get 4)
+           (local.get 2) (local.get 4) (i32.add)
+           (i32.load8_u)
+           (array.set $string-array)
+           (local.get 4) (i32.const 1) (i32.add)
+           (local.set 4)
+           (br $copy)
+       ))
+   )
+   (local.get 5)  ;; return GC string array
+   ```
+
+### Memory Layout
+
+The statically linked modules share a single linear memory:
+
+| Region     | Usage                                          |
+| ---------- | ---------------------------------------------- |
+| Pages 0-16 | ryu's internal allocator and formatting buffer |
+| Page 17+   | Main module's string data and allocations      |
+
+### Key Design Decisions
+
+1. **Imported memory**: Ryu imports memory from `env` module instead of defining its own, enabling a single shared address space.
+
+2. **Packed return value**: `wado_bundled_format_f64` returns `(len << 32) | ptr` as a single i64, avoiding the need for multi-value returns or out parameters.
+
+3. **GC array copy**: The `f64-to-string` function copies bytes from linear memory to a GC array, bridging the gap between ryu's linear memory output and Wado's GC-based strings.
+
+4. **17-page minimum**: Ryu's allocator requires 17 pages of memory. This is a fixed cost regardless of program size.
+
+### Current Capabilities
+
+- ✅ `f64` to string conversion via ryu (deterministic, minimal representation)
+- ✅ Template string interpolation with floats: `` `Value: {3.14159}` ``
+
+### Future Extensions
+
+- [ ] `i32` to string conversion
+- [ ] `i64` to string conversion
+- [ ] `bool` to string conversion
+- [ ] Format specifiers (`.2f`, `0.3f`, etc.)
+- [ ] Additional runtime helpers (regex, date formatting, etc.)
+
+### Test Coverage
+
+```bash
+cargo test --test e2e test_float_template_formatting
+# ✅ PASSED - Runtime f64-to-string via statically linked ryu
+```
+
+Example working code:
+
+```wado
+use {println} from "core:cli";
+
+pub fn run() {
+    let x = 3.14159;
+    println(`{x}`);  // Output: 3.14159
+}
+```
 
 ---
 

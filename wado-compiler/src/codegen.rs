@@ -7,6 +7,13 @@ use crate::ast::{
 };
 use crate::symbol::SymbolTable;
 use std::collections::HashMap;
+
+/// Embedded wado-bundled Wasm module (ryu float formatting library)
+/// This is compiled from the wado-bundled crate and provides deterministic float-to-string conversion.
+/// Currently used for compile-time float formatting via the ryu crate.
+/// TODO: Implement runtime wasm-to-wasm linking for dynamic float formatting.
+#[allow(dead_code)]
+const WADO_BUNDLED_WASM: &[u8] = include_bytes!("../embedded/ryu.wasm");
 use wasm_encoder::{
     Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
     ComponentOuterAliasKind, ComponentValType, CompositeInnerType, CompositeType, ConstExpr,
@@ -965,6 +972,39 @@ impl Codegen {
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
         ctx.register_core_instance("env");
 
+        // ========================================
+        // wado-bundled module (ryu float formatting)
+        // ========================================
+        ctx.register_core_module("ryu-mod");
+        builder.core_module_raw(Some("ryu-mod"), WADO_BUNDLED_WASM);
+
+        // Instantiate ryu module with env (shared memory)
+        ctx.register_core_instance("ryu");
+        builder.core_instantiate(
+            Some("ryu"),
+            ctx.core_module_idx("ryu-mod"),
+            [("env", ModuleArg::Instance(env_instance))],
+        );
+
+        // Alias wado_bundled_format_f64 from ryu instance
+        ctx.register_core_func("wado-bundled-format-f64");
+        builder.core_alias_export(
+            Some("wado-bundled-format-f64"),
+            ctx.core_instance_idx("ryu"),
+            "wado_bundled_format_f64",
+            ExportKind::Func,
+        );
+
+        // Create wado-bundled instance with the format function
+        let wado_bundled_exports = [(
+            "wado_bundled_format_f64",
+            ExportKind::Func,
+            ctx.core_func_idx("wado-bundled-format-f64"),
+        )];
+        let wado_bundled_instance =
+            builder.core_instantiate_exports(Some("wado-bundled-instance"), wado_bundled_exports);
+        ctx.register_core_instance("wado-bundled");
+
         // Instantiate main module
         ctx.register_core_instance("main");
         builder.core_instantiate(
@@ -973,6 +1013,7 @@ impl Codegen {
             [
                 ("wasi", ModuleArg::Instance(wasi_instance)),
                 ("env", ModuleArg::Instance(env_instance)),
+                ("wado-bundled", ModuleArg::Instance(wado_bundled_instance)),
             ],
         );
 
@@ -1229,9 +1270,10 @@ impl Codegen {
             functions.function(0);
             memory_module.section(&functions);
 
+            // Minimum 17 pages required for wado-bundled (ryu float formatting)
             let mut memory = MemorySection::new();
             memory.memory(MemoryType {
-                minimum: 1,
+                minimum: 17,
                 maximum: None,
                 memory64: false,
                 shared: false,
@@ -1421,6 +1463,39 @@ impl Codegen {
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
         ctx.register_core_instance("env");
 
+        // ========================================
+        // wado-bundled module (ryu float formatting)
+        // ========================================
+        ctx.register_core_module("ryu-mod");
+        builder.core_module_raw(Some("ryu-mod"), WADO_BUNDLED_WASM);
+
+        // Instantiate ryu module with env (shared memory)
+        ctx.register_core_instance("ryu");
+        builder.core_instantiate(
+            Some("ryu"),
+            ctx.core_module_idx("ryu-mod"),
+            [("env", ModuleArg::Instance(env_instance))],
+        );
+
+        // Alias wado_bundled_format_f64 from ryu instance
+        ctx.register_core_func("wado-bundled-format-f64");
+        builder.core_alias_export(
+            Some("wado-bundled-format-f64"),
+            ctx.core_instance_idx("ryu"),
+            "wado_bundled_format_f64",
+            ExportKind::Func,
+        );
+
+        // Create wado-bundled instance with the format function
+        let wado_bundled_exports = [(
+            "wado_bundled_format_f64",
+            ExportKind::Func,
+            ctx.core_func_idx("wado-bundled-format-f64"),
+        )];
+        let wado_bundled_instance =
+            builder.core_instantiate_exports(Some("wado-bundled-instance"), wado_bundled_exports);
+        ctx.register_core_instance("wado-bundled");
+
         // Instantiate main module
         ctx.register_core_instance("main");
         builder.core_instantiate(
@@ -1429,6 +1504,7 @@ impl Codegen {
             [
                 ("wasi", ModuleArg::Instance(wasi_instance)),
                 ("env", ModuleArg::Instance(env_instance)),
+                ("wado-bundled", ModuleArg::Instance(wado_bundled_instance)),
             ],
         );
 
@@ -1532,14 +1608,19 @@ impl Codegen {
         );
 
         // GC string array type (array<u8>)
-        builder.define_gc_array_type("string-array", StorageType::I8, false);
+        // Mutable array for runtime string construction (e.g., f64-to-string)
+        builder.define_gc_array_type("string-array", StorageType::I8, true);
 
         // println type - takes a ref to string array
         let string_ref = builder.string_ref_type();
         builder.define_func_type("println", &[ValType::Ref(string_ref)], &[]);
 
         // f64-to-string type - takes f64, returns string array ref
-        builder.define_func_type("f64-to-string", &[ValType::F64], &[ValType::Ref(string_ref)]);
+        builder.define_func_type(
+            "f64-to-string",
+            &[ValType::F64],
+            &[ValType::Ref(string_ref)],
+        );
 
         // wado-bundled ryu function type - takes f64, returns packed (len, ptr) as i64
         builder.define_func_type("wado-bundled-format-f64", &[ValType::F64], &[ValType::I64]);
@@ -1628,7 +1709,13 @@ impl Codegen {
         code.function(&println_func);
 
         // f64-to-string function
-        let mut f64_to_string_func = Function::new([]);
+        // Locals: i64 (packed result), i32 (ptr), i32 (len), i32 (loop counter), ref array (result)
+        let string_ref = builder.string_ref_type();
+        let mut f64_to_string_func = Function::new([
+            (1, ValType::I64),
+            (3, ValType::I32),
+            (1, ValType::Ref(string_ref)),
+        ]);
         self.generate_f64_to_string_body(&mut f64_to_string_func, &builder);
         f64_to_string_func.instruction(&Instruction::End);
         code.function(&f64_to_string_func);
@@ -1733,11 +1820,22 @@ impl Codegen {
         );
 
         // GC string array type (array<u8>)
-        builder.define_gc_array_type("string-array", StorageType::I8, false);
+        // Mutable array for runtime string construction (e.g., f64-to-string)
+        builder.define_gc_array_type("string-array", StorageType::I8, true);
 
         // println type - takes a ref to string array
         let string_ref = builder.string_ref_type();
         builder.define_func_type("println", &[ValType::Ref(string_ref)], &[]);
+
+        // f64-to-string type - takes f64, returns string array ref
+        builder.define_func_type(
+            "f64-to-string",
+            &[ValType::F64],
+            &[ValType::Ref(string_ref)],
+        );
+
+        // wado-bundled ryu function type - takes f64, returns packed (len, ptr) as i64
+        builder.define_func_type("wado-bundled-format-f64", &[ValType::F64], &[ValType::I64]);
 
         // Types for user-defined functions
         for func in &user_funcs {
@@ -1789,6 +1887,7 @@ impl Codegen {
         // Function section
         // ========================================
         builder.define_func("println", "println");
+        builder.define_func("f64-to-string", "f64-to-string");
 
         // Register user-defined functions
         for func in &user_funcs {
@@ -1833,6 +1932,26 @@ impl Codegen {
         self.generate_println_body(&mut println_func, &builder);
         println_func.instruction(&Instruction::End);
         code.function(&println_func);
+
+        // ============================================
+        // f64-to-string function - converts f64 to GC string array
+        // Parameters: f64 (param 0)
+        // Locals:
+        //   local 1: packed (i64) - result from wado_bundled_format_f64
+        //   local 2: ptr (i32) - pointer to string in linear memory
+        //   local 3: len (i32) - string length
+        //   local 4: i (i32) - loop counter
+        //   local 5: result (ref array<u8>) - GC string array
+        // ============================================
+        let string_ref = builder.string_ref_type();
+        let mut f64_to_string_func = Function::new([
+            (1, ValType::I64),
+            (3, ValType::I32),
+            (1, ValType::Ref(string_ref)),
+        ]);
+        self.generate_f64_to_string_body(&mut f64_to_string_func, &builder);
+        f64_to_string_func.instruction(&Instruction::End);
+        code.function(&f64_to_string_func);
 
         // ============================================
         // User-defined functions
@@ -2605,29 +2724,86 @@ impl Codegen {
     ///   local 6: tx (i32) - writable stream handle
     ///   local 7: status (i32) - subtask status
     /// Generate f64-to-string function body
-    /// Takes f64 parameter, returns string array ref
-    /// TODO: Integrate wado-bundled.wasm for runtime ryu formatting
-    /// Currently returns fixed string for testing
+    /// Takes f64 parameter (local 0), returns string array ref
+    /// Uses wado-bundled's wado_bundled_format_f64 for runtime float formatting
+    ///
+    /// wado_bundled_format_f64 returns i64: (len << 32) | ptr
+    /// where ptr points to a UTF-8 string in linear memory
     fn generate_f64_to_string_body(&self, func: &mut Function, builder: &CoreModuleBuilder) {
         let string_array_type = builder.type_idx("string-array");
+        let format_f64_idx = builder.func_idx("wado_bundled_format_f64");
 
-        // For now, return a fixed string "3.14159\n" for testing with println
-        // TODO: Actually convert f64 to string using ryu
-        // TODO: Remove newline when proper println template string handling is implemented
-        let test_output = "3.14159\n";
-        let offset = self.get_string_offset(test_output);
-        let len = test_output.len();
+        // Local 0: f64 parameter
+        // Local 1: i64 result from format_f64 (packed len|ptr)
+        // Local 2: i32 ptr
+        // Local 3: i32 len
+        // Local 4: i32 loop counter
+        // Local 5: string array ref
 
-        // Create GC array from data segment
-        func.instruction(&Instruction::I32Const(offset as i32));
-        func.instruction(&Instruction::I32Const(len as i32));
-        func.instruction(&Instruction::ArrayNewData {
-            array_type_index: string_array_type,
-            array_data_index: 0,
-        });
+        // Call wado_bundled_format_f64(f64) -> i64 (packed len|ptr)
+        func.instruction(&Instruction::LocalGet(0)); // f64 parameter
+        func.instruction(&Instruction::Call(format_f64_idx));
+        func.instruction(&Instruction::LocalSet(1)); // save packed result
 
-        // The f64 parameter (local 0) is ignored for now
-        // TODO: Use the f64 value to actually format the number
+        // Extract ptr (lower 32 bits)
+        func.instruction(&Instruction::LocalGet(1));
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(2)); // ptr
+
+        // Extract len (upper 32 bits)
+        func.instruction(&Instruction::LocalGet(1));
+        func.instruction(&Instruction::I64Const(32));
+        func.instruction(&Instruction::I64ShrU);
+        func.instruction(&Instruction::I32WrapI64);
+        func.instruction(&Instruction::LocalSet(3)); // len
+
+        // Create GC array with the length
+        func.instruction(&Instruction::LocalGet(3)); // len
+        func.instruction(&Instruction::ArrayNewDefault(string_array_type));
+        func.instruction(&Instruction::LocalSet(5)); // array ref
+
+        // Copy bytes from linear memory to GC array
+        // for (i = 0; i < len; i++) { array[i] = memory[ptr + i]; }
+        func.instruction(&Instruction::I32Const(0));
+        func.instruction(&Instruction::LocalSet(4)); // i = 0
+
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // outer block for break
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // loop
+
+        // Check: i >= len -> break
+        func.instruction(&Instruction::LocalGet(4)); // i
+        func.instruction(&Instruction::LocalGet(3)); // len
+        func.instruction(&Instruction::I32GeU);
+        func.instruction(&Instruction::BrIf(1)); // break outer block
+
+        // array[i] = memory[ptr + i]
+        func.instruction(&Instruction::LocalGet(5)); // array ref
+        func.instruction(&Instruction::LocalGet(4)); // i
+        // Load byte from memory[ptr + i]
+        func.instruction(&Instruction::LocalGet(2)); // ptr
+        func.instruction(&Instruction::LocalGet(4)); // i
+        func.instruction(&Instruction::I32Add);
+        func.instruction(&Instruction::I32Load8U(wasm_encoder::MemArg {
+            offset: 0,
+            align: 0,
+            memory_index: 0,
+        }));
+        // Store to array[i]
+        func.instruction(&Instruction::ArraySet(string_array_type));
+
+        // i++
+        func.instruction(&Instruction::LocalGet(4));
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32Add);
+        func.instruction(&Instruction::LocalSet(4));
+
+        // Continue loop
+        func.instruction(&Instruction::Br(0));
+        func.instruction(&Instruction::End); // end loop
+        func.instruction(&Instruction::End); // end block
+
+        // Return the array
+        func.instruction(&Instruction::LocalGet(5));
     }
 
     fn generate_println_body(&self, func: &mut Function, builder: &CoreModuleBuilder) {
@@ -3087,9 +3263,10 @@ impl Codegen {
         module.section(&functions);
 
         // Memory section
+        // Minimum 17 pages required for wado-bundled (ryu float formatting)
         let mut memories = MemorySection::new();
         memories.memory(MemoryType {
-            minimum: 1,
+            minimum: 17,
             maximum: None,
             memory64: false,
             shared: false,

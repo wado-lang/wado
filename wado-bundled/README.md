@@ -75,6 +75,7 @@ wado-bundled/
     └── lib.rs           # Float formatting implementation
 
 wado-compiler/embedded/
+├── ryu.wasm             # Pre-compiled wado-bundled module (for future wasm-to-wasm linking)
 └── ryu.wit              # WIT interface definition (for future use)
 ```
 
@@ -112,10 +113,13 @@ Integrate ryu directly into wado-compiler for compile-time float formatting:
 - [x] Add ryu as dependency to wado-compiler
 - [x] Implement compile-time float literal formatting in template strings
 - [x] Generate deterministic string literals for float values
-- [ ] Implement runtime float-to-string conversion (requires template string concatenation)
+- [x] Build wado-bundled.wasm with proper function exports
+- [x] Embed wado-bundled.wasm in wado-compiler
+- [ ] Implement wasm-to-wasm linking (requires memory sharing between modules)
+- [ ] Implement runtime float-to-string conversion for float variables
 - [ ] Complete template string multi-part concatenation logic
 
-**Current Status**: Float literals in template strings are formatted at compile time using ryu and embedded as string literals in the data section. This works for simple cases like `{3.14}`, but template strings with multiple parts (e.g., `Pi: {3.14}`) require full concatenation logic which is not yet implemented.
+**Current Status**: Float literals in template strings are formatted at compile time using ryu and embedded as string literals in the data section. This works for simple cases like `{3.14}` and single-part templates like `` `{x}` `` where `x` is initialized with a constant. Multi-part template strings (e.g., `Pi: {3.14}`) require full concatenation logic which is not yet implemented. Runtime wasm-to-wasm linking is prepared (ryu.wasm is embedded) but not yet active due to memory sharing complexity.
 
 ### Phase 3: Wado API (TODO)
 

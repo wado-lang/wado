@@ -12,8 +12,6 @@
 //! 現時点では、Core Wasm（cdylib）としてビルドされます。
 //! 将来的には、Component Modelへの変換を追加する予定です。
 
-use core::slice;
-
 /// Format an f64 to a string using ryu
 ///
 /// # Example
@@ -61,7 +59,7 @@ pub extern "C" fn wado_bundled_format_f64(value: f64) -> i64 {
 pub extern "C" fn wado_bundled_free(ptr: *mut u8, len: usize) {
     if !ptr.is_null() {
         unsafe {
-            let _ = Box::from_raw(slice::from_raw_parts_mut(ptr, len));
+            let _ = Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len));
         }
     }
 }
@@ -108,4 +106,3 @@ mod tests {
         }
     }
 }
-
