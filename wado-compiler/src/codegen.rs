@@ -1541,6 +1541,9 @@ impl Codegen {
         // f64-to-string type - takes f64, returns string array ref
         builder.define_func_type("f64-to-string", &[ValType::F64], &[ValType::Ref(string_ref)]);
 
+        // wado-bundled ryu function type - takes f64, returns packed (len, ptr) as i64
+        builder.define_func_type("wado-bundled-format-f64", &[ValType::F64], &[ValType::I64]);
+
         // Types for user-defined functions
         let string_array_idx = builder.type_idx("string-array");
         for (_, func, qualified_name) in &all_funcs {
@@ -1577,6 +1580,11 @@ impl Codegen {
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
         builder.import_func("env", "realloc", "realloc");
+        builder.import_func(
+            "wado-bundled",
+            "wado_bundled_format_f64",
+            "wado-bundled-format-f64",
+        );
         builder.import_memory("env", "memory", 1);
         module.section(&builder.imports);
 
@@ -1769,6 +1777,11 @@ impl Codegen {
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
         builder.import_func("env", "realloc", "realloc");
+        builder.import_func(
+            "wado-bundled",
+            "wado_bundled_format_f64",
+            "wado-bundled-format-f64",
+        );
         builder.import_memory("env", "memory", 1);
         module.section(&builder.imports);
 

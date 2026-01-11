@@ -12,6 +12,8 @@
 //! 現時点では、Core Wasm（cdylib）としてビルドされます。
 //! 将来的には、Component Modelへの変換を追加する予定です。
 
+use core::slice;
+
 /// Format an f64 to a string using ryu
 ///
 /// # Example
@@ -34,6 +36,34 @@ pub fn format_f64(value: f64) -> String {
 pub fn format_f32(value: f32) -> String {
     let mut buf = ryu::Buffer::new();
     buf.format(value).to_string()
+}
+
+// ============================================================================
+// Wasm C ABI exports for integration with wado-compiler
+// ============================================================================
+
+/// Format f64 to string and return pointer and length
+/// Returns: (len << 32) | ptr as i64
+/// Caller must free the returned pointer using wado_bundled_free
+#[unsafe(no_mangle)]
+pub extern "C" fn wado_bundled_format_f64(value: f64) -> i64 {
+    let s = format_f64(value);
+    let bytes = s.into_bytes();
+    let len = bytes.len() as i64;
+    let ptr = Box::into_raw(bytes.into_boxed_slice()) as *mut u8 as i64;
+
+    // Pack length and pointer into i64: (len << 32) | ptr
+    (len << 32) | (ptr & 0xFFFFFFFF)
+}
+
+/// Free memory allocated by wado_bundled_format_f64
+#[unsafe(no_mangle)]
+pub extern "C" fn wado_bundled_free(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(slice::from_raw_parts_mut(ptr, len));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -63,4 +93,19 @@ mod tests {
             assert_eq!(format_f64(value), "1.2345678901234567");
         }
     }
+
+    #[test]
+    #[cfg(target_arch = "wasm32")]
+    fn test_wasm_abi() {
+        let result = wado_bundled_format_f64(1.23456);
+        let len = (result >> 32) as usize;
+        let ptr = (result & 0xFFFFFFFF) as *mut u8;
+
+        unsafe {
+            let s = String::from_utf8_unchecked(slice::from_raw_parts(ptr, len).to_vec());
+            assert_eq!(s, "1.23456");
+            wado_bundled_free(ptr, len);
+        }
+    }
 }
+
