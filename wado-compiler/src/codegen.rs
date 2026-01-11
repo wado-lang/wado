@@ -2,7 +2,7 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
-use crate::ast::{Block, CallExpr, Expr, Item, Literal, Module as AstModule, Stmt};
+use crate::ast::{Block, CallExpr, Expr, Item, Literal, Module as AstModule, Stmt, TemplatePart};
 use crate::bundled::wado_bundled_wasm;
 use crate::symbol::SymbolTable;
 use crate::wasm_postprocess;
@@ -627,7 +627,6 @@ impl Codegen {
                 self.collect_strings_from_expr(&assign.value);
             }
             Expr::TemplateString(template) => {
-                use crate::ast::TemplatePart;
                 for part in &template.parts {
                     match part {
                         TemplatePart::String(s) => {
@@ -2980,8 +2979,6 @@ impl Codegen {
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
     ) {
-        use crate::ast::TemplatePart;
-
         let string_array_type = builder.type_idx("string-array");
 
         match part {
