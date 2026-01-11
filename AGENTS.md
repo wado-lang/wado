@@ -117,3 +117,9 @@ wasm-tools validate --features=cm-async,cm-async-stackful,cm-async-builtins,gc e
 
 make format # format code and documents
 ```
+
+## On Your Task Done
+
+```sh
+make on-task-done # format, clippy-fix, update-bundled, test
+```
