@@ -2910,10 +2910,6 @@ impl Codegen {
 
     /// Generate code for template string expression
     /// Template strings are interpolated strings like `Hello, {name}!`
-    ///
-    /// Uses core:internals::string_concat for string concatenation instead of
-    /// inline Wasm instructions. This makes the generated code smaller and
-    /// the compiler more maintainable.
     fn generate_template_string(
         &self,
         func: &mut Function,
@@ -2928,11 +2924,10 @@ impl Codegen {
 
         if template.parts.is_empty() {
             // Empty template string -> empty string
-            func.instruction(&Instruction::I32Const(0)); // offset
-            func.instruction(&Instruction::I32Const(0)); // length
-            func.instruction(&Instruction::ArrayNewData {
+            // Use ArrayNewFixed with 0 elements to avoid requiring a data segment
+            func.instruction(&Instruction::ArrayNewFixed {
                 array_type_index: string_array_type,
-                array_data_index: 0,
+                array_size: 0,
             });
             return;
         }

@@ -441,3 +441,77 @@ async fn test_parentheses_precedence() {
     // Run - test passes if no unreachable trap
     run_wasm_capture_stdout(wasm).await.expect("runtime error");
 }
+
+// ============================================================================
+// String template literal tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_template_string_empty() {
+    let source = include_str!("fixtures/template_string_empty.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - empty template produces empty string, println adds newline
+    assert_eq!(output, "\n");
+}
+
+#[tokio::test]
+async fn test_template_string_two_middle() {
+    let source = include_str!("fixtures/template_string_two_middle.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - template: `a {s1} b {s2} c`
+    assert_eq!(output, "a X b Y c\n");
+}
+
+#[tokio::test]
+async fn test_template_string_three_interp() {
+    let source = include_str!("fixtures/template_string_three_interp.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - template: `{s1} a {s2} c {s3}`
+    assert_eq!(output, "X a Y c Z\n");
+}
+
+#[tokio::test]
+async fn test_template_string_two_end() {
+    let source = include_str!("fixtures/template_string_two_end.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - template: `a {s1} b {s2}`
+    assert_eq!(output, "a X b Y\n");
+}
+
+#[tokio::test]
+async fn test_template_string_two_interp() {
+    let source = include_str!("fixtures/template_string_two_interp.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - template: `{s1} a {s2} c`
+    assert_eq!(output, "X a Y c\n");
+}

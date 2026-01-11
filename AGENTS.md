@@ -14,6 +14,8 @@ Standard libraries are implemented in `wado-compiler/lib`, whre `wasi/` for WASI
 
 See also `docs/compiler.md` for the implementation details and the feature checklist.
 
+There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
+
 ## The CLI
 
 The CLI is implemented in `wado-cli/` with sub-command style CLI:
