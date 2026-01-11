@@ -27,17 +27,18 @@ if (flags & MASK == EXPECTED)  // Parsed as: flags & (MASK == EXPECTED)
 **Historical reason**: Early C had no `&&`/`||`. When they were added, `&`/`|` precedence was left unchanged for backward compatibility, creating a permanent design flaw.
 
 **Impact**: Requires excessive parentheses and is counterintuitive since `&` and `|` conceptually behave like arithmetic operators:
+
 - `a + b == 7` correctly parses as `(a + b) == 7` ✅
 - `a & b == 7` incorrectly parses as `a & (b == 7)` ❌
 
 ### Language Comparison
 
-| Language       | Bitwise vs Comparison | Fixed C's Mistake? |
-| -------------- | --------------------- | ------------------ |
-| C/Java/JS      | Comparison > Bitwise  | ❌ No              |
-| **Rust**       | **Bitwise > Comparison** | ✅ **Yes**      |
-| **Go**         | **Bitwise > Comparison** | ✅ **Yes**      |
-| Python         | Comparison > Bitwise  | ❌ No              |
+| Language  | Bitwise vs Comparison    | Fixed C's Mistake? |
+| --------- | ------------------------ | ------------------ |
+| C/Java/JS | Comparison > Bitwise     | ❌ No              |
+| **Rust**  | **Bitwise > Comparison** | ✅ **Yes**         |
+| **Go**    | **Bitwise > Comparison** | ✅ **Yes**         |
+| Python    | Comparison > Bitwise     | ❌ No              |
 
 Rust and Go fixed this by giving bitwise operators higher precedence than comparison operators.
 
@@ -53,11 +54,13 @@ int y = x + ++x;  // Undefined behavior!
 ```
 
 **Problems**:
+
 - Undefined behavior when used multiple times in same expression
 - Side effect confusion
 - Prefix vs postfix complexity
 
 **Language responses**:
+
 - **Rust**: Removed entirely ✅
 - **Python**: Never had them ✅
 - **Go**: Postfix only, statements only (not expressions) ⚠️
@@ -73,6 +76,7 @@ Python's `**` has counterintuitive precedence:
 ```
 
 **Language approaches**:
+
 - **Python/JS**: Have `**` operator (with precedence quirks) ⚠️
 - **C/Java/Rust/Go**: Use function: `pow()`, `Math.pow()`, `.pow()` ✅
 
@@ -82,12 +86,13 @@ Different languages handle chained comparisons differently:
 
 ```javascript
 // JavaScript - Bug prone
-1 < 2 < 3  // true (seems right)
-3 > 2 > 1  // false (wait, what?)
+1 < 2 < 3; // true (seems right)
+3 > 2 > 1; // false (wait, what?)
 // Evaluates as: (3 > 2) > 1 → true > 1 → 1 > 1 → false
 ```
 
 **Language approaches**:
+
 - **C/Java/Go/JS**: Left-associative (allows confusing bugs) ❌
 - **Rust**: Non-associative (compile error) ✅
 - **Python**: Special chaining syntax (`a < b < c` = `a < b and b < c`) ✅
@@ -99,6 +104,7 @@ Different languages handle chained comparisons differently:
 Wado adopts Rust's operator precedence table with minor modifications.
 
 **Rationale**:
+
 - Fixes C's bitwise precedence mistake
 - No `++`/`--` (avoids undefined behavior)
 - Well-designed and battle-tested
@@ -127,6 +133,7 @@ let y = ~x;  // Bitwise NOT
 ```
 
 **Rationale**:
+
 - More familiar to developers from C/Java/Python/JavaScript backgrounds
 - Clear visual distinction between logical NOT (`!`) and bitwise NOT (`~`)
 - Same precedence level (unary) as Rust's `!`, so no precedence issues
@@ -143,6 +150,7 @@ count += 1;  // ✅ Correct
 ```
 
 **Rationale**:
+
 - Avoids undefined behavior
 - Eliminates side effect confusion
 - Consistent with Rust and Python
@@ -160,6 +168,7 @@ let result = pow(x, 2);   // ✅ Correct
 ```
 
 **Rationale**:
+
 - Wasm has no native power instruction (would compile to function call anyway)
 - Avoids precedence ambiguity (Python's `-1**2 = -1` is counterintuitive)
 - Explicit function call is clearer
@@ -205,6 +214,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 5. **`!=` is ambiguous**: The meaning of `a != b != c` is unclear (is it "a, b, c are all different" or "a != b AND b != c"?)
 
 **Implementation**: The parser allows comparison operators to be chained (left-associative). The semantic analyser validates:
+
 - All operators in the chain are in the same "group" (ascending, descending, or equality)
 - `!=` is never chained
 
@@ -236,25 +246,26 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 
 From highest to lowest precedence:
 
-| Level | Operators                              | Associativity   | Description                    |
-| ----- | -------------------------------------- | --------------- | ------------------------------ |
-| 1     | `::`, `.`, `()`                        | Left-to-right   | Paths, method calls, fields    |
-| 2     | `?`                                    | N/A             | Error propagation              |
-| 3     | `!`, `~`, `-`, `*`, `&`, `&mut`        | Right-to-left   | Unary operators                |
-| 4     | `as`                                   | Left-to-right   | Type cast                      |
-| 5     | `*`, `/`, `%`                          | Left-to-right   | Multiplicative                 |
-| 6     | `+`, `-`                               | Left-to-right   | Additive                       |
-| 7     | `<<`, `>>`                             | Left-to-right   | Bitwise shift                  |
-| 8     | `&`                                    | Left-to-right   | Bitwise AND                    |
-| 9     | `^`                                    | Left-to-right   | Bitwise XOR                    |
-| 10    | `\|`                                   | Left-to-right   | Bitwise OR                     |
-| 11    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | **Restricted** | Comparison |
-| 12    | `&&`                                   | Left-to-right   | Logical AND                    |
-| 13    | `\|\|`                                 | Left-to-right   | Logical OR                     |
-| 14    | `..`, `..=`                            | N/A             | Range operators                |
-| 15    | `=`, `+=`, `-=`, etc.                  | Right-to-left   | Assignment                     |
+| Level | Operators                                                           | Associativity  | Description                 |
+| ----- | ------------------------------------------------------------------- | -------------- | --------------------------- |
+| 1     | `::`, `.`, `()`                                                     | Left-to-right  | Paths, method calls, fields |
+| 2     | `?`                                                                 | N/A            | Error propagation           |
+| 3     | `!`, `~`, `-`, `*`, `&`, `&mut`                                     | Right-to-left  | Unary operators             |
+| 4     | `as`                                                                | Left-to-right  | Type cast                   |
+| 5     | `*`, `/`, `%`                                                       | Left-to-right  | Multiplicative              |
+| 6     | `+`, `-`                                                            | Left-to-right  | Additive                    |
+| 7     | `<<`, `>>`                                                          | Left-to-right  | Bitwise shift               |
+| 8     | `&`                                                                 | Left-to-right  | Bitwise AND                 |
+| 9     | `^`                                                                 | Left-to-right  | Bitwise XOR                 |
+| 10    | `\|`                                                                | Left-to-right  | Bitwise OR                  |
+| 11    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | **Restricted** | Comparison                  |
+| 12    | `&&`                                                                | Left-to-right  | Logical AND                 |
+| 13    | `\|\|`                                                              | Left-to-right  | Logical OR                  |
+| 14    | `..`, `..=`                                                         | N/A            | Range operators             |
+| 15    | `=`, `+=`, `-=`, etc.                                               | Right-to-left  | Assignment                  |
 
 **Key differences from Rust**:
+
 - Level 3: Added `~` for bitwise NOT (Rust uses `!` only)
 - Level 11: Comparison chaining allowed with semantic validation:
   - Same-direction chains OK: `a < b < c`, `a > b > c`, `a == b == c`

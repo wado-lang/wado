@@ -12,19 +12,19 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 
 ### Modules
 
-| Module   | File          | Description                                     |
-| -------- | ------------- | ----------------------------------------------- |
-| Lexer    | `lexer.rs`    | Tokenizes source code                           |
-| Parser   | `parser.rs`   | Recursive descent parser, builds AST            |
-| AST      | `ast.rs`      | AST node definitions                            |
-| Token    | `token.rs`    | Token types and spans                           |
-| Analyzer | `analyze.rs`  | Semantic analysis, symbol table construction    |
-| Symbol   | `symbol.rs`   | Symbol table data structures                    |
-| Resolver | `resolver.rs` | Module resolution, loads core library           |
-| Stdlib   | `stdlib.rs`   | Embedded core library sources                   |
-| Codegen  | `codegen.rs`  | Generates Component Model Wasm via wasm-encoder |
-| Bundled  | `bundled.rs`  | Loads pre-compiled Wasm builtins (wado-bundled)  |
-| Postproc | `wasm_postprocess.rs` | Wasm binary transformations             |
+| Module   | File                  | Description                                     |
+| -------- | --------------------- | ----------------------------------------------- |
+| Lexer    | `lexer.rs`            | Tokenizes source code                           |
+| Parser   | `parser.rs`           | Recursive descent parser, builds AST            |
+| AST      | `ast.rs`              | AST node definitions                            |
+| Token    | `token.rs`            | Token types and spans                           |
+| Analyzer | `analyze.rs`          | Semantic analysis, symbol table construction    |
+| Symbol   | `symbol.rs`           | Symbol table data structures                    |
+| Resolver | `resolver.rs`         | Module resolution, loads core library           |
+| Stdlib   | `stdlib.rs`           | Embedded core library sources                   |
+| Codegen  | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder |
+| Bundled  | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled) |
+| Postproc | `wasm_postprocess.rs` | Wasm binary transformations                     |
 
 ### Bundled Builtins (wado-bundled)
 
@@ -34,8 +34,8 @@ The `wado-bundled` crate provides pre-compiled Wasm functions for operations tha
 
 **Current Functions:**
 
-| Function | Signature | Description |
-| -------- | --------- | ----------- |
+| Function        | Signature           | Description                          |
+| --------------- | ------------------- | ------------------------------------ |
 | `f64_to_buffer` | `(f64, i32) -> i32` | Format f64 to buffer, returns length |
 | `f32_to_buffer` | `(f32, i32) -> i32` | Format f32 to buffer, returns length |
 

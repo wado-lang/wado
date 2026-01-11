@@ -1553,4 +1553,3 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
     Pipe,             // Maps to WIT: pipe
 }
 ```
-

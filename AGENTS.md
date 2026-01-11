@@ -91,7 +91,6 @@ Significant architectural decisions are documented as ADRs in `docs/adr-{yyyy-mm
 - **Decision**: What was decided and why
 - **Consequences**: Impact and trade-offs
 
-
 ## Terminology
 
 - Wasm: WebAssembly (not WASM)

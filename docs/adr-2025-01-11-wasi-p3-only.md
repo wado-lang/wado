@@ -39,7 +39,6 @@ P2 requires explicit `subscribe()` calls and pollable management. P3's `async fu
 ### Rationale
 
 1. **Design alignment**: Wado's core abstractions map directly to P3 primitives:
-
    - `Stream<T>` ↔ P3's `stream<T>`
    - `Future<T>` ↔ P3's `future<T>`
    - Colorless async ↔ P3's `async func` + stack switching

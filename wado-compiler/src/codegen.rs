@@ -8,13 +8,12 @@ use crate::symbol::SymbolTable;
 use crate::wasm_postprocess;
 use std::collections::HashMap;
 use wasm_encoder::{
-    Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder,
-    ComponentExportKind, ComponentOuterAliasKind, ComponentValType, CompositeInnerType,
-    CompositeType, ConstExpr, DataCountSection, DataSection, DataSegment, DataSegmentMode,
-    EntityType, ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType,
-    ImportSection, InstanceType, Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg,
-    NameMap, NameSection, PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection,
-    ValType,
+    Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
+    ComponentOuterAliasKind, ComponentValType, CompositeInnerType, CompositeType, ConstExpr,
+    DataCountSection, DataSection, DataSegment, DataSegmentMode, EntityType, ExportKind,
+    ExportSection, FieldType, Function, FunctionSection, HeapType, ImportSection, InstanceType,
+    Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
+    PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection, ValType,
 };
 
 /// Code generator that produces Component Model components
