@@ -402,3 +402,26 @@ async fn test_operator_precedence_comprehensive() {
     assert!(output.contains("assignment has lowest precedence"));
     assert!(output.contains("complex precedence works"));
 }
+
+// ============================================================================
+// Float formatting tests (ryu integration)
+// ============================================================================
+
+// TODO: Re-enable once template string concatenation is fully implemented
+// Currently, template strings with multiple parts (e.g., `Pi: {3.14}`) don't concatenate correctly
+// The float formatting with ryu works, but the string concatenation logic needs completion
+#[tokio::test]
+#[ignore = "Template string concatenation not yet implemented"]
+async fn test_float_template_formatting() {
+    let source = include_str!("fixtures/float_template.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify ryu-formatted float output
+    // ryu produces deterministic, minimal representations
+    assert_eq!(output, "Pi: 3.14159\n", "Expected 'Pi: 3.14159\\n', got: {output}");
+}

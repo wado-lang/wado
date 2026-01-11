@@ -105,13 +105,17 @@ Convert the current Core Wasm module to a Component Model component:
 - [ ] Convert Core Wasm to Component using `wasm-tools component new`
 - [ ] Implement proper canonical ABI (cabi_realloc, etc.)
 
-### Phase 2: Compiler Integration (TODO)
+### Phase 2: Compiler Integration (IN PROGRESS)
 
-Integrate the bundled Wasm into wado-compiler:
+Integrate ryu directly into wado-compiler for compile-time float formatting:
 
-- [ ] Embed the Wasm component in the compiler binary
-- [ ] Implement `builtin:ryu` namespace resolution
-- [ ] Link bundled Wasm into final output
+- [x] Add ryu as dependency to wado-compiler
+- [x] Implement compile-time float literal formatting in template strings
+- [x] Generate deterministic string literals for float values
+- [ ] Implement runtime float-to-string conversion (requires template string concatenation)
+- [ ] Complete template string multi-part concatenation logic
+
+**Current Status**: Float literals in template strings are formatted at compile time using ryu and embedded as string literals in the data section. This works for simple cases like `{3.14}`, but template strings with multiple parts (e.g., `Pi: {3.14}`) require full concatenation logic which is not yet implemented.
 
 ### Phase 3: Wado API (TODO)
 
