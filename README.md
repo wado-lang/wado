@@ -71,7 +71,8 @@ Why built-in instead of a library?
 ```wado
 use {println, Stdout} from "core:cli";
 
-fn main() with Stdout {
+// run() is the entry point of the wasi:cli's Command world
+fn run() with Stdout {
     println("Hello, world!");
 }
 ```
@@ -82,17 +83,22 @@ Run it:
 wado run example/hello.wado
 ```
 
-Or compile to WebAssembly:
+Compile to WebAssembly:
 
 ```sh
-wado compile -o hello.wasm example/hello.wado
-wado compile -o hello.wat example/hello.wado  # Text format
+wado compile example/hello.wado # generates example/hello.wado
+wado compile -o example/hello.wasm example/hello.wado # ditto
+wado compile --format wasm example/hello.wado # ditto
+
+wado compile --format wat example/hello.wado # generates example/hello.wat with WAT format
+wado compile -o example/hello.wat example/hello.wado  # ditto
 ```
 
 ## Documentation
 
 - [Language Specification](spec.md) - Full language reference
 - [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
+- [Other Documentation](docs) - ADR, research notes, TODOs, etc.
 
 ## Development
 
@@ -124,7 +130,7 @@ make on-task-done # format, clippy-fix, update-bundled, test
 
 ### What's Done
 
-There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
+There are E2E test fixtures in [wado-compiler/tests/fixtures/*.wado](wado-compiler/tests/fixtures).
 
 ## License
 
