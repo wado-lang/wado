@@ -268,6 +268,23 @@ async fn test_local_floats_mut() {
     assert_eq!(output, "x is 1.0\nx is 2.5\nx is 3.0\n");
 }
 
+#[tokio::test]
+async fn test_float_to_string() {
+    let source = include_str!("fixtures/float_to_string.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+
+    // Verify output - float interpolation in template strings
+    assert_eq!(
+        output,
+        "f is 1.23\npi is approximately 3.14159\n10.5 + 2.5 = 13.0\n"
+    );
+}
+
 // ============================================================================
 // User-defined function tests
 // ============================================================================

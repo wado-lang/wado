@@ -31,6 +31,12 @@ jobs:
         run: cargo fmt --all --check
       - name: Run clippy
         run: cargo clippy --locked --all-targets --all-features
+      - name: Install wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+      - name: Install wasm-tools
+        run: cargo install wasm-tools --locked || true
+      - name: Check bundled WAT is up-to-date
+        run: make check-bundled
 
   test:
     name: Test
