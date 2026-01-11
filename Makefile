@@ -54,7 +54,7 @@ update-stdlib-wasi: build
 		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
 		--output-dir wado-compiler/lib/wasi
 
-wado-compiler/lib/builtins/wado-bundled.wat: Cargo.lock wado-bundled/Cargo.toml wado-bundled/src/lib.rs
+wado-compiler/lib/builtins/wado-bundled.wat: Cargo.toml Cargo.lock wado-bundled/Cargo.toml wado-bundled/src/lib.rs
 	make update-bundled
 
 .PHONY: update-bundled
