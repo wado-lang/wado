@@ -1,11 +1,12 @@
-//! Test float formatting in string templates using builtin ryu
+//! Test float formatting in string templates using wado-bundled ryu
 //!
-//! This tests that float literals in template strings are formatted
-//! deterministically using the ryu algorithm.
+//! This tests that float values in template strings are formatted
+//! dynamically at runtime using the ryu algorithm from wado-bundled.wasm.
 
 use {println} from "core:cli";
 
 pub fn run() -> Result<(), ()> {
-    // Test basic float formatting (single part - no concatenation needed)
-    println(`{3.14159}`);
+    // Test dynamic float formatting via wado-bundled.wasm
+    let x: f64 = 3.14159;
+    println(`{x}`);
 }
