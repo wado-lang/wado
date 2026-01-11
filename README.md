@@ -94,12 +94,37 @@ wado compile -o hello.wat example/hello.wado  # Text format
 - [Language Specification](spec.md) - Full language reference
 - [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
 
-## Building
+## Development
+
+### Install `cargo`
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### Install `wasm-tools` and `wasmtime`
+
+```sh
+cargo install wasm-tools
+cargo install wasmtime
+```
+
+### Build and Test
 
 ```sh
 cargo build
 cargo test
 ```
+
+### On Your Task Done
+
+```sh
+make on-task-done # format, clippy-fix, update-bundled, test
+```
+
+### What's Done
+
+There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
 
 ## License
 
