@@ -55,10 +55,11 @@ Identifiers match the pattern `[a-zA-Z_][a-zA-Z0-9_]*`:
 
 ```wado
 foo
+foo_bar
+fooBar
+FooBar
+FOO_BAR
 _private
-camelCase
-PascalCase
-SCREAMING_CASE
 name123
 ```
 
@@ -183,6 +184,7 @@ All Wado types map directly to WebAssembly Component Model types:
 | `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types                                  |
 | `Option<T>`               | `option<T>`                          | Optional value                               |
 | `Result<T, E>`            | `result<T, E>`                       | Result type                                  |
+| `Result<(), ()>`          | `result`                             | Unit result (no payload)                     |
 | `struct { ... }`          | `record { ... }`                     | GC struct in Wado, record at CM boundary     |
 | `enum { ... }`            | `enum { ... }`                       | Enumeration without payloads                 |
 | `variant { ... }`         | `variant { ... }`                    | Variant/sum type with payloads               |
@@ -190,12 +192,6 @@ All Wado types map directly to WebAssembly Component Model types:
 | `resource`                | `resource`                           | Resource handle                              |
 | `Stream<T>`               | `stream<T>`                          | Component Model async stream                 |
 | `Future<T>`               | `future<T>`                          | Component Model async future                 |
-
-**Type Naming Convention:**
-
-- Wasm primitive types use lowercase: `bool`, `char`, `i32`, `f64`, etc.
-- Standard library types use UpperCamelCase: `String`, `Array<T>`, `Option<T>`, `Result<T, E>`, etc.
-- User-defined types follow UpperCamelCase convention
 
 ### The Prelude
 
@@ -205,6 +201,9 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 
 - `String` - UTF-8 string type
 - `Array<T>` - Dynamic array type
+- `Dict<K, V>` - Dictionary type
+- `Tuple<T1, T2, ...>` - Tuple type
+- `Reactive<T>` - Reactive value
 - `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
 - `Stream<T>` - Component Model async stream
@@ -217,12 +216,12 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use {String, Array, Option, Result, Stream} from "core:prelude";
+use {String, Array, Dict, Tuple, Reactive, Option, Result, Stream, Future, Pollable} from "core:prelude";
 ```
 
-### Built-in Types (No Import Required)
+### Primitive Types
 
-**Wasm primitive types** (lowercase):
+Wasm primitive types are built into the language (no import required):
 
 ```wado
 // Numeric
@@ -233,25 +232,6 @@ f32, f64
 // Basic
 bool
 char
-```
-
-**Standard library types** (UpperCamelCase, defined in `core/`):
-
-```wado
-String             // UTF-8 string type
-Array<T>           // Dynamic array type
-Dict<K, V>         // As list<tuple<K, V>> at CM boundary
-Tuple<T1, T2, ...> // Component Model tuple<T1, T2, ...>
-Reactive<T>        // Reactive value
-```
-
-**Prelude types** (from `core:prelude`, auto-imported):
-
-```wado
-Option<T>    // Some(x), None (also accessible via `null` keyword)
-Result<T, E> // Ok(x), Err(e)
-Stream<T>    // Component Model async stream
-Future<T>    // Component Model async future
 ```
 
 ### Primitive Literals
@@ -289,20 +269,7 @@ let emoji = '😀';        // Direct Unicode character
 let newline = '\n';
 ```
 
-**Escape sequences** (shared with string literals, except `\'` instead of `\"`):
-
-| Escape   | Character                  |
-| -------- | -------------------------- |
-| `\'`     | Single quote               |
-| `\\`     | Backslash                  |
-| `\/`     | Forward slash              |
-| `\b`     | Backspace                  |
-| `\f`     | Form feed                  |
-| `\n`     | Newline                    |
-| `\r`     | Carriage return            |
-| `\t`     | Tab                        |
-| `\uHHHH` | Unicode BMP (4 hex digits) |
-| `\u{H+}` | Unicode full range         |
+See [Escape Sequences](#escape-sequences) for supported escapes (`\'` for char, `\"` for string).
 
 ```wado
 let a = '\u0041';         // 'A' (BMP)
@@ -357,11 +324,14 @@ let path = "path/to/file.txt";
 let escaped = "Line 1\nLine 2\tTabbed";
 ```
 
-**Escape sequences:**
+#### Escape Sequences
+
+Escape sequences are shared between character and string literals:
 
 | Escape   | Character                  |
 | -------- | -------------------------- |
-| `\"`     | Double quote               |
+| `\'`     | Single quote (char only)   |
+| `\"`     | Double quote (string only) |
 | `\\`     | Backslash                  |
 | `\/`     | Forward slash              |
 | `\b`     | Backspace                  |
@@ -1513,19 +1483,7 @@ fn App() -> Element with Dom {
 
 Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
 
-### WASI P3 Type Mapping
-
-| WIT Type        | Wado Type        | Notes                               |
-| --------------- | ---------------- | ----------------------------------- |
-| `stream<u8>`    | `Stream<u8>`     | First-class async stream            |
-| `future<T>`     | `Future<T>`      | First-class async future            |
-| `result<T, E>`  | `Result<T, E>`   | Error handling                      |
-| `result`        | `Result<(), ()>` | Unit result (no payload)            |
-| `option<T>`     | `Option<T>`      | Optional value                      |
-| `list<T>`       | `Array<T>`       | Dynamic list                        |
-| `tuple<A, B>`   | `Tuple<A, B>`    | Tuple types                         |
-| `string`        | `String`         | UTF-8 string (struct in Wado)       |
-| `enum { a, b }` | `enum { A, B }`  | Variants use UpperCamelCase in Wado |
+All Wado types map directly to Component Model (WIT) types. See the [Component Model Mapping](#component-model-mapping) table in the Type System section for the complete mapping reference.
 
 ### WASI P3 CLI Interfaces
 
@@ -1564,7 +1522,6 @@ pub effect Stdout {
 resource TerminalOutput;
 
 // Link an enum to a WASI enum
-// Wado uses UpperCamelCase for variants
 pub enum ErrorCode {  // Maps to WIT: enum error-code
     Io,               // Maps to WIT: io
     IllegalByteSequence,  // Maps to WIT: illegal-byte-sequence
@@ -1574,10 +1531,25 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 
 ## Appendix
 
+### Naming Conventions
+
+| Element            | Style            | Notes                  |
+| ------------------ | ---------------- | ---------------------- |
+| Project name       | `kebab-case`     |                        |
+| Module/file name   | `snake_case`     | e.g., `my_module.wado` |
+| Primitive types    | `lowercase`      | e.g., `i32`, `bool`    |
+| User-defined types | `UpperCamelCase` | e.g., `UserConfig`     |
+| Enum/variant cases | `UpperCamelCase` | e.g., `SomeValue`      |
+| Functions          | `snake_case`     | e.g., `get_user`       |
+| Local variables    | `snake_case`     | e.g., `user_count`     |
+
+WIT/Component Model interop: The compiler automatically converts between Wado conventions and WIT conventions (kebab-case) at component boundaries.
+
 ### Terminology
 
 - Wasm: WebAssembly (not WASM)
 - WASI: WebAssembly System Interface
+- CM: Wasm Component Model
 - module: a Wado file
 - project: a collection of modules
-- Wado standard library: consists of the core library and the WASI library
+- Wado standard library: consists of the `core:` and the `wasi:`
