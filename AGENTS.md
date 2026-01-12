@@ -76,21 +76,22 @@ This project relays on the following features:
 
 ## Rules for Markdown
 
-- Format markdown files with `prettier`.
+- Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
+- Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`), instead of `~~...~~` (strike-through).
 
 ## Architecture Decision Records (ADR)
 
 Significant architectural decisions are documented as ADRs in `docs/adr-{yyyy-mm-dd}-{feature}.md`.
 
-**Format**: `docs/adr-YYYY-MM-DD-feature-name.md`
+Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 
-**Structure**:
+### Structure
 
-- **Title**: Short description of the decision
-- **Status**: Proposed | Accepted | Deprecated | Superseded
-- **Context**: Background and problem statement
-- **Decision**: What was decided and why
-- **Consequences**: Impact and trade-offs
+- Title: Short description of the decision
+- Status: Proposed | Accepted | Deprecated | Superseded
+- Context: Background and problem statement
+- Decision: What was decided and why
+- Consequences: Impact and trade-offs
 
 ## Project Development
 

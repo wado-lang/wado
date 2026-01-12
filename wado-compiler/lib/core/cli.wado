@@ -128,3 +128,16 @@ pub fn exit(code: u8) -> ! with Exit {
     Exit::exit_with_code(code);
 }
 
+// ============================================================================
+// Panic Functions
+// ============================================================================
+
+/// Panic with a message
+/// Prints the message to stderr and traps (unreachable)
+pub fn panic(message: String) -> ! with Stderr {
+    eprintln(message);
+    // Wait for the async stderr write to complete before trapping
+    builtin::effect_wait();
+    builtin::unreachable();
+}
+

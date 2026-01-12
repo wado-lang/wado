@@ -25,7 +25,17 @@ impl WasiView for TestWasiState {
     }
 }
 
-async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
+/// Result of running a Wasm component with captured output
+struct WasmRunResult {
+    /// Captured stdout
+    stdout: String,
+    /// Captured stderr
+    stderr: String,
+    /// Whether the component trapped (e.g., from unreachable)
+    trapped: bool,
+}
+
+async fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
     let mut config = Config::new();
     config.async_support(true);
     config.wasm_component_model(true);
@@ -36,7 +46,6 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     config.wasm_simd(true);
     config.wasm_wide_arithmetic(true);
     config.wasm_threads(true);
-    // config.wasm_stack_switching(true); // "runtime error: the wasm_stack_switching feature is not supported on this compiler configuration" on macos
     config.wasm_gc(true);
     config.wasm_function_references(true);
 
@@ -49,12 +58,17 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     let mut linker: Linker<TestWasiState> = Linker::new(&engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
 
-    // Create stdout capture pipe
+    // Create stdout and stderr capture pipes
     let stdout_pipe = MemoryOutputPipe::new(4096);
     let stdout_clone = stdout_pipe.clone();
+    let stderr_pipe = MemoryOutputPipe::new(4096);
+    let stderr_clone = stderr_pipe.clone();
 
-    // Create WASI state with captured stdout
-    let ctx = WasiCtxBuilder::new().stdout(stdout_pipe).build();
+    // Create WASI state with captured stdout and stderr
+    let ctx = WasiCtxBuilder::new()
+        .stdout(stdout_pipe)
+        .stderr(stderr_pipe)
+        .build();
     let table = ResourceTable::new();
 
     let state = TestWasiState { ctx, table };
@@ -66,14 +80,22 @@ async fn run_wasm_capture_stdout(wasm: Vec<u8>) -> anyhow::Result<String> {
     // Get and call the "run" function
     let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
 
-    let (result,) = run_func.call_async(&mut store, ()).await?;
-    result.map_err(|()| anyhow::anyhow!("Component returned error"))?;
+    let trapped = match run_func.call_async(&mut store, ()).await {
+        Ok((result,)) => result.is_err(),
+        Err(_) => true, // Runtime error (trap)
+    };
 
-    // Get captured stdout using contents() method
-    let output_bytes = stdout_clone.contents();
-    let output = String::from_utf8(output_bytes.to_vec())?;
+    // Get captured output
+    let stdout_bytes = stdout_clone.contents();
+    let stdout = String::from_utf8(stdout_bytes.to_vec())?;
+    let stderr_bytes = stderr_clone.contents();
+    let stderr = String::from_utf8(stderr_bytes.to_vec())?;
 
-    Ok(output)
+    Ok(WasmRunResult {
+        stdout,
+        stderr,
+        trapped,
+    })
 }
 
 // ============================================================================
@@ -88,10 +110,10 @@ async fn test_hello_world() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output
-    assert_eq!(output, "Hello, world!\n");
+    assert_eq!(result.stdout, "Hello, world!\n");
 }
 
 #[tokio::test]
@@ -102,10 +124,10 @@ async fn test_multiple_println() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output
-    assert_eq!(output, "Line 1\nLine 2\nLine 3\n");
+    assert_eq!(result.stdout, "Line 1\nLine 2\nLine 3\n");
 }
 
 // ============================================================================
@@ -120,10 +142,10 @@ async fn test_effect_import_demo() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify stdout
-    assert_eq!(output, "Hello from imported Stdout!\n");
+    assert_eq!(result.stdout, "Hello from imported Stdout!\n");
 }
 
 #[tokio::test]
@@ -134,11 +156,11 @@ async fn test_effect_import_with_aliasing() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output
-    assert!(output.contains("Aliased import works!"));
-    assert!(output.contains("Direct import also works!"));
+    assert!(result.stdout.contains("Aliased import works!"));
+    assert!(result.stdout.contains("Direct import also works!"));
 }
 
 #[tokio::test]
@@ -149,10 +171,10 @@ async fn test_multiple_effect_imports() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output
-    assert_eq!(output, "Testing multiple imports\n");
+    assert_eq!(result.stdout, "Testing multiple imports\n");
 }
 
 // ============================================================================
@@ -167,10 +189,10 @@ async fn test_local_let() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output
-    assert_eq!(output, "Hello from let!\n");
+    assert_eq!(result.stdout, "Hello from let!\n");
 }
 
 #[tokio::test]
@@ -181,10 +203,10 @@ async fn test_local_let_mut() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output
-    assert_eq!(output, "First message\nSecond message\n");
+    assert_eq!(result.stdout, "First message\nSecond message\n");
 }
 
 // ============================================================================
@@ -199,10 +221,10 @@ async fn test_for_loop() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - loop runs 3 times, then "done"
-    assert_eq!(output, "loop\nloop\nloop\ndone\n");
+    assert_eq!(result.stdout, "loop\nloop\nloop\ndone\n");
 }
 
 // ============================================================================
@@ -217,10 +239,10 @@ async fn test_local_integers() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - integer arithmetic works
-    assert_eq!(output, "integers work\n");
+    assert_eq!(result.stdout, "integers work\n");
 }
 
 #[tokio::test]
@@ -231,10 +253,10 @@ async fn test_local_integers_mut() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - mutable integers with reassignment
-    assert_eq!(output, "x is 5\nx is 10\nx is 15\n");
+    assert_eq!(result.stdout, "x is 5\nx is 10\nx is 15\n");
 }
 
 // ============================================================================
@@ -249,10 +271,10 @@ async fn test_local_floats() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - float arithmetic works
-    assert_eq!(output, "floats work\n");
+    assert_eq!(result.stdout, "floats work\n");
 }
 
 #[tokio::test]
@@ -263,10 +285,10 @@ async fn test_local_floats_mut() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - mutable floats with reassignment
-    assert_eq!(output, "x is 1.0\nx is 2.5\nx is 3.0\n");
+    assert_eq!(result.stdout, "x is 1.0\nx is 2.5\nx is 3.0\n");
 }
 
 #[tokio::test]
@@ -277,11 +299,11 @@ async fn test_float_to_string() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - float interpolation in template strings
     assert_eq!(
-        output,
+        result.stdout,
         "f is 1.23\npi is approximately 3.14159\n10.5 + 2.5 = 13.0\n"
     );
 }
@@ -298,10 +320,10 @@ async fn test_user_function_call() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - add(40, 2) should return 42
-    assert_eq!(output, "success\n");
+    assert_eq!(result.stdout, "success\n");
 }
 
 // ============================================================================
@@ -316,10 +338,10 @@ async fn test_local_bools() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - boolean variables in conditions
-    assert_eq!(output, "t is true\nf is false\n");
+    assert_eq!(result.stdout, "t is true\nf is false\n");
 }
 
 #[tokio::test]
@@ -330,10 +352,10 @@ async fn test_local_bools_mut() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - mutable booleans with reassignment
-    assert_eq!(output, "flag is false\nflag is true\n");
+    assert_eq!(result.stdout, "flag is false\nflag is true\n");
 }
 
 // ============================================================================
@@ -352,10 +374,10 @@ async fn test_use_local_module() {
     let wasm = compile_file(&fixture_path).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - add(40, 2) from imported module should return 42
-    assert_eq!(output, "success\n");
+    assert_eq!(result.stdout, "success\n");
 }
 
 // ============================================================================
@@ -370,7 +392,7 @@ async fn test_bitwise_and() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run - test passes if no unreachable trap (assertion uses unreachable on failure)
-    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    run_wasm(wasm).await.expect("runtime error");
 }
 
 #[tokio::test]
@@ -381,7 +403,7 @@ async fn test_bitwise_or() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run - test passes if no unreachable trap
-    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    run_wasm(wasm).await.expect("runtime error");
 }
 
 #[tokio::test]
@@ -392,7 +414,7 @@ async fn test_bitwise_xor() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run - test passes if no unreachable trap
-    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    run_wasm(wasm).await.expect("runtime error");
 }
 
 #[tokio::test]
@@ -403,7 +425,7 @@ async fn test_bitwise_shift() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run - test passes if no unreachable trap
-    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    run_wasm(wasm).await.expect("runtime error");
 }
 
 #[tokio::test]
@@ -414,7 +436,7 @@ async fn test_bitwise_not() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run - test passes if no unreachable trap
-    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    run_wasm(wasm).await.expect("runtime error");
 }
 
 #[tokio::test]
@@ -425,7 +447,7 @@ async fn test_bitwise_combined() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run - test passes if no unreachable trap
-    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    run_wasm(wasm).await.expect("runtime error");
 }
 
 // ============================================================================
@@ -440,7 +462,7 @@ async fn test_parentheses_precedence() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run - test passes if no unreachable trap
-    run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    run_wasm(wasm).await.expect("runtime error");
 }
 
 // ============================================================================
@@ -455,10 +477,10 @@ async fn test_template_string_empty() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - empty template produces empty string, println adds newline
-    assert_eq!(output, "\n");
+    assert_eq!(result.stdout, "\n");
 }
 
 #[tokio::test]
@@ -469,10 +491,10 @@ async fn test_template_string_two_middle() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - template: `a {s1} b {s2} c`
-    assert_eq!(output, "a X b Y c\n");
+    assert_eq!(result.stdout, "a X b Y c\n");
 }
 
 #[tokio::test]
@@ -483,10 +505,10 @@ async fn test_template_string_three_interp() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - template: `{s1} a {s2} c {s3}`
-    assert_eq!(output, "X a Y c Z\n");
+    assert_eq!(result.stdout, "X a Y c Z\n");
 }
 
 #[tokio::test]
@@ -497,10 +519,10 @@ async fn test_template_string_two_end() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - template: `a {s1} b {s2}`
-    assert_eq!(output, "a X b Y\n");
+    assert_eq!(result.stdout, "a X b Y\n");
 }
 
 #[tokio::test]
@@ -511,10 +533,10 @@ async fn test_template_string_two_interp() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - template: `{s1} a {s2} c`
-    assert_eq!(output, "X a Y c\n");
+    assert_eq!(result.stdout, "X a Y c\n");
 }
 
 // ============================================================================
@@ -529,11 +551,11 @@ async fn test_type_cast() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - all cast tests pass
     assert_eq!(
-        output,
+        result.stdout,
         "i32 to f64 works\nf64 to i32 works\nchained casts work\ncast in arithmetic works\n"
     );
 }
@@ -550,10 +572,10 @@ async fn test_template_string_bool() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - bool values are converted to "true" and "false"
-    assert_eq!(output, "true: true\nfalse: false\n");
+    assert_eq!(result.stdout, "true: true\nfalse: false\n");
 }
 
 #[tokio::test]
@@ -564,10 +586,10 @@ async fn test_template_string_char() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - char values are converted to their string representation
-    assert_eq!(output, "char A: A\nchar Z: Z\n");
+    assert_eq!(result.stdout, "char A: A\nchar Z: Z\n");
 }
 
 #[tokio::test]
@@ -578,10 +600,10 @@ async fn test_template_string_i32() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - i32 values are converted to their string representation
-    assert_eq!(output, "positive: 42\nnegative: -17\nzero: 0\n");
+    assert_eq!(result.stdout, "positive: 42\nnegative: -17\nzero: 0\n");
 }
 
 #[tokio::test]
@@ -592,11 +614,11 @@ async fn test_template_string_i64() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - i64 values are converted to their string representation
     assert_eq!(
-        output,
+        result.stdout,
         "positive: 12345\nbig: 100000000000\nnegative: -9876\n"
     );
 }
@@ -609,8 +631,46 @@ async fn test_template_string_f64() {
     let wasm = compile(source).expect("compilation failed");
 
     // Run and capture output
-    let output = run_wasm_capture_stdout(wasm).await.expect("runtime error");
+    let result = run_wasm(wasm).await.expect("runtime error");
 
     // Verify output - f64 values are converted to their string representation
-    assert_eq!(output, "pi: 3.14159\nnegative: -2.5\n");
+    assert_eq!(result.stdout, "pi: 3.14159\nnegative: -2.5\n");
+}
+
+// ============================================================================
+// Panic tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_eprintln_then_trap() {
+    let source = include_str!("fixtures/eprintln_then_trap.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let result = run_wasm(wasm).await.expect("runtime setup error");
+
+    // Verify the error message was printed to stderr
+    assert_eq!(result.stderr, "error message\n");
+
+    // Verify the program trapped (unreachable was executed)
+    assert!(result.trapped, "should cause a trap");
+}
+
+#[tokio::test]
+async fn test_panic_basic() {
+    let source = include_str!("fixtures/panic_basic.wado");
+
+    // Compile the source
+    let wasm = compile(source).expect("compilation failed");
+
+    // Run and capture output
+    let result = run_wasm(wasm).await.expect("runtime setup error");
+
+    // Verify the panic message was printed to stderr
+    assert_eq!(result.stderr, "This is a panic message\n");
+
+    // Verify the program trapped (unreachable was executed)
+    assert!(result.trapped, "panic should cause a trap");
 }
