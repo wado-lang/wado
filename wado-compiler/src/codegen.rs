@@ -824,6 +824,24 @@ impl Codegen {
         );
 
         // ========================================
+        // Import stderr instance from WASI P3
+        // stderr has the same interface type as stdout
+        // ========================================
+        ctx.register_instance("stderr");
+        builder.import(
+            "wasi:cli/stderr@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
+        );
+
+        // Alias write-via-stream from stderr instance (component func)
+        ctx.register_comp_func("write-via-stream-stderr");
+        builder.alias_export(
+            ctx.instance_idx("stderr"),
+            "write-via-stream",
+            ComponentExportKind::Func,
+        );
+
+        // ========================================
         // Type: stream<u8> for stream intrinsics
         // ========================================
         let stream_u8_type = ctx.register_type("stream-u8");
@@ -935,11 +953,23 @@ impl Codegen {
         ctx.register_core_func("stream-drop-readable");
         builder.stream_drop_readable(stream_u8_type);
 
-        // Lower write-via-stream component func to core func
+        // Lower write-via-stream component func to core func (stdout)
         ctx.register_core_func("write-via-stream-core");
         builder.lower_func(
             Some("write-via-stream-core"),
             ctx.comp_func_idx("write-via-stream"),
+            [
+                CanonicalOption::Async,
+                CanonicalOption::Memory(ctx.memory_idx()),
+                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+            ],
+        );
+
+        // Lower write-via-stream-stderr component func to core func (stderr)
+        ctx.register_core_func("write-via-stream-stderr-core");
+        builder.lower_func(
+            Some("write-via-stream-stderr-core"),
+            ctx.comp_func_idx("write-via-stream-stderr"),
             [
                 CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
@@ -1000,6 +1030,11 @@ impl Codegen {
                 "write-via-stream",
                 ExportKind::Func,
                 ctx.core_func_idx("write-via-stream-core"),
+            ),
+            (
+                "write-via-stream-stderr",
+                ExportKind::Func,
+                ctx.core_func_idx("write-via-stream-stderr-core"),
             ),
             (
                 "task-return",
@@ -1283,6 +1318,24 @@ impl Codegen {
             ComponentExportKind::Func,
         );
 
+        // ========================================
+        // Import stderr instance from WASI P3
+        // stderr has the same interface type as stdout
+        // ========================================
+        ctx.register_instance("stderr");
+        builder.import(
+            "wasi:cli/stderr@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
+        );
+
+        // Alias write-via-stream from stderr instance (component func)
+        ctx.register_comp_func("write-via-stream-stderr");
+        builder.alias_export(
+            ctx.instance_idx("stderr"),
+            "write-via-stream",
+            ComponentExportKind::Func,
+        );
+
         // Type: stream<u8>
         let stream_u8_type = ctx.register_type("stream-u8");
         {
@@ -1455,11 +1508,23 @@ impl Codegen {
         ctx.register_core_func("stream-drop-readable");
         builder.stream_drop_readable(stream_u8_type);
 
-        // Lower write-via-stream
+        // Lower write-via-stream (stdout)
         ctx.register_core_func("write-via-stream-core");
         builder.lower_func(
             Some("write-via-stream-core"),
             ctx.comp_func_idx("write-via-stream"),
+            [
+                CanonicalOption::Async,
+                CanonicalOption::Memory(ctx.memory_idx()),
+                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+            ],
+        );
+
+        // Lower write-via-stream-stderr (stderr)
+        ctx.register_core_func("write-via-stream-stderr-core");
+        builder.lower_func(
+            Some("write-via-stream-stderr-core"),
+            ctx.comp_func_idx("write-via-stream-stderr"),
             [
                 CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
@@ -1522,6 +1587,11 @@ impl Codegen {
                 "write-via-stream",
                 ExportKind::Func,
                 ctx.core_func_idx("write-via-stream-core"),
+            ),
+            (
+                "write-via-stream-stderr",
+                ExportKind::Func,
+                ctx.core_func_idx("write-via-stream-stderr-core"),
             ),
             (
                 "task-return",
@@ -1696,6 +1766,13 @@ impl Codegen {
             &[ValType::I32],
         );
 
+        // Stderr write-via-stream (same signature as stdout, defined after GC types)
+        builder.define_func_type(
+            "write-via-stream-stderr",
+            &[ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
+
         // Types for user-defined functions
         let string_array_idx = builder.type_idx("string-array");
         for (_, func, qualified_name) in &all_funcs {
@@ -1704,8 +1781,13 @@ impl Codegen {
                 .iter()
                 .map(|p| self.wado_type_to_wasm_with_idx(&p.ty, string_array_idx))
                 .collect();
+            // Never type (!) has no Wasm return type - the function never returns
             let return_types: Vec<ValType> = if let Some(ret_ty) = &func.return_type {
-                vec![self.wado_type_to_wasm_with_idx(ret_ty, string_array_idx)]
+                if self.is_never_type(ret_ty) {
+                    vec![]
+                } else {
+                    vec![self.wado_type_to_wasm_with_idx(ret_ty, string_array_idx)]
+                }
             } else {
                 vec![]
             };
@@ -1726,6 +1808,7 @@ impl Codegen {
         builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
         builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
         builder.import_func("wasi", "write-via-stream", "write-via-stream");
+        builder.import_func("wasi", "write-via-stream-stderr", "write-via-stream-stderr");
         builder.import_func("wasi", "task-return", "task-return");
         builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
         builder.import_func("wasi", "waitable-join", "waitable-join");
@@ -1887,6 +1970,13 @@ impl Codegen {
             &[ValType::I32],
         );
 
+        // Stderr write-via-stream (same signature as stdout, defined after GC types)
+        builder.define_func_type(
+            "write-via-stream-stderr",
+            &[ValType::I32, ValType::I32],
+            &[ValType::I32],
+        );
+
         // Types for user-defined functions
         for func in &user_funcs {
             // Convert Wado params to Wasm types
@@ -1896,8 +1986,13 @@ impl Codegen {
                 .iter()
                 .map(|p| self.wado_type_to_wasm_with_idx(&p.ty, string_array_idx))
                 .collect();
+            // Never type (!) has no Wasm return type - the function never returns
             let return_types: Vec<ValType> = if let Some(ret_ty) = &func.return_type {
-                vec![self.wado_type_to_wasm_with_idx(ret_ty, string_array_idx)]
+                if self.is_never_type(ret_ty) {
+                    vec![]
+                } else {
+                    vec![self.wado_type_to_wasm_with_idx(ret_ty, string_array_idx)]
+                }
             } else {
                 vec![]
             };
@@ -1918,6 +2013,7 @@ impl Codegen {
         builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
         builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
         builder.import_func("wasi", "write-via-stream", "write-via-stream");
+        builder.import_func("wasi", "write-via-stream-stderr", "write-via-stream-stderr");
         builder.import_func("wasi", "task-return", "task-return");
         builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
         builder.import_func("wasi", "waitable-join", "waitable-join");
@@ -2094,6 +2190,12 @@ impl Codegen {
             },
             _ => SemanticType::Other,
         }
+    }
+
+    /// Check if a type is the never type (!)
+    /// Functions with ! return type never return, so they have no Wasm return type.
+    fn is_never_type(&self, ty: &crate::ast::Type) -> bool {
+        matches!(ty, crate::ast::Type::Named(named) if named.name == "!")
     }
 
     fn wado_type_to_wasm_with_idx(&self, ty: &crate::ast::Type, string_array_idx: u32) -> ValType {
@@ -2735,8 +2837,10 @@ impl Codegen {
                 for arg in &call.args {
                     self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
-                // For write-via-stream, we start the operation but defer wait to function end
-                if wasi_func_name == "write-via-stream" {
+                // For write-via-stream (stdout or stderr), we start the operation but defer wait to function end
+                if wasi_func_name == "write-via-stream"
+                    || wasi_func_name == "write-via-stream-stderr"
+                {
                     self.generate_write_via_stream_start(func, ctx, builder, func_idx);
                 } else {
                     func.instruction(&Instruction::Call(func_idx));
@@ -2770,9 +2874,8 @@ impl Codegen {
         match name {
             // wasi:cli/stdout
             "Stdout::write_via_stream" => Some("write-via-stream".to_string()),
-            // wasi:cli/stderr - TODO: use separate stderr write function
-            // For now, use the same write-via-stream (stderr goes to stdout)
-            "Stderr::write_via_stream" => Some("write-via-stream".to_string()),
+            // wasi:cli/stderr
+            "Stderr::write_via_stream" => Some("write-via-stream-stderr".to_string()),
             // wasi:cli/stdin
             "Stdin::read_via_stream" => Some("stdin-read-via-stream".to_string()),
             // wasi:cli/environment
@@ -2963,6 +3066,37 @@ impl Codegen {
                     self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 func.instruction(&Instruction::Call(builder.func_idx("f32_to_buffer")));
+            }
+
+            // Control flow
+            "unreachable" => {
+                // unreachable() -> ! (traps immediately)
+                func.instruction(&Instruction::Unreachable);
+            }
+            "effect_wait" => {
+                // effect_wait() - Wait for pending async effects to complete
+                // This should be called before unreachable in functions with effects
+                self.generate_effect_wait(func, ctx, builder);
+            }
+
+            // Ambient logging builtins (for log/log_error functions that bypass effect system)
+            "call_indirect_stdout_write_via_stream" => {
+                // call_indirect_stdout_write_via_stream(rx: i32) - call stdout write-via-stream
+                // Used by log() for ambient stdout logging without requiring Stdout effect
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                let func_idx = builder.func_idx("write-via-stream");
+                self.generate_write_via_stream_start(func, ctx, builder, func_idx);
+            }
+            "call_indirect_stderr_write_via_stream" => {
+                // call_indirect_stderr_write_via_stream(rx: i32) - call stderr write-via-stream
+                // Used by log_error() for ambient stderr logging without requiring Stderr effect
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                let func_idx = builder.func_idx("write-via-stream-stderr");
+                self.generate_write_via_stream_start(func, ctx, builder, func_idx);
             }
 
             _ => {
@@ -3210,6 +3344,8 @@ impl Codegen {
                 | "subtask_drop"
                 | "memory_store8"
                 | "array_set_u8"
+                | "unreachable"
+                | "effect_wait"
         )
     }
 
