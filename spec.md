@@ -15,7 +15,7 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 ## Design Philosophy
 
 - **Wasm only**: Zero abstraction to Wasm
-- **Explicitness**: All dependencies are explicit
+- **Explicitness**: Make intent explicit
 - **Colorless async**: Eliminates async/await "color" problem via Wasm Stack Switching
 - **Effect System**: Side effect tracking and control, swappable via Handlers
 
