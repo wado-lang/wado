@@ -1,0 +1,48 @@
+// Test assignment operator precedence
+// Assignment (=) has lowest precedence
+
+fn run() {
+    // Assignment evaluates the right side first
+    let mut a = 0;
+    a = 2 + 3;
+    assert a == 5;
+
+    // Assignment with multiplication
+    let mut b = 0;
+    b = 2 * 3 + 1;  // b = (2 * 3) + 1 = 7
+    assert b == 7;
+
+    // Assignment with comparison (comparison has lower precedence than arithmetic)
+    // Note: Can't directly assign bool to int, so test with bool
+    let c = 5 > 3;  // true
+    assert c == true;
+
+    // Assignment with logical operators
+    let d = true && false;  // false
+    assert d == false;
+
+    let e = true || false;  // true
+    assert e == true;
+
+    // Assignment with bitwise operators
+    let f = 3 | 4;  // 7
+    assert f == 7;
+
+    let g = 7 & 3;  // 3
+    assert g == 3;
+
+    // Chained assignment (right-associative)
+    // a = b = c means a = (b = c)
+    let mut h = 0;
+    let mut i = 0;
+    h = i = 42;
+    assert h == 42;
+    assert i == 42;
+
+    // Complex expression on right side
+    let j = 2 + 3 * 4 - 1;  // 2 + 12 - 1 = 13
+    assert j == 13;
+}
+
+__DATA__
+{}

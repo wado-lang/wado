@@ -1,0 +1,58 @@
+// Test shift vs arithmetic operator precedence
+// Additive (+, -) > Shift (<<, >>)
+
+fn run() {
+    // + has higher precedence than <<
+    // 1 << 2 + 1 = 1 << (2 + 1) = 1 << 3 = 8
+    let a = 1 << 2 + 1;
+    assert a == 8;
+
+    // - has higher precedence than >>
+    // 16 >> 4 - 2 = 16 >> (4 - 2) = 16 >> 2 = 4
+    let b = 16 >> 4 - 2;
+    assert b == 4;
+
+    // * has higher precedence than <<
+    // 1 << 2 * 2 = 1 << (2 * 2) = 1 << 4 = 16
+    let c = 1 << 2 * 2;
+    assert c == 16;
+
+    // Complex: arithmetic first, then shift
+    // 2 + 3 << 1 + 1 = (2 + 3) << (1 + 1) ... wait that's wrong
+    // Actually: arithmetic binds tighter, so:
+    // 2 + 3 << 1 + 1 depends on associativity
+    // Let's use parentheses to be clear
+
+    // 1 << 1 + 2 = 1 << (1 + 2) = 1 << 3 = 8
+    let d = 1 << 1 + 2;
+    assert d == 8;
+
+    // Left shift then add (need parens)
+    // (1 << 2) + 3 = 4 + 3 = 7
+    let e = (1 << 2) + 3;
+    assert e == 7;
+
+    // Shift left-to-right associativity
+    // 64 >> 2 >> 1 = (64 >> 2) >> 1 = 16 >> 1 = 8
+    let f = 64 >> 2 >> 1;
+    assert f == 8;
+
+    // 1 << 2 << 1 = (1 << 2) << 1 = 4 << 1 = 8
+    let g = 1 << 2 << 1;
+    assert g == 8;
+
+    // Shift vs bitwise AND
+    // & has lower precedence than <<
+    // 8 & 4 << 1 = 8 & (4 << 1) = 8 & 8 = 8
+    let h = 8 & 4 << 1;
+    assert h == 8;
+
+    // 15 >> 1 & 3 = (15 >> 1) & 3 ... no wait
+    // & has lower precedence, so:
+    // 15 >> 1 & 3 = (15 >> 1) & 3 = 7 & 3 = 3
+    let i = 15 >> 1 & 3;
+    assert i == 3;
+}
+
+__DATA__
+{}

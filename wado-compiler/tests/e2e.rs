@@ -62,6 +62,11 @@ struct TestSpec {
     /// Whether the program is expected to trap
     #[serde(default)]
     trapped: bool,
+
+    /// Expected compile error message (substring match).
+    /// If set, the test expects compilation to fail with this message.
+    #[serde(default)]
+    compile_error: Option<String>,
 }
 
 fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
@@ -134,6 +139,18 @@ fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
     })
 }
 
+/// Extract __DATA__ section from source file content
+fn extract_data_section(source: &str) -> Option<&str> {
+    let marker = "\n__DATA__\n";
+    if let Some(pos) = source.find(marker) {
+        Some(&source[pos + marker.len()..])
+    } else if source.starts_with("__DATA__\n") {
+        Some(&source["__DATA__\n".len()..])
+    } else {
+        None
+    }
+}
+
 /// Parse test spec from __DATA__ section JSON
 fn parse_test_spec(data_section: &str, fixture_name: &str) -> TestSpec {
     serde_json::from_str(data_section).unwrap_or_else(|e| {
@@ -193,13 +210,13 @@ fn run_fixture_test(fixture_path: &Path) {
         .to_string_lossy()
         .to_string();
 
-    // Compile the fixture (compile_file handles local imports and returns CompileResult)
-    let compile_result = compile_file(fixture_path).unwrap_or_else(|e| {
-        panic!("[{fixture_name}] compilation failed: {e}");
+    // Read the source file to extract __DATA__ section before compilation
+    let source = std::fs::read_to_string(fixture_path).unwrap_or_else(|e| {
+        panic!("[{fixture_name}] failed to read file: {e}");
     });
 
     // Get the __DATA__ section - required for all fixtures
-    let data_section = compile_result.module.data_section().unwrap_or_else(|| {
+    let data_section = extract_data_section(&source).unwrap_or_else(|| {
         panic!(
             "[{fixture_name}] missing __DATA__ section - all fixtures must have test expectations"
         );
@@ -207,6 +224,33 @@ fn run_fixture_test(fixture_path: &Path) {
 
     // Parse the test spec from JSON
     let spec = parse_test_spec(data_section, &fixture_name);
+
+    // Try to compile the fixture
+    let compile_result = compile_file(fixture_path);
+
+    // Handle expected compile errors
+    if let Some(expected_error) = &spec.compile_error {
+        match compile_result {
+            Err(e) => {
+                let error_msg = e.to_string();
+                assert!(
+                    error_msg.contains(expected_error),
+                    "[{fixture_name}] compile error mismatch:\n  expected to contain: {expected_error}\n  actual error: {error_msg}"
+                );
+                return; // Test passed - expected compile error occurred
+            }
+            Ok(_) => {
+                panic!(
+                    "[{fixture_name}] expected compile error containing '{expected_error}', but compilation succeeded"
+                );
+            }
+        }
+    }
+
+    // No compile error expected - compilation must succeed
+    let compile_result = compile_result.unwrap_or_else(|e| {
+        panic!("[{fixture_name}] compilation failed: {e}");
+    });
 
     // Run and capture output
     let result = run_wasm(compile_result.wasm).unwrap_or_else(|e| {

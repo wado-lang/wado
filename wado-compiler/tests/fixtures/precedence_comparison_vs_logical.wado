@@ -1,0 +1,57 @@
+// Test comparison vs logical operator precedence
+// Comparison (==, !=, <, <=, >, >=) > Logical AND (&&) > Logical OR (||)
+
+fn run() {
+    // Comparison has higher precedence than &&
+    // 1 < 2 && 3 < 4 = (1 < 2) && (3 < 4) = true && true = true
+    let a = 1 < 2 && 3 < 4;
+    assert a == true;
+
+    // && has higher precedence than ||
+    // true || false && false = true || (false && false) = true || false = true
+    let b = true || false && false;
+    assert b == true;
+
+    // false && true || true = (false && true) || true = false || true = true
+    let c = false && true || true;
+    assert c == true;
+
+    // Complex: comparison, then &&, then ||
+    // 1 == 1 && 2 == 2 || 3 == 4 = ((1 == 1) && (2 == 2)) || (3 == 4)
+    //                            = (true && true) || false
+    //                            = true || false = true
+    let d = 1 == 1 && 2 == 2 || 3 == 4;
+    assert d == true;
+
+    // 1 == 2 || 3 == 3 && 4 == 4 = (1 == 2) || ((3 == 3) && (4 == 4))
+    //                            = false || (true && true)
+    //                            = false || true = true
+    let e = 1 == 2 || 3 == 3 && 4 == 4;
+    assert e == true;
+
+    // Multiple && (left-to-right)
+    // true && true && false = (true && true) && false = true && false = false
+    let f = true && true && false;
+    assert f == false;
+
+    // Multiple || (left-to-right)
+    // false || false || true = (false || false) || true = false || true = true
+    let g = false || false || true;
+    assert g == true;
+
+    // Comparison operators with numbers
+    // 5 > 3 && 10 <= 10 || 1 != 1 = ((5 > 3) && (10 <= 10)) || (1 != 1)
+    //                             = (true && true) || false
+    //                             = true || false = true
+    let h = 5 > 3 && 10 <= 10 || 1 != 1;
+    assert h == true;
+
+    // 2 >= 3 || 4 < 5 && 6 == 6 = (2 >= 3) || ((4 < 5) && (6 == 6))
+    //                           = false || (true && true)
+    //                           = false || true = true
+    let i = 2 >= 3 || 4 < 5 && 6 == 6;
+    assert i == true;
+}
+
+__DATA__
+{}
