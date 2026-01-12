@@ -1,0 +1,46 @@
+// Test bitwise operator precedence
+// Shift (<<, >>) > AND (&) > XOR (^) > OR (|)
+
+fn run() {
+    // & has higher precedence than |
+    // 0b0011 | (0b0100 & 0b0110) = 0b0011 | 0b0100 = 0b0111
+    let a = 0b0011 | 0b0100 & 0b0110;
+    assert a == 0b0111;
+
+    // ^ has higher precedence than |
+    // 0b01 | (0b10 ^ 0b11) = 0b01 | 0b01 = 0b01
+    let b = 0b01 | 0b10 ^ 0b11;
+    assert b == 0b01;
+
+    // & has higher precedence than ^
+    // 0b111 ^ (0b011 & 0b101) = 0b111 ^ 0b001 = 0b110
+    let c = 0b111 ^ 0b011 & 0b101;
+    assert c == 0b110;
+
+    // << has higher precedence than &
+    // 0b001 & (0b001 << 2) = 0b001 & 0b100 = 0b000
+    let d = 0b001 & 0b001 << 2;
+    assert d == 0b000;
+
+    // >> has higher precedence than |
+    // 0b1000 | (0b10000 >> 2) = 0b1000 | 0b0100 = 0b1100
+    let e = 0b1000 | 0b10000 >> 2;
+    assert e == 0b1100;
+
+    // Complex bitwise expression
+    // 0b001 | ((0b010 & 0b011) ^ 0b100) = 0b001 | (0b010 ^ 0b100) = 0b001 | 0b110 = 0b111
+    let f = 0b001 | 0b010 & 0b011 ^ 0b100;
+    assert f == 0b111;
+
+    // Left-to-right associativity for same precedence
+    // (0b1111 & 0b0111) & 0b0011 = 0b0111 & 0b0011 = 0b0011
+    let g = 0b1111 & 0b0111 & 0b0011;
+    assert g == 0b0011;
+
+    // (0b001 | 0b010) | 0b100 = 0b011 | 0b100 = 0b111
+    let h = 0b001 | 0b010 | 0b100;
+    assert h == 0b111;
+}
+
+__DATA__
+{}

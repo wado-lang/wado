@@ -18,6 +18,45 @@ See also `docs/compiler.md` for the implementation details and the feature check
 
 There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
 
+### E2E Test Specification
+
+E2E tests are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__` section containing JSON test expectations.
+
+Each test fixture group has the same prefix in their filenames.
+
+#### Data Section Schema
+
+| Field             | Type       | Description                              |
+| ----------------- | ---------- | ---------------------------------------- |
+| `stdout`          | `string`   | Expected stdout (exact match)            |
+| `stderr`          | `string`   | Expected stderr (exact match)            |
+| `stdout_contains` | `string[]` | Strings that must appear in stdout       |
+| `stderr_contains` | `string[]` | Strings that must appear in stderr       |
+| `trapped`         | `bool`     | Whether the program should trap          |
+| `compile_error`   | `string`   | Expected compile error (substring match) |
+
+#### Examples
+
+```wado
+// Success test - expects specific output
+fn run() {
+    println("Hello");
+}
+
+__DATA__
+{"stdout": "Hello\n"}
+```
+
+```wado
+// Error test - expects compilation to fail
+fn run() {
+    let a = 1 != 2 != 3;
+}
+
+__DATA__
+{"compile_error": "!= operator cannot be chained"}
+```
+
 ## The CLI
 
 The CLI is implemented in `wado-cli/` with sub-command style CLI:

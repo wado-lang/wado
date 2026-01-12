@@ -293,6 +293,196 @@ fn main() {
 // These tests should be added when the analyzer is extended.
 
 // ============================================================================
+// Comparison Chaining Errors
+// ============================================================================
+
+#[test]
+fn test_comparison_chain_error_not_equal_cannot_chain() {
+    let source = r#"
+fn run() {
+    let a = 1 != 2 != 3;
+}
+"#;
+
+    let result = compile(source);
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    match err {
+        CompileError::Parser {
+            message,
+            line,
+            column,
+            filename,
+        } => {
+            assert!(
+                message.contains("!= operator cannot be chained"),
+                "Unexpected message: {message}"
+            );
+            assert_eq!(line, 3);
+            assert!(column > 0);
+            assert!(filename.is_none());
+        }
+        other => panic!("Expected Parser error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_comparison_chain_error_mixed_ascending_descending() {
+    let source = r#"
+fn run() {
+    let a = 1 < 2 > 3;
+}
+"#;
+
+    let result = compile(source);
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    match err {
+        CompileError::Parser {
+            message,
+            line,
+            column,
+            filename,
+        } => {
+            assert!(
+                message.contains("cannot mix ascending") || message.contains("descending"),
+                "Unexpected message: {message}"
+            );
+            assert_eq!(line, 3);
+            assert!(column > 0);
+            assert!(filename.is_none());
+        }
+        other => panic!("Expected Parser error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_comparison_chain_error_mixed_descending_ascending() {
+    let source = r#"
+fn run() {
+    let a = 3 > 2 < 1;
+}
+"#;
+
+    let result = compile(source);
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    match err {
+        CompileError::Parser {
+            message,
+            line,
+            column,
+            filename,
+        } => {
+            assert!(
+                message.contains("cannot mix ascending") || message.contains("descending"),
+                "Unexpected message: {message}"
+            );
+            assert_eq!(line, 3);
+            assert!(column > 0);
+            assert!(filename.is_none());
+        }
+        other => panic!("Expected Parser error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_comparison_chain_error_equality_with_inequality() {
+    let source = r#"
+fn run() {
+    let a = 1 == 2 < 3;
+}
+"#;
+
+    let result = compile(source);
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    match err {
+        CompileError::Parser {
+            message,
+            line,
+            column,
+            filename,
+        } => {
+            assert!(
+                message.contains("cannot mix ==") || message.contains("inequality"),
+                "Unexpected message: {message}"
+            );
+            assert_eq!(line, 3);
+            assert!(column > 0);
+            assert!(filename.is_none());
+        }
+        other => panic!("Expected Parser error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_comparison_chain_error_inequality_with_equality() {
+    let source = r#"
+fn run() {
+    let a = 1 < 2 == 3;
+}
+"#;
+
+    let result = compile(source);
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    match err {
+        CompileError::Parser {
+            message,
+            line,
+            column,
+            filename,
+        } => {
+            assert!(
+                message.contains("cannot mix ==") || message.contains("inequality"),
+                "Unexpected message: {message}"
+            );
+            assert_eq!(line, 3);
+            assert!(column > 0);
+            assert!(filename.is_none());
+        }
+        other => panic!("Expected Parser error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_comparison_chain_error_not_equal_after_less_than() {
+    let source = r#"
+fn run() {
+    let a = 1 < 2 != 3;
+}
+"#;
+
+    let result = compile(source);
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    match err {
+        CompileError::Parser {
+            message,
+            line,
+            column,
+            filename,
+        } => {
+            assert!(
+                message.contains("!= operator cannot be chained"),
+                "Unexpected message: {message}"
+            );
+            assert_eq!(line, 3);
+            assert!(column > 0);
+            assert!(filename.is_none());
+        }
+        other => panic!("Expected Parser error, got: {other}"),
+    }
+}
+
+// ============================================================================
 // Error Display Format
 // ============================================================================
 

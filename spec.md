@@ -124,19 +124,22 @@ Identifiers are case-sensitive.
 
 **Binary Operators** (in order of precedence, lowest to highest):
 
-| Precedence | Operators            | Description    | Associativity |
-| ---------- | -------------------- | -------------- | ------------- |
-| 1          | `=`                  | Assignment     | Right         |
-| 2          | `\|\|`               | Logical OR     | Left          |
-| 3          | `&&`                 | Logical AND    | Left          |
-| 4          | `\|`                 | Bitwise OR     | Left          |
-| 5          | `^`                  | Bitwise XOR    | Left          |
-| 6          | `&`                  | Bitwise AND    | Left          |
-| 7          | `==`, `!=`           | Equality       | Left          |
-| 8          | `<`, `<=`, `>`, `>=` | Comparison     | Left          |
-| 9          | `<<`, `>>`           | Bitwise shift  | Left          |
-| 10         | `+`, `-`             | Additive       | Left          |
-| 11         | `*`, `/`, `%`        | Multiplicative | Left          |
+| Precedence | Operators                        | Description    | Associativity |
+| ---------- | -------------------------------- | -------------- | ------------- |
+| 1          | `=`, `+=`, `-=`, `*=`, `/=`, etc | Assignment     | Right         |
+| 2          | `\|\|`                           | Logical OR     | Left          |
+| 3          | `&&`                             | Logical AND    | Left          |
+| 4          | `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparison     | Restricted    |
+| 5          | `\|`                             | Bitwise OR     | Left          |
+| 6          | `^`                              | Bitwise XOR    | Left          |
+| 7          | `&`                              | Bitwise AND    | Left          |
+| 8          | `<<`, `>>`                       | Bitwise shift  | Left          |
+| 9          | `+`, `-`                         | Additive       | Left          |
+| 10         | `*`, `/`, `%`                    | Multiplicative | Left          |
+
+TODO: Add range operators once the range syntax is fully designed.
+
+**Design Note**: Bitwise operators (`&`, `|`, `^`) have **higher** precedence than comparison operators, fixing C's well-known design flaw. This means `flags & MASK == EXPECTED` correctly parses as `(flags & MASK) == EXPECTED`.
 
 **Unary Operators** (highest precedence):
 
@@ -146,17 +149,26 @@ Identifiers are case-sensitive.
 | `!`      | Logical NOT |
 | `~`      | Bitwise NOT |
 | `&`      | Reference   |
+| `&mut`   | Mut ref     |
 | `*`      | Dereference |
 
 **Postfix Operators** (highest precedence):
 
-| Operator  | Description      |
-| --------- | ---------------- |
-| `.`       | Field access     |
-| `[]`      | Index access     |
-| `()`      | Function call    |
-| `::`      | Namespace access |
-| `as Type` | Type cast        |
+| Operator  | Description       |
+| --------- | ----------------- |
+| `.`       | Field access      |
+| `[]`      | Index access      |
+| `()`      | Function call     |
+| `::`      | Namespace access  |
+| `as Type` | Type cast         |
+| `?`       | Error propagation |
+
+**Prohibited Operators**:
+
+Wado intentionally omits certain operators found in other languages:
+
+- **No `++`/`--`**: Use `x += 1` and `x -= 1` instead. These operators cause undefined behavior in C/C++ and add unnecessary complexity.
+- **No `**`power operator**: Use`pow(x, y)`function instead. The`**`operator has counterintuitive precedence in languages that have it (e.g., Python's`-1**2 = -1`).
 
 **Type Cast (`as`):**
 
@@ -185,6 +197,38 @@ let b = (2 + 3) * 4;    // 20 (addition first due to parentheses)
 let c = 3 | 4 & 6;      // 7 (& has higher precedence than |)
 let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 ```
+
+**Comparison Chaining:**
+
+Wado supports mathematical comparison chaining similar to Python, allowing natural range expressions:
+
+```wado
+// Valid chains (same direction)
+a < b < c       // Equivalent to: a < b && b < c
+a > b > c       // Equivalent to: a > b && b > c
+a <= b <= c     // Equivalent to: a <= b && b <= c
+a >= b >= c     // Equivalent to: a >= b && b >= c
+a == b == c     // Equivalent to: a == b && b == c
+0 <= x <= 100   // Natural range check
+```
+
+```wado
+// Invalid chains (semantic error)
+a < b > c       // Error: mixed directions
+a > b < c       // Error: mixed directions
+a < b >= c      // Error: mixing < and >=
+a == b < c      // Error: mixing == and inequality
+a != b != c     // Error: != chaining not allowed
+```
+
+**Chaining Rules:**
+
+1. **Same-direction inequality**: `<`/`<=` can only chain with `<`/`<=`, and `>`/`>=` can only chain with `>`/`>=`
+2. **Equality chaining**: `==` can only chain with `==`
+3. **No `!=` chaining**: `!=` cannot be chained (the meaning of `a != b != c` is ambiguous)
+4. **No mixing**: Cannot mix equality operators with inequality operators
+
+See `docs/adr-2026-01-11-operator-precedence.md` for detailed rationale.
 
 ## Memory Model
 

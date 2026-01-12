@@ -21,6 +21,19 @@ pub struct ParseError {
 
 type ParseResult<T> = Result<T, ParseError>;
 
+/// Groups of comparison operators for chain validation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ComparisonChainGroup {
+    /// < and <=
+    Ascending,
+    /// > and >=
+    Descending,
+    /// ==
+    Equality,
+    /// != (cannot be chained)
+    NotEqual,
+}
+
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
@@ -114,6 +127,14 @@ impl Parser {
             message: format!("expected Gt, found {:?}", self.peek_kind()),
             span: self.peek().span,
         })
+    }
+
+    /// Create an error at a specific span
+    fn error_at_span(&self, span: Span, message: &str) -> ParseError {
+        ParseError {
+            message: message.to_string(),
+            span,
+        }
     }
 
     fn consume_ident(&mut self) -> ParseResult<String> {
@@ -779,12 +800,12 @@ impl Parser {
     }
 
     fn parse_and_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_bitor_expr()?;
+        let mut left = self.parse_comparison_expr()?;
 
         while self.check(&TokenKind::And) {
             let left_span = left.span();
             self.advance();
-            let right = self.parse_bitor_expr()?;
+            let right = self.parse_comparison_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
@@ -795,6 +816,135 @@ impl Parser {
         }
 
         Ok(left)
+    }
+
+    /// Parse comparison expressions with chaining support.
+    /// All comparison operators (==, !=, <, <=, >, >=) are at the same precedence level.
+    /// Chaining like `a < b < c` is parsed as `(a < b) && (b < c)`.
+    ///
+    /// Chaining rules:
+    /// - `<`/`<=` can only chain with `<`/`<=` (ascending)
+    /// - `>`/`>=` can only chain with `>`/`>=` (descending)
+    /// - `==` can only chain with `==`
+    /// - `!=` cannot be chained at all
+    fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
+        let left = self.parse_bitor_expr()?;
+
+        // Check if we have a comparison operator
+        let first_op = match self.peek_kind() {
+            TokenKind::EqEq => Some(BinaryOp::Eq),
+            TokenKind::NotEq => Some(BinaryOp::NotEq),
+            TokenKind::Lt => Some(BinaryOp::Lt),
+            TokenKind::LtEq => Some(BinaryOp::LtEq),
+            TokenKind::Gt => Some(BinaryOp::Gt),
+            TokenKind::GtEq => Some(BinaryOp::GtEq),
+            _ => None,
+        };
+
+        if first_op.is_none() {
+            return Ok(left);
+        }
+
+        // Parse first comparison
+        let first_op = first_op.unwrap();
+        let _first_op_span = self.peek().span;
+        let left_span = left.span();
+        self.advance();
+        let mut middle = self.parse_bitor_expr()?;
+        let merged_span = left_span.merge(&middle.span());
+        let mut result = Expr::Binary(Box::new(BinaryExpr {
+            left,
+            op: first_op,
+            right: middle.clone(),
+            span: merged_span,
+        }));
+
+        // Determine chain group from first operator
+        let chain_group = Self::comparison_chain_group(first_op);
+
+        // Check for chained comparisons (e.g., a < b < c)
+        loop {
+            let next_op = match self.peek_kind() {
+                TokenKind::EqEq => Some(BinaryOp::Eq),
+                TokenKind::NotEq => Some(BinaryOp::NotEq),
+                TokenKind::Lt => Some(BinaryOp::Lt),
+                TokenKind::LtEq => Some(BinaryOp::LtEq),
+                TokenKind::Gt => Some(BinaryOp::Gt),
+                TokenKind::GtEq => Some(BinaryOp::GtEq),
+                _ => break,
+            };
+
+            let next_op = next_op.unwrap();
+            let next_op_span = self.peek().span;
+
+            // Validate chain
+            // Rule: != cannot be chained
+            if first_op == BinaryOp::NotEq {
+                return Err(self.error_at_span(
+                    next_op_span,
+                    "!= operator cannot be chained; use explicit && instead: `a != b && b != c`",
+                ));
+            }
+            if next_op == BinaryOp::NotEq {
+                return Err(self.error_at_span(
+                    next_op_span,
+                    "!= operator cannot be chained; use explicit && instead: `a != b && b != c`",
+                ));
+            }
+
+            // Rule: operators must be in the same group
+            let next_group = Self::comparison_chain_group(next_op);
+            if chain_group != next_group {
+                let msg = match (chain_group, next_group) {
+                    (ComparisonChainGroup::Ascending, ComparisonChainGroup::Descending)
+                    | (ComparisonChainGroup::Descending, ComparisonChainGroup::Ascending) => {
+                        "cannot mix ascending (<, <=) and descending (>, >=) comparisons in a chain"
+                    }
+                    (ComparisonChainGroup::Equality, _) | (_, ComparisonChainGroup::Equality) => {
+                        "cannot mix == with inequality operators in a comparison chain"
+                    }
+                    _ => "invalid comparison chain: operators must be in the same direction",
+                };
+                return Err(self.error_at_span(next_op_span, msg));
+            }
+
+            let middle_span = middle.span();
+            self.advance();
+            let right = self.parse_bitor_expr()?;
+            let right_span = right.span();
+
+            // Create the next comparison: middle op right
+            let next_comparison = Expr::Binary(Box::new(BinaryExpr {
+                left: middle,
+                op: next_op,
+                right: right.clone(),
+                span: middle_span.merge(&right_span),
+            }));
+
+            // Chain with &&: (previous result) && (middle op right)
+            let result_span = result.span();
+            result = Expr::Binary(Box::new(BinaryExpr {
+                left: result,
+                op: BinaryOp::And,
+                right: next_comparison,
+                span: result_span.merge(&right_span),
+            }));
+
+            middle = right;
+        }
+
+        Ok(result)
+    }
+
+    /// Determine the chain group for a comparison operator
+    fn comparison_chain_group(op: BinaryOp) -> ComparisonChainGroup {
+        match op {
+            BinaryOp::Lt | BinaryOp::LtEq => ComparisonChainGroup::Ascending,
+            BinaryOp::Gt | BinaryOp::GtEq => ComparisonChainGroup::Descending,
+            BinaryOp::Eq => ComparisonChainGroup::Equality,
+            BinaryOp::NotEq => ComparisonChainGroup::NotEqual,
+            _ => unreachable!("not a comparison operator"),
+        }
     }
 
     fn parse_bitor_expr(&mut self) -> ParseResult<Expr> {
@@ -836,66 +986,16 @@ impl Parser {
     }
 
     fn parse_bitand_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_equality_expr()?;
-
-        while self.check(&TokenKind::Ampersand) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_equality_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                left,
-                op: BinaryOp::BitAnd,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
-    }
-
-    fn parse_equality_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_comparison_expr()?;
-
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::EqEq => BinaryOp::Eq,
-                TokenKind::NotEq => BinaryOp::NotEq,
-                _ => break,
-            };
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_comparison_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                left,
-                op,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
-    }
-
-    fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
         let mut left = self.parse_shift_expr()?;
 
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::Lt => BinaryOp::Lt,
-                TokenKind::LtEq => BinaryOp::LtEq,
-                TokenKind::Gt => BinaryOp::Gt,
-                TokenKind::GtEq => BinaryOp::GtEq,
-                _ => break,
-            };
+        while self.check(&TokenKind::Ampersand) {
             let left_span = left.span();
             self.advance();
             let right = self.parse_shift_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
-                op,
+                op: BinaryOp::BitAnd,
                 right,
                 span: merged_span,
             }));
