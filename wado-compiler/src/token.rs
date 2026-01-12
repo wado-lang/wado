@@ -120,4 +120,15 @@ impl Span {
             column,
         }
     }
+
+    /// Merge two spans to create a span covering both
+    /// Uses the start of self and end of other
+    pub fn merge(&self, other: &Span) -> Self {
+        Self {
+            start: self.start,
+            end: other.end,
+            line: self.line,
+            column: self.column,
+        }
+    }
 }

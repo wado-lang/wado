@@ -31,16 +31,16 @@ on-task-done: format clippy-fix update-bundled test
 
 .PHONY: format
 format:
-	cargo fmt
+	cargo fmt --verbose --all
 	npx prettier --write spec.md AGENTS.md README.md docs/*.md
 
 .PHONY: clippy
 clippy:
-	cargo clippy
+	cargo clippy --all --all-features
 
 .PHONY: clippy-fix
 clippy-fix:
-	cargo clippy --fix --all-features --allow-dirty --allow-staged
+	cargo clippy --all --all-features --fix --allow-dirty --allow-staged
 
 .PHONY: clean
 clean:

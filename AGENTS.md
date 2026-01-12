@@ -111,6 +111,8 @@ See `Makefile` for all the development tasks.
 
 ## On Your Task Done
 
-```sh
-make on-task-done # format, clippy-fix, update-bundled, test
-```
+When you have completed a task, make sure everything is up-to-date and tested:
+
+- `make on-task-done` for format, clippy-fix, update-bundled, test.
+- Update spec.md if necessary.
+- Update docs/compiler.md if necessary.

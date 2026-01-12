@@ -674,3 +674,117 @@ async fn test_panic_basic() {
     // Verify the program trapped (unreachable was executed)
     assert!(result.trapped, "panic should cause a trap");
 }
+
+// ============================================================================
+// Power-assert failure tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_assert_fail_simple() {
+    let source = include_str!("fixtures/assert_fail_simple.wado");
+
+    let wasm = compile(source).expect("compilation failed");
+    let result = run_wasm(wasm).await.expect("runtime setup error");
+
+    // Verify the program trapped
+    assert!(result.trapped, "assert should cause a trap");
+
+    // Verify power-assert output in stderr
+    assert!(
+        result.stderr.contains("Assertion failed:"),
+        "should contain 'Assertion failed:'"
+    );
+    assert!(
+        result.stderr.contains("condition: x > 10"),
+        "should show the condition"
+    );
+    assert!(result.stderr.contains("x: 5"), "should show the value of x");
+}
+
+#[tokio::test]
+async fn test_assert_fail_with_message() {
+    let source = include_str!("fixtures/assert_fail_with_message.wado");
+
+    let wasm = compile(source).expect("compilation failed");
+    let result = run_wasm(wasm).await.expect("runtime setup error");
+
+    // Verify the program trapped
+    assert!(result.trapped, "assert should cause a trap");
+
+    // Verify power-assert output with custom message
+    assert!(
+        result
+            .stderr
+            .contains("Assertion failed: value must be positive"),
+        "should contain custom message"
+    );
+    assert!(
+        result.stderr.contains("condition: x > 0"),
+        "should show the condition"
+    );
+    assert!(
+        result.stderr.contains("x: -5"),
+        "should show the value of x"
+    );
+}
+
+#[tokio::test]
+async fn test_assert_fail_intermediate() {
+    let source = include_str!("fixtures/assert_fail_intermediate.wado");
+
+    let wasm = compile(source).expect("compilation failed");
+    let result = run_wasm(wasm).await.expect("runtime setup error");
+
+    // Verify the program trapped
+    assert!(result.trapped, "assert should cause a trap");
+
+    // Verify power-assert shows intermediate values
+    assert!(
+        result.stderr.contains("Assertion failed:"),
+        "should contain 'Assertion failed:'"
+    );
+    assert!(
+        result.stderr.contains("condition: x + y > 10"),
+        "should show the full condition"
+    );
+    assert!(result.stderr.contains("x: 3"), "should show value of x");
+    assert!(result.stderr.contains("y: 4"), "should show value of y");
+    assert!(
+        result.stderr.contains("x + y: 7"),
+        "should show intermediate expression value"
+    );
+}
+
+#[tokio::test]
+async fn test_assert_fail_side_effect() {
+    let source = include_str!("fixtures/assert_fail_side_effect.wado");
+
+    let wasm = compile(source).expect("compilation failed");
+    let result = run_wasm(wasm).await.expect("runtime setup error");
+
+    // Verify the program trapped
+    assert!(result.trapped, "assert should cause a trap");
+
+    // Verify the function was called exactly ONCE (side-effect test)
+    // If caching works correctly, "get_value called" appears only once
+    let call_count = result.stdout.matches("get_value called").count();
+    assert_eq!(
+        call_count, 1,
+        "function should be called exactly once (caching), but was called {} times",
+        call_count
+    );
+
+    // Verify power-assert output
+    assert!(
+        result.stderr.contains("Assertion failed:"),
+        "should contain 'Assertion failed:'"
+    );
+    assert!(
+        result.stderr.contains("condition: get_value() > 10"),
+        "should show the condition with function call"
+    );
+    assert!(
+        result.stderr.contains("get_value(): 5"),
+        "should show the cached return value"
+    );
+}

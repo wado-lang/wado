@@ -509,10 +509,20 @@ impl Parser {
         self.expect(&TokenKind::Assert)?;
 
         let condition = self.parse_expr()?;
+
+        // Check for optional message after comma
+        let message = if self.check(&TokenKind::Comma) {
+            self.advance(); // consume comma
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
         self.expect(&TokenKind::Semicolon)?;
 
         Ok(Stmt::Assert(AssertStmt {
             condition,
+            message,
             span: start_span,
         }))
     }
@@ -740,14 +750,15 @@ impl Parser {
         let mut left = self.parse_and_expr()?;
 
         while self.check(&TokenKind::Or) {
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_and_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op: BinaryOp::Or,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -758,14 +769,15 @@ impl Parser {
         let mut left = self.parse_bitor_expr()?;
 
         while self.check(&TokenKind::And) {
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_bitor_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op: BinaryOp::And,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -776,14 +788,15 @@ impl Parser {
         let mut left = self.parse_bitxor_expr()?;
 
         while self.check(&TokenKind::Pipe) {
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_bitxor_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op: BinaryOp::BitOr,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -794,14 +807,15 @@ impl Parser {
         let mut left = self.parse_bitand_expr()?;
 
         while self.check(&TokenKind::Caret) {
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_bitand_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op: BinaryOp::BitXor,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -812,14 +826,15 @@ impl Parser {
         let mut left = self.parse_equality_expr()?;
 
         while self.check(&TokenKind::Ampersand) {
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_equality_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op: BinaryOp::BitAnd,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -835,14 +850,15 @@ impl Parser {
                 TokenKind::NotEq => BinaryOp::NotEq,
                 _ => break,
             };
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_comparison_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -860,14 +876,15 @@ impl Parser {
                 TokenKind::GtEq => BinaryOp::GtEq,
                 _ => break,
             };
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_shift_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -883,14 +900,15 @@ impl Parser {
                 TokenKind::GtGt => BinaryOp::Shr,
                 _ => break,
             };
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_additive_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -906,14 +924,15 @@ impl Parser {
                 TokenKind::Minus => BinaryOp::Sub,
                 _ => break,
             };
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_multiplicative_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -930,14 +949,15 @@ impl Parser {
                 TokenKind::Percent => BinaryOp::Mod,
                 _ => break,
             };
-            let start_span = self.peek().span;
+            let left_span = left.span();
             self.advance();
             let right = self.parse_unary_expr()?;
+            let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
                 op,
                 right,
-                span: start_span,
+                span: merged_span,
             }));
         }
 
@@ -974,48 +994,56 @@ impl Parser {
         loop {
             match self.peek_kind() {
                 TokenKind::LParen => {
-                    let start_span = self.peek().span;
+                    let callee_span = expr.span();
                     self.advance();
                     let args = self.parse_arg_list()?;
+                    let rparen_span = self.peek().span;
                     self.expect(&TokenKind::RParen)?;
+                    let merged_span = callee_span.merge(&rparen_span);
                     expr = Expr::Call(Box::new(CallExpr {
                         callee: expr,
                         args,
-                        span: start_span,
+                        span: merged_span,
                     }));
                 }
                 TokenKind::Dot => {
-                    let start_span = self.peek().span;
+                    let receiver_span = expr.span();
                     self.advance();
+                    let field_span = self.peek().span;
                     let field = self.consume_ident()?;
 
                     if self.check(&TokenKind::LParen) {
                         self.advance();
                         let args = self.parse_arg_list()?;
+                        let rparen_span = self.peek().span;
                         self.expect(&TokenKind::RParen)?;
+                        let merged_span = receiver_span.merge(&rparen_span);
                         expr = Expr::MethodCall(Box::new(MethodCallExpr {
                             receiver: expr,
                             method: field,
                             args,
-                            span: start_span,
+                            span: merged_span,
                         }));
                     } else {
+                        let merged_span = receiver_span.merge(&field_span);
                         expr = Expr::FieldAccess(Box::new(FieldAccessExpr {
                             expr,
                             field,
-                            span: start_span,
+                            span: merged_span,
                         }));
                     }
                 }
                 TokenKind::LBracket => {
-                    let start_span = self.peek().span;
+                    let expr_span = expr.span();
                     self.advance();
                     let index = self.parse_expr()?;
+                    let rbracket_span = self.peek().span;
                     self.expect(&TokenKind::RBracket)?;
+                    let merged_span = expr_span.merge(&rbracket_span);
                     expr = Expr::Index(Box::new(IndexExpr {
                         expr,
                         index,
-                        span: start_span,
+                        span: merged_span,
                     }));
                 }
                 TokenKind::As => {
@@ -2203,6 +2231,84 @@ mod tests {
                 assert!(for_stmt.update.is_none());
             } else {
                 panic!("expected for statement");
+            }
+        }
+    }
+
+    #[test]
+    fn test_assert_simple() {
+        let source = r#"
+            fn test() {
+                assert x > 0;
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            if let Stmt::Assert(assert_stmt) = &body.stmts[0] {
+                // Check that condition is parsed
+                assert!(matches!(assert_stmt.condition, Expr::Binary(_)));
+                // Check that message is None
+                assert!(assert_stmt.message.is_none());
+            } else {
+                panic!("expected assert statement");
+            }
+        }
+    }
+
+    #[test]
+    fn test_assert_with_message() {
+        let source = r#"
+            fn test() {
+                assert x > 0, "x must be positive";
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            if let Stmt::Assert(assert_stmt) = &body.stmts[0] {
+                // Check that condition is parsed
+                assert!(matches!(assert_stmt.condition, Expr::Binary(_)));
+                // Check that message is present and is a string literal
+                assert!(assert_stmt.message.is_some());
+                if let Some(Expr::Literal(lit)) = &assert_stmt.message {
+                    assert!(matches!(&lit.value, Literal::String(s) if s == "x must be positive"));
+                } else {
+                    panic!("expected string literal message");
+                }
+            } else {
+                panic!("expected assert statement");
+            }
+        }
+    }
+
+    #[test]
+    fn test_assert_with_template_message() {
+        let source = r#"
+            fn test() {
+                assert x > 0, `x must be positive, got {x}`;
+            }
+        "#;
+
+        let module = parse(source).unwrap();
+
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            if let Stmt::Assert(assert_stmt) = &body.stmts[0] {
+                // Check that condition is parsed
+                assert!(matches!(assert_stmt.condition, Expr::Binary(_)));
+                // Check that message is a template string
+                assert!(assert_stmt.message.is_some());
+                assert!(matches!(
+                    assert_stmt.message.as_ref(),
+                    Some(Expr::TemplateString(_))
+                ));
+            } else {
+                panic!("expected assert statement");
             }
         }
     }

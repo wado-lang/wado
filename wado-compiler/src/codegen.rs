@@ -25,6 +25,8 @@ use wasmparser::{Validator, WasmFeatures};
 /// Targets WASI P3 (0.3.0-rc-2025-09-16)
 pub struct Codegen {
     string_literals: Vec<String>,
+    /// Source code for extracting span text (for power-assert messages)
+    source_code: String,
 }
 
 /// Context for tracking local variables during function code generation
@@ -555,15 +557,102 @@ impl ComponentContext {
 
 impl Default for Codegen {
     fn default() -> Self {
-        Self::new()
+        Self::new_with_source(String::new())
     }
 }
 
 impl Codegen {
-    /// Create a new code generator
-    pub fn new() -> Self {
+    /// Create a new code generator with source code for power-assert messages
+    pub fn new_with_source(source_code: String) -> Self {
         Self {
             string_literals: Vec::new(),
+            source_code,
+        }
+    }
+
+    /// Get the source text for a span (for power-assert messages)
+    fn get_source_text(&self, span: &crate::token::Span) -> String {
+        if span.start < self.source_code.len() && span.end <= self.source_code.len() {
+            self.source_code[span.start..span.end].to_string()
+        } else {
+            // Fallback for spans from other modules (stdlib)
+            String::from("<unknown>")
+        }
+    }
+
+    /// Extract interesting sub-expressions for power-assert display
+    /// Returns pairs of (display_name, expression) for values to show
+    fn extract_intermediate_values<'a>(&self, expr: &'a Expr) -> Vec<(String, &'a Expr)> {
+        let mut values = Vec::new();
+        self.collect_intermediate_values(expr, &mut values, true);
+        values
+    }
+
+    /// Recursively collect intermediate values from an expression
+    /// is_root: true for the top-level condition expression
+    fn collect_intermediate_values<'a>(
+        &self,
+        expr: &'a Expr,
+        values: &mut Vec<(String, &'a Expr)>,
+        is_root: bool,
+    ) {
+        match expr {
+            Expr::Binary(bin) => {
+                // Recursively collect from operands
+                self.collect_intermediate_values(&bin.left, values, false);
+                self.collect_intermediate_values(&bin.right, values, false);
+
+                // Add the binary expression itself if it's NOT the root comparison
+                // (the root is shown as "condition: ..." so we don't need to show it again)
+                if !is_root {
+                    let source = self.get_source_text(&bin.span);
+                    values.push((source, expr));
+                }
+            }
+            Expr::Ident(ident) => {
+                // Always show identifiers - they're the most useful values
+                values.push((ident.name.clone(), expr));
+            }
+            Expr::Call(call) => {
+                // Show function call results
+                let source = self.get_source_text(&call.span);
+                values.push((source, expr));
+            }
+            Expr::MethodCall(call) => {
+                // Show method call results
+                let source = self.get_source_text(&call.span);
+                values.push((source, expr));
+            }
+            Expr::FieldAccess(access) => {
+                // Show field access results
+                let source = self.get_source_text(&access.span);
+                values.push((source, expr));
+            }
+            Expr::Index(idx) => {
+                // Show index access results
+                let source = self.get_source_text(&idx.span);
+                values.push((source, expr));
+            }
+            Expr::Unary(unary) => {
+                // Recurse into the operand
+                self.collect_intermediate_values(&unary.expr, values, false);
+                // Also show the unary expression itself
+                let source = self.get_source_text(&unary.span);
+                values.push((source, expr));
+            }
+            Expr::Cast(cast) => {
+                // Recurse into the expression being cast
+                self.collect_intermediate_values(&cast.expr, values, false);
+            }
+            // Literals don't need to be shown - their value is obvious from source
+            Expr::Literal(_) => {}
+            // Skip complex expressions that don't make sense to show
+            Expr::Block(_)
+            | Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Closure(_)
+            | Expr::TemplateString(_)
+            | Expr::Assign(_) => {}
         }
     }
 
@@ -677,7 +766,38 @@ impl Codegen {
                 self.collect_strings_from_block(&for_stmt.body);
             }
             Stmt::Assert(assert_stmt) => {
+                // Collect strings from condition (for intermediate value display)
                 self.collect_strings_from_expr(&assert_stmt.condition);
+
+                // Collect strings from optional message
+                if let Some(msg) = &assert_stmt.message {
+                    self.collect_strings_from_expr(msg);
+                }
+
+                // Collect static strings for power-assert message
+                let condition_source = self.get_source_text(&assert_stmt.condition.span());
+
+                // Helper to add string if not already present
+                let add_str = |strings: &mut Vec<String>, s: String| {
+                    if !strings.contains(&s) {
+                        strings.push(s);
+                    }
+                };
+
+                // Header strings
+                add_str(&mut self.string_literals, "Assertion failed:\n".to_string());
+                add_str(&mut self.string_literals, "Assertion failed: ".to_string());
+                add_str(&mut self.string_literals, "\n".to_string());
+
+                // Condition line
+                let condition_line = format!("condition: {}\n", condition_source);
+                add_str(&mut self.string_literals, condition_line);
+
+                // Intermediate value strings
+                for (name, _) in self.extract_intermediate_values(&assert_stmt.condition) {
+                    let name_prefix = format!("{}: ", name);
+                    add_str(&mut self.string_literals, name_prefix);
+                }
             }
         }
     }
@@ -1912,6 +2032,8 @@ impl Codegen {
                 // Pre-allocate scratch locals for builtins (including float conversion)
                 let string_array_type = builder.type_idx("string-array");
                 self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+                // Pre-allocate locals for assert statements (power-assert needs cached values)
+                self.preallocate_assert_locals(body, &mut func_ctx, string_array_type);
                 func_ctx.get_local_decls()
             } else {
                 vec![]
@@ -2140,6 +2262,8 @@ impl Codegen {
                 // Pre-allocate scratch locals for builtins (including float conversion)
                 let string_array_type = builder.type_idx("string-array");
                 self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+                // Pre-allocate locals for assert statements (power-assert needs cached values)
+                self.preallocate_assert_locals(body, &mut func_ctx, string_array_type);
                 func_ctx.get_local_decls()
             } else {
                 vec![]
@@ -2327,6 +2451,11 @@ impl Codegen {
         let string_array_type = builder.type_idx("string-array");
         self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
 
+        // Pre-allocate locals for assert statements (power-assert needs cached values)
+        if let Some(body) = &ast_func.body {
+            self.preallocate_assert_locals(body, &mut func_ctx, string_array_type);
+        }
+
         // Create Wasm function with collected locals (including pre-allocated scratch locals)
         let local_decls = func_ctx.get_local_decls();
         let mut wasm_func = Function::new(local_decls);
@@ -2492,6 +2621,65 @@ impl Codegen {
         ctx.alloc_local("__part_len", ValType::I32);
     }
 
+    /// Pre-allocate locals needed for assert statements in a block
+    fn preallocate_assert_locals(
+        &self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        string_array_type: u32,
+    ) {
+        for stmt in &block.stmts {
+            self.preallocate_assert_locals_from_stmt(stmt, ctx, string_array_type);
+        }
+    }
+
+    /// Pre-allocate locals from a single statement (recursively handles nested blocks)
+    fn preallocate_assert_locals_from_stmt(
+        &self,
+        stmt: &Stmt,
+        ctx: &mut FunctionContext,
+        string_array_type: u32,
+    ) {
+        match stmt {
+            Stmt::Assert(assert_stmt) => {
+                // Pre-allocate locals for intermediate values
+                let intermediate_values = self.extract_intermediate_values(&assert_stmt.condition);
+                for (name, expr) in &intermediate_values {
+                    let val_type = self.infer_expr_type_with_ctx(expr, ctx);
+                    ctx.alloc_local(&format!("__assert_{}", name.replace(' ', "_")), val_type);
+                }
+
+                // Pre-allocate condition local
+                ctx.alloc_local("__assert_cond", ValType::I32);
+
+                // Pre-allocate message accumulator local (nullable ref)
+                ctx.alloc_local(
+                    "__assert_msg",
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(string_array_type),
+                    }),
+                );
+            }
+            Stmt::For(for_stmt) => {
+                if let Some(init) = &for_stmt.init {
+                    self.preallocate_assert_locals_from_stmt(init, ctx, string_array_type);
+                }
+                self.preallocate_assert_locals(&for_stmt.body, ctx, string_array_type);
+            }
+            Stmt::While(while_stmt) => {
+                self.preallocate_assert_locals(&while_stmt.body, ctx, string_array_type);
+            }
+            Stmt::If(if_stmt) => {
+                self.preallocate_assert_locals(&if_stmt.then_block, ctx, string_array_type);
+                if let Some(else_block) = &if_stmt.else_block {
+                    self.preallocate_assert_locals(else_block, ctx, string_array_type);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Collect local variables from a block
     fn collect_locals_from_block(&self, block: &Block, ctx: &mut FunctionContext) {
         for stmt in &block.stmts {
@@ -2648,11 +2836,66 @@ impl Codegen {
                 func.instruction(&Instruction::End);
             }
             Stmt::Assert(assert_stmt) => {
-                // Generate: if (!condition) { unreachable(); }
-                self.generate_expr_with_builder(func, &assert_stmt.condition, ctx, builder);
+                // Power-assert: Cache intermediate values, then check condition
+                // If false, build detailed error message and panic
+
+                // 1. Extract intermediate values to cache
+                let intermediate_values = self.extract_intermediate_values(&assert_stmt.condition);
+                let mut cached_locals: Vec<(String, u32, ValType)> = Vec::new();
+                let mut expr_cache: HashMap<usize, u32> = HashMap::new();
+
+                // 2. Evaluate and cache each intermediate value
+                for (name, expr) in &intermediate_values {
+                    let val_type = self.infer_expr_type_with_ctx(expr, ctx);
+                    let local_idx =
+                        ctx.alloc_local(&format!("__assert_{}", name.replace(' ', "_")), val_type);
+                    self.generate_expr_with_builder(func, expr, ctx, builder);
+                    func.instruction(&Instruction::LocalSet(local_idx));
+                    cached_locals.push((name.clone(), local_idx, val_type));
+                    // Store in cache for later lookup (by expression pointer)
+                    let expr_ptr = *expr as *const Expr as usize;
+                    expr_cache.insert(expr_ptr, local_idx);
+                }
+
+                // 3. Evaluate condition using cached values (prevents re-evaluation of side effects)
+                let cond_local = ctx.alloc_local("__assert_cond", ValType::I32);
+                self.generate_expr_with_cache(
+                    func,
+                    &assert_stmt.condition,
+                    &expr_cache,
+                    ctx,
+                    builder,
+                );
+                func.instruction(&Instruction::LocalSet(cond_local));
+
+                // 4. Check condition: if (!condition) { ... }
+                func.instruction(&Instruction::LocalGet(cond_local));
                 func.instruction(&Instruction::I32Eqz);
+
+                // Set branch hint: failure is unlikely
+                ctx.set_branch_hint(false);
+                let if_offset = func.byte_len() as u32;
+                ctx.consume_branch_hint(if_offset);
+
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+
+                // 5. Build power-assert message and panic
+                let condition_source = self.get_source_text(&assert_stmt.condition.span());
+                self.generate_assert_message(
+                    func,
+                    &condition_source,
+                    assert_stmt.message.as_ref(),
+                    &cached_locals,
+                    ctx,
+                    builder,
+                );
+
+                // 6. Call panic (assumes panic function is available)
+                func.instruction(&Instruction::Call(builder.func_idx("panic")));
+
+                // 7. Unreachable (panic never returns)
                 func.instruction(&Instruction::Unreachable);
+
                 func.instruction(&Instruction::End);
             }
         }
@@ -3636,6 +3879,238 @@ impl Codegen {
         }
     }
 
+    /// Generate power-assert message using cached local values
+    /// Format: "Assertion failed: [message]\ncondition: <source>\n<var>: <value>\n..."
+    fn generate_assert_message(
+        &self,
+        func: &mut Function,
+        condition_source: &str,
+        message_expr: Option<&Expr>,
+        cached_locals: &[(String, u32, ValType)],
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        let string_array_type = builder.type_idx("string-array");
+
+        // Allocate result local for message accumulation
+        let result_local = ctx.alloc_local(
+            "__assert_msg",
+            ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(string_array_type),
+            }),
+        );
+
+        // 1. Start with header
+        if let Some(msg_expr) = message_expr {
+            // "Assertion failed: "
+            self.generate_string_from_data(func, "Assertion failed: ", builder);
+            func.instruction(&Instruction::LocalSet(result_local));
+
+            // Append user's message
+            func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::RefAsNonNull);
+            self.generate_expr_with_builder(func, msg_expr, ctx, builder);
+            func.instruction(&Instruction::Call(builder.func_idx("string_concat")));
+            func.instruction(&Instruction::LocalSet(result_local));
+
+            // Append newline
+            func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::RefAsNonNull);
+            self.generate_string_from_data(func, "\n", builder);
+            func.instruction(&Instruction::Call(builder.func_idx("string_concat")));
+            func.instruction(&Instruction::LocalSet(result_local));
+        } else {
+            // "Assertion failed:\n"
+            self.generate_string_from_data(func, "Assertion failed:\n", builder);
+            func.instruction(&Instruction::LocalSet(result_local));
+        }
+
+        // 2. Append condition source: "condition: <source>\n"
+        func.instruction(&Instruction::LocalGet(result_local));
+        func.instruction(&Instruction::RefAsNonNull);
+        let condition_line = format!("condition: {}\n", condition_source);
+        self.generate_string_from_data(func, &condition_line, builder);
+        func.instruction(&Instruction::Call(builder.func_idx("string_concat")));
+        func.instruction(&Instruction::LocalSet(result_local));
+
+        // 3. For each cached value, append "<name>: <value>\n"
+        for (name, local_idx, val_type) in cached_locals {
+            // Append "<name>: "
+            func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::RefAsNonNull);
+            let name_prefix = format!("{}: ", name);
+            self.generate_string_from_data(func, &name_prefix, builder);
+            func.instruction(&Instruction::Call(builder.func_idx("string_concat")));
+            func.instruction(&Instruction::LocalSet(result_local));
+
+            // Append value (convert to string based on type)
+            func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::RefAsNonNull);
+            func.instruction(&Instruction::LocalGet(*local_idx));
+            self.generate_value_to_string(func, val_type, builder);
+            func.instruction(&Instruction::Call(builder.func_idx("string_concat")));
+            func.instruction(&Instruction::LocalSet(result_local));
+
+            // Append newline
+            func.instruction(&Instruction::LocalGet(result_local));
+            func.instruction(&Instruction::RefAsNonNull);
+            self.generate_string_from_data(func, "\n", builder);
+            func.instruction(&Instruction::Call(builder.func_idx("string_concat")));
+            func.instruction(&Instruction::LocalSet(result_local));
+        }
+
+        // 4. Final result on stack
+        func.instruction(&Instruction::LocalGet(result_local));
+        func.instruction(&Instruction::RefAsNonNull);
+    }
+
+    /// Generate a string from data section
+    fn generate_string_from_data(&self, func: &mut Function, s: &str, builder: &CoreModuleBuilder) {
+        let string_array_type = builder.type_idx("string-array");
+        let offset = self.get_string_offset(s);
+        let len = s.len();
+        func.instruction(&Instruction::I32Const(offset as i32));
+        func.instruction(&Instruction::I32Const(len as i32));
+        func.instruction(&Instruction::ArrayNewData {
+            array_type_index: string_array_type,
+            array_data_index: 0,
+        });
+    }
+
+    /// Generate code to convert a value to string based on its Wasm type
+    fn generate_value_to_string(
+        &self,
+        func: &mut Function,
+        val_type: &ValType,
+        builder: &CoreModuleBuilder,
+    ) {
+        match val_type {
+            ValType::I32 => {
+                func.instruction(&Instruction::Call(builder.func_idx("i32_to_string")));
+            }
+            ValType::I64 => {
+                func.instruction(&Instruction::Call(builder.func_idx("i64_to_string")));
+            }
+            ValType::F32 => {
+                func.instruction(&Instruction::Call(builder.func_idx("f32_to_string")));
+            }
+            ValType::F64 => {
+                func.instruction(&Instruction::Call(builder.func_idx("f64_to_string")));
+            }
+            ValType::Ref(_) => {
+                // Assume it's already a string - no conversion needed
+            }
+            ValType::V128 => {
+                // Not supported - treat as i32
+                func.instruction(&Instruction::Call(builder.func_idx("i32_to_string")));
+            }
+        }
+    }
+
+    /// Generate expression code using cached values where available
+    /// This prevents re-evaluation of side-effectful expressions in assert conditions
+    fn generate_expr_with_cache(
+        &self,
+        func: &mut Function,
+        expr: &Expr,
+        cache: &HashMap<usize, u32>, // Maps expression pointer to local index
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Check if this exact expression was cached (by pointer address)
+        let expr_ptr = expr as *const Expr as usize;
+        if let Some(&local_idx) = cache.get(&expr_ptr) {
+            func.instruction(&Instruction::LocalGet(local_idx));
+            return;
+        }
+
+        // Otherwise, recursively generate with cache lookups
+        match expr {
+            Expr::Binary(bin) => {
+                self.generate_expr_with_cache(func, &bin.left, cache, ctx, builder);
+                self.generate_expr_with_cache(func, &bin.right, cache, ctx, builder);
+
+                // Infer operand type to select correct instructions
+                let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx);
+
+                match operand_type {
+                    ValType::F64 => match bin.op {
+                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::F64Add),
+                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::F64Sub),
+                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::F64Mul),
+                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::F64Div),
+                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::F64Eq),
+                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::F64Ne),
+                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::F64Lt),
+                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::F64Le),
+                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::F64Gt),
+                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::F64Ge),
+                        _ => func.instruction(&Instruction::I32Const(0)),
+                    },
+                    ValType::F32 => match bin.op {
+                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::F32Add),
+                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::F32Sub),
+                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::F32Mul),
+                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::F32Div),
+                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::F32Eq),
+                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::F32Ne),
+                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::F32Lt),
+                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::F32Le),
+                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::F32Gt),
+                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::F32Ge),
+                        _ => func.instruction(&Instruction::I32Const(0)),
+                    },
+                    ValType::I64 => match bin.op {
+                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::I64Add),
+                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I64Sub),
+                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I64Mul),
+                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::I64DivS),
+                        crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I64RemS),
+                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I64Eq),
+                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I64Ne),
+                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I64LtS),
+                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I64LeS),
+                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I64GtS),
+                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I64GeS),
+                        crate::ast::BinaryOp::And => func.instruction(&Instruction::I64And),
+                        crate::ast::BinaryOp::Or => func.instruction(&Instruction::I64Or),
+                        crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I64And),
+                        crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I64Or),
+                        crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I64Xor),
+                        crate::ast::BinaryOp::Shl => func.instruction(&Instruction::I64Shl),
+                        crate::ast::BinaryOp::Shr => func.instruction(&Instruction::I64ShrS),
+                    },
+                    _ => match bin.op {
+                        crate::ast::BinaryOp::Add => func.instruction(&Instruction::I32Add),
+                        crate::ast::BinaryOp::Sub => func.instruction(&Instruction::I32Sub),
+                        crate::ast::BinaryOp::Mul => func.instruction(&Instruction::I32Mul),
+                        crate::ast::BinaryOp::Div => func.instruction(&Instruction::I32DivS),
+                        crate::ast::BinaryOp::Mod => func.instruction(&Instruction::I32RemS),
+                        crate::ast::BinaryOp::Eq => func.instruction(&Instruction::I32Eq),
+                        crate::ast::BinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
+                        crate::ast::BinaryOp::Lt => func.instruction(&Instruction::I32LtS),
+                        crate::ast::BinaryOp::LtEq => func.instruction(&Instruction::I32LeS),
+                        crate::ast::BinaryOp::Gt => func.instruction(&Instruction::I32GtS),
+                        crate::ast::BinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
+                        crate::ast::BinaryOp::And => func.instruction(&Instruction::I32And),
+                        crate::ast::BinaryOp::Or => func.instruction(&Instruction::I32Or),
+                        crate::ast::BinaryOp::BitAnd => func.instruction(&Instruction::I32And),
+                        crate::ast::BinaryOp::BitOr => func.instruction(&Instruction::I32Or),
+                        crate::ast::BinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
+                        crate::ast::BinaryOp::Shl => func.instruction(&Instruction::I32Shl),
+                        crate::ast::BinaryOp::Shr => func.instruction(&Instruction::I32ShrS),
+                    },
+                };
+            }
+            // For non-binary expressions, fall back to normal generation
+            // (they should have been cached if they have side effects)
+            _ => {
+                self.generate_expr_with_builder(func, expr, ctx, builder);
+            }
+        }
+    }
+
     fn build_memory_module(&self, string_data: &[u8]) -> Vec<u8> {
         let mut module = Module::new();
 
@@ -3737,7 +4212,7 @@ mod tests {
         );
 
         let _symbols = analyze(&ast);
-        let mut codegen = Codegen::new();
+        let mut codegen = Codegen::default();
         codegen.collect_strings(&ast);
 
         // String literals are collected as-is
@@ -3758,7 +4233,7 @@ mod tests {
         );
 
         let _symbols = analyze(&ast);
-        let mut codegen = Codegen::new();
+        let mut codegen = Codegen::default();
         // generate_wasm() automatically validates the output
         let wasm = codegen.generate_wasm(&ast);
 
@@ -3780,7 +4255,7 @@ mod tests {
         );
 
         let _symbols = analyze(&ast);
-        let mut codegen = Codegen::new();
+        let mut codegen = Codegen::default();
         let wat = codegen.generate_wat(&ast);
 
         // Verify it produces valid WAT
