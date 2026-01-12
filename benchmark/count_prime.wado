@@ -13,6 +13,7 @@
 //      wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
 
 use {println, Stdout} from "core:cli";
+use {now, MonotonicClock} from "core:clocks";
 
 fn is_prime(n: i32) -> bool {
     if n < 2 {
@@ -40,8 +41,17 @@ fn count_primes(limit: i32) -> i32 {
     return count;
 }
 
-fn run() with Stdout {
+fn run() with Stdout, MonotonicClock {
     let limit = 10000000;
+
+    let start = now();
     let count = count_primes(limit);
+    let end = now();
+
+    let elapsed_ns = end - start;
+    // Convert nanoseconds to milliseconds (integer division)
+    let elapsed_ms = elapsed_ns / (1000000 as i64);
+
     println(`Prime count up to {limit}: {count}`);
+    println(`Elapsed: {elapsed_ms} ms`);
 }

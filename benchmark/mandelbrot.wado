@@ -10,6 +10,7 @@
 //   wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
 
 use {println, Stdout} from "core:cli";
+use {now, MonotonicClock} from "core:clocks";
 
 fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
     let mut x = 0.0;
@@ -33,7 +34,7 @@ fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
     return max_iter;
 }
 
-fn run() with Stdout {
+fn run() with Stdout, MonotonicClock {
     let width = 800;
     let height = 600;
     let max_iter = 256;
@@ -48,6 +49,8 @@ fn run() with Stdout {
     let height_f = 600.0;
     let dx = (x_max - x_min) / width_f;
     let dy = (y_max - y_min) / height_f;
+
+    let start = now();
 
     // Use i32 accumulator (max possible: 800*600*256 = 122,880,000 fits in i32)
     let mut total_iterations = 0;
@@ -72,6 +75,12 @@ fn run() with Stdout {
         py_f = py_f + 1.0;
     }
 
+    let end = now();
+    let elapsed_ns = end - start;
+    // Convert nanoseconds to milliseconds (integer division)
+    let elapsed_ms = elapsed_ns / (1000000 as i64);
+
     println(`Mandelbrot {width}x{height}, max_iter={max_iter}`);
     println(`Total iterations: {total_iterations}`);
+    println(`Elapsed: {elapsed_ms} ms`);
 }

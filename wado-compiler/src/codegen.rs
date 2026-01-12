@@ -3179,11 +3179,29 @@ impl Codegen {
                 self.generate_literal_p3(func, &lit.value);
             }
             Expr::Binary(bin) => {
-                self.generate_expr_with_builder(func, &bin.left, ctx, builder);
-                self.generate_expr_with_builder(func, &bin.right, ctx, builder);
+                // Infer both operand types for potential type coercion
+                let left_type = self.infer_expr_type_with_ctx(&bin.left, ctx, Some(builder));
+                let right_type = self.infer_expr_type_with_ctx(&bin.right, ctx, Some(builder));
 
-                // Infer operand type to select correct instructions
-                let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx, Some(builder));
+                // Determine the target type for the operation
+                // If one operand is i64 and the other is i32, promote to i64
+                let operand_type = if left_type == ValType::I64 || right_type == ValType::I64 {
+                    ValType::I64
+                } else {
+                    left_type
+                };
+
+                // Generate left operand with potential promotion
+                self.generate_expr_with_builder(func, &bin.left, ctx, builder);
+                if operand_type == ValType::I64 && left_type == ValType::I32 {
+                    func.instruction(&Instruction::I64ExtendI32S);
+                }
+
+                // Generate right operand with potential promotion
+                self.generate_expr_with_builder(func, &bin.right, ctx, builder);
+                if operand_type == ValType::I64 && right_type == ValType::I32 {
+                    func.instruction(&Instruction::I64ExtendI32S);
+                }
 
                 match operand_type {
                     ValType::F64 => {
@@ -3320,8 +3338,21 @@ impl Codegen {
                 }
             }
             Expr::Cast(cast) => {
-                self.generate_expr_with_builder(func, &cast.expr, ctx, builder);
-                self.generate_type_cast(func, &cast.expr, &cast.target_type, ctx);
+                // Special case: integer literal cast to i64/u64 - generate I64Const directly
+                // to avoid truncation through i32
+                let target_type_name = self.get_primitive_type_name(&cast.target_type);
+                if let Expr::Literal(lit) = &cast.expr
+                    && let Literal::Int(n) = &lit.value
+                    && matches!(
+                        target_type_name.as_str(),
+                        "i64" | "u64" | "Instant" | "Duration"
+                    )
+                {
+                    func.instruction(&Instruction::I64Const(*n));
+                } else {
+                    self.generate_expr_with_builder(func, &cast.expr, ctx, builder);
+                    self.generate_type_cast(func, &cast.expr, &cast.target_type, ctx);
+                }
             }
             _ => {}
         }
