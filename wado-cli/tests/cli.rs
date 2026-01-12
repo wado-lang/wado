@@ -1,0 +1,337 @@
+//! End-to-end tests for wado CLI
+//!
+//! Tests the CLI interface including argument parsing, subcommands,
+//! and integration with the compiler.
+
+use predicates::prelude::*;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+
+/// Get the project root directory (parent of wado-cli)
+fn project_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf()
+}
+
+fn wado() -> assert_cmd::Command {
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("wado"));
+    cmd.current_dir(project_root());
+    cmd.into()
+}
+
+// =============================================================================
+// Root command tests
+// =============================================================================
+
+#[test]
+fn test_help() {
+    wado()
+        .arg("--help")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Usage: wado <command>"))
+        .stderr(predicate::str::contains("compile"))
+        .stderr(predicate::str::contains("run"));
+}
+
+#[test]
+fn test_version() {
+    wado()
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("wado "))
+        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn test_no_args_shows_usage() {
+    wado()
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Usage: wado"));
+}
+
+#[test]
+fn test_unknown_command() {
+    wado()
+        .arg("unknown")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown command"));
+}
+
+// =============================================================================
+// Compile subcommand tests
+// =============================================================================
+
+#[test]
+fn test_compile_help() {
+    wado()
+        .args(["compile", "--help"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Usage: wado compile"));
+}
+
+#[test]
+fn test_compile_missing_input() {
+    wado()
+        .arg("compile")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no input file specified"));
+}
+
+#[test]
+fn test_compile_file_not_found() {
+    wado()
+        .args(["compile", "nonexistent.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("nonexistent.wado"));
+}
+
+#[test]
+fn test_compile_output_wasm() {
+    let temp_dir = std::env::temp_dir();
+    let output_path = temp_dir.join("test_compile_output.wasm");
+
+    // Clean up before test
+    let _ = fs::remove_file(&output_path);
+
+    wado()
+        .args([
+            "compile",
+            "-o",
+            output_path.to_str().unwrap(),
+            "example/hello.wado",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Generated:"));
+
+    // Verify file was created
+    assert!(output_path.exists(), "Output file should exist");
+
+    // Verify it's a valid Wasm file (starts with magic bytes)
+    let content = fs::read(&output_path).unwrap();
+    assert!(content.len() > 4, "Wasm file should have content");
+    // Component model starts with \0asm but version differs from core wasm
+
+    // Clean up
+    let _ = fs::remove_file(&output_path);
+}
+
+#[test]
+fn test_compile_output_wat() {
+    let temp_dir = std::env::temp_dir();
+    let output_path = temp_dir.join("test_compile_output.wat");
+
+    // Clean up before test
+    let _ = fs::remove_file(&output_path);
+
+    wado()
+        .args([
+            "compile",
+            "-o",
+            output_path.to_str().unwrap(),
+            "example/hello.wado",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Generated:"));
+
+    // Verify file was created with WAT content
+    let content = fs::read_to_string(&output_path).unwrap();
+    assert!(
+        content.contains("(component"),
+        "WAT file should contain component"
+    );
+
+    // Clean up
+    let _ = fs::remove_file(&output_path);
+}
+
+#[test]
+fn test_compile_format_wat() {
+    let temp_dir = std::env::temp_dir();
+    let output_path = temp_dir.join("test_compile_format.txt");
+
+    // Clean up before test
+    let _ = fs::remove_file(&output_path);
+
+    wado()
+        .args([
+            "compile",
+            "--format",
+            "wat",
+            "-o",
+            output_path.to_str().unwrap(),
+            "example/hello.wado",
+        ])
+        .assert()
+        .success();
+
+    // Verify WAT content even with non-standard extension
+    let content = fs::read_to_string(&output_path).unwrap();
+    assert!(
+        content.contains("(component"),
+        "Should be WAT format regardless of extension"
+    );
+
+    // Clean up
+    let _ = fs::remove_file(&output_path);
+}
+
+#[test]
+fn test_compile_format_wasm() {
+    let temp_dir = std::env::temp_dir();
+    let output_path = temp_dir.join("test_compile_format.bin");
+
+    // Clean up before test
+    let _ = fs::remove_file(&output_path);
+
+    wado()
+        .args([
+            "compile",
+            "--format",
+            "wasm",
+            "-o",
+            output_path.to_str().unwrap(),
+            "example/hello.wado",
+        ])
+        .assert()
+        .success();
+
+    // Verify binary content even with non-standard extension
+    let content = fs::read(&output_path).unwrap();
+    assert!(content.len() > 4, "Wasm file should have content");
+
+    // Clean up
+    let _ = fs::remove_file(&output_path);
+}
+
+#[test]
+fn test_compile_wat_to_stdout() {
+    wado()
+        .args(["compile", "--wat-to-stdout", "example/hello.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(component"));
+}
+
+#[test]
+fn test_compile_invalid_format() {
+    wado()
+        .args(["compile", "--format", "invalid", "example/hello.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown format"));
+}
+
+#[test]
+fn test_compile_unknown_option() {
+    wado()
+        .args(["compile", "--unknown", "example/hello.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid option"));
+}
+
+#[test]
+fn test_compile_opt_level_o0() {
+    wado()
+        .args(["compile", "-O0", "--wat-to-stdout", "example/hello.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(component"));
+}
+
+#[test]
+fn test_compile_opt_level_o2() {
+    wado()
+        .args(["compile", "-O2", "--wat-to-stdout", "example/hello.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(component"));
+}
+
+#[test]
+fn test_compile_opt_level_os() {
+    wado()
+        .args(["compile", "-Os", "--wat-to-stdout", "example/hello.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(component"));
+}
+
+#[test]
+fn test_compile_opt_level_og() {
+    wado()
+        .args(["compile", "-Og", "--wat-to-stdout", "example/hello.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(component"));
+}
+
+#[test]
+fn test_compile_opt_level_invalid() {
+    wado()
+        .args(["compile", "-Ox", "example/hello.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown optimization level"));
+}
+
+// =============================================================================
+// Run subcommand tests
+// =============================================================================
+
+#[test]
+fn test_run_help() {
+    wado()
+        .args(["run", "--help"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Usage: wado run"));
+}
+
+#[test]
+fn test_run_missing_input() {
+    wado()
+        .arg("run")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no input file specified"));
+}
+
+#[test]
+fn test_run_hello() {
+    wado()
+        .args(["run", "example/hello.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello, world!"));
+}
+
+#[test]
+fn test_run_file_not_found() {
+    wado()
+        .args(["run", "nonexistent.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("nonexistent.wado"));
+}
+
+#[test]
+fn test_run_unknown_option() {
+    wado()
+        .args(["run", "--unknown", "example/hello.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid option"));
+}

@@ -1,8 +1,9 @@
 mod compile;
 mod run;
 
-use std::env;
 use std::process;
+
+use lexopt::prelude::*;
 
 fn print_usage() {
     eprintln!("Usage: wado <command> [options]");
@@ -16,32 +17,54 @@ fn print_usage() {
     eprintln!("  --format <fmt>   Output format: wasm, wat (default: guessed from -o extension)");
     eprintln!();
     eprintln!("Global options:");
-    eprintln!("  --help, -h  Show this help message");
+    eprintln!("  --help       Show this help message");
+    eprintln!("  --version    Show version information");
+}
+
+fn print_version() {
+    println!("wado {}", env!("CARGO_PKG_VERSION"));
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let mut parser = lexopt::Parser::from_env();
 
-    if args.len() < 2 {
+    let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("Error: {e}");
+        process::exit(1);
+    }) else {
         print_usage();
         process::exit(1);
-    }
+    };
 
-    match args[1].as_str() {
-        "--help" | "-h" => {
+    match arg {
+        Long("help") => {
             print_usage();
             process::exit(0);
         }
-        "compile" => {
-            let opts = compile::parse_args(&args[2..]);
-            compile::run(opts);
+        Long("version") => {
+            print_version();
+            process::exit(0);
         }
-        "run" => {
-            let opts = run::parse_args(&args[2..]);
-            run::run(opts);
+        Value(cmd) => {
+            let cmd = cmd.to_string_lossy();
+            match cmd.as_ref() {
+                "compile" => {
+                    let opts = compile::parse_args(parser);
+                    compile::run(opts);
+                }
+                "run" => {
+                    let opts = run::parse_args(parser);
+                    run::run(opts);
+                }
+                _ => {
+                    eprintln!("Error: unknown command '{cmd}'");
+                    print_usage();
+                    process::exit(1);
+                }
+            }
         }
-        cmd => {
-            eprintln!("Error: unknown command '{cmd}'");
+        _ => {
+            eprintln!("Error: expected command");
             print_usage();
             process::exit(1);
         }

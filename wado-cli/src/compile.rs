@@ -2,6 +2,20 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
+use lexopt::prelude::*;
+
+/// Optimization level (not yet implemented)
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum OptLevel {
+    #[default]
+    O0,
+    O1,
+    O2,
+    O3,
+    Os,
+    Og,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Wasm,
@@ -32,6 +46,8 @@ pub struct CompileOptions {
     pub input: String,
     pub output: Option<String>,
     pub format: Option<OutputFormat>,
+    #[allow(dead_code)] // Not yet implemented
+    pub opt_level: OptLevel,
     pub wat_to_stdout: bool,
 }
 
@@ -44,74 +60,84 @@ pub fn print_usage() {
     eprintln!(
         "  --wat-to-stdout  Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
     );
-    eprintln!("  --help, -h       Show this help message");
+    eprintln!(
+        "  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os, -Og (not yet implemented)"
+    );
+    eprintln!("  --help           Show this help message");
 }
 
-pub fn parse_args(args: &[String]) -> CompileOptions {
+pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut output: Option<String> = None;
     let mut format: Option<OutputFormat> = None;
     let mut input: Option<String> = None;
+    let mut opt_level = OptLevel::default();
     let mut wat_to_stdout = false;
-    let mut i = 0;
 
-    while i < args.len() {
-        match args[i].as_str() {
-            "--help" | "-h" => {
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("Error: {e}");
+        process::exit(1);
+    }) {
+        match arg {
+            Long("help") => {
                 print_usage();
                 process::exit(0);
             }
-            "--wat-to-stdout" => {
+            Long("wat-to-stdout") => {
                 wat_to_stdout = true;
-                i += 1;
             }
-            "-o" => {
-                if i + 1 >= args.len() {
-                    eprintln!("Error: -o requires an argument");
+            Short('o') => {
+                let val = parser.value().unwrap_or_else(|e| {
+                    eprintln!("Error: {e}");
                     process::exit(1);
-                }
-                output = Some(args[i + 1].clone());
-                i += 2;
+                });
+                output = Some(val.to_string_lossy().into_owned());
             }
-            "--format" => {
-                if i + 1 >= args.len() {
-                    eprintln!("Error: --format requires an argument");
-                    process::exit(1);
-                }
-                match OutputFormat::from_str(&args[i + 1]) {
-                    Some(f) => format = Some(f),
-                    None => {
+            Short('O') => {
+                let val = parser.optional_value();
+                let level_str = val
+                    .as_ref()
+                    .map(|v| v.to_string_lossy())
+                    .unwrap_or_default();
+                opt_level = match level_str.as_ref() {
+                    "" | "0" => OptLevel::O0,
+                    "1" => OptLevel::O1,
+                    "2" => OptLevel::O2,
+                    "3" => OptLevel::O3,
+                    "s" => OptLevel::Os,
+                    "g" => OptLevel::Og,
+                    _ => {
                         eprintln!(
-                            "Error: unknown format '{}'. Use 'wasm' or 'wat'",
-                            args[i + 1]
+                            "Error: unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
                         );
                         process::exit(1);
                     }
-                }
-                i += 2;
+                };
             }
-            arg if arg.starts_with("--format=") => {
-                let fmt = &arg["--format=".len()..];
-                match OutputFormat::from_str(fmt) {
+            Long("format") => {
+                let val = parser.value().unwrap_or_else(|e| {
+                    eprintln!("Error: {e}");
+                    process::exit(1);
+                });
+                let fmt_str = val.to_string_lossy();
+                match OutputFormat::from_str(&fmt_str) {
                     Some(f) => format = Some(f),
                     None => {
-                        eprintln!("Error: unknown format '{fmt}'. Use 'wasm' or 'wat'");
+                        eprintln!("Error: unknown format '{fmt_str}'. Use 'wasm' or 'wat'");
                         process::exit(1);
                     }
                 }
-                i += 1;
             }
-            arg if arg.starts_with('-') => {
-                eprintln!("Error: unknown option '{arg}'");
-                print_usage();
-                process::exit(1);
-            }
-            arg => {
+            Value(val) => {
                 if input.is_some() {
                     eprintln!("Error: multiple input files not supported");
                     process::exit(1);
                 }
-                input = Some(arg.to_string());
-                i += 1;
+                input = Some(val.to_string_lossy().into_owned());
+            }
+            _ => {
+                eprintln!("Error: {}", arg.unexpected());
+                print_usage();
+                process::exit(1);
             }
         }
     }
@@ -129,6 +155,7 @@ pub fn parse_args(args: &[String]) -> CompileOptions {
         input,
         output,
         format,
+        opt_level,
         wat_to_stdout,
     }
 }

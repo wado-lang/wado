@@ -113,6 +113,7 @@ This project relays on the following features:
 - Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/` directory.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Avoid using well-known floating point numbers in tests not to violate the Clippy `approx_constant` rule.
+- Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 
 ## Rules for Markdown
 

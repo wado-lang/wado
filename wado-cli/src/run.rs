@@ -1,6 +1,7 @@
 use std::process;
 
 use anyhow::Result;
+use lexopt::prelude::*;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -15,31 +16,32 @@ pub fn print_usage() {
     eprintln!("Usage: wado run [options] <file.wado>");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  --help, -h  Show this help message");
+    eprintln!("  --help  Show this help message");
 }
 
-pub fn parse_args(args: &[String]) -> RunOptions {
+pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut input: Option<String> = None;
-    let mut i = 0;
 
-    while i < args.len() {
-        match args[i].as_str() {
-            "--help" | "-h" => {
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("Error: {e}");
+        process::exit(1);
+    }) {
+        match arg {
+            Long("help") => {
                 print_usage();
                 process::exit(0);
             }
-            arg if arg.starts_with('-') => {
-                eprintln!("Error: unknown option '{arg}'");
-                print_usage();
-                process::exit(1);
-            }
-            arg => {
+            Value(val) => {
                 if input.is_some() {
                     eprintln!("Error: multiple input files not supported");
                     process::exit(1);
                 }
-                input = Some(arg.to_string());
-                i += 1;
+                input = Some(val.to_string_lossy().into_owned());
+            }
+            _ => {
+                eprintln!("Error: {}", arg.unexpected());
+                print_usage();
+                process::exit(1);
             }
         }
     }
