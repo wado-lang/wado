@@ -5,6 +5,32 @@ use crate::token::Span;
 #[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<Item>,
+    /// Content of the __DATA__ section, if present in the source file.
+    /// This is available after parsing for tooling (test harnesses, IDEs).
+    data_section: Option<String>,
+}
+
+impl Module {
+    /// Creates a new module with the given items and no data section.
+    pub fn new(items: Vec<Item>) -> Self {
+        Self {
+            items,
+            data_section: None,
+        }
+    }
+
+    /// Creates a new module with the given items and data section.
+    pub fn with_data_section(items: Vec<Item>, data_section: Option<String>) -> Self {
+        Self {
+            items,
+            data_section,
+        }
+    }
+
+    /// Returns the content of the __DATA__ section, if present.
+    pub fn data_section(&self) -> Option<&str> {
+        self.data_section.as_deref()
+    }
 }
 
 #[derive(Debug, Clone)]

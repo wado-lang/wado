@@ -9,6 +9,8 @@ pub struct Parser {
     /// Tracks when we've split a GtGt into two Gt tokens for nested generics.
     /// When true, the next expect_gt call should succeed without consuming a token.
     pending_gt: bool,
+    /// Content of the __DATA__ section, passed from the lexer.
+    data_section: Option<String>,
 }
 
 #[derive(Debug)]
@@ -25,6 +27,17 @@ impl Parser {
             tokens,
             pos: 0,
             pending_gt: false,
+            data_section: None,
+        }
+    }
+
+    /// Creates a new parser with the given tokens and data section.
+    pub fn with_data_section(tokens: Vec<Token>, data_section: Option<String>) -> Self {
+        Self {
+            tokens,
+            pos: 0,
+            pending_gt: false,
+            data_section,
         }
     }
 
@@ -35,7 +48,7 @@ impl Parser {
             items.push(self.parse_item()?);
         }
 
-        Ok(Module { items })
+        Ok(Module::with_data_section(items, self.data_section.take()))
     }
 
     // Token handling
@@ -1816,7 +1829,8 @@ mod tests {
     fn parse(source: &str) -> ParseResult<Module> {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().expect("lexer error");
-        let mut parser = Parser::new(tokens);
+        let data_section = lexer.into_data_section();
+        let mut parser = Parser::with_data_section(tokens, data_section);
         parser.parse()
     }
 
@@ -2311,5 +2325,49 @@ mod tests {
                 panic!("expected assert statement");
             }
         }
+    }
+
+    #[test]
+    fn test_module_data_section() {
+        let source = r#"fn main() { }
+__DATA__
+{"exit": 0, "stdout": "Hello\n"}"#;
+
+        let module = parse(source).unwrap();
+
+        // Should have parsed the function
+        assert_eq!(module.items.len(), 1);
+        assert!(matches!(&module.items[0], Item::Function(f) if f.name == "main"));
+
+        // Should have captured the data section
+        let data = module.data_section().unwrap();
+        assert!(data.contains("\"exit\": 0"));
+        assert!(data.contains("\"stdout\": \"Hello\\n\""));
+    }
+
+    #[test]
+    fn test_module_no_data_section() {
+        let source = "fn main() { }";
+
+        let module = parse(source).unwrap();
+        assert!(module.data_section().is_none());
+    }
+
+    #[test]
+    fn test_module_data_section_preserves_content() {
+        let source = r#"fn run() { }
+__DATA__
+line 1
+line 2
+{
+  "key": "value"
+}"#;
+
+        let module = parse(source).unwrap();
+        let data = module.data_section().unwrap();
+
+        assert!(data.starts_with("line 1"));
+        assert!(data.contains("line 2"));
+        assert!(data.contains("\"key\": \"value\""));
     }
 }

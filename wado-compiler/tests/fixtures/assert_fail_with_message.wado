@@ -1,10 +1,12 @@
 // Test: Assert failure with custom message
-// Expected output should contain:
-//   Assertion failed: value must be positive
-//   condition: x > 0
-//   x: -5
 
 fn run() with Stdout, Stderr {
     let x = -5;
     assert x > 0, "value must be positive";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["Assertion failed: value must be positive", "condition: x > 0", "x: -5"]
 }

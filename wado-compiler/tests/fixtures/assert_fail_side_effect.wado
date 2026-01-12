@@ -1,11 +1,6 @@
 // Test: Assert failure with side-effect function
 // This verifies that the function is only called ONCE (for caching),
 // not twice (once for caching, once for condition evaluation).
-// Expected stdout: "get_value called" (exactly once)
-// Expected stderr should contain:
-//   Assertion failed:
-//   condition: get_value() > 10
-//   get_value(): 5
 
 use {println} from "core:cli";
 
@@ -16,4 +11,11 @@ fn get_value() -> i32 with Stdout {
 
 fn run() with Stdout, Stderr {
     assert get_value() > 10;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stdout": "get_value called\n",
+    "stderr_contains": ["Assertion failed:", "condition: get_value() > 10", "get_value(): 5"]
 }

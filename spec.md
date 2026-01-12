@@ -51,6 +51,53 @@ Block comments do not nest.
 
 TODO: the parser keeps comments in the AST.
 
+### Data Section
+
+The `__DATA__` marker separates source code from embedded data. Everything after `__DATA__` on its own line is captured as raw text and is not parsed as Wado code.
+
+```wado
+use {println} from "core:cli";
+
+fn run() with Stdout {
+    println("Hello!");
+}
+
+__DATA__
+This is raw data that can be accessed via the compiler API.
+It can contain any text, including JSON, YAML, or test expectations.
+```
+
+**Syntax Rules:**
+
+- `__DATA__` must appear at the start of a line (after any preceding newline)
+- The line must contain only `__DATA__` followed by a newline (no trailing content on the same line)
+- Everything after the `__DATA__` line becomes the data section
+- The data section is optional; most modules won't have one
+
+**Accessing Data:**
+
+The data section is accessible via the compiler API through `Module::data_section()`, which returns `Option<&str>`. This enables tooling like test frameworks to embed expected results directly in source files.
+
+```rust
+// Compiler API example
+let result = wado_compiler::compile_file(path)?;
+if let Some(data) = result.module.data_section() {
+    // Process the data section content
+}
+```
+
+**Future: `#[data]` Attribute (TODO):**
+
+A future `#[data]` attribute will allow injecting the data section content into code:
+
+```wado
+#[data]
+const TEST_DATA: String;  // Injected from __DATA__ section
+
+#[data("json")]
+const CONFIG: Config;     // Parsed as JSON from __DATA__ section
+```
+
 ### Identifiers
 
 Identifiers match the pattern `[a-zA-Z_][a-zA-Z0-9_]*`:
