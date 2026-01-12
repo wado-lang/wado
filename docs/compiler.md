@@ -257,7 +257,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `let` statements (with `mut`, `reactive`, type annotation)
 - [x] Expression statements
 - [x] `return` statements
-- [x] `assert` statements (condition check, unreachable on failure)
+- [x] `assert` statements with optional message (power-assert style error messages)
 - [x] `if` statements
 - [x] `while` loops
 - [x] C-style `for` loops
@@ -342,7 +342,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Control flow (`if` statements, `while`, `for`)
 - [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
 - [x] Type cast (`as T`) for primitive types (i32, i64, f32, f64)
-- [x] Assert statements (condition check, unreachable on failure)
+- [x] Assert statements with power-assert style error messages (intermediate values, value caching)
 - [x] User-defined functions (from core:: modules)
 - [x] Branch hinting (`builtin::likely`, `builtin::unlikely`)
 - [ ] Struct construction
@@ -374,6 +374,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] E2E test: float-to-string template interpolation
 - [x] E2E test: bool/char/i32/i64 template interpolation
 - [x] E2E test: type cast (`as T`) for primitive types
+- [x] E2E test: assert failure (simple, with message, intermediate values, side-effect caching)
 - [ ] Compile error tests (partial)
 - [ ] More E2E tests
 
@@ -546,33 +547,64 @@ pub struct FormatSpec {
 
 ## The `assert` Statement Implementation
 
-`assert` behaves like a power-assert, which needs the compiler supports to show source conditions, collect intermediate values, and print them if the assertion fails.
+✅ **Fully Implemented**
+
+`assert` behaves like a power-assert, which shows source conditions, collects intermediate values, and prints them if the assertion fails.
+
+### Basic Assert
 
 `assert x > 0;` is compiled into:
 
 ```wado
-if builtin::unlikely(x) {
-    builtin::panic(`Assertion failed:\ncondition: x > 0\nx: {x}`);
+if builtin::unlikely(!condition) {
+    panic(`Assertion failed:\ncondition: x > 0\nx: {x}`);
 }
 ```
+
+### Assert with Custom Message
 
 `assert x > 0, "x must be checked elsewhere";` is compiled into:
 
 ```wado
-if builtin::unlikely(x) {
-    builtin::panic(`Assertion failed: x must be checked elsewhere\ncondition: x > 0\nx: {x}`);
+if builtin::unlikely(!condition) {
+    panic(`Assertion failed: x must be checked elsewhere\ncondition: x > 0\nx: {x}`);
 }
 ```
 
-Also, each intermediate values are collected and printed if the assertion fails.
+### Intermediate Values
+
+Each intermediate value is collected and printed if the assertion fails.
 
 `assert x + y > 0;` is compiled into:
 
 ```wado
-if builtin::unlikely(x + y) {
-    builtin::panic(`Assertion failed:\ncondition: x + y > 0\nx: {x}\ny: {y}\nx + y: {x + y}`);
+if builtin::unlikely(!condition) {
+    panic(`Assertion failed:\ncondition: x + y > 0\nx: {x}\ny: {y}\nx + y: {x + y}`);
 }
 ```
+
+### Value Caching for Side-Effect Safety
+
+When the condition contains function calls with side effects, values are cached in Wasm locals to ensure each function is called exactly once:
+
+```wado
+assert get_value() > 10;
+```
+
+The compiler:
+
+1. Extracts all "interesting" sub-expressions (identifiers, function calls, binary expressions)
+2. Evaluates each sub-expression once and stores the result in a local variable
+3. Evaluates the condition using cached local values
+4. On failure, builds the error message using cached values (no re-evaluation)
+
+This ensures that `get_value()` is called only once, not twice (once for caching and once for condition evaluation).
+
+### Implementation Details
+
+- **Branch hinting**: Uses `builtin::unlikely` for the failure branch since assertions typically pass
+- **Source text extraction**: Uses expression spans to extract the original source code
+- **Local pre-allocation**: All locals for caching are pre-allocated before code generation
 
 ## Reactive Signals Implementation
 
