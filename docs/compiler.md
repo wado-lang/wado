@@ -517,7 +517,35 @@ pub struct FormatSpec {
 3. ~~**Add char to string conversion**~~: ✅ **Done** (char_to_string in core/internals.wado)
    - Char values converted to their UTF-8 string representation (supports full Unicode)
 
----
+## The `assert` Statement Implementation
+
+`assert` behaves like a power-assert, which needs the compiler supports to show source conditions, collect intermediate values, and print them if the assertion fails.
+
+`assert x > 0;` is compiled into:
+
+```wado
+if builtin::unlikely(x) {
+    builtin::panic(`Assertion failed:\ncondition: x > 0\nx: {x}`);
+}
+```
+
+`assert x > 0, "x must be checked elsewhere";` is compiled into:
+
+```wado
+if builtin::unlikely(x) {
+    builtin::panic(`Assertion failed: x must be checked elsewhere\ncondition: x > 0\nx: {x}`);
+}
+```
+
+Also, each intermediate values are collected and printed if the assertion fails.
+
+`assert x + y > 0;` is compiled into:
+
+```wado
+if builtin::unlikely(x + y) {
+    builtin::panic(`Assertion failed:\ncondition: x + y > 0\nx: {x}\ny: {y}\nx + y: {x + y}`);
+}
+```
 
 ## Reactive Signals Implementation
 

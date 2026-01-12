@@ -822,13 +822,16 @@ panic("error");
 unreachable();
 ```
 
-## The `assert` Keyword
+## The `assert` Statement
 
-The `assert` keyword is used to assert that a condition is true. If the condition is false, the program will terminate with the power-assert style message.
+The `assert` keyword is used to assert that a condition is true. If the condition is false, the program will panic with messages that includes the source of the condition and related intermediate values (like the power-assert).
 
 ```wado
-// if x is not greater than 0, the program will panic, printing x (if x is a struct, the fields of the struct will be printed).
+// If x is not greater than 0, the program will panic, printing x.
 assert x > 0;
+
+// Also assert can take an optional message.
+assert x > 0, "x must be checked elsewhere";
 ```
 
 ## Reactive System
