@@ -36,6 +36,9 @@ pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 /// Embedded source for core:internals
 pub const CORE_INTERNALS: &str = include_str!("../lib/core/internals.wado");
 
+/// Embedded source for core:clocks
+pub const CORE_CLOCKS: &str = include_str!("../lib/core/clocks.wado");
+
 /// Embedded source for wasi:cli
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
 
@@ -70,6 +73,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:stream" => Some(CORE_STREAM),
         "core:filesystem" => Some(CORE_FILESYSTEM),
         "core:internals" => Some(CORE_INTERNALS),
+        "core:clocks" => Some(CORE_CLOCKS),
 
         // WASI library
         "wasi:cli" => Some(WASI_CLI),
@@ -123,6 +127,13 @@ mod tests {
         let source = get_stdlib_module("wasi:filesystem");
         assert!(source.is_some());
         assert!(source.unwrap().contains("Descriptor"));
+    }
+
+    #[test]
+    fn test_get_core_clocks() {
+        let source = get_stdlib_module("core:clocks");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("now"));
     }
 
     #[test]

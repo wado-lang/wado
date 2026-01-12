@@ -1043,6 +1043,39 @@ impl Codegen {
         );
 
         // ========================================
+        // Import monotonic-clock from WASI P3
+        // ========================================
+        // Type for monotonic-clock instance: { now: func() -> u64 }
+        let monotonic_clock_instance_type = ctx.register_type("monotonic-clock-instance");
+        {
+            let (_, enc) = builder.ty(Some("monotonic-clock-instance"));
+            let mut instance_type = InstanceType::new();
+            // Type 0 within instance: func() -> u64 (sync function)
+            instance_type
+                .ty()
+                .function()
+                .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                .result(Some(ComponentValType::Primitive(PrimitiveValType::U64)));
+            instance_type.export("now", wasm_encoder::ComponentTypeRef::Func(0));
+            enc.instance(&instance_type);
+        }
+
+        // Import monotonic-clock instance from WASI P3
+        ctx.register_instance("monotonic-clock");
+        builder.import(
+            "wasi:clocks/monotonic-clock@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(monotonic_clock_instance_type),
+        );
+
+        // Alias now from monotonic-clock instance (component func)
+        ctx.register_comp_func("monotonic-clock-now");
+        builder.alias_export(
+            ctx.instance_idx("monotonic-clock"),
+            "now",
+            ComponentExportKind::Func,
+        );
+
+        // ========================================
         // Type: stream<u8> for stream intrinsics
         // ========================================
         let stream_u8_type = ctx.register_type("stream-u8");
@@ -1178,6 +1211,15 @@ impl Codegen {
             ],
         );
 
+        // Lower monotonic-clock-now component func to core func
+        // This is a sync function: func() -> u64, no memory/realloc needed
+        ctx.register_core_func("monotonic-clock-now-core");
+        builder.lower_func(
+            Some("monotonic-clock-now-core"),
+            ctx.comp_func_idx("monotonic-clock-now"),
+            [],
+        );
+
         // task.return for completing async tasks
         ctx.register_core_func("task-return");
         builder.task_return(Some(ComponentValType::Type(result_unit_type)), []);
@@ -1261,6 +1303,11 @@ impl Codegen {
                 "subtask-drop",
                 ExportKind::Func,
                 ctx.core_func_idx("subtask-drop"),
+            ),
+            (
+                "monotonic-clock-now",
+                ExportKind::Func,
+                ctx.core_func_idx("monotonic-clock-now-core"),
             ),
         ];
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
@@ -1404,10 +1451,12 @@ impl Codegen {
                         continue;
                     }
                     // Skip functions that have unsupported effects
-                    // Currently only Stdout and Stderr effects are supported (or no effects)
+                    // Currently only Stdout, Stderr, and MonotonicClock effects are supported (or no effects)
                     if !f.effects.is_empty() {
-                        let has_unsupported_effects =
-                            f.effects.iter().any(|e| e != "Stdout" && e != "Stderr");
+                        let has_unsupported_effects = f
+                            .effects
+                            .iter()
+                            .any(|e| e != "Stdout" && e != "Stderr" && e != "MonotonicClock");
                         if has_unsupported_effects {
                             continue;
                         }
@@ -1535,6 +1584,39 @@ impl Codegen {
         builder.alias_export(
             ctx.instance_idx("stderr"),
             "write-via-stream",
+            ComponentExportKind::Func,
+        );
+
+        // ========================================
+        // Import monotonic-clock from WASI P3
+        // ========================================
+        // Type for monotonic-clock instance: { now: func() -> u64 }
+        let monotonic_clock_instance_type = ctx.register_type("monotonic-clock-instance");
+        {
+            let (_, enc) = builder.ty(Some("monotonic-clock-instance"));
+            let mut instance_type = InstanceType::new();
+            // Type 0 within instance: func() -> u64 (sync function)
+            instance_type
+                .ty()
+                .function()
+                .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                .result(Some(ComponentValType::Primitive(PrimitiveValType::U64)));
+            instance_type.export("now", wasm_encoder::ComponentTypeRef::Func(0));
+            enc.instance(&instance_type);
+        }
+
+        // Import monotonic-clock instance from WASI P3
+        ctx.register_instance("monotonic-clock");
+        builder.import(
+            "wasi:clocks/monotonic-clock@0.3.0-rc-2025-09-16",
+            wasm_encoder::ComponentTypeRef::Instance(monotonic_clock_instance_type),
+        );
+
+        // Alias now from monotonic-clock instance (component func)
+        ctx.register_comp_func("monotonic-clock-now");
+        builder.alias_export(
+            ctx.instance_idx("monotonic-clock"),
+            "now",
             ComponentExportKind::Func,
         );
 
@@ -1734,6 +1816,15 @@ impl Codegen {
             ],
         );
 
+        // Lower monotonic-clock-now component func to core func
+        // This is a sync function: func() -> u64, no memory/realloc needed
+        ctx.register_core_func("monotonic-clock-now-core");
+        builder.lower_func(
+            Some("monotonic-clock-now-core"),
+            ctx.comp_func_idx("monotonic-clock-now"),
+            [],
+        );
+
         // task.return
         ctx.register_core_func("task-return");
         builder.task_return(Some(ComponentValType::Type(result_unit_type)), []);
@@ -1820,6 +1911,11 @@ impl Codegen {
                 "subtask-drop",
                 ExportKind::Func,
                 ctx.core_func_idx("subtask-drop"),
+            ),
+            (
+                "monotonic-clock-now",
+                ExportKind::Func,
+                ctx.core_func_idx("monotonic-clock-now-core"),
             ),
         ];
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
@@ -1977,6 +2073,9 @@ impl Codegen {
             &[ValType::I32],
         );
 
+        // Monotonic clock now (sync function returning u64, defined after GC types)
+        builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+
         // Types for user-defined functions
         let string_array_idx = builder.type_idx("string-array");
         for (_, func, qualified_name) in &all_funcs {
@@ -2018,6 +2117,7 @@ impl Codegen {
         builder.import_func("wasi", "waitable-join", "waitable-join");
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
+        builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
         builder.import_func("env", "realloc", "realloc");
         builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
         builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
@@ -2264,6 +2364,9 @@ impl Codegen {
             &[ValType::I32],
         );
 
+        // Monotonic clock now (sync function returning u64, defined after GC types)
+        builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+
         // Types for user-defined functions
         for func in &user_funcs {
             // Convert Wado params to Wasm types
@@ -2306,6 +2409,7 @@ impl Codegen {
         builder.import_func("wasi", "waitable-join", "waitable-join");
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
+        builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
         builder.import_func("env", "realloc", "realloc");
         builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
         builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
@@ -2528,7 +2632,7 @@ impl Codegen {
         match ty {
             crate::ast::Type::Named(named) => match named.name.as_str() {
                 "i32" | "u32" | "bool" => ValType::I32,
-                "i64" | "u64" => ValType::I64,
+                "i64" | "u64" | "Instant" | "Duration" => ValType::I64, // Instant/Duration are u64 type aliases from wasi:clocks
                 "f32" => ValType::F32,
                 "f64" => ValType::F64,
                 "String" => ValType::Ref(RefType {
@@ -3381,6 +3485,8 @@ impl Codegen {
             // wasi:cli/exit
             "Exit::exit" => Some("exit".to_string()),
             "Exit::exit_with_code" => Some("exit-with-code".to_string()),
+            // wasi:clocks/monotonic-clock
+            "MonotonicClock::now" => Some("monotonic-clock-now".to_string()),
             _ => None,
         }
     }
