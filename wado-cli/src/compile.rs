@@ -136,7 +136,7 @@ pub fn parse_args(args: &[String]) -> CompileOptions {
 /// Compile a Wado source file and return the Wasm binary
 pub fn compile(filename: &str) -> Vec<u8> {
     match wado_compiler::compile_file(Path::new(filename)) {
-        Ok(wasm) => wasm,
+        Ok(result) => result.wasm,
         Err(e) => {
             eprintln!("{e}");
             process::exit(1);

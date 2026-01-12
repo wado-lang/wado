@@ -12,19 +12,19 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 
 ### Modules
 
-| Module   | File                  | Description                                     |
-| -------- | --------------------- | ----------------------------------------------- |
-| Lexer    | `lexer.rs`            | Tokenizes source code                           |
-| Parser   | `parser.rs`           | Recursive descent parser, builds AST            |
-| AST      | `ast.rs`              | AST node definitions                            |
-| Token    | `token.rs`            | Token types and spans                           |
-| Analyzer | `analyze.rs`          | Semantic analysis, symbol table construction    |
-| Symbol   | `symbol.rs`           | Symbol table data structures                    |
-| Resolver | `resolver.rs`         | Module resolution, loads core library           |
-| Stdlib   | `stdlib.rs`           | Embedded core library sources                   |
-| Codegen  | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder |
-| Bundled  | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled) |
-| Postproc | `wasm_postprocess.rs` | Wasm binary transformations                     |
+| Module   | File                  | Description                                        |
+| -------- | --------------------- | -------------------------------------------------- |
+| Lexer    | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section |
+| Parser   | `parser.rs`           | Recursive descent parser, builds AST               |
+| AST      | `ast.rs`              | AST node definitions, `Module::data_section()` API |
+| Token    | `token.rs`            | Token types and spans                              |
+| Analyzer | `analyze.rs`          | Semantic analysis, symbol table construction       |
+| Symbol   | `symbol.rs`           | Symbol table data structures                       |
+| Resolver | `resolver.rs`         | Module resolution, loads core library              |
+| Stdlib   | `stdlib.rs`           | Embedded core library sources                      |
+| Codegen  | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
+| Bundled  | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
+| Postproc | `wasm_postprocess.rs` | Wasm binary transformations                        |
 
 ### Bundled Builtins (wado-bundled)
 
@@ -229,6 +229,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
 - [x] Punctuation (`(`, `)`, `{`, `}`, `[`, `]`, `,`, `:`, `;`, `::`, `.`, `->`, `=>`, `|`, `&`, `#`, `?`)
 - [x] Comments (`//`)
+- [x] Data section (`__DATA__` marker)
 - [ ] Block comments (`/* */`)
 - [ ] Doc comments (`///`, `//!`)
 
@@ -247,6 +248,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `resource` declarations
 - [x] `world` declarations (with imports/exports)
 - [x] Attributes (`#[...]`)
+- [ ] `#[data]` attribute for data section injection
 - [ ] `variant` declarations (with payloads)
 - [ ] `flags` declarations (bit flags)
 - [ ] Inner attributes (`#![...]`)
@@ -367,6 +369,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Analyzer unit tests
 - [x] Codegen unit tests
 - [x] Template string tests (20 comprehensive tests)
+- [x] E2E tests with `__DATA__` sections (JSON test specs, auto-discovered via `datatest-stable`)
 - [x] E2E test: hello world (with wasmtime)
 - [x] E2E test: multiple println
 - [x] E2E test: bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)

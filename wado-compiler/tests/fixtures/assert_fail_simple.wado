@@ -1,10 +1,12 @@
 // Test: Simple assert failure
-// Expected output should contain:
-//   Assertion failed:
-//   condition: x > 10
-//   x: 5
 
 fn run() with Stdout, Stderr {
     let x = 5;
     assert x > 10;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["Assertion failed:", "condition: x > 10", "x: 5"]
 }

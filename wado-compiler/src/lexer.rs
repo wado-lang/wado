@@ -8,6 +8,8 @@ pub struct Lexer<'a> {
     pos: usize,
     line: usize,
     column: usize,
+    /// Content of the __DATA__ section, if present
+    data_section: Option<String>,
 }
 
 #[derive(Debug)]
@@ -24,7 +26,19 @@ impl<'a> Lexer<'a> {
             pos: 0,
             line: 1,
             column: 1,
+            data_section: None,
         }
+    }
+
+    /// Returns the content of the __DATA__ section, if present.
+    /// This is available after calling `tokenize()`.
+    pub fn data_section(&self) -> Option<&str> {
+        self.data_section.as_deref()
+    }
+
+    /// Consumes the lexer and returns the data section content.
+    pub fn into_data_section(self) -> Option<String> {
+        self.data_section
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>, LexError> {
@@ -287,6 +301,11 @@ impl<'a> Lexer<'a> {
                 }
             }
 
+            // Check for __DATA__ at the start of a line
+            if self.column == 1 && self.check_data_section() {
+                return;
+            }
+
             // Skip line comments
             if let Some((_, '/')) = self.peek() {
                 let mut chars = self.chars.clone();
@@ -307,6 +326,55 @@ impl<'a> Lexer<'a> {
 
             break;
         }
+    }
+
+    /// Check if we're at __DATA__ marker and capture the data section if so.
+    /// __DATA__ must be on its own line (^__DATA__$), followed by newline or EOF.
+    /// Returns true if __DATA__ was found and processed.
+    fn check_data_section(&mut self) -> bool {
+        const DATA_MARKER: &str = "__DATA__";
+
+        // Check if we have enough characters and they match __DATA__
+        let remaining = &self.input[self.pos..];
+        if !remaining.starts_with(DATA_MARKER) {
+            return false;
+        }
+
+        // Check that __DATA__ is followed by end of input or newline (must be on its own line)
+        let after_marker = &remaining[DATA_MARKER.len()..];
+        if !after_marker.is_empty() {
+            let next_char = after_marker.chars().next().unwrap();
+            // Only allow newline (\n or \r) or EOF after __DATA__
+            if next_char != '\n' && next_char != '\r' {
+                return false;
+            }
+        }
+
+        // Found __DATA__ marker - consume it
+        for _ in 0..DATA_MARKER.len() {
+            self.advance();
+        }
+
+        // Skip to the end of the __DATA__ line (consume the newline)
+        while let Some((_, ch)) = self.peek() {
+            self.advance();
+            if ch == '\n' {
+                break;
+            }
+        }
+
+        // Capture everything after __DATA__ as the data section
+        let data_content = &self.input[self.pos..];
+        self.data_section = if data_content.is_empty() {
+            Some(String::new())
+        } else {
+            Some(data_content.to_string())
+        };
+
+        // Move position to end of input
+        while self.advance().is_some() {}
+
+        true
     }
 
     fn lex_ident_or_keyword(&mut self) -> TokenKind {
@@ -983,5 +1051,123 @@ mod tests {
         let tokens = lexer.tokenize().unwrap();
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
+    }
+
+    #[test]
+    fn test_data_section_basic() {
+        let source = r#"fn main() { }
+__DATA__
+hello world"#;
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Should have parsed the function tokens and EOF
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert!(matches!(tokens.last().unwrap().kind, TokenKind::Eof));
+
+        // Should have captured the data section
+        assert_eq!(lexer.data_section(), Some("hello world"));
+    }
+
+    #[test]
+    fn test_data_section_multiline() {
+        let source = r#"fn main() { }
+__DATA__
+line 1
+line 2
+line 3"#;
+        let mut lexer = Lexer::new(source);
+        lexer.tokenize().unwrap();
+
+        assert_eq!(lexer.data_section(), Some("line 1\nline 2\nline 3"));
+    }
+
+    #[test]
+    fn test_data_section_json() {
+        let source = r#"fn main() { }
+__DATA__
+{
+  "exit": 0,
+  "stdout": "Hello\n"
+}"#;
+        let mut lexer = Lexer::new(source);
+        lexer.tokenize().unwrap();
+
+        let data = lexer.data_section().unwrap();
+        assert!(data.contains("\"exit\": 0"));
+        assert!(data.contains("\"stdout\": \"Hello\\n\""));
+    }
+
+    #[test]
+    fn test_data_section_empty() {
+        let source = "fn main() { }\n__DATA__\n";
+        let mut lexer = Lexer::new(source);
+        lexer.tokenize().unwrap();
+
+        // Empty data section should be Some("")
+        assert_eq!(lexer.data_section(), Some(""));
+    }
+
+    #[test]
+    fn test_no_data_section() {
+        let source = "fn main() { }";
+        let mut lexer = Lexer::new(source);
+        lexer.tokenize().unwrap();
+
+        assert_eq!(lexer.data_section(), None);
+    }
+
+    #[test]
+    fn test_data_section_not_at_start_of_line() {
+        // __DATA__ in the middle of a line should not be recognized
+        let source = "let x = __DATA__;";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Should parse __DATA__ as an identifier
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "__DATA__"))
+        );
+        assert_eq!(lexer.data_section(), None);
+    }
+
+    #[test]
+    fn test_data_section_with_trailing_content() {
+        // __DATA__ with content on the same line should not be recognized
+        let source = "fn main() { }\n__DATA__ some content";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Should parse __DATA__ as an identifier since it's not on its own line
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "__DATA__"))
+        );
+        assert_eq!(lexer.data_section(), None);
+    }
+
+    #[test]
+    fn test_data_section_after_comment() {
+        let source = r#"// some comment
+fn main() { }
+__DATA__
+test data"#;
+        let mut lexer = Lexer::new(source);
+        lexer.tokenize().unwrap();
+
+        assert_eq!(lexer.data_section(), Some("test data"));
+    }
+
+    #[test]
+    fn test_into_data_section() {
+        let source = "fn main() { }\n__DATA__\nowned data";
+        let mut lexer = Lexer::new(source);
+        lexer.tokenize().unwrap();
+
+        let data = lexer.into_data_section();
+        assert_eq!(data, Some("owned data".to_string()));
     }
 }

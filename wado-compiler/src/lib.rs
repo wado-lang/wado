@@ -18,6 +18,15 @@ pub use token::Span;
 
 use std::path::Path;
 
+/// Result of compiling a Wado source file
+#[derive(Debug)]
+pub struct CompileResult {
+    /// Compiled WebAssembly component bytes
+    pub wasm: Vec<u8>,
+    /// Parsed module AST (includes data section if present)
+    pub module: ast::Module,
+}
+
 /// Compile Wado source code to Component Model WebAssembly bytes.
 ///
 /// This is a convenience function that runs the full compilation pipeline:
@@ -38,19 +47,20 @@ use std::path::Path;
 /// assert_eq!(&wasm[0..4], b"\0asm");
 /// ```
 pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, None)
+    compile_impl(source, None, None).map(|r| r.wasm)
 }
 
 /// Compile Wado source code with a base path for relative imports.
 pub fn compile_with_base_path(source: &str, base_path: &Path) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, Some(base_path))
+    compile_impl(source, None, Some(base_path)).map(|r| r.wasm)
 }
 
-/// Compile a Wado source file to Component Model WebAssembly bytes.
+/// Compile a Wado source file to Component Model WebAssembly.
 ///
 /// Like [`compile`], but reads source from a file and includes the filename
 /// in error messages. Also supports relative imports from the file's directory.
-pub fn compile_file(path: &Path) -> Result<Vec<u8>, CompileError> {
+/// Returns a [`CompileResult`] containing both the wasm bytes and the parsed module.
+pub fn compile_file(path: &Path) -> Result<CompileResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
         path: path.display().to_string(),
         message: e.to_string(),
@@ -70,7 +80,7 @@ fn compile_impl(
     source: &str,
     filename: Option<String>,
     base_path: Option<&Path>,
-) -> Result<Vec<u8>, CompileError> {
+) -> Result<CompileResult, CompileError> {
     // Lexer
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
@@ -79,9 +89,10 @@ fn compile_impl(
         column: e.span.column,
         filename: filename.clone(),
     })?;
+    let data_section = lexer.into_data_section();
 
-    // Parser
-    let mut parser = Parser::new(tokens);
+    // Parser (with data section from lexer)
+    let mut parser = Parser::with_data_section(tokens, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
         line: e.span.line,
@@ -119,7 +130,7 @@ fn compile_impl(
     let mut codegen = Codegen::new_with_source(source.to_string());
     let wasm = codegen.generate_wasm_with_modules(&ast, &loaded_modules_vec, &symbols);
 
-    Ok(wasm)
+    Ok(CompileResult { wasm, module: ast })
 }
 
 /// Compilation error with structured location info
