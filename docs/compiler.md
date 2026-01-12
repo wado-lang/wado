@@ -278,6 +278,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Unit `()`
 - [x] Template string interpolation (`` `Hello, {name}!` ``)
 - [x] Binary operators (arithmetic, comparison, logical, bitwise)
+- [x] Comparison chaining (`a < b < c` → `a < b && b < c`)
 - [x] Unary operators (`-`, `!`, `~`, `&`, `*`)
 - [x] Parentheses for grouping `(expr)`
 - [x] Function calls
@@ -378,7 +379,10 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] E2E test: bool/char/i32/i64 template interpolation
 - [x] E2E test: type cast (`as T`) for primitive types
 - [x] E2E test: assert failure (simple, with message, intermediate values, side-effect caching)
-- [ ] Compile error tests (partial)
+- [x] E2E test: operator precedence (arithmetic, bitwise, comparison, logical, unary, shift)
+- [x] E2E test: bitwise vs comparison precedence (fixing C's design flaw)
+- [x] E2E test: comparison chaining (`a < b < c`)
+- [x] Compile error tests: comparison chaining validation (mixed directions, `!=` chaining)
 - [ ] More E2E tests
 
 ---
