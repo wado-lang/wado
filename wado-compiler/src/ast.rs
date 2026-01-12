@@ -228,11 +228,13 @@ pub enum Stmt {
     Assert(AssertStmt),
 }
 
-/// Assert statement: `assert expr;`
-/// If the expression is false, prints an error message and calls unreachable
+/// Assert statement: `assert expr;` or `assert expr, "message";`
+/// If the expression is false, prints a power-assert style error message and calls unreachable
 #[derive(Debug, Clone)]
 pub struct AssertStmt {
     pub condition: Expr,
+    /// Optional message expression (typically a String literal or template string)
+    pub message: Option<Expr>,
     pub span: Span,
 }
 
@@ -303,6 +305,29 @@ pub enum Expr {
     Closure(Box<ClosureExpr>),
     TemplateString(Box<TemplateStringExpr>),
     Cast(Box<CastExpr>),
+}
+
+impl Expr {
+    /// Get the source span for this expression
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Ident(e) => e.span,
+            Expr::Literal(e) => e.span,
+            Expr::Binary(e) => e.span,
+            Expr::Unary(e) => e.span,
+            Expr::Assign(e) => e.span,
+            Expr::Call(e) => e.span,
+            Expr::MethodCall(e) => e.span,
+            Expr::FieldAccess(e) => e.span,
+            Expr::Index(e) => e.span,
+            Expr::Block(e) => e.span,
+            Expr::If(e) => e.span,
+            Expr::Match(e) => e.span,
+            Expr::Closure(e) => e.span,
+            Expr::TemplateString(e) => e.span,
+            Expr::Cast(e) => e.span,
+        }
+    }
 }
 
 /// Type cast expression: `expr as Type`

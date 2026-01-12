@@ -1,6 +1,6 @@
 # Wado Language Specification
 
-Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
+Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ## Overview
 
@@ -25,12 +25,12 @@ Wado is a new programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 The lexer recognizes exactly four whitespace characters:
 
-| Code Point | Name                 |
-| ---------- | -------------------- |
-| `\u0020`   | Space                |
-| `\u000A`   | Line Feed (LF)       |
-| `\u000D`   | Carriage Return (CR) |
-| `\u0009`   | Tab                  |
+| Code Point | Name  |
+| ---------- | ----- |
+| `\u0020`   | Space |
+| `\u000A`   | LF    |
+| `\u000D`   | CR    |
+| `\u0009`   | Tab   |
 
 The lexer skips whitespace between tokens. Other Unicode whitespace characters (e.g., `\u00A0` non-breaking space) are not recognized as whitespace and will cause a lexer error if used outside strings.
 
@@ -47,7 +47,9 @@ The lexer skips whitespace between tokens. Other Unicode whitespace characters (
  */
 ```
 
-Block comments do not nest. The lexer discards all comments.
+Block comments do not nest.
+
+TODO: the parser keeps comments in the AST.
 
 ### Identifiers
 
@@ -63,7 +65,13 @@ _private
 name123
 ```
 
-Identifiers are case-sensitive. Unicode letters are not permitted in identifiers.
+Identifiers are case-sensitive.
+
+### Statements and Expressions
+
+- `expr;` makes a statement. A semicolon is required for every statement including the last one.
+- `return expr;` is necessary for a function to return a value.
+- Control flow statements do not need to be followed by a semicolon.
 
 ### Operators
 
@@ -154,7 +162,7 @@ println(a);         // Compile error: a has been moved
 consume(move data);
 ```
 
-### unique Modifier (Unique Ownership)
+### Unique Ownership
 
 ```wado
 // Enforce unique ownership
@@ -255,7 +263,7 @@ let also_missing = None;          // Standard library identifier
 assert(null == None);
 ```
 
-**Note:** `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same value.
+Note: `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same instructions.
 
 #### Character Literals
 

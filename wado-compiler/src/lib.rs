@@ -115,8 +115,8 @@ fn compile_impl(
     let loaded_modules_vec: Vec<(&Vec<String>, &crate::ast::Module)> =
         loaded_modules.iter().collect();
 
-    // Codegen (pass loaded modules so it can generate code for all of them)
-    let mut codegen = Codegen::new();
+    // Codegen (pass source code for power-assert messages)
+    let mut codegen = Codegen::new_with_source(source.to_string());
     let wasm = codegen.generate_wasm_with_modules(&ast, &loaded_modules_vec, &symbols);
 
     Ok(wasm)

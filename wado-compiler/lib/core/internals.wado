@@ -241,6 +241,36 @@ pub fn bool_to_string(value: bool) -> String {
     return "false";
 }
 
+/// Panic with a message
+/// This is an internal function used by assert statements.
+/// It logs the message to stderr (ambient, no effect required) and traps.
+pub fn panic(message: String) -> ! {
+    // Write message to stderr using ambient logging (no effect required)
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    // Start stderr consumer
+    builtin::call_indirect_stderr_write_via_stream(rx);
+
+    // Write message bytes to linear memory, then to stream
+    let len = builtin::array_len(message);
+    let ptr = builtin::realloc(0, 0, 1, len + 1);
+    for (let mut i = 0; i < len; i = i + 1) {
+        let byte = builtin::array_get_u8(message, i);
+        builtin::memory_store8(ptr + i, byte);
+    }
+    builtin::memory_store8(ptr + len, '\n');
+    builtin::stream_write(tx, ptr, len + 1);
+    builtin::stream_drop_writable(tx);
+
+    // Wait for write to complete
+    builtin::effect_wait();
+
+    // Trap
+    builtin::unreachable();
+}
+
 /// Convert char to String (single character)
 pub fn char_to_string(value: char) -> String {
     // char is a Unicode scalar value (u32), we need to encode as UTF-8

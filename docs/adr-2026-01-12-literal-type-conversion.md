@@ -19,37 +19,40 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
 
 ### Language Survey
 
-| Language | Approach | Key Features |
-|----------|----------|--------------|
-| **Rust** | Minimal implicit conversion | Default types (`i32`, `f64`), explicit `as` required for most conversions |
-| **Go** | Untyped constants | [Untyped constants](https://go.dev/blog/constants) with arbitrary precision, flexible until typed, strict afterward |
-| **Swift** | Protocol-based literals | [Default types](https://developer.apple.com/documentation/swift/default-literal-types) (`Int`, `Double`), context-driven inference |
-| **Zig** | Compile-time types | [`comptime_int`/`comptime_float`](https://zig.guide/language-basics/comptime/) coerce to any compatible type, strict at runtime |
+| Language  | Approach                    | Key Features                                                                                                                       |
+| --------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Rust**  | Minimal implicit conversion | Default types (`i32`, `f64`), explicit `as` required for most conversions                                                          |
+| **Go**    | Untyped constants           | [Untyped constants](https://go.dev/blog/constants) with arbitrary precision, flexible until typed, strict afterward                |
+| **Swift** | Protocol-based literals     | [Default types](https://developer.apple.com/documentation/swift/default-literal-types) (`Int`, `Double`), context-driven inference |
+| **Zig**   | Compile-time types          | [`comptime_int`/`comptime_float`](https://zig.guide/language-basics/comptime/) coerce to any compatible type, strict at runtime    |
 
 ### Conversion Patterns
 
-| Case | Example | Rust | Go | Zig | Swift |
-|------|---------|------|-----|-----|-------|
-| Literal → variable | `let x: i64 = 32;` | ✅ | ✅ | ✅ | ✅ |
-| Untyped literal → variable | Go: `const C = 32; var x i64 = C` | N/A | ✅ | ✅ | ✅ |
-| Typed value → different type | `let x: i64 = 32; let z: i32 = x;` | ❌ | ❌ | ❌ | ❌ |
+| Case                         | Example                            | Rust | Go  | Zig | Swift |
+| ---------------------------- | ---------------------------------- | ---- | --- | --- | ----- |
+| Literal → variable           | `let x: i64 = 32;`                 | ✅   | ✅  | ✅  | ✅    |
+| Untyped literal → variable   | Go: `const C = 32; var x i64 = C`  | N/A  | ✅  | ✅  | ✅    |
+| Typed value → different type | `let x: i64 = 32; let z: i32 = x;` | ❌   | ❌  | ❌  | ❌    |
 
 **Key finding**: All languages allow flexibility at the "untyped" stage only. Once a value has a concrete type, implicit conversions are disallowed.
 
 ### Three Design Options
 
 **Option A: Minimal (Rust-style)**
+
 - ✅ Literals can be implicitly converted to any compatible type
 - ❌ Variables require explicit `as` casts for type conversion
 - Simple, predictable, separates type checking from optimization
 
 **Option B: Untyped Literals (Go/Zig-style)**
+
 - Variables without type annotation remain "untyped" until used
 - Untyped values can convert to any compatible type
 - Once typed (via annotation or inference), conversions require `as`
 - More complex, introduces "untyped" concept
 
 **Option C: Constant Propagation-based**
+
 - Allow conversions when compiler knows the value at compile time
 - Most flexible but couples type checking with optimization
 - Unclear boundaries for when propagation applies
@@ -62,6 +65,7 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
 ### Rules
 
 1. **Literals allow implicit conversion**:
+
    ```wado
    let x: i64 = 32;        // ✅ Literal → any compatible type
    let y: i32 = 42;        // ✅
@@ -69,6 +73,7 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
    ```
 
 2. **Variables require explicit conversion**:
+
    ```wado
    let x: i64 = 32;
    let y: i32 = x;         // ❌ Error: type mismatch
@@ -76,6 +81,7 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
    ```
 
 3. **Range checking for literals**:
+
    ```wado
    let overflow: i8 = 128;  // ❌ Compile error: out of range
    ```
