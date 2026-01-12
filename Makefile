@@ -91,7 +91,7 @@ benchmark-count-prime: build
 	@node benchmark/count_prime.js
 	@echo ""
 	@echo "=== Wado (wasmtime) ==="
-	@time wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
+	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
 
 .PHONY: benchmark-mandelbrot
 benchmark-mandelbrot: build
@@ -108,4 +108,4 @@ benchmark-mandelbrot: build
 	@node benchmark/mandelbrot.js
 	@echo ""
 	@echo "=== Wado (wasmtime) ==="
-	@time wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
+	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
