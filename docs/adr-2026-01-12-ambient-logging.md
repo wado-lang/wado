@@ -34,12 +34,12 @@ This is unergonomic because:
 
 ### Research: How Other Languages Handle This
 
-| Language | Approach | Notes |
-|----------|----------|-------|
-| **Koka** | `exn` effect for exceptions | Explicit, propagates through types |
-| **Rust** | Untracked panic | `panic!` has no effect in type system |
-| **Unison** | `Exception` ability | Explicit, but commonly used |
-| **WebAssembly** | `unreachable` is primitive | Trap is not an effect, just terminates |
+| Language        | Approach                    | Notes                                  |
+| --------------- | --------------------------- | -------------------------------------- |
+| **Koka**        | `exn` effect for exceptions | Explicit, propagates through types     |
+| **Rust**        | Untracked panic             | `panic!` has no effect in type system  |
+| **Unison**      | `Exception` ability         | Explicit, but commonly used            |
+| **WebAssembly** | `unreachable` is primitive  | Trap is not an effect, just terminates |
 
 Many languages also provide "ambient" logging facilities that don't require explicit capability declarations:
 
@@ -55,49 +55,51 @@ These logging systems are "fire-and-forget" - they attempt to log but don't fail
 
 Add two new functions that provide best-effort logging without effect requirements:
 
-| Function | Target | Effect Required | Behavior |
-|----------|--------|-----------------|----------|
-| `log(msg)` | stdout | None | Write if stdout available, no-op otherwise |
-| `log_error(msg)` | stderr | None | Write if stderr available, no-op otherwise |
+| Function         | Target | Effect Required | Behavior                                   |
+| ---------------- | ------ | --------------- | ------------------------------------------ |
+| `log(msg)`       | stdout | None            | Write if stdout available, no-op otherwise |
+| `log_error(msg)` | stderr | None            | Write if stderr available, no-op otherwise |
 
 These contrast with the strict I/O functions:
 
-| Function | Target | Effect Required | Behavior |
-|----------|--------|-----------------|----------|
-| `println(msg)` | stdout | `with Stdout` | Guaranteed write to stdout |
-| `eprintln(msg)` | stderr | `with Stderr` | Guaranteed write to stderr |
+| Function        | Target | Effect Required | Behavior                   |
+| --------------- | ------ | --------------- | -------------------------- |
+| `println(msg)`  | stdout | `with Stdout`   | Guaranteed write to stdout |
+| `eprintln(msg)` | stderr | `with Stderr`   | Guaranteed write to stderr |
 
 ### Implementation
 
 ```wado
 /// Best-effort logging to stdout
-/// Writes to stdout if available in the current world, no-op otherwise.
-/// Does not require effect declaration.
-/// If stdout is available, waits for the async write to complete.
+/// Writes to stdout. Does not require effect declaration.
+/// Waits for the async write to complete.
+/// Future: will be no-op if stdout is not available in the world.
 pub fn log(message: String) {
-    // If stdout is available:
-    //   1. Write message to stdout (with newline)
-    //   2. Call effect_wait() to ensure write completes
-    // If stdout is not available:
-    //   No-op
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
 
-    // Current implementation: no-op (stdout availability detection not yet implemented)
+    builtin::call_indirect_stdout_write_via_stream(rx);
+    write_to_stream(tx, message, true);
+    builtin::effect_wait();
 }
 
 /// Best-effort logging to stderr
-/// Writes to stderr if available in the current world, no-op otherwise.
-/// Does not require effect declaration.
-/// If stderr is available, waits for the async write to complete.
+/// Writes to stderr. Does not require effect declaration.
+/// Waits for the async write to complete.
+/// Future: will be no-op if stderr is not available in the world.
 pub fn log_error(message: String) {
-    // If stderr is available:
-    //   1. Write message to stderr (with newline)
-    //   2. Call effect_wait() to ensure write completes
-    // If stderr is not available:
-    //   No-op
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
 
-    // Current implementation: no-op (stderr availability detection not yet implemented)
+    builtin::call_indirect_stderr_write_via_stream(rx);
+    write_to_stream(tx, message, true);
+    builtin::effect_wait();
 }
 ```
+
+The `builtin::call_indirect_*_write_via_stream` functions directly call the WASI write-via-stream functions without requiring effect declarations. This is implemented in the compiler's codegen.
 
 ### Updated `panic()` Implementation
 
@@ -111,6 +113,7 @@ pub fn panic(message: String) -> ! {
 ```
 
 Note: `effect_wait()` is encapsulated inside `log_error()` rather than in `panic()`. This ensures:
+
 - Wait only happens if we actually wrote to stderr
 - No wasted wait when stderr is unavailable
 - Cleaner `panic()` implementation
@@ -167,22 +170,19 @@ Note: `effect_wait()` is encapsulated inside `log_error()` rather than in `panic
 
 ### Host Capability Detection
 
-The ambient logging functions need to handle missing I/O capabilities:
+**Current approach**: `log()` and `log_error()` directly call the WASI write-via-stream functions. This works when the world provides stdout/stderr.
+
+**Future enhancement**: Add capability detection so these functions become no-ops when I/O is unavailable:
 
 ```wado
 pub fn log_error(message: String) {
     // Future: explicit capability check
     // if builtin::has_capability("stderr") {
-    //     write_to_stderr(message);
-    //     builtin::effect_wait();
+    //     ... write to stderr ...
     // }
-
-    // Current implementation: no-op
-    // Stderr availability detection is not yet implemented
+    // For now: always attempt to write
 }
 ```
-
-**Current approach**: Until proper capability detection is implemented, `log()` and `log_error()` are no-ops. This means `panic()` will trap immediately without printing a message. Once capability detection is implemented, the logging will work.
 
 ### Future: Assert Statement
 

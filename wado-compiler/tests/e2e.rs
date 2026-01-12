@@ -668,7 +668,7 @@ async fn test_panic_basic() {
     // Run and capture output
     let result = run_wasm(wasm).await.expect("runtime setup error");
 
-    // Verify the panic message was printed to stderr
+    // Verify the panic message was printed to stderr via log_error()
     assert_eq!(result.stderr, "This is a panic message\n");
 
     // Verify the program trapped (unreachable was executed)

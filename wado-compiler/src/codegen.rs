@@ -3079,6 +3079,26 @@ impl Codegen {
                 self.generate_effect_wait(func, ctx, builder);
             }
 
+            // Ambient logging builtins (for log/log_error functions that bypass effect system)
+            "call_indirect_stdout_write_via_stream" => {
+                // call_indirect_stdout_write_via_stream(rx: i32) - call stdout write-via-stream
+                // Used by log() for ambient stdout logging without requiring Stdout effect
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                let func_idx = builder.func_idx("write-via-stream");
+                self.generate_write_via_stream_start(func, ctx, builder, func_idx);
+            }
+            "call_indirect_stderr_write_via_stream" => {
+                // call_indirect_stderr_write_via_stream(rx: i32) - call stderr write-via-stream
+                // Used by log_error() for ambient stderr logging without requiring Stderr effect
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                let func_idx = builder.func_idx("write-via-stream-stderr");
+                self.generate_write_via_stream_start(func, ctx, builder, func_idx);
+            }
+
             _ => {
                 // Unknown builtin - generate error at runtime
                 func.instruction(&Instruction::Unreachable);

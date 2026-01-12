@@ -129,15 +129,45 @@ pub fn exit(code: u8) -> ! with Exit {
 }
 
 // ============================================================================
+// Ambient Logging Functions
+// ============================================================================
+
+/// Best-effort logging to stdout
+/// Writes to stdout. Does not require effect declaration.
+/// Waits for the async write to complete.
+/// Future: will be no-op if stdout is not available in the world.
+pub fn log(message: String) {
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    builtin::call_indirect_stdout_write_via_stream(rx);
+    write_to_stream(tx, message, true);
+    builtin::effect_wait();
+}
+
+/// Best-effort logging to stderr
+/// Writes to stderr. Does not require effect declaration.
+/// Waits for the async write to complete.
+/// Future: will be no-op if stderr is not available in the world.
+pub fn log_error(message: String) {
+    let handles = builtin::stream_new();
+    let rx = builtin::i64_low32(handles);
+    let tx = builtin::i64_high32(handles);
+
+    builtin::call_indirect_stderr_write_via_stream(rx);
+    write_to_stream(tx, message, true);
+    builtin::effect_wait();
+}
+
+// ============================================================================
 // Panic Functions
 // ============================================================================
 
 /// Panic with a message
-/// Prints the message to stderr and traps (unreachable)
-pub fn panic(message: String) -> ! with Stderr {
-    eprintln(message);
-    // Wait for the async stderr write to complete before trapping
-    builtin::effect_wait();
+/// Logs the message to stderr (if available) and traps.
+pub fn panic(message: String) -> ! {
+    log_error(message);
     builtin::unreachable();
 }
 
