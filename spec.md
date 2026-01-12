@@ -1533,17 +1533,17 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 
 ### Naming Conventions
 
-| Element            | Style            | Notes                  |
-| ------------------ | ---------------- | ---------------------- |
-| Project name       | `kebab-case`     |                        |
-| Module/file name   | `snake_case`     | e.g., `my_module.wado` |
-| Primitive types    | `lowercase`      | e.g., `i32`, `bool`    |
-| User-defined types | `UpperCamelCase` | e.g., `UserConfig`     |
-| Enum/variant cases | `UpperCamelCase` | e.g., `SomeValue`      |
-| Functions          | `snake_case`     | e.g., `get_user`       |
-| Local variables    | `snake_case`     | e.g., `user_count`     |
+| Element            | Style            |
+| ------------------ | ---------------- |
+| Project name       | `kebab-case`     |
+| Module/file name   | `snake_case`     |
+| Primitive types    | `lowercase`      |
+| User-defined types | `UpperCamelCase` |
+| Enum/variant cases | `UpperCamelCase` |
+| Functions          | `snake_case`     |
+| Local variables    | `snake_case`     |
 
-WIT/Component Model interop: The compiler automatically converts between Wado conventions and WIT conventions (kebab-case) at component boundaries.
+Component Model interop: The compiler automatically converts between Wado conventions and WIT conventions (kebab-case) at component boundaries.
 
 ### Terminology
 

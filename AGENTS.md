@@ -6,11 +6,13 @@ This is the specification and implementation of Wado, a programming language tar
 
 Read @spec.md to understand the new language.
 
+When updating spec.md, keep it mutually exclusive and collectively exhaustive (MECE).
+
 ## The Compiler
 
 The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
 
-Standard libraries are implemented in `wado-compiler/lib`, whre `wasi/` for WASI and `core/` for the core library.
+Standard libraries are implemented in `wado-compiler/lib`, where `wasi/` for WASI and `core/` for the core library.
 
 See also `docs/compiler.md` for the implementation details and the feature checklist.
 
@@ -23,10 +25,8 @@ The CLI is implemented in `wado-cli/` with sub-command style CLI:
 ```sh
 wado compile -o file.wasm file.wado # generates Wasm
 wado compile -o file.wat file.wado  # generates WAT
-wado run file.wado
+wado run file.wado                  # run it directly using wasmtime
 ```
-
-The CLI can run a Wado module directly using wasmtime as a library.
 
 ## Bundled Library
 
@@ -65,7 +65,7 @@ This project relays on the following features:
 - All the documents and comments must be written in English.
 - Everything is under discussion. We can change the spec at any time.
 - When referring to WAT, use folded style syntax.
-- Avoid using well-known floating point number constants like PI, E, etc in order not to violate the Clippy `approx_constant` rule.
+- Avoid using well-known floating point number constants like PI, E, etc. in tests not to violate the Clippy `approx_constant` rule.
 
 ## Rules for Rust
 
