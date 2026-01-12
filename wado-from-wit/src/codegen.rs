@@ -75,6 +75,13 @@ impl WadoCodeGenerator {
             WadoTypeDef::Struct(s) => self.write_struct(s),
             WadoTypeDef::Variant(v) => self.write_variant(v),
             WadoTypeDef::TypeAlias(a) => {
+                // Skip self-referential type aliases (e.g., `type Duration = Duration;`)
+                // These occur when WIT re-exports a type from another interface via `use`.
+                if let WadoType::Named(target_name) = &a.target
+                    && target_name == &a.name
+                {
+                    return;
+                }
                 if let Some(ref attr) = a.wasi_attr {
                     self.writeln(&format!("#[wasi(\"{}\")]", attr));
                 }

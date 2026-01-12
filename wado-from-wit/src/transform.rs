@@ -8,8 +8,8 @@ use wit_parser::{
 
 use crate::ir::{
     WadoEffect, WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction,
-    WadoModule, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeDef, WadoVariant,
-    WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
+    WadoModule, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeAlias, WadoTypeDef,
+    WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
 };
 use crate::naming::{escape_keyword, to_snake_case, to_upper_camel_case};
 
@@ -384,6 +384,15 @@ impl<'a> Transformer<'a> {
                 })))
             }
             TypeDefKind::Resource => Ok(None), // Resources handled separately
+            TypeDefKind::Type(inner) => {
+                // Type alias (e.g., `type instant = u64;` in WIT)
+                let target = self.transform_type(*inner)?;
+                Ok(Some(WadoTypeDef::TypeAlias(WadoTypeAlias {
+                    name,
+                    wasi_attr: Some(wasi_attr),
+                    target,
+                })))
+            }
             _ => Ok(None),
         }
     }

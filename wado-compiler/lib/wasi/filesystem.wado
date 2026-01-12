@@ -5,6 +5,10 @@
 //   - vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem/preopens.wit
 //   - vendor/wasmtime/crates/wasi/src/p3/wit/deps/random/world.wit
 
+
+#[wasi("wasi:filesystem/types@0.3.0-rc-2025-09-16#filesize")]
+pub type Filesize = u64;
+
 /// The type of a filesystem object referenced by a descriptor.
 /// 
 /// Note: This was called `filetype` in earlier versions of WASI.
@@ -93,6 +97,9 @@ pub flags OpenFlags {
     /// Truncate file to size 0, similar to `O_TRUNC` in POSIX.
     Truncate,
 }
+
+#[wasi("wasi:filesystem/types@0.3.0-rc-2025-09-16#link-count")]
+pub type LinkCount = u64;
 
 /// File attributes.
 /// 
@@ -256,6 +263,7 @@ pub struct MetadataHashValue {
     /// Another 64 bits of a 128-bit hash value.
     upper: u64,
 }
+
 
 /// A descriptor is a reference to a filesystem object, which may be a file,
 /// directory, named pipe, special file, or other object on which filesystem
