@@ -32,6 +32,7 @@ pub struct CompileOptions {
     pub input: String,
     pub output: Option<String>,
     pub format: Option<OutputFormat>,
+    pub wat_to_stdout: bool,
 }
 
 pub fn print_usage() {
@@ -40,6 +41,9 @@ pub fn print_usage() {
     eprintln!("Options:");
     eprintln!("  -o <file>        Output file path (default: <input>.wasm)");
     eprintln!("  --format <fmt>   Output format: wasm, wat (default: guessed from -o extension)");
+    eprintln!(
+        "  --wat-to-stdout  Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
+    );
     eprintln!("  --help, -h       Show this help message");
 }
 
@@ -47,6 +51,7 @@ pub fn parse_args(args: &[String]) -> CompileOptions {
     let mut output: Option<String> = None;
     let mut format: Option<OutputFormat> = None;
     let mut input: Option<String> = None;
+    let mut wat_to_stdout = false;
     let mut i = 0;
 
     while i < args.len() {
@@ -54,6 +59,10 @@ pub fn parse_args(args: &[String]) -> CompileOptions {
             "--help" | "-h" => {
                 print_usage();
                 process::exit(0);
+            }
+            "--wat-to-stdout" => {
+                wat_to_stdout = true;
+                i += 1;
             }
             "-o" => {
                 if i + 1 >= args.len() {
@@ -120,6 +129,7 @@ pub fn parse_args(args: &[String]) -> CompileOptions {
         input,
         output,
         format,
+        wat_to_stdout,
     }
 }
 
@@ -150,6 +160,13 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 
 pub fn run(opts: CompileOptions) {
     let wasm = compile(&opts.input);
+
+    // Handle --wat-to-stdout: output WAT to stdout and return
+    if opts.wat_to_stdout {
+        let wat = wasm_to_wat(&wasm);
+        print!("{wat}");
+        return;
+    }
 
     // Determine format: explicit > guessed from -o extension > default (wasm)
     let format = opts

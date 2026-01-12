@@ -23,9 +23,10 @@ There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
 The CLI is implemented in `wado-cli/` with sub-command style CLI:
 
 ```sh
-wado compile -o file.wasm file.wado # generates Wasm
-wado compile -o file.wat file.wado  # generates WAT
-wado run file.wado                  # run it directly using wasmtime
+cargo run --bin wado -- compile -o file.wasm file.wado    # generates Wasm
+cargo run --bin wado -- compile -o file.wat file.wado     # generates WAT
+cargo run --bin wado -- compile --wat-to-stdout file.wado # outputs WAT to stdout
+cargo run --bin wado -- run file.wado                     # run it directly using wasmtime
 ```
 
 ## Bundled Library

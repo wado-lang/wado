@@ -128,6 +128,32 @@ builtin::waitable_set_new() -> i32
 builtin::waitable_join(set: i32, subtask: i32)
 builtin::waitable_set_wait(set: i32, outptr: i32) -> i32
 builtin::subtask_drop(subtask: i32)
+
+// Branch hinting (Wasm branch hinting proposal)
+builtin::likely(cond: bool) -> bool    // Hint: branch is usually taken
+builtin::unlikely(cond: bool) -> bool  // Hint: branch is rarely taken
+```
+
+**Branch Hinting:**
+
+`builtin::likely()` and `builtin::unlikely()` generate WebAssembly branch hints via the `metadata.code.branch_hint` custom section. These hints help the Wasm runtime optimize branch prediction.
+
+```wado
+// Hint that this condition is usually true
+if builtin::likely(x > 0) {
+    // fast path
+}
+
+// Hint that this condition is rarely true (error path)
+if builtin::unlikely(x < 0) {
+    // error handling
+}
+```
+
+To inspect generated branch hints:
+
+```sh
+cargo run --bin wado -- compile --wat-to-stdout file.wado | grep branch_hint
 ```
 
 **Usage in Standard Library:**
@@ -318,6 +344,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Type cast (`as T`) for primitive types (i32, i64, f32, f64)
 - [x] Assert statements (condition check, unreachable on failure)
 - [x] User-defined functions (from core:: modules)
+- [x] Branch hinting (`builtin::likely`, `builtin::unlikely`)
 - [ ] Struct construction
 - [ ] Enum/variant construction
 - [ ] Pattern matching

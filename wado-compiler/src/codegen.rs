@@ -11,12 +11,13 @@ use crate::symbol::SymbolTable;
 use crate::wasm_postprocess;
 use std::collections::HashMap;
 use wasm_encoder::{
-    Alias, ArrayType, CanonicalOption, CodeSection, ComponentBuilder, ComponentExportKind,
-    ComponentOuterAliasKind, ComponentValType, CompositeInnerType, CompositeType, ConstExpr,
-    DataCountSection, DataSection, DataSegment, DataSegmentMode, EntityType, ExportKind,
-    ExportSection, FieldType, Function, FunctionSection, HeapType, ImportSection, InstanceType,
-    Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
-    PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection, ValType,
+    Alias, ArrayType, BranchHint, BranchHints, CanonicalOption, CodeSection, ComponentBuilder,
+    ComponentExportKind, ComponentOuterAliasKind, ComponentValType, CompositeInnerType,
+    CompositeType, ConstExpr, DataCountSection, DataSection, DataSegment, DataSegmentMode,
+    EntityType, ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType,
+    ImportSection, InstanceType, Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg,
+    NameMap, NameSection, PrimitiveValType, RefType, StorageType, SubType, TypeBounds, TypeSection,
+    ValType,
 };
 use wasmparser::{Validator, WasmFeatures};
 
@@ -44,6 +45,11 @@ struct FunctionContext {
     local_types: Vec<ValType>,
     /// Return type of the function (for ref.as_non_null handling)
     return_type: Option<ValType>,
+    /// Pending branch hint from builtin::likely() or builtin::unlikely()
+    /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
+    pending_branch_hint: Option<bool>,
+    /// Collected branch hints for this function (offset, taken)
+    branch_hints: Vec<(u32, bool)>,
 }
 
 impl FunctionContext {
@@ -56,7 +62,26 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
+            pending_branch_hint: None,
+            branch_hints: Vec::new(),
         }
+    }
+
+    /// Set a pending branch hint (from builtin::likely/unlikely)
+    fn set_branch_hint(&mut self, taken: bool) {
+        self.pending_branch_hint = Some(taken);
+    }
+
+    /// Consume pending branch hint and record it at the given offset
+    fn consume_branch_hint(&mut self, offset: u32) {
+        if let Some(taken) = self.pending_branch_hint.take() {
+            self.branch_hints.push((offset, taken));
+        }
+    }
+
+    /// Take the collected branch hints (consumes them)
+    fn take_branch_hints(&mut self) -> Vec<(u32, bool)> {
+        std::mem::take(&mut self.branch_hints)
     }
 
     fn set_return_type(&mut self, ty: ValType) {
@@ -164,6 +189,8 @@ struct CoreModuleBuilder {
     func_type_names: HashMap<String, String>, // func_name -> type_name
     type_has_return: HashMap<String, bool>,   // type_name -> has_return
     next_func_idx: u32,
+    /// Number of imported functions (for branch hint calculation)
+    import_func_count: u32,
 
     // Memory tracking
     has_memory: bool,
@@ -184,6 +211,7 @@ impl CoreModuleBuilder {
             func_type_names: HashMap::new(),
             type_has_return: HashMap::new(),
             next_func_idx: 0,
+            import_func_count: 0,
             has_memory: false,
         }
     }
@@ -232,6 +260,7 @@ impl CoreModuleBuilder {
         self.func_type_names
             .insert(name.to_string(), type_name.to_string());
         self.next_func_idx += 1;
+        self.import_func_count += 1;
         func_idx
     }
 
@@ -1847,13 +1876,19 @@ impl Codegen {
         let data_count = if string_data.is_empty() { 0 } else { 1 };
         module.section(&DataCountSection { count: data_count });
 
-        // Code section
+        // Code section and branch hints collection
         let mut code = CodeSection::new();
+        let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
 
         // User-defined functions from all modules
-        for (_, func, _) in &all_funcs {
-            let wasm_func = self.generate_user_function(func, &builder);
+        // Function indices for hints: imported functions come first, then user-defined
+        let import_count = builder.import_func_count;
+        for (idx, (_, func, _)) in all_funcs.iter().enumerate() {
+            let (wasm_func, hints) = self.generate_user_function(func, &builder);
             code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((import_count + idx as u32, hints));
+            }
         }
 
         // run function
@@ -1894,6 +1929,22 @@ impl Codegen {
         run_func.instruction(&Instruction::Call(task_return_idx));
         run_func.instruction(&Instruction::End);
         code.function(&run_func);
+
+        // Branch hints section (must come before code section)
+        if !all_branch_hints.is_empty() {
+            let mut hints = BranchHints::new();
+            for (func_idx, func_hints) in all_branch_hints {
+                hints.function_hints(
+                    func_idx,
+                    func_hints.into_iter().map(|(offset, taken)| BranchHint {
+                        branch_func_offset: offset,
+                        branch_hint_value: if taken { 1 } else { 0 },
+                    }),
+                );
+            }
+            module.section(&hints);
+        }
+
         module.section(&code);
 
         // Data section
@@ -2049,13 +2100,19 @@ impl Codegen {
         let data_count = if string_data.is_empty() { 0 } else { 1 };
         module.section(&DataCountSection { count: data_count });
 
-        // Code section
+        // Code section and branch hints collection
         let mut code = CodeSection::new();
+        let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
 
         // User-defined functions
-        for func in &user_funcs {
-            let wasm_func = self.generate_user_function(func, &builder);
+        // Function indices for hints: imported functions come first, then user-defined
+        let import_count = builder.import_func_count;
+        for (idx, func) in user_funcs.iter().enumerate() {
+            let (wasm_func, hints) = self.generate_user_function(func, &builder);
             code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((import_count + idx as u32, hints));
+            }
         }
 
         // ============================================
@@ -2105,6 +2162,22 @@ impl Codegen {
         // No return value - task.return already provided the result
         run_func.instruction(&Instruction::End);
         code.function(&run_func);
+
+        // Branch hints section (must come before code section)
+        if !all_branch_hints.is_empty() {
+            let mut hints = BranchHints::new();
+            for (func_idx, func_hints) in all_branch_hints {
+                hints.function_hints(
+                    func_idx,
+                    func_hints.into_iter().map(|(offset, taken)| BranchHint {
+                        branch_func_offset: offset,
+                        branch_hint_value: if taken { 1 } else { 0 },
+                    }),
+                );
+            }
+            module.section(&hints);
+        }
+
         module.section(&code);
 
         // Data section: string literals for array.new_data
@@ -2223,12 +2296,12 @@ impl Codegen {
         }
     }
 
-    /// Generate a user-defined function
+    /// Generate a user-defined function and return branch hints collected during generation
     fn generate_user_function(
         &self,
         ast_func: &crate::ast::Function,
         builder: &CoreModuleBuilder,
-    ) -> Function {
+    ) -> (Function, Vec<(u32, bool)>) {
         // First pass: analyze function body to collect locals
         let mut func_ctx = FunctionContext::new(ast_func.params.len() as u32);
 
@@ -2286,7 +2359,10 @@ impl Codegen {
         }
 
         wasm_func.instruction(&Instruction::End);
-        wasm_func
+
+        // Collect branch hints from the context
+        let branch_hints = gen_ctx.take_branch_hints();
+        (wasm_func, branch_hints)
     }
 
     /// Generate write-via-stream call (START only, no wait)
@@ -2556,6 +2632,9 @@ impl Codegen {
             }
             Stmt::If(if_stmt) => {
                 self.generate_expr_with_builder(func, &if_stmt.condition, ctx, builder);
+                // Record branch hint offset before emitting the if instruction
+                let if_offset = func.byte_len() as u32;
+                ctx.consume_branch_hint(if_offset);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 for s in &if_stmt.then_block.stmts {
                     self.generate_stmt_with_builder(func, s, ctx, builder);
@@ -3097,6 +3176,28 @@ impl Codegen {
                 }
                 let func_idx = builder.func_idx("write-via-stream-stderr");
                 self.generate_write_via_stream_start(func, ctx, builder, func_idx);
+            }
+
+            // Branch hinting builtins
+            "likely" => {
+                // likely(cond: bool) -> bool
+                // Hints to the runtime that the condition is likely true (branch taken)
+                // The condition value is passed through unchanged
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                // Set pending hint: true = branch likely taken
+                ctx.set_branch_hint(true);
+            }
+            "unlikely" => {
+                // unlikely(cond: bool) -> bool
+                // Hints to the runtime that the condition is unlikely true (branch not taken)
+                // The condition value is passed through unchanged
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                // Set pending hint: false = branch unlikely taken
+                ctx.set_branch_hint(false);
             }
 
             _ => {
