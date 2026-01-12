@@ -759,7 +759,7 @@ utils::helper_function();
 - Namespace imports omit curly braces: `use name from "..."`
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - All imports must be explicit (except the prelude)
-- Use `::` for effect function access: `Effect::{func1, func2}`
+- Use `::` for effect operation access: `Effect::{op1, op2}`
 
 ```wado
 // Valid patterns
@@ -772,9 +772,9 @@ use * from "core:cli";           // Wildcard not allowed
 use println from "core:cli";     // Named items require curly braces
 ```
 
-### Calling Effect Functions
+### Calling Effect Operations
 
-Effect functions use `::` syntax:
+Effect operations use `::` syntax:
 
 ```wado
 use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
@@ -791,7 +791,7 @@ fn example() with Stdout {
 Notation distinction:
 
 - `.` → struct fields and methods (`user.name`, `stream.read()`)
-- `::` → effect functions and namespace access (`Stdout::write_via_stream()`)
+- `::` → effect operations and namespace access (`Stdout::write_via_stream()`)
 
 ### Renaming Imports
 
@@ -1067,23 +1067,28 @@ The Effect System is equivalent to:
 
 Effects can be defined in two ways:
 
-**1. Effect interfaces** (for free functions):
+**1. Effect interfaces** (declaring operations as free functions):
 
 ```wado
-effect Console {
-    fn print(msg: String);
-    fn read_line() -> String;
+// WASI CLI effects (see wasi:cli for real definitions)
+effect Stdout {
+    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
+effect Stderr {
+    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+}
+
+effect Environment {
+    fn get_environment() -> Array<Tuple<String, String>>;
+    fn get_arguments() -> Array<String>;
+    fn get_initial_cwd() -> Option<String>;
+}
+
+// Custom effect interfaces
 effect Http {
     fn get(url: String) -> Response;
     fn post(url: String, body: String) -> Response;
-}
-
-effect FileSystem {
-    fn read(path: String) -> Result<Array<u8>, IoError>;
-    fn write(path: String, data: Array<u8>) -> Result<(), IoError>;
-    fn exists(path: String) -> bool;
 }
 
 effect Dom {
@@ -1121,15 +1126,15 @@ This approach makes effect requirements explicit and visible in method signature
 ### Effect Declaration in Functions
 
 ```wado
-// Declare effects used with `with`
-fn greet(name: String) with Console {
-    Console::print(`Hello, {name}!`);
+// Declare required effects with `with`
+fn greet(name: String) with Stdout {
+    Stdout::write_via_stream(to_stream(`Hello, {name}!\n`));
 }
 
 // Multiple effects
-fn download_and_save(url: String, path: String) with Http, FileSystem {
-    let data = Http::get(url).body;
-    FileSystem::write(path, data);
+fn show_env() with Stdout, Environment {
+    let args = Environment::get_arguments();
+    Stdout::write_via_stream(to_stream(`Arguments: {args}\n`));
 }
 
 // No effects = pure function
@@ -1138,12 +1143,12 @@ fn add(a: i32, b: i32) -> i32 {
 }
 ```
 
-### Importing Effect Functions
+### Importing Effect Operations
 
-To avoid the verbosity of `Effect::function()` calls, you can explicitly import effect functions:
+To avoid the verbosity of `Effect::operation()` calls, you can explicitly import effect operations:
 
 ```wado
-// Import effect functions
+// Import effect operations
 use {Stdout::{write_via_stream}} from "wasi:cli";
 use {Environment::{get_environment, get_arguments}} from "wasi:cli";
 
@@ -1166,17 +1171,17 @@ pub fn env(name: String) -> Option<String> with Environment {
 
 **Import Rules:**
 
-- Effect functions use `::` syntax: `use {Effect::{func1, func2}} from "..."`
-- Multiple functions can be imported: `Effect::{func1, func2, func3}`
-- Function renaming is supported: `use {func as renamed} from "..."`
+- Effect operations use `::` syntax: `use {Effect::{op1, op2}} from "..."`
+- Multiple operations can be imported: `Effect::{op1, op2, op3}`
+- Renaming is supported: `use {op as renamed} from "..."`
 - Wildcards are prohibited: `use {Effect::{*}}` is not allowed
 - The `with` declaration is still required for effect tracking
 
 **Name Resolution:**
 
-- Imported effect functions can be called directly without the `Effect::` prefix
-- If a function name is ambiguous, use the fully qualified `Effect::function()` syntax
-- Non-imported effect functions must always use the `Effect::function()` syntax
+- Imported effect operations can be called directly without the `Effect::` prefix
+- If an operation name is ambiguous, use the fully qualified `Effect::operation()` syntax
+- Non-imported effect operations must always use the `Effect::operation()` syntax
 
 ```wado
 // Example with name collision handling
@@ -1208,13 +1213,17 @@ pub fn api_function() with Http, FileSystem {
 
 ### Handlers
 
+> **TBD**: The handler system is in an early design stage. The syntax and semantics below are provisional and subject to change.
+
+Handlers provide implementations for effect operations, enabling dependency injection and testing.
+
 #### Built-in Handlers
 
 ```wado
-use {WasiConsole, WasiFileSystem, WasiHttp, BrowserDom} from "core:handlers";
+use {WasiStdout, WasiStderr, WasiEnvironment, BrowserDom} from "core:handlers";
 
 fn main() {
-    with Console => WasiConsole, FileSystem => WasiFileSystem, Http => WasiHttp {
+    with Stdout => WasiStdout, Stderr => WasiStderr, Environment => WasiEnvironment {
         app();
     }
 }
@@ -1223,9 +1232,8 @@ fn main() {
 #### Inline Handler
 
 ```wado
-with handler Console {
-    print(msg) => actual_print(msg),
-    read_line() => actual_read(),
+with handler Stdout {
+    write_via_stream(data) => actual_write(data),
 } {
     greet("Alice");
 }
@@ -1234,18 +1242,18 @@ with handler Console {
 #### Named Handler
 
 ```wado
-handler MockConsole for Console {
-    let mut output: Array<String> = [];
+handler MockStdout for Stdout {
+    let mut output: Array<u8> = [];
 
-    print(msg) => {
-        output.push(msg);
+    write_via_stream(data) => {
+        output.extend(collect_stream(data));
+        return Ok(());
     },
-    read_line() => "mocked input",
 }
 
 // Usage
 fn test() {
-    with Console => MockConsole {
+    with Stdout => MockStdout {
         greet("Bob");
     }
 }
@@ -1286,7 +1294,7 @@ fn collect_all() -> Array<i32> {
 
 ```wado
 fn main() {
-    with Console => WasiConsole, Http => WasiHttp, FileSystem => WasiFileSystem {
+    with Stdout => WasiStdout, Stderr => WasiStderr, Http => WasiHttp {
         app();
     }
 }
@@ -1563,4 +1571,8 @@ Component Model interop: The compiler automatically converts between Wado conven
 - CM: Wasm Component Model
 - module: a Wado file
 - project: a collection of modules
-- Wado standard library: consists of the `core:` and the `wasi:`
+- Wado standard library: consists of `core:` and `wasi:`
+- effect: the concept; e.g., "the `Stdout` effect"
+- effect interface: the declaration (`effect Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
+- operation: a function in an effect interface; synonym: "effect operation"
+- handler: provides implementations for operations
