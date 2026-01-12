@@ -1,0 +1,10 @@
+// Test that log_stderr from "core:internals" is NOT implicitly accessible in user code.
+// Users must explicitly import from core:internals to use internal functions.
+// See log_stderr_explicit_import.wado for the positive test case.
+
+fn run() {
+    log_stderr("This should fail");
+}
+
+__DATA__
+{"compile_error": "log_stderr"}

@@ -101,7 +101,7 @@ mod tests {
     fn test_get_core_prelude() {
         let source = get_stdlib_module("core:prelude");
         assert!(source.is_some());
-        assert!(source.unwrap().contains("Stream"));
+        assert!(source.unwrap().contains("panic"));
     }
 
     #[test]

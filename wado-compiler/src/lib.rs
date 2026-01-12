@@ -119,16 +119,32 @@ fn compile_impl(
         }
     })?;
 
-    // Get loaded modules and symbols for codegen
-    let (symbols, loaded_modules) = analyzer.into_parts();
+    // Get loaded modules, symbols, and implicit modules for codegen
+    let (symbols, loaded_modules, implicit_modules) = analyzer.into_parts();
 
     // Convert HashMap to Vec of references for codegen
     let loaded_modules_vec: Vec<(&Vec<String>, &crate::ast::Module)> =
         loaded_modules.iter().collect();
 
     // Codegen (pass source code for power-assert messages)
+    // Use catch_unwind to convert codegen panics to proper errors
     let mut codegen = Codegen::new_with_source(source.to_string());
-    let wasm = codegen.generate_wasm_with_modules(&ast, &loaded_modules_vec, &symbols);
+    let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        codegen.generate_wasm_with_modules(&ast, &loaded_modules_vec, &symbols, &implicit_modules)
+    }))
+    .map_err(|e| {
+        let message = if let Some(s) = e.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = e.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown codegen error".to_string()
+        };
+        CompileError::Codegen {
+            message,
+            filename: filename.clone(),
+        }
+    })?;
 
     Ok(CompileResult { wasm, module: ast })
 }
@@ -154,6 +170,11 @@ pub enum CompileError {
     },
     /// Semantic analysis error
     Analyzer {
+        message: String,
+        filename: Option<String>,
+    },
+    /// Code generation error
+    Codegen {
         message: String,
         filename: Option<String>,
     },
@@ -194,6 +215,13 @@ impl std::fmt::Display for CompileError {
                     write!(f, "{file}: analysis error: {message}")
                 } else {
                     write!(f, "analysis error: {message}")
+                }
+            }
+            CompileError::Codegen { message, filename } => {
+                if let Some(file) = filename {
+                    write!(f, "{file}: codegen error: {message}")
+                } else {
+                    write!(f, "codegen error: {message}")
                 }
             }
         }

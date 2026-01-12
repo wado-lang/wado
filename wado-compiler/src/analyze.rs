@@ -84,6 +84,8 @@ pub struct Analyzer {
     resolver: ModuleResolver,
     /// Collected errors
     errors: Vec<AnalyzeError>,
+    /// Modules loaded implicitly by the compiler (not by user imports)
+    implicit_modules: std::collections::HashSet<Vec<String>>,
 }
 
 impl Analyzer {
@@ -93,6 +95,7 @@ impl Analyzer {
             symbols: SymbolTable::new(),
             resolver: ModuleResolver::new(),
             errors: Vec::new(),
+            implicit_modules: std::collections::HashSet::new(),
         }
     }
 
@@ -102,6 +105,7 @@ impl Analyzer {
             symbols: SymbolTable::new(),
             resolver: ModuleResolver::with_base_path(base_path),
             errors: Vec::new(),
+            implicit_modules: std::collections::HashSet::new(),
         }
     }
 
@@ -124,6 +128,10 @@ impl Analyzer {
         // Second pass: resolve imports
         self.resolve_imports(module, module_path)?;
 
+        // Always load core:prelude for compiler-generated code (e.g., panic from assert)
+        // This module provides fundamental functions like panic.
+        self.load_implicit_module(&["core".to_string(), "prelude".to_string()]);
+
         // Always load core:internals for compiler-generated code (e.g., template strings)
         // This module provides internal helper functions like string_concat, f64_to_string, etc.
         self.load_implicit_module(&["core".to_string(), "internals".to_string()]);
@@ -136,9 +144,11 @@ impl Analyzer {
     }
 
     /// Load a module implicitly (without a user import declaration)
-    /// Used for modules like core:internals that provide compiler-generated code support
+    /// Used for modules like core:internals that provide compiler-generated code support.
+    /// Functions from implicit modules are only accessible via qualified names in codegen,
+    /// not via simple names from user code.
     fn load_implicit_module(&mut self, module_path: &[String]) {
-        // Skip if already loaded
+        // Skip if already loaded (might have been explicitly imported by user)
         if self.resolver.is_loaded(module_path) {
             return;
         }
@@ -155,6 +165,9 @@ impl Analyzer {
                 return;
             }
         };
+
+        // Mark this module as implicitly loaded
+        self.implicit_modules.insert(module_path.to_vec());
 
         // Collect definitions from the implicit module
         self.collect_definitions(&imported_module, module_path);
@@ -498,9 +511,19 @@ impl Analyzer {
             .collect()
     }
 
-    /// Consume the analyzer and return both the symbol table and loaded modules
-    pub fn into_parts(self) -> (SymbolTable, std::collections::HashMap<Vec<String>, Module>) {
-        (self.symbols, self.resolver.into_modules())
+    /// Consume the analyzer and return the symbol table, loaded modules, and implicit modules
+    pub fn into_parts(
+        self,
+    ) -> (
+        SymbolTable,
+        std::collections::HashMap<Vec<String>, Module>,
+        std::collections::HashSet<Vec<String>>,
+    ) {
+        (
+            self.symbols,
+            self.resolver.into_modules(),
+            self.implicit_modules,
+        )
     }
 }
 

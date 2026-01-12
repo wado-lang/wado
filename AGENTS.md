@@ -114,6 +114,7 @@ This project relays on the following features:
 - Manage dependencies in the workspace `Cargo.toml`.
 - Avoid using well-known floating point numbers in tests not to violate the Clippy `approx_constant` rule.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
+- Use `panic!("not yet implemented")` for things that are not yet implemented.
 
 ## Rules for Markdown
 

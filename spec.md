@@ -916,9 +916,8 @@ wasi            # wasi: namespace for system interfaces
 ### Global Functions defined in `core:prelude`
 
 ```wado
-println("hello");
-panic("error");
-unreachable();
+panic("error"); // traps with a message
+unreachable(); // traps  with no message
 ```
 
 ## The `assert` Statement

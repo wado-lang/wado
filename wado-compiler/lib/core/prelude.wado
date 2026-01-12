@@ -1,139 +1,18 @@
-// Wado Prelude Module
-// Based on WebAssembly Component Model specification
-//
-// This module contains types and functions that are automatically imported into every
-// Wado module. The prelude provides access to fundamental Component Model types
-// that are essential for writing Wado programs.
-//
-// Types in this prelude:
-// - Option<T>, Result<T, E> - Always available (built-in to language)
-// - Stream<T>, Future<T> - Component Model async types
-// - Pollable - WASI I/O polling (re-exported from wasi:io)
+// The Wado Prelude Module.
+// Symbols defined in this module is automatically imported in every module.
 //
 // To disable the prelude in a module, use: #![no_prelude]
 
-// Re-export Pollable from WASI I/O
-use {Pollable, poll} from "wasi:io";
-pub use {Pollable, poll};
+use {log_stderr} from "core:internals";
 
-// ============================================================================
-// Component Model Async Types
-// ============================================================================
-
-/// A stream represents a sequence of values that are produced or consumed over time.
-/// Streams are a fundamental part of the Component Model's async support.
-///
-/// Streams can be thought of as async iterators that can be passed between components.
-/// The stream type is built into the Component Model and represents a channel for
-/// transmitting values of type T.
-///
-/// Component Model: `stream<T>`
-#[component_model("stream")]
-pub resource Stream<T> {
-    /// Read the next value from the stream.
-    /// Returns None when the stream is closed.
-    #[component_model("stream.read")]
-    fn read() -> Option<T>;
-
-    /// Write a value to the stream.
-    /// Returns an error if the stream is closed or full.
-    #[component_model("stream.write")]
-    fn write(value: T) -> Result<(), StreamError>;
-
-    /// Close the stream for writing.
-    /// After closing, no more values can be written.
-    #[component_model("stream.close-write")]
-    fn close_write();
-
-    /// Close the stream for reading.
-    /// After closing, no more values can be read.
-    #[component_model("stream.close-read")]
-    fn close_read();
-
-    /// Check if the stream is readable (has data available).
-    #[component_model("stream.is-readable")]
-    fn is_readable() -> bool;
-
-    /// Check if the stream is writable (has space available).
-    #[component_model("stream.is-writable")]
-    fn is_writable() -> bool;
+/// Traps with a message
+/// Logs the message to stderr (ambient, no effect required) and traps.
+pub fn panic(message: String) -> ! {
+    log_stderr(message);
+    builtin::unreachable();
 }
 
-/// Errors that can occur when working with streams.
-pub enum StreamError {
-    /// The stream has been closed and cannot be written to.
-    Closed,
-    /// The stream is full and cannot accept more data.
-    Full,
-    /// An I/O error occurred.
-    Io,
+/// Traps with no message
+pub fn unreachable() -> ! {
+    builtin::unreachable();
 }
-
-/// A future represents a value that will be available at some point in the future.
-/// Futures are a fundamental part of the Component Model's async support.
-///
-/// Unlike promises in JavaScript, Component Model futures are single-use and
-/// represent a computation that will eventually produce a value of type T.
-///
-/// Component Model: `future<T>`
-#[component_model("future")]
-pub resource Future<T> {
-    /// Subscribe to this future, returning a pollable that becomes ready
-    /// when the future resolves.
-    #[component_model("future.subscribe")]
-    fn subscribe() -> Pollable;
-
-    /// Get the value if the future has resolved.
-    /// Returns None if the future is still pending.
-    #[component_model("future.get")]
-    fn get() -> Option<T>;
-}
-
-// ============================================================================
-// Resource Handle Ownership
-// ============================================================================
-
-/// Owned resource handle - Component Model `own<T>`
-/// Ownership is transferred when passed to another component.
-/// This is the default for resource types.
-pub type Own<T> = T;
-
-/// Borrowed resource handle - Component Model `borrow<T>`
-/// Reference is borrowed temporarily, ownership remains with caller.
-/// In Wado, this is represented by `&T`.
-pub type Borrow<T> = &T;
-
-// ============================================================================
-// Notes on Built-in Type Mappings
-// ============================================================================
-
-// The following types are built into Wado and map to Component Model types:
-//
-// Wasm Primitives:
-//   bool              -> bool
-//   char              -> char
-//   i8..i64           -> s8..s64
-//   u8..u64           -> u8..u64
-//   f32, f64          -> f32, f64
-//
-// builtin:: Namespace (Wasm GC primitives, lowercase):
-//   builtin::array<T> -> Wasm GC array (no methods)
-//   builtin::i31ref   -> Wasm GC i31ref
-//
-// Standard Library Types (UpperCamelCase, structs wrapping builtins):
-//   String            -> string (struct wrapping builtin::array<u8>)
-//   Array<T>          -> list<T> (struct wrapping builtin::array<T>)
-//   Tuple<T1, T2, ...> -> tuple<T1, T2, ...>
-//   Option<T>         -> option<T>
-//   Result<T, E>      -> result<T, E>
-//
-// User-defined:
-//   struct { ... }    -> record { ... } (GC struct in Wado, record at CM boundary)
-//   enum { ... }      -> enum { ... } (enumeration without payloads)
-//   variant { ... }   -> variant { ... } (sum type with payloads)
-//   flags { ... }     -> flags { ... } (bit flags)
-//   resource          -> resource
-//
-// Extensions (Wado-specific, mapped at CM boundary):
-//   i128, u128        -> tuple<s64, s64>, tuple<u64, u64>
-//   Dict<K, V>        -> list<tuple<K, V>>
