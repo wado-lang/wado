@@ -761,18 +761,50 @@ impl Parser {
         self.parse_assignment_expr()
     }
 
-    /// Parse assignment expression: `target = value`
+    /// Parse assignment expression: `target = value` or `target op= value`
     /// Assignment has lowest precedence and is right-associative
+    /// Compound assignments (+=, -=, *=, /=, %=) are desugared to `target = target op value`
     fn parse_assignment_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         let expr = self.parse_or_expr()?;
 
+        // Check for simple assignment
         if self.check(&TokenKind::Eq) {
             self.advance();
             let value = self.parse_assignment_expr()?; // Right-associative
             return Ok(Expr::Assign(Box::new(AssignExpr {
                 target: expr,
                 value,
+                span: start_span,
+            })));
+        }
+
+        // Check for compound assignment operators
+        let compound_op = match self.peek().kind {
+            TokenKind::PlusEq => Some(BinaryOp::Add),
+            TokenKind::MinusEq => Some(BinaryOp::Sub),
+            TokenKind::StarEq => Some(BinaryOp::Mul),
+            TokenKind::SlashEq => Some(BinaryOp::Div),
+            TokenKind::PercentEq => Some(BinaryOp::Mod),
+            _ => None,
+        };
+
+        if let Some(op) = compound_op {
+            self.advance();
+            let rhs = self.parse_assignment_expr()?; // Right-associative
+            let rhs_span = rhs.span();
+
+            // Desugar: x op= y  -->  x = x op y
+            let binary_expr = Expr::Binary(Box::new(BinaryExpr {
+                left: expr.clone(),
+                op,
+                right: rhs,
+                span: start_span.merge(&rhs_span),
+            }));
+
+            return Ok(Expr::Assign(Box::new(AssignExpr {
+                target: expr,
+                value: binary_expr,
                 span: start_span,
             })));
         }

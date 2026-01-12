@@ -1,0 +1,47 @@
+// Prime counting benchmark for Wado
+// Counts primes up to LIMIT using trial division
+// Reference: π(1,000,000) = 78,498
+//
+// How to run:
+//   make benchmark-count-prime
+//
+// Or manually:
+//   1. Compile to Wasm:
+//      cargo run --bin wado -- compile -o benchmark/count_prime.wasm benchmark/count_prime.wado
+//
+//   2. Run with wasmtime:
+//      wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
+
+use {println, Stdout} from "core:cli";
+
+fn is_prime(n: i32) -> bool {
+    if n < 2 {
+        return false;
+    }
+    let mut d = 2;
+    while d * d <= n {
+        if n % d == 0 {
+            return false;
+        }
+        d += 1;
+    }
+    return true;
+}
+
+fn count_primes(limit: i32) -> i32 {
+    let mut count = 0;
+    let mut n = 2;
+    while n <= limit {
+        if builtin::unlikely(is_prime(n)) {
+            count += 1;
+        }
+        n += 1;
+    }
+    return count;
+}
+
+fn run() with Stdout {
+    let limit = 10000000;
+    let count = count_primes(limit);
+    println(`Prime count up to {limit}: {count}`);
+}

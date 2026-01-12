@@ -1,0 +1,77 @@
+// Mandelbrot set benchmark for Wado
+// Counts total iterations across a grid of points
+// Real-world use case: fractal rendering, GPU benchmarks
+//
+// How to run:
+//   make benchmark-mandelbrot
+//
+// Or manually:
+//   cargo run --bin wado -- compile -o benchmark/mandelbrot.wasm benchmark/mandelbrot.wado
+//   wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
+
+use {println, Stdout} from "core:cli";
+
+fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
+    let mut x = 0.0;
+    let mut y = 0.0;
+    let mut iter = 0;
+
+    while iter < max_iter {
+        let x2 = x * x;
+        let y2 = y * y;
+
+        if x2 + y2 > 4.0 {
+            return iter;
+        }
+
+        let xy = x * y;
+        x = x2 - y2 + cx;
+        y = 2.0 * xy + cy;
+        iter = iter + 1;
+    }
+
+    return max_iter;
+}
+
+fn run() with Stdout {
+    let width = 800;
+    let height = 600;
+    let max_iter = 256;
+
+    // Mandelbrot region: x in [-2.5, 1.0], y in [-1.0, 1.0]
+    let x_min = -2.5;
+    let x_max = 1.0;
+    let y_min = -1.0;
+    let y_max = 1.0;
+
+    let width_f = 800.0;
+    let height_f = 600.0;
+    let dx = (x_max - x_min) / width_f;
+    let dy = (y_max - y_min) / height_f;
+
+    // Use i32 accumulator (max possible: 800*600*256 = 122,880,000 fits in i32)
+    let mut total_iterations = 0;
+    let mut py = 0;
+    let mut py_f = 0.0;
+
+    while py < height {
+        let cy = y_min + py_f * dy;
+        let mut px = 0;
+        let mut px_f = 0.0;
+
+        while px < width {
+            let cx = x_min + px_f * dx;
+            let iter = mandelbrot_iterations(cx, cy, max_iter);
+            total_iterations = total_iterations + iter;
+
+            px = px + 1;
+            px_f = px_f + 1.0;
+        }
+
+        py = py + 1;
+        py_f = py_f + 1.0;
+    }
+
+    println(`Mandelbrot {width}x{height}, max_iter={max_iter}`);
+    println(`Total iterations: {total_iterations}`);
+}

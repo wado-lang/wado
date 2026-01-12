@@ -208,6 +208,7 @@ struct CoreModuleBuilder {
     func_names: HashMap<String, u32>,
     func_type_names: HashMap<String, String>, // func_name -> type_name
     type_has_return: HashMap<String, bool>,   // type_name -> has_return
+    type_return_type: HashMap<String, ValType>, // type_name -> return ValType
     next_func_idx: u32,
     /// Number of imported functions (for branch hint calculation)
     import_func_count: u32,
@@ -233,6 +234,7 @@ impl CoreModuleBuilder {
             func_names: HashMap::new(),
             func_type_names: HashMap::new(),
             type_has_return: HashMap::new(),
+            type_return_type: HashMap::new(),
             next_func_idx: 0,
             import_func_count: 0,
             has_memory: false,
@@ -259,6 +261,9 @@ impl CoreModuleBuilder {
         self.type_names.insert(name.to_string(), idx);
         self.type_has_return
             .insert(name.to_string(), !results.is_empty());
+        if let Some(ret_type) = results.first() {
+            self.type_return_type.insert(name.to_string(), *ret_type);
+        }
         self.next_type_idx += 1;
         idx
     }
@@ -366,6 +371,14 @@ impl CoreModuleBuilder {
             .and_then(|type_name| self.type_has_return.get(type_name))
             .copied()
             .unwrap_or(false)
+    }
+
+    /// Get the return type of a function, returns None if function not found or has no return
+    fn func_return_type(&self, name: &str) -> Option<ValType> {
+        self.func_type_names
+            .get(name)
+            .and_then(|type_name| self.type_return_type.get(type_name))
+            .copied()
     }
 
     /// Add a function name to the name section (names are automatically tracked)
@@ -2078,6 +2091,19 @@ impl Codegen {
         let data_count = if string_data.is_empty() { 0 } else { 1 };
         module.section(&DataCountSection { count: data_count });
 
+        // Build func_return_types map for local collection phase
+        // This is needed to infer types for function calls before builder is fully populated
+        let mut func_return_types: HashMap<String, ValType> = HashMap::new();
+        for (_module_path, func, qualified_name) in &all_funcs {
+            if let Some(ret_type) = builder.func_return_type(qualified_name) {
+                func_return_types.insert(qualified_name.clone(), ret_type);
+                // Also add simple name alias
+                if qualified_name != &func.name {
+                    func_return_types.insert(func.name.clone(), ret_type);
+                }
+            }
+        }
+
         // Code section and branch hints collection
         let mut code = CodeSection::new();
         let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
@@ -2086,7 +2112,8 @@ impl Codegen {
         // Function indices for hints: imported functions come first, then user-defined
         let import_count = builder.import_func_count;
         for (idx, (module_path, func, _)) in all_funcs.iter().enumerate() {
-            let (wasm_func, hints) = self.generate_user_function(func, &builder, module_path);
+            let (wasm_func, hints) =
+                self.generate_user_function(func, &builder, module_path, &func_return_types);
             code.function(&wasm_func);
             if !hints.is_empty() {
                 all_branch_hints.push((import_count + idx as u32, hints));
@@ -2110,7 +2137,7 @@ impl Codegen {
                     let param_type = self.wado_type_to_wasm_primitive(&param.ty);
                     func_ctx.add_param(&param.name, param_type);
                 }
-                self.collect_locals_from_block(body, &mut func_ctx);
+                self.collect_locals_from_block(body, &mut func_ctx, &func_return_types);
                 // Pre-allocate scratch locals for builtins (including float conversion)
                 let string_array_type = builder.type_idx("string-array");
                 self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
@@ -2125,7 +2152,12 @@ impl Codegen {
         };
 
         let mut run_func = Function::new(local_decls);
-        self.generate_run_body_instructions_p3_with_builder(&mut run_func, main_module, &builder);
+        self.generate_run_body_instructions_p3_with_builder(
+            &mut run_func,
+            main_module,
+            &builder,
+            &func_return_types,
+        );
 
         // Call task.return to complete the async task
         let task_return_idx = builder.func_idx("task-return");
@@ -2304,6 +2336,14 @@ impl Codegen {
         let data_count = if string_data.is_empty() { 0 } else { 1 };
         module.section(&DataCountSection { count: data_count });
 
+        // Build func_return_types map for local collection phase
+        let mut func_return_types: HashMap<String, ValType> = HashMap::new();
+        for func in &user_funcs {
+            if let Some(ret_type) = builder.func_return_type(&func.name) {
+                func_return_types.insert(func.name.clone(), ret_type);
+            }
+        }
+
         // Code section and branch hints collection
         let mut code = CodeSection::new();
         let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
@@ -2313,7 +2353,8 @@ impl Codegen {
         let import_count = builder.import_func_count;
         let empty_path: &[String] = &[];
         for (idx, func) in user_funcs.iter().enumerate() {
-            let (wasm_func, hints) = self.generate_user_function(func, &builder, empty_path);
+            let (wasm_func, hints) =
+                self.generate_user_function(func, &builder, empty_path, &func_return_types);
             code.function(&wasm_func);
             if !hints.is_empty() {
                 all_branch_hints.push((import_count + idx as u32, hints));
@@ -2341,7 +2382,7 @@ impl Codegen {
                     let param_type = self.wado_type_to_wasm_primitive(&param.ty);
                     func_ctx.add_param(&param.name, param_type);
                 }
-                self.collect_locals_from_block(body, &mut func_ctx);
+                self.collect_locals_from_block(body, &mut func_ctx, &func_return_types);
                 // Pre-allocate scratch locals for builtins (including float conversion)
                 let string_array_type = builder.type_idx("string-array");
                 self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
@@ -2358,7 +2399,12 @@ impl Codegen {
         let mut run_func = Function::new(local_decls);
 
         // Generate body from AST (calls to println, etc.)
-        self.generate_run_body_instructions_p3_with_builder(&mut run_func, ast_module, &builder);
+        self.generate_run_body_instructions_p3_with_builder(
+            &mut run_func,
+            ast_module,
+            &builder,
+            &func_return_types,
+        );
 
         // Call task.return to complete the async task
         // For result unit with no payload, pass discriminant directly (0 = ok)
@@ -2509,6 +2555,7 @@ impl Codegen {
         ast_func: &crate::ast::Function,
         builder: &CoreModuleBuilder,
         module_path: &[String],
+        func_return_types: &HashMap<String, ValType>,
     ) -> (Function, Vec<(u32, bool)>) {
         // First pass: analyze function body to collect locals
         let mut func_ctx =
@@ -2528,7 +2575,7 @@ impl Codegen {
 
         // Collect local variables from body
         if let Some(body) = &ast_func.body {
-            self.collect_locals_from_block(body, &mut func_ctx);
+            self.collect_locals_from_block(body, &mut func_ctx, func_return_types);
         }
 
         // Pre-allocate scratch locals that builtins might need
@@ -2730,7 +2777,7 @@ impl Codegen {
                 // Pre-allocate locals for intermediate values
                 let intermediate_values = self.extract_intermediate_values(&assert_stmt.condition);
                 for (name, expr) in &intermediate_values {
-                    let val_type = self.infer_expr_type_with_ctx(expr, ctx);
+                    let val_type = self.infer_expr_type_with_ctx(expr, ctx, None);
                     ctx.alloc_local(&format!("__assert_{}", name.replace(' ', "_")), val_type);
                 }
 
@@ -2766,21 +2813,35 @@ impl Codegen {
     }
 
     /// Collect local variables from a block
-    fn collect_locals_from_block(&self, block: &Block, ctx: &mut FunctionContext) {
+    fn collect_locals_from_block(
+        &self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        func_return_types: &HashMap<String, ValType>,
+    ) {
         for stmt in &block.stmts {
-            self.collect_locals_from_stmt(stmt, ctx);
+            self.collect_locals_from_stmt(stmt, ctx, func_return_types);
         }
     }
 
     /// Collect local variables from a statement
-    fn collect_locals_from_stmt(&self, stmt: &Stmt, ctx: &mut FunctionContext) {
+    fn collect_locals_from_stmt(
+        &self,
+        stmt: &Stmt,
+        ctx: &mut FunctionContext,
+        func_return_types: &HashMap<String, ValType>,
+    ) {
         match stmt {
             Stmt::Let(let_stmt) => {
                 // Use explicit type annotation if present, otherwise infer from value
                 let val_type = if let Some(ty) = &let_stmt.ty {
                     self.wado_type_to_wasm_primitive(ty)
                 } else {
-                    self.infer_expr_type_with_ctx(&let_stmt.value, ctx)
+                    self.infer_expr_type_with_ctx_with_funcs(
+                        &let_stmt.value,
+                        ctx,
+                        func_return_types,
+                    )
                 };
                 ctx.alloc_local(&let_stmt.name, val_type);
                 // Track semantic type for bool/char detection in template interpolation
@@ -2793,17 +2854,17 @@ impl Codegen {
             }
             Stmt::For(for_stmt) => {
                 if let Some(init) = &for_stmt.init {
-                    self.collect_locals_from_stmt(init, ctx);
+                    self.collect_locals_from_stmt(init, ctx, func_return_types);
                 }
-                self.collect_locals_from_block(&for_stmt.body, ctx);
+                self.collect_locals_from_block(&for_stmt.body, ctx, func_return_types);
             }
             Stmt::While(while_stmt) => {
-                self.collect_locals_from_block(&while_stmt.body, ctx);
+                self.collect_locals_from_block(&while_stmt.body, ctx, func_return_types);
             }
             Stmt::If(if_stmt) => {
-                self.collect_locals_from_block(&if_stmt.then_block, ctx);
+                self.collect_locals_from_block(&if_stmt.then_block, ctx, func_return_types);
                 if let Some(else_block) = &if_stmt.else_block {
-                    self.collect_locals_from_block(else_block, ctx);
+                    self.collect_locals_from_block(else_block, ctx, func_return_types);
                 }
             }
             _ => {}
@@ -2833,7 +2894,7 @@ impl Codegen {
                     let string_array_type = builder.type_idx("string-array");
                     self.wado_type_to_wasm_with_idx(ty, string_array_type)
                 } else {
-                    self.infer_expr_type_with_ctx(&let_stmt.value, ctx)
+                    self.infer_expr_type_with_ctx(&let_stmt.value, ctx, Some(builder))
                 };
                 let local_idx = ctx.alloc_local(&let_stmt.name, val_type);
                 self.generate_expr_with_builder(func, &let_stmt.value, ctx, builder);
@@ -2844,7 +2905,7 @@ impl Codegen {
                     self.generate_expr_with_builder(func, value, ctx, builder);
                     // If the expression type is a nullable ref but return type expects non-nullable,
                     // we need to add ref.as_non_null
-                    let expr_type = self.infer_expr_type_with_ctx(value, ctx);
+                    let expr_type = self.infer_expr_type_with_ctx(value, ctx, None);
                     if let (
                         ValType::Ref(RefType {
                             nullable: true,
@@ -2931,7 +2992,7 @@ impl Codegen {
 
                 // 2. Evaluate and cache each intermediate value
                 for (name, expr) in &intermediate_values {
-                    let val_type = self.infer_expr_type_with_ctx(expr, ctx);
+                    let val_type = self.infer_expr_type_with_ctx(expr, ctx, None);
                     let local_idx =
                         ctx.alloc_local(&format!("__assert_{}", name.replace(' ', "_")), val_type);
                     self.generate_expr_with_builder(func, expr, ctx, builder);
@@ -3018,7 +3079,7 @@ impl Codegen {
                 self.generate_expr_with_builder(func, &bin.right, ctx, builder);
 
                 // Infer operand type to select correct instructions
-                let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx);
+                let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx, Some(builder));
 
                 match operand_type {
                     ValType::F64 => {
@@ -3118,17 +3179,27 @@ impl Codegen {
                 self.generate_expr_with_builder(func, &un.expr, ctx, builder);
                 match un.op {
                     crate::ast::UnaryOp::Neg => {
-                        // Negate: 0 - value
-                        // First push 0, swap, then subtract
-                        // But simpler: i32.const 0, local.get, i32.sub
-                        // Actually we already have the value on stack, so we can do:
-                        // i32.const -1, i32.mul or push 0, swap, sub
-                        // Easiest: i32.const 0 before expr, then i32.sub
-                        // But expr is already generated, so we need to handle differently
-                        // For i32: we can use (0 - value) but value is on stack
-                        // Let's use: i32.const -1, i32.mul
-                        func.instruction(&Instruction::I32Const(-1));
-                        func.instruction(&Instruction::I32Mul);
+                        // Negate: generate appropriate instruction based on operand type
+                        let operand_type =
+                            self.infer_expr_type_with_ctx(&un.expr, ctx, Some(builder));
+                        match operand_type {
+                            ValType::F64 => {
+                                func.instruction(&Instruction::F64Neg);
+                            }
+                            ValType::F32 => {
+                                func.instruction(&Instruction::F32Neg);
+                            }
+                            ValType::I64 => {
+                                // For i64: multiply by -1
+                                func.instruction(&Instruction::I64Const(-1));
+                                func.instruction(&Instruction::I64Mul);
+                            }
+                            _ => {
+                                // For i32 and other types: multiply by -1
+                                func.instruction(&Instruction::I32Const(-1));
+                                func.instruction(&Instruction::I32Mul);
+                            }
+                        }
                     }
                     crate::ast::UnaryOp::Not => {
                         // Logical not: value == 0
@@ -3160,7 +3231,7 @@ impl Codegen {
         target_type: &crate::ast::Type,
         ctx: &FunctionContext,
     ) {
-        let source_wasm_type = self.infer_expr_type_with_ctx(source_expr, ctx);
+        let source_wasm_type = self.infer_expr_type_with_ctx(source_expr, ctx, None);
         let target_type_name = self.get_primitive_type_name(target_type);
 
         match (source_wasm_type, target_type_name.as_str()) {
@@ -3559,6 +3630,7 @@ impl Codegen {
         func: &mut Function,
         ast_module: &crate::ast::Module,
         builder: &CoreModuleBuilder,
+        func_return_types: &HashMap<String, ValType>,
     ) {
         // Find run function (WASI CLI Command world entry point)
         let run_func_ast = ast_module.items.iter().find_map(|item| {
@@ -3580,7 +3652,7 @@ impl Codegen {
                 ctx.add_param(&param.name, param_type);
             }
             // Collect locals from body (must match the local collection phase)
-            self.collect_locals_from_block(body, &mut ctx);
+            self.collect_locals_from_block(body, &mut ctx, func_return_types);
             // Pre-allocate scratch locals for builtins (must match the local collection phase)
             let string_array_type = builder.type_idx("string-array");
             self.preallocate_builtin_scratch_locals(&mut ctx, string_array_type);
@@ -3592,7 +3664,13 @@ impl Codegen {
     }
 
     /// Infer expression type with function context (for looking up variable types)
-    fn infer_expr_type_with_ctx(&self, expr: &Expr, ctx: &FunctionContext) -> ValType {
+    /// If builder is provided, can look up user function return types
+    fn infer_expr_type_with_ctx(
+        &self,
+        expr: &Expr,
+        ctx: &FunctionContext,
+        builder: Option<&CoreModuleBuilder>,
+    ) -> ValType {
         match expr {
             Expr::Literal(lit) => match &lit.value {
                 Literal::Int(_) => ValType::I32,
@@ -3631,7 +3709,7 @@ impl Codegen {
                     | crate::ast::BinaryOp::Shl
                     | crate::ast::BinaryOp::Shr => ValType::I32,
                     // Arithmetic ops return the operand type
-                    _ => self.infer_expr_type_with_ctx(&bin.left, ctx),
+                    _ => self.infer_expr_type_with_ctx(&bin.left, ctx, builder),
                 }
             }
             Expr::Call(call) => {
@@ -3658,7 +3736,15 @@ impl Codegen {
                         | "builtin::realloc"
                         | "builtin::f64_to_buffer"
                         | "builtin::f32_to_buffer" => ValType::I32,
-                        _ => ValType::I32,
+                        _ => {
+                            // Check if it's a user-defined function with known return type
+                            if let Some(b) = builder
+                                && let Some(ret_type) = b.func_return_type(&ident.name)
+                            {
+                                return ret_type;
+                            }
+                            ValType::I32
+                        }
                     }
                 } else {
                     ValType::I32
@@ -3679,6 +3765,125 @@ impl Codegen {
                     "i64" | "u64" => ValType::I64,
                     "f32" => ValType::F32,
                     "f64" => ValType::F64,
+                    _ => ValType::I32,
+                }
+            }
+            Expr::Unary(unary) => {
+                // For negation (-), the type is the same as the operand
+                // For logical not (!) and bitwise not (~), the type is i32
+                match unary.op {
+                    crate::ast::UnaryOp::Neg => {
+                        self.infer_expr_type_with_ctx(&unary.expr, ctx, builder)
+                    }
+                    crate::ast::UnaryOp::Not | crate::ast::UnaryOp::BitNot => ValType::I32,
+                    _ => ValType::I32,
+                }
+            }
+            _ => ValType::I32,
+        }
+    }
+
+    /// Infer expression type using a function return type map (for local collection phase)
+    /// This is used before the CoreModuleBuilder has function types populated
+    fn infer_expr_type_with_ctx_with_funcs(
+        &self,
+        expr: &Expr,
+        ctx: &FunctionContext,
+        func_return_types: &HashMap<String, ValType>,
+    ) -> ValType {
+        match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::Int(_) => ValType::I32,
+                Literal::Float(_) => ValType::F64,
+                Literal::Bool(_) => ValType::I32,
+                Literal::Char(_) => ValType::I32,
+                Literal::String(_) => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(11),
+                }),
+                Literal::Null => ValType::I32,
+                Literal::Unit => ValType::I32,
+            },
+            Expr::Ident(ident) => {
+                if let Some(ty) = ctx.get_local_type(&ident.name) {
+                    ty
+                } else {
+                    ValType::I32
+                }
+            }
+            Expr::Binary(bin) => match bin.op {
+                crate::ast::BinaryOp::Eq
+                | crate::ast::BinaryOp::NotEq
+                | crate::ast::BinaryOp::Lt
+                | crate::ast::BinaryOp::LtEq
+                | crate::ast::BinaryOp::Gt
+                | crate::ast::BinaryOp::GtEq
+                | crate::ast::BinaryOp::And
+                | crate::ast::BinaryOp::Or
+                | crate::ast::BinaryOp::BitAnd
+                | crate::ast::BinaryOp::BitOr
+                | crate::ast::BinaryOp::BitXor
+                | crate::ast::BinaryOp::Shl
+                | crate::ast::BinaryOp::Shr => ValType::I32,
+                _ => self.infer_expr_type_with_ctx_with_funcs(&bin.left, ctx, func_return_types),
+            },
+            Expr::Call(call) => {
+                if let Expr::Ident(ident) = &call.callee {
+                    match ident.name.as_str() {
+                        "builtin::stream_new" => ValType::I64,
+                        "builtin::string_new" => ValType::Ref(RefType {
+                            nullable: false,
+                            heap_type: HeapType::Concrete(11),
+                        }),
+                        "builtin::i64_low32"
+                        | "builtin::i64_high32"
+                        | "builtin::array_len"
+                        | "builtin::array_get_u8"
+                        | "builtin::i32_and"
+                        | "builtin::i32_eqz"
+                        | "builtin::stream_write"
+                        | "builtin::waitable_set_new"
+                        | "builtin::waitable_set_wait"
+                        | "builtin::memory_load8_u"
+                        | "builtin::realloc"
+                        | "builtin::f64_to_buffer"
+                        | "builtin::f32_to_buffer" => ValType::I32,
+                        _ => {
+                            // Check user-defined function return types
+                            if let Some(&ret_type) = func_return_types.get(&ident.name) {
+                                return ret_type;
+                            }
+                            ValType::I32
+                        }
+                    }
+                } else {
+                    ValType::I32
+                }
+            }
+            Expr::TemplateString(_) => ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(11),
+            }),
+            Expr::Cast(cast) => {
+                let target_name = self.get_primitive_type_name(&cast.target_type);
+                match target_name.as_str() {
+                    "i32" | "u32" | "bool" => ValType::I32,
+                    "i64" | "u64" => ValType::I64,
+                    "f32" => ValType::F32,
+                    "f64" => ValType::F64,
+                    _ => ValType::I32,
+                }
+            }
+            Expr::Unary(unary) => {
+                // For negation (-), the type is the same as the operand
+                // For logical not (!) and bitwise not (~), the type is i32
+                match unary.op {
+                    crate::ast::UnaryOp::Neg => self.infer_expr_type_with_ctx_with_funcs(
+                        &unary.expr,
+                        ctx,
+                        func_return_types,
+                    ),
+                    crate::ast::UnaryOp::Not | crate::ast::UnaryOp::BitNot => ValType::I32,
                     _ => ValType::I32,
                 }
             }
@@ -3930,7 +4135,7 @@ impl Codegen {
             TemplatePart::Interpolation { expr, format: _ } => {
                 // TODO: Handle format specifiers
                 // Determine the expression type to decide on conversion
-                let expr_type = self.infer_expr_type_with_ctx(expr, ctx);
+                let expr_type = self.infer_expr_type_with_ctx(expr, ctx, Some(builder));
 
                 match expr_type {
                     ValType::F64 => {
@@ -4167,7 +4372,7 @@ impl Codegen {
                 self.generate_expr_with_cache(func, &bin.right, cache, ctx, builder);
 
                 // Infer operand type to select correct instructions
-                let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx);
+                let operand_type = self.infer_expr_type_with_ctx(&bin.left, ctx, Some(builder));
 
                 match operand_type {
                     ValType::F64 => match bin.op {
