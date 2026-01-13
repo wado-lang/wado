@@ -64,6 +64,8 @@ pub struct Codegen {
     string_array_type_idx: u32,
     /// Registry of user-defined struct types
     struct_types: HashMap<String, StructTypeInfo>,
+    /// Registry of type aliases (e.g., `type Instant = u64`)
+    type_aliases: HashMap<String, crate::ast::Type>,
 }
 
 /// Context for tracking local variables during function code generation
@@ -687,6 +689,7 @@ impl Codegen {
             world_registry: WorldRegistry::new(),
             string_array_type_idx: 0, // Set when types are defined
             struct_types: HashMap::new(),
+            type_aliases: HashMap::new(),
         }
     }
 
@@ -844,11 +847,11 @@ impl Codegen {
 
     /// Register effects from a single WASI module
     fn register_wasi_module(&mut self, _module_path: &[String], module: &AstModule) {
-        // First, collect type aliases from this module
-        let mut type_aliases: HashMap<String, Type> = HashMap::new();
+        // First, collect type aliases from this module into the persistent registry
         for item in &module.items {
             if let Item::Type(alias) = item {
-                type_aliases.insert(alias.name.clone(), alias.ty.clone());
+                self.type_aliases
+                    .insert(alias.name.clone(), alias.ty.clone());
             }
         }
 
@@ -856,7 +859,7 @@ impl Codegen {
         let resolve_type = |ty: &Type| -> Type {
             match ty {
                 Type::Named(named) => {
-                    if let Some(resolved) = type_aliases.get(&named.name) {
+                    if let Some(resolved) = self.type_aliases.get(&named.name) {
                         resolved.clone()
                     } else {
                         ty.clone()
@@ -3363,6 +3366,15 @@ impl Codegen {
                 for param in &run_ast.params {
                     let param_type = self.wado_type_to_wasm_primitive(&param.ty);
                     func_ctx.add_param(&param.name, param_type);
+                    // Set semantic type for struct parameters (needed for field access)
+                    if let crate::ast::Type::Named(named) = &param.ty
+                        && self.struct_types.contains_key(&named.name)
+                    {
+                        func_ctx.set_semantic_type(
+                            &param.name,
+                            SemanticType::Struct(named.name.clone()),
+                        );
+                    }
                 }
                 self.collect_locals_from_block(body, &mut func_ctx, &func_return_types);
                 // Pre-allocate scratch locals for builtins (including float conversion)
@@ -3430,29 +3442,57 @@ impl Codegen {
         module.finish()
     }
 
+    /// Resolve a type name through type aliases to get the underlying primitive type name.
+    /// Returns the resolved type name (e.g., "Instant" -> "u64", "Duration" -> "u64").
+    fn resolve_type_alias<'a>(&'a self, type_name: &'a str) -> &'a str {
+        if let Some(aliased_ty) = self.type_aliases.get(type_name)
+            && let crate::ast::Type::Named(named) = aliased_ty
+        {
+            // Recursively resolve in case of chained aliases
+            return self.resolve_type_alias(&named.name);
+        }
+        type_name
+    }
+
     /// Convert Wado type to Wasm ValType (primitive types only, for local collection)
     fn wado_type_to_wasm_primitive(&self, ty: &crate::ast::Type) -> ValType {
         match ty {
-            crate::ast::Type::Named(named) => match named.name.as_str() {
-                "i32" | "u32" | "bool" | "char" => ValType::I32,
-                "i64" | "u64" => ValType::I64,
-                "f32" => ValType::F32,
-                "f64" => ValType::F64,
-                // For complex types, use a ref type (string-array)
-                "String" => ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(self.string_array_type_idx),
-                }),
-                _ => ValType::I32,
-            },
+            crate::ast::Type::Named(named) => {
+                // Resolve type aliases (e.g., Instant -> u64, Duration -> u64)
+                let resolved_name = self.resolve_type_alias(&named.name);
+                match resolved_name {
+                    "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "bool" | "char" | "!" => {
+                        ValType::I32 // Never type (!) maps to I32 but is never actually used
+                    }
+                    "i64" | "u64" => ValType::I64,
+                    "f32" => ValType::F32,
+                    "f64" => ValType::F64,
+                    // For complex types, use a ref type (string-array)
+                    "String" => ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(self.string_array_type_idx),
+                    }),
+                    type_name => {
+                        // Check if this is a struct type
+                        if let Some(struct_info) = self.struct_types.get(type_name) {
+                            ValType::Ref(RefType {
+                                nullable: false,
+                                heap_type: HeapType::Concrete(struct_info.type_idx),
+                            })
+                        } else {
+                            panic!("unknown type in wado_type_to_wasm_primitive: {type_name}");
+                        }
+                    }
+                }
+            }
             crate::ast::Type::Generic(generic) => match generic.name.as_str() {
                 "Array" => ValType::Ref(RefType {
                     nullable: false,
                     heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
-                _ => ValType::I32,
+                other => panic!("unknown generic type in wado_type_to_wasm_primitive: {other}"),
             },
-            _ => ValType::I32,
+            other => panic!("unsupported type variant in wado_type_to_wasm_primitive: {other:?}"),
         }
     }
 
@@ -3509,26 +3549,41 @@ impl Codegen {
 
     fn wado_type_to_wasm_with_idx(&self, ty: &crate::ast::Type, string_array_idx: u32) -> ValType {
         match ty {
-            crate::ast::Type::Named(named) => match named.name.as_str() {
-                "i32" | "u32" | "bool" => ValType::I32,
-                "i64" | "u64" | "Instant" | "Duration" => ValType::I64, // Instant/Duration are u64 type aliases from wasi:clocks
-                "f32" => ValType::F32,
-                "f64" => ValType::F64,
-                "String" => ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(string_array_idx),
-                }),
-                _ => ValType::I32,
-            },
+            crate::ast::Type::Named(named) => {
+                // Resolve type aliases (e.g., Instant -> u64, Duration -> u64)
+                let resolved_name = self.resolve_type_alias(&named.name);
+                match resolved_name {
+                    "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "bool" | "char" => ValType::I32,
+                    "i64" | "u64" => ValType::I64,
+                    "!" => ValType::I32, // Never type - actual value doesn't matter as it's unreachable
+                    "f32" => ValType::F32,
+                    "f64" => ValType::F64,
+                    "String" => ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(string_array_idx),
+                    }),
+                    type_name => {
+                        // Check if this is a struct type
+                        if let Some(struct_info) = self.struct_types.get(type_name) {
+                            ValType::Ref(RefType {
+                                nullable: false,
+                                heap_type: HeapType::Concrete(struct_info.type_idx),
+                            })
+                        } else {
+                            panic!("unknown type in wado_type_to_wasm_with_idx: {type_name}");
+                        }
+                    }
+                }
+            }
             crate::ast::Type::Generic(generic) => match generic.name.as_str() {
                 "Stream" => ValType::I32,
                 "Array" => ValType::Ref(RefType {
                     nullable: false,
                     heap_type: HeapType::Concrete(string_array_idx),
                 }),
-                _ => ValType::I32,
+                other => panic!("unknown generic type in wado_type_to_wasm_with_idx: {other}"),
             },
-            _ => ValType::I32,
+            other => panic!("unsupported type variant in wado_type_to_wasm_with_idx: {other:?}"),
         }
     }
 
@@ -3555,6 +3610,12 @@ impl Codegen {
         for param in &ast_func.params {
             let param_type = self.wado_type_to_wasm_primitive(&param.ty);
             func_ctx.add_param(&param.name, param_type);
+            // Set semantic type for struct parameters (needed for field access)
+            if let crate::ast::Type::Named(named) = &param.ty
+                && self.struct_types.contains_key(&named.name)
+            {
+                func_ctx.set_semantic_type(&param.name, SemanticType::Struct(named.name.clone()));
+            }
         }
 
         // Collect local variables from body
@@ -3967,6 +4028,11 @@ impl Codegen {
                 };
                 let local_idx = ctx.alloc_local(&let_stmt.name, val_type);
                 self.generate_expr_with_builder(func, &let_stmt.value, ctx, builder);
+                // Type promotion: if local expects i64 but expression produces i32, extend it
+                let expr_type = self.infer_expr_type_with_ctx(&let_stmt.value, ctx, Some(builder));
+                if val_type == ValType::I64 && expr_type == ValType::I32 {
+                    func.instruction(&Instruction::I64ExtendI32S);
+                }
                 func.instruction(&Instruction::LocalSet(local_idx));
             }
             Stmt::Return(ret_stmt) => {
@@ -4852,6 +4918,12 @@ impl Codegen {
             for param in &run_ast.params {
                 let param_type = self.wado_type_to_wasm_primitive(&param.ty);
                 ctx.add_param(&param.name, param_type);
+                // Set semantic type for struct parameters (needed for field access)
+                if let crate::ast::Type::Named(named) = &param.ty
+                    && self.struct_types.contains_key(&named.name)
+                {
+                    ctx.set_semantic_type(&param.name, SemanticType::Struct(named.name.clone()));
+                }
             }
             // Collect locals from body (must match the local collection phase)
             self.collect_locals_from_block(body, &mut ctx, func_return_types);

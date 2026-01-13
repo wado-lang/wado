@@ -1,0 +1,25 @@
+// Test struct as parameter and return value
+
+use {println} from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn create_point(x: i32, y: i32) -> Point {
+    return Point { x: x, y: y };
+}
+
+fn point_sum(p: Point) -> i32 {
+    return p.x + p.y;
+}
+
+fn run() with Stdout {
+    let p = create_point(17, 25);
+    let sum = point_sum(p);
+    println(`sum: {sum}`);
+}
+
+__DATA__
+{"stdout": "sum: 42\n"}
