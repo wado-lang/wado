@@ -12,6 +12,9 @@ use crate::ast::{Function, Type};
 pub struct BuiltinFunctionInfo {
     /// Function name (e.g., "stream_new")
     pub name: String,
+    /// Canonical name from #[canonical("...")] attribute (e.g., "stream-new")
+    /// None means this builtin compiles to Wasm instructions directly
+    pub canonical_name: Option<String>,
     /// Parameter types
     pub params: Vec<(String, Type)>,
     /// Return type (None for void/diverging functions)
@@ -56,8 +59,16 @@ impl BuiltinRegistry {
             (None, false)
         };
 
+        // Extract canonical name from #[canonical("...")] attribute
+        let canonical_name = func
+            .attrs
+            .iter()
+            .find(|a| a.name == "canonical")
+            .and_then(|a| a.args.clone());
+
         let info = BuiltinFunctionInfo {
             name: func.name.clone(),
+            canonical_name,
             params,
             return_type,
             diverges,
@@ -100,6 +111,18 @@ impl BuiltinRegistry {
     pub fn is_empty(&self) -> bool {
         self.functions.is_empty()
     }
+
+    /// Iterate over all registered builtin functions
+    pub fn iter(&self) -> impl Iterator<Item = &BuiltinFunctionInfo> {
+        self.functions.values()
+    }
+
+    /// Iterate over builtins that are imported (have #[canonical("...")] attribute)
+    pub fn imported_builtins(&self) -> impl Iterator<Item = &BuiltinFunctionInfo> {
+        self.functions
+            .values()
+            .filter(|f| f.canonical_name.is_some())
+    }
 }
 
 #[cfg(test)]
@@ -123,14 +146,15 @@ mod tests {
 
         let func = Function {
             name: "stream_new".to_string(),
+            is_pub: false,
+            attrs: vec![],
             params: vec![],
             return_type: Some(Type::Named(NamedType {
                 name: "i64".to_string(),
                 span: make_span(),
             })),
-            body: None,
             effects: vec![],
-            is_pub: false,
+            body: None,
             span: make_span(),
         };
 
@@ -151,14 +175,15 @@ mod tests {
 
         let func = Function {
             name: "unreachable".to_string(),
+            is_pub: false,
+            attrs: vec![],
             params: vec![],
             return_type: Some(Type::Named(NamedType {
                 name: "!".to_string(),
                 span: make_span(),
             })),
-            body: None,
             effects: vec![],
-            is_pub: false,
+            body: None,
             span: make_span(),
         };
 
@@ -174,6 +199,8 @@ mod tests {
 
         let func = Function {
             name: "stream_write".to_string(),
+            is_pub: false,
+            attrs: vec![],
             params: vec![
                 Param {
                     name: "tx".to_string(),
@@ -204,9 +231,8 @@ mod tests {
                 name: "i32".to_string(),
                 span: make_span(),
             })),
-            body: None,
             effects: vec![],
-            is_pub: false,
+            body: None,
             span: make_span(),
         };
 

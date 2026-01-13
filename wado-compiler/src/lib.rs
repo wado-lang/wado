@@ -11,6 +11,7 @@ pub mod symbol;
 pub mod token;
 pub mod wasi_registry;
 pub mod wasm_postprocess;
+pub mod world_registry;
 
 pub use analyze::Analyzer;
 pub use codegen::Codegen;

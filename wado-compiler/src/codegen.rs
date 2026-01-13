@@ -6,7 +6,7 @@ use crate::ast::{
     Block, CallExpr, Expr, Function as AstFunction, Item, Literal, Module as AstModule, Stmt,
     TemplatePart, Type,
 };
-use crate::builtin_registry::BuiltinRegistry;
+use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -14,6 +14,7 @@ use crate::stdlib;
 use crate::symbol::SymbolTable;
 use crate::wasi_registry::{WasiFunctionInfo, WasiRegistry, build_local_alias_name};
 use crate::wasm_postprocess;
+use crate::world_registry::{WorldExportInfo, WorldRegistry};
 use heck::ToKebabCase;
 use std::collections::HashMap;
 use wasm_encoder::{
@@ -37,6 +38,8 @@ pub struct Codegen {
     wasi_registry: WasiRegistry,
     /// Registry of builtin function signatures from lib/core/builtin.wado
     builtin_registry: BuiltinRegistry,
+    /// Registry of world definitions from lib/wasi/*.wado
+    world_registry: WorldRegistry,
     /// Type index for string-array (GC array<u8>), set when types are defined
     string_array_type_idx: u32,
 }
@@ -636,6 +639,7 @@ impl Codegen {
             source_code,
             wasi_registry: WasiRegistry::new(),
             builtin_registry: BuiltinRegistry::new(),
+            world_registry: WorldRegistry::new(),
             string_array_type_idx: 0, // Set when types are defined
         }
     }
@@ -838,6 +842,13 @@ impl Codegen {
                         );
                     }
                 }
+            }
+        }
+
+        // Register world definitions
+        for item in &module.items {
+            if let Item::World(world) = item {
+                self.world_registry.register(world);
             }
         }
     }
@@ -2536,71 +2547,27 @@ impl Codegen {
         // Define types using the builder
         // ========================================
 
-        // WASI function types
-        builder.define_func_type("stream-new", &[], &[ValType::I64]);
-        builder.define_func_type(
-            "stream-write",
-            &[ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
-        builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        // Always define stdout write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stdout_type_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        builder.define_func_type(
-            &stdout_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("task-return", &[ValType::I32], &[]);
-        builder.define_func_type("waitable-set-new", &[], &[ValType::I32]);
-        builder.define_func_type("waitable-join", &[ValType::I32, ValType::I32], &[]);
-        builder.define_func_type(
-            "waitable-set-wait",
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("subtask-drop", &[ValType::I32], &[]);
-
-        // realloc type
-        builder.define_func_type(
-            "realloc",
-            &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
+        // Builtin function types - derived from core/builtin.wado
+        // Only builtins with #[canonical("...")] attribute are imported
+        for func in self.builtin_registry.imported_builtins() {
+            let canonical_name = func.canonical_name.as_ref().unwrap();
+            let params = Self::builtin_func_to_core_params(func);
+            let results = Self::builtin_func_to_core_results(func);
+            builder.define_func_type(canonical_name, &params, &results);
+        }
 
         // GC string array type (array<u8>) - mutable to support float-to-string conversion
         self.string_array_type_idx =
             builder.define_gc_array_type("string-array", StorageType::I8, true);
 
-        // Float-to-buffer types (after GC types to preserve type indices)
-        builder.define_func_type(
-            "f64_to_buffer",
-            &[ValType::F64, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type(
-            "f32_to_buffer",
-            &[ValType::F32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Stderr write-via-stream (same signature as stdout, defined after GC types)
-        // Always define stderr write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stderr_type_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        builder.define_func_type(
-            &stderr_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Monotonic clock now (sync function returning u64, defined after GC types)
-        // Only define if monotonic-clock interface is registered
-        if self.wasi_registry.has_interface("monotonic-clock") {
-            let monotonic_type_name = build_local_alias_name("clocks", "MonotonicClock", "now");
-            builder.define_func_type(&monotonic_type_name, &[], &[ValType::I64]);
+        // WASI effect function types - derived from wasi/*.wado definitions
+        for interface in self.wasi_registry.interfaces() {
+            for func in &interface.functions {
+                let local_name = func.local_alias_name();
+                let params = Self::wasi_func_to_core_params(func);
+                let results = Self::wasi_func_to_core_results(func);
+                builder.define_func_type(&local_name, &params, &results);
+            }
         }
 
         // Types for user-defined functions
@@ -2624,8 +2591,12 @@ impl Codegen {
             builder.define_func_type(qualified_name, &param_types, &return_types);
         }
 
-        // run type
-        builder.define_func_type("run", &[], &[]);
+        // World export types - derived from Command world in wasi/cli.wado
+        if let Some(run_export) = self.world_registry.get_export("Command", "run") {
+            let params = Self::world_export_to_core_params(run_export);
+            let results = Self::world_export_to_core_results(run_export);
+            builder.define_func_type(&run_export.name, &params, &results);
+        }
 
         // Add types section to module
         module.section(&builder.types);
@@ -2711,7 +2682,7 @@ impl Codegen {
             }
         }
 
-        // run function
+        // run function for the wasi:cli Command world
         builder.define_func("run", "run");
         module.section(&builder.functions);
 
@@ -2843,71 +2814,27 @@ impl Codegen {
         // Define types using the builder
         // ========================================
 
-        // WASI function types
-        builder.define_func_type("stream-new", &[], &[ValType::I64]);
-        builder.define_func_type(
-            "stream-write",
-            &[ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
-        builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        // Always define stdout write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stdout_type_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        builder.define_func_type(
-            &stdout_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("task-return", &[ValType::I32], &[]);
-        builder.define_func_type("waitable-set-new", &[], &[ValType::I32]);
-        builder.define_func_type("waitable-join", &[ValType::I32, ValType::I32], &[]);
-        builder.define_func_type(
-            "waitable-set-wait",
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("subtask-drop", &[ValType::I32], &[]);
-
-        // realloc type
-        builder.define_func_type(
-            "realloc",
-            &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
+        // Builtin function types - derived from core/builtin.wado
+        // Only builtins with #[canonical("...")] attribute are imported
+        for func in self.builtin_registry.imported_builtins() {
+            let canonical_name = func.canonical_name.as_ref().unwrap();
+            let params = Self::builtin_func_to_core_params(func);
+            let results = Self::builtin_func_to_core_results(func);
+            builder.define_func_type(canonical_name, &params, &results);
+        }
 
         // GC string array type (array<u8>) - mutable to support float-to-string conversion
         self.string_array_type_idx =
             builder.define_gc_array_type("string-array", StorageType::I8, true);
 
-        // Float-to-buffer types (after GC types to preserve type indices)
-        builder.define_func_type(
-            "f64_to_buffer",
-            &[ValType::F64, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type(
-            "f32_to_buffer",
-            &[ValType::F32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Stderr write-via-stream (same signature as stdout, defined after GC types)
-        // Always define stderr write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stderr_type_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        builder.define_func_type(
-            &stderr_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Monotonic clock now (sync function returning u64, defined after GC types)
-        // Only define if monotonic-clock interface is registered
-        if self.wasi_registry.has_interface("monotonic-clock") {
-            let monotonic_type_name = build_local_alias_name("clocks", "MonotonicClock", "now");
-            builder.define_func_type(&monotonic_type_name, &[], &[ValType::I64]);
+        // WASI effect function types - derived from wasi/*.wado definitions
+        for interface in self.wasi_registry.interfaces() {
+            for func in &interface.functions {
+                let local_name = func.local_alias_name();
+                let params = Self::wasi_func_to_core_params(func);
+                let results = Self::wasi_func_to_core_results(func);
+                builder.define_func_type(&local_name, &params, &results);
+            }
         }
 
         // Types for user-defined functions
@@ -2932,8 +2859,12 @@ impl Codegen {
             builder.define_func_type(&func.name, &param_types, &return_types);
         }
 
-        // run type
-        builder.define_func_type("run", &[], &[]);
+        // World export types - derived from Command world in wasi/cli.wado
+        if let Some(run_export) = self.world_registry.get_export("Command", "run") {
+            let params = Self::world_export_to_core_params(run_export);
+            let results = Self::world_export_to_core_results(run_export);
+            builder.define_func_type(&run_export.name, &params, &results);
+        }
 
         // Add types section to module
         module.section(&builder.types);
@@ -4365,6 +4296,122 @@ impl Codegen {
                 _ => ValType::I32, // Default fallback
             },
             _ => ValType::I32, // Default fallback for complex types
+        }
+    }
+
+    /// Convert a WASI function type to Core Wasm params
+    ///
+    /// For async functions, an extra i32 param (outptr) is added per Component Model ABI.
+    /// For sync functions, params are mapped directly.
+    fn wasi_func_to_core_params(func: &WasiFunctionInfo) -> Vec<ValType> {
+        let mut params: Vec<ValType> = func
+            .params
+            .iter()
+            .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+            .collect();
+
+        // Async functions have an additional outptr parameter for the result
+        if func.is_async {
+            params.push(ValType::I32); // outptr
+        }
+
+        params
+    }
+
+    /// Convert a WASI function type to Core Wasm results
+    ///
+    /// For async functions, the result is always i32 (subtask handle).
+    /// For sync functions, the return type is mapped directly.
+    fn wasi_func_to_core_results(func: &WasiFunctionInfo) -> Vec<ValType> {
+        if func.is_async {
+            // Async functions return a subtask handle (i32)
+            vec![ValType::I32]
+        } else if let Some(ret_ty) = &func.return_type {
+            vec![Self::wasi_type_to_valtype(ret_ty)]
+        } else {
+            vec![]
+        }
+    }
+
+    /// Convert a Wado type to ValType for WASI function signatures
+    ///
+    /// This is a simplified version that doesn't need string_array_type_idx
+    /// because WASI function parameters and returns don't use String directly.
+    fn wasi_type_to_valtype(ty: &Type) -> ValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => ValType::I32,
+                "i64" | "u64" | "Instant" | "Duration" => ValType::I64,
+                "f32" => ValType::F32,
+                "f64" => ValType::F64,
+                // Stream handles are i32
+                _ => ValType::I32,
+            },
+            Type::Generic(generic) => match generic.name.as_str() {
+                // Stream<T> is represented as i32 handle
+                "Stream" => ValType::I32,
+                // Result<T, E> is represented as i32 discriminant
+                "Result" => ValType::I32,
+                // Future<T> is represented as i32 handle
+                "Future" => ValType::I32,
+                // Tuple types map to i32 for simplicity (struct pointer)
+                "Tuple" => ValType::I32,
+                _ => ValType::I32,
+            },
+            Type::Tuple(_) => ValType::I32,
+            _ => ValType::I32,
+        }
+    }
+
+    /// Convert a builtin function type to Core Wasm params
+    fn builtin_func_to_core_params(func: &BuiltinFunctionInfo) -> Vec<ValType> {
+        func.params
+            .iter()
+            .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+            .collect()
+    }
+
+    /// Convert a builtin function type to Core Wasm results
+    fn builtin_func_to_core_results(func: &BuiltinFunctionInfo) -> Vec<ValType> {
+        if func.diverges {
+            // Diverging functions have no return type
+            vec![]
+        } else if let Some(ret_ty) = &func.return_type {
+            vec![Self::wasi_type_to_valtype(ret_ty)]
+        } else {
+            vec![]
+        }
+    }
+
+    /// Convert a world export function type to Core Wasm params
+    ///
+    /// For async exports, the core function has no params (async uses task_return).
+    /// For sync exports, params are mapped directly.
+    fn world_export_to_core_params(export: &WorldExportInfo) -> Vec<ValType> {
+        if export.is_async {
+            // Async exports have no params in core (lifted signature differs)
+            vec![]
+        } else {
+            export
+                .params
+                .iter()
+                .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+                .collect()
+        }
+    }
+
+    /// Convert a world export function type to Core Wasm results
+    ///
+    /// For async exports, there's no return (result passed via task_return).
+    /// For sync exports, the return type is mapped directly.
+    fn world_export_to_core_results(export: &WorldExportInfo) -> Vec<ValType> {
+        if export.is_async {
+            // Async exports have no return in core (use task_return)
+            vec![]
+        } else if let Some(ret_ty) = &export.return_type {
+            vec![Self::wasi_type_to_valtype(ret_ty)]
+        } else {
+            vec![]
         }
     }
 

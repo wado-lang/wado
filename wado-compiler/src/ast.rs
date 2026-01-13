@@ -222,6 +222,7 @@ pub struct UseDecl {
 pub struct Function {
     pub name: String,
     pub is_pub: bool,
+    pub attrs: Vec<Attribute>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub effects: Vec<String>,

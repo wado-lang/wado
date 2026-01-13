@@ -6,6 +6,9 @@
 //
 // Usage: builtin::function_name(args)
 // These functions cannot be imported or called without the builtin:: prefix.
+//
+// Functions with #[canonical("name")] are imported as CM canonical built-ins.
+// Functions without #[canonical(...)] compile to Wasm instructions directly.
 
 // ============================================================================
 // Stream Intrinsics (Component Model async streams)
@@ -13,33 +16,46 @@
 
 /// Create a new stream, returns (rx, tx) packed in i64
 /// Low 32 bits = rx (readable end), High 32 bits = tx (writable end)
+#[canonical("stream-new")]
 fn stream_new() -> i64;
 
 /// Write data from linear memory to a stream
 /// Returns the number of bytes written
+#[canonical("stream-write")]
 fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
 
 /// Drop the writable end of a stream (close for writing)
+#[canonical("stream-drop-writable")]
 fn stream_drop_writable(tx: i32);
 
 /// Drop the readable end of a stream (close for reading)
+#[canonical("stream-drop-readable")]
 fn stream_drop_readable(rx: i32);
 
 // ============================================================================
 // Async Task Intrinsics (Component Model async)
 // ============================================================================
 
+/// Signal task completion with a result value
+/// Used internally by the compiler to complete async exports
+#[canonical("task-return")]
+fn task_return(result: i32);
+
 /// Create a new waitable set for async task coordination
+#[canonical("waitable-set-new")]
 fn waitable_set_new() -> i32;
 
 /// Join a subtask to a waitable set
+#[canonical("waitable-join")]
 fn waitable_join(set: i32, subtask: i32);
 
 /// Wait on a waitable set, returns when any task completes
 /// Writes completion info to outptr
+#[canonical("waitable-set-wait")]
 fn waitable_set_wait(set: i32, outptr: i32) -> i32;
 
 /// Drop a completed subtask handle
+#[canonical("subtask-drop")]
 fn subtask_drop(subtask: i32);
 
 /// Wait for all pending effects to complete
@@ -83,6 +99,7 @@ fn memory_load8_u(addr: i32) -> i32;
 
 /// Allocate/reallocate memory in linear memory
 /// Standard WASI realloc signature
+#[canonical("realloc")]
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 // ============================================================================
@@ -91,10 +108,12 @@ fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 /// Convert f64 to string bytes in linear memory buffer
 /// Returns the number of bytes written
+#[canonical("f64_to_buffer")]
 fn f64_to_buffer(value: f64, ptr: i32) -> i32;
 
 /// Convert f32 to string bytes in linear memory buffer
 /// Returns the number of bytes written
+#[canonical("f32_to_buffer")]
 fn f32_to_buffer(value: f32, ptr: i32) -> i32;
 
 // ============================================================================
