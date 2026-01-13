@@ -415,25 +415,6 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 
 ## Feature Checklist
 
-### Lexer
-
-- [x] Keywords (`fn`, `let`, `use`, `if`, `while`, `for`, `match`, `return`, etc.)
-- [x] Keywords (`pub`, `effect`, `struct`, `enum`, `type`, `impl`, `resource`, `world`)
-- [x] Keywords (`async`, `import`, `export`, `with`, `mut`, `reactive`, `move`, `unique`)
-- [x] Identifiers
-- [x] Integer literals
-- [x] Float literals
-- [x] String literals (double quotes)
-- [x] Character literals (single quotes)
-- [x] Template strings (backticks with interpolation `{expr}`)
-- [x] Operators (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`)
-- [x] Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
-- [x] Punctuation (`(`, `)`, `{`, `}`, `[`, `]`, `,`, `:`, `;`, `::`, `.`, `->`, `=>`, `|`, `&`, `#`, `?`)
-- [x] Comments (`//`)
-- [x] Data section (`__DATA__` marker)
-- [ ] Block comments (`/* */`)
-- [ ] Doc comments (`///`, `//!`)
-
 ### Parser
 
 #### Items
@@ -442,7 +423,9 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `fn` declarations (with params, return type, effects)
 - [x] `pub` modifier
 - [x] `effect` declarations
-- [x] `struct` declarations (GC struct in Wado, maps to record at CM boundary)
+- [x] `struct` declarations
+- [x] `impl` blocks
+- [ ] `trait` declarations
 - [x] `enum` declarations (payload-free, CM semantics)
 - [x] `type` aliases
 - [x] `impl` blocks
@@ -464,6 +447,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `if` statements
 - [x] `while` loops
 - [x] C-style `for` loops
+- [ ] `loop` loops
 - [ ] `for-of` loops
 - [ ] `match` statements
 
@@ -492,7 +476,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] `match` expressions
 - [ ] Block expressions
 - [ ] Struct literals (`{ field: value }`)
-- [ ] Array literals
+- [ ] Array literals (`[1, 2, 3]`)
+- [ ] Dict literals (`{ "key": "value" }`)
 - [ ] Tuple expressions
 - [ ] Range expressions
 - [ ] `?` operator (error propagation)
@@ -566,32 +551,6 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Multiple modules/files
 - [ ] Other WASI interfaces (filesystem, etc.)
 
-### Testing
-
-- [x] Lexer unit tests
-- [x] Parser unit tests
-- [x] Analyzer unit tests
-- [x] Codegen unit tests
-- [x] Template string tests (20 comprehensive tests)
-- [x] E2E tests with `__DATA__` sections (JSON test specs, auto-discovered via `datatest-stable`)
-- [x] E2E test: hello world (with wasmtime)
-- [x] E2E test: multiple println
-- [x] E2E test: bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
-- [x] E2E test: parentheses for precedence grouping
-- [x] E2E test: float-to-string template interpolation
-- [x] E2E test: bool/char/i32/i64 template interpolation
-- [x] E2E test: type cast (`as T`) for primitive types
-- [x] E2E test: assert failure (simple, with message, intermediate values, side-effect caching)
-- [x] E2E test: operator precedence (arithmetic, bitwise, comparison, logical, unary, shift)
-- [x] E2E test: bitwise vs comparison precedence (fixing C's design flaw)
-- [x] E2E test: comparison chaining (`a < b < c`)
-- [x] Compile error tests: comparison chaining validation (mixed directions, `!=` chaining)
-- [x] E2E test: MonotonicClock::now() (core:clocks)
-- [x] E2E test: i64 to string conversion
-- [x] E2E test: i64 arithmetic operations
-- [x] E2E test: i64 vs i32 literal comparison (mixed-type promotion)
-- [ ] More E2E tests
-
 ---
 
 ## Current Capabilities
@@ -613,7 +572,7 @@ The compiler can currently:
 ```wado
 use {println, Stdout} from "core:cli";
 
-fn main() with Stdout {
+fn run() with Stdout {
     println("Hello, world!");
 }
 ```
@@ -626,19 +585,18 @@ fn main() with Stdout {
 2. **No `variant` keyword**: Parser doesn't recognize `variant` declarations (sum types with payloads)
 3. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
 4. **Template strings - mostly implemented**:
-   - ✅ Syntax parsing with interpolation `{expr}` works
-   - ✅ Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished
-   - ✅ Nested template strings supported
-   - ✅ Integer interpolation (i32/i64 → string)
-   - ✅ Float interpolation (f32/f64 → string via wado-bundled)
-   - ✅ Boolean interpolation (bool → "true"/"false")
-   - ✅ Char interpolation (char → UTF-8 string)
-   - ✅ String concatenation with GC array copy
-   - ❌ Format specifiers (`.2f`, etc.) not implemented in codegen
+   - [x] Syntax parsing with interpolation `{expr}` works
+   - [x] Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished
+   - [x] Nested template strings supported
+   - [x] Integer interpolation (i32/i64 → string)
+   - [x] Float interpolation (f32/f64 → string via wado-bundled)
+   - [x] Boolean interpolation (bool → "true"/"false")
+   - [x] Char interpolation (char → UTF-8 string)
+   - [x] String concatenation with GC array copy
+   - [ ] Format specifiers (`.2f`, etc.) not implemented in codegen
 5. **No type checking**: The analyzer doesn't perform type checking yet
-6. **Limited codegen**: Only `println` with string literals works
-7. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
-8. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
+6. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
+7. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
 
 ---
 
@@ -885,7 +843,7 @@ The compiler:
 
 The compiler generates different code depending on the target world:
 
-**CLI World (Synchronous):**
+#### CLI World (Synchronous)
 
 - Updates propagate immediately at each mutation site
 - Effect closures are called inline, synchronously
@@ -898,7 +856,7 @@ The compiler generates different code depending on the target world:
 ;; Next statement executes after effect completes
 ```
 
-**Event-looped World (Browser/GUI):**
+#### Event-looped World (Browser/GUI)
 
 - Updates may be batched within an event handler
 - Compiler generates a scheduler that collects mutations and flushes at end of event
@@ -952,13 +910,3 @@ increment(&reactive count);  // doubled gets updated
 ```
 
 This requires the reactive reference to carry update callback information, implemented as a Wasm GC struct containing the value and a reference to the update dispatcher.
-
----
-
-## Next Steps (Priority Order)
-
-1. **Add `variant` and `flags` keywords** to lexer/parser
-2. **Support generic resources** in parser for `prelude.wado`
-3. **Add variable support** in codegen (locals, let bindings)
-4. **Add control flow** in codegen (if, while)
-5. **Type checking** in analyzer
