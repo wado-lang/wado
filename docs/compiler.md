@@ -102,32 +102,40 @@ The registry provides `build_local_alias_name()` utility function and `resolve()
 
 **What's Dynamic (from registry):**
 
-| Item                | Example                                                       |
-| ------------------- | ------------------------------------------------------------- |
-| Version strings     | `wasi:cli/stdout@0.3.0-rc-2025-09-16`                         |
-| Import paths        | Built via `format!("wasi:cli/stdout@{}", cli_version)`        |
-| Function async flag | `is_async` from effect method definition                      |
-| Interface presence  | `has_interface("monotonic-clock")` for conditional codegen    |
-| Local alias names   | `build_local_alias_name("cli", "Stdout", "write_via_stream")` |
+| Item                 | Example                                                          |
+| -------------------- | ---------------------------------------------------------------- |
+| Version strings      | `wasi:cli/stdout@0.3.0-rc-2025-09-16`                            |
+| Import paths         | Built via `format!("wasi:cli/stdout@{}", cli_version)`           |
+| Function async flag  | `is_async` from effect method definition                         |
+| Interface presence   | `has_interface("monotonic-clock")` for conditional codegen       |
+| Local alias names    | `build_local_alias_name("cli", "Stdout", "write_via_stream")`    |
+| Type aliases         | `Instant` → `u64`, `Duration` → `u64` resolved from wasi/\*.wado |
+| Function signatures  | Params and return types parsed from effect methods               |
+| Supported interfaces | Dynamically filtered based on type support                       |
+
+**Dynamic Interface Filtering:**
+
+Instead of a hardcoded whitelist, interfaces are included based on type support:
+
+- Only interfaces where ALL functions have supported types are imported
+- Supported param types: primitives (`i32`, `u64`, `bool`, `char`, `String`, etc.), `Stream<T>`
+- Supported return types: same as params plus `Result<T, E>`
+- Type aliases are resolved before filtering (e.g., `Instant` → `u64`)
+- The "run" interface is skipped (it defines exports, not imports; needed for Command world)
 
 **What's Still Hardcoded (TODO):**
 
-| Item                         | Location                                          | Reason             |
-| ---------------------------- | ------------------------------------------------- | ------------------ |
-| `error-code` enum variants   | `["io", "illegal-byte-sequence", "pipe"]`         | CM type structure  |
-| `write-via-stream` signature | `async func(stream<u8>) -> result<_, error-code>` | CM type structure  |
-| `now` signature              | `func() -> u64`                                   | CM type structure  |
-| Supported interfaces list    | `["stdout", "stderr", "monotonic-clock"]`         | Codegen limitation |
+| Item                       | Location                                  | Reason                                |
+| -------------------------- | ----------------------------------------- | ------------------------------------- |
+| `error-code` enum variants | `["io", "illegal-byte-sequence", "pipe"]` | Registry only tracks effect functions |
 
 **Future Work:**
 
 To fully eliminate hardcoded CM structures, the registry would need to:
 
-1. Parse Wado type signatures from effect methods
-2. Convert Wado types to Component Model types dynamically
-3. Build CM instance types from parsed definitions
-
-This would require extending `WasiFunctionInfo` to include parsed parameter/return types and adding a Wado-to-CM type converter.
+1. Track WASI types (enums, resources) in addition to effect functions
+2. Parse enum variants from `#[wasi(...)]` annotated enums in wasi/\*.wado
+3. Generate CM type definitions dynamically from parsed definitions
 
 ### Type System
 

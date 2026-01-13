@@ -11,7 +11,7 @@ use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::stdlib;
 use crate::symbol::SymbolTable;
-use crate::wasi_registry::{WasiRegistry, build_local_alias_name};
+use crate::wasi_registry::{WasiFunctionInfo, WasiRegistry, build_local_alias_name};
 use crate::wasm_postprocess;
 use heck::ToKebabCase;
 use std::collections::HashMap;
@@ -781,6 +781,29 @@ impl Codegen {
 
     /// Register effects from a single WASI module
     fn register_wasi_module(&mut self, _module_path: &[String], module: &AstModule) {
+        // First, collect type aliases from this module
+        let mut type_aliases: HashMap<String, Type> = HashMap::new();
+        for item in &module.items {
+            if let Item::Type(alias) = item {
+                type_aliases.insert(alias.name.clone(), alias.ty.clone());
+            }
+        }
+
+        // Helper to resolve a type through aliases
+        let resolve_type = |ty: &Type| -> Type {
+            match ty {
+                Type::Named(named) => {
+                    if let Some(resolved) = type_aliases.get(&named.name) {
+                        resolved.clone()
+                    } else {
+                        ty.clone()
+                    }
+                }
+                _ => ty.clone(),
+            }
+        };
+
+        // Register effect methods with resolved types
         for item in &module.items {
             if let Item::Effect(effect) = item {
                 for method in &effect.methods {
@@ -788,8 +811,10 @@ impl Codegen {
                         let params: Vec<(String, Type)> = method
                             .params
                             .iter()
-                            .map(|p| (p.name.clone(), p.ty.clone()))
+                            .map(|p| (p.name.clone(), resolve_type(&p.ty)))
                             .collect();
+
+                        let return_type = method.return_type.as_ref().map(&resolve_type);
 
                         self.wasi_registry.register(
                             &effect.name,
@@ -797,7 +822,7 @@ impl Codegen {
                             wasi,
                             method.is_async,
                             params,
-                            method.return_type.clone(),
+                            return_type,
                         );
                     }
                 }
@@ -848,14 +873,31 @@ impl Codegen {
         );
 
         // Now generate imports for each interface in the registry
-        // Currently we only support a subset of interfaces that have simple type signatures
-        let supported_interfaces = ["stdout", "stderr", "monotonic-clock"];
-
+        // Dynamically filter based on whether function types are supported
         for interface_info in self.wasi_registry.interfaces() {
-            // Skip interfaces we don't support yet
-            if !supported_interfaces.contains(&interface_info.interface.as_str()) {
+            // Skip interfaces that define exports (not imports)
+            // The "run" interface defines the component's entry point export.
+            // Note: "run" is needed for the wasi:cli Command world, which Wado
+            // doesn't fully implement yet. When Command world support is added,
+            // this should be handled as an export, not an import.
+            if interface_info.interface == "run" {
                 continue;
             }
+
+            // Only include interfaces where ALL functions have supported types
+            // This ensures we're requesting exactly what we can generate,
+            // avoiding mismatches with runtime-provided interfaces
+            let all_functions_supported = interface_info
+                .functions
+                .iter()
+                .all(|f| self.is_wasi_function_supported(f));
+
+            if !all_functions_supported {
+                continue;
+            }
+
+            // All functions are supported, so use them all
+            let supported_functions: Vec<_> = interface_info.functions.iter().collect();
 
             // Build instance type for this interface
             let instance_type_name = format!("{}-instance-type", interface_info.interface);
@@ -867,7 +909,7 @@ impl Codegen {
 
                 // Track which functions need which types
                 // We'll build types first, then functions
-                for func in &interface_info.functions {
+                for func in &supported_functions {
                     // Determine what types this function needs
                     let needs_stream_u8 = func
                         .params
@@ -971,7 +1013,7 @@ impl Codegen {
             );
 
             // Alias each function from the instance
-            for func in &interface_info.functions {
+            for func in &supported_functions {
                 let local_name = self
                     .wasi_registry
                     .get_local_name(&interface_info.path, &func.wasi_func_name)
@@ -1115,7 +1157,78 @@ impl Codegen {
         }
     }
 
+    /// Check if a Wado type is supported for CM parameter generation
+    ///
+    /// Note: Result is NOT included here because it's a return-type-only construct.
+    /// Type aliases (like Instant, Duration) should already be resolved to their
+    /// underlying types before this check.
+    fn is_param_type_supported(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Named(named) => matches!(
+                named.name.as_str(),
+                "i32"
+                    | "i64"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+            ),
+            Type::Generic(generic) => matches!(generic.name.as_str(), "Stream"),
+            _ => false,
+        }
+    }
+
+    /// Check if a return type is supported for CM generation
+    ///
+    /// Type aliases (like Instant, Duration) should already be resolved to their
+    /// underlying types before this check.
+    fn is_return_type_supported(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Named(named) => matches!(
+                named.name.as_str(),
+                "i32"
+                    | "i64"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+            ),
+            Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
+            _ => false,
+        }
+    }
+
+    /// Check if all types in a WASI function are supported for CM generation
+    fn is_wasi_function_supported(&self, func: &WasiFunctionInfo) -> bool {
+        // Check all parameter types (Result not allowed in params)
+        for (_, ty) in &func.params {
+            if !self.is_param_type_supported(ty) {
+                return false;
+            }
+        }
+        // Check return type if present (Result allowed)
+        if let Some(ret_ty) = &func.return_type
+            && !self.is_return_type_supported(ret_ty)
+        {
+            return false;
+        }
+        true
+    }
+
     /// Convert a Wado type to a Component Model value type
+    ///
+    /// Panics if the type is not supported - callers must validate with
+    /// `is_param_type_supported` first. Type aliases should already be resolved.
     fn wado_type_to_cm_val_type(
         &self,
         ty: &Type,
@@ -1135,22 +1248,23 @@ impl Codegen {
                 "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
                 "char" => ComponentValType::Primitive(PrimitiveValType::Char),
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                // Handle type aliases like Instant = u64, Duration = u64
-                "Instant" | "Duration" => ComponentValType::Primitive(PrimitiveValType::U64),
-                _ => panic!("unsupported Wado type for CM: {}", named.name),
+                _ => panic!("unsupported Wado param type for CM: {}", named.name),
             },
             Type::Generic(generic) => match generic.name.as_str() {
                 "Stream" => {
                     // Use the pre-defined stream type index
                     ComponentValType::Type(stream_type_idx.expect("stream type not defined"))
                 }
-                _ => panic!("unsupported generic type for CM: {}", generic.name),
+                _ => panic!("unsupported generic param type for CM: {}", generic.name),
             },
-            _ => panic!("unsupported Wado type for CM value: {:?}", ty),
+            _ => panic!("unsupported Wado param type for CM: {:?}", ty),
         }
     }
 
     /// Convert a Wado return type to a Component Model result type
+    ///
+    /// Panics if the type is not supported - callers must validate with
+    /// `is_return_type_supported` first. Type aliases should already be resolved.
     fn wado_type_to_cm_result_type(
         &self,
         ty: &Type,
@@ -1169,7 +1283,6 @@ impl Codegen {
                 "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
                 "char" => ComponentValType::Primitive(PrimitiveValType::Char),
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                "Instant" | "Duration" => ComponentValType::Primitive(PrimitiveValType::U64),
                 _ => panic!("unsupported Wado return type for CM: {}", named.name),
             },
             Type::Generic(generic) if generic.name == "Result" => {
