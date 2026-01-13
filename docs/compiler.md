@@ -58,6 +58,7 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | ----------------- | ----------------- | -------------------------------------------------- |
 | `core:prelude`    | `prelude.wado`    | Partial (parser doesn't support generic resources) |
 | `core:cli`        | `cli.wado`        | Complete                                           |
+| `core:clocks`     | `clocks.wado`     | Complete (MonotonicClock, now())                   |
 | `core:filesystem` | `filesystem.wado` | Complete                                           |
 | `core:stream`     | `stream.wado`     | Complete                                           |
 | `core:internals`  | `internals.wado`  | Internal (compiler-generated code support)         |
@@ -68,6 +69,7 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | ----------------- | ----------------- | -------- |
 | `wasi:io`         | `io.wado`         | Complete |
 | `wasi:cli`        | `cli.wado`        | Complete |
+| `wasi:clocks`     | `clocks.wado`     | Complete |
 | `wasi:filesystem` | `filesystem.wado` | Complete |
 
 ### Type System
@@ -348,6 +350,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Assert statements with power-assert style error messages (intermediate values, value caching)
 - [x] User-defined functions (from core:: modules)
 - [x] Branch hinting (`builtin::likely`, `builtin::unlikely`)
+- [x] WASI clocks (`wasi:clocks/monotonic-clock`, `now()`)
+- [x] Mixed-type arithmetic (i64 vs i32 literal promotion)
 - [ ] Struct construction
 - [ ] Enum/variant construction
 - [ ] Pattern matching
@@ -383,6 +387,10 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] E2E test: bitwise vs comparison precedence (fixing C's design flaw)
 - [x] E2E test: comparison chaining (`a < b < c`)
 - [x] Compile error tests: comparison chaining validation (mixed directions, `!=` chaining)
+- [x] E2E test: MonotonicClock::now() (core:clocks)
+- [x] E2E test: i64 to string conversion
+- [x] E2E test: i64 arithmetic operations
+- [x] E2E test: i64 vs i32 literal comparison (mixed-type promotion)
 - [ ] More E2E tests
 
 ---

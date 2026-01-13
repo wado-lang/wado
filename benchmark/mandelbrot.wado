@@ -35,8 +35,8 @@ fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
 }
 
 fn run() with Stdout, MonotonicClock {
-    let width = 800;
-    let height = 600;
+    let width = 1024;
+    let height = 768;
     let max_iter = 256;
 
     // Mandelbrot region: x in [-2.5, 1.0], y in [-1.0, 1.0]
@@ -45,34 +45,27 @@ fn run() with Stdout, MonotonicClock {
     let y_min = -1.0;
     let y_max = 1.0;
 
-    let width_f = 800.0;
-    let height_f = 600.0;
-    let dx = (x_max - x_min) / width_f;
-    let dy = (y_max - y_min) / height_f;
+    let dx = (x_max - x_min) / (width as f64);
+    let dy = (y_max - y_min) / (height as f64);
 
     let start = now();
 
-    // Use i32 accumulator (max possible: 800*600*256 = 122,880,000 fits in i32)
+    // Use i32 accumulator (max possible: 1024*768*256 = 201,326,592 fits in i32)
     let mut total_iterations = 0;
     let mut py = 0;
-    let mut py_f = 0.0;
 
     while py < height {
-        let cy = y_min + py_f * dy;
+        let cy = y_min + (py as f64) * dy;
         let mut px = 0;
-        let mut px_f = 0.0;
 
         while px < width {
-            let cx = x_min + px_f * dx;
+            let cx = x_min + (px as f64) * dx;
             let iter = mandelbrot_iterations(cx, cy, max_iter);
             total_iterations = total_iterations + iter;
-
             px = px + 1;
-            px_f = px_f + 1.0;
         }
 
         py = py + 1;
-        py_f = py_f + 1.0;
     }
 
     let end = now();

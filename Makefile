@@ -32,7 +32,7 @@ on-task-done: format clippy-fix update-bundled test
 .PHONY: format
 format:
 	cargo fmt --verbose --all
-	npx prettier --write spec.md AGENTS.md README.md docs/*.md
+	npx prettier --write spec.md AGENTS.md README.md docs/*.md benchmark/*.md
 
 .PHONY: clippy
 clippy:
@@ -90,6 +90,9 @@ benchmark-count-prime: build
 	@echo "=== JavaScript (Node.js) ==="
 	@node benchmark/count_prime.js
 	@echo ""
+	@echo "=== Python ==="
+	@python3 benchmark/count_prime.py
+	@echo ""
 	@echo "=== Wado (wasmtime) ==="
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
 
@@ -106,6 +109,9 @@ benchmark-mandelbrot: build
 	@echo ""
 	@echo "=== JavaScript (Node.js) ==="
 	@node benchmark/mandelbrot.js
+	@echo ""
+	@echo "=== Python ==="
+	@python3 benchmark/mandelbrot.py
 	@echo ""
 	@echo "=== Wado (wasmtime) ==="
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm

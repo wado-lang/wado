@@ -31,8 +31,8 @@ function mandelbrotIterations(cx, cy, maxIter) {
 }
 
 function main() {
-  const width = 800;
-  const height = 600;
+  const width = 1024;
+  const height = 768;
   const maxIter = 256;
 
   // Mandelbrot region: x in [-2.5, 1.0], y in [-1.0, 1.0]

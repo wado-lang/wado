@@ -39,8 +39,8 @@ int mandelbrot_iterations(double cx, double cy, int max_iter) {
 }
 
 int main() {
-    volatile int width = 800;
-    volatile int height = 600;
+    volatile int width = 1024;
+    volatile int height = 768;
     volatile int max_iter = 256;
 
     // Mandelbrot region: x in [-2.5, 1.0], y in [-1.0, 1.0]
