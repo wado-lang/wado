@@ -12,20 +12,22 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 
 ### Modules
 
-| Module       | File                  | Description                                        |
-| ------------ | --------------------- | -------------------------------------------------- |
-| Lexer        | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section |
-| Parser       | `parser.rs`           | Recursive descent parser, builds AST               |
-| AST          | `ast.rs`              | AST node definitions, `Module::data_section()` API |
-| Token        | `token.rs`            | Token types and spans                              |
-| Analyzer     | `analyze.rs`          | Semantic analysis, symbol table construction       |
-| Symbol       | `symbol.rs`           | Symbol table data structures                       |
-| Resolver     | `resolver.rs`         | Module resolution, loads core library              |
-| Stdlib       | `stdlib.rs`           | Embedded core library sources                      |
-| WasiRegistry | `wasi_registry.rs`    | WASI import registry for dynamic CM generation     |
-| Codegen      | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
-| Bundled      | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
-| Postproc     | `wasm_postprocess.rs` | Wasm binary transformations                        |
+| Module          | File                  | Description                                        |
+| --------------- | --------------------- | -------------------------------------------------- |
+| Lexer           | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section |
+| Parser          | `parser.rs`           | Recursive descent parser, builds AST               |
+| AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API |
+| Token           | `token.rs`            | Token types and spans                              |
+| Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction       |
+| Symbol          | `symbol.rs`           | Symbol table data structures                       |
+| Resolver        | `resolver.rs`         | Module resolution, loads core library              |
+| Stdlib          | `stdlib.rs`           | Embedded core library sources                      |
+| WasiRegistry    | `wasi_registry.rs`    | WASI import registry for dynamic CM generation     |
+| BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`      |
+| WorldRegistry   | `world_registry.rs`   | World definitions registry for export signatures   |
+| Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
+| Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
+| Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                        |
 
 ### Bundled Builtins (wado-bundled)
 
@@ -62,7 +64,8 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:clocks`     | `clocks.wado`     | Complete (MonotonicClock, now())                   |
 | `core:filesystem` | `filesystem.wado` | Complete                                           |
 | `core:stream`     | `stream.wado`     | Complete                                           |
-| `core:internals`  | `internals.wado`  | Internal (compiler-generated code support)         |
+| `core:internal`   | `internal.wado`   | Internal (compiler-generated code support)         |
+| `core:builtin`    | `builtin.wado`    | Compiler intrinsics with `#[canonical(...)]` attrs |
 
 **WASI Library (`wasi/`):**
 
@@ -102,32 +105,111 @@ The registry provides `build_local_alias_name()` utility function and `resolve()
 
 **What's Dynamic (from registry):**
 
-| Item                | Example                                                       |
-| ------------------- | ------------------------------------------------------------- |
-| Version strings     | `wasi:cli/stdout@0.3.0-rc-2025-09-16`                         |
-| Import paths        | Built via `format!("wasi:cli/stdout@{}", cli_version)`        |
-| Function async flag | `is_async` from effect method definition                      |
-| Interface presence  | `has_interface("monotonic-clock")` for conditional codegen    |
-| Local alias names   | `build_local_alias_name("cli", "Stdout", "write_via_stream")` |
+| Item                 | Example                                                          |
+| -------------------- | ---------------------------------------------------------------- |
+| Version strings      | `wasi:cli/stdout@0.3.0-rc-2025-09-16`                            |
+| Import paths         | Built via `format!("wasi:cli/stdout@{}", cli_version)`           |
+| Function async flag  | `is_async` from effect method definition                         |
+| Interface presence   | `has_interface("monotonic-clock")` for conditional codegen       |
+| Local alias names    | `build_local_alias_name("cli", "Stdout", "write_via_stream")`    |
+| Type aliases         | `Instant` → `u64`, `Duration` → `u64` resolved from wasi/\*.wado |
+| Function signatures  | Params and return types parsed from effect methods               |
+| Supported interfaces | Dynamically filtered based on type support                       |
+
+**Dynamic Interface Filtering:**
+
+Instead of a hardcoded whitelist, interfaces are included based on type support:
+
+- Only interfaces where ALL functions have supported types are imported
+- Supported param types: primitives (`i32`, `u64`, `bool`, `char`, `String`, etc.), `Stream<T>`
+- Supported return types: same as params plus `Result<T, E>`
+- Type aliases are resolved before filtering (e.g., `Instant` → `u64`)
+- The "run" interface is skipped (it defines exports, not imports; needed for Command world)
 
 **What's Still Hardcoded (TODO):**
 
-| Item                         | Location                                          | Reason             |
-| ---------------------------- | ------------------------------------------------- | ------------------ |
-| `error-code` enum variants   | `["io", "illegal-byte-sequence", "pipe"]`         | CM type structure  |
-| `write-via-stream` signature | `async func(stream<u8>) -> result<_, error-code>` | CM type structure  |
-| `now` signature              | `func() -> u64`                                   | CM type structure  |
-| Supported interfaces list    | `["stdout", "stderr", "monotonic-clock"]`         | Codegen limitation |
+| Item                       | Location                                  | Reason                                |
+| -------------------------- | ----------------------------------------- | ------------------------------------- |
+| `error-code` enum variants | `["io", "illegal-byte-sequence", "pipe"]` | Registry only tracks effect functions |
 
 **Future Work:**
 
 To fully eliminate hardcoded CM structures, the registry would need to:
 
-1. Parse Wado type signatures from effect methods
-2. Convert Wado types to Component Model types dynamically
-3. Build CM instance types from parsed definitions
+1. Track WASI types (enums, resources) in addition to effect functions
+2. Parse enum variants from `#[wasi(...)]` annotated enums in wasi/\*.wado
+3. Generate CM type definitions dynamically from parsed definitions
 
-This would require extending `WasiFunctionInfo` to include parsed parameter/return types and adding a Wado-to-CM type converter.
+### Builtin Registry
+
+The `BuiltinRegistry` module (`builtin_registry.rs`) collects function signatures from `lib/core/builtin.wado` and provides type information for code generation.
+
+**The `#[canonical("...")]` Attribute:**
+
+Builtins in `builtin.wado` are divided into two categories:
+
+1. **Canonical builtins** - Functions with `#[canonical("name")]` attribute are imported as Component Model canonical built-ins
+2. **Instruction builtins** - Functions without the attribute compile directly to Wasm instructions
+
+```wado
+// Canonical builtin - imported as CM function "stream-new"
+#[canonical("stream-new")]
+fn stream_new() -> i64;
+
+// Instruction builtin - compiles to Wasm i32.and instruction
+fn i32_and(a: i32, b: i32) -> i32;
+```
+
+**Canonical Builtins (12 functions):**
+
+| Wado Name              | Canonical Name         | Category         |
+| ---------------------- | ---------------------- | ---------------- |
+| `stream_new`           | `stream-new`           | Stream           |
+| `stream_write`         | `stream-write`         | Stream           |
+| `stream_drop_writable` | `stream-drop-writable` | Stream           |
+| `stream_drop_readable` | `stream-drop-readable` | Stream           |
+| `task_return`          | `task-return`          | Async task       |
+| `waitable_set_new`     | `waitable-set-new`     | Async task       |
+| `waitable_join`        | `waitable-join`        | Async task       |
+| `waitable_set_wait`    | `waitable-set-wait`    | Async task       |
+| `subtask_drop`         | `subtask-drop`         | Async task       |
+| `realloc`              | `realloc`              | Memory (bundled) |
+| `f64_to_buffer`        | `f64_to_buffer`        | Float (bundled)  |
+| `f32_to_buffer`        | `f32_to_buffer`        | Float (bundled)  |
+
+**Instruction Builtins:**
+
+| Function         | Wasm Instruction    |
+| ---------------- | ------------------- |
+| `i32_and`        | `i32.and`           |
+| `i32_eqz`        | `i32.eqz`           |
+| `array_len`      | `array.len`         |
+| `array_get_u8`   | `array.get_u $type` |
+| `array_set_u8`   | `array.set $type`   |
+| `string_new`     | `array.new_default` |
+| `memory_store8`  | `i32.store8`        |
+| `memory_load8_u` | `i32.load8_u`       |
+| `unreachable`    | `unreachable`       |
+
+### World Registry
+
+The `WorldRegistry` module (`world_registry.rs`) collects world definitions from `lib/wasi/*.wado` and provides export signature information for code generation.
+
+**Purpose:**
+
+- Extract world definitions (e.g., `Command` world from `wasi/cli.wado`)
+- Provide export function signatures for component generation
+- Derive the `run` function signature from world exports instead of hardcoding
+
+**Usage:**
+
+```rust
+// Get the run export signature from Command world
+if let Some(run_export) = world_registry.get_export("Command", "run") {
+    let params = world_export_to_core_params(run_export);
+    let results = world_export_to_core_results(run_export);
+}
+```
 
 ### Type System
 
@@ -163,10 +245,6 @@ builtin::eqref<T, U>(a: T, b: U) -> bool   // Compare any GC references
 // Control
 builtin::unreachable() -> !   // Wasm trap instruction
 
-// i64 bit manipulation
-builtin::i64_low32(value: i64) -> i32    // Extract low 32 bits
-builtin::i64_high32(value: i64) -> i32   // Extract high 32 bits
-
 // i32 operations
 builtin::i32_and(a: i32, b: i32) -> i32  // Bitwise AND
 builtin::i32_eqz(a: i32) -> i32          // Check if zero (returns 0 or 1)
@@ -178,6 +256,7 @@ builtin::realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
 
 // Stream intrinsics (Component Model)
 builtin::stream_new() -> i64              // Create stream, returns rx|tx packed
+                                          // Extract: rx = handles as i32, tx = (handles >> 32) as i32
 builtin::stream_write(tx: i32, ptr: i32, len: i32) -> i32
 builtin::stream_drop_writable(tx: i32)
 builtin::stream_drop_readable(rx: i32)
@@ -611,10 +690,10 @@ pub struct FormatSpec {
    - Parse format spec (precision, padding, alignment)
    - Pass to appropriate formatting function in wado-bundled
 
-2. ~~**Add boolean to string conversion**~~: ✅ **Done** (bool_to_string in core/internals.wado)
+2. ~~**Add boolean to string conversion**~~: ✅ **Done** (bool_to_string in core/internal.wado)
    - `true` → "true", `false` → "false"
 
-3. ~~**Add char to string conversion**~~: ✅ **Done** (char_to_string in core/internals.wado)
+3. ~~**Add char to string conversion**~~: ✅ **Done** (char_to_string in core/internal.wado)
    - Char values converted to their UTF-8 string representation (supports full Unicode)
 
 ## The `assert` Statement Implementation

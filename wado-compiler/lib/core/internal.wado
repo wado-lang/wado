@@ -1,4 +1,4 @@
-// Wado Core Internals Module
+// Wado Core Internal Module
 //
 // This module provides internal functions used by the compiler for
 // operations like template string interpolation. These functions are
@@ -307,8 +307,8 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
 /// Writes message with newline to stdout. Waits for completion.
 pub fn log_stdout(message: String) {
     let handles = builtin::stream_new();
-    let rx = builtin::i64_low32(handles);
-    let tx = builtin::i64_high32(handles);
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
 
     builtin::call_indirect_stdout_write_via_stream(rx);
     write_string_to_stream(tx, message, true);
@@ -319,8 +319,8 @@ pub fn log_stdout(message: String) {
 /// Writes message with newline to stderr. Waits for completion.
 pub fn log_stderr(message: String) {
     let handles = builtin::stream_new();
-    let rx = builtin::i64_low32(handles);
-    let tx = builtin::i64_high32(handles);
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
 
     builtin::call_indirect_stderr_write_via_stream(rx);
     write_string_to_stream(tx, message, true);

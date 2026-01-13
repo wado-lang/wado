@@ -12,7 +12,7 @@ When updating spec.md, keep it mutually exclusive and collectively exhaustive (M
 
 The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
 
-Standard libraries are implemented in `wado-compiler/lib`, where `wasi/` for WASI and `core/` for the core library.
+Standard libraries are implemented in `wado-compiler/lib`, with `wasi/` for WASI and `core/` for the core library.
 
 See also `docs/compiler.md` for the implementation details and the feature checklist.
 
@@ -59,9 +59,9 @@ __DATA__
 
 ### The `wasi:*` Modules
 
-`wasi:*` modules are the part of the Wado standard library.
+`wasi:*` modules are part of the Wado standard library.
 
-Those modules are generated from WIT files by the `wado-from-wit` tool, so if `wasi/*.wado` are need to be updated, edit `wado-from-wit` instead, and run:
+Those modules are generated from WIT files by the `wado-from-wit` tool, so if `wasi/*.wado` files need to be updated, edit `wado-from-wit` instead, and run:
 
 ```sh
 make update-stdlib-wasi
@@ -109,7 +109,7 @@ There are external references in the module for convenience:
 
 ### Wasm and WASI Features
 
-This project relays on the following features:
+This project relies on the following features:
 
 - Wasm GC
 - Wasm Reference Types
@@ -127,14 +127,14 @@ This project relays on the following features:
 - All the documents and comments must be written in English.
 - Everything is under discussion. We can change the spec at any time.
 - When referring to WAT, use folded style syntax.
-- Avoid using well-known floating point number constants like PI, E, etc. in tests not to violate the Clippy `approx_constant` rule.
+- Do not commit changes unless the user requests so.
 
 ## Rules for Rust
 
 - Do not use wildcard imports (`use ...::*;`).
 - Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/` directory.
 - Manage dependencies in the workspace `Cargo.toml`.
-- Avoid using well-known floating point numbers in tests not to violate the Clippy `approx_constant` rule.
+- Avoid using well-known floating point number constants like PI, E, etc. in tests not to violate the Clippy `approx_constant` rule.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
 

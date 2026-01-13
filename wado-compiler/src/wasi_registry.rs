@@ -36,7 +36,6 @@ impl WasiFunctionInfo {
     pub fn local_alias_name(&self) -> String {
         build_local_alias_name(&self.package, &self.effect_name, &self.method_name)
     }
-
 }
 
 /// Build a local alias name for a WASI function.

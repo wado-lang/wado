@@ -33,8 +33,11 @@ pub const CORE_STREAM: &str = include_str!("../lib/core/stream.wado");
 /// Embedded source for core:filesystem
 pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 
-/// Embedded source for core:internals
-pub const CORE_INTERNALS: &str = include_str!("../lib/core/internals.wado");
+/// Embedded source for core:internal
+pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
+
+/// Embedded source for core:builtin (compiler intrinsic declarations)
+pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
 
 /// Embedded source for core:clocks
 pub const CORE_CLOCKS: &str = include_str!("../lib/core/clocks.wado");
@@ -72,7 +75,8 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),
         "core:filesystem" => Some(CORE_FILESYSTEM),
-        "core:internals" => Some(CORE_INTERNALS),
+        "core:internal" => Some(CORE_INTERNAL),
+        "core:builtin" => Some(CORE_BUILTIN),
         "core:clocks" => Some(CORE_CLOCKS),
 
         // WASI library

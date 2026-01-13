@@ -6,13 +6,15 @@ use crate::ast::{
     Block, CallExpr, Expr, Function as AstFunction, Item, Literal, Module as AstModule, Stmt,
     TemplatePart, Type,
 };
+use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::stdlib;
 use crate::symbol::SymbolTable;
-use crate::wasi_registry::{WasiRegistry, build_local_alias_name};
+use crate::wasi_registry::{WasiFunctionInfo, WasiRegistry, build_local_alias_name};
 use crate::wasm_postprocess;
+use crate::world_registry::{WorldExportInfo, WorldRegistry};
 use heck::ToKebabCase;
 use std::collections::HashMap;
 use wasm_encoder::{
@@ -34,6 +36,12 @@ pub struct Codegen {
     source_code: String,
     /// Registry of WASI imports from lib/wasi/*.wado
     wasi_registry: WasiRegistry,
+    /// Registry of builtin function signatures from lib/core/builtin.wado
+    builtin_registry: BuiltinRegistry,
+    /// Registry of world definitions from lib/wasi/*.wado
+    world_registry: WorldRegistry,
+    /// Type index for string-array (GC array<u8>), set when types are defined
+    string_array_type_idx: u32,
 }
 
 /// Context for tracking local variables during function code generation
@@ -223,8 +231,8 @@ struct CoreModuleBuilder {
     // Memory tracking
     has_memory: bool,
 
-    // Access control: functions from core:internals (require explicit import)
-    internals_functions: std::collections::HashSet<String>,
+    // Access control: functions from core:internal (require explicit import)
+    internal_functions: std::collections::HashSet<String>,
 }
 
 impl CoreModuleBuilder {
@@ -245,18 +253,18 @@ impl CoreModuleBuilder {
             next_func_idx: 0,
             import_func_count: 0,
             has_memory: false,
-            internals_functions: std::collections::HashSet::new(),
+            internal_functions: std::collections::HashSet::new(),
         }
     }
 
-    /// Mark a function as being from core:internals (requires explicit import to call)
-    fn mark_as_internals(&mut self, name: &str) {
-        self.internals_functions.insert(name.to_string());
+    /// Mark a function as being from core:internal (requires explicit import to call)
+    fn mark_as_internal(&mut self, name: &str) {
+        self.internal_functions.insert(name.to_string());
     }
 
-    /// Check if a function is from core:internals
-    fn is_internals_function(&self, name: &str) -> bool {
-        self.internals_functions.contains(name)
+    /// Check if a function is from core:internal
+    fn is_internal_function(&self, name: &str) -> bool {
+        self.internal_functions.contains(name)
     }
 
     /// Define a function type and return its index
@@ -630,6 +638,9 @@ impl Codegen {
             string_literals: Vec::new(),
             source_code,
             wasi_registry: WasiRegistry::new(),
+            builtin_registry: BuiltinRegistry::new(),
+            world_registry: WorldRegistry::new(),
+            string_array_type_idx: 0, // Set when types are defined
         }
     }
 
@@ -741,10 +752,15 @@ impl Codegen {
             self.build_wasi_registry_from_stdlib();
         }
 
+        // Build builtin registry from stdlib (if not already built)
+        if self.builtin_registry.is_empty() {
+            self.build_builtin_registry_from_stdlib();
+        }
+
         // First pass: collect string literals
         self.collect_strings(module);
 
-        // Generate binary Wasm
+        // Generate binary Wasm (updates string_array_type_idx)
         let wasm = self.generate_component(module);
 
         // Validate the generated Wasm (catches codegen bugs early)
@@ -781,6 +797,29 @@ impl Codegen {
 
     /// Register effects from a single WASI module
     fn register_wasi_module(&mut self, _module_path: &[String], module: &AstModule) {
+        // First, collect type aliases from this module
+        let mut type_aliases: HashMap<String, Type> = HashMap::new();
+        for item in &module.items {
+            if let Item::Type(alias) = item {
+                type_aliases.insert(alias.name.clone(), alias.ty.clone());
+            }
+        }
+
+        // Helper to resolve a type through aliases
+        let resolve_type = |ty: &Type| -> Type {
+            match ty {
+                Type::Named(named) => {
+                    if let Some(resolved) = type_aliases.get(&named.name) {
+                        resolved.clone()
+                    } else {
+                        ty.clone()
+                    }
+                }
+                _ => ty.clone(),
+            }
+        };
+
+        // Register effect methods with resolved types
         for item in &module.items {
             if let Item::Effect(effect) = item {
                 for method in &effect.methods {
@@ -788,8 +827,10 @@ impl Codegen {
                         let params: Vec<(String, Type)> = method
                             .params
                             .iter()
-                            .map(|p| (p.name.clone(), p.ty.clone()))
+                            .map(|p| (p.name.clone(), resolve_type(&p.ty)))
                             .collect();
+
+                        let return_type = method.return_type.as_ref().map(&resolve_type);
 
                         self.wasi_registry.register(
                             &effect.name,
@@ -797,10 +838,35 @@ impl Codegen {
                             wasi,
                             method.is_async,
                             params,
-                            method.return_type.clone(),
+                            return_type,
                         );
                     }
                 }
+            }
+        }
+
+        // Register world definitions
+        for item in &module.items {
+            if let Item::World(world) = item {
+                self.world_registry.register(world);
+            }
+        }
+    }
+
+    /// Build builtin registry from embedded stdlib
+    ///
+    /// Parses lib/core/builtin.wado and registers function signatures
+    /// for type inference during code generation.
+    fn build_builtin_registry_from_stdlib(&mut self) {
+        let source = stdlib::CORE_BUILTIN;
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer error in core:builtin");
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse().expect("parser error in core:builtin");
+
+        for item in &module.items {
+            if let Item::Function(func) = item {
+                self.builtin_registry.register(func);
             }
         }
     }
@@ -848,14 +914,31 @@ impl Codegen {
         );
 
         // Now generate imports for each interface in the registry
-        // Currently we only support a subset of interfaces that have simple type signatures
-        let supported_interfaces = ["stdout", "stderr", "monotonic-clock"];
-
+        // Dynamically filter based on whether function types are supported
         for interface_info in self.wasi_registry.interfaces() {
-            // Skip interfaces we don't support yet
-            if !supported_interfaces.contains(&interface_info.interface.as_str()) {
+            // Skip interfaces that define exports (not imports)
+            // The "run" interface defines the component's entry point export.
+            // Note: "run" is needed for the wasi:cli Command world, which Wado
+            // doesn't fully implement yet. When Command world support is added,
+            // this should be handled as an export, not an import.
+            if interface_info.interface == "run" {
                 continue;
             }
+
+            // Only include interfaces where ALL functions have supported types
+            // This ensures we're requesting exactly what we can generate,
+            // avoiding mismatches with runtime-provided interfaces
+            let all_functions_supported = interface_info
+                .functions
+                .iter()
+                .all(|f| self.is_wasi_function_supported(f));
+
+            if !all_functions_supported {
+                continue;
+            }
+
+            // All functions are supported, so use them all
+            let supported_functions: Vec<_> = interface_info.functions.iter().collect();
 
             // Build instance type for this interface
             let instance_type_name = format!("{}-instance-type", interface_info.interface);
@@ -867,7 +950,7 @@ impl Codegen {
 
                 // Track which functions need which types
                 // We'll build types first, then functions
-                for func in &interface_info.functions {
+                for func in &supported_functions {
                     // Determine what types this function needs
                     let needs_stream_u8 = func
                         .params
@@ -971,7 +1054,7 @@ impl Codegen {
             );
 
             // Alias each function from the instance
-            for func in &interface_info.functions {
+            for func in &supported_functions {
                 let local_name = self
                     .wasi_registry
                     .get_local_name(&interface_info.path, &func.wasi_func_name)
@@ -1115,7 +1198,78 @@ impl Codegen {
         }
     }
 
+    /// Check if a Wado type is supported for CM parameter generation
+    ///
+    /// Note: Result is NOT included here because it's a return-type-only construct.
+    /// Type aliases (like Instant, Duration) should already be resolved to their
+    /// underlying types before this check.
+    fn is_param_type_supported(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Named(named) => matches!(
+                named.name.as_str(),
+                "i32"
+                    | "i64"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+            ),
+            Type::Generic(generic) => matches!(generic.name.as_str(), "Stream"),
+            _ => false,
+        }
+    }
+
+    /// Check if a return type is supported for CM generation
+    ///
+    /// Type aliases (like Instant, Duration) should already be resolved to their
+    /// underlying types before this check.
+    fn is_return_type_supported(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Named(named) => matches!(
+                named.name.as_str(),
+                "i32"
+                    | "i64"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+            ),
+            Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
+            _ => false,
+        }
+    }
+
+    /// Check if all types in a WASI function are supported for CM generation
+    fn is_wasi_function_supported(&self, func: &WasiFunctionInfo) -> bool {
+        // Check all parameter types (Result not allowed in params)
+        for (_, ty) in &func.params {
+            if !self.is_param_type_supported(ty) {
+                return false;
+            }
+        }
+        // Check return type if present (Result allowed)
+        if let Some(ret_ty) = &func.return_type
+            && !self.is_return_type_supported(ret_ty)
+        {
+            return false;
+        }
+        true
+    }
+
     /// Convert a Wado type to a Component Model value type
+    ///
+    /// Panics if the type is not supported - callers must validate with
+    /// `is_param_type_supported` first. Type aliases should already be resolved.
     fn wado_type_to_cm_val_type(
         &self,
         ty: &Type,
@@ -1135,22 +1289,23 @@ impl Codegen {
                 "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
                 "char" => ComponentValType::Primitive(PrimitiveValType::Char),
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                // Handle type aliases like Instant = u64, Duration = u64
-                "Instant" | "Duration" => ComponentValType::Primitive(PrimitiveValType::U64),
-                _ => panic!("unsupported Wado type for CM: {}", named.name),
+                _ => panic!("unsupported Wado param type for CM: {}", named.name),
             },
             Type::Generic(generic) => match generic.name.as_str() {
                 "Stream" => {
                     // Use the pre-defined stream type index
                     ComponentValType::Type(stream_type_idx.expect("stream type not defined"))
                 }
-                _ => panic!("unsupported generic type for CM: {}", generic.name),
+                _ => panic!("unsupported generic param type for CM: {}", generic.name),
             },
-            _ => panic!("unsupported Wado type for CM value: {:?}", ty),
+            _ => panic!("unsupported Wado param type for CM: {:?}", ty),
         }
     }
 
     /// Convert a Wado return type to a Component Model result type
+    ///
+    /// Panics if the type is not supported - callers must validate with
+    /// `is_return_type_supported` first. Type aliases should already be resolved.
     fn wado_type_to_cm_result_type(
         &self,
         ty: &Type,
@@ -1169,7 +1324,6 @@ impl Codegen {
                 "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
                 "char" => ComponentValType::Primitive(PrimitiveValType::Char),
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                "Instant" | "Duration" => ComponentValType::Primitive(PrimitiveValType::U64),
                 _ => panic!("unsupported Wado return type for CM: {}", named.name),
             },
             Type::Generic(generic) if generic.name == "Result" => {
@@ -1192,8 +1346,9 @@ impl Codegen {
         symbols: &SymbolTable,
         implicit_modules: &std::collections::HashSet<Vec<String>>,
     ) -> Vec<u8> {
-        // Build WASI registry from stdlib (always available)
+        // Build registries from stdlib (always available)
         self.build_wasi_registry_from_stdlib();
+        self.build_builtin_registry_from_stdlib();
 
         // First pass: collect string literals from all modules
         self.collect_strings(main_module);
@@ -1381,7 +1536,7 @@ impl Codegen {
 
     /// Generate component for WASI P3
     /// Uses native stream<T> types and imports wasi:cli/stdout
-    fn generate_component(&self, ast_module: &AstModule) -> Vec<u8> {
+    fn generate_component(&mut self, ast_module: &AstModule) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
         let mut ctx = ComponentContext::new();
 
@@ -1955,7 +2110,7 @@ impl Codegen {
 
     /// Generate component with multi-module support
     fn generate_component_with_modules(
-        &self,
+        &mut self,
         main_module: &AstModule,
         loaded_modules: &[(&Vec<String>, &AstModule)],
         symbols: &SymbolTable,
@@ -2366,7 +2521,7 @@ impl Codegen {
 
     /// Build main module for WASI P3 with multi-module support
     fn build_main_module_p3_with_modules(
-        &self,
+        &mut self,
         main_module: &AstModule,
         loaded_modules: &[(&Vec<String>, &AstModule)],
         _symbols: &SymbolTable,
@@ -2392,72 +2547,27 @@ impl Codegen {
         // Define types using the builder
         // ========================================
 
-        // WASI function types
-        builder.define_func_type("stream-new", &[], &[ValType::I64]);
-        builder.define_func_type(
-            "stream-write",
-            &[ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
-        builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        // Always define stdout write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stdout_type_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        builder.define_func_type(
-            &stdout_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("task-return", &[ValType::I32], &[]);
-        builder.define_func_type("waitable-set-new", &[], &[ValType::I32]);
-        builder.define_func_type("waitable-join", &[ValType::I32, ValType::I32], &[]);
-        builder.define_func_type(
-            "waitable-set-wait",
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("subtask-drop", &[ValType::I32], &[]);
-
-        // realloc type
-        builder.define_func_type(
-            "realloc",
-            &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
+        // Builtin function types - derived from core/builtin.wado
+        // Only builtins with #[canonical("...")] attribute are imported
+        for func in self.builtin_registry.imported_builtins() {
+            let canonical_name = func.canonical_name.as_ref().unwrap();
+            let params = Self::builtin_func_to_core_params(func);
+            let results = Self::builtin_func_to_core_results(func);
+            builder.define_func_type(canonical_name, &params, &results);
+        }
 
         // GC string array type (array<u8>) - mutable to support float-to-string conversion
-        // IMPORTANT: This must be defined at this position to maintain type index 11
-        // for string-array (hardcoded in several places for type inference)
-        builder.define_gc_array_type("string-array", StorageType::I8, true);
+        self.string_array_type_idx =
+            builder.define_gc_array_type("string-array", StorageType::I8, true);
 
-        // Float-to-buffer types (after GC types to preserve type indices)
-        builder.define_func_type(
-            "f64_to_buffer",
-            &[ValType::F64, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type(
-            "f32_to_buffer",
-            &[ValType::F32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Stderr write-via-stream (same signature as stdout, defined after GC types)
-        // Always define stderr write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stderr_type_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        builder.define_func_type(
-            &stderr_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Monotonic clock now (sync function returning u64, defined after GC types)
-        // Only define if monotonic-clock interface is registered
-        if self.wasi_registry.has_interface("monotonic-clock") {
-            let monotonic_type_name = build_local_alias_name("clocks", "MonotonicClock", "now");
-            builder.define_func_type(&monotonic_type_name, &[], &[ValType::I64]);
+        // WASI effect function types - derived from wasi/*.wado definitions
+        for interface in self.wasi_registry.interfaces() {
+            for func in &interface.functions {
+                let local_name = func.local_alias_name();
+                let params = Self::wasi_func_to_core_params(func);
+                let results = Self::wasi_func_to_core_results(func);
+                builder.define_func_type(&local_name, &params, &results);
+            }
         }
 
         // Types for user-defined functions
@@ -2481,8 +2591,12 @@ impl Codegen {
             builder.define_func_type(qualified_name, &param_types, &return_types);
         }
 
-        // run type
-        builder.define_func_type("run", &[], &[]);
+        // World export types - derived from Command world in wasi/cli.wado
+        if let Some(run_export) = self.world_registry.get_export("Command", "run") {
+            let params = Self::world_export_to_core_params(run_export);
+            let results = Self::world_export_to_core_results(run_export);
+            builder.define_func_type(&run_export.name, &params, &results);
+        }
 
         // Add types section to module
         module.section(&builder.types);
@@ -2520,25 +2634,25 @@ impl Codegen {
         // ========================================
 
         // Register all user-defined functions
-        let internals_path = vec!["core".to_string(), "internals".to_string()];
+        let internal_path = vec!["core".to_string(), "internal".to_string()];
         for (module_path, func, qualified_name) in &all_funcs {
             let func_idx = builder.define_func(qualified_name, qualified_name);
-            let is_from_internals = module_path == &internals_path;
+            let is_from_internal = module_path == &internal_path;
 
-            // Register simple name alias for all functions EXCEPT internals
-            // Internals functions require explicit import to be accessible.
-            if qualified_name != &func.name && !is_from_internals {
+            // Register simple name alias for all functions EXCEPT internal
+            // Internal functions require explicit import to be accessible.
+            if qualified_name != &func.name && !is_from_internal {
                 builder.define_func_alias(&func.name, func_idx);
             }
 
-            // Track internals functions for access control
-            if is_from_internals {
-                builder.mark_as_internals(&func.name);
+            // Track internal functions for access control
+            if is_from_internal {
+                builder.mark_as_internal(&func.name);
             }
         }
 
-        // Register aliases for explicitly imported functions from core:internals
-        // Only for user code modules (not privileged modules like prelude/internals).
+        // Register aliases for explicitly imported functions from core:internal
+        // Only for user code modules (not privileged modules like prelude/internal).
         // Privileged modules use the qualified name fallback in generate_call_with_builder.
         let prelude_path = vec!["core".to_string(), "prelude".to_string()];
         for (module_path, module) in loaded_modules
@@ -2546,18 +2660,18 @@ impl Codegen {
             .chain(std::iter::once(&(&vec![], main_module)))
         {
             // Skip privileged modules - they use qualified name fallback
-            let is_privileged = **module_path == internals_path || **module_path == prelude_path;
+            let is_privileged = **module_path == internal_path || **module_path == prelude_path;
             if is_privileged {
                 continue;
             }
 
             for item in &module.items {
                 if let crate::ast::Item::Use(use_decl) = item
-                    && use_decl.source == "core:internals"
+                    && use_decl.source == "core:internal"
                 {
                     for use_item in &use_decl.items {
                         if let crate::ast::UseItem::Simple { name, alias } = use_item {
-                            let qualified_name = format!("{}::{}", internals_path.join("::"), name);
+                            let qualified_name = format!("{}::{}", internal_path.join("::"), name);
                             if let Some(func_idx) = builder.try_func_idx(&qualified_name) {
                                 let alias_name = alias.as_ref().unwrap_or(name);
                                 builder.define_func_alias(alias_name, func_idx);
@@ -2568,7 +2682,7 @@ impl Codegen {
             }
         }
 
-        // run function
+        // run function for the wasi:cli Command world
         builder.define_func("run", "run");
         module.section(&builder.functions);
 
@@ -2689,7 +2803,7 @@ impl Codegen {
     }
 
     /// Build main module for WASI P3 with write-via-stream
-    fn build_main_module_p3(&self, ast_module: &AstModule, string_data: &[u8]) -> Vec<u8> {
+    fn build_main_module_p3(&mut self, ast_module: &AstModule, string_data: &[u8]) -> Vec<u8> {
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
 
@@ -2700,72 +2814,27 @@ impl Codegen {
         // Define types using the builder
         // ========================================
 
-        // WASI function types
-        builder.define_func_type("stream-new", &[], &[ValType::I64]);
-        builder.define_func_type(
-            "stream-write",
-            &[ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
-        builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        // Always define stdout write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stdout_type_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        builder.define_func_type(
-            &stdout_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("task-return", &[ValType::I32], &[]);
-        builder.define_func_type("waitable-set-new", &[], &[ValType::I32]);
-        builder.define_func_type("waitable-join", &[ValType::I32, ValType::I32], &[]);
-        builder.define_func_type(
-            "waitable-set-wait",
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type("subtask-drop", &[ValType::I32], &[]);
-
-        // realloc type
-        builder.define_func_type(
-            "realloc",
-            &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
+        // Builtin function types - derived from core/builtin.wado
+        // Only builtins with #[canonical("...")] attribute are imported
+        for func in self.builtin_registry.imported_builtins() {
+            let canonical_name = func.canonical_name.as_ref().unwrap();
+            let params = Self::builtin_func_to_core_params(func);
+            let results = Self::builtin_func_to_core_results(func);
+            builder.define_func_type(canonical_name, &params, &results);
+        }
 
         // GC string array type (array<u8>) - mutable to support float-to-string conversion
-        // IMPORTANT: This must be defined at this position to maintain type index 11
-        // for string-array (hardcoded in several places for type inference)
-        builder.define_gc_array_type("string-array", StorageType::I8, true);
+        self.string_array_type_idx =
+            builder.define_gc_array_type("string-array", StorageType::I8, true);
 
-        // Float-to-buffer types (after GC types to preserve type indices)
-        builder.define_func_type(
-            "f64_to_buffer",
-            &[ValType::F64, ValType::I32],
-            &[ValType::I32],
-        );
-        builder.define_func_type(
-            "f32_to_buffer",
-            &[ValType::F32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Stderr write-via-stream (same signature as stdout, defined after GC types)
-        // Always define stderr write-via-stream to maintain type indices
-        // (import is conditional, but type must exist for index stability)
-        let stderr_type_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        builder.define_func_type(
-            &stderr_type_name,
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        );
-
-        // Monotonic clock now (sync function returning u64, defined after GC types)
-        // Only define if monotonic-clock interface is registered
-        if self.wasi_registry.has_interface("monotonic-clock") {
-            let monotonic_type_name = build_local_alias_name("clocks", "MonotonicClock", "now");
-            builder.define_func_type(&monotonic_type_name, &[], &[ValType::I64]);
+        // WASI effect function types - derived from wasi/*.wado definitions
+        for interface in self.wasi_registry.interfaces() {
+            for func in &interface.functions {
+                let local_name = func.local_alias_name();
+                let params = Self::wasi_func_to_core_params(func);
+                let results = Self::wasi_func_to_core_results(func);
+                builder.define_func_type(&local_name, &params, &results);
+            }
         }
 
         // Types for user-defined functions
@@ -2790,8 +2859,12 @@ impl Codegen {
             builder.define_func_type(&func.name, &param_types, &return_types);
         }
 
-        // run type
-        builder.define_func_type("run", &[], &[]);
+        // World export types - derived from Command world in wasi/cli.wado
+        if let Some(run_export) = self.world_registry.get_export("Command", "run") {
+            let params = Self::world_export_to_core_params(run_export);
+            let results = Self::world_export_to_core_results(run_export);
+            builder.define_func_type(&run_export.name, &params, &results);
+        }
 
         // Add types section to module
         module.section(&builder.types);
@@ -2968,17 +3041,17 @@ impl Codegen {
                 "i64" | "u64" => ValType::I64,
                 "f32" => ValType::F32,
                 "f64" => ValType::F64,
-                // For complex types, use a ref type with hardcoded index 11 (string-array)
+                // For complex types, use a ref type (string-array)
                 "String" => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 _ => ValType::I32,
             },
             crate::ast::Type::Generic(generic) => match generic.name.as_str() {
                 "Array" => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 _ => ValType::I32,
             },
@@ -3075,8 +3148,9 @@ impl Codegen {
 
         // Set return type for ref.as_non_null handling in return statements
         if let Some(ret_ty) = &ast_func.return_type {
-            let string_array_type = 11_u32; // Pre-known type index for string-array
-            func_ctx.set_return_type(self.wado_type_to_wasm_with_idx(ret_ty, string_array_type));
+            func_ctx.set_return_type(
+                self.wado_type_to_wasm_with_idx(ret_ty, self.string_array_type_idx),
+            );
         }
 
         // Add parameters to context
@@ -3874,13 +3948,13 @@ impl Codegen {
                 idx
             } else {
                 // Simple name not found. If caller is from a privileged module
-                // (core:internals or core:prelude), try qualified name fallback.
+                // (core:internal or core:prelude), try qualified name fallback.
                 let caller_module = &ctx.current_module_path;
-                let is_privileged = caller_module == &["core".to_string(), "internals".to_string()]
+                let is_privileged = caller_module == &["core".to_string(), "internal".to_string()]
                     || caller_module == &["core".to_string(), "prelude".to_string()];
 
-                if is_privileged && builder.is_internals_function(&ident.name) {
-                    let qualified_name = format!("core::internals::{}", ident.name);
+                if is_privileged && builder.is_internal_function(&ident.name) {
+                    let qualified_name = format!("core::internal::{}", ident.name);
                     builder.try_func_idx(&qualified_name).unwrap_or_else(|| {
                         panic!("unknown function: {}", ident.name);
                     })
@@ -3930,72 +4004,21 @@ impl Codegen {
     ) {
         let builtin_name = name.strip_prefix("builtin::").unwrap_or(name);
 
+        // Check if this builtin has a canonical name (imported CM function)
+        if let Some(builtin_info) = self.builtin_registry.get(builtin_name)
+            && let Some(canonical_name) = &builtin_info.canonical_name
+        {
+            // Generate all arguments
+            for arg in &call.args {
+                self.generate_expr_with_builder(func, arg, ctx, builder);
+            }
+            // Call the imported function
+            func.instruction(&Instruction::Call(builder.func_idx(canonical_name)));
+            return;
+        }
+
+        // Handle builtins that compile to Wasm instructions or have special logic
         match builtin_name {
-            // Stream intrinsics
-            "stream_new" => {
-                func.instruction(&Instruction::Call(builder.func_idx("stream-new")));
-            }
-            "stream_write" => {
-                // stream_write(tx: i32, ptr: i32, len: i32) -> i32
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-write")));
-            }
-            "stream_drop_writable" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-writable")));
-            }
-            "stream_drop_readable" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-readable")));
-            }
-
-            // Async task intrinsics
-            "waitable_set_new" => {
-                func.instruction(&Instruction::Call(builder.func_idx("waitable-set-new")));
-            }
-            "waitable_join" => {
-                // waitable_join(set: i32, subtask: i32)
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("waitable-join")));
-            }
-            "waitable_set_wait" => {
-                // waitable_set_wait(set: i32, outptr: i32) -> i32
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("waitable-set-wait")));
-            }
-            "subtask_drop" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("subtask-drop")));
-            }
-
-            // i64 bit manipulation
-            "i64_low32" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::I32WrapI64);
-            }
-            "i64_high32" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::I64Const(32));
-                func.instruction(&Instruction::I64ShrU);
-                func.instruction(&Instruction::I32WrapI64);
-            }
-
             // i32 operations
             "i32_and" => {
                 // i32_and(a: i32, b: i32) -> i32
@@ -4067,29 +4090,6 @@ impl Codegen {
                     align: 0,
                     memory_index: 0,
                 }));
-            }
-            "realloc" => {
-                // realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("realloc")));
-            }
-
-            // Float-to-string conversion
-            "f64_to_buffer" => {
-                // f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 (length)
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("f64_to_buffer")));
-            }
-            "f32_to_buffer" => {
-                // f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 (length)
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("f32_to_buffer")));
             }
 
             // Control flow
@@ -4213,6 +4213,150 @@ impl Codegen {
         }
     }
 
+    /// Get the Wasm return type for a builtin function from the registry
+    /// Returns None if the function is not found or has no return type
+    fn get_builtin_return_type(&self, name: &str) -> Option<ValType> {
+        let builtin_name = name.strip_prefix("builtin::").unwrap_or(name);
+        let return_type = self.builtin_registry.get_return_type(builtin_name)?;
+
+        // Convert AST Type to ValType
+        Some(self.ast_type_to_wasm_valtype(return_type))
+    }
+
+    /// Convert an AST Type to a Wasm ValType
+    fn ast_type_to_wasm_valtype(&self, ty: &Type) -> ValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => ValType::I32,
+                "i64" | "u64" => ValType::I64,
+                "f32" => ValType::F32,
+                "f64" => ValType::F64,
+                "String" => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(self.string_array_type_idx), // string-array type index
+                }),
+                _ => ValType::I32, // Default fallback
+            },
+            _ => ValType::I32, // Default fallback for complex types
+        }
+    }
+
+    /// Convert a WASI function type to Core Wasm params
+    ///
+    /// For async functions, an extra i32 param (outptr) is added per Component Model ABI.
+    /// For sync functions, params are mapped directly.
+    fn wasi_func_to_core_params(func: &WasiFunctionInfo) -> Vec<ValType> {
+        let mut params: Vec<ValType> = func
+            .params
+            .iter()
+            .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+            .collect();
+
+        // Async functions have an additional outptr parameter for the result
+        if func.is_async {
+            params.push(ValType::I32); // outptr
+        }
+
+        params
+    }
+
+    /// Convert a WASI function type to Core Wasm results
+    ///
+    /// For async functions, the result is always i32 (subtask handle).
+    /// For sync functions, the return type is mapped directly.
+    fn wasi_func_to_core_results(func: &WasiFunctionInfo) -> Vec<ValType> {
+        if func.is_async {
+            // Async functions return a subtask handle (i32)
+            vec![ValType::I32]
+        } else if let Some(ret_ty) = &func.return_type {
+            vec![Self::wasi_type_to_valtype(ret_ty)]
+        } else {
+            vec![]
+        }
+    }
+
+    /// Convert a Wado type to ValType for WASI function signatures
+    ///
+    /// This is a simplified version that doesn't need string_array_type_idx
+    /// because WASI function parameters and returns don't use String directly.
+    fn wasi_type_to_valtype(ty: &Type) -> ValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => ValType::I32,
+                "i64" | "u64" | "Instant" | "Duration" => ValType::I64,
+                "f32" => ValType::F32,
+                "f64" => ValType::F64,
+                // Stream handles are i32
+                _ => ValType::I32,
+            },
+            Type::Generic(generic) => match generic.name.as_str() {
+                // Stream<T> is represented as i32 handle
+                "Stream" => ValType::I32,
+                // Result<T, E> is represented as i32 discriminant
+                "Result" => ValType::I32,
+                // Future<T> is represented as i32 handle
+                "Future" => ValType::I32,
+                // Tuple types map to i32 for simplicity (struct pointer)
+                "Tuple" => ValType::I32,
+                _ => ValType::I32,
+            },
+            Type::Tuple(_) => ValType::I32,
+            _ => ValType::I32,
+        }
+    }
+
+    /// Convert a builtin function type to Core Wasm params
+    fn builtin_func_to_core_params(func: &BuiltinFunctionInfo) -> Vec<ValType> {
+        func.params
+            .iter()
+            .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+            .collect()
+    }
+
+    /// Convert a builtin function type to Core Wasm results
+    fn builtin_func_to_core_results(func: &BuiltinFunctionInfo) -> Vec<ValType> {
+        if func.diverges {
+            // Diverging functions have no return type
+            vec![]
+        } else if let Some(ret_ty) = &func.return_type {
+            vec![Self::wasi_type_to_valtype(ret_ty)]
+        } else {
+            vec![]
+        }
+    }
+
+    /// Convert a world export function type to Core Wasm params
+    ///
+    /// For async exports, the core function has no params (async uses task_return).
+    /// For sync exports, params are mapped directly.
+    fn world_export_to_core_params(export: &WorldExportInfo) -> Vec<ValType> {
+        if export.is_async {
+            // Async exports have no params in core (lifted signature differs)
+            vec![]
+        } else {
+            export
+                .params
+                .iter()
+                .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+                .collect()
+        }
+    }
+
+    /// Convert a world export function type to Core Wasm results
+    ///
+    /// For async exports, there's no return (result passed via task_return).
+    /// For sync exports, the return type is mapped directly.
+    fn world_export_to_core_results(export: &WorldExportInfo) -> Vec<ValType> {
+        if export.is_async {
+            // Async exports have no return in core (use task_return)
+            vec![]
+        } else if let Some(ret_ty) = &export.return_type {
+            vec![Self::wasi_type_to_valtype(ret_ty)]
+        } else {
+            vec![]
+        }
+    }
+
     /// Infer expression type with function context (for looking up variable types)
     /// If builder is provided, can look up user function return types
     fn infer_expr_type_with_ctx(
@@ -4229,7 +4373,7 @@ impl Codegen {
                 Literal::Char(_) => ValType::I32, // Unicode code point as i32
                 Literal::String(_) => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 Literal::Null => ValType::I32, // TODO: proper Option type
                 Literal::Unit => ValType::I32,
@@ -4243,7 +4387,8 @@ impl Codegen {
                 }
             }
             Expr::Binary(bin) => {
-                // For comparison ops, result is always i32
+                // Comparison and logical ops always return i32 (bool)
+                // Bitwise and arithmetic ops return the operand type
                 match bin.op {
                     crate::ast::BinaryOp::Eq
                     | crate::ast::BinaryOp::NotEq
@@ -4252,50 +4397,29 @@ impl Codegen {
                     | crate::ast::BinaryOp::Gt
                     | crate::ast::BinaryOp::GtEq
                     | crate::ast::BinaryOp::And
-                    | crate::ast::BinaryOp::Or
-                    | crate::ast::BinaryOp::BitAnd
-                    | crate::ast::BinaryOp::BitOr
-                    | crate::ast::BinaryOp::BitXor
-                    | crate::ast::BinaryOp::Shl
-                    | crate::ast::BinaryOp::Shr => ValType::I32,
-                    // Arithmetic ops return the operand type
+                    | crate::ast::BinaryOp::Or => ValType::I32,
+                    // Bitwise and arithmetic ops return the operand type
                     _ => self.infer_expr_type_with_ctx(&bin.left, ctx, builder),
                 }
             }
             Expr::Call(call) => {
                 if let Expr::Ident(ident) = &call.callee {
-                    match ident.name.as_str() {
-                        "builtin::stream_new" => ValType::I64,
-                        "builtin::string_new" => {
-                            // string_new returns String (ref array<u8>)
-                            ValType::Ref(RefType {
-                                nullable: false,
-                                heap_type: HeapType::Concrete(11), // string-array type index
-                            })
+                    // First, check if it's a builtin function
+                    if ident.name.starts_with("builtin::") {
+                        if let Some(ret_type) = self.get_builtin_return_type(&ident.name) {
+                            return ret_type;
                         }
-                        "builtin::i64_low32"
-                        | "builtin::i64_high32"
-                        | "builtin::array_len"
-                        | "builtin::array_get_u8"
-                        | "builtin::i32_and"
-                        | "builtin::i32_eqz"
-                        | "builtin::stream_write"
-                        | "builtin::waitable_set_new"
-                        | "builtin::waitable_set_wait"
-                        | "builtin::memory_load8_u"
-                        | "builtin::realloc"
-                        | "builtin::f64_to_buffer"
-                        | "builtin::f32_to_buffer" => ValType::I32,
-                        _ => {
-                            // Check if it's a user-defined function with known return type
-                            if let Some(b) = builder
-                                && let Some(ret_type) = b.func_return_type(&ident.name)
-                            {
-                                return ret_type;
-                            }
-                            ValType::I32
-                        }
+                        // Builtins with no return type (void) - return I32 as default
+                        return ValType::I32;
                     }
+
+                    // Check if it's a user-defined function with known return type
+                    if let Some(b) = builder
+                        && let Some(ret_type) = b.func_return_type(&ident.name)
+                    {
+                        return ret_type;
+                    }
+                    ValType::I32
                 } else {
                     ValType::I32
                 }
@@ -4304,7 +4428,7 @@ impl Codegen {
                 // Template strings return a GC array<u8> (same as string literals)
                 ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 })
             }
             Expr::Cast(cast) => {
@@ -4349,7 +4473,7 @@ impl Codegen {
                 Literal::Char(_) => ValType::I32,
                 Literal::String(_) => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 Literal::Null => ValType::I32,
                 Literal::Unit => ValType::I32,
@@ -4362,6 +4486,7 @@ impl Codegen {
                 }
             }
             Expr::Binary(bin) => match bin.op {
+                // Comparison and logical ops always return i32 (bool)
                 crate::ast::BinaryOp::Eq
                 | crate::ast::BinaryOp::NotEq
                 | crate::ast::BinaryOp::Lt
@@ -4369,50 +4494,33 @@ impl Codegen {
                 | crate::ast::BinaryOp::Gt
                 | crate::ast::BinaryOp::GtEq
                 | crate::ast::BinaryOp::And
-                | crate::ast::BinaryOp::Or
-                | crate::ast::BinaryOp::BitAnd
-                | crate::ast::BinaryOp::BitOr
-                | crate::ast::BinaryOp::BitXor
-                | crate::ast::BinaryOp::Shl
-                | crate::ast::BinaryOp::Shr => ValType::I32,
+                | crate::ast::BinaryOp::Or => ValType::I32,
+                // Bitwise and arithmetic ops return the operand type
                 _ => self.infer_expr_type_with_ctx_with_funcs(&bin.left, ctx, func_return_types),
             },
             Expr::Call(call) => {
                 if let Expr::Ident(ident) = &call.callee {
-                    match ident.name.as_str() {
-                        "builtin::stream_new" => ValType::I64,
-                        "builtin::string_new" => ValType::Ref(RefType {
-                            nullable: false,
-                            heap_type: HeapType::Concrete(11),
-                        }),
-                        "builtin::i64_low32"
-                        | "builtin::i64_high32"
-                        | "builtin::array_len"
-                        | "builtin::array_get_u8"
-                        | "builtin::i32_and"
-                        | "builtin::i32_eqz"
-                        | "builtin::stream_write"
-                        | "builtin::waitable_set_new"
-                        | "builtin::waitable_set_wait"
-                        | "builtin::memory_load8_u"
-                        | "builtin::realloc"
-                        | "builtin::f64_to_buffer"
-                        | "builtin::f32_to_buffer" => ValType::I32,
-                        _ => {
-                            // Check user-defined function return types
-                            if let Some(&ret_type) = func_return_types.get(&ident.name) {
-                                return ret_type;
-                            }
-                            ValType::I32
+                    // First, check if it's a builtin function
+                    if ident.name.starts_with("builtin::") {
+                        if let Some(ret_type) = self.get_builtin_return_type(&ident.name) {
+                            return ret_type;
                         }
+                        // Builtins with no return type (void) - return I32 as default
+                        return ValType::I32;
                     }
+
+                    // Check user-defined function return types
+                    if let Some(&ret_type) = func_return_types.get(&ident.name) {
+                        return ret_type;
+                    }
+                    ValType::I32
                 } else {
                     ValType::I32
                 }
             }
             Expr::TemplateString(_) => ValType::Ref(RefType {
                 nullable: false,
-                heap_type: HeapType::Concrete(11),
+                heap_type: HeapType::Concrete(self.string_array_type_idx),
             }),
             Expr::Cast(cast) => {
                 let target_name = self.get_primitive_type_name(&cast.target_type);
@@ -4571,8 +4679,8 @@ impl Codegen {
                 func.instruction(&Instruction::I32Const(offset as i32)); // offset in data segment
                 func.instruction(&Instruction::I32Const(len as i32)); // length
                 func.instruction(&Instruction::ArrayNewData {
-                    array_type_index: 11, // GC array<u8> type
-                    array_data_index: 0,  // Data segment 0
+                    array_type_index: self.string_array_type_idx,
+                    array_data_index: 0, // Data segment 0
                 });
             }
             Literal::Char(c) => {
@@ -4616,7 +4724,7 @@ impl Codegen {
             return;
         }
 
-        // Strategy: Use string_concat from core:internals for concatenation
+        // Strategy: Use string_concat from core:internal for concatenation
         // 1. Generate first part
         // 2. For each subsequent part, call string_concat(result, part)
 
@@ -4635,7 +4743,7 @@ impl Codegen {
             func.instruction(&Instruction::LocalSet(result_local));
         }
 
-        // Concatenate remaining parts using string_concat from core:internals
+        // Concatenate remaining parts using string_concat from core:internal
         for part in template.parts.iter().skip(1) {
             // Push result (first argument to string_concat)
             // Convert nullable ref to non-nullable since string_concat expects non-nullable
@@ -4646,9 +4754,9 @@ impl Codegen {
             self.generate_template_part(func, part, ctx, builder);
 
             // Call string_concat(result, part) -> new result
-            // The function is registered as "string_concat" (alias) or "core::internals::string_concat" (qualified)
+            // The function is registered as "string_concat" (alias) or "core::internal::string_concat" (qualified)
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
 
             // Store the result for next iteration
@@ -4689,24 +4797,24 @@ impl Codegen {
 
                 match expr_type {
                     ValType::F64 => {
-                        // Float-to-string conversion using core:internals::f64_to_string
+                        // Float-to-string conversion using core:internal::f64_to_string
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::f64_to_string"),
+                            builder.func_idx("core::internal::f64_to_string"),
                         ));
                     }
                     ValType::F32 => {
-                        // Float-to-string conversion using core:internals::f32_to_string
+                        // Float-to-string conversion using core:internal::f32_to_string
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::f32_to_string"),
+                            builder.func_idx("core::internal::f32_to_string"),
                         ));
                     }
                     ValType::I64 => {
-                        // i64-to-string conversion using core:internals::i64_to_string
+                        // i64-to-string conversion using core:internal::i64_to_string
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::i64_to_string"),
+                            builder.func_idx("core::internal::i64_to_string"),
                         ));
                     }
                     ValType::I32 => {
@@ -4716,17 +4824,17 @@ impl Codegen {
                         match semantic_type {
                             SemanticType::Bool => {
                                 func.instruction(&Instruction::Call(
-                                    builder.func_idx("core::internals::bool_to_string"),
+                                    builder.func_idx("core::internal::bool_to_string"),
                                 ));
                             }
                             SemanticType::Char => {
                                 func.instruction(&Instruction::Call(
-                                    builder.func_idx("core::internals::char_to_string"),
+                                    builder.func_idx("core::internal::char_to_string"),
                                 ));
                             }
                             SemanticType::I32 | SemanticType::Other => {
                                 func.instruction(&Instruction::Call(
-                                    builder.func_idx("core::internals::i32_to_string"),
+                                    builder.func_idx("core::internal::i32_to_string"),
                                 ));
                             }
                         }
@@ -4739,7 +4847,7 @@ impl Codegen {
                         // V128 is not supported in template strings - treat as i32
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::i32_to_string"),
+                            builder.func_idx("core::internal::i32_to_string"),
                         ));
                     }
                 }
@@ -4780,7 +4888,7 @@ impl Codegen {
             func.instruction(&Instruction::RefAsNonNull);
             self.generate_expr_with_builder(func, msg_expr, ctx, builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4789,7 +4897,7 @@ impl Codegen {
             func.instruction(&Instruction::RefAsNonNull);
             self.generate_string_from_data(func, "\n", builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
         } else {
@@ -4804,7 +4912,7 @@ impl Codegen {
         let condition_line = format!("condition: {}\n", condition_source);
         self.generate_string_from_data(func, &condition_line, builder);
         func.instruction(&Instruction::Call(
-            builder.func_idx("core::internals::string_concat"),
+            builder.func_idx("core::internal::string_concat"),
         ));
         func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4816,7 +4924,7 @@ impl Codegen {
             let name_prefix = format!("{}: ", name);
             self.generate_string_from_data(func, &name_prefix, builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4826,7 +4934,7 @@ impl Codegen {
             func.instruction(&Instruction::LocalGet(*local_idx));
             self.generate_value_to_string(func, val_type, builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4835,7 +4943,7 @@ impl Codegen {
             func.instruction(&Instruction::RefAsNonNull);
             self.generate_string_from_data(func, "\n", builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
         }
@@ -4868,22 +4976,22 @@ impl Codegen {
         match val_type {
             ValType::I32 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::i32_to_string"),
+                    builder.func_idx("core::internal::i32_to_string"),
                 ));
             }
             ValType::I64 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::i64_to_string"),
+                    builder.func_idx("core::internal::i64_to_string"),
                 ));
             }
             ValType::F32 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::f32_to_string"),
+                    builder.func_idx("core::internal::f32_to_string"),
                 ));
             }
             ValType::F64 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::f64_to_string"),
+                    builder.func_idx("core::internal::f64_to_string"),
                 ));
             }
             ValType::Ref(_) => {
@@ -4892,7 +5000,7 @@ impl Codegen {
             ValType::V128 => {
                 // Not supported - treat as i32
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::i32_to_string"),
+                    builder.func_idx("core::internal::i32_to_string"),
                 ));
             }
         }
