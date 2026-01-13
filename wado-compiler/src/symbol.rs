@@ -52,6 +52,8 @@ pub struct FunctionSymbol {
 pub struct EffectSymbol {
     /// Method names defined in this effect
     pub methods: Vec<String>,
+    /// WASI import metadata if this effect maps to a WASI interface
+    pub wasi_import: Option<WasiImport>,
 }
 
 /// Struct symbol data
@@ -149,6 +151,7 @@ impl Symbol {
     pub fn wasi_import(&self) -> Option<&WasiImport> {
         match &self.kind {
             SymbolKind::Function(f) => f.wasi_import.as_ref(),
+            SymbolKind::Effect(e) => e.wasi_import.as_ref(),
             SymbolKind::Resource(r) => r.wasi_import.as_ref(),
             _ => None,
         }

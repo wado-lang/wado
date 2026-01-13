@@ -57,6 +57,16 @@ __DATA__
 {"compile_error": "!= operator cannot be chained"}
 ```
 
+### The `wasi:*` Modules
+
+`wasi:*` modules are the part of the Wado standard library.
+
+Those modules are generated from WIT files by the `wado-from-wit` tool, so if `wasi/*.wado` are need to be updated, edit `wado-from-wit` instead, and run:
+
+```sh
+make update-stdlib-wasi
+```
+
 ## The CLI
 
 The CLI is implemented in `wado-cli/` with sub-command style CLI:
@@ -66,6 +76,18 @@ cargo run --bin wado -- compile -o file.wasm file.wado    # generates Wasm
 cargo run --bin wado -- compile -o file.wat file.wado     # generates WAT
 cargo run --bin wado -- compile --wat-to-stdout file.wado # outputs WAT to stdout
 cargo run --bin wado -- run file.wado                     # run it directly using wasmtime
+cargo run --bin wado -- dump file.wado                    # dump compiler internal state
+```
+
+### Dump Command
+
+Use `wado dump` to inspect compiler internal state for debugging:
+
+```sh
+wado dump file.wado           # show all: modules, symbols, AST
+wado dump --modules file.wado # show loaded modules only
+wado dump --symbols file.wado # show symbol table only
+wado dump --ast file.wado     # show AST only
 ```
 
 ## Bundled Library

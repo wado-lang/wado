@@ -573,6 +573,7 @@ pub struct FunctionType {
 pub struct EffectDecl {
     pub name: String,
     pub is_pub: bool,
+    pub attrs: Vec<Attribute>,
     pub methods: Vec<EffectMethod>,
     pub span: Span,
 }

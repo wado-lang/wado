@@ -4,11 +4,16 @@
 
 use crate::ast::{
     Block, CallExpr, Expr, Function as AstFunction, Item, Literal, Module as AstModule, Stmt,
-    TemplatePart,
+    TemplatePart, Type,
 };
 use crate::bundled::wado_bundled_wasm;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
+use crate::stdlib;
 use crate::symbol::SymbolTable;
+use crate::wasi_registry::WasiRegistry;
 use crate::wasm_postprocess;
+use heck::ToKebabCase;
 use std::collections::HashMap;
 use wasm_encoder::{
     Alias, ArrayType, BranchHint, BranchHints, CanonicalOption, CodeSection, ComponentBuilder,
@@ -22,11 +27,13 @@ use wasm_encoder::{
 use wasmparser::{Validator, WasmFeatures};
 
 /// Code generator that produces Component Model components
-/// Targets WASI P3 (0.3.0-rc-2025-09-16)
+/// Targets WASI P3
 pub struct Codegen {
     string_literals: Vec<String>,
     /// Source code for extracting span text (for power-assert messages)
     source_code: String,
+    /// Registry of WASI imports from lib/wasi/*.wado
+    wasi_registry: WasiRegistry,
 }
 
 /// Context for tracking local variables during function code generation
@@ -567,6 +574,11 @@ impl ComponentContext {
             .unwrap_or_else(|| panic!("unknown component function: {name}"))
     }
 
+    /// Check if a component-level function exists
+    fn has_comp_func(&self, name: &str) -> bool {
+        self.comp_func_names.contains_key(name)
+    }
+
     /// Register a core module and return its index
     fn register_core_module(&mut self, name: &str) -> u32 {
         let idx = self.next_core_module_idx;
@@ -606,12 +618,18 @@ impl Default for Codegen {
     }
 }
 
+/// Convert a snake_case identifier to kebab-case for Component Model
+fn to_kebab_case(name: &str) -> String {
+    name.to_kebab_case()
+}
+
 impl Codegen {
     /// Create a new code generator with source code for power-assert messages
     pub fn new_with_source(source_code: String) -> Self {
         Self {
             string_literals: Vec::new(),
             source_code,
+            wasi_registry: WasiRegistry::new(),
         }
     }
 
@@ -718,6 +736,11 @@ impl Codegen {
 
     /// Generate Component Model binary Wasm
     pub fn generate_wasm(&mut self, module: &AstModule) -> Vec<u8> {
+        // Build WASI registry from stdlib (if not already built)
+        if self.wasi_registry.is_empty() {
+            self.build_wasi_registry_from_stdlib();
+        }
+
         // First pass: collect string literals
         self.collect_strings(module);
 
@@ -728,6 +751,431 @@ impl Codegen {
         Self::validate_wasm(&wasm);
 
         wasm
+    }
+
+    /// Build WASI registry from embedded stdlib
+    ///
+    /// Parses the embedded wasi:* modules and registers their effect methods.
+    /// This is used when generating Wasm without explicit module loading.
+    fn build_wasi_registry_from_stdlib(&mut self) {
+        fn parse_module(source: &str) -> AstModule {
+            let mut lexer = Lexer::new(source);
+            let tokens = lexer.tokenize().expect("lexer error in stdlib");
+            let mut parser = Parser::new(tokens);
+            parser.parse().expect("parser error in stdlib")
+        }
+
+        // Parse and register wasi:cli (required for version and stdout/stderr)
+        let wasi_cli = parse_module(stdlib::WASI_CLI);
+        let cli_path = vec!["wasi".to_string(), "cli".to_string()];
+        self.register_wasi_module(&cli_path, &wasi_cli);
+
+        // Parse and register wasi:clocks
+        let wasi_clocks = parse_module(stdlib::WASI_CLOCKS);
+        let clocks_path = vec!["wasi".to_string(), "clocks".to_string()];
+        self.register_wasi_module(&clocks_path, &wasi_clocks);
+
+        // Note: wasi:filesystem is not loaded here because it uses `flags`
+        // which the parser doesn't support yet.
+    }
+
+    /// Register effects from a single WASI module
+    fn register_wasi_module(&mut self, _module_path: &[String], module: &AstModule) {
+        for item in &module.items {
+            if let Item::Effect(effect) = item {
+                for method in &effect.methods {
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.wasi_import.as_ref()) {
+                        let params: Vec<(String, Type)> = method
+                            .params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.ty.clone()))
+                            .collect();
+
+                        self.wasi_registry.register(
+                            &effect.name,
+                            &method.name,
+                            wasi,
+                            method.is_async,
+                            params,
+                            method.return_type.clone(),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Generate WASI imports dynamically from the registry
+    ///
+    /// This generates Component Model imports based on the WASI registry data
+    /// populated from lib/wasi/*.wado files.
+    fn generate_wasi_imports(&self, builder: &mut ComponentBuilder, ctx: &mut ComponentContext) {
+        // Get the CLI version from the registry
+        let cli_version = self
+            .wasi_registry
+            .get_cli_version()
+            .expect("WASI CLI version not found in registry - lib/wasi/*.wado not loaded?");
+
+        // First, import wasi:cli/types for shared types (error-code)
+        // This must come first as other interfaces reference error-code
+        let types_instance_type = ctx.register_type("types-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("types-instance-type"));
+            let mut instance_type = InstanceType::new();
+            instance_type
+                .ty()
+                .defined_type()
+                .enum_type(["io", "illegal-byte-sequence", "pipe"]);
+            instance_type.export(
+                "error-code",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+            );
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("types");
+        let types_import_path = format!("wasi:cli/types@{}", cli_version);
+        builder.import(
+            &types_import_path,
+            wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
+        );
+
+        ctx.register_type("error-code");
+        builder.alias_export(
+            ctx.instance_idx("types"),
+            "error-code",
+            ComponentExportKind::Type,
+        );
+
+        // Now generate imports for each interface in the registry
+        // Currently we only support a subset of interfaces that have simple type signatures
+        let supported_interfaces = ["stdout", "stderr", "monotonic-clock"];
+
+        for interface_info in self.wasi_registry.interfaces() {
+            // Skip interfaces we don't support yet
+            if !supported_interfaces.contains(&interface_info.interface.as_str()) {
+                continue;
+            }
+
+            // Build instance type for this interface
+            let instance_type_name = format!("{}-instance-type", interface_info.interface);
+            let instance_type_idx = ctx.register_type(&instance_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&instance_type_name));
+                let mut instance_type = InstanceType::new();
+                let mut local_type_idx = 0u32;
+
+                // Track which functions need which types
+                // We'll build types first, then functions
+                for func in &interface_info.functions {
+                    // Determine what types this function needs
+                    let needs_stream_u8 = func
+                        .params
+                        .iter()
+                        .any(|(_, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
+                    let needs_error_code = func
+                        .return_type
+                        .as_ref()
+                        .is_some_and(|ty| matches!(ty, Type::Generic(g) if g.name == "Result"));
+
+                    // Stream<u8> type
+                    let stream_type_idx = if needs_stream_u8 {
+                        instance_type
+                            .ty()
+                            .defined_type()
+                            .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+                        let idx = local_type_idx;
+                        local_type_idx += 1;
+                        Some(idx)
+                    } else {
+                        None
+                    };
+
+                    // Error-code alias (if needed for result type)
+                    let error_code_idx = if needs_error_code {
+                        let outer_error_code = ctx.type_idx("error-code");
+                        instance_type.alias(Alias::Outer {
+                            kind: ComponentOuterAliasKind::Type,
+                            count: 1,
+                            index: outer_error_code,
+                        });
+                        let idx = local_type_idx;
+                        local_type_idx += 1;
+                        Some(idx)
+                    } else {
+                        None
+                    };
+
+                    // Result type (if needed)
+                    let result_type_idx = if let Some(err_idx) = error_code_idx {
+                        instance_type
+                            .ty()
+                            .defined_type()
+                            .result(None, Some(ComponentValType::Type(err_idx)));
+                        let idx = local_type_idx;
+                        local_type_idx += 1;
+                        Some(idx)
+                    } else {
+                        None
+                    };
+
+                    // Build function type
+                    // Build params - convert names to kebab-case for CM
+                    let kebab_params: Vec<(String, ComponentValType)> = func
+                        .params
+                        .iter()
+                        .map(|(name, ty)| {
+                            let val_type =
+                                self.wado_type_to_cm_val_type(ty, stream_type_idx, error_code_idx);
+                            (to_kebab_case(name), val_type)
+                        })
+                        .collect();
+                    // Convert to references for the encoder
+                    let params: Vec<(&str, ComponentValType)> = kebab_params
+                        .iter()
+                        .map(|(name, val_type)| (name.as_str(), *val_type))
+                        .collect();
+
+                    // Build result
+                    let result_type = func
+                        .return_type
+                        .as_ref()
+                        .map(|ty| self.wado_type_to_cm_result_type(ty, result_type_idx));
+
+                    // Create function type with params, result, and async flag
+                    let mut func_encoder = instance_type.ty().function();
+                    if func.is_async {
+                        func_encoder.async_(true).params(params).result(result_type);
+                    } else {
+                        func_encoder.params(params).result(result_type);
+                    }
+
+                    let func_type_idx = local_type_idx;
+                    local_type_idx += 1;
+
+                    // Export the function
+                    instance_type.export(
+                        &func.wasi_func_name,
+                        wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+                    );
+                }
+
+                enc.instance(&instance_type);
+            }
+
+            // Import the interface instance
+            ctx.register_instance(&interface_info.interface);
+            builder.import(
+                &interface_info.path,
+                wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+            );
+
+            // Alias each function from the instance
+            for func in &interface_info.functions {
+                let local_name = self
+                    .wasi_registry
+                    .get_local_name(&interface_info.path, &func.wasi_func_name)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        format!("{}-{}", interface_info.interface, func.wasi_func_name)
+                    });
+
+                ctx.register_comp_func(&local_name);
+                builder.alias_export(
+                    ctx.instance_idx(&interface_info.interface),
+                    &func.wasi_func_name,
+                    ComponentExportKind::Func,
+                );
+            }
+        }
+
+        // Always import stdout/stderr if not already imported from registry
+        // These are needed by core infrastructure (panic, log functions)
+        self.ensure_stdout_stderr_imported(builder, ctx, cli_version);
+    }
+
+    /// Ensure stdout and stderr are imported (for panic/logging support)
+    ///
+    /// These are needed by core infrastructure even if wasi:cli isn't explicitly imported.
+    /// Uses the version from the registry.
+    fn ensure_stdout_stderr_imported(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentContext,
+        cli_version: &str,
+    ) {
+        // Import stdout if not already imported
+        if !ctx.has_comp_func("stdout-write-via-stream") {
+            // Try to get function info from registry for dynamic signature
+            let func_info = self.wasi_registry.get_stdout_write_via_stream();
+            let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
+
+            let stdout_instance_type = ctx.register_type("stdout-instance-type");
+            {
+                let (_, enc) = builder.ty(Some("stdout-instance-type"));
+                let mut instance_type = InstanceType::new();
+                // Type 0: stream<u8>
+                instance_type
+                    .ty()
+                    .defined_type()
+                    .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+                // Type 1: error-code alias
+                let outer_error_code = ctx.type_idx("error-code");
+                instance_type.alias(Alias::Outer {
+                    kind: ComponentOuterAliasKind::Type,
+                    count: 1,
+                    index: outer_error_code,
+                });
+                // Type 2: result<_, error-code>
+                instance_type
+                    .ty()
+                    .defined_type()
+                    .result(None, Some(ComponentValType::Type(1)));
+                // Type 3: func(stream<u8>) -> result<_, error-code>
+                let mut func_encoder = instance_type.ty().function();
+                if is_async {
+                    func_encoder.async_(true);
+                }
+                func_encoder
+                    .params([("data", ComponentValType::Type(0))])
+                    .result(Some(ComponentValType::Type(2)));
+                instance_type.export("write-via-stream", wasm_encoder::ComponentTypeRef::Func(3));
+                enc.instance(&instance_type);
+            }
+
+            ctx.register_instance("stdout");
+            let stdout_import_path = format!("wasi:cli/stdout@{}", cli_version);
+            builder.import(
+                &stdout_import_path,
+                wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
+            );
+
+            ctx.register_comp_func("stdout-write-via-stream");
+            builder.alias_export(
+                ctx.instance_idx("stdout"),
+                "write-via-stream",
+                ComponentExportKind::Func,
+            );
+        }
+
+        // Import stderr if not already imported
+        if !ctx.has_comp_func("stderr-write-via-stream") {
+            // Try to get function info from registry for dynamic signature
+            let func_info = self.wasi_registry.get_stderr_write_via_stream();
+            let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
+
+            let stderr_instance_type = ctx.register_type("stderr-instance-type");
+            {
+                let (_, enc) = builder.ty(Some("stderr-instance-type"));
+                let mut instance_type = InstanceType::new();
+                // Type 0: stream<u8>
+                instance_type
+                    .ty()
+                    .defined_type()
+                    .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+                // Type 1: error-code alias
+                let outer_error_code = ctx.type_idx("error-code");
+                instance_type.alias(Alias::Outer {
+                    kind: ComponentOuterAliasKind::Type,
+                    count: 1,
+                    index: outer_error_code,
+                });
+                // Type 2: result<_, error-code>
+                instance_type
+                    .ty()
+                    .defined_type()
+                    .result(None, Some(ComponentValType::Type(1)));
+                // Type 3: func(stream<u8>) -> result<_, error-code>
+                let mut func_encoder = instance_type.ty().function();
+                if is_async {
+                    func_encoder.async_(true);
+                }
+                func_encoder
+                    .params([("data", ComponentValType::Type(0))])
+                    .result(Some(ComponentValType::Type(2)));
+                instance_type.export("write-via-stream", wasm_encoder::ComponentTypeRef::Func(3));
+                enc.instance(&instance_type);
+            }
+
+            ctx.register_instance("stderr");
+            let stderr_import_path = format!("wasi:cli/stderr@{}", cli_version);
+            builder.import(
+                &stderr_import_path,
+                wasm_encoder::ComponentTypeRef::Instance(stderr_instance_type),
+            );
+
+            ctx.register_comp_func("stderr-write-via-stream");
+            builder.alias_export(
+                ctx.instance_idx("stderr"),
+                "write-via-stream",
+                ComponentExportKind::Func,
+            );
+        }
+    }
+
+    /// Convert a Wado type to a Component Model value type
+    fn wado_type_to_cm_val_type(
+        &self,
+        ty: &Type,
+        stream_type_idx: Option<u32>,
+        _error_code_idx: Option<u32>,
+    ) -> ComponentValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
+                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
+                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
+                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
+                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
+                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
+                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
+                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
+                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
+                "String" => ComponentValType::Primitive(PrimitiveValType::String),
+                // Handle type aliases like Instant = u64, Duration = u64
+                "Instant" | "Duration" => ComponentValType::Primitive(PrimitiveValType::U64),
+                _ => panic!("unsupported Wado type for CM: {}", named.name),
+            },
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Stream" => {
+                    // Use the pre-defined stream type index
+                    ComponentValType::Type(stream_type_idx.expect("stream type not defined"))
+                }
+                _ => panic!("unsupported generic type for CM: {}", generic.name),
+            },
+            _ => panic!("unsupported Wado type for CM value: {:?}", ty),
+        }
+    }
+
+    /// Convert a Wado return type to a Component Model result type
+    fn wado_type_to_cm_result_type(
+        &self,
+        ty: &Type,
+        result_type_idx: Option<u32>,
+    ) -> ComponentValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
+                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
+                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
+                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
+                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
+                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
+                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
+                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
+                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
+                "String" => ComponentValType::Primitive(PrimitiveValType::String),
+                "Instant" | "Duration" => ComponentValType::Primitive(PrimitiveValType::U64),
+                _ => panic!("unsupported Wado return type for CM: {}", named.name),
+            },
+            Type::Generic(generic) if generic.name == "Result" => {
+                // Use the pre-defined result type index
+                ComponentValType::Type(result_type_idx.expect("result type not defined"))
+            }
+            _ => panic!("unsupported Wado return type for CM: {:?}", ty),
+        }
     }
 
     /// Generate Component Model binary Wasm with support for multiple modules
@@ -742,6 +1190,9 @@ impl Codegen {
         symbols: &SymbolTable,
         implicit_modules: &std::collections::HashSet<Vec<String>>,
     ) -> Vec<u8> {
+        // Build WASI registry from stdlib (always available)
+        self.build_wasi_registry_from_stdlib();
+
         // First pass: collect string literals from all modules
         self.collect_strings(main_module);
         for (_, module) in loaded_modules {
@@ -932,6 +1383,12 @@ impl Codegen {
         let mut builder = ComponentBuilder::default();
         let mut ctx = ComponentContext::new();
 
+        // Get the CLI version from the registry
+        let cli_version = self
+            .wasi_registry
+            .get_cli_version()
+            .expect("WASI CLI version not found in registry - lib/wasi/*.wado not loaded?");
+
         // Build string data for memory
         let string_data: Vec<u8> = self
             .string_literals
@@ -960,8 +1417,9 @@ impl Codegen {
 
         // Import types instance from WASI P3
         ctx.register_instance("types");
+        let types_import_path = format!("wasi:cli/types@{}", cli_version);
         builder.import(
-            "wasi:cli/types@0.3.0-rc-2025-09-16",
+            &types_import_path,
             wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
         );
 
@@ -1011,13 +1469,14 @@ impl Codegen {
 
         // Import stdout instance from WASI P3
         ctx.register_instance("stdout");
+        let stdout_import_path = format!("wasi:cli/stdout@{}", cli_version);
         builder.import(
-            "wasi:cli/stdout@0.3.0-rc-2025-09-16",
+            &stdout_import_path,
             wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
         );
 
         // Alias write-via-stream from stdout instance (component func)
-        ctx.register_comp_func("write-via-stream");
+        ctx.register_comp_func("stdout-write-via-stream");
         builder.alias_export(
             ctx.instance_idx("stdout"),
             "write-via-stream",
@@ -1029,13 +1488,14 @@ impl Codegen {
         // stderr has the same interface type as stdout
         // ========================================
         ctx.register_instance("stderr");
+        let stderr_import_path = format!("wasi:cli/stderr@{}", cli_version);
         builder.import(
-            "wasi:cli/stderr@0.3.0-rc-2025-09-16",
+            &stderr_import_path,
             wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
         );
 
         // Alias write-via-stream from stderr instance (component func)
-        ctx.register_comp_func("write-via-stream-stderr");
+        ctx.register_comp_func("stderr-write-via-stream");
         builder.alias_export(
             ctx.instance_idx("stderr"),
             "write-via-stream",
@@ -1062,8 +1522,13 @@ impl Codegen {
 
         // Import monotonic-clock instance from WASI P3
         ctx.register_instance("monotonic-clock");
+        let clock_version = self
+            .wasi_registry
+            .get_package_version("clocks")
+            .unwrap_or(cli_version);
+        let clock_import_path = format!("wasi:clocks/monotonic-clock@{}", clock_version);
         builder.import(
-            "wasi:clocks/monotonic-clock@0.3.0-rc-2025-09-16",
+            &clock_import_path,
             wasm_encoder::ComponentTypeRef::Instance(monotonic_clock_instance_type),
         );
 
@@ -1188,10 +1653,10 @@ impl Codegen {
         builder.stream_drop_readable(stream_u8_type);
 
         // Lower write-via-stream component func to core func (stdout)
-        ctx.register_core_func("write-via-stream-core");
+        ctx.register_core_func("stdout-write-via-stream-core");
         builder.lower_func(
-            Some("write-via-stream-core"),
-            ctx.comp_func_idx("write-via-stream"),
+            Some("stdout-write-via-stream-core"),
+            ctx.comp_func_idx("stdout-write-via-stream"),
             [
                 CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
@@ -1199,11 +1664,11 @@ impl Codegen {
             ],
         );
 
-        // Lower write-via-stream-stderr component func to core func (stderr)
-        ctx.register_core_func("write-via-stream-stderr-core");
+        // Lower write-via-stream component func to core func (stderr)
+        ctx.register_core_func("stderr-write-via-stream-core");
         builder.lower_func(
-            Some("write-via-stream-stderr-core"),
-            ctx.comp_func_idx("write-via-stream-stderr"),
+            Some("stderr-write-via-stream-core"),
+            ctx.comp_func_idx("stderr-write-via-stream"),
             [
                 CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
@@ -1211,14 +1676,16 @@ impl Codegen {
             ],
         );
 
-        // Lower monotonic-clock-now component func to core func
+        // Lower monotonic-clock-now component func to core func (if available)
         // This is a sync function: func() -> u64, no memory/realloc needed
-        ctx.register_core_func("monotonic-clock-now-core");
-        builder.lower_func(
-            Some("monotonic-clock-now-core"),
-            ctx.comp_func_idx("monotonic-clock-now"),
-            [],
-        );
+        if ctx.has_comp_func("monotonic-clock-now") {
+            ctx.register_core_func("monotonic-clock-now-core");
+            builder.lower_func(
+                Some("monotonic-clock-now-core"),
+                ctx.comp_func_idx("monotonic-clock-now"),
+                [],
+            );
+        }
 
         // task.return for completing async tasks
         ctx.register_core_func("task-return");
@@ -1248,7 +1715,7 @@ impl Codegen {
         builder.core_module_raw(Some("main-mod"), &main_module);
 
         // Create wasi instance with stream intrinsics + lowered WASI function + async intrinsics
-        let wasi_exports = [
+        let mut wasi_exports: Vec<(&str, ExportKind, u32)> = vec![
             (
                 "stream-new",
                 ExportKind::Func,
@@ -1270,14 +1737,14 @@ impl Codegen {
                 ctx.core_func_idx("stream-drop-readable"),
             ),
             (
-                "write-via-stream",
+                "stdout-write-via-stream",
                 ExportKind::Func,
-                ctx.core_func_idx("write-via-stream-core"),
+                ctx.core_func_idx("stdout-write-via-stream-core"),
             ),
             (
-                "write-via-stream-stderr",
+                "stderr-write-via-stream",
                 ExportKind::Func,
-                ctx.core_func_idx("write-via-stream-stderr-core"),
+                ctx.core_func_idx("stderr-write-via-stream-core"),
             ),
             (
                 "task-return",
@@ -1304,12 +1771,15 @@ impl Codegen {
                 ExportKind::Func,
                 ctx.core_func_idx("subtask-drop"),
             ),
-            (
+        ];
+        // Conditionally add monotonic-clock-now if it was registered
+        if ctx.has_comp_func("monotonic-clock-now") {
+            wasi_exports.push((
                 "monotonic-clock-now",
                 ExportKind::Func,
                 ctx.core_func_idx("monotonic-clock-now-core"),
-            ),
-        ];
+            ));
+        }
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
         ctx.register_core_instance("wasi");
         // Note: wasi_instance is the synthetic instance index returned by core_instantiate_exports
@@ -1489,136 +1959,8 @@ impl Codegen {
             .flat_map(|s| s.bytes())
             .collect();
 
-        // ========================================
-        // Type: types instance type (for wasi:cli/types)
-        // Contains error-code enum definition
-        // ========================================
-        let types_instance_type = ctx.register_type("types-instance-type");
-        {
-            let (_, enc) = builder.ty(Some("types-instance-type"));
-            let mut instance_type = InstanceType::new();
-            instance_type
-                .ty()
-                .defined_type()
-                .enum_type(["io", "illegal-byte-sequence", "pipe"]);
-            instance_type.export(
-                "error-code",
-                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
-            );
-            enc.instance(&instance_type);
-        }
-
-        // Import types instance from WASI P3
-        ctx.register_instance("types");
-        builder.import(
-            "wasi:cli/types@0.3.0-rc-2025-09-16",
-            wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
-        );
-
-        // Alias error-code from types instance
-        ctx.register_type("error-code");
-        builder.alias_export(
-            ctx.instance_idx("types"),
-            "error-code",
-            ComponentExportKind::Type,
-        );
-
-        // ========================================
-        // Type: stdout instance type
-        // ========================================
-        let stdout_instance_type = ctx.register_type("stdout-instance-type");
-        {
-            let (_, enc) = builder.ty(Some("stdout-instance-type"));
-            let mut instance_type = InstanceType::new();
-            instance_type
-                .ty()
-                .defined_type()
-                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
-            let error_code_type = ctx.type_idx("error-code");
-            instance_type.alias(Alias::Outer {
-                kind: ComponentOuterAliasKind::Type,
-                count: 1,
-                index: error_code_type,
-            });
-            instance_type
-                .ty()
-                .defined_type()
-                .result(None, Some(ComponentValType::Type(1)));
-            instance_type
-                .ty()
-                .function()
-                .async_(true)
-                .params([("data", ComponentValType::Type(0))])
-                .result(Some(ComponentValType::Type(2)));
-            instance_type.export("write-via-stream", wasm_encoder::ComponentTypeRef::Func(3));
-            enc.instance(&instance_type);
-        }
-
-        // Import stdout instance from WASI P3
-        ctx.register_instance("stdout");
-        builder.import(
-            "wasi:cli/stdout@0.3.0-rc-2025-09-16",
-            wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
-        );
-
-        // Alias write-via-stream from stdout instance (component func)
-        ctx.register_comp_func("write-via-stream");
-        builder.alias_export(
-            ctx.instance_idx("stdout"),
-            "write-via-stream",
-            ComponentExportKind::Func,
-        );
-
-        // ========================================
-        // Import stderr instance from WASI P3
-        // stderr has the same interface type as stdout
-        // ========================================
-        ctx.register_instance("stderr");
-        builder.import(
-            "wasi:cli/stderr@0.3.0-rc-2025-09-16",
-            wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
-        );
-
-        // Alias write-via-stream from stderr instance (component func)
-        ctx.register_comp_func("write-via-stream-stderr");
-        builder.alias_export(
-            ctx.instance_idx("stderr"),
-            "write-via-stream",
-            ComponentExportKind::Func,
-        );
-
-        // ========================================
-        // Import monotonic-clock from WASI P3
-        // ========================================
-        // Type for monotonic-clock instance: { now: func() -> u64 }
-        let monotonic_clock_instance_type = ctx.register_type("monotonic-clock-instance");
-        {
-            let (_, enc) = builder.ty(Some("monotonic-clock-instance"));
-            let mut instance_type = InstanceType::new();
-            // Type 0 within instance: func() -> u64 (sync function)
-            instance_type
-                .ty()
-                .function()
-                .params::<[(&str, ComponentValType); 0], ComponentValType>([])
-                .result(Some(ComponentValType::Primitive(PrimitiveValType::U64)));
-            instance_type.export("now", wasm_encoder::ComponentTypeRef::Func(0));
-            enc.instance(&instance_type);
-        }
-
-        // Import monotonic-clock instance from WASI P3
-        ctx.register_instance("monotonic-clock");
-        builder.import(
-            "wasi:clocks/monotonic-clock@0.3.0-rc-2025-09-16",
-            wasm_encoder::ComponentTypeRef::Instance(monotonic_clock_instance_type),
-        );
-
-        // Alias now from monotonic-clock instance (component func)
-        ctx.register_comp_func("monotonic-clock-now");
-        builder.alias_export(
-            ctx.instance_idx("monotonic-clock"),
-            "now",
-            ComponentExportKind::Func,
-        );
+        // Generate WASI imports dynamically from registry
+        self.generate_wasi_imports(&mut builder, &mut ctx);
 
         // Type: stream<u8>
         let stream_u8_type = ctx.register_type("stream-u8");
@@ -1792,38 +2134,44 @@ impl Codegen {
         ctx.register_core_func("stream-drop-readable");
         builder.stream_drop_readable(stream_u8_type);
 
-        // Lower write-via-stream (stdout)
-        ctx.register_core_func("write-via-stream-core");
-        builder.lower_func(
-            Some("write-via-stream-core"),
-            ctx.comp_func_idx("write-via-stream"),
-            [
-                CanonicalOption::Async,
-                CanonicalOption::Memory(ctx.memory_idx()),
-                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-            ],
-        );
+        // Lower write-via-stream (stdout) - only if stdout interface is available
+        if ctx.has_comp_func("stdout-write-via-stream") {
+            ctx.register_core_func("stdout-write-via-stream-core");
+            builder.lower_func(
+                Some("stdout-write-via-stream-core"),
+                ctx.comp_func_idx("stdout-write-via-stream"),
+                [
+                    CanonicalOption::Async,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
 
-        // Lower write-via-stream-stderr (stderr)
-        ctx.register_core_func("write-via-stream-stderr-core");
-        builder.lower_func(
-            Some("write-via-stream-stderr-core"),
-            ctx.comp_func_idx("write-via-stream-stderr"),
-            [
-                CanonicalOption::Async,
-                CanonicalOption::Memory(ctx.memory_idx()),
-                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-            ],
-        );
+        // Lower write-via-stream (stderr) - only if stderr interface is available
+        if ctx.has_comp_func("stderr-write-via-stream") {
+            ctx.register_core_func("stderr-write-via-stream-core");
+            builder.lower_func(
+                Some("stderr-write-via-stream-core"),
+                ctx.comp_func_idx("stderr-write-via-stream"),
+                [
+                    CanonicalOption::Async,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
 
-        // Lower monotonic-clock-now component func to core func
+        // Lower monotonic-clock-now component func to core func (if available)
         // This is a sync function: func() -> u64, no memory/realloc needed
-        ctx.register_core_func("monotonic-clock-now-core");
-        builder.lower_func(
-            Some("monotonic-clock-now-core"),
-            ctx.comp_func_idx("monotonic-clock-now"),
-            [],
-        );
+        if ctx.has_comp_func("monotonic-clock-now") {
+            ctx.register_core_func("monotonic-clock-now-core");
+            builder.lower_func(
+                Some("monotonic-clock-now-core"),
+                ctx.comp_func_idx("monotonic-clock-now"),
+                [],
+            );
+        }
 
         // task.return
         ctx.register_core_func("task-return");
@@ -1856,7 +2204,7 @@ impl Codegen {
         builder.core_module_raw(Some("main-mod"), &main_core_module);
 
         // Create wasi instance with stream intrinsics + lowered WASI function + async intrinsics
-        let wasi_exports = [
+        let mut wasi_exports: Vec<(&str, ExportKind, u32)> = vec![
             (
                 "stream-new",
                 ExportKind::Func,
@@ -1876,16 +2224,6 @@ impl Codegen {
                 "stream-drop-readable",
                 ExportKind::Func,
                 ctx.core_func_idx("stream-drop-readable"),
-            ),
-            (
-                "write-via-stream",
-                ExportKind::Func,
-                ctx.core_func_idx("write-via-stream-core"),
-            ),
-            (
-                "write-via-stream-stderr",
-                ExportKind::Func,
-                ctx.core_func_idx("write-via-stream-stderr-core"),
             ),
             (
                 "task-return",
@@ -1912,12 +2250,30 @@ impl Codegen {
                 ExportKind::Func,
                 ctx.core_func_idx("subtask-drop"),
             ),
-            (
+        ];
+        // Conditionally add stdout/stderr write-via-stream if registered
+        if ctx.has_comp_func("stdout-write-via-stream") {
+            wasi_exports.push((
+                "stdout-write-via-stream",
+                ExportKind::Func,
+                ctx.core_func_idx("stdout-write-via-stream-core"),
+            ));
+        }
+        if ctx.has_comp_func("stderr-write-via-stream") {
+            wasi_exports.push((
+                "stderr-write-via-stream",
+                ExportKind::Func,
+                ctx.core_func_idx("stderr-write-via-stream-core"),
+            ));
+        }
+        // Conditionally add monotonic-clock-now if it was registered
+        if ctx.has_comp_func("monotonic-clock-now") {
+            wasi_exports.push((
                 "monotonic-clock-now",
                 ExportKind::Func,
                 ctx.core_func_idx("monotonic-clock-now-core"),
-            ),
-        ];
+            ));
+        }
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
         ctx.register_core_instance("wasi");
 
@@ -2027,8 +2383,10 @@ impl Codegen {
         );
         builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
         builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
+        // Always define stdout-write-via-stream to maintain type indices
+        // (import is conditional, but type must exist for index stability)
         builder.define_func_type(
-            "write-via-stream",
+            "stdout-write-via-stream",
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
@@ -2067,14 +2425,19 @@ impl Codegen {
         );
 
         // Stderr write-via-stream (same signature as stdout, defined after GC types)
+        // Always define stderr-write-via-stream to maintain type indices
+        // (import is conditional, but type must exist for index stability)
         builder.define_func_type(
-            "write-via-stream-stderr",
+            "stderr-write-via-stream",
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
 
         // Monotonic clock now (sync function returning u64, defined after GC types)
-        builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+        // Only define if monotonic-clock interface is registered
+        if self.wasi_registry.has_interface("monotonic-clock") {
+            builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+        }
 
         // Types for user-defined functions
         let string_array_idx = builder.type_idx("string-array");
@@ -2110,14 +2473,18 @@ impl Codegen {
         builder.import_func("wasi", "stream-write", "stream-write");
         builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
         builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
-        builder.import_func("wasi", "write-via-stream", "write-via-stream");
-        builder.import_func("wasi", "write-via-stream-stderr", "write-via-stream-stderr");
+        // Always import stdout/stderr - they're needed by core infrastructure (panic, logging)
+        builder.import_func("wasi", "stdout-write-via-stream", "stdout-write-via-stream");
+        builder.import_func("wasi", "stderr-write-via-stream", "stderr-write-via-stream");
         builder.import_func("wasi", "task-return", "task-return");
         builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
         builder.import_func("wasi", "waitable-join", "waitable-join");
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
-        builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
+        // Only import monotonic-clock-now if the interface is registered
+        if self.wasi_registry.has_interface("monotonic-clock") {
+            builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
+        }
         builder.import_func("env", "realloc", "realloc");
         builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
         builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
@@ -2318,8 +2685,10 @@ impl Codegen {
         );
         builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
         builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
+        // Always define stdout-write-via-stream to maintain type indices
+        // (import is conditional, but type must exist for index stability)
         builder.define_func_type(
-            "write-via-stream",
+            "stdout-write-via-stream",
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
@@ -2358,14 +2727,19 @@ impl Codegen {
         );
 
         // Stderr write-via-stream (same signature as stdout, defined after GC types)
+        // Always define stderr-write-via-stream to maintain type indices
+        // (import is conditional, but type must exist for index stability)
         builder.define_func_type(
-            "write-via-stream-stderr",
+            "stderr-write-via-stream",
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
 
         // Monotonic clock now (sync function returning u64, defined after GC types)
-        builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+        // Only define if monotonic-clock interface is registered
+        if self.wasi_registry.has_interface("monotonic-clock") {
+            builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+        }
 
         // Types for user-defined functions
         for func in &user_funcs {
@@ -2402,14 +2776,18 @@ impl Codegen {
         builder.import_func("wasi", "stream-write", "stream-write");
         builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
         builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
-        builder.import_func("wasi", "write-via-stream", "write-via-stream");
-        builder.import_func("wasi", "write-via-stream-stderr", "write-via-stream-stderr");
+        // Always import stdout/stderr - they're needed by core infrastructure (panic, logging)
+        builder.import_func("wasi", "stdout-write-via-stream", "stdout-write-via-stream");
+        builder.import_func("wasi", "stderr-write-via-stream", "stderr-write-via-stream");
         builder.import_func("wasi", "task-return", "task-return");
         builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
         builder.import_func("wasi", "waitable-join", "waitable-join");
         builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
-        builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
+        // Only import monotonic-clock-now if the interface is registered
+        if self.wasi_registry.has_interface("monotonic-clock") {
+            builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
+        }
         builder.import_func("env", "realloc", "realloc");
         builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
         builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
@@ -3451,8 +3829,8 @@ impl Codegen {
                     self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 // For write-via-stream (stdout or stderr), we start the operation but defer wait to function end
-                if wasi_func_name == "write-via-stream"
-                    || wasi_func_name == "write-via-stream-stderr"
+                if wasi_func_name == "stdout-write-via-stream"
+                    || wasi_func_name == "stderr-write-via-stream"
                 {
                     self.generate_write_via_stream_start(func, ctx, builder, func_idx);
                 } else {
@@ -3500,26 +3878,8 @@ impl Codegen {
             return None;
         }
 
-        // Map known effect functions to their WASI import names
-        // These correspond to the #[wasi(...)] attributes in wasi/cli.wado
-        match name {
-            // wasi:cli/stdout
-            "Stdout::write_via_stream" => Some("write-via-stream".to_string()),
-            // wasi:cli/stderr
-            "Stderr::write_via_stream" => Some("write-via-stream-stderr".to_string()),
-            // wasi:cli/stdin
-            "Stdin::read_via_stream" => Some("stdin-read-via-stream".to_string()),
-            // wasi:cli/environment
-            "Environment::get_arguments" => Some("get-arguments".to_string()),
-            "Environment::get_environment" => Some("get-environment".to_string()),
-            "Environment::get_initial_cwd" => Some("get-initial-cwd".to_string()),
-            // wasi:cli/exit
-            "Exit::exit" => Some("exit".to_string()),
-            "Exit::exit_with_code" => Some("exit-with-code".to_string()),
-            // wasi:clocks/monotonic-clock
-            "MonotonicClock::now" => Some("monotonic-clock-now".to_string()),
-            _ => None,
-        }
+        // Look up in the WASI registry (populated from wasi/*.wado modules)
+        self.wasi_registry.resolve(name)
     }
 
     /// Check if a function name is a builtin
@@ -3716,20 +4076,40 @@ impl Codegen {
             "call_indirect_stdout_write_via_stream" => {
                 // call_indirect_stdout_write_via_stream(rx: i32) - call stdout write-via-stream
                 // Used by log() for ambient stdout logging without requiring Stdout effect
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                // If stdout isn't available (wasi:cli not imported), this is a no-op
+                if let Some(func_idx) = builder.try_func_idx("stdout-write-via-stream") {
+                    for arg in &call.args {
+                        self.generate_expr_with_builder(func, arg, ctx, builder);
+                    }
+                    self.generate_write_via_stream_start(func, ctx, builder, func_idx);
+                } else {
+                    // stdout not available - drop the argument and push dummy return value
+                    // (generate_write_via_stream_start pushes i32(0) as dummy value)
+                    for arg in &call.args {
+                        self.generate_expr_with_builder(func, arg, ctx, builder);
+                    }
+                    func.instruction(&Instruction::Drop); // drop the rx argument
+                    func.instruction(&Instruction::I32Const(0)); // push dummy return value
                 }
-                let func_idx = builder.func_idx("write-via-stream");
-                self.generate_write_via_stream_start(func, ctx, builder, func_idx);
             }
             "call_indirect_stderr_write_via_stream" => {
                 // call_indirect_stderr_write_via_stream(rx: i32) - call stderr write-via-stream
                 // Used by log_error() for ambient stderr logging without requiring Stderr effect
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                // If stderr isn't available (wasi:cli not imported), this is a no-op
+                if let Some(func_idx) = builder.try_func_idx("stderr-write-via-stream") {
+                    for arg in &call.args {
+                        self.generate_expr_with_builder(func, arg, ctx, builder);
+                    }
+                    self.generate_write_via_stream_start(func, ctx, builder, func_idx);
+                } else {
+                    // stderr not available - drop the argument and push dummy return value
+                    // (generate_write_via_stream_start pushes i32(0) as dummy value)
+                    for arg in &call.args {
+                        self.generate_expr_with_builder(func, arg, ctx, builder);
+                    }
+                    func.instruction(&Instruction::Drop); // drop the rx argument
+                    func.instruction(&Instruction::I32Const(0)); // push dummy return value
                 }
-                let func_idx = builder.func_idx("write-via-stream-stderr");
-                self.generate_write_via_stream_start(func, ctx, builder, func_idx);
             }
 
             // Branch hinting builtins

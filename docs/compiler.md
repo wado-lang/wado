@@ -12,19 +12,20 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 
 ### Modules
 
-| Module   | File                  | Description                                        |
-| -------- | --------------------- | -------------------------------------------------- |
-| Lexer    | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section |
-| Parser   | `parser.rs`           | Recursive descent parser, builds AST               |
-| AST      | `ast.rs`              | AST node definitions, `Module::data_section()` API |
-| Token    | `token.rs`            | Token types and spans                              |
-| Analyzer | `analyze.rs`          | Semantic analysis, symbol table construction       |
-| Symbol   | `symbol.rs`           | Symbol table data structures                       |
-| Resolver | `resolver.rs`         | Module resolution, loads core library              |
-| Stdlib   | `stdlib.rs`           | Embedded core library sources                      |
-| Codegen  | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
-| Bundled  | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
-| Postproc | `wasm_postprocess.rs` | Wasm binary transformations                        |
+| Module       | File                  | Description                                        |
+| ------------ | --------------------- | -------------------------------------------------- |
+| Lexer        | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section |
+| Parser       | `parser.rs`           | Recursive descent parser, builds AST               |
+| AST          | `ast.rs`              | AST node definitions, `Module::data_section()` API |
+| Token        | `token.rs`            | Token types and spans                              |
+| Analyzer     | `analyze.rs`          | Semantic analysis, symbol table construction       |
+| Symbol       | `symbol.rs`           | Symbol table data structures                       |
+| Resolver     | `resolver.rs`         | Module resolution, loads core library              |
+| Stdlib       | `stdlib.rs`           | Embedded core library sources                      |
+| WasiRegistry | `wasi_registry.rs`    | WASI import registry for dynamic CM generation     |
+| Codegen      | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
+| Bundled      | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
+| Postproc     | `wasm_postprocess.rs` | Wasm binary transformations                        |
 
 ### Bundled Builtins (wado-bundled)
 
@@ -71,6 +72,44 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `wasi:cli`        | `cli.wado`        | Complete |
 | `wasi:clocks`     | `clocks.wado`     | Complete |
 | `wasi:filesystem` | `filesystem.wado` | Complete |
+
+### WASI Registry
+
+The `WasiRegistry` module (`wasi_registry.rs`) collects WASI import information from `lib/wasi/*.wado` files and provides it to the code generator for dynamic Component Model generation.
+
+**Purpose:**
+
+- Extract WASI version strings from `#[wasi(...)]` attributes (e.g., `0.3.0-rc-2025-09-16`)
+- Map effect methods to WASI function names (e.g., `Stdout::write_via_stream` → `stdout-write-via-stream`)
+- Track which WASI interfaces are used for conditional import generation
+
+**What's Dynamic (from registry):**
+
+| Item                | Example                                                    |
+| ------------------- | ---------------------------------------------------------- |
+| Version strings     | `wasi:cli/stdout@0.3.0-rc-2025-09-16`                      |
+| Import paths        | Built via `format!("wasi:cli/stdout@{}", cli_version)`     |
+| Function async flag | `is_async` from effect method definition                   |
+| Interface presence  | `has_interface("monotonic-clock")` for conditional codegen |
+
+**What's Still Hardcoded (TODO):**
+
+| Item                         | Location                                          | Reason             |
+| ---------------------------- | ------------------------------------------------- | ------------------ |
+| `error-code` enum variants   | `["io", "illegal-byte-sequence", "pipe"]`         | CM type structure  |
+| `write-via-stream` signature | `async func(stream<u8>) -> result<_, error-code>` | CM type structure  |
+| `now` signature              | `func() -> u64`                                   | CM type structure  |
+| Supported interfaces list    | `["stdout", "stderr", "monotonic-clock"]`         | Codegen limitation |
+
+**Future Work:**
+
+To fully eliminate hardcoded CM structures, the registry would need to:
+
+1. Parse Wado type signatures from effect methods
+2. Convert Wado types to Component Model types dynamically
+3. Build CM instance types from parsed definitions
+
+This would require extending `WasiFunctionInfo` to include parsed parameter/return types and adding a Wado-to-CM type converter.
 
 ### Type System
 
@@ -425,7 +464,7 @@ fn main() with Stdout {
 
 1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
 2. **No `variant` keyword**: Parser doesn't recognize `variant` declarations (sum types with payloads)
-3. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags)
+3. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
 4. **Template strings - mostly implemented**:
    - ✅ Syntax parsing with interpolation `{expr}` works
    - ✅ Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished

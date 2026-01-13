@@ -126,6 +126,7 @@ pub struct WadoFunction {
     pub wasi_attr: String,
     pub params: Vec<WadoParam>,
     pub return_type: Option<WadoType>,
+    pub is_async: bool,
     pub never_returns: bool,
 }
 

@@ -8,6 +8,7 @@ pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
 pub mod token;
+pub mod wasi_registry;
 pub mod wasm_postprocess;
 
 pub use analyze::Analyzer;
@@ -25,6 +26,19 @@ pub struct CompileResult {
     pub wasm: Vec<u8>,
     /// Parsed module AST (includes data section if present)
     pub module: ast::Module,
+}
+
+/// Result of dumping compiler internal state
+#[derive(Debug)]
+pub struct DumpResult {
+    /// The main module's AST
+    pub ast: ast::Module,
+    /// Symbol table after analysis
+    pub symbols: symbol::SymbolTable,
+    /// Loaded module paths (in resolution order)
+    pub loaded_modules: Vec<Vec<String>>,
+    /// Modules loaded implicitly by the compiler
+    pub implicit_modules: Vec<Vec<String>>,
 }
 
 /// Compile Wado source code to Component Model WebAssembly bytes.
@@ -74,6 +88,67 @@ pub fn compile_file(path: &Path) -> Result<CompileResult, CompileError> {
         Some(path.display().to_string()),
         base_path.as_deref(),
     )
+}
+
+/// Dump compiler internal state for a Wado source file.
+///
+/// This runs the compilation pipeline up through analysis (without code generation)
+/// and returns diagnostic information about the internal state.
+pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
+    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
+        path: path.display().to_string(),
+        message: e.to_string(),
+    })?;
+
+    let base_path = path.parent().map(|p| p.to_path_buf());
+    let filename = Some(path.display().to_string());
+
+    // Lexer
+    let mut lexer = Lexer::new(&source);
+    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: filename.clone(),
+    })?;
+    let data_section = lexer.into_data_section();
+
+    // Parser
+    let mut parser = Parser::with_data_section(tokens, data_section);
+    let ast = parser.parse().map_err(|e| CompileError::Parser {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: filename.clone(),
+    })?;
+
+    // Analyzer
+    let mut analyzer = if let Some(base) = base_path.as_deref() {
+        Analyzer::with_base_path(base)
+    } else {
+        Analyzer::new()
+    };
+    analyzer.analyze(&ast, &[]).map_err(|errors| {
+        let msg = errors
+            .into_iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        CompileError::Analyzer {
+            message: msg,
+            filename: filename.clone(),
+        }
+    })?;
+
+    // Get loaded modules, symbols, and implicit modules
+    let (symbols, loaded_modules, implicit_modules) = analyzer.into_parts();
+
+    Ok(DumpResult {
+        ast,
+        symbols,
+        loaded_modules: loaded_modules.keys().cloned().collect(),
+        implicit_modules: implicit_modules.into_iter().collect(),
+    })
 }
 
 fn compile_impl(

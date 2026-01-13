@@ -183,12 +183,16 @@ impl<'a> Transformer<'a> {
         let params = self.transform_params(&func.params)?;
         let return_type = self.transform_result(&func.result)?;
 
+        // Check if this is an async function
+        let is_async = matches!(func.kind, FunctionKind::AsyncFreestanding);
+
         Ok(WadoFunction {
             name: to_snake_case(name),
             doc_comment: func.docs.contents.clone(),
             wasi_attr,
             params,
             return_type,
+            is_async,
             never_returns: false,
         })
     }
@@ -438,6 +442,7 @@ impl<'a> Transformer<'a> {
                             wasi_attr: method_attr,
                             params: self.transform_params(&func.params)?,
                             return_type: self.transform_result(&func.result)?,
+                            is_async: false,
                             never_returns: false,
                         });
                     }

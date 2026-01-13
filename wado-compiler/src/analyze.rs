@@ -197,8 +197,13 @@ impl Analyzer {
                 }
 
                 Item::Effect(effect) => {
+                    // Extract effect-level WASI import from attributes
+                    let effect_wasi_import =
+                        effect.attrs.first().and_then(|a| a.wasi_import.clone());
+
                     let kind = SymbolKind::Effect(EffectSymbol {
                         methods: effect.methods.iter().map(|m| m.name.clone()).collect(),
+                        wasi_import: effect_wasi_import,
                     });
 
                     self.symbols

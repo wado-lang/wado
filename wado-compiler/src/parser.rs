@@ -166,7 +166,7 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(is_pub).map(Item::Use),
             TokenKind::Fn => self.parse_function(is_pub).map(Item::Function),
-            TokenKind::Effect => self.parse_effect_decl(is_pub).map(Item::Effect),
+            TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub).map(Item::Enum),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
@@ -1425,7 +1425,11 @@ impl Parser {
 
     // Placeholder implementations for other declarations
 
-    fn parse_effect_decl(&mut self, is_pub: bool) -> ParseResult<EffectDecl> {
+    fn parse_effect_decl(
+        &mut self,
+        is_pub: bool,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<EffectDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Effect)?;
         let name = self.consume_ident()?;
@@ -1441,6 +1445,7 @@ impl Parser {
         Ok(EffectDecl {
             name,
             is_pub,
+            attrs,
             methods,
             span: start_span,
         })
