@@ -55,15 +55,15 @@ impl Connection {
 
 ### Survey of Other Languages
 
-| Language | Memory Management | Resource Management | Notes |
-|----------|-------------------|---------------------|-------|
-| **Rust** | Ownership (no GC) | `Drop` trait | Deterministic, compositional |
-| **Swift** | ARC (ref counting) | `deinit` | Deterministic, compositional |
-| **C#** | Tracing GC | `IDisposable` + `using` | Manual, requires explicit syntax |
-| **Java** | Tracing GC | `AutoCloseable` + `try-with-resources` | Manual, requires explicit syntax |
-| **Python** | Mixed (CPython: RC, PyPy: GC) | `__enter__`/`__exit__` + `with` | Manual, requires explicit syntax |
-| **Go** | Tracing GC | `defer` | Manual, requires explicit syntax |
-| **Zig** | Manual | `defer` | Manual, requires explicit syntax |
+| Language   | Memory Management             | Resource Management                    | Notes                            |
+| ---------- | ----------------------------- | -------------------------------------- | -------------------------------- |
+| **Rust**   | Ownership (no GC)             | `Drop` trait                           | Deterministic, compositional     |
+| **Swift**  | ARC (ref counting)            | `deinit`                               | Deterministic, compositional     |
+| **C#**     | Tracing GC                    | `IDisposable` + `using`                | Manual, requires explicit syntax |
+| **Java**   | Tracing GC                    | `AutoCloseable` + `try-with-resources` | Manual, requires explicit syntax |
+| **Python** | Mixed (CPython: RC, PyPy: GC) | `__enter__`/`__exit__` + `with`        | Manual, requires explicit syntax |
+| **Go**     | Tracing GC                    | `defer`                                | Manual, requires explicit syntax |
+| **Zig**    | Manual                        | `defer`                                | Manual, requires explicit syntax |
 
 **Key observation**: Languages with tracing GC require **explicit syntax** (`using`, `try-with-resources`, `defer`) for deterministic cleanup. None provide automatic compositional cleanup like Rust's `Drop`.
 
@@ -84,6 +84,7 @@ resource file {
 ```
 
 Key properties:
+
 - **Owned handle**: Resource instances have unique ownership
 - **Deterministic destruction**: Destructor is called when the handle is dropped
 - **Component Model boundary**: Resources can't leak across components
@@ -111,6 +112,7 @@ let file2 = move file; // OK: explicit move
 ```
 
 **Rationale**:
+
 - Resources represent unique system objects (file handles, sockets)
 - Copying would create aliasing problems (double-close, double-free)
 - Move-only semantics prevent these bugs
@@ -133,6 +135,7 @@ resource Socket {
 ```
 
 **Syntax rules**:
+
 - Must be named `[destructor]` (attribute syntax, not identifier)
 - Must have signature `fn [destructor]() with Effects`
 - No parameters, no return value
@@ -140,6 +143,7 @@ resource Socket {
 - Implicitly takes `&mut self` (can access fields)
 
 **Rationale**:
+
 - `[destructor]` is clear and searchable
 - Bracket syntax `[...]` distinguishes from regular methods
 - Aligns with WIT's destructor notation
@@ -173,6 +177,7 @@ let conn2 = move conn;    // OK: explicit move
 ```
 
 **Synthesis rules**:
+
 1. If struct has any `resource` fields, the struct becomes implicitly `unique`
 2. Compiler generates a destructor that calls destructors of all `resource` fields in **declaration order**
 3. Non-resource fields are ignored (GC handles them)
@@ -195,13 +200,13 @@ unique struct CustomHandle {
 
 Destructors are called deterministically in these situations:
 
-| Situation | When Destructor Runs | Example |
-|-----------|---------------------|---------|
-| Scope exit | End of block | `{ let f = File::open(...); }` |
-| Early return | Before function returns | `if err { return; }` |
-| Move | Old binding invalidated | `let f2 = move f;` (f's destructor NOT run) |
-| Explicit drop | `drop(f)` call | `drop(f);` |
-| Panic | Unwinding (TBD) | `panic("error");` |
+| Situation     | When Destructor Runs    | Example                                     |
+| ------------- | ----------------------- | ------------------------------------------- |
+| Scope exit    | End of block            | `{ let f = File::open(...); }`              |
+| Early return  | Before function returns | `if err { return; }`                        |
+| Move          | Old binding invalidated | `let f2 = move f;` (f's destructor NOT run) |
+| Explicit drop | `drop(f)` call          | `drop(f);`                                  |
+| Panic         | Unwinding (TBD)         | `panic("error");`                           |
 
 **Scope exit example**:
 
@@ -272,11 +277,11 @@ For now, resources should be designed to tolerate abrupt termination (e.g., file
 
 This design integrates cleanly with the value semantics ADR:
 
-| Struct Type | Default Semantics | Implicit `unique`? | Destructor? |
-|-------------|-------------------|--------------------|-------------|
-| No `resource` fields | Value (copyable) | No | No |
-| Has `resource` fields | Move-only | Yes | Synthesized |
-| Explicit `unique` | Move-only | Yes | No (unless has resources) |
+| Struct Type           | Default Semantics | Implicit `unique`? | Destructor?               |
+| --------------------- | ----------------- | ------------------ | ------------------------- |
+| No `resource` fields  | Value (copyable)  | No                 | No                        |
+| Has `resource` fields | Move-only         | Yes                | Synthesized               |
+| Explicit `unique`     | Move-only         | Yes                | No (unless has resources) |
 
 **Examples**:
 
