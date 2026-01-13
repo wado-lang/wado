@@ -4004,56 +4004,21 @@ impl Codegen {
     ) {
         let builtin_name = name.strip_prefix("builtin::").unwrap_or(name);
 
+        // Check if this builtin has a canonical name (imported CM function)
+        if let Some(builtin_info) = self.builtin_registry.get(builtin_name) {
+            if let Some(canonical_name) = &builtin_info.canonical_name {
+                // Generate all arguments
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+                // Call the imported function
+                func.instruction(&Instruction::Call(builder.func_idx(canonical_name)));
+                return;
+            }
+        }
+
+        // Handle builtins that compile to Wasm instructions or have special logic
         match builtin_name {
-            // Stream intrinsics
-            "stream_new" => {
-                func.instruction(&Instruction::Call(builder.func_idx("stream-new")));
-            }
-            "stream_write" => {
-                // stream_write(tx: i32, ptr: i32, len: i32) -> i32
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-write")));
-            }
-            "stream_drop_writable" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-writable")));
-            }
-            "stream_drop_readable" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("stream-drop-readable")));
-            }
-
-            // Async task intrinsics
-            "waitable_set_new" => {
-                func.instruction(&Instruction::Call(builder.func_idx("waitable-set-new")));
-            }
-            "waitable_join" => {
-                // waitable_join(set: i32, subtask: i32)
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("waitable-join")));
-            }
-            "waitable_set_wait" => {
-                // waitable_set_wait(set: i32, outptr: i32) -> i32
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("waitable-set-wait")));
-            }
-            "subtask_drop" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("subtask-drop")));
-            }
-
             // i32 operations
             "i32_and" => {
                 // i32_and(a: i32, b: i32) -> i32
@@ -4125,29 +4090,6 @@ impl Codegen {
                     align: 0,
                     memory_index: 0,
                 }));
-            }
-            "realloc" => {
-                // realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("realloc")));
-            }
-
-            // Float-to-string conversion
-            "f64_to_buffer" => {
-                // f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 (length)
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("f64_to_buffer")));
-            }
-            "f32_to_buffer" => {
-                // f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 (length)
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::Call(builder.func_idx("f32_to_buffer")));
             }
 
             // Control flow
