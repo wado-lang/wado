@@ -62,7 +62,8 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:clocks`     | `clocks.wado`     | Complete (MonotonicClock, now())                   |
 | `core:filesystem` | `filesystem.wado` | Complete                                           |
 | `core:stream`     | `stream.wado`     | Complete                                           |
-| `core:internals`  | `internals.wado`  | Internal (compiler-generated code support)         |
+| `core:internal`   | `internal.wado`   | Internal (compiler-generated code support)         |
+| `core:builtin`    | `builtin.wado`    | Compiler intrinsic type declarations               |
 
 **WASI Library (`wasi/`):**
 
@@ -171,10 +172,6 @@ builtin::eqref<T, U>(a: T, b: U) -> bool   // Compare any GC references
 // Control
 builtin::unreachable() -> !   // Wasm trap instruction
 
-// i64 bit manipulation
-builtin::i64_low32(value: i64) -> i32    // Extract low 32 bits
-builtin::i64_high32(value: i64) -> i32   // Extract high 32 bits
-
 // i32 operations
 builtin::i32_and(a: i32, b: i32) -> i32  // Bitwise AND
 builtin::i32_eqz(a: i32) -> i32          // Check if zero (returns 0 or 1)
@@ -186,6 +183,7 @@ builtin::realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
 
 // Stream intrinsics (Component Model)
 builtin::stream_new() -> i64              // Create stream, returns rx|tx packed
+                                          // Extract: rx = handles as i32, tx = (handles >> 32) as i32
 builtin::stream_write(tx: i32, ptr: i32, len: i32) -> i32
 builtin::stream_drop_writable(tx: i32)
 builtin::stream_drop_readable(rx: i32)
@@ -619,10 +617,10 @@ pub struct FormatSpec {
    - Parse format spec (precision, padding, alignment)
    - Pass to appropriate formatting function in wado-bundled
 
-2. ~~**Add boolean to string conversion**~~: ✅ **Done** (bool_to_string in core/internals.wado)
+2. ~~**Add boolean to string conversion**~~: ✅ **Done** (bool_to_string in core/internal.wado)
    - `true` → "true", `false` → "false"
 
-3. ~~**Add char to string conversion**~~: ✅ **Done** (char_to_string in core/internals.wado)
+3. ~~**Add char to string conversion**~~: ✅ **Done** (char_to_string in core/internal.wado)
    - Char values converted to their UTF-8 string representation (supports full Unicode)
 
 ## The `assert` Statement Implementation

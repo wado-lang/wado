@@ -132,9 +132,13 @@ impl Analyzer {
         // This module provides fundamental functions like panic.
         self.load_implicit_module(&["core".to_string(), "prelude".to_string()]);
 
-        // Always load core:internals for compiler-generated code (e.g., template strings)
+        // Always load core:internal for compiler-generated code (e.g., template strings)
         // This module provides internal helper functions like string_concat, f64_to_string, etc.
-        self.load_implicit_module(&["core".to_string(), "internals".to_string()]);
+        self.load_implicit_module(&["core".to_string(), "internal".to_string()]);
+
+        // Always load core:builtin for compiler intrinsic type information.
+        // This module provides type declarations for builtin:: functions.
+        self.load_implicit_module(&["core".to_string(), "builtin".to_string()]);
 
         if self.errors.is_empty() {
             Ok(())
@@ -144,7 +148,7 @@ impl Analyzer {
     }
 
     /// Load a module implicitly (without a user import declaration)
-    /// Used for modules like core:internals that provide compiler-generated code support.
+    /// Used for modules like core:internal that provide compiler-generated code support.
     /// Functions from implicit modules are only accessible via qualified names in codegen,
     /// not via simple names from user code.
     fn load_implicit_module(&mut self, module_path: &[String]) {

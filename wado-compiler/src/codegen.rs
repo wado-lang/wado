@@ -6,6 +6,7 @@ use crate::ast::{
     Block, CallExpr, Expr, Function as AstFunction, Item, Literal, Module as AstModule, Stmt,
     TemplatePart, Type,
 };
+use crate::builtin_registry::BuiltinRegistry;
 use crate::bundled::wado_bundled_wasm;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -34,6 +35,8 @@ pub struct Codegen {
     source_code: String,
     /// Registry of WASI imports from lib/wasi/*.wado
     wasi_registry: WasiRegistry,
+    /// Registry of builtin function signatures from lib/core/builtin.wado
+    builtin_registry: BuiltinRegistry,
 }
 
 /// Context for tracking local variables during function code generation
@@ -223,8 +226,8 @@ struct CoreModuleBuilder {
     // Memory tracking
     has_memory: bool,
 
-    // Access control: functions from core:internals (require explicit import)
-    internals_functions: std::collections::HashSet<String>,
+    // Access control: functions from core:internal (require explicit import)
+    internal_functions: std::collections::HashSet<String>,
 }
 
 impl CoreModuleBuilder {
@@ -245,18 +248,18 @@ impl CoreModuleBuilder {
             next_func_idx: 0,
             import_func_count: 0,
             has_memory: false,
-            internals_functions: std::collections::HashSet::new(),
+            internal_functions: std::collections::HashSet::new(),
         }
     }
 
-    /// Mark a function as being from core:internals (requires explicit import to call)
-    fn mark_as_internals(&mut self, name: &str) {
-        self.internals_functions.insert(name.to_string());
+    /// Mark a function as being from core:internal (requires explicit import to call)
+    fn mark_as_internal(&mut self, name: &str) {
+        self.internal_functions.insert(name.to_string());
     }
 
-    /// Check if a function is from core:internals
-    fn is_internals_function(&self, name: &str) -> bool {
-        self.internals_functions.contains(name)
+    /// Check if a function is from core:internal
+    fn is_internal_function(&self, name: &str) -> bool {
+        self.internal_functions.contains(name)
     }
 
     /// Define a function type and return its index
@@ -630,6 +633,7 @@ impl Codegen {
             string_literals: Vec::new(),
             source_code,
             wasi_registry: WasiRegistry::new(),
+            builtin_registry: BuiltinRegistry::new(),
         }
     }
 
@@ -741,6 +745,11 @@ impl Codegen {
             self.build_wasi_registry_from_stdlib();
         }
 
+        // Build builtin registry from stdlib (if not already built)
+        if self.builtin_registry.is_empty() {
+            self.build_builtin_registry_from_stdlib();
+        }
+
         // First pass: collect string literals
         self.collect_strings(module);
 
@@ -826,6 +835,24 @@ impl Codegen {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    /// Build builtin registry from embedded stdlib
+    ///
+    /// Parses lib/core/builtin.wado and registers function signatures
+    /// for type inference during code generation.
+    fn build_builtin_registry_from_stdlib(&mut self) {
+        let source = stdlib::CORE_BUILTIN;
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer error in core:builtin");
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse().expect("parser error in core:builtin");
+
+        for item in &module.items {
+            if let Item::Function(func) = item {
+                self.builtin_registry.register(func);
             }
         }
     }
@@ -1305,8 +1332,9 @@ impl Codegen {
         symbols: &SymbolTable,
         implicit_modules: &std::collections::HashSet<Vec<String>>,
     ) -> Vec<u8> {
-        // Build WASI registry from stdlib (always available)
+        // Build registries from stdlib (always available)
         self.build_wasi_registry_from_stdlib();
+        self.build_builtin_registry_from_stdlib();
 
         // First pass: collect string literals from all modules
         self.collect_strings(main_module);
@@ -2633,25 +2661,25 @@ impl Codegen {
         // ========================================
 
         // Register all user-defined functions
-        let internals_path = vec!["core".to_string(), "internals".to_string()];
+        let internal_path = vec!["core".to_string(), "internal".to_string()];
         for (module_path, func, qualified_name) in &all_funcs {
             let func_idx = builder.define_func(qualified_name, qualified_name);
-            let is_from_internals = module_path == &internals_path;
+            let is_from_internal = module_path == &internal_path;
 
-            // Register simple name alias for all functions EXCEPT internals
-            // Internals functions require explicit import to be accessible.
-            if qualified_name != &func.name && !is_from_internals {
+            // Register simple name alias for all functions EXCEPT internal
+            // Internal functions require explicit import to be accessible.
+            if qualified_name != &func.name && !is_from_internal {
                 builder.define_func_alias(&func.name, func_idx);
             }
 
-            // Track internals functions for access control
-            if is_from_internals {
-                builder.mark_as_internals(&func.name);
+            // Track internal functions for access control
+            if is_from_internal {
+                builder.mark_as_internal(&func.name);
             }
         }
 
-        // Register aliases for explicitly imported functions from core:internals
-        // Only for user code modules (not privileged modules like prelude/internals).
+        // Register aliases for explicitly imported functions from core:internal
+        // Only for user code modules (not privileged modules like prelude/internal).
         // Privileged modules use the qualified name fallback in generate_call_with_builder.
         let prelude_path = vec!["core".to_string(), "prelude".to_string()];
         for (module_path, module) in loaded_modules
@@ -2659,18 +2687,18 @@ impl Codegen {
             .chain(std::iter::once(&(&vec![], main_module)))
         {
             // Skip privileged modules - they use qualified name fallback
-            let is_privileged = **module_path == internals_path || **module_path == prelude_path;
+            let is_privileged = **module_path == internal_path || **module_path == prelude_path;
             if is_privileged {
                 continue;
             }
 
             for item in &module.items {
                 if let crate::ast::Item::Use(use_decl) = item
-                    && use_decl.source == "core:internals"
+                    && use_decl.source == "core:internal"
                 {
                     for use_item in &use_decl.items {
                         if let crate::ast::UseItem::Simple { name, alias } = use_item {
-                            let qualified_name = format!("{}::{}", internals_path.join("::"), name);
+                            let qualified_name = format!("{}::{}", internal_path.join("::"), name);
                             if let Some(func_idx) = builder.try_func_idx(&qualified_name) {
                                 let alias_name = alias.as_ref().unwrap_or(name);
                                 builder.define_func_alias(alias_name, func_idx);
@@ -3987,13 +4015,13 @@ impl Codegen {
                 idx
             } else {
                 // Simple name not found. If caller is from a privileged module
-                // (core:internals or core:prelude), try qualified name fallback.
+                // (core:internal or core:prelude), try qualified name fallback.
                 let caller_module = &ctx.current_module_path;
-                let is_privileged = caller_module == &["core".to_string(), "internals".to_string()]
+                let is_privileged = caller_module == &["core".to_string(), "internal".to_string()]
                     || caller_module == &["core".to_string(), "prelude".to_string()];
 
-                if is_privileged && builder.is_internals_function(&ident.name) {
-                    let qualified_name = format!("core::internals::{}", ident.name);
+                if is_privileged && builder.is_internal_function(&ident.name) {
+                    let qualified_name = format!("core::internal::{}", ident.name);
                     builder.try_func_idx(&qualified_name).unwrap_or_else(|| {
                         panic!("unknown function: {}", ident.name);
                     })
@@ -4091,22 +4119,6 @@ impl Codegen {
                     self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 func.instruction(&Instruction::Call(builder.func_idx("subtask-drop")));
-            }
-
-            // i64 bit manipulation
-            "i64_low32" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::I32WrapI64);
-            }
-            "i64_high32" => {
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                func.instruction(&Instruction::I64Const(32));
-                func.instruction(&Instruction::I64ShrU);
-                func.instruction(&Instruction::I32WrapI64);
             }
 
             // i32 operations
@@ -4326,6 +4338,34 @@ impl Codegen {
         }
     }
 
+    /// Get the Wasm return type for a builtin function from the registry
+    /// Returns None if the function is not found or has no return type
+    fn get_builtin_return_type(&self, name: &str) -> Option<ValType> {
+        let builtin_name = name.strip_prefix("builtin::").unwrap_or(name);
+        let return_type = self.builtin_registry.get_return_type(builtin_name)?;
+
+        // Convert AST Type to ValType
+        Some(self.ast_type_to_wasm_valtype(return_type))
+    }
+
+    /// Convert an AST Type to a Wasm ValType
+    fn ast_type_to_wasm_valtype(&self, ty: &Type) -> ValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => ValType::I32,
+                "i64" | "u64" => ValType::I64,
+                "f32" => ValType::F32,
+                "f64" => ValType::F64,
+                "String" => ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(11), // string-array type index
+                }),
+                _ => ValType::I32, // Default fallback
+            },
+            _ => ValType::I32, // Default fallback for complex types
+        }
+    }
+
     /// Infer expression type with function context (for looking up variable types)
     /// If builder is provided, can look up user function return types
     fn infer_expr_type_with_ctx(
@@ -4356,7 +4396,8 @@ impl Codegen {
                 }
             }
             Expr::Binary(bin) => {
-                // For comparison ops, result is always i32
+                // Comparison and logical ops always return i32 (bool)
+                // Bitwise and arithmetic ops return the operand type
                 match bin.op {
                     crate::ast::BinaryOp::Eq
                     | crate::ast::BinaryOp::NotEq
@@ -4365,50 +4406,29 @@ impl Codegen {
                     | crate::ast::BinaryOp::Gt
                     | crate::ast::BinaryOp::GtEq
                     | crate::ast::BinaryOp::And
-                    | crate::ast::BinaryOp::Or
-                    | crate::ast::BinaryOp::BitAnd
-                    | crate::ast::BinaryOp::BitOr
-                    | crate::ast::BinaryOp::BitXor
-                    | crate::ast::BinaryOp::Shl
-                    | crate::ast::BinaryOp::Shr => ValType::I32,
-                    // Arithmetic ops return the operand type
+                    | crate::ast::BinaryOp::Or => ValType::I32,
+                    // Bitwise and arithmetic ops return the operand type
                     _ => self.infer_expr_type_with_ctx(&bin.left, ctx, builder),
                 }
             }
             Expr::Call(call) => {
                 if let Expr::Ident(ident) = &call.callee {
-                    match ident.name.as_str() {
-                        "builtin::stream_new" => ValType::I64,
-                        "builtin::string_new" => {
-                            // string_new returns String (ref array<u8>)
-                            ValType::Ref(RefType {
-                                nullable: false,
-                                heap_type: HeapType::Concrete(11), // string-array type index
-                            })
+                    // First, check if it's a builtin function
+                    if ident.name.starts_with("builtin::") {
+                        if let Some(ret_type) = self.get_builtin_return_type(&ident.name) {
+                            return ret_type;
                         }
-                        "builtin::i64_low32"
-                        | "builtin::i64_high32"
-                        | "builtin::array_len"
-                        | "builtin::array_get_u8"
-                        | "builtin::i32_and"
-                        | "builtin::i32_eqz"
-                        | "builtin::stream_write"
-                        | "builtin::waitable_set_new"
-                        | "builtin::waitable_set_wait"
-                        | "builtin::memory_load8_u"
-                        | "builtin::realloc"
-                        | "builtin::f64_to_buffer"
-                        | "builtin::f32_to_buffer" => ValType::I32,
-                        _ => {
-                            // Check if it's a user-defined function with known return type
-                            if let Some(b) = builder
-                                && let Some(ret_type) = b.func_return_type(&ident.name)
-                            {
-                                return ret_type;
-                            }
-                            ValType::I32
-                        }
+                        // Builtins with no return type (void) - return I32 as default
+                        return ValType::I32;
                     }
+
+                    // Check if it's a user-defined function with known return type
+                    if let Some(b) = builder
+                        && let Some(ret_type) = b.func_return_type(&ident.name)
+                    {
+                        return ret_type;
+                    }
+                    ValType::I32
                 } else {
                     ValType::I32
                 }
@@ -4475,6 +4495,7 @@ impl Codegen {
                 }
             }
             Expr::Binary(bin) => match bin.op {
+                // Comparison and logical ops always return i32 (bool)
                 crate::ast::BinaryOp::Eq
                 | crate::ast::BinaryOp::NotEq
                 | crate::ast::BinaryOp::Lt
@@ -4482,43 +4503,26 @@ impl Codegen {
                 | crate::ast::BinaryOp::Gt
                 | crate::ast::BinaryOp::GtEq
                 | crate::ast::BinaryOp::And
-                | crate::ast::BinaryOp::Or
-                | crate::ast::BinaryOp::BitAnd
-                | crate::ast::BinaryOp::BitOr
-                | crate::ast::BinaryOp::BitXor
-                | crate::ast::BinaryOp::Shl
-                | crate::ast::BinaryOp::Shr => ValType::I32,
+                | crate::ast::BinaryOp::Or => ValType::I32,
+                // Bitwise and arithmetic ops return the operand type
                 _ => self.infer_expr_type_with_ctx_with_funcs(&bin.left, ctx, func_return_types),
             },
             Expr::Call(call) => {
                 if let Expr::Ident(ident) = &call.callee {
-                    match ident.name.as_str() {
-                        "builtin::stream_new" => ValType::I64,
-                        "builtin::string_new" => ValType::Ref(RefType {
-                            nullable: false,
-                            heap_type: HeapType::Concrete(11),
-                        }),
-                        "builtin::i64_low32"
-                        | "builtin::i64_high32"
-                        | "builtin::array_len"
-                        | "builtin::array_get_u8"
-                        | "builtin::i32_and"
-                        | "builtin::i32_eqz"
-                        | "builtin::stream_write"
-                        | "builtin::waitable_set_new"
-                        | "builtin::waitable_set_wait"
-                        | "builtin::memory_load8_u"
-                        | "builtin::realloc"
-                        | "builtin::f64_to_buffer"
-                        | "builtin::f32_to_buffer" => ValType::I32,
-                        _ => {
-                            // Check user-defined function return types
-                            if let Some(&ret_type) = func_return_types.get(&ident.name) {
-                                return ret_type;
-                            }
-                            ValType::I32
+                    // First, check if it's a builtin function
+                    if ident.name.starts_with("builtin::") {
+                        if let Some(ret_type) = self.get_builtin_return_type(&ident.name) {
+                            return ret_type;
                         }
+                        // Builtins with no return type (void) - return I32 as default
+                        return ValType::I32;
                     }
+
+                    // Check user-defined function return types
+                    if let Some(&ret_type) = func_return_types.get(&ident.name) {
+                        return ret_type;
+                    }
+                    ValType::I32
                 } else {
                     ValType::I32
                 }
@@ -4729,7 +4733,7 @@ impl Codegen {
             return;
         }
 
-        // Strategy: Use string_concat from core:internals for concatenation
+        // Strategy: Use string_concat from core:internal for concatenation
         // 1. Generate first part
         // 2. For each subsequent part, call string_concat(result, part)
 
@@ -4748,7 +4752,7 @@ impl Codegen {
             func.instruction(&Instruction::LocalSet(result_local));
         }
 
-        // Concatenate remaining parts using string_concat from core:internals
+        // Concatenate remaining parts using string_concat from core:internal
         for part in template.parts.iter().skip(1) {
             // Push result (first argument to string_concat)
             // Convert nullable ref to non-nullable since string_concat expects non-nullable
@@ -4759,9 +4763,9 @@ impl Codegen {
             self.generate_template_part(func, part, ctx, builder);
 
             // Call string_concat(result, part) -> new result
-            // The function is registered as "string_concat" (alias) or "core::internals::string_concat" (qualified)
+            // The function is registered as "string_concat" (alias) or "core::internal::string_concat" (qualified)
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
 
             // Store the result for next iteration
@@ -4802,24 +4806,24 @@ impl Codegen {
 
                 match expr_type {
                     ValType::F64 => {
-                        // Float-to-string conversion using core:internals::f64_to_string
+                        // Float-to-string conversion using core:internal::f64_to_string
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::f64_to_string"),
+                            builder.func_idx("core::internal::f64_to_string"),
                         ));
                     }
                     ValType::F32 => {
-                        // Float-to-string conversion using core:internals::f32_to_string
+                        // Float-to-string conversion using core:internal::f32_to_string
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::f32_to_string"),
+                            builder.func_idx("core::internal::f32_to_string"),
                         ));
                     }
                     ValType::I64 => {
-                        // i64-to-string conversion using core:internals::i64_to_string
+                        // i64-to-string conversion using core:internal::i64_to_string
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::i64_to_string"),
+                            builder.func_idx("core::internal::i64_to_string"),
                         ));
                     }
                     ValType::I32 => {
@@ -4829,17 +4833,17 @@ impl Codegen {
                         match semantic_type {
                             SemanticType::Bool => {
                                 func.instruction(&Instruction::Call(
-                                    builder.func_idx("core::internals::bool_to_string"),
+                                    builder.func_idx("core::internal::bool_to_string"),
                                 ));
                             }
                             SemanticType::Char => {
                                 func.instruction(&Instruction::Call(
-                                    builder.func_idx("core::internals::char_to_string"),
+                                    builder.func_idx("core::internal::char_to_string"),
                                 ));
                             }
                             SemanticType::I32 | SemanticType::Other => {
                                 func.instruction(&Instruction::Call(
-                                    builder.func_idx("core::internals::i32_to_string"),
+                                    builder.func_idx("core::internal::i32_to_string"),
                                 ));
                             }
                         }
@@ -4852,7 +4856,7 @@ impl Codegen {
                         // V128 is not supported in template strings - treat as i32
                         self.generate_expr_with_builder(func, expr, ctx, builder);
                         func.instruction(&Instruction::Call(
-                            builder.func_idx("core::internals::i32_to_string"),
+                            builder.func_idx("core::internal::i32_to_string"),
                         ));
                     }
                 }
@@ -4893,7 +4897,7 @@ impl Codegen {
             func.instruction(&Instruction::RefAsNonNull);
             self.generate_expr_with_builder(func, msg_expr, ctx, builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4902,7 +4906,7 @@ impl Codegen {
             func.instruction(&Instruction::RefAsNonNull);
             self.generate_string_from_data(func, "\n", builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
         } else {
@@ -4917,7 +4921,7 @@ impl Codegen {
         let condition_line = format!("condition: {}\n", condition_source);
         self.generate_string_from_data(func, &condition_line, builder);
         func.instruction(&Instruction::Call(
-            builder.func_idx("core::internals::string_concat"),
+            builder.func_idx("core::internal::string_concat"),
         ));
         func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4929,7 +4933,7 @@ impl Codegen {
             let name_prefix = format!("{}: ", name);
             self.generate_string_from_data(func, &name_prefix, builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4939,7 +4943,7 @@ impl Codegen {
             func.instruction(&Instruction::LocalGet(*local_idx));
             self.generate_value_to_string(func, val_type, builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
 
@@ -4948,7 +4952,7 @@ impl Codegen {
             func.instruction(&Instruction::RefAsNonNull);
             self.generate_string_from_data(func, "\n", builder);
             func.instruction(&Instruction::Call(
-                builder.func_idx("core::internals::string_concat"),
+                builder.func_idx("core::internal::string_concat"),
             ));
             func.instruction(&Instruction::LocalSet(result_local));
         }
@@ -4981,22 +4985,22 @@ impl Codegen {
         match val_type {
             ValType::I32 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::i32_to_string"),
+                    builder.func_idx("core::internal::i32_to_string"),
                 ));
             }
             ValType::I64 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::i64_to_string"),
+                    builder.func_idx("core::internal::i64_to_string"),
                 ));
             }
             ValType::F32 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::f32_to_string"),
+                    builder.func_idx("core::internal::f32_to_string"),
                 ));
             }
             ValType::F64 => {
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::f64_to_string"),
+                    builder.func_idx("core::internal::f64_to_string"),
                 ));
             }
             ValType::Ref(_) => {
@@ -5005,7 +5009,7 @@ impl Codegen {
             ValType::V128 => {
                 // Not supported - treat as i32
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internals::i32_to_string"),
+                    builder.func_idx("core::internal::i32_to_string"),
                 ));
             }
         }

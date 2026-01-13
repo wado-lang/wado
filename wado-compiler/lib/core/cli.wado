@@ -51,8 +51,8 @@ pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
 pub fn println(message: String) with Stdout {
     // 1. Create stream
     let handles = builtin::stream_new();
-    let rx = builtin::i64_low32(handles);
-    let tx = builtin::i64_high32(handles);
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
 
     // 2. Start consumer FIRST (critical for WASI P3 async streams)
     Stdout::write_via_stream(rx);
@@ -64,8 +64,8 @@ pub fn println(message: String) with Stdout {
 /// Print a line to stderr (adds newline)
 pub fn eprintln(message: String) with Stderr {
     let handles = builtin::stream_new();
-    let rx = builtin::i64_low32(handles);
-    let tx = builtin::i64_high32(handles);
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
 
     Stderr::write_via_stream(rx);
     write_to_stream(tx, message, true);
@@ -74,8 +74,8 @@ pub fn eprintln(message: String) with Stderr {
 /// Print to stdout without newline
 pub fn print(message: String) with Stdout {
     let handles = builtin::stream_new();
-    let rx = builtin::i64_low32(handles);
-    let tx = builtin::i64_high32(handles);
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
 
     Stdout::write_via_stream(rx);
     write_to_stream(tx, message, false);
@@ -84,8 +84,8 @@ pub fn print(message: String) with Stdout {
 /// Print to stderr without newline
 pub fn eprint(message: String) with Stderr {
     let handles = builtin::stream_new();
-    let rx = builtin::i64_low32(handles);
-    let tx = builtin::i64_high32(handles);
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
 
     Stderr::write_via_stream(rx);
     write_to_stream(tx, message, false);

@@ -1,5 +1,6 @@
 pub mod analyze;
 pub mod ast;
+pub mod builtin_registry;
 pub mod bundled;
 pub mod codegen;
 pub mod lexer;
