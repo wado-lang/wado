@@ -37,6 +37,8 @@ pub struct Codegen {
     wasi_registry: WasiRegistry,
     /// Registry of builtin function signatures from lib/core/builtin.wado
     builtin_registry: BuiltinRegistry,
+    /// Type index for string-array (GC array<u8>), set when types are defined
+    string_array_type_idx: u32,
 }
 
 /// Context for tracking local variables during function code generation
@@ -634,6 +636,7 @@ impl Codegen {
             source_code,
             wasi_registry: WasiRegistry::new(),
             builtin_registry: BuiltinRegistry::new(),
+            string_array_type_idx: 0, // Set when types are defined
         }
     }
 
@@ -753,7 +756,7 @@ impl Codegen {
         // First pass: collect string literals
         self.collect_strings(module);
 
-        // Generate binary Wasm
+        // Generate binary Wasm (updates string_array_type_idx)
         let wasm = self.generate_component(module);
 
         // Validate the generated Wasm (catches codegen bugs early)
@@ -1522,7 +1525,7 @@ impl Codegen {
 
     /// Generate component for WASI P3
     /// Uses native stream<T> types and imports wasi:cli/stdout
-    fn generate_component(&self, ast_module: &AstModule) -> Vec<u8> {
+    fn generate_component(&mut self, ast_module: &AstModule) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
         let mut ctx = ComponentContext::new();
 
@@ -2096,7 +2099,7 @@ impl Codegen {
 
     /// Generate component with multi-module support
     fn generate_component_with_modules(
-        &self,
+        &mut self,
         main_module: &AstModule,
         loaded_modules: &[(&Vec<String>, &AstModule)],
         symbols: &SymbolTable,
@@ -2507,7 +2510,7 @@ impl Codegen {
 
     /// Build main module for WASI P3 with multi-module support
     fn build_main_module_p3_with_modules(
-        &self,
+        &mut self,
         main_module: &AstModule,
         loaded_modules: &[(&Vec<String>, &AstModule)],
         _symbols: &SymbolTable,
@@ -2568,9 +2571,8 @@ impl Codegen {
         );
 
         // GC string array type (array<u8>) - mutable to support float-to-string conversion
-        // IMPORTANT: This must be defined at this position to maintain type index 11
-        // for string-array (hardcoded in several places for type inference)
-        builder.define_gc_array_type("string-array", StorageType::I8, true);
+        self.string_array_type_idx =
+            builder.define_gc_array_type("string-array", StorageType::I8, true);
 
         // Float-to-buffer types (after GC types to preserve type indices)
         builder.define_func_type(
@@ -2830,7 +2832,7 @@ impl Codegen {
     }
 
     /// Build main module for WASI P3 with write-via-stream
-    fn build_main_module_p3(&self, ast_module: &AstModule, string_data: &[u8]) -> Vec<u8> {
+    fn build_main_module_p3(&mut self, ast_module: &AstModule, string_data: &[u8]) -> Vec<u8> {
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
 
@@ -2876,9 +2878,8 @@ impl Codegen {
         );
 
         // GC string array type (array<u8>) - mutable to support float-to-string conversion
-        // IMPORTANT: This must be defined at this position to maintain type index 11
-        // for string-array (hardcoded in several places for type inference)
-        builder.define_gc_array_type("string-array", StorageType::I8, true);
+        self.string_array_type_idx =
+            builder.define_gc_array_type("string-array", StorageType::I8, true);
 
         // Float-to-buffer types (after GC types to preserve type indices)
         builder.define_func_type(
@@ -3109,17 +3110,17 @@ impl Codegen {
                 "i64" | "u64" => ValType::I64,
                 "f32" => ValType::F32,
                 "f64" => ValType::F64,
-                // For complex types, use a ref type with hardcoded index 11 (string-array)
+                // For complex types, use a ref type (string-array)
                 "String" => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 _ => ValType::I32,
             },
             crate::ast::Type::Generic(generic) => match generic.name.as_str() {
                 "Array" => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 _ => ValType::I32,
             },
@@ -3216,8 +3217,9 @@ impl Codegen {
 
         // Set return type for ref.as_non_null handling in return statements
         if let Some(ret_ty) = &ast_func.return_type {
-            let string_array_type = 11_u32; // Pre-known type index for string-array
-            func_ctx.set_return_type(self.wado_type_to_wasm_with_idx(ret_ty, string_array_type));
+            func_ctx.set_return_type(
+                self.wado_type_to_wasm_with_idx(ret_ty, self.string_array_type_idx),
+            );
         }
 
         // Add parameters to context
@@ -4358,7 +4360,7 @@ impl Codegen {
                 "f64" => ValType::F64,
                 "String" => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11), // string-array type index
+                    heap_type: HeapType::Concrete(self.string_array_type_idx), // string-array type index
                 }),
                 _ => ValType::I32, // Default fallback
             },
@@ -4382,7 +4384,7 @@ impl Codegen {
                 Literal::Char(_) => ValType::I32, // Unicode code point as i32
                 Literal::String(_) => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 Literal::Null => ValType::I32, // TODO: proper Option type
                 Literal::Unit => ValType::I32,
@@ -4437,7 +4439,7 @@ impl Codegen {
                 // Template strings return a GC array<u8> (same as string literals)
                 ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 })
             }
             Expr::Cast(cast) => {
@@ -4482,7 +4484,7 @@ impl Codegen {
                 Literal::Char(_) => ValType::I32,
                 Literal::String(_) => ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(11),
+                    heap_type: HeapType::Concrete(self.string_array_type_idx),
                 }),
                 Literal::Null => ValType::I32,
                 Literal::Unit => ValType::I32,
@@ -4529,7 +4531,7 @@ impl Codegen {
             }
             Expr::TemplateString(_) => ValType::Ref(RefType {
                 nullable: false,
-                heap_type: HeapType::Concrete(11),
+                heap_type: HeapType::Concrete(self.string_array_type_idx),
             }),
             Expr::Cast(cast) => {
                 let target_name = self.get_primitive_type_name(&cast.target_type);
@@ -4688,8 +4690,8 @@ impl Codegen {
                 func.instruction(&Instruction::I32Const(offset as i32)); // offset in data segment
                 func.instruction(&Instruction::I32Const(len as i32)); // length
                 func.instruction(&Instruction::ArrayNewData {
-                    array_type_index: 11, // GC array<u8> type
-                    array_data_index: 0,  // Data segment 0
+                    array_type_index: self.string_array_type_idx,
+                    array_data_index: 0, // Data segment 0
                 });
             }
             Literal::Char(c) => {
