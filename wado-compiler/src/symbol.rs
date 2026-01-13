@@ -226,6 +226,30 @@ impl SymbolTable {
         self.imports.clear();
     }
 
+    /// Get all struct import aliases
+    ///
+    /// Returns tuples of (alias_name, module_path, original_struct_name) for imports where:
+    /// - The alias name differs from the original name
+    /// - The imported symbol is a struct
+    ///
+    /// The module_path can be used to construct qualified names for collision handling.
+    pub fn get_struct_aliases(&self) -> Vec<(String, Vec<String>, String)> {
+        let mut aliases = Vec::new();
+        for (alias_name, &symbol_id) in &self.imports {
+            if let Some(symbol) = self.symbols.get(symbol_id)
+                && matches!(symbol.kind, SymbolKind::Struct(_))
+                && alias_name != &symbol.name
+            {
+                aliases.push((
+                    alias_name.clone(),
+                    symbol.module_path.clone(),
+                    symbol.name.clone(),
+                ));
+            }
+        }
+        aliases
+    }
+
     /// Look up a symbol by name in the current context
     ///
     /// Search order:
@@ -434,5 +458,52 @@ mod tests {
         assert!(matches!(&symbol.kind, SymbolKind::Variable(v) if !v.is_mut));
 
         table.exit_scope();
+    }
+
+    #[test]
+    fn test_struct_aliases() {
+        let mut table = SymbolTable::new();
+
+        // Define a struct in a module
+        let id = table.define(
+            "Point",
+            SymbolKind::Struct(StructSymbol {
+                fields: vec!["x".to_string(), "y".to_string()],
+            }),
+            &["geometry".to_string()],
+            None,
+        );
+
+        // Import the struct with an alias
+        table.register_import("OtherPoint", id);
+
+        // get_struct_aliases should return the alias mapping with module path
+        let aliases = table.get_struct_aliases();
+        assert_eq!(aliases.len(), 1);
+        assert_eq!(aliases[0].0, "OtherPoint"); // alias name
+        assert_eq!(aliases[0].1, vec!["geometry".to_string()]); // module path
+        assert_eq!(aliases[0].2, "Point"); // original struct name
+    }
+
+    #[test]
+    fn test_struct_aliases_same_name() {
+        let mut table = SymbolTable::new();
+
+        // Define a struct in a module
+        let id = table.define(
+            "Point",
+            SymbolKind::Struct(StructSymbol {
+                fields: vec!["x".to_string(), "y".to_string()],
+            }),
+            &["geometry".to_string()],
+            None,
+        );
+
+        // Import the struct without an alias (same name)
+        table.register_import("Point", id);
+
+        // get_struct_aliases should NOT return same-name imports
+        let aliases = table.get_struct_aliases();
+        assert_eq!(aliases.len(), 0);
     }
 }

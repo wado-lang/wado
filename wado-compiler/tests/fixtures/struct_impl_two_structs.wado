@@ -1,0 +1,35 @@
+// Two structs with impl blocks in one file
+
+use {println} from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Rectangle {
+    width: i32,
+    height: i32,
+}
+
+impl Point {
+    pub fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+impl Rectangle {
+    pub fn area(&self) -> i32 {
+        return self.width * self.height;
+    }
+}
+
+fn run() with Stdout {
+    let p = Point { x: 3, y: 4 };
+    let r = Rectangle { width: 5, height: 6 };
+    println(`point sum: {p.sum()}`);
+    println(`rect area: {r.area()}`);
+}
+
+__DATA__
+{"stdout": "point sum: 7\nrect area: 30\n"}

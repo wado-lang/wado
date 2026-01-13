@@ -20,6 +20,7 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 | Token           | `token.rs`            | Token types and spans                              |
 | Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction       |
 | Symbol          | `symbol.rs`           | Symbol table data structures                       |
+| Name            | `name.rs`             | Name mangling utilities for methods and symbols    |
 | Resolver        | `resolver.rs`         | Module resolution, loads core library              |
 | Stdlib          | `stdlib.rs`           | Embedded core library sources                      |
 | WasiRegistry    | `wasi_registry.rs`    | WASI import registry for dynamic CM generation     |
@@ -210,6 +211,68 @@ if let Some(run_export) = world_registry.get_export("Command", "run") {
     let results = world_export_to_core_results(run_export);
 }
 ```
+
+### Name Mangling
+
+The `name.rs` module centralizes all naming and mangling logic for the compiler. It provides utilities for building and parsing mangled names for methods, effect operations, and module-qualified symbols.
+
+**Naming Conventions:**
+
+| Name Type               | Format                                                 | Example                              |
+| ----------------------- | ------------------------------------------------------ | ------------------------------------ |
+| Simple method           | `{struct_name}::{method_name}`                         | `Point::sum`                         |
+| Full method             | `{filename}/{struct_name}::{method_name}`              | `./geometry.wado/Point::sum`         |
+| Trait method            | `{filename}/{struct_name}^{trait_name}::{method_name}` | `./geometry.wado/Point^Display::fmt` |
+| Effect operation        | `{effect_name}::{operation_name}`                      | `Stdout::write_via_stream`           |
+| WASI qualified          | `wasi:{package}/{interface}::{function}`               | `wasi:cli/stdout::write-via-stream`  |
+| Module-qualified struct | `{module_path}::{struct_name}`                         | `./geometry.wado::Point`             |
+| Core internal           | `core::internal::{name}`                               | `core::internal::log_stdout`         |
+
+**Key Types:**
+
+```rust
+pub struct MethodNameInfo {
+    pub filename: String,        // e.g., "./geometry.wado"
+    pub struct_name: String,     // e.g., "Point"
+    pub trait_name: Option<String>, // e.g., Some("Display")
+    pub method_name: String,     // e.g., "sum"
+}
+```
+
+### Module Path Canonicalization
+
+The `name.rs` module also provides path canonicalization utilities to ensure the same file imported via different paths resolves to the same module identity.
+
+**Design:**
+
+- Uses URI path normalization (RFC 3986)
+- Always uses `/` separator (platform-agnostic, even on Windows)
+- Canonical paths are project-root-relative (prefixed with `./`)
+- Special prefixes (`core:`, `wasi:`, `http://`, `https://`) pass through unchanged
+
+**Examples:**
+
+| Input Path                       | Canonical Output                 |
+| -------------------------------- | -------------------------------- |
+| `./geometry.wado`                | `./geometry.wado`                |
+| `./sub/../geometry.wado`         | `./geometry.wado`                |
+| `./sub/./file.wado`              | `./sub/file.wado`                |
+| `core:cli`                       | `core:cli`                       |
+| `http://localhost:8080/lib.wado` | `http://localhost:8080/lib.wado` |
+
+**Relative Import Resolution:**
+
+When resolving relative imports, the path is resolved against the importing module's path:
+
+| From Module       | Import Source     | Resolved Path      |
+| ----------------- | ----------------- | ------------------ |
+| `./main.wado`     | `./geometry.wado` | `./geometry.wado`  |
+| `./sub/main.wado` | `./utils.wado`    | `./sub/utils.wado` |
+| `./sub/main.wado` | `../lib.wado`     | `./lib.wado`       |
+
+**Validation:**
+
+The analyzer validates module paths before loading to provide better error messages for invalid paths. Paths must be valid URI references per RFC 3986.
 
 ### Type System
 

@@ -3,12 +3,21 @@
 //! Resolves module paths to source code and parses them.
 //! Core library modules are loaded from embedded sources.
 //! Local .wado files are loaded from the filesystem.
+//!
+//! # Path Canonicalization
+//!
+//! Module paths are canonicalized to ensure the same file imported via different
+//! paths resolves to the same identity. For example:
+//! - `./geometry.wado` and `./sub/../geometry.wado` → same module
+//!
+//! Canonical paths are project-root-relative and always use `/` separator.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::ast::Module;
 use crate::lexer::Lexer;
+use crate::name::{canonicalize_entry_point, normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
 use crate::stdlib;
 
@@ -56,17 +65,21 @@ impl std::error::Error for ResolveError {}
 /// Loads and parses modules, caching the results.
 /// Core library modules are loaded from embedded sources in the compiler binary.
 /// Local .wado files are loaded from the filesystem relative to base_path.
+///
+/// Module paths are canonicalized before caching to ensure that the same file
+/// imported via different paths (e.g., `./geometry.wado` vs `./sub/../geometry.wado`)
+/// resolves to the same module instance.
 #[derive(Debug, Default)]
 pub struct ModuleResolver {
-    /// Cache of already parsed modules (module path → parsed AST)
+    /// Cache of already parsed modules (canonical module path → parsed AST)
     parsed_modules: HashMap<Vec<String>, Module>,
     /// Set of modules currently being resolved (for cycle detection)
+    /// Uses canonical paths for accurate cycle detection
     resolving: HashSet<Vec<String>>,
     /// Base path for resolving relative imports (directory containing the main module)
     base_path: Option<PathBuf>,
-    /// Mapping from relative file path to canonical module path (for future use)
-    #[allow(dead_code)]
-    file_to_module: HashMap<PathBuf, Vec<String>>,
+    /// Canonical path of the entry point module (e.g., `./main.wado`)
+    entry_point_canonical: Option<String>,
 }
 
 impl ModuleResolver {
@@ -81,7 +94,7 @@ impl ModuleResolver {
             parsed_modules: HashMap::new(),
             resolving: HashSet::new(),
             base_path: Some(base_path.to_path_buf()),
-            file_to_module: HashMap::new(),
+            entry_point_canonical: None,
         }
     }
 
@@ -90,41 +103,118 @@ impl ModuleResolver {
         self.base_path = Some(base_path.to_path_buf());
     }
 
+    /// Set the canonical path for the entry point module.
+    ///
+    /// This is typically `./main.wado` or the filename of the entry point,
+    /// prefixed with `./` to indicate it's in the project root.
+    pub fn set_entry_point(&mut self, filename: &str) {
+        self.entry_point_canonical = Some(canonicalize_entry_point(filename));
+    }
+
+    /// Get the canonical path of the entry point module.
+    pub fn entry_point(&self) -> Option<&str> {
+        self.entry_point_canonical.as_deref()
+    }
+
+    /// Canonicalize a module path.
+    ///
+    /// For relative paths, this resolves `.` and `..` segments.
+    /// For special prefixes (`core:`, `wasi:`, `http://`, `https://`), returns as-is.
+    fn canonicalize_path(&self, module_path: &[String]) -> Vec<String> {
+        if module_path.is_empty() {
+            return module_path.to_vec();
+        }
+
+        let first = &module_path[0];
+
+        // Handle relative local imports
+        if first.starts_with("./") || first.starts_with("../") || first.ends_with(".wado") {
+            let canonical = normalize_module_path(first);
+            return vec![canonical];
+        }
+
+        // For other paths (core:*, wasi:*, etc.), return as-is
+        module_path.to_vec()
+    }
+
+    /// Resolve a relative import path against an importing module's path.
+    ///
+    /// # Arguments
+    /// * `from_module` - The canonical path of the importing module (e.g., `["./sub/main.wado"]`)
+    /// * `import_source` - The import source string (e.g., `"./geometry.wado"` or `"../lib.wado"`)
+    ///
+    /// # Returns
+    /// The resolved and canonicalized module path.
+    pub fn resolve_import(&self, from_module: &[String], import_source: &str) -> Vec<String> {
+        // Handle special prefixes - they don't need resolution
+        if import_source.starts_with("core:")
+            || import_source.starts_with("wasi:")
+            || import_source.starts_with("https://")
+            || import_source.starts_with("http://")
+        {
+            // Parse into path segments
+            if import_source.contains(':') {
+                return import_source.splitn(2, ':').map(String::from).collect();
+            }
+            return vec![import_source.to_string()];
+        }
+
+        // For relative imports, resolve against the from_module's path
+        if !from_module.is_empty() {
+            let from_path = &from_module[0];
+            if from_path.starts_with("./") || from_path.starts_with("../") {
+                let resolved = resolve_module_path(from_path, import_source);
+                return vec![resolved];
+            }
+        }
+
+        // Fallback: treat as relative to project root
+        let canonical = normalize_module_path(import_source);
+        vec![canonical]
+    }
+
     /// Load and parse a module by its path
     ///
     /// # Arguments
-    /// * `module_path` - Module path segments, e.g., `["core", "cli"]`
+    /// * `module_path` - Module path segments, e.g., `["core", "cli"]` or `["./geometry.wado"]`
     ///
     /// # Returns
     /// The parsed module AST, or an error if the module cannot be found or parsed.
+    ///
+    /// # Note
+    /// The path is canonicalized before caching, so `["./sub/../geometry.wado"]` and
+    /// `["./geometry.wado"]` will resolve to the same cached module.
     pub fn load_module(&mut self, module_path: &[String]) -> Result<&Module, ResolveError> {
-        let path_vec = module_path.to_vec();
+        // Canonicalize the path for caching
+        let canonical_path = self.canonicalize_path(module_path);
 
-        // Check cache first
-        if self.parsed_modules.contains_key(&path_vec) {
-            return Ok(self.parsed_modules.get(&path_vec).unwrap());
+        // Check cache first using canonical path
+        if self.parsed_modules.contains_key(&canonical_path) {
+            return Ok(self.parsed_modules.get(&canonical_path).unwrap());
         }
 
-        // Check for circular imports
-        if self.resolving.contains(&path_vec) {
-            return Err(ResolveError::CircularImport { path: path_vec });
+        // Check for circular imports using canonical path
+        if self.resolving.contains(&canonical_path) {
+            return Err(ResolveError::CircularImport {
+                path: canonical_path,
+            });
         }
 
         // Mark as being resolved
-        self.resolving.insert(path_vec.clone());
+        self.resolving.insert(canonical_path.clone());
 
-        // Get source code
+        // Get source code (use original path for filesystem access)
         let source = self.get_source(module_path)?;
 
         // Parse the module
-        let module = self.parse_source(&source, module_path)?;
+        let module = self.parse_source(&source, &canonical_path)?;
 
         // Remove from resolving set
-        self.resolving.remove(&path_vec);
+        self.resolving.remove(&canonical_path);
 
-        // Cache and return
-        self.parsed_modules.insert(path_vec.clone(), module);
-        Ok(self.parsed_modules.get(&path_vec).unwrap())
+        // Cache using canonical path and return
+        self.parsed_modules.insert(canonical_path.clone(), module);
+        Ok(self.parsed_modules.get(&canonical_path).unwrap())
     }
 
     /// Get the source code for a module
@@ -207,13 +297,19 @@ impl ModuleResolver {
     }
 
     /// Check if a module has been loaded
+    ///
+    /// Uses canonical path for lookup.
     pub fn is_loaded(&self, module_path: &[String]) -> bool {
-        self.parsed_modules.contains_key(module_path)
+        let canonical = self.canonicalize_path(module_path);
+        self.parsed_modules.contains_key(&canonical)
     }
 
     /// Get a cached module (if already loaded)
+    ///
+    /// Uses canonical path for lookup.
     pub fn get_cached(&self, module_path: &[String]) -> Option<&Module> {
-        self.parsed_modules.get(module_path)
+        let canonical = self.canonicalize_path(module_path);
+        self.parsed_modules.get(&canonical)
     }
 
     /// Get all loaded modules

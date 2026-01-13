@@ -332,6 +332,7 @@ pub enum Expr {
     Closure(Box<ClosureExpr>),
     TemplateString(Box<TemplateStringExpr>),
     Cast(Box<CastExpr>),
+    StructLiteral(Box<StructLiteralExpr>),
 }
 
 impl Expr {
@@ -353,6 +354,7 @@ impl Expr {
             Expr::Closure(e) => e.span,
             Expr::TemplateString(e) => e.span,
             Expr::Cast(e) => e.span,
+            Expr::StructLiteral(e) => e.span,
         }
     }
 }
@@ -362,6 +364,22 @@ impl Expr {
 pub struct CastExpr {
     pub expr: Expr,
     pub target_type: Type,
+    pub span: Span,
+}
+
+/// Struct literal expression: `Point { x: 10, y: 20 }`
+#[derive(Debug, Clone)]
+pub struct StructLiteralExpr {
+    pub name: String,
+    pub fields: Vec<StructLiteralField>,
+    pub span: Span,
+}
+
+/// A field in a struct literal: `x: 10` or `x` (shorthand)
+#[derive(Debug, Clone)]
+pub struct StructLiteralField {
+    pub name: String,
+    pub value: Expr,
     pub span: Span,
 }
 

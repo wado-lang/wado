@@ -9,6 +9,10 @@ use crate::ast::{
 use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
 use crate::lexer::Lexer;
+use crate::name::{
+    build_core_internal_name, build_qualified_name, build_simple_method_name,
+    transform_method_alias,
+};
 use crate::parser::Parser;
 use crate::stdlib;
 use crate::symbol::SymbolTable;
@@ -28,6 +32,22 @@ use wasm_encoder::{
 };
 use wasmparser::{Validator, WasmFeatures};
 
+/// Information about a struct field
+#[derive(Debug, Clone)]
+struct StructFieldInfo {
+    index: u32,
+    wasm_type: ValType,
+}
+
+/// Information about a user-defined struct type
+#[derive(Debug, Clone)]
+struct StructTypeInfo {
+    type_idx: u32,
+    fields: HashMap<String, StructFieldInfo>,
+    /// Ordered field names (for struct literal generation)
+    field_order: Vec<String>,
+}
+
 /// Code generator that produces Component Model components
 /// Targets WASI P3
 pub struct Codegen {
@@ -42,6 +62,8 @@ pub struct Codegen {
     world_registry: WorldRegistry,
     /// Type index for string-array (GC array<u8>), set when types are defined
     string_array_type_idx: u32,
+    /// Registry of user-defined struct types
+    struct_types: HashMap<String, StructTypeInfo>,
 }
 
 /// Context for tracking local variables during function code generation
@@ -132,7 +154,7 @@ impl FunctionContext {
 
     /// Get semantic type for a variable
     fn get_semantic_type(&self, name: &str) -> Option<SemanticType> {
-        self.semantic_type_map.get(name).copied()
+        self.semantic_type_map.get(name).cloned()
     }
 
     /// Set semantic type for a variable
@@ -192,12 +214,14 @@ impl FunctionContext {
 }
 
 /// Semantic type for distinguishing bool/char from i32 in template interpolation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Also tracks struct types for field access
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum SemanticType {
     Bool,
     Char,
     I32,
     Other,
+    Struct(String),
 }
 
 // ============================================================================
@@ -294,6 +318,27 @@ impl CoreModuleBuilder {
                     element_type: element,
                     mutable,
                 })),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
+        });
+        self.type_names.insert(name.to_string(), idx);
+        self.next_type_idx += 1;
+        idx
+    }
+
+    /// Define a GC struct type and return its index
+    fn define_gc_struct_type(&mut self, name: &str, fields: &[FieldType]) -> u32 {
+        use wasm_encoder::StructType;
+        let idx = self.next_type_idx;
+        self.types.ty().subtype(&SubType {
+            is_final: true,
+            supertype_idx: None,
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Struct(StructType {
+                    fields: fields.to_vec().into_boxed_slice(),
+                }),
                 shared: false,
                 descriptor: None,
                 describes: None,
@@ -641,6 +686,7 @@ impl Codegen {
             builtin_registry: BuiltinRegistry::new(),
             world_registry: WorldRegistry::new(),
             string_array_type_idx: 0, // Set when types are defined
+            struct_types: HashMap::new(),
         }
     }
 
@@ -726,7 +772,8 @@ impl Codegen {
             | Expr::Match(_)
             | Expr::Closure(_)
             | Expr::TemplateString(_)
-            | Expr::Assign(_) => {}
+            | Expr::Assign(_)
+            | Expr::StructLiteral(_) => {}
         }
     }
 
@@ -2099,13 +2146,211 @@ impl Codegen {
                         }
                     }
                     // Create qualified name: "module_path::func_name"
-                    let qualified_name = format!("{}::{}", module_path.join("::"), f.name);
+                    let qualified_name = build_qualified_name(module_path, &f.name);
                     all_funcs.push((module_path.to_vec(), f, qualified_name));
                 }
             }
         }
 
         all_funcs
+    }
+
+    /// Collect all user-defined struct declarations from the main module and loaded modules
+    /// Returns (module_path, struct_decl) tuples where module_path is empty for main module structs
+    fn collect_all_struct_decls<'a>(
+        &self,
+        main_module: &'a AstModule,
+        loaded_modules: &'a [(&'a Vec<String>, &'a AstModule)],
+    ) -> Vec<(Vec<String>, &'a crate::ast::StructDecl)> {
+        let mut all_structs = Vec::new();
+
+        // Collect from main module (empty path = local/main module)
+        for item in &main_module.items {
+            if let Item::Struct(s) = item {
+                all_structs.push((vec![], s));
+            }
+        }
+
+        // Collect pub structs from loaded modules
+        for (module_path, module) in loaded_modules {
+            for item in &module.items {
+                if let Item::Struct(s) = item
+                    && s.is_pub
+                {
+                    all_structs.push((module_path.to_vec(), s));
+                }
+            }
+        }
+
+        all_structs
+    }
+
+    /// Collect all impl blocks and their methods from the main module
+    /// Returns (module_path, struct_name, method_function, mangled_name)
+    fn collect_all_impl_methods<'a>(
+        &self,
+        main_module: &'a AstModule,
+        loaded_modules: &'a [(&'a Vec<String>, &'a AstModule)],
+    ) -> Vec<(Vec<String>, String, &'a AstFunction, String)> {
+        let mut all_methods = Vec::new();
+
+        // Collect from main module (empty module path)
+        for item in &main_module.items {
+            if let Item::Impl(impl_block) = item {
+                // Get struct name from the impl type
+                let struct_name = match &impl_block.ty {
+                    Type::Named(named) => named.name.clone(),
+                    _ => continue, // Skip non-named types for now
+                };
+
+                // Collect methods
+                for method in &impl_block.methods {
+                    // Skip bodyless methods
+                    if method.body.is_none() {
+                        continue;
+                    }
+
+                    // Build mangled name: {struct}::{method}
+                    let mangled_name = build_simple_method_name(&struct_name, &method.name);
+                    all_methods.push((vec![], struct_name.clone(), method, mangled_name));
+                }
+            }
+        }
+
+        // Collect pub methods from loaded modules
+        for (module_path, module) in loaded_modules {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item {
+                    // Get struct name from the impl type
+                    let struct_name = match &impl_block.ty {
+                        Type::Named(named) => named.name.clone(),
+                        _ => continue, // Skip non-named types for now
+                    };
+
+                    // Collect pub methods only
+                    for method in &impl_block.methods {
+                        // Skip non-pub methods from other modules
+                        if !method.is_pub {
+                            continue;
+                        }
+                        // Skip bodyless methods
+                        if method.body.is_none() {
+                            continue;
+                        }
+
+                        // Build mangled name: {struct}::{method}
+                        let mangled_name = build_simple_method_name(&struct_name, &method.name);
+                        all_methods.push((
+                            module_path.to_vec(),
+                            struct_name.clone(),
+                            method,
+                            mangled_name,
+                        ));
+                    }
+                }
+            }
+        }
+
+        all_methods
+    }
+
+    /// Register a struct type and return its type index
+    fn register_struct_type(
+        &mut self,
+        decl: &crate::ast::StructDecl,
+        builder: &mut CoreModuleBuilder,
+        string_array_idx: u32,
+    ) -> u32 {
+        let mut fields = Vec::new();
+        let mut field_info = HashMap::new();
+        let mut field_order = Vec::new();
+
+        for (idx, field) in decl.fields.iter().enumerate() {
+            let wasm_type = self.wado_type_to_wasm_with_idx(&field.ty, string_array_idx);
+            let storage_type = match wasm_type {
+                ValType::I32 => StorageType::Val(ValType::I32),
+                ValType::I64 => StorageType::Val(ValType::I64),
+                ValType::F32 => StorageType::Val(ValType::F32),
+                ValType::F64 => StorageType::Val(ValType::F64),
+                ValType::Ref(rt) => StorageType::Val(ValType::Ref(rt)),
+                _ => StorageType::Val(ValType::I32), // Default fallback
+            };
+            fields.push(FieldType {
+                element_type: storage_type,
+                mutable: true, // All fields are mutable by default
+            });
+            field_info.insert(
+                field.name.clone(),
+                StructFieldInfo {
+                    index: idx as u32,
+                    wasm_type,
+                },
+            );
+            field_order.push(field.name.clone());
+        }
+
+        let type_idx = builder.define_gc_struct_type(&decl.name, &fields);
+
+        self.struct_types.insert(
+            decl.name.clone(),
+            StructTypeInfo {
+                type_idx,
+                fields: field_info,
+                field_order,
+            },
+        );
+
+        type_idx
+    }
+
+    /// Register a struct type with a custom name (for qualified names)
+    fn register_struct_type_with_name(
+        &mut self,
+        name: &str,
+        decl: &crate::ast::StructDecl,
+        builder: &mut CoreModuleBuilder,
+        string_array_idx: u32,
+    ) -> u32 {
+        let mut fields = Vec::new();
+        let mut field_info = HashMap::new();
+        let mut field_order = Vec::new();
+
+        for (idx, field) in decl.fields.iter().enumerate() {
+            let wasm_type = self.wado_type_to_wasm_with_idx(&field.ty, string_array_idx);
+            let storage_type = match wasm_type {
+                ValType::I32 => StorageType::Val(ValType::I32),
+                ValType::I64 => StorageType::Val(ValType::I64),
+                ValType::F32 => StorageType::Val(ValType::F32),
+                ValType::F64 => StorageType::Val(ValType::F64),
+                ValType::Ref(rt) => StorageType::Val(ValType::Ref(rt)),
+                _ => StorageType::Val(ValType::I32), // Default fallback
+            };
+            fields.push(FieldType {
+                element_type: storage_type,
+                mutable: true, // All fields are mutable by default
+            });
+            field_info.insert(
+                field.name.clone(),
+                StructFieldInfo {
+                    index: idx as u32,
+                    wasm_type,
+                },
+            );
+            field_order.push(field.name.clone());
+        }
+
+        let type_idx = builder.define_gc_struct_type(name, &fields);
+
+        self.struct_types.insert(
+            name.to_string(),
+            StructTypeInfo {
+                type_idx,
+                fields: field_info,
+                field_order,
+            },
+        );
+
+        type_idx
     }
 
     /// Generate component with multi-module support
@@ -2524,7 +2769,7 @@ impl Codegen {
         &mut self,
         main_module: &AstModule,
         loaded_modules: &[(&Vec<String>, &AstModule)],
-        _symbols: &SymbolTable,
+        symbols: &SymbolTable,
         string_data: &[u8],
         _implicit_modules: &std::collections::HashSet<Vec<String>>,
     ) -> Vec<u8> {
@@ -2560,6 +2805,59 @@ impl Codegen {
         self.string_array_type_idx =
             builder.define_gc_array_type("string-array", StorageType::I8, true);
 
+        // User-defined struct types
+        // Register main module structs first with simple names
+        let all_structs = self.collect_all_struct_decls(main_module, loaded_modules);
+        let string_array_idx_for_structs = builder.type_idx("string-array");
+        let mut main_module_struct_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
+        // First pass: register main module structs (empty module path)
+        for (module_path, decl) in &all_structs {
+            if module_path.is_empty() {
+                self.register_struct_type(decl, &mut builder, string_array_idx_for_structs);
+                main_module_struct_names.insert(decl.name.clone());
+            }
+        }
+
+        // Second pass: register imported structs
+        // - If no collision: register with simple name
+        // - If collision with main module: register with qualified name
+        for (module_path, decl) in &all_structs {
+            if !module_path.is_empty() {
+                if main_module_struct_names.contains(&decl.name) {
+                    // Collision - register with qualified name
+                    let qualified_name = build_qualified_name(module_path, &decl.name);
+                    self.register_struct_type_with_name(
+                        &qualified_name,
+                        decl,
+                        &mut builder,
+                        string_array_idx_for_structs,
+                    );
+                } else {
+                    // No collision - register with simple name
+                    self.register_struct_type(decl, &mut builder, string_array_idx_for_structs);
+                }
+            }
+        }
+
+        // Register struct type aliases (e.g., `Point as OtherPoint`)
+        for (alias_name, alias_module_path, original_name) in symbols.get_struct_aliases() {
+            // Check if there's a collision (main module has same-named struct)
+            if main_module_struct_names.contains(&original_name) && !alias_module_path.is_empty() {
+                // Collision case - use qualified name from the alias's module
+                let qualified_name = build_qualified_name(&alias_module_path, &original_name);
+                if let Some(info) = self.struct_types.get(&qualified_name).cloned() {
+                    self.struct_types.insert(alias_name, info);
+                }
+            } else {
+                // No collision - use simple name
+                if let Some(info) = self.struct_types.get(&original_name).cloned() {
+                    self.struct_types.insert(alias_name, info);
+                }
+            }
+        }
+
         // WASI effect function types - derived from wasi/*.wado definitions
         for interface in self.wasi_registry.interfaces() {
             for func in &interface.functions {
@@ -2589,6 +2887,48 @@ impl Codegen {
                 vec![]
             };
             builder.define_func_type(qualified_name, &param_types, &return_types);
+        }
+
+        // Types for impl methods
+        let all_impl_methods = self.collect_all_impl_methods(main_module, loaded_modules);
+        for (module_path, struct_name, method, mangled_name) in &all_impl_methods {
+            let mut param_types: Vec<ValType> = Vec::new();
+
+            // Determine the struct lookup key - use qualified name for collisions
+            let struct_lookup_key = if module_path.is_empty() {
+                struct_name.clone()
+            } else if main_module_struct_names.contains(struct_name) {
+                // Collision - use qualified name
+                build_qualified_name(module_path, struct_name)
+            } else {
+                struct_name.clone()
+            };
+
+            for param in &method.params {
+                if param.name == "self" {
+                    // &self parameter: use reference to struct type
+                    if let Some(struct_info) = self.struct_types.get(&struct_lookup_key) {
+                        let struct_ref_type = ValType::Ref(RefType {
+                            nullable: false,
+                            heap_type: HeapType::Concrete(struct_info.type_idx),
+                        });
+                        param_types.push(struct_ref_type);
+                    }
+                } else {
+                    param_types.push(self.wado_type_to_wasm_with_idx(&param.ty, string_array_idx));
+                }
+            }
+
+            let return_types: Vec<ValType> = if let Some(ret_ty) = &method.return_type {
+                if self.is_never_type(ret_ty) {
+                    vec![]
+                } else {
+                    vec![self.wado_type_to_wasm_with_idx(ret_ty, string_array_idx)]
+                }
+            } else {
+                vec![]
+            };
+            builder.define_func_type(mangled_name, &param_types, &return_types);
         }
 
         // World export types - derived from Command world in wasi/cli.wado
@@ -2671,12 +3011,32 @@ impl Codegen {
                 {
                     for use_item in &use_decl.items {
                         if let crate::ast::UseItem::Simple { name, alias } = use_item {
-                            let qualified_name = format!("{}::{}", internal_path.join("::"), name);
+                            let qualified_name = build_qualified_name(&internal_path, name);
                             if let Some(func_idx) = builder.try_func_idx(&qualified_name) {
                                 let alias_name = alias.as_ref().unwrap_or(name);
                                 builder.define_func_alias(alias_name, func_idx);
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Register impl methods
+        for (_, _, _, mangled_name) in &all_impl_methods {
+            builder.define_func(mangled_name, mangled_name);
+        }
+
+        // Register method aliases for struct type aliases (e.g., OtherPoint::sum -> Point::sum)
+        for (alias_name, _alias_module_path, original_name) in symbols.get_struct_aliases() {
+            for (_, struct_name, _, mangled_name) in &all_impl_methods {
+                if struct_name == &original_name {
+                    // Transform method name: Point::sum -> OtherPoint::sum
+                    if let Some(alias_mangled) =
+                        transform_method_alias(mangled_name, &original_name, &alias_name)
+                        && let Some(func_idx) = builder.try_func_idx(mangled_name)
+                    {
+                        builder.define_func_alias(&alias_mangled, func_idx);
                     }
                 }
             }
@@ -2708,6 +3068,24 @@ impl Codegen {
                 }
             }
         }
+        // Add impl method return types
+        for (_, _, _, mangled_name) in &all_impl_methods {
+            if let Some(ret_type) = builder.func_return_type(mangled_name) {
+                func_return_types.insert(mangled_name.clone(), ret_type);
+            }
+        }
+        // Add return types for aliased method names
+        for (alias_name, _alias_module_path, original_name) in symbols.get_struct_aliases() {
+            for (_, struct_name, _, mangled_name) in &all_impl_methods {
+                if struct_name == &original_name
+                    && let Some(alias_mangled) =
+                        transform_method_alias(mangled_name, &original_name, &alias_name)
+                    && let Some(ret_type) = builder.func_return_type(mangled_name)
+                {
+                    func_return_types.insert(alias_mangled, ret_type);
+                }
+            }
+        }
 
         // Code section and branch hints collection
         let mut code = CodeSection::new();
@@ -2722,6 +3100,25 @@ impl Codegen {
             code.function(&wasm_func);
             if !hints.is_empty() {
                 all_branch_hints.push((import_count + idx as u32, hints));
+            }
+        }
+
+        // Impl methods
+        let method_start_idx = import_count + all_funcs.len() as u32;
+        for (idx, (module_path, struct_name, method, _)) in all_impl_methods.iter().enumerate() {
+            // Determine the struct lookup key - use qualified name for collisions
+            let struct_lookup_key = if module_path.is_empty() {
+                struct_name.clone()
+            } else if main_module_struct_names.contains(struct_name) {
+                build_qualified_name(module_path, struct_name)
+            } else {
+                struct_name.clone()
+            };
+            let (wasm_func, hints) =
+                self.generate_impl_method(&struct_lookup_key, method, &builder, &func_return_types);
+            code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((method_start_idx + idx as u32, hints));
             }
         }
 
@@ -3099,6 +3496,7 @@ impl Codegen {
                 crate::ast::UnaryOp::Not => SemanticType::Bool,
                 _ => SemanticType::I32,
             },
+            Expr::StructLiteral(lit) => SemanticType::Struct(lit.name.clone()),
             _ => SemanticType::Other,
         }
     }
@@ -3208,6 +3606,91 @@ impl Codegen {
         wasm_func.instruction(&Instruction::End);
 
         // Collect branch hints from the context
+        let branch_hints = gen_ctx.take_branch_hints();
+        (wasm_func, branch_hints)
+    }
+
+    /// Generate code for an impl method
+    fn generate_impl_method(
+        &self,
+        struct_name: &str,
+        method: &crate::ast::Function,
+        builder: &CoreModuleBuilder,
+        func_return_types: &HashMap<String, ValType>,
+    ) -> (Function, Vec<(u32, bool)>) {
+        let mut func_ctx = FunctionContext::new(method.params.len() as u32);
+
+        // Set return type for ref.as_non_null handling in return statements
+        if let Some(ret_ty) = &method.return_type {
+            func_ctx.set_return_type(
+                self.wado_type_to_wasm_with_idx(ret_ty, self.string_array_type_idx),
+            );
+        }
+
+        // Add parameters to context
+        for param in &method.params {
+            if param.name == "self" {
+                // &self parameter: use reference to struct type
+                if let Some(struct_info) = self.struct_types.get(struct_name) {
+                    let struct_ref_type = ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(struct_info.type_idx),
+                    });
+                    func_ctx.add_param("self", struct_ref_type);
+                    // Also mark the semantic type for field access
+                    func_ctx
+                        .set_semantic_type("self", SemanticType::Struct(struct_name.to_string()));
+                }
+            } else {
+                let param_type = self.wado_type_to_wasm_primitive(&param.ty);
+                func_ctx.add_param(&param.name, param_type);
+            }
+        }
+
+        // Collect local variables from body
+        if let Some(body) = &method.body {
+            self.collect_locals_from_block(body, &mut func_ctx, func_return_types);
+        }
+
+        // Pre-allocate scratch locals that builtins might need
+        let string_array_type = builder.type_idx("string-array");
+        self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+
+        // Pre-allocate locals for assert statements (power-assert needs cached values)
+        if let Some(body) = &method.body {
+            self.preallocate_assert_locals(body, &mut func_ctx, string_array_type);
+        }
+
+        // Create Wasm function with collected locals
+        let local_decls = func_ctx.get_local_decls();
+        let mut wasm_func = Function::new(local_decls);
+
+        // Use the same context for code generation
+        let mut gen_ctx = func_ctx;
+
+        // Generate method body
+        if let Some(body) = &method.body {
+            for stmt in &body.stmts {
+                self.generate_stmt_with_builder(&mut wasm_func, stmt, &mut gen_ctx, builder);
+            }
+        }
+
+        // For methods with Stdout/Stderr effects, wait for pending async operations
+        if method
+            .effects
+            .iter()
+            .any(|e| e == "Stdout" || e == "Stderr")
+        {
+            self.generate_effect_wait(&mut wasm_func, &gen_ctx, builder);
+        }
+
+        // For methods with return types, add unreachable
+        if method.return_type.is_some() {
+            wasm_func.instruction(&Instruction::Unreachable);
+        }
+
+        wasm_func.instruction(&Instruction::End);
+
         let branch_hints = gen_ctx.take_branch_hints();
         (wasm_func, branch_hints)
     }
@@ -3769,11 +4252,15 @@ impl Codegen {
                 }
             }
             Expr::Assign(assign) => {
-                self.generate_expr_with_builder(func, &assign.value, ctx, builder);
-                if let Expr::Ident(ident) = &assign.target
-                    && let Some(local_idx) = ctx.get_local(&ident.name)
-                {
-                    func.instruction(&Instruction::LocalTee(local_idx));
+                if let Expr::Ident(ident) = &assign.target {
+                    // Simple variable assignment: x = value
+                    self.generate_expr_with_builder(func, &assign.value, ctx, builder);
+                    if let Some(local_idx) = ctx.get_local(&ident.name) {
+                        func.instruction(&Instruction::LocalTee(local_idx));
+                    }
+                } else if let Expr::FieldAccess(access) = &assign.target {
+                    // Struct field assignment: p.x = value
+                    self.generate_field_assignment(func, access, &assign.value, ctx, builder);
                 }
             }
             Expr::TemplateString(template) => {
@@ -3836,8 +4323,173 @@ impl Codegen {
                     self.generate_type_cast(func, &cast.expr, &cast.target_type, ctx);
                 }
             }
+            Expr::StructLiteral(lit) => {
+                self.generate_struct_literal(func, lit, ctx, builder);
+            }
+            Expr::FieldAccess(access) => {
+                self.generate_field_access(func, access, ctx, builder);
+            }
+            Expr::MethodCall(call) => {
+                self.generate_method_call(func, call, ctx, builder);
+            }
             _ => {}
         }
+    }
+
+    /// Generate code for method call: `p.sum()`
+    fn generate_method_call(
+        &self,
+        func: &mut Function,
+        call: &crate::ast::MethodCallExpr,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Determine the struct type from the receiver
+        let struct_name = self.infer_struct_type_name(&call.receiver, ctx);
+
+        if let Some(name) = struct_name {
+            // Build the mangled method name: {struct}::{method}
+            let mangled_name = build_simple_method_name(&name, &call.method);
+
+            // Look up the method function index
+            if let Some(func_idx) = builder.try_func_idx(&mangled_name) {
+                // Generate code for the receiver (self parameter)
+                self.generate_expr_with_builder(func, &call.receiver, ctx, builder);
+
+                // Generate code for other arguments
+                for arg in &call.args {
+                    self.generate_expr_with_builder(func, arg, ctx, builder);
+                }
+
+                // Call the method
+                func.instruction(&Instruction::Call(func_idx));
+            }
+        }
+    }
+
+    /// Generate code for field access: `p.x`
+    fn generate_field_access(
+        &self,
+        func: &mut Function,
+        access: &crate::ast::FieldAccessExpr,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // First, generate the expression being accessed (e.g., `p` in `p.x`)
+        self.generate_expr_with_builder(func, &access.expr, ctx, builder);
+
+        // Determine the struct type from the expression
+        let struct_name = self.infer_struct_type_name(&access.expr, ctx);
+        if let Some(name) = struct_name
+            && let Some(struct_info) = self.struct_types.get(&name)
+            && let Some(field_info) = struct_info.fields.get(&access.field)
+        {
+            // Generate struct.get instruction
+            func.instruction(&Instruction::StructGet {
+                struct_type_index: struct_info.type_idx,
+                field_index: field_info.index,
+            });
+        }
+
+        // If we couldn't resolve the field access, we might be accessing
+        // something else (like array length). Fall through silently for now.
+    }
+
+    /// Generate code for struct field assignment: `p.x = value`
+    fn generate_field_assignment(
+        &self,
+        func: &mut Function,
+        access: &crate::ast::FieldAccessExpr,
+        value: &Expr,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Get struct info
+        let struct_name = self.infer_struct_type_name(&access.expr, ctx);
+        let (struct_type_idx, field_index) = match struct_name {
+            Some(name) => {
+                if let Some(struct_info) = self.struct_types.get(&name) {
+                    if let Some(field_info) = struct_info.fields.get(&access.field) {
+                        (struct_info.type_idx, field_info.index)
+                    } else {
+                        return; // Unknown field
+                    }
+                } else {
+                    return; // Unknown struct
+                }
+            }
+            None => return, // Cannot determine struct type
+        };
+
+        // Generate: struct_ref, value, struct.set
+        // First, generate the struct reference (e.g., `p` in `p.x = value`)
+        self.generate_expr_with_builder(func, &access.expr, ctx, builder);
+
+        // Then generate the value to assign
+        self.generate_expr_with_builder(func, value, ctx, builder);
+
+        // Finally, emit struct.set instruction
+        func.instruction(&Instruction::StructSet {
+            struct_type_index: struct_type_idx,
+            field_index,
+        });
+    }
+
+    /// Infer the struct type name from an expression
+    fn infer_struct_type_name(&self, expr: &Expr, ctx: &FunctionContext) -> Option<String> {
+        match expr {
+            Expr::Ident(ident) => {
+                // Look up the variable's type in the context
+                // For now, we store struct type names in a special way
+                ctx.semantic_type_map
+                    .get(&ident.name)
+                    .and_then(|st| match st {
+                        SemanticType::Struct(name) => Some(name.clone()),
+                        _ => None,
+                    })
+            }
+            Expr::StructLiteral(lit) => Some(lit.name.clone()),
+            _ => None,
+        }
+    }
+
+    /// Generate code for struct literal: `Point { x: 10, y: 20 }`
+    fn generate_struct_literal(
+        &self,
+        func: &mut Function,
+        lit: &crate::ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        let struct_info = match self.struct_types.get(&lit.name) {
+            Some(info) => info,
+            None => {
+                // Unknown struct type - this should be caught by type checking
+                return;
+            }
+        };
+
+        // Generate field values in the correct order
+        // First, collect the expressions for each field in struct field order
+        let mut field_exprs: Vec<Option<&Expr>> = vec![None; struct_info.field_order.len()];
+        for field in &lit.fields {
+            if let Some(info) = struct_info.fields.get(&field.name) {
+                field_exprs[info.index as usize] = Some(&field.value);
+            }
+        }
+
+        // Generate code for each field in order
+        for expr_opt in field_exprs {
+            if let Some(expr) = expr_opt {
+                self.generate_expr_with_builder(func, expr, ctx, builder);
+            } else {
+                // Missing field - generate default value (should be caught by type checking)
+                func.instruction(&Instruction::I32Const(0));
+            }
+        }
+
+        // Generate struct.new instruction
+        func.instruction(&Instruction::StructNew(struct_info.type_idx));
     }
 
     /// Generate type cast instruction based on source and target types
@@ -3954,7 +4606,7 @@ impl Codegen {
                     || caller_module == &["core".to_string(), "prelude".to_string()];
 
                 if is_privileged && builder.is_internal_function(&ident.name) {
-                    let qualified_name = format!("core::internal::{}", ident.name);
+                    let qualified_name = build_core_internal_name(&ident.name);
                     builder.try_func_idx(&qualified_name).unwrap_or_else(|| {
                         panic!("unknown function: {}", ident.name);
                     })
@@ -4453,6 +5105,39 @@ impl Codegen {
                     _ => ValType::I32,
                 }
             }
+            Expr::StructLiteral(lit) => {
+                // Return reference to struct type
+                if let Some(struct_info) = self.struct_types.get(&lit.name) {
+                    ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(struct_info.type_idx),
+                    })
+                } else {
+                    ValType::I32 // Fallback for unknown struct
+                }
+            }
+            Expr::FieldAccess(access) => {
+                // Get the field type from the struct
+                if let Some(struct_name) = self.infer_struct_type_name(&access.expr, ctx)
+                    && let Some(struct_info) = self.struct_types.get(&struct_name)
+                    && let Some(field_info) = struct_info.fields.get(&access.field)
+                {
+                    return field_info.wasm_type;
+                }
+                ValType::I32 // Fallback for unknown field
+            }
+            Expr::MethodCall(call) => {
+                // Look up the method's return type using the mangled name
+                if let Some(struct_name) = self.infer_struct_type_name(&call.receiver, ctx) {
+                    let mangled_name = build_simple_method_name(&struct_name, &call.method);
+                    if let Some(b) = builder
+                        && let Some(ret_type) = b.func_return_type(&mangled_name)
+                    {
+                        return ret_type;
+                    }
+                }
+                ValType::I32 // Fallback
+            }
             _ => ValType::I32,
         }
     }
@@ -4545,6 +5230,37 @@ impl Codegen {
                     _ => ValType::I32,
                 }
             }
+            Expr::StructLiteral(lit) => {
+                // Return reference to struct type
+                if let Some(struct_info) = self.struct_types.get(&lit.name) {
+                    ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(struct_info.type_idx),
+                    })
+                } else {
+                    ValType::I32 // Fallback for unknown struct
+                }
+            }
+            Expr::FieldAccess(access) => {
+                // Get the field type from the struct
+                if let Some(struct_name) = self.infer_struct_type_name(&access.expr, ctx)
+                    && let Some(struct_info) = self.struct_types.get(&struct_name)
+                    && let Some(field_info) = struct_info.fields.get(&access.field)
+                {
+                    return field_info.wasm_type;
+                }
+                ValType::I32 // Fallback for unknown field
+            }
+            Expr::MethodCall(call) => {
+                // Look up the method's return type using the mangled name
+                if let Some(struct_name) = self.infer_struct_type_name(&call.receiver, ctx) {
+                    let mangled_name = build_simple_method_name(&struct_name, &call.method);
+                    if let Some(&ret_type) = func_return_types.get(&mangled_name) {
+                        return ret_type;
+                    }
+                }
+                ValType::I32 // Fallback
+            }
             _ => ValType::I32,
         }
     }
@@ -4612,8 +5328,9 @@ impl Codegen {
             Expr::Binary(_) => true,
             // Unary ops produce values
             Expr::Unary(_) => true,
-            // Assignments produce values (via LocalTee)
-            Expr::Assign(_) => true,
+            // Variable assignments produce values (via LocalTee)
+            // Field assignments (struct.set) do NOT produce values
+            Expr::Assign(assign) => !matches!(&assign.target, Expr::FieldAccess(_)),
             // Calls produce values based on their return type
             Expr::Call(call) => {
                 if let Expr::Ident(ident) = &call.callee {
@@ -4832,7 +5549,7 @@ impl Codegen {
                                     builder.func_idx("core::internal::char_to_string"),
                                 ));
                             }
-                            SemanticType::I32 | SemanticType::Other => {
+                            SemanticType::I32 | SemanticType::Other | SemanticType::Struct(_) => {
                                 func.instruction(&Instruction::Call(
                                     builder.func_idx("core::internal::i32_to_string"),
                                 ));

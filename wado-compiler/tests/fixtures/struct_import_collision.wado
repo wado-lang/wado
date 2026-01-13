@@ -1,0 +1,30 @@
+// Import struct with alias and define local struct with same name
+
+use {println} from "core:cli";
+use {Point as OtherPoint} from "./geometry.wado";
+
+struct Point {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl Point {
+    pub fn total(&self) -> i32 {
+        return self.a + self.b + self.c;
+    }
+}
+
+fn run() with Stdout {
+    // Local Point (3 fields)
+    let local = Point { a: 1, b: 2, c: 3 };
+    println(`local total: {local.total()}`);
+
+    // Imported Point aliased as OtherPoint (2 fields)
+    let other = OtherPoint { x: 10, y: 4 };
+    println(`other sum: {other.sum()}`);
+    println(`other product: {other.product()}`);
+}
+
+__DATA__
+{"stdout": "local total: 6\nother sum: 14\nother product: 40\n"}

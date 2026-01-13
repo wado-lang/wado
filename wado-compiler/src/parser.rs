@@ -487,6 +487,44 @@ impl Parser {
 
     fn parse_param(&mut self) -> ParseResult<Param> {
         let start_span = self.peek().span;
+
+        // Handle &self and &mut self for methods
+        if self.check(&TokenKind::Ampersand) {
+            self.advance();
+
+            // Check for &mut self
+            let is_mut = if self.check(&TokenKind::Mut) {
+                self.advance();
+                true
+            } else {
+                false
+            };
+
+            // Expect "self" identifier
+            if let TokenKind::Ident(name) = self.peek_kind()
+                && name == "self"
+            {
+                self.advance();
+                let self_type = Type::Named(NamedType {
+                    name: "Self".to_string(),
+                    span: start_span,
+                });
+                // For now, both &self and &mut self are represented as Reference
+                // TODO: Add MutReference type when needed
+                let _ = is_mut; // Will use this later for &mut self distinction
+                return Ok(Param {
+                    name: "self".to_string(),
+                    ty: Type::Reference(Box::new(self_type)),
+                    span: start_span,
+                });
+            }
+
+            return Err(ParseError {
+                message: "expected 'self' after '&' in method parameter".to_string(),
+                span: self.peek().span,
+            });
+        }
+
         let name = self.consume_ident()?;
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
@@ -1224,6 +1262,13 @@ impl Parser {
                         name: qualified_name,
                         span: start_span,
                     }))
+                } else if self.check(&TokenKind::LBrace)
+                    && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                {
+                    // Struct literal: `Point { x: 10, y: 20 }`
+                    // Only parse as struct literal if name starts with uppercase
+                    // (struct naming convention: UpperCamelCase)
+                    self.parse_struct_literal(name, start_span)
                 } else {
                     Ok(Expr::Ident(IdentExpr {
                         name,
@@ -1957,6 +2002,54 @@ impl Parser {
 
         let mut parser = Parser::new(tokens);
         parser.parse_expr()
+    }
+
+    /// Parse struct literal: `Point { x: 10, y: 20 }` or `Point { x, y }` (shorthand)
+    fn parse_struct_literal(&mut self, name: String, start_span: Span) -> ParseResult<Expr> {
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut fields = Vec::new();
+
+        if !self.check(&TokenKind::RBrace) {
+            loop {
+                let field_span = self.peek().span;
+                let field_name = self.consume_ident()?;
+
+                let value = if self.check(&TokenKind::Colon) {
+                    self.advance();
+                    self.parse_expr()?
+                } else {
+                    // Shorthand: `{ x }` is equivalent to `{ x: x }`
+                    Expr::Ident(IdentExpr {
+                        name: field_name.clone(),
+                        span: field_span,
+                    })
+                };
+
+                fields.push(StructLiteralField {
+                    name: field_name,
+                    value,
+                    span: field_span,
+                });
+
+                if !self.check(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance(); // consume comma
+                if self.check(&TokenKind::RBrace) {
+                    break; // trailing comma allowed
+                }
+            }
+        }
+
+        let end_span = self.peek().span;
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(Expr::StructLiteral(Box::new(StructLiteralExpr {
+            name,
+            fields,
+            span: start_span.merge(&end_span),
+        })))
     }
 }
 

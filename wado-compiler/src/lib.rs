@@ -4,6 +4,7 @@ pub mod builtin_registry;
 pub mod bundled;
 pub mod codegen;
 pub mod lexer;
+pub mod name;
 pub mod parser;
 pub mod resolver;
 pub mod stdlib;

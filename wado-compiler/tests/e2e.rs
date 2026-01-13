@@ -4,7 +4,8 @@
 //! verifying the output matches expected values defined in each file's __DATA__ section.
 //!
 //! Test fixtures in fixtures/*.wado must have a __DATA__ section with JSON specifying
-//! expected results. Library files that are imported by tests go in fixtures/lib/.
+//! expected results. Helper modules that are imported by tests go in subdirectories
+//! (e.g., fixtures/sub/) and are not run as tests themselves.
 
 use serde::Deserialize;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -268,5 +269,7 @@ fn fixture_test(path: &Path) -> datatest_stable::Result<()> {
 }
 
 datatest_stable::harness! {
-    { test = fixture_test, root = "tests/fixtures", pattern = r"\.wado$" },
+    // Pattern matches .wado files directly in fixtures/ but not in subdirectories
+    // (subdirectories contain helper modules that are imported, not run as tests)
+    { test = fixture_test, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
 }

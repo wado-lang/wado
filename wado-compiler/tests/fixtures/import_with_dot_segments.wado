@@ -1,0 +1,15 @@
+// Test importing with redundant dot segments (path normalization)
+
+use {println} from "core:cli";
+// These should all resolve to the same module: ./sub/helper.wado
+use {double} from "./sub/./helper.wado";
+use {get_magic} from "./sub/../sub/helper.wado";
+
+fn run() with Stdout {
+    let x = get_magic();
+    let y = double(x);
+    println(`magic: {x}, doubled: {y}`);
+}
+
+__DATA__
+{"stdout": "magic: 42, doubled: 84\n"}

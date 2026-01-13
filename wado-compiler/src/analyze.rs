@@ -6,6 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
+use crate::name::validate_module_path;
 use crate::resolver::{ModuleResolver, ResolveError};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
@@ -28,6 +29,12 @@ pub enum AnalyzeError {
     DuplicateDefinition { name: String, span: Span },
     /// Undefined symbol reference
     UndefinedSymbol { name: String, span: Span },
+    /// Invalid module path (not a valid URI reference)
+    InvalidModulePath {
+        path: String,
+        message: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for AnalyzeError {
@@ -60,6 +67,17 @@ impl std::fmt::Display for AnalyzeError {
                     f,
                     "{}:{}: undefined symbol '{}'",
                     span.line, span.column, name
+                )
+            }
+            AnalyzeError::InvalidModulePath {
+                path,
+                message,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: invalid module path '{}': {}",
+                    span.line, span.column, path, message
                 )
             }
         }
@@ -308,12 +326,19 @@ impl Analyzer {
                 Item::Use(use_decl) => {
                     // Handle pub use (re-exports)
                     if use_decl.is_pub {
-                        // Parse the source string into module path segments
-                        let source_path: Vec<String> = if use_decl.source.contains(':') {
-                            use_decl.source.splitn(2, ':').map(String::from).collect()
-                        } else {
-                            vec![use_decl.source.clone()]
-                        };
+                        // Validate the import source is a valid URI reference
+                        if let Err(message) = validate_module_path(&use_decl.source) {
+                            self.errors.push(AnalyzeError::InvalidModulePath {
+                                path: use_decl.source.clone(),
+                                message,
+                                span: use_decl.span,
+                            });
+                            continue;
+                        }
+
+                        // Resolve the source path relative to the current module
+                        let source_path =
+                            self.resolver.resolve_import(module_path, &use_decl.source);
 
                         // Try to load the source module
                         let source_module = match self.resolver.load_module(&source_path) {
@@ -398,22 +423,34 @@ impl Analyzer {
     ///
     /// Handles the new ESM-like import syntax:
     /// `use {items} from "source";`
+    ///
+    /// # Arguments
+    /// * `module` - The module containing import declarations
+    /// * `from_module_path` - Canonical path of the importing module (used for resolving relative imports)
     fn resolve_imports(
         &mut self,
         module: &Module,
-        _module_path: &[String],
+        from_module_path: &[String],
     ) -> Result<(), Vec<AnalyzeError>> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                // Parse the source string into module path segments
-                // e.g., "core:cli" -> ["core", "cli"]
-                // e.g., "wasi:filesystem" -> ["wasi", "filesystem"]
-                let module_path: Vec<String> = if use_decl.source.contains(':') {
-                    use_decl.source.splitn(2, ':').map(String::from).collect()
-                } else {
-                    // For package names or relative paths, just use as-is for now
-                    vec![use_decl.source.clone()]
-                };
+                // Validate the import source is a valid URI reference
+                if let Err(message) = validate_module_path(&use_decl.source) {
+                    self.errors.push(AnalyzeError::InvalidModulePath {
+                        path: use_decl.source.clone(),
+                        message,
+                        span: use_decl.span,
+                    });
+                    continue;
+                }
+
+                // Resolve the import source relative to the importing module
+                // This handles cases like:
+                // - "core:cli" -> ["core", "cli"]
+                // - "./geometry.wado" from "./sub/main.wado" -> ["./sub/geometry.wado"]
+                let module_path = self
+                    .resolver
+                    .resolve_import(from_module_path, &use_decl.source);
 
                 // Try to load the module
                 let imported_module = match self.resolver.load_module(&module_path) {
