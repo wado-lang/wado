@@ -4006,15 +4006,16 @@ impl Codegen {
 
         // Check if this builtin has a canonical name (imported CM function)
         if let Some(builtin_info) = self.builtin_registry.get(builtin_name)
-            && let Some(canonical_name) = &builtin_info.canonical_name {
-                // Generate all arguments
-                for arg in &call.args {
-                    self.generate_expr_with_builder(func, arg, ctx, builder);
-                }
-                // Call the imported function
-                func.instruction(&Instruction::Call(builder.func_idx(canonical_name)));
-                return;
+            && let Some(canonical_name) = &builtin_info.canonical_name
+        {
+            // Generate all arguments
+            for arg in &call.args {
+                self.generate_expr_with_builder(func, arg, ctx, builder);
             }
+            // Call the imported function
+            func.instruction(&Instruction::Call(builder.func_idx(canonical_name)));
+            return;
+        }
 
         // Handle builtins that compile to Wasm instructions or have special logic
         match builtin_name {

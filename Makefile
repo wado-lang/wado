@@ -26,7 +26,7 @@ test:
 	cargo test
 
 .PHONY: on-task-done
-on-task-done: format clippy-fix update-bundled test
+on-task-done: clippy-fix format update-bundled test
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: format
