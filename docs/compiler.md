@@ -80,17 +80,35 @@ The `WasiRegistry` module (`wasi_registry.rs`) collects WASI import information 
 **Purpose:**
 
 - Extract WASI version strings from `#[wasi(...)]` attributes (e.g., `0.3.0-rc-2025-09-16`)
-- Map effect methods to WASI function names (e.g., `Stdout::write_via_stream` → `stdout-write-via-stream`)
+- Map effect methods to function names using a unified naming scheme
 - Track which WASI interfaces are used for conditional import generation
+
+**Naming Convention:**
+
+The registry uses a **unified naming scheme** across both component-level and core module-level code:
+
+| Format                                       | Example                             |
+| -------------------------------------------- | ----------------------------------- |
+| `wasi:{package}/{EffectName}::{method_name}` | `wasi:cli/Stdout::write_via_stream` |
+
+This naming scheme:
+
+- Uses `wasi:` prefix for clarity
+- Includes package for uniqueness across packages (e.g., `cli`, `clocks`)
+- Uses Wado effect/method names (not WIT interface/function names)
+- Uses `::` as method separator (Wado convention)
+
+The registry provides `build_local_alias_name()` utility function and `resolve()` method for name resolution.
 
 **What's Dynamic (from registry):**
 
-| Item                | Example                                                    |
-| ------------------- | ---------------------------------------------------------- |
-| Version strings     | `wasi:cli/stdout@0.3.0-rc-2025-09-16`                      |
-| Import paths        | Built via `format!("wasi:cli/stdout@{}", cli_version)`     |
-| Function async flag | `is_async` from effect method definition                   |
-| Interface presence  | `has_interface("monotonic-clock")` for conditional codegen |
+| Item                | Example                                                       |
+| ------------------- | ------------------------------------------------------------- |
+| Version strings     | `wasi:cli/stdout@0.3.0-rc-2025-09-16`                         |
+| Import paths        | Built via `format!("wasi:cli/stdout@{}", cli_version)`        |
+| Function async flag | `is_async` from effect method definition                      |
+| Interface presence  | `has_interface("monotonic-clock")` for conditional codegen    |
+| Local alias names   | `build_local_alias_name("cli", "Stdout", "write_via_stream")` |
 
 **What's Still Hardcoded (TODO):**
 

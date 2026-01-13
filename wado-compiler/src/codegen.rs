@@ -11,7 +11,7 @@ use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::stdlib;
 use crate::symbol::SymbolTable;
-use crate::wasi_registry::WasiRegistry;
+use crate::wasi_registry::{WasiRegistry, build_local_alias_name};
 use crate::wasm_postprocess;
 use heck::ToKebabCase;
 use std::collections::HashMap;
@@ -1005,7 +1005,8 @@ impl Codegen {
         cli_version: &str,
     ) {
         // Import stdout if not already imported
-        if !ctx.has_comp_func("stdout-write-via-stream") {
+        let stdout_local_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        if !ctx.has_comp_func(&stdout_local_name) {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stdout_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -1050,7 +1051,7 @@ impl Codegen {
                 wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
             );
 
-            ctx.register_comp_func("stdout-write-via-stream");
+            ctx.register_comp_func(&stdout_local_name);
             builder.alias_export(
                 ctx.instance_idx("stdout"),
                 "write-via-stream",
@@ -1059,7 +1060,8 @@ impl Codegen {
         }
 
         // Import stderr if not already imported
-        if !ctx.has_comp_func("stderr-write-via-stream") {
+        let stderr_local_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+        if !ctx.has_comp_func(&stderr_local_name) {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stderr_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -1104,7 +1106,7 @@ impl Codegen {
                 wasm_encoder::ComponentTypeRef::Instance(stderr_instance_type),
             );
 
-            ctx.register_comp_func("stderr-write-via-stream");
+            ctx.register_comp_func(&stderr_local_name);
             builder.alias_export(
                 ctx.instance_idx("stderr"),
                 "write-via-stream",
@@ -1476,7 +1478,8 @@ impl Codegen {
         );
 
         // Alias write-via-stream from stdout instance (component func)
-        ctx.register_comp_func("stdout-write-via-stream");
+        let stdout_comp_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        ctx.register_comp_func(&stdout_comp_name);
         builder.alias_export(
             ctx.instance_idx("stdout"),
             "write-via-stream",
@@ -1495,7 +1498,8 @@ impl Codegen {
         );
 
         // Alias write-via-stream from stderr instance (component func)
-        ctx.register_comp_func("stderr-write-via-stream");
+        let stderr_comp_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+        ctx.register_comp_func(&stderr_comp_name);
         builder.alias_export(
             ctx.instance_idx("stderr"),
             "write-via-stream",
@@ -1533,7 +1537,8 @@ impl Codegen {
         );
 
         // Alias now from monotonic-clock instance (component func)
-        ctx.register_comp_func("monotonic-clock-now");
+        let monotonic_clock_comp_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+        ctx.register_comp_func(&monotonic_clock_comp_name);
         builder.alias_export(
             ctx.instance_idx("monotonic-clock"),
             "now",
@@ -1653,10 +1658,11 @@ impl Codegen {
         builder.stream_drop_readable(stream_u8_type);
 
         // Lower write-via-stream component func to core func (stdout)
-        ctx.register_core_func("stdout-write-via-stream-core");
+        let stdout_func_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        ctx.register_core_func(&stdout_func_name);
         builder.lower_func(
-            Some("stdout-write-via-stream-core"),
-            ctx.comp_func_idx("stdout-write-via-stream"),
+            Some(&stdout_func_name),
+            ctx.comp_func_idx(&stdout_func_name),
             [
                 CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
@@ -1665,10 +1671,11 @@ impl Codegen {
         );
 
         // Lower write-via-stream component func to core func (stderr)
-        ctx.register_core_func("stderr-write-via-stream-core");
+        let stderr_func_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+        ctx.register_core_func(&stderr_func_name);
         builder.lower_func(
-            Some("stderr-write-via-stream-core"),
-            ctx.comp_func_idx("stderr-write-via-stream"),
+            Some(&stderr_func_name),
+            ctx.comp_func_idx(&stderr_func_name),
             [
                 CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
@@ -1678,11 +1685,12 @@ impl Codegen {
 
         // Lower monotonic-clock-now component func to core func (if available)
         // This is a sync function: func() -> u64, no memory/realloc needed
-        if ctx.has_comp_func("monotonic-clock-now") {
-            ctx.register_core_func("monotonic-clock-now-core");
+        let monotonic_clock_func_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+        if ctx.has_comp_func(&monotonic_clock_func_name) {
+            ctx.register_core_func(&monotonic_clock_func_name);
             builder.lower_func(
-                Some("monotonic-clock-now-core"),
-                ctx.comp_func_idx("monotonic-clock-now"),
+                Some(&monotonic_clock_func_name),
+                ctx.comp_func_idx(&monotonic_clock_func_name),
                 [],
             );
         }
@@ -1715,6 +1723,9 @@ impl Codegen {
         builder.core_module_raw(Some("main-mod"), &main_module);
 
         // Create wasi instance with stream intrinsics + lowered WASI function + async intrinsics
+        // Pre-compute WASI function names to ensure they live long enough
+        let stdout_func_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        let stderr_func_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
         let mut wasi_exports: Vec<(&str, ExportKind, u32)> = vec![
             (
                 "stream-new",
@@ -1737,14 +1748,14 @@ impl Codegen {
                 ctx.core_func_idx("stream-drop-readable"),
             ),
             (
-                "stdout-write-via-stream",
+                &stdout_func_name,
                 ExportKind::Func,
-                ctx.core_func_idx("stdout-write-via-stream-core"),
+                ctx.core_func_idx(&stdout_func_name),
             ),
             (
-                "stderr-write-via-stream",
+                &stderr_func_name,
                 ExportKind::Func,
-                ctx.core_func_idx("stderr-write-via-stream-core"),
+                ctx.core_func_idx(&stderr_func_name),
             ),
             (
                 "task-return",
@@ -1773,11 +1784,12 @@ impl Codegen {
             ),
         ];
         // Conditionally add monotonic-clock-now if it was registered
-        if ctx.has_comp_func("monotonic-clock-now") {
+        let monotonic_clock_func_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+        if ctx.has_comp_func(&monotonic_clock_func_name) {
             wasi_exports.push((
-                "monotonic-clock-now",
+                &monotonic_clock_func_name,
                 ExportKind::Func,
-                ctx.core_func_idx("monotonic-clock-now-core"),
+                ctx.core_func_idx(&monotonic_clock_func_name),
             ));
         }
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
@@ -2135,11 +2147,12 @@ impl Codegen {
         builder.stream_drop_readable(stream_u8_type);
 
         // Lower write-via-stream (stdout) - only if stdout interface is available
-        if ctx.has_comp_func("stdout-write-via-stream") {
-            ctx.register_core_func("stdout-write-via-stream-core");
+        let stdout_func_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        if ctx.has_comp_func(&stdout_func_name) {
+            ctx.register_core_func(&stdout_func_name);
             builder.lower_func(
-                Some("stdout-write-via-stream-core"),
-                ctx.comp_func_idx("stdout-write-via-stream"),
+                Some(&stdout_func_name),
+                ctx.comp_func_idx(&stdout_func_name),
                 [
                     CanonicalOption::Async,
                     CanonicalOption::Memory(ctx.memory_idx()),
@@ -2149,11 +2162,12 @@ impl Codegen {
         }
 
         // Lower write-via-stream (stderr) - only if stderr interface is available
-        if ctx.has_comp_func("stderr-write-via-stream") {
-            ctx.register_core_func("stderr-write-via-stream-core");
+        let stderr_func_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+        if ctx.has_comp_func(&stderr_func_name) {
+            ctx.register_core_func(&stderr_func_name);
             builder.lower_func(
-                Some("stderr-write-via-stream-core"),
-                ctx.comp_func_idx("stderr-write-via-stream"),
+                Some(&stderr_func_name),
+                ctx.comp_func_idx(&stderr_func_name),
                 [
                     CanonicalOption::Async,
                     CanonicalOption::Memory(ctx.memory_idx()),
@@ -2164,11 +2178,12 @@ impl Codegen {
 
         // Lower monotonic-clock-now component func to core func (if available)
         // This is a sync function: func() -> u64, no memory/realloc needed
-        if ctx.has_comp_func("monotonic-clock-now") {
-            ctx.register_core_func("monotonic-clock-now-core");
+        let monotonic_clock_func_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+        if ctx.has_comp_func(&monotonic_clock_func_name) {
+            ctx.register_core_func(&monotonic_clock_func_name);
             builder.lower_func(
-                Some("monotonic-clock-now-core"),
-                ctx.comp_func_idx("monotonic-clock-now"),
+                Some(&monotonic_clock_func_name),
+                ctx.comp_func_idx(&monotonic_clock_func_name),
                 [],
             );
         }
@@ -2252,26 +2267,29 @@ impl Codegen {
             ),
         ];
         // Conditionally add stdout/stderr write-via-stream if registered
-        if ctx.has_comp_func("stdout-write-via-stream") {
+        let stdout_func_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        if ctx.has_comp_func(&stdout_func_name) {
             wasi_exports.push((
-                "stdout-write-via-stream",
+                &stdout_func_name,
                 ExportKind::Func,
-                ctx.core_func_idx("stdout-write-via-stream-core"),
+                ctx.core_func_idx(&stdout_func_name),
             ));
         }
-        if ctx.has_comp_func("stderr-write-via-stream") {
+        let stderr_func_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+        if ctx.has_comp_func(&stderr_func_name) {
             wasi_exports.push((
-                "stderr-write-via-stream",
+                &stderr_func_name,
                 ExportKind::Func,
-                ctx.core_func_idx("stderr-write-via-stream-core"),
+                ctx.core_func_idx(&stderr_func_name),
             ));
         }
         // Conditionally add monotonic-clock-now if it was registered
-        if ctx.has_comp_func("monotonic-clock-now") {
+        let monotonic_clock_func_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+        if ctx.has_comp_func(&monotonic_clock_func_name) {
             wasi_exports.push((
-                "monotonic-clock-now",
+                &monotonic_clock_func_name,
                 ExportKind::Func,
-                ctx.core_func_idx("monotonic-clock-now-core"),
+                ctx.core_func_idx(&monotonic_clock_func_name),
             ));
         }
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
@@ -2383,10 +2401,11 @@ impl Codegen {
         );
         builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
         builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        // Always define stdout-write-via-stream to maintain type indices
+        // Always define stdout write-via-stream to maintain type indices
         // (import is conditional, but type must exist for index stability)
+        let stdout_type_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
         builder.define_func_type(
-            "stdout-write-via-stream",
+            &stdout_type_name,
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
@@ -2425,10 +2444,11 @@ impl Codegen {
         );
 
         // Stderr write-via-stream (same signature as stdout, defined after GC types)
-        // Always define stderr-write-via-stream to maintain type indices
+        // Always define stderr write-via-stream to maintain type indices
         // (import is conditional, but type must exist for index stability)
+        let stderr_type_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
         builder.define_func_type(
-            "stderr-write-via-stream",
+            &stderr_type_name,
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
@@ -2436,7 +2456,8 @@ impl Codegen {
         // Monotonic clock now (sync function returning u64, defined after GC types)
         // Only define if monotonic-clock interface is registered
         if self.wasi_registry.has_interface("monotonic-clock") {
-            builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+            let monotonic_type_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+            builder.define_func_type(&monotonic_type_name, &[], &[ValType::I64]);
         }
 
         // Types for user-defined functions
@@ -2474,8 +2495,10 @@ impl Codegen {
         builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
         builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
         // Always import stdout/stderr - they're needed by core infrastructure (panic, logging)
-        builder.import_func("wasi", "stdout-write-via-stream", "stdout-write-via-stream");
-        builder.import_func("wasi", "stderr-write-via-stream", "stderr-write-via-stream");
+        let stdout_import_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        let stderr_import_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+        builder.import_func("wasi", &stdout_import_name, &stdout_import_name);
+        builder.import_func("wasi", &stderr_import_name, &stderr_import_name);
         builder.import_func("wasi", "task-return", "task-return");
         builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
         builder.import_func("wasi", "waitable-join", "waitable-join");
@@ -2483,7 +2506,8 @@ impl Codegen {
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
         // Only import monotonic-clock-now if the interface is registered
         if self.wasi_registry.has_interface("monotonic-clock") {
-            builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
+            let monotonic_import_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+            builder.import_func("wasi", &monotonic_import_name, &monotonic_import_name);
         }
         builder.import_func("env", "realloc", "realloc");
         builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
@@ -2685,10 +2709,11 @@ impl Codegen {
         );
         builder.define_func_type("stream-drop-writable", &[ValType::I32], &[]);
         builder.define_func_type("stream-drop-readable", &[ValType::I32], &[]);
-        // Always define stdout-write-via-stream to maintain type indices
+        // Always define stdout write-via-stream to maintain type indices
         // (import is conditional, but type must exist for index stability)
+        let stdout_type_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
         builder.define_func_type(
-            "stdout-write-via-stream",
+            &stdout_type_name,
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
@@ -2727,10 +2752,11 @@ impl Codegen {
         );
 
         // Stderr write-via-stream (same signature as stdout, defined after GC types)
-        // Always define stderr-write-via-stream to maintain type indices
+        // Always define stderr write-via-stream to maintain type indices
         // (import is conditional, but type must exist for index stability)
+        let stderr_type_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
         builder.define_func_type(
-            "stderr-write-via-stream",
+            &stderr_type_name,
             &[ValType::I32, ValType::I32],
             &[ValType::I32],
         );
@@ -2738,7 +2764,8 @@ impl Codegen {
         // Monotonic clock now (sync function returning u64, defined after GC types)
         // Only define if monotonic-clock interface is registered
         if self.wasi_registry.has_interface("monotonic-clock") {
-            builder.define_func_type("monotonic-clock-now", &[], &[ValType::I64]);
+            let monotonic_type_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+            builder.define_func_type(&monotonic_type_name, &[], &[ValType::I64]);
         }
 
         // Types for user-defined functions
@@ -2777,8 +2804,10 @@ impl Codegen {
         builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
         builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
         // Always import stdout/stderr - they're needed by core infrastructure (panic, logging)
-        builder.import_func("wasi", "stdout-write-via-stream", "stdout-write-via-stream");
-        builder.import_func("wasi", "stderr-write-via-stream", "stderr-write-via-stream");
+        let stdout_import_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+        let stderr_import_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+        builder.import_func("wasi", &stdout_import_name, &stdout_import_name);
+        builder.import_func("wasi", &stderr_import_name, &stderr_import_name);
         builder.import_func("wasi", "task-return", "task-return");
         builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
         builder.import_func("wasi", "waitable-join", "waitable-join");
@@ -2786,7 +2815,8 @@ impl Codegen {
         builder.import_func("wasi", "subtask-drop", "subtask-drop");
         // Only import monotonic-clock-now if the interface is registered
         if self.wasi_registry.has_interface("monotonic-clock") {
-            builder.import_func("wasi", "monotonic-clock-now", "monotonic-clock-now");
+            let monotonic_import_name = build_local_alias_name("clocks", "MonotonicClock", "now");
+            builder.import_func("wasi", &monotonic_import_name, &monotonic_import_name);
         }
         builder.import_func("env", "realloc", "realloc");
         builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
@@ -3829,9 +3859,9 @@ impl Codegen {
                     self.generate_expr_with_builder(func, arg, ctx, builder);
                 }
                 // For write-via-stream (stdout or stderr), we start the operation but defer wait to function end
-                if wasi_func_name == "stdout-write-via-stream"
-                    || wasi_func_name == "stderr-write-via-stream"
-                {
+                let stdout_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+                let stderr_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+                if wasi_func_name == stdout_name || wasi_func_name == stderr_name {
                     self.generate_write_via_stream_start(func, ctx, builder, func_idx);
                 } else {
                     func.instruction(&Instruction::Call(func_idx));
@@ -3868,17 +3898,18 @@ impl Codegen {
         }
     }
 
-    /// Resolve an effect function call to its WASI import name
+    /// Resolve an effect function call to its local alias name
     ///
     /// Maps Wado effect function syntax (Effect::method) to WASI function names.
     /// The mapping is based on the `#[wasi(...)]` attributes in wasi/*.wado modules.
+    /// Returns the unified name format: `wasi:{package}/{EffectName}::{method_name}`
     fn resolve_effect_function(&self, name: &str) -> Option<String> {
         // Check if this is an effect function call (contains ::)
         if !name.contains("::") {
             return None;
         }
 
-        // Look up in the WASI registry (populated from wasi/*.wado modules)
+        // Look up in the WASI registry and return the local alias name
         self.wasi_registry.resolve(name)
     }
 
@@ -4077,7 +4108,8 @@ impl Codegen {
                 // call_indirect_stdout_write_via_stream(rx: i32) - call stdout write-via-stream
                 // Used by log() for ambient stdout logging without requiring Stdout effect
                 // If stdout isn't available (wasi:cli not imported), this is a no-op
-                if let Some(func_idx) = builder.try_func_idx("stdout-write-via-stream") {
+                let stdout_func_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+                if let Some(func_idx) = builder.try_func_idx(&stdout_func_name) {
                     for arg in &call.args {
                         self.generate_expr_with_builder(func, arg, ctx, builder);
                     }
@@ -4096,7 +4128,8 @@ impl Codegen {
                 // call_indirect_stderr_write_via_stream(rx: i32) - call stderr write-via-stream
                 // Used by log_error() for ambient stderr logging without requiring Stderr effect
                 // If stderr isn't available (wasi:cli not imported), this is a no-op
-                if let Some(func_idx) = builder.try_func_idx("stderr-write-via-stream") {
+                let stderr_func_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+                if let Some(func_idx) = builder.try_func_idx(&stderr_func_name) {
                     for arg in &call.args {
                         self.generate_expr_with_builder(func, arg, ctx, builder);
                     }

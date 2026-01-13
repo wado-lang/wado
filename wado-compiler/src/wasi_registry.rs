@@ -18,12 +18,39 @@ pub struct WasiFunctionInfo {
     pub wasi_func_name: String,
     /// Full WASI interface path (e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16")
     pub interface_path: String,
+    /// WASI package (e.g., "cli")
+    pub package: String,
     /// Whether this is an async function
     pub is_async: bool,
     /// Parameter types
     pub params: Vec<(String, Type)>,
     /// Return type
     pub return_type: Option<Type>,
+}
+
+impl WasiFunctionInfo {
+    /// Build the local alias name for Component Model imports.
+    ///
+    /// Format: `wasi:{package}/{effect_name}::{method_name}`
+    /// Example: `wasi:cli/Stdout::write_via_stream`
+    pub fn local_alias_name(&self) -> String {
+        build_local_alias_name(&self.package, &self.effect_name, &self.method_name)
+    }
+
+}
+
+/// Build a local alias name for a WASI function.
+///
+/// Format: `wasi:{package}/{effect_name}::{method_name}`
+/// Example: `wasi:cli/Stdout::write_via_stream`
+///
+/// This naming scheme:
+/// - Uses `wasi:` prefix for clarity
+/// - Includes package for uniqueness across packages
+/// - Uses Wado effect/method names (not WIT interface/function names)
+/// - Uses `::` as method separator (Wado convention)
+pub fn build_local_alias_name(package: &str, effect_name: &str, method_name: &str) -> String {
+    format!("wasi:{}/{}::{}", package, effect_name, method_name)
 }
 
 /// Information about a WASI interface (grouping functions by interface)
@@ -58,7 +85,8 @@ pub struct WasiRegistry {
     interfaces: BTreeMap<String, Vec<WasiFunctionInfo>>,
 
     /// Local alias -> (interface_path, wasi_func_name)
-    /// Used for disambiguation (e.g., write-via-stream-stderr)
+    /// Key format: wasi:{package}/{effect_name}::{method_name}
+    /// e.g., "wasi:cli/Stdout::write_via_stream"
     local_aliases: HashMap<String, (String, String)>,
 
     /// Track which WASI function names are used to detect collisions
@@ -97,21 +125,22 @@ impl WasiRegistry {
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
 
-        // Generate a unique local name using pattern: {interface}-{function}
-        // e.g., "stdout-write-via-stream", "monotonic-clock-now"
-        let local_name = format!("{}-{}", wasi.interface, wasi_func_name);
-
-        self.used_names.insert(local_name.clone());
-
         let func_info = WasiFunctionInfo {
             effect_name: effect_name.to_string(),
             method_name: method_name.to_string(),
             wasi_func_name: wasi_func_name.clone(),
             interface_path: interface_path.clone(),
+            package: wasi.package.clone(),
             is_async,
             params,
             return_type,
         };
+
+        // Generate the local alias name using utility function
+        // Format: wasi:{package}/{effect_name}::{method_name}
+        let local_name = func_info.local_alias_name();
+
+        self.used_names.insert(local_name.clone());
 
         // Register in effect -> func map
         let qualified_name = format!("{}::{}", effect_name, method_name);
@@ -129,13 +158,13 @@ impl WasiRegistry {
             .insert(local_name, (interface_path, wasi_func_name));
     }
 
-    /// Resolve an effect function call to its local name for code generation
+    /// Resolve an effect function call to its component-level local alias name
     ///
     /// # Arguments
     /// * `name` - The qualified effect call (e.g., "Stdout::write_via_stream")
     ///
     /// # Returns
-    /// The local function name to use in generated code (e.g., "stdout-write-via-stream")
+    /// The component-level local function name (e.g., "wasi:cli/Stdout::write_via_stream")
     pub fn resolve(&self, name: &str) -> Option<String> {
         if !name.contains("::") {
             return None;
@@ -314,9 +343,12 @@ mod tests {
             Some(make_result_type()),
         );
 
-        // Local name uses {interface}-{function} format
+        // Local name uses wasi:{package}/{effect}::{method} format
         let resolved = registry.resolve("Stdout::write_via_stream");
-        assert_eq!(resolved, Some("stdout-write-via-stream".to_string()));
+        assert_eq!(
+            resolved,
+            Some("wasi:cli/Stdout::write_via_stream".to_string())
+        );
     }
 
     #[test]
@@ -347,12 +379,18 @@ mod tests {
             Some(make_result_type()),
         );
 
-        // Each gets its own unique name via {interface}-{function} pattern
+        // Each gets its own unique name via wasi:{package}/{effect}::{method} pattern
         let stdout_resolved = registry.resolve("Stdout::write_via_stream");
-        assert_eq!(stdout_resolved, Some("stdout-write-via-stream".to_string()));
+        assert_eq!(
+            stdout_resolved,
+            Some("wasi:cli/Stdout::write_via_stream".to_string())
+        );
 
         let stderr_resolved = registry.resolve("Stderr::write_via_stream");
-        assert_eq!(stderr_resolved, Some("stderr-write-via-stream".to_string()));
+        assert_eq!(
+            stderr_resolved,
+            Some("wasi:cli/Stderr::write_via_stream".to_string())
+        );
     }
 
     #[test]
@@ -381,5 +419,36 @@ mod tests {
             Some("0.3.0-rc-2025-09-16".to_string())
         );
         assert_eq!(interfaces[0].functions.len(), 1);
+    }
+
+    #[test]
+    fn test_build_local_alias_name() {
+        // Test the utility function directly
+        assert_eq!(
+            build_local_alias_name("cli", "Stdout", "write_via_stream"),
+            "wasi:cli/Stdout::write_via_stream"
+        );
+        assert_eq!(
+            build_local_alias_name("clocks", "MonotonicClock", "now"),
+            "wasi:clocks/MonotonicClock::now"
+        );
+    }
+
+    #[test]
+    fn test_func_info_local_alias_name() {
+        let func_info = WasiFunctionInfo {
+            effect_name: "Stdout".to_string(),
+            method_name: "write_via_stream".to_string(),
+            wasi_func_name: "write-via-stream".to_string(),
+            interface_path: "wasi:cli/stdout@0.3.0-rc-2025-09-16".to_string(),
+            package: "cli".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: None,
+        };
+        assert_eq!(
+            func_info.local_alias_name(),
+            "wasi:cli/Stdout::write_via_stream"
+        );
     }
 }
