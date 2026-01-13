@@ -64,28 +64,31 @@ pub enum TokenKind {
     Hash,       // #
 
     // Operators
-    Eq,       // =
-    EqEq,     // ==
-    NotEq,    // !=
-    Lt,       // <
-    LtEq,     // <=
-    Gt,       // >
-    GtEq,     // >=
-    LtLt,     // <<
-    GtGt,     // >>
-    Plus,     // +
-    Minus,    // -
-    Star,     // *
-    Slash,    // /
-    Percent,  // %
-    Not,      // !
-    And,      // &&
-    Or,       // ||
-    Caret,    // ^
-    Tilde,    // ~
-    PlusEq,   // +=
-    MinusEq,  // -=
-    Question, // ?
+    Eq,        // =
+    EqEq,      // ==
+    NotEq,     // !=
+    Lt,        // <
+    LtEq,      // <=
+    Gt,        // >
+    GtEq,      // >=
+    LtLt,      // <<
+    GtGt,      // >>
+    Plus,      // +
+    Minus,     // -
+    Star,      // *
+    Slash,     // /
+    Percent,   // %
+    Not,       // !
+    And,       // &&
+    Or,        // ||
+    Caret,     // ^
+    Tilde,     // ~
+    PlusEq,    // +=
+    MinusEq,   // -=
+    StarEq,    // *=
+    SlashEq,   // /=
+    PercentEq, // %=
+    Question,  // ?
 
     // Special
     Eof,

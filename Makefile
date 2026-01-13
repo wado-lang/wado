@@ -32,7 +32,7 @@ on-task-done: format clippy-fix update-bundled test
 .PHONY: format
 format:
 	cargo fmt --verbose --all
-	npx prettier --write spec.md AGENTS.md README.md docs/*.md
+	npx prettier --write spec.md AGENTS.md README.md docs/*.md benchmark/*.md
 
 .PHONY: clippy
 clippy:
@@ -46,6 +46,7 @@ clippy-fix:
 clean:
 	cargo clean
 	rm -f example/*.wat example/*.wasm
+	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c
 
 .PHONY: update-vendor
 update-vendor:
@@ -74,3 +75,43 @@ check-bundled:
 	@diff -q wado-compiler/lib/builtins/wado-bundled.wat /tmp/wado-bundled-check.wat || \
 		(echo "ERROR: wado-bundled.wat is out of date. Run 'make update-bundled' to regenerate." && exit 1)
 	@echo "wado-bundled.wat is up-to-date."
+
+.PHONY: benchmark-count-prime
+benchmark-count-prime: build
+	@echo "=== Compiling Wado benchmark ==="
+	cargo run --bin wado --quiet -- compile -o benchmark/count_prime.wasm benchmark/count_prime.wado
+	@echo ""
+	@echo "=== Compiling C benchmark ==="
+	cc -O3 -o benchmark/count_prime_c benchmark/count_prime.c
+	@echo ""
+	@echo "=== C (cc -O3) ==="
+	@./benchmark/count_prime_c
+	@echo ""
+	@echo "=== JavaScript (Node.js) ==="
+	@node benchmark/count_prime.js
+	@echo ""
+	@echo "=== Python ==="
+	@python3 benchmark/count_prime.py
+	@echo ""
+	@echo "=== Wado (wasmtime) ==="
+	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
+
+.PHONY: benchmark-mandelbrot
+benchmark-mandelbrot: build
+	@echo "=== Compiling Wado benchmark ==="
+	cargo run --bin wado --quiet -- compile -o benchmark/mandelbrot.wasm benchmark/mandelbrot.wado
+	@echo ""
+	@echo "=== Compiling C benchmark ==="
+	cc -O3 -ffp-contract=off -o benchmark/mandelbrot_c benchmark/mandelbrot.c
+	@echo ""
+	@echo "=== C (cc -O3) ==="
+	@./benchmark/mandelbrot_c
+	@echo ""
+	@echo "=== JavaScript (Node.js) ==="
+	@node benchmark/mandelbrot.js
+	@echo ""
+	@echo "=== Python ==="
+	@python3 benchmark/mandelbrot.py
+	@echo ""
+	@echo "=== Wado (wasmtime) ==="
+	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm

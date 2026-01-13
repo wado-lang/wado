@@ -220,15 +220,30 @@ impl<'a> Lexer<'a> {
             }
             '*' => {
                 self.advance();
-                TokenKind::Star
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::StarEq
+                } else {
+                    TokenKind::Star
+                }
             }
             '/' => {
                 self.advance();
-                TokenKind::Slash
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::SlashEq
+                } else {
+                    TokenKind::Slash
+                }
             }
             '%' => {
                 self.advance();
-                TokenKind::Percent
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::PercentEq
+                } else {
+                    TokenKind::Percent
+                }
             }
             '|' => {
                 self.advance();

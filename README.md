@@ -98,6 +98,7 @@ wado compile -o example/hello.wat example/hello.wado  # ditto
 
 - [Language Specification](spec.md) - Full language reference
 - [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
+- [Benchmarks](benchmark/README.md) - Performance benchmarks vs C and JavaScript, and so on
 - [Other Documentation](docs) - ADR, research notes, TODOs, etc.
 
 ## Development
