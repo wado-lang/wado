@@ -2799,8 +2799,8 @@ impl Codegen {
         // Only builtins with #[canonical("...")] attribute are imported
         for func in self.builtin_registry.imported_builtins() {
             let canonical_name = func.canonical_name.as_ref().unwrap();
-            let params = Self::builtin_func_to_core_params(func);
-            let results = Self::builtin_func_to_core_results(func);
+            let params = self.builtin_func_to_core_params(func);
+            let results = self.builtin_func_to_core_results(func);
             builder.define_func_type(canonical_name, &params, &results);
         }
 
@@ -2865,8 +2865,8 @@ impl Codegen {
         for interface in self.wasi_registry.interfaces() {
             for func in &interface.functions {
                 let local_name = func.local_alias_name();
-                let params = Self::wasi_func_to_core_params(func);
-                let results = Self::wasi_func_to_core_results(func);
+                let params = self.wasi_func_to_core_params(func);
+                let results = self.wasi_func_to_core_results(func);
                 builder.define_func_type(&local_name, &params, &results);
             }
         }
@@ -2936,8 +2936,8 @@ impl Codegen {
 
         // World export types - derived from Command world in wasi/cli.wado
         if let Some(run_export) = self.world_registry.get_export("Command", "run") {
-            let params = Self::world_export_to_core_params(run_export);
-            let results = Self::world_export_to_core_results(run_export);
+            let params = self.world_export_to_core_params(run_export);
+            let results = self.world_export_to_core_results(run_export);
             builder.define_func_type(&run_export.name, &params, &results);
         }
 
@@ -3218,8 +3218,8 @@ impl Codegen {
         // Only builtins with #[canonical("...")] attribute are imported
         for func in self.builtin_registry.imported_builtins() {
             let canonical_name = func.canonical_name.as_ref().unwrap();
-            let params = Self::builtin_func_to_core_params(func);
-            let results = Self::builtin_func_to_core_results(func);
+            let params = self.builtin_func_to_core_params(func);
+            let results = self.builtin_func_to_core_results(func);
             builder.define_func_type(canonical_name, &params, &results);
         }
 
@@ -3231,8 +3231,8 @@ impl Codegen {
         for interface in self.wasi_registry.interfaces() {
             for func in &interface.functions {
                 let local_name = func.local_alias_name();
-                let params = Self::wasi_func_to_core_params(func);
-                let results = Self::wasi_func_to_core_results(func);
+                let params = self.wasi_func_to_core_params(func);
+                let results = self.wasi_func_to_core_results(func);
                 builder.define_func_type(&local_name, &params, &results);
             }
         }
@@ -3261,8 +3261,8 @@ impl Codegen {
 
         // World export types - derived from Command world in wasi/cli.wado
         if let Some(run_export) = self.world_registry.get_export("Command", "run") {
-            let params = Self::world_export_to_core_params(run_export);
-            let results = Self::world_export_to_core_results(run_export);
+            let params = self.world_export_to_core_params(run_export);
+            let results = self.world_export_to_core_results(run_export);
             builder.define_func_type(&run_export.name, &params, &results);
         }
 
@@ -4376,12 +4376,10 @@ impl Codegen {
                 // Special case: integer literal cast to i64/u64 - generate I64Const directly
                 // to avoid truncation through i32
                 let target_type_name = self.get_primitive_type_name(&cast.target_type);
+                let resolved_type = self.resolve_type_alias(&target_type_name);
                 if let Expr::Literal(lit) = &cast.expr
                     && let Literal::Int(n) = &lit.value
-                    && matches!(
-                        target_type_name.as_str(),
-                        "i64" | "u64" | "Instant" | "Duration"
-                    )
+                    && matches!(resolved_type, "i64" | "u64")
                 {
                     func.instruction(&Instruction::I64Const(*n));
                 } else {
@@ -4969,11 +4967,11 @@ impl Codegen {
     ///
     /// For async functions, an extra i32 param (outptr) is added per Component Model ABI.
     /// For sync functions, params are mapped directly.
-    fn wasi_func_to_core_params(func: &WasiFunctionInfo) -> Vec<ValType> {
+    fn wasi_func_to_core_params(&self, func: &WasiFunctionInfo) -> Vec<ValType> {
         let mut params: Vec<ValType> = func
             .params
             .iter()
-            .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+            .map(|(_, ty)| self.wasi_type_to_valtype(ty))
             .collect();
 
         // Async functions have an additional outptr parameter for the result
@@ -4988,12 +4986,12 @@ impl Codegen {
     ///
     /// For async functions, the result is always i32 (subtask handle).
     /// For sync functions, the return type is mapped directly.
-    fn wasi_func_to_core_results(func: &WasiFunctionInfo) -> Vec<ValType> {
+    fn wasi_func_to_core_results(&self, func: &WasiFunctionInfo) -> Vec<ValType> {
         if func.is_async {
             // Async functions return a subtask handle (i32)
             vec![ValType::I32]
         } else if let Some(ret_ty) = &func.return_type {
-            vec![Self::wasi_type_to_valtype(ret_ty)]
+            vec![self.wasi_type_to_valtype(ret_ty)]
         } else {
             vec![]
         }
@@ -5003,16 +5001,21 @@ impl Codegen {
     ///
     /// This is a simplified version that doesn't need string_array_type_idx
     /// because WASI function parameters and returns don't use String directly.
-    fn wasi_type_to_valtype(ty: &Type) -> ValType {
+    fn wasi_type_to_valtype(&self, ty: &Type) -> ValType {
         match ty {
-            Type::Named(named) => match named.name.as_str() {
-                "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => ValType::I32,
-                "i64" | "u64" | "Instant" | "Duration" => ValType::I64,
-                "f32" => ValType::F32,
-                "f64" => ValType::F64,
-                // Stream handles are i32
-                _ => ValType::I32,
-            },
+            Type::Named(named) => {
+                // Resolve type aliases (e.g., Instant -> u64, Duration -> u64)
+                let resolved_name = self.resolve_type_alias(&named.name);
+                match resolved_name {
+                    "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => ValType::I32,
+                    "i64" | "u64" => ValType::I64,
+                    "f32" => ValType::F32,
+                    "f64" => ValType::F64,
+                    // For WASI contexts, unknown named types (struct types like Datetime, etc.)
+                    // are passed as i32 handles/pointers
+                    _ => ValType::I32,
+                }
+            }
             Type::Generic(generic) => match generic.name.as_str() {
                 // Stream<T> is represented as i32 handle
                 "Stream" => ValType::I32,
@@ -5022,28 +5025,32 @@ impl Codegen {
                 "Future" => ValType::I32,
                 // Tuple types map to i32 for simplicity (struct pointer)
                 "Tuple" => ValType::I32,
-                _ => ValType::I32,
+                // Array<T> is represented as a GC array reference (handled as i32 in WASI context)
+                "Array" => ValType::I32,
+                // Option<T> is represented as i32 discriminant
+                "Option" => ValType::I32,
+                other => panic!("unknown generic type in wasi_type_to_valtype: {other}"),
             },
             Type::Tuple(_) => ValType::I32,
-            _ => ValType::I32,
+            other => panic!("unsupported type variant in wasi_type_to_valtype: {other:?}"),
         }
     }
 
     /// Convert a builtin function type to Core Wasm params
-    fn builtin_func_to_core_params(func: &BuiltinFunctionInfo) -> Vec<ValType> {
+    fn builtin_func_to_core_params(&self, func: &BuiltinFunctionInfo) -> Vec<ValType> {
         func.params
             .iter()
-            .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+            .map(|(_, ty)| self.wasi_type_to_valtype(ty))
             .collect()
     }
 
     /// Convert a builtin function type to Core Wasm results
-    fn builtin_func_to_core_results(func: &BuiltinFunctionInfo) -> Vec<ValType> {
+    fn builtin_func_to_core_results(&self, func: &BuiltinFunctionInfo) -> Vec<ValType> {
         if func.diverges {
             // Diverging functions have no return type
             vec![]
         } else if let Some(ret_ty) = &func.return_type {
-            vec![Self::wasi_type_to_valtype(ret_ty)]
+            vec![self.wasi_type_to_valtype(ret_ty)]
         } else {
             vec![]
         }
@@ -5053,7 +5060,7 @@ impl Codegen {
     ///
     /// For async exports, the core function has no params (async uses task_return).
     /// For sync exports, params are mapped directly.
-    fn world_export_to_core_params(export: &WorldExportInfo) -> Vec<ValType> {
+    fn world_export_to_core_params(&self, export: &WorldExportInfo) -> Vec<ValType> {
         if export.is_async {
             // Async exports have no params in core (lifted signature differs)
             vec![]
@@ -5061,7 +5068,7 @@ impl Codegen {
             export
                 .params
                 .iter()
-                .map(|(_, ty)| Self::wasi_type_to_valtype(ty))
+                .map(|(_, ty)| self.wasi_type_to_valtype(ty))
                 .collect()
         }
     }
@@ -5070,12 +5077,12 @@ impl Codegen {
     ///
     /// For async exports, there's no return (result passed via task_return).
     /// For sync exports, the return type is mapped directly.
-    fn world_export_to_core_results(export: &WorldExportInfo) -> Vec<ValType> {
+    fn world_export_to_core_results(&self, export: &WorldExportInfo) -> Vec<ValType> {
         if export.is_async {
             // Async exports have no return in core (use task_return)
             vec![]
         } else if let Some(ret_ty) = &export.return_type {
-            vec![Self::wasi_type_to_valtype(ret_ty)]
+            vec![self.wasi_type_to_valtype(ret_ty)]
         } else {
             vec![]
         }
