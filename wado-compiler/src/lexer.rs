@@ -1,5 +1,6 @@
 // Lexer for Wado
 
+use crate::comment::{Comment, CommentKind};
 use crate::token::{Span, Token, TokenKind};
 
 pub struct Lexer<'a> {
@@ -10,6 +11,8 @@ pub struct Lexer<'a> {
     column: usize,
     /// Content of the __DATA__ section, if present
     data_section: Option<String>,
+    /// Collected comments (not discarded, for formatter use)
+    comments: Vec<Comment>,
 }
 
 #[derive(Debug)]
@@ -27,6 +30,7 @@ impl<'a> Lexer<'a> {
             line: 1,
             column: 1,
             data_section: None,
+            comments: Vec::new(),
         }
     }
 
@@ -39,6 +43,18 @@ impl<'a> Lexer<'a> {
     /// Consumes the lexer and returns the data section content.
     pub fn into_data_section(self) -> Option<String> {
         self.data_section
+    }
+
+    pub fn comments(&self) -> &[Comment] {
+        &self.comments
+    }
+
+    pub fn into_comments(self) -> Vec<Comment> {
+        self.comments
+    }
+
+    pub fn into_parts(self) -> (Option<String>, Vec<Comment>) {
+        (self.data_section, self.comments)
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>, LexError> {
@@ -321,25 +337,98 @@ impl<'a> Lexer<'a> {
                 return;
             }
 
-            // Skip line comments
+            // Check for comments
             if let Some((_, '/')) = self.peek() {
                 let mut chars = self.chars.clone();
                 chars.next();
-                if let Some((_, '/')) = chars.peek() {
-                    // Line comment
-                    self.advance(); // first /
-                    self.advance(); // second /
-                    while let Some((_, ch)) = self.peek() {
-                        if ch == '\n' {
-                            break;
-                        }
-                        self.advance();
+                match chars.peek() {
+                    Some((_, '/')) => {
+                        // Line comment - collect instead of discard
+                        let comment = self.lex_line_comment();
+                        self.comments.push(comment);
+                        continue;
                     }
-                    continue;
+                    Some((_, '*')) => {
+                        // Block comment - collect instead of discard
+                        match self.lex_block_comment() {
+                            Ok(comment) => {
+                                self.comments.push(comment);
+                                continue;
+                            }
+                            Err(_) => {
+                                // Error will be caught in next_token when we
+                                // encounter the unterminated block comment again
+                                break;
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
 
             break;
+        }
+    }
+
+    fn lex_line_comment(&mut self) -> Comment {
+        let start = self.pos;
+        let start_line = self.line;
+        let start_column = self.column;
+
+        self.advance(); // first /
+        self.advance(); // second /
+
+        let text_start = self.pos;
+        while let Some((_, ch)) = self.peek() {
+            if ch == '\n' {
+                break;
+            }
+            self.advance();
+        }
+
+        let text = self.input[text_start..self.pos].to_string();
+
+        Comment {
+            text,
+            kind: CommentKind::Line,
+            span: Span::new(start, self.pos, start_line, start_column),
+        }
+    }
+
+    fn lex_block_comment(&mut self) -> Result<Comment, LexError> {
+        let start = self.pos;
+        let start_line = self.line;
+        let start_column = self.column;
+
+        self.advance(); // /
+        self.advance(); // *
+
+        let text_start = self.pos;
+        loop {
+            match self.peek() {
+                None => {
+                    return Err(LexError {
+                        message: "unterminated block comment".to_string(),
+                        span: Span::new(start, self.pos, start_line, start_column),
+                    });
+                }
+                Some((_, '*')) => {
+                    self.advance();
+                    if self.peek_char() == Some('/') {
+                        let text_end = self.pos - 1; // before the *
+                        self.advance(); // consume /
+                        let text = self.input[text_start..text_end].to_string();
+                        return Ok(Comment {
+                            text,
+                            kind: CommentKind::Block,
+                            span: Span::new(start, self.pos, start_line, start_column),
+                        });
+                    }
+                }
+                Some(_) => {
+                    self.advance();
+                }
+            }
         }
     }
 
@@ -539,13 +628,19 @@ impl<'a> Lexer<'a> {
                 message: format!("invalid float literal: {text}"),
                 span: Span::new(start, self.pos, start_line, start_column),
             })?;
-            Ok(TokenKind::FloatLit(value))
+            Ok(TokenKind::FloatLit {
+                value,
+                repr: text.to_string(),
+            })
         } else {
             let value: i64 = clean_text.parse().map_err(|_| LexError {
                 message: format!("invalid integer literal: {text}"),
                 span: Span::new(start, self.pos, start_line, start_column),
             })?;
-            Ok(TokenKind::IntLit(value))
+            Ok(TokenKind::IntLit {
+                value,
+                repr: text.to_string(),
+            })
         }
     }
 
@@ -580,7 +675,9 @@ impl<'a> Lexer<'a> {
             span: Span::new(start, self.pos, start_line, start_column),
         })?;
 
-        Ok(TokenKind::IntLit(value))
+        // Include "0x" prefix in repr
+        let repr = self.input[start..self.pos].to_string();
+        Ok(TokenKind::IntLit { value, repr })
     }
 
     fn lex_binary_number(
@@ -614,7 +711,9 @@ impl<'a> Lexer<'a> {
             span: Span::new(start, self.pos, start_line, start_column),
         })?;
 
-        Ok(TokenKind::IntLit(value))
+        // Include "0b" prefix in repr
+        let repr = self.input[start..self.pos].to_string();
+        Ok(TokenKind::IntLit { value, repr })
     }
 
     fn lex_octal_number(
@@ -648,7 +747,9 @@ impl<'a> Lexer<'a> {
             span: Span::new(start, self.pos, start_line, start_column),
         })?;
 
-        Ok(TokenKind::IntLit(value))
+        // Include "0o" prefix in repr
+        let repr = self.input[start..self.pos].to_string();
+        Ok(TokenKind::IntLit { value, repr })
     }
 
     fn lex_string(&mut self) -> Result<TokenKind, LexError> {
@@ -1066,6 +1167,71 @@ mod tests {
         let tokens = lexer.tokenize().unwrap();
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
+
+        // Comments should be collected, not discarded
+        let comments = lexer.comments();
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].text, " comment");
+        assert_eq!(comments[0].kind, CommentKind::Line);
+    }
+
+    #[test]
+    fn test_block_comments() {
+        let mut lexer = Lexer::new("/* block comment */fn");
+        let tokens = lexer.tokenize().unwrap();
+
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+
+        let comments = lexer.comments();
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].text, " block comment ");
+        assert_eq!(comments[0].kind, CommentKind::Block);
+    }
+
+    #[test]
+    fn test_multiline_block_comment() {
+        let mut lexer = Lexer::new("/*\n * multi-line\n * comment\n */\nfn");
+        let tokens = lexer.tokenize().unwrap();
+
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+
+        let comments = lexer.comments();
+        assert_eq!(comments.len(), 1);
+        assert!(comments[0].text.contains("multi-line"));
+        assert!(comments[0].text.contains("comment"));
+        assert_eq!(comments[0].kind, CommentKind::Block);
+    }
+
+    #[test]
+    fn test_multiple_comments() {
+        let mut lexer = Lexer::new("// first\n/* second */\n// third\nfn");
+        let tokens = lexer.tokenize().unwrap();
+
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+
+        let comments = lexer.comments();
+        assert_eq!(comments.len(), 3);
+        assert_eq!(comments[0].text, " first");
+        assert_eq!(comments[0].kind, CommentKind::Line);
+        assert_eq!(comments[1].text, " second ");
+        assert_eq!(comments[1].kind, CommentKind::Block);
+        assert_eq!(comments[2].text, " third");
+        assert_eq!(comments[2].kind, CommentKind::Line);
+    }
+
+    #[test]
+    fn test_trailing_comment() {
+        let mut lexer = Lexer::new("fn main() { } // trailing comment");
+        let tokens = lexer.tokenize().unwrap();
+
+        // Find the function tokens
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+
+        let comments = lexer.comments();
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].text, " trailing comment");
+        // The comment should be on the same line as the code
+        assert_eq!(comments[0].span.line, 1);
     }
 
     #[test]

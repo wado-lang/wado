@@ -777,6 +777,10 @@ impl Codegen {
             | Expr::TemplateString(_)
             | Expr::Assign(_)
             | Expr::StructLiteral(_) => {}
+            // These should be desugared before codegen
+            Expr::CompoundAssign(_) | Expr::ComparisonChain(_) => {
+                panic!("CompoundAssign and ComparisonChain should be desugared before codegen")
+            }
         }
     }
 
@@ -4381,7 +4385,7 @@ impl Codegen {
                     && let Literal::Int(n) = &lit.value
                     && matches!(resolved_type, "i64" | "u64")
                 {
-                    func.instruction(&Instruction::I64Const(*n));
+                    func.instruction(&Instruction::I64Const(n.value));
                 } else {
                     self.generate_expr_with_builder(func, &cast.expr, ctx, builder);
                     self.generate_type_cast(func, &cast.expr, &cast.target_type, ctx);
@@ -5459,10 +5463,10 @@ impl Codegen {
     fn generate_literal_p3(&self, func: &mut Function, lit: &Literal) {
         match lit {
             Literal::Int(n) => {
-                func.instruction(&Instruction::I32Const(*n as i32));
+                func.instruction(&Instruction::I32Const(n.value as i32));
             }
             Literal::Float(f) => {
-                func.instruction(&Instruction::F64Const((*f).into()));
+                func.instruction(&Instruction::F64Const(f.value.into()));
             }
             Literal::Bool(b) => {
                 func.instruction(&Instruction::I32Const(if *b { 1 } else { 0 }));

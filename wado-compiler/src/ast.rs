@@ -231,10 +231,19 @@ pub struct Function {
     pub span: Span,
 }
 
+/// Self parameter shorthand: &self or &mut self
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfKind {
+    None,
+    Ref,
+    MutRef,
+}
+
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,
     pub ty: Type,
+    pub self_kind: SelfKind,
     pub span: Span,
 }
 
@@ -322,6 +331,8 @@ pub enum Expr {
     Binary(Box<BinaryExpr>),
     Unary(Box<UnaryExpr>),
     Assign(Box<AssignExpr>),
+    CompoundAssign(Box<CompoundAssignExpr>),
+    ComparisonChain(Box<ComparisonChainExpr>),
     Call(Box<CallExpr>),
     MethodCall(Box<MethodCallExpr>),
     FieldAccess(Box<FieldAccessExpr>),
@@ -344,6 +355,8 @@ impl Expr {
             Expr::Binary(e) => e.span,
             Expr::Unary(e) => e.span,
             Expr::Assign(e) => e.span,
+            Expr::CompoundAssign(e) => e.span,
+            Expr::ComparisonChain(e) => e.span,
             Expr::Call(e) => e.span,
             Expr::MethodCall(e) => e.span,
             Expr::FieldAccess(e) => e.span,
@@ -380,6 +393,8 @@ pub struct StructLiteralExpr {
 pub struct StructLiteralField {
     pub name: String,
     pub value: Expr,
+    /// Whether this field uses shorthand syntax `{ x }` instead of `{ x: x }`
+    pub is_shorthand: bool,
     pub span: Span,
 }
 
@@ -387,6 +402,25 @@ pub struct StructLiteralField {
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
     pub target: Expr,
+    pub value: Expr,
+    pub span: Span,
+}
+
+/// Compound assignment operators
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CompoundAssignOp {
+    Add, // +=
+    Sub, // -=
+    Mul, // *=
+    Div, // /=
+    Mod, // %=
+}
+
+/// Compound assignment expression: `x += value`
+#[derive(Debug, Clone)]
+pub struct CompoundAssignExpr {
+    pub target: Expr,
+    pub op: CompoundAssignOp,
     pub value: Expr,
     pub span: Span,
 }
@@ -405,13 +439,27 @@ pub struct LiteralExpr {
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    Int(i64),
-    Float(f64),
+    Int(IntLiteral),
+    Float(FloatLiteral),
     String(String),
     Char(char),
     Bool(bool),
     Null,
     Unit,
+}
+
+/// Integer literal with original representation (e.g., "0b1100", "0xFF", "42")
+#[derive(Debug, Clone)]
+pub struct IntLiteral {
+    pub value: i64,
+    pub repr: String,
+}
+
+/// Float literal with original representation (e.g., "3.14", "6.022e23")
+#[derive(Debug, Clone)]
+pub struct FloatLiteral {
+    pub value: f64,
+    pub repr: String,
 }
 
 #[derive(Debug, Clone)]
@@ -444,6 +492,22 @@ pub enum BinaryOp {
     Shr,
 }
 
+/// A comparison in a chain (e.g., the `< b` part of `a < b < c`)
+#[derive(Debug, Clone)]
+pub struct ChainedComparison {
+    pub op: BinaryOp,
+    pub right: Expr,
+    pub op_span: Span,
+}
+
+/// Comparison chain expression: `a < b < c` or `0 <= x <= 100`
+#[derive(Debug, Clone)]
+pub struct ComparisonChainExpr {
+    pub first: Expr,
+    pub comparisons: Vec<ChainedComparison>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct UnaryExpr {
     pub op: UnaryOp,
@@ -451,7 +515,7 @@ pub struct UnaryExpr {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
     Neg,
     Not,
@@ -565,6 +629,7 @@ pub enum Type {
     Function(Box<FunctionType>),
     Tuple(Vec<Type>),
     Reference(Box<Type>),
+    MutReference(Box<Type>),
 }
 
 #[derive(Debug, Clone)]

@@ -39,8 +39,8 @@ pub enum TokenKind {
     StringLit(String),
     TemplateStringLit(String), // Raw template string content (without backticks)
     CharLit(char),
-    IntLit(i64),
-    FloatLit(f64),
+    IntLit { value: i64, repr: String },
+    FloatLit { value: f64, repr: String },
     True,
     False,
     Null,
@@ -106,6 +106,7 @@ pub struct Span {
     pub end: usize,
     pub line: usize,
     pub column: usize,
+    pub end_line: usize,
 }
 
 impl Token {
@@ -121,17 +122,37 @@ impl Span {
             end,
             line,
             column,
+            end_line: line,
         }
     }
 
-    /// Merge two spans to create a span covering both
-    /// Uses the start of self and end of other
+    pub fn with_end_line(
+        start: usize,
+        end: usize,
+        line: usize,
+        column: usize,
+        end_line: usize,
+    ) -> Self {
+        Self {
+            start,
+            end,
+            line,
+            column,
+            end_line,
+        }
+    }
+
+    pub fn end_line(&self) -> usize {
+        self.end_line
+    }
+
     pub fn merge(&self, other: &Span) -> Self {
         Self {
             start: self.start,
             end: other.end,
             line: self.line,
             column: self.column,
+            end_line: other.end_line,
         }
     }
 }

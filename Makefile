@@ -30,9 +30,10 @@ on-task-done: clippy-fix format update-bundled test
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: format
-format:
+format: build
 	cargo fmt --verbose --all
 	npx prettier --write spec.md AGENTS.md README.md docs/*.md benchmark/*.md
+	cargo run --bin wado --quiet -- format -w $$(grep -L '"compile_error"' wado-compiler/tests/fixtures/*.wado wado-compiler/tests/fixtures/**/*.wado)
 
 .PHONY: clippy
 clippy:

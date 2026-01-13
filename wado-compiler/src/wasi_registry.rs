@@ -293,12 +293,7 @@ mod tests {
     use crate::token::Span;
 
     fn make_span() -> Span {
-        Span {
-            start: 0,
-            end: 0,
-            line: 1,
-            column: 1,
-        }
+        Span::new(0, 0, 1, 1)
     }
 
     fn make_stream_u8_type() -> Type {

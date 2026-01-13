@@ -128,16 +128,11 @@ impl BuiltinRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{NamedType, Param};
+    use crate::ast::{NamedType, Param, SelfKind};
     use crate::token::Span;
 
     fn make_span() -> Span {
-        Span {
-            start: 0,
-            end: 0,
-            line: 1,
-            column: 1,
-        }
+        Span::new(0, 0, 1, 1)
     }
 
     #[test]
@@ -208,6 +203,7 @@ mod tests {
                         name: "i32".to_string(),
                         span: make_span(),
                     }),
+                    self_kind: SelfKind::None,
                     span: make_span(),
                 },
                 Param {
@@ -216,6 +212,7 @@ mod tests {
                         name: "i32".to_string(),
                         span: make_span(),
                     }),
+                    self_kind: SelfKind::None,
                     span: make_span(),
                 },
                 Param {
@@ -224,6 +221,7 @@ mod tests {
                         name: "i32".to_string(),
                         span: make_span(),
                     }),
+                    self_kind: SelfKind::None,
                     span: make_span(),
                 },
             ],

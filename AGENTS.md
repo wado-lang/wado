@@ -137,6 +137,7 @@ This project relies on the following features:
 - Avoid using well-known floating point number constants like PI, E, etc. in tests not to violate the Clippy `approx_constant` rule.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
+- Use string interpolation (`print!("foo: {foo}")`) - only variables are allowed inside the interpolation, though.
 
 ## Rules for Markdown
 

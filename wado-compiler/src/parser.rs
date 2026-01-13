@@ -455,6 +455,10 @@ impl Parser {
             Some(self.parse_block()?)
         };
 
+        let span = body
+            .as_ref()
+            .map_or(start_span, |b| start_span.merge(&b.span));
+
         Ok(Function {
             name,
             is_pub,
@@ -463,7 +467,7 @@ impl Parser {
             return_type,
             effects,
             body,
-            span: start_span,
+            span,
         })
     }
 
@@ -509,12 +513,19 @@ impl Parser {
                     name: "Self".to_string(),
                     span: start_span,
                 });
-                // For now, both &self and &mut self are represented as Reference
-                // TODO: Add MutReference type when needed
-                let _ = is_mut; // Will use this later for &mut self distinction
+                let ty = if is_mut {
+                    Type::MutReference(Box::new(self_type))
+                } else {
+                    Type::Reference(Box::new(self_type))
+                };
                 return Ok(Param {
                     name: "self".to_string(),
-                    ty: Type::Reference(Box::new(self_type)),
+                    ty,
+                    self_kind: if is_mut {
+                        SelfKind::MutRef
+                    } else {
+                        SelfKind::Ref
+                    },
                     span: start_span,
                 });
             }
@@ -532,6 +543,7 @@ impl Parser {
         Ok(Param {
             name,
             ty,
+            self_kind: SelfKind::None,
             span: start_span,
         })
     }
@@ -557,11 +569,11 @@ impl Parser {
             stmts.push(self.parse_stmt()?);
         }
 
-        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(Block {
             stmts,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -681,11 +693,14 @@ impl Parser {
             None
         };
 
+        let end_span = else_block.as_ref().map_or(&then_block.span, |b| &b.span);
+        let span = start_span.merge(end_span);
+
         Ok(Stmt::If(IfStmt {
             condition,
             then_block,
             else_block,
-            span: start_span,
+            span,
         }))
     }
 
@@ -695,11 +710,12 @@ impl Parser {
 
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
+        let span = start_span.merge(&body.span);
 
         Ok(Stmt::While(WhileStmt {
             condition,
             body,
-            span: start_span,
+            span,
         }))
     }
 
@@ -740,13 +756,14 @@ impl Parser {
         self.expect(&TokenKind::RParen)?;
 
         let body = self.parse_block()?;
+        let span = start_span.merge(&body.span);
 
         Ok(Stmt::For(ForStmt {
             init,
             condition,
             update,
             body,
-            span: start_span,
+            span,
         }))
     }
 
@@ -820,31 +837,24 @@ impl Parser {
 
         // Check for compound assignment operators
         let compound_op = match self.peek().kind {
-            TokenKind::PlusEq => Some(BinaryOp::Add),
-            TokenKind::MinusEq => Some(BinaryOp::Sub),
-            TokenKind::StarEq => Some(BinaryOp::Mul),
-            TokenKind::SlashEq => Some(BinaryOp::Div),
-            TokenKind::PercentEq => Some(BinaryOp::Mod),
+            TokenKind::PlusEq => Some(CompoundAssignOp::Add),
+            TokenKind::MinusEq => Some(CompoundAssignOp::Sub),
+            TokenKind::StarEq => Some(CompoundAssignOp::Mul),
+            TokenKind::SlashEq => Some(CompoundAssignOp::Div),
+            TokenKind::PercentEq => Some(CompoundAssignOp::Mod),
             _ => None,
         };
 
         if let Some(op) = compound_op {
             self.advance();
-            let rhs = self.parse_assignment_expr()?; // Right-associative
-            let rhs_span = rhs.span();
+            let value = self.parse_assignment_expr()?; // Right-associative
+            let value_span = value.span();
 
-            // Desugar: x op= y  -->  x = x op y
-            let binary_expr = Expr::Binary(Box::new(BinaryExpr {
-                left: expr.clone(),
-                op,
-                right: rhs,
-                span: start_span.merge(&rhs_span),
-            }));
-
-            return Ok(Expr::Assign(Box::new(AssignExpr {
+            return Ok(Expr::CompoundAssign(Box::new(CompoundAssignExpr {
                 target: expr,
-                value: binary_expr,
-                span: start_span,
+                op,
+                value,
+                span: start_span.merge(&value_span),
             })));
         }
 
@@ -891,7 +901,7 @@ impl Parser {
 
     /// Parse comparison expressions with chaining support.
     /// All comparison operators (==, !=, <, <=, >, >=) are at the same precedence level.
-    /// Chaining like `a < b < c` is parsed as `(a < b) && (b < c)`.
+    /// Chaining like `a < b < c` is preserved as `ComparisonChainExpr`.
     ///
     /// Chaining rules:
     /// - `<`/`<=` can only chain with `<`/`<=` (ascending)
@@ -899,7 +909,7 @@ impl Parser {
     /// - `==` can only chain with `==`
     /// - `!=` cannot be chained at all
     fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
-        let left = self.parse_bitor_expr()?;
+        let first = self.parse_bitor_expr()?;
 
         // Check if we have a comparison operator
         let first_op = match self.peek_kind() {
@@ -913,27 +923,28 @@ impl Parser {
         };
 
         if first_op.is_none() {
-            return Ok(left);
+            return Ok(first);
         }
 
         // Parse first comparison
         let first_op = first_op.unwrap();
-        let _first_op_span = self.peek().span;
-        let left_span = left.span();
+        let first_op_span = self.peek().span;
+        let first_span = first.span();
         self.advance();
-        let mut middle = self.parse_bitor_expr()?;
-        let merged_span = left_span.merge(&middle.span());
-        let mut result = Expr::Binary(Box::new(BinaryExpr {
-            left,
+        let second = self.parse_bitor_expr()?;
+
+        // Collect comparisons
+        let mut comparisons = vec![ChainedComparison {
             op: first_op,
-            right: middle.clone(),
-            span: merged_span,
-        }));
+            right: second.clone(),
+            op_span: first_op_span,
+        }];
 
         // Determine chain group from first operator
         let chain_group = Self::comparison_chain_group(first_op);
 
         // Check for chained comparisons (e.g., a < b < c)
+        let mut current = second;
         loop {
             let next_op = match self.peek_kind() {
                 TokenKind::EqEq => Some(BinaryOp::Eq),
@@ -979,32 +990,37 @@ impl Parser {
                 return Err(self.error_at_span(next_op_span, msg));
             }
 
-            let middle_span = middle.span();
             self.advance();
             let right = self.parse_bitor_expr()?;
-            let right_span = right.span();
 
-            // Create the next comparison: middle op right
-            let next_comparison = Expr::Binary(Box::new(BinaryExpr {
-                left: middle,
+            comparisons.push(ChainedComparison {
                 op: next_op,
                 right: right.clone(),
-                span: middle_span.merge(&right_span),
-            }));
+                op_span: next_op_span,
+            });
 
-            // Chain with &&: (previous result) && (middle op right)
-            let result_span = result.span();
-            result = Expr::Binary(Box::new(BinaryExpr {
-                left: result,
-                op: BinaryOp::And,
-                right: next_comparison,
-                span: result_span.merge(&right_span),
-            }));
-
-            middle = right;
+            current = right;
         }
 
-        Ok(result)
+        // If only one comparison, return a simple binary expression
+        if comparisons.len() == 1 {
+            let cmp = comparisons.pop().unwrap();
+            let merged_span = first_span.merge(&cmp.right.span());
+            return Ok(Expr::Binary(Box::new(BinaryExpr {
+                left: first,
+                op: cmp.op,
+                right: cmp.right,
+                span: merged_span,
+            })));
+        }
+
+        // Multiple comparisons: return a ComparisonChainExpr
+        let full_span = first_span.merge(&current.span());
+        Ok(Expr::ComparisonChain(Box::new(ComparisonChainExpr {
+            first,
+            comparisons,
+            span: full_span,
+        })))
     }
 
     /// Determine the chain group for a comparison operator
@@ -1276,17 +1292,23 @@ impl Parser {
                     }))
                 }
             }
-            TokenKind::IntLit(value) => {
+            TokenKind::IntLit { value, repr } => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Int(value),
+                    value: Literal::Int(IntLiteral {
+                        value,
+                        repr: repr.clone(),
+                    }),
                     span: start_span,
                 }))
             }
-            TokenKind::FloatLit(value) => {
+            TokenKind::FloatLit { value, repr } => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Float(value),
+                    value: Literal::Float(FloatLiteral {
+                        value,
+                        repr: repr.clone(),
+                    }),
                     span: start_span,
                 }))
             }
@@ -1416,11 +1438,22 @@ impl Parser {
             }));
         }
 
-        // Reference type: &T
+        // Reference type: &T or &mut T
         if self.check(&TokenKind::Ampersand) {
             self.advance();
+            // Check for mutable reference
+            let is_mut = if self.check(&TokenKind::Mut) {
+                self.advance();
+                true
+            } else {
+                false
+            };
             let inner = self.parse_type()?;
-            return Ok(Type::Reference(Box::new(inner)));
+            return Ok(if is_mut {
+                Type::MutReference(Box::new(inner))
+            } else {
+                Type::Reference(Box::new(inner))
+            });
         }
 
         // Tuple type: () or (T, U, ...)
@@ -1486,14 +1519,14 @@ impl Parser {
             methods.push(self.parse_effect_method()?);
         }
 
-        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(EffectDecl {
             name,
             is_pub,
             attrs,
             methods,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -1554,13 +1587,13 @@ impl Parser {
 
         let fields = self.parse_struct_fields()?;
 
-        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(StructDecl {
             name,
             is_pub,
             fields,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -1601,13 +1634,13 @@ impl Parser {
             }
         }
 
-        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(EnumDecl {
             name,
             is_pub,
             variants,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -1669,12 +1702,12 @@ impl Parser {
             methods.push(self.parse_function(is_pub, attrs)?);
         }
 
-        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(ImplBlock {
             ty,
             methods,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -1716,13 +1749,13 @@ impl Parser {
             }
         }
 
-        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(WorldDecl {
             name,
             imports,
             exports,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -2015,20 +2048,24 @@ impl Parser {
                 let field_span = self.peek().span;
                 let field_name = self.consume_ident()?;
 
-                let value = if self.check(&TokenKind::Colon) {
+                let (value, is_shorthand) = if self.check(&TokenKind::Colon) {
                     self.advance();
-                    self.parse_expr()?
+                    (self.parse_expr()?, false)
                 } else {
                     // Shorthand: `{ x }` is equivalent to `{ x: x }`
-                    Expr::Ident(IdentExpr {
-                        name: field_name.clone(),
-                        span: field_span,
-                    })
+                    (
+                        Expr::Ident(IdentExpr {
+                            name: field_name.clone(),
+                            span: field_span,
+                        }),
+                        true,
+                    )
                 };
 
                 fields.push(StructLiteralField {
                     name: field_name,
                     value,
+                    is_shorthand,
                     span: field_span,
                 });
 

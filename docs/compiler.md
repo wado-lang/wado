@@ -7,7 +7,9 @@ This document tracks the current implementation status of the Wado compiler.
 The compiler follows a traditional pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model Wasm
+Source (.wado) → Lexer → Parser → Analyzer → Desugar → Codegen → Component Model Wasm
+                           ↓
+                       Unparser → Formatted Source (wado format)
 ```
 
 ### Modules
@@ -18,6 +20,9 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 | Parser          | `parser.rs`           | Recursive descent parser, builds AST               |
 | AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API |
 | Token           | `token.rs`            | Token types and spans                              |
+| Comment         | `comment.rs`          | Comment collection and CommentMap for formatting   |
+| Desugar         | `desugar.rs`          | AST transformations before codegen                 |
+| Unparser        | `unparse.rs`          | Converts AST back to canonical source code         |
 | Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction       |
 | Symbol          | `symbol.rs`           | Symbol table data structures                       |
 | Name            | `name.rs`             | Name mangling utilities for methods and symbols    |
@@ -29,6 +34,21 @@ Source (.wado) → Lexer → Parser → Analyzer → Codegen → Component Model
 | Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
 | Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
 | Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                        |
+
+### Parser and Desugar Separation
+
+The parser preserves source syntax literally to enable accurate formatting via the unparser. Syntactic sugar is transformed in the desugar pass before codegen.
+
+| Construct               | Parser Output           | Desugar Output                        |
+| ----------------------- | ----------------------- | ------------------------------------- |
+| `x += y`                | `CompoundAssignExpr`    | `AssignExpr` with `BinaryExpr`        |
+| `a < b < c`             | `ComparisonChainExpr`   | `BinaryExpr` chain with `&&`          |
+| `&self`                 | `Param` with `SelfKind` | (preserved, handled in codegen)       |
+| `{ x }` (struct field)  | `is_shorthand: true`    | (preserved for formatting)            |
+
+This separation ensures:
+- `wado format` outputs the original syntax (e.g., `x += 1` not `x = x + 1`)
+- Codegen receives simplified AST without syntactic variants
 
 ### Bundled Builtins (wado-bundled)
 

@@ -3,6 +3,8 @@ pub mod ast;
 pub mod builtin_registry;
 pub mod bundled;
 pub mod codegen;
+pub mod comment;
+pub mod desugar;
 pub mod lexer;
 pub mod name;
 pub mod parser;
@@ -10,6 +12,7 @@ pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
 pub mod token;
+pub mod unparse;
 pub mod wasi_registry;
 pub mod wasm_postprocess;
 pub mod world_registry;
@@ -70,6 +73,60 @@ pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
 /// Compile Wado source code with a base path for relative imports.
 pub fn compile_with_base_path(source: &str, base_path: &Path) -> Result<Vec<u8>, CompileError> {
     compile_impl(source, None, Some(base_path)).map(|r| r.wasm)
+}
+
+/// Format Wado source code.
+///
+/// Returns the formatted source with canonical formatting.
+/// Preserves comments and the `__DATA__` section.
+///
+/// # Example
+/// ```
+/// let source = r#"use {println} from "core:cli";
+/// fn run() with Stdout { println("Hello!"); }
+/// "#;
+/// let formatted = wado_compiler::format(source).unwrap();
+/// assert!(formatted.contains("use { println }"));
+/// ```
+pub fn format(source: &str) -> Result<String, CompileError> {
+    // Lexer (collect comments)
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: None,
+    })?;
+    let data_section = lexer.data_section().map(String::from);
+    let comments = lexer.into_comments();
+
+    // Build comment map
+    let comment_map = comment::CommentMap::from_comments(comments, source);
+
+    // Parser (with data section)
+    let mut parser = Parser::with_data_section(tokens, data_section);
+    let ast = parser.parse().map_err(|e| CompileError::Parser {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: None,
+    })?;
+
+    // Unparse (no lowering - preserve high-level constructs)
+    let unparser = unparse::Unparser::new(&comment_map);
+    Ok(unparser.unparse(&ast))
+}
+
+/// Format a Wado source file.
+///
+/// Like [`format`], but reads source from a file.
+pub fn format_file(path: &Path) -> Result<String, CompileError> {
+    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
+        path: path.display().to_string(),
+        message: e.to_string(),
+    })?;
+
+    format(&source)
 }
 
 /// Compile a Wado source file to Component Model WebAssembly.
@@ -200,15 +257,28 @@ fn compile_impl(
     // Get loaded modules, symbols, and implicit modules for codegen
     let (symbols, loaded_modules, implicit_modules) = analyzer.into_parts();
 
+    // Desugar the main module and loaded modules
+    let desugared_ast = desugar::desugar_module(&ast);
+    let desugared_loaded_modules: std::collections::HashMap<Vec<String>, crate::ast::Module> =
+        loaded_modules
+            .iter()
+            .map(|(path, module)| (path.clone(), desugar::desugar_module(module)))
+            .collect();
+
     // Convert HashMap to Vec of references for codegen
     let loaded_modules_vec: Vec<(&Vec<String>, &crate::ast::Module)> =
-        loaded_modules.iter().collect();
+        desugared_loaded_modules.iter().collect();
 
     // Codegen (pass source code for power-assert messages)
     // Use catch_unwind to convert codegen panics to proper errors
     let mut codegen = Codegen::new_with_source(source.to_string());
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        codegen.generate_wasm_with_modules(&ast, &loaded_modules_vec, &symbols, &implicit_modules)
+        codegen.generate_wasm_with_modules(
+            &desugared_ast,
+            &loaded_modules_vec,
+            &symbols,
+            &implicit_modules,
+        )
     }))
     .map_err(|e| {
         let message = if let Some(s) = e.downcast_ref::<&str>() {
@@ -224,6 +294,7 @@ fn compile_impl(
         }
     })?;
 
+    // Return the original (non-desugared) AST for tooling
     Ok(CompileResult { wasm, module: ast })
 }
 

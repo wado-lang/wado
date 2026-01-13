@@ -1,5 +1,6 @@
 mod compile;
 mod dump;
+mod format;
 mod run;
 
 use std::process;
@@ -12,11 +13,16 @@ fn print_usage() {
     eprintln!("Commands:");
     eprintln!("  compile [options] <file.wado>  Compile a Wado source file");
     eprintln!("  run [options] <file.wado>      Compile and run a Wado source file");
+    eprintln!("  format [options] <file.wado>   Format a Wado source file");
     eprintln!("  dump [options] <file.wado>     Dump compiler internal state");
     eprintln!();
     eprintln!("Compile options:");
     eprintln!("  -o <file>        Output file path (default: <input>.wasm)");
     eprintln!("  --format <fmt>   Output format: wasm, wat (default: guessed from -o extension)");
+    eprintln!();
+    eprintln!("Format options:");
+    eprintln!("  -w, --write      Write formatted output back to file");
+    eprintln!("  --check          Check if file is formatted (exit 1 if not)");
     eprintln!();
     eprintln!("Dump options:");
     eprintln!("  --ast        Show the AST");
@@ -67,6 +73,10 @@ fn main() {
                 "dump" => {
                     let opts = dump::parse_args(parser);
                     dump::run(opts);
+                }
+                "format" => {
+                    let opts = format::parse_args(parser);
+                    format::run(opts);
                 }
                 _ => {
                     eprintln!("Error: unknown command '{cmd}'");

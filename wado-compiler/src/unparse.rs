@@ -1,0 +1,1285 @@
+// Unparser for Wado AST
+//
+// Converts AST back to canonical source code with comments.
+
+use crate::ast::{
+    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, CallExpr, CastExpr,
+    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, EffectDecl,
+    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForStmt, Function,
+    FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LetStmt, Literal,
+    MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl, ReturnStmt,
+    SelfKind, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, Type,
+    TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, WhileStmt, WorldDecl,
+};
+use crate::comment::{Comment, CommentKind, CommentMap};
+use crate::token::Span;
+use std::collections::HashSet;
+
+pub struct Unparser<'a> {
+    comments: &'a CommentMap,
+    output: String,
+    indent_level: usize,
+    emitted_comments: HashSet<usize>,
+    last_source_line: usize,
+}
+
+impl<'a> Unparser<'a> {
+    pub fn new(comments: &'a CommentMap) -> Self {
+        Self {
+            comments,
+            output: String::new(),
+            indent_level: 0,
+            emitted_comments: HashSet::new(),
+            last_source_line: 0,
+        }
+    }
+
+    /// Emit blank lines to reach the target line, updating last_source_line
+    fn emit_blank_lines_to(&mut self, target_line: usize) {
+        if self.last_source_line > 0 && target_line > self.last_source_line {
+            let blanks = self
+                .comments
+                .blank_lines_between(self.last_source_line, target_line);
+            for _ in 0..blanks {
+                self.output.push('\n');
+            }
+        }
+        self.last_source_line = target_line;
+    }
+
+    pub fn unparse(mut self, module: &Module) -> String {
+        self.unparse_module(module);
+
+        // Append data section if present
+        if let Some(data) = module.data_section() {
+            if !self.output.ends_with('\n') {
+                self.output.push('\n');
+            }
+            self.output.push_str("\n__DATA__\n");
+            self.output.push_str(data);
+        }
+
+        self.output
+    }
+
+    fn unparse_module(&mut self, module: &Module) {
+        for item in &module.items {
+            let item_span = get_item_span(item);
+            self.unparse_item(item);
+            self.last_source_line = item_span.end_line();
+        }
+    }
+
+    fn unparse_item(&mut self, item: &Item) {
+        let span = get_item_span(item);
+
+        // Emit leading comments (handles blank lines before comments)
+        self.emit_leading_comments(&span);
+
+        // Emit blank lines before the item itself
+        self.emit_blank_lines_to(span.line);
+
+        match item {
+            Item::Use(u) => self.unparse_use(u),
+            Item::Function(f) => self.unparse_function(f),
+            Item::Struct(s) => self.unparse_struct(s),
+            Item::Enum(e) => self.unparse_enum(e),
+            Item::Type(t) => self.unparse_type_alias(t),
+            Item::Impl(i) => self.unparse_impl(i),
+            Item::Effect(e) => self.unparse_effect(e),
+            Item::Resource(r) => self.unparse_resource(r),
+            Item::World(w) => self.unparse_world(w),
+        }
+
+        // Emit trailing comments
+        self.emit_trailing_comments(&span);
+    }
+
+    fn unparse_use(&mut self, u: &UseDecl) {
+        self.write_indent();
+
+        if u.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("use { ");
+
+        for (i, item) in u.items.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_use_item(item);
+        }
+
+        self.output.push_str(" } from \"");
+        self.output.push_str(&u.source);
+        self.output.push('"');
+
+        if let Some(attrs) = &u.attributes {
+            self.unparse_import_attributes(attrs);
+        }
+
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_use_item(&mut self, item: &UseItem) {
+        match item {
+            UseItem::Simple { name, alias } => {
+                self.output.push_str(name);
+                if let Some(alias) = alias {
+                    self.output.push_str(" as ");
+                    self.output.push_str(alias);
+                }
+            }
+            UseItem::EffectFunctions {
+                effect_name,
+                functions,
+            } => {
+                self.output.push_str(effect_name);
+                self.output.push_str("::{ ");
+                for (i, func) in functions.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_use_item_simple(func);
+                }
+                self.output.push_str(" }");
+            }
+        }
+    }
+
+    fn unparse_use_item_simple(&mut self, item: &UseItemSimple) {
+        self.output.push_str(&item.name);
+        if let Some(alias) = &item.alias {
+            self.output.push_str(" as ");
+            self.output.push_str(alias);
+        }
+    }
+
+    fn unparse_import_attributes(&mut self, attrs: &ImportAttributes) {
+        let mut parts = Vec::new();
+        if let Some(v) = &attrs.version {
+            parts.push(format!("version: \"{}\"", v));
+        }
+        if let Some(t) = &attrs.type_hint {
+            parts.push(format!("type: \"{}\"", t));
+        }
+        if let Some(i) = &attrs.integrity {
+            parts.push(format!("integrity: \"{}\"", i));
+        }
+        if !parts.is_empty() {
+            self.output.push_str(" with { ");
+            self.output.push_str(&parts.join(", "));
+            self.output.push_str(" }");
+        }
+    }
+
+    fn unparse_function(&mut self, f: &Function) {
+        self.write_indent();
+
+        // Attributes
+        for attr in &f.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
+        if f.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("fn ");
+        self.output.push_str(&f.name);
+        self.output.push('(');
+
+        for (i, param) in f.params.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_param(param);
+        }
+
+        self.output.push(')');
+
+        // Return type
+        if let Some(ret) = &f.return_type {
+            self.output.push_str(" -> ");
+            self.unparse_type(ret);
+        }
+
+        // Effects
+        if !f.effects.is_empty() {
+            self.output.push_str(" with ");
+            self.output.push_str(&f.effects.join(", "));
+        }
+
+        // Body
+        if let Some(body) = &f.body {
+            self.output.push_str(" {\n");
+            self.indent_level += 1;
+            self.unparse_block(body);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push_str("}\n");
+        } else {
+            self.output.push_str(";\n");
+        }
+    }
+
+    fn unparse_param(&mut self, param: &Param) {
+        match param.self_kind {
+            SelfKind::Ref => {
+                self.output.push_str("&self");
+                return;
+            }
+            SelfKind::MutRef => {
+                self.output.push_str("&mut self");
+                return;
+            }
+            SelfKind::None => {}
+        }
+        // Regular parameter
+        self.output.push_str(&param.name);
+        self.output.push_str(": ");
+        self.unparse_type(&param.ty);
+    }
+
+    fn unparse_attribute(&mut self, attr: &Attribute) {
+        self.output.push_str("#[");
+        self.output.push_str(&attr.name);
+        if let Some(args) = &attr.args {
+            self.output.push('(');
+            self.output.push('"');
+            self.output.push_str(args);
+            self.output.push('"');
+            self.output.push(')');
+        }
+        self.output.push(']');
+    }
+
+    fn unparse_struct(&mut self, s: &StructDecl) {
+        self.write_indent();
+
+        if s.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("struct ");
+        self.output.push_str(&s.name);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        // Track line context for blank lines inside struct
+        let saved_line = self.last_source_line;
+        self.last_source_line = s.span.line;
+
+        for field in &s.fields {
+            self.emit_leading_comments(&field.span);
+            self.emit_blank_lines_to(field.span.line);
+            self.unparse_struct_field(field);
+            self.emit_trailing_comments_inline(&field.span);
+            self.output.push('\n');
+            self.last_source_line = field.span.end_line();
+        }
+        self.indent_level -= 1;
+
+        self.last_source_line = saved_line.max(s.span.end_line());
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_struct_field(&mut self, field: &StructField) {
+        self.write_indent();
+        self.output.push_str(&field.name);
+        self.output.push_str(": ");
+        self.unparse_type(&field.ty);
+        self.output.push(',');
+    }
+
+    fn unparse_enum(&mut self, e: &EnumDecl) {
+        self.write_indent();
+
+        if e.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("enum ");
+        self.output.push_str(&e.name);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        for variant in &e.variants {
+            self.unparse_enum_variant(variant);
+        }
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_enum_variant(&mut self, variant: &EnumVariant) {
+        self.write_indent();
+        self.output.push_str(&variant.name);
+        if let Some(fields) = &variant.fields {
+            self.output.push('(');
+            for (i, ty) in fields.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.unparse_type(ty);
+            }
+            self.output.push(')');
+        }
+        self.output.push_str(",\n");
+    }
+
+    fn unparse_type_alias(&mut self, t: &TypeAlias) {
+        self.write_indent();
+
+        if t.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("type ");
+        self.output.push_str(&t.name);
+        self.output.push_str(" = ");
+        self.unparse_type(&t.ty);
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_impl(&mut self, i: &ImplBlock) {
+        self.write_indent();
+        self.output.push_str("impl ");
+        self.unparse_type(&i.ty);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        for (idx, method) in i.methods.iter().enumerate() {
+            if idx > 0 {
+                self.output.push('\n');
+            }
+            self.unparse_function(method);
+        }
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_effect(&mut self, e: &EffectDecl) {
+        self.write_indent();
+
+        // Attributes
+        for attr in &e.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
+        if e.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("effect ");
+        self.output.push_str(&e.name);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        for method in &e.methods {
+            self.unparse_effect_method(method);
+        }
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_effect_method(&mut self, m: &EffectMethod) {
+        self.write_indent();
+
+        for attr in &m.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
+        self.output.push_str("fn ");
+        self.output.push_str(&m.name);
+        self.output.push('(');
+
+        for (i, param) in m.params.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.output.push_str(&param.name);
+            self.output.push_str(": ");
+            self.unparse_type(&param.ty);
+        }
+
+        self.output.push(')');
+
+        if let Some(ret) = &m.return_type {
+            self.output.push_str(" -> ");
+            self.unparse_type(ret);
+        }
+
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_resource(&mut self, r: &ResourceDecl) {
+        self.write_indent();
+
+        for attr in &r.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
+        self.output.push_str("resource ");
+        self.output.push_str(&r.name);
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_world(&mut self, w: &WorldDecl) {
+        self.write_indent();
+        self.output.push_str("world ");
+        self.output.push_str(&w.name);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+
+        for imp in &w.imports {
+            self.write_indent();
+            self.output.push_str("import ");
+            self.output.push_str(&imp.effect_name);
+            self.output.push_str(" {\n");
+
+            self.indent_level += 1;
+            for func in &imp.functions {
+                self.write_indent();
+                self.output.push_str(func);
+                self.output.push_str(",\n");
+            }
+            self.indent_level -= 1;
+
+            self.write_indent();
+            self.output.push_str("}\n");
+        }
+
+        for exp in &w.exports {
+            self.write_indent();
+            self.output.push_str("export ");
+            if exp.is_async {
+                self.output.push_str("async ");
+            }
+            self.output.push_str("fn ");
+            self.output.push_str(&exp.name);
+            self.output.push('(');
+            for (i, param) in exp.params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&param.name);
+                self.output.push_str(": ");
+                self.unparse_type(&param.ty);
+            }
+            self.output.push(')');
+            if let Some(ret) = &exp.return_type {
+                self.output.push_str(" -> ");
+                self.unparse_type(ret);
+            }
+            self.output.push_str(";\n");
+        }
+
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_type(&mut self, ty: &Type) {
+        match ty {
+            Type::Named(n) => self.output.push_str(&n.name),
+            Type::Generic(g) => {
+                self.output.push_str(&g.name);
+                self.output.push('<');
+                for (i, arg) in g.args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_type(arg);
+                }
+                self.output.push('>');
+            }
+            Type::Function(f) => self.unparse_function_type(f),
+            Type::Tuple(types) => {
+                self.output.push_str("Tuple<");
+                for (i, t) in types.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_type(t);
+                }
+                self.output.push('>');
+            }
+            Type::Reference(inner) => {
+                self.output.push('&');
+                self.unparse_type(inner);
+            }
+            Type::MutReference(inner) => {
+                self.output.push_str("&mut ");
+                self.unparse_type(inner);
+            }
+        }
+    }
+
+    fn unparse_function_type(&mut self, f: &FunctionType) {
+        self.output.push_str("fn(");
+        for (i, param) in f.params.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_type(param);
+        }
+        self.output.push(')');
+        self.output.push_str(" -> ");
+        self.unparse_type(&f.return_type);
+        if !f.effects.is_empty() {
+            self.output.push_str(" with ");
+            self.output.push_str(&f.effects.join(", "));
+        }
+    }
+
+    fn unparse_block(&mut self, block: &Block) {
+        // Save and reset last_source_line for this block context
+        let saved_line = self.last_source_line;
+        self.last_source_line = block.span.line;
+
+        for stmt in &block.stmts {
+            let stmt_span = get_stmt_span(stmt);
+
+            // Emit leading comments (handles blank lines before comments)
+            self.emit_leading_comments(&stmt_span);
+
+            // Emit blank lines before the statement itself
+            self.emit_blank_lines_to(stmt_span.line);
+
+            self.unparse_stmt(stmt);
+            self.emit_trailing_comments(&stmt_span);
+            self.last_source_line = stmt_span.end_line();
+        }
+
+        // Emit trailing comments in the block (between last statement and closing brace)
+        self.emit_dangling_comments_in_block(block);
+
+        // Restore for parent context
+        self.last_source_line = saved_line.max(block.span.end_line());
+    }
+
+    fn unparse_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let(l) => self.unparse_let(l),
+            Stmt::Expr(e) => self.unparse_expr_stmt(e),
+            Stmt::Return(r) => self.unparse_return(r),
+            Stmt::If(i) => self.unparse_if_stmt(i),
+            Stmt::While(w) => self.unparse_while(w),
+            Stmt::For(f) => self.unparse_for(f),
+            Stmt::Assert(a) => self.unparse_assert(a),
+        }
+    }
+
+    fn unparse_let(&mut self, l: &LetStmt) {
+        self.write_indent();
+        self.output.push_str("let ");
+
+        if l.is_reactive {
+            self.output.push_str("reactive ");
+        }
+        if l.is_mut {
+            self.output.push_str("mut ");
+        }
+
+        self.output.push_str(&l.name);
+
+        if let Some(ty) = &l.ty {
+            self.output.push_str(": ");
+            self.unparse_type(ty);
+        }
+
+        self.output.push_str(" = ");
+        self.unparse_expr(&l.value);
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_expr_stmt(&mut self, e: &ExprStmt) {
+        self.write_indent();
+        self.unparse_expr(&e.expr);
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_return(&mut self, r: &ReturnStmt) {
+        self.write_indent();
+        self.output.push_str("return");
+        if let Some(value) = &r.value {
+            self.output.push(' ');
+            self.unparse_expr(value);
+        }
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_if_stmt(&mut self, i: &IfStmt) {
+        self.write_indent();
+        self.output.push_str("if ");
+        self.unparse_expr(&i.condition);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&i.then_block);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push('}');
+
+        if let Some(else_block) = &i.else_block {
+            self.output.push_str(" else {\n");
+            self.indent_level += 1;
+            self.unparse_block(else_block);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push('}');
+        }
+
+        self.output.push('\n');
+    }
+
+    fn unparse_while(&mut self, w: &WhileStmt) {
+        self.write_indent();
+        self.output.push_str("while ");
+        self.unparse_expr(&w.condition);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&w.body);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_for(&mut self, f: &ForStmt) {
+        self.write_indent();
+        self.output.push_str("for (");
+
+        if let Some(init) = &f.init {
+            self.unparse_for_init(init);
+        }
+        self.output.push_str("; ");
+
+        if let Some(cond) = &f.condition {
+            self.unparse_expr(cond);
+        }
+        self.output.push_str("; ");
+
+        if let Some(update) = &f.update {
+            self.unparse_expr(update);
+        }
+
+        self.output.push_str(") {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&f.body);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_for_init(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let(l) => {
+                self.output.push_str("let ");
+                if l.is_mut {
+                    self.output.push_str("mut ");
+                }
+                self.output.push_str(&l.name);
+                if let Some(ty) = &l.ty {
+                    self.output.push_str(": ");
+                    self.unparse_type(ty);
+                }
+                self.output.push_str(" = ");
+                self.unparse_expr(&l.value);
+            }
+            Stmt::Expr(e) => {
+                self.unparse_expr(&e.expr);
+            }
+            _ => {}
+        }
+    }
+
+    fn unparse_assert(&mut self, a: &AssertStmt) {
+        self.write_indent();
+        self.output.push_str("assert ");
+        self.unparse_expr(&a.condition);
+        if let Some(msg) = &a.message {
+            self.output.push_str(", ");
+            self.unparse_expr(msg);
+        }
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Ident(i) => self.output.push_str(&i.name),
+            Expr::Literal(l) => self.unparse_literal(&l.value),
+            Expr::Binary(b) => self.unparse_binary(b),
+            Expr::Unary(u) => self.unparse_unary(u),
+            Expr::Assign(a) => self.unparse_assign(a),
+            Expr::CompoundAssign(ca) => self.unparse_compound_assign(ca),
+            Expr::ComparisonChain(chain) => self.unparse_comparison_chain(chain),
+            Expr::Call(c) => self.unparse_call(c),
+            Expr::MethodCall(m) => self.unparse_method_call(m),
+            Expr::FieldAccess(f) => self.unparse_field_access(f),
+            Expr::Index(i) => self.unparse_index(i),
+            Expr::Block(b) => self.unparse_block_expr(b),
+            Expr::If(i) => self.unparse_if_expr(i),
+            Expr::Match(m) => self.unparse_match(m),
+            Expr::Closure(c) => self.unparse_closure(c),
+            Expr::TemplateString(t) => self.unparse_template_string(t),
+            Expr::Cast(c) => self.unparse_cast(c),
+            Expr::StructLiteral(s) => self.unparse_struct_literal(s),
+        }
+    }
+
+    fn unparse_literal(&mut self, lit: &Literal) {
+        match lit {
+            Literal::Int(int_lit) => self.output.push_str(&int_lit.repr),
+            Literal::Float(float_lit) => self.output.push_str(&float_lit.repr),
+            Literal::String(s) => {
+                self.output.push('"');
+                self.output.push_str(&escape_string(s));
+                self.output.push('"');
+            }
+            Literal::Char(c) => {
+                self.output.push('\'');
+                self.output.push_str(&escape_char(*c));
+                self.output.push('\'');
+            }
+            Literal::Bool(b) => self.output.push_str(if *b { "true" } else { "false" }),
+            Literal::Null => self.output.push_str("null"),
+            Literal::Unit => self.output.push_str("()"),
+        }
+    }
+
+    fn unparse_binary(&mut self, b: &BinaryExpr) {
+        let needs_parens_left = needs_parens(&b.left, b.op, true);
+        let needs_parens_right = needs_parens(&b.right, b.op, false);
+
+        if needs_parens_left {
+            self.output.push('(');
+        }
+        self.unparse_expr(&b.left);
+        if needs_parens_left {
+            self.output.push(')');
+        }
+
+        self.output.push(' ');
+        self.output.push_str(binary_op_str(b.op));
+        self.output.push(' ');
+
+        if needs_parens_right {
+            self.output.push('(');
+        }
+        self.unparse_expr(&b.right);
+        if needs_parens_right {
+            self.output.push(')');
+        }
+    }
+
+    fn unparse_unary(&mut self, u: &UnaryExpr) {
+        self.output.push_str(unary_op_str(u.op));
+
+        // Space between consecutive same operators: "- -5" not "--5", "& &x" not "&&x"
+        let needs_space = matches!(
+            (&u.op, &u.expr),
+            (UnaryOp::Neg, Expr::Unary(inner)) if inner.op == UnaryOp::Neg
+        ) || matches!(
+            (&u.op, &u.expr),
+            (UnaryOp::Ref, Expr::Unary(inner)) if inner.op == UnaryOp::Ref
+        );
+        if needs_space {
+            self.output.push(' ');
+        }
+
+        let needs_parens = matches!(
+            &u.expr,
+            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
+        );
+        if needs_parens {
+            self.output.push('(');
+        }
+        self.unparse_expr(&u.expr);
+        if needs_parens {
+            self.output.push(')');
+        }
+    }
+
+    fn unparse_assign(&mut self, a: &AssignExpr) {
+        self.unparse_expr(&a.target);
+        self.output.push_str(" = ");
+        self.unparse_expr(&a.value);
+    }
+
+    fn unparse_compound_assign(&mut self, ca: &CompoundAssignExpr) {
+        self.unparse_expr(&ca.target);
+        self.output.push(' ');
+        self.output.push_str(compound_op_str(ca.op));
+        self.output.push(' ');
+        self.unparse_expr(&ca.value);
+    }
+
+    fn unparse_comparison_chain(&mut self, chain: &ComparisonChainExpr) {
+        self.unparse_expr(&chain.first);
+        for cmp in &chain.comparisons {
+            self.output.push(' ');
+            self.output.push_str(binary_op_str(cmp.op));
+            self.output.push(' ');
+            self.unparse_expr(&cmp.right);
+        }
+    }
+
+    fn unparse_call(&mut self, c: &CallExpr) {
+        self.unparse_expr(&c.callee);
+        self.output.push('(');
+        for (i, arg) in c.args.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(arg);
+        }
+        self.output.push(')');
+    }
+
+    fn unparse_method_call(&mut self, m: &MethodCallExpr) {
+        self.unparse_expr(&m.receiver);
+        self.output.push('.');
+        self.output.push_str(&m.method);
+        self.output.push('(');
+        for (i, arg) in m.args.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(arg);
+        }
+        self.output.push(')');
+    }
+
+    fn unparse_field_access(&mut self, f: &FieldAccessExpr) {
+        self.unparse_expr(&f.expr);
+        self.output.push('.');
+        self.output.push_str(&f.field);
+    }
+
+    fn unparse_index(&mut self, i: &IndexExpr) {
+        self.unparse_expr(&i.expr);
+        self.output.push('[');
+        self.unparse_expr(&i.index);
+        self.output.push(']');
+    }
+
+    fn unparse_block_expr(&mut self, b: &Block) {
+        self.output.push_str("{\n");
+        self.indent_level += 1;
+        self.unparse_block(b);
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    fn unparse_if_expr(&mut self, i: &IfExpr) {
+        self.output.push_str("if ");
+        self.unparse_expr(&i.condition);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&i.then_block);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push('}');
+
+        if let Some(else_block) = &i.else_block {
+            self.output.push_str(" else {\n");
+            self.indent_level += 1;
+            self.unparse_block(else_block);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push('}');
+        }
+    }
+
+    fn unparse_match(&mut self, m: &MatchExpr) {
+        self.output.push_str("match ");
+        self.unparse_expr(&m.expr);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        for arm in &m.arms {
+            self.unparse_match_arm(arm);
+        }
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    fn unparse_match_arm(&mut self, arm: &MatchArm) {
+        self.write_indent();
+        self.unparse_pattern(&arm.pattern);
+        self.output.push_str(" => ");
+        self.unparse_expr(&arm.body);
+        self.output.push_str(",\n");
+    }
+
+    fn unparse_pattern(&mut self, pattern: &Pattern) {
+        match pattern {
+            Pattern::Ident(name) => self.output.push_str(name),
+            Pattern::Literal(lit) => self.unparse_literal(lit),
+            Pattern::Wildcard => self.output.push('_'),
+            Pattern::Tuple(patterns) => {
+                self.output.push('(');
+                for (i, p) in patterns.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_pattern(p);
+                }
+                self.output.push(')');
+            }
+        }
+    }
+
+    fn unparse_closure(&mut self, c: &ClosureExpr) {
+        self.output.push('|');
+        for (i, param) in c.params.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.output.push_str(&param.name);
+            if let Some(ty) = &param.ty {
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
+        }
+        self.output.push_str("| ");
+        self.unparse_expr(&c.body);
+    }
+
+    fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
+        use crate::ast::TemplatePart;
+
+        self.output.push('`');
+        for part in &t.parts {
+            match part {
+                TemplatePart::String(s) => {
+                    // Escape ` and { in template strings
+                    for c in s.chars() {
+                        match c {
+                            '`' => self.output.push_str("\\`"),
+                            '{' => self.output.push_str("{{"),
+                            '}' => self.output.push_str("}}"),
+                            _ => self.output.push(c),
+                        }
+                    }
+                }
+                TemplatePart::Interpolation { expr, format } => {
+                    self.output.push('{');
+                    self.unparse_expr(expr);
+                    if let Some(fmt) = format {
+                        self.output.push(':');
+                        self.output.push_str(&fmt.spec);
+                    }
+                    self.output.push('}');
+                }
+            }
+        }
+        self.output.push('`');
+    }
+
+    fn unparse_cast(&mut self, c: &CastExpr) {
+        let needs_parens = matches!(
+            &c.expr,
+            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
+        );
+        if needs_parens {
+            self.output.push('(');
+        }
+        self.unparse_expr(&c.expr);
+        if needs_parens {
+            self.output.push(')');
+        }
+        self.output.push_str(" as ");
+        self.unparse_type(&c.target_type);
+    }
+
+    fn unparse_struct_literal(&mut self, s: &StructLiteralExpr) {
+        self.output.push_str(&s.name);
+        self.output.push_str(" { ");
+
+        for (i, field) in s.fields.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.output.push_str(&field.name);
+            if !field.is_shorthand {
+                self.output.push_str(": ");
+                self.unparse_expr(&field.value);
+            }
+        }
+
+        self.output.push_str(" }");
+    }
+
+    // Helper methods
+
+    fn write_indent(&mut self) {
+        for _ in 0..self.indent_level {
+            self.output.push_str("    ");
+        }
+    }
+
+    fn emit_leading_comments(&mut self, span: &Span) {
+        for comment in self.comments.leading_comments(span) {
+            if self.emitted_comments.insert(comment.span.start) {
+                // Emit blank lines before this comment
+                self.emit_blank_lines_to(comment.span.line);
+                self.write_indent();
+                self.emit_comment(comment);
+                self.output.push('\n');
+                self.last_source_line = comment.span.line;
+            }
+        }
+    }
+
+    fn emit_trailing_comments(&mut self, span: &Span) {
+        for comment in self.comments.trailing_comments(span) {
+            if self.emitted_comments.insert(comment.span.start) {
+                // Insert before trailing newline if present
+                if self.output.ends_with('\n') {
+                    self.output.pop();
+                    self.output.push_str("  ");
+                    self.emit_comment(comment);
+                    self.output.push('\n');
+                } else {
+                    self.output.push_str("  ");
+                    self.emit_comment(comment);
+                }
+            }
+        }
+    }
+
+    fn emit_trailing_comments_inline(&mut self, span: &Span) {
+        for comment in self.comments.trailing_comments(span) {
+            if self.emitted_comments.insert(comment.span.start) {
+                self.output.push_str("  ");
+                self.emit_comment(comment);
+            }
+        }
+    }
+
+    fn emit_dangling_comments_in_block(&mut self, block: &Block) {
+        let after_pos = if let Some(last_stmt) = block.stmts.last() {
+            get_stmt_span(last_stmt).end
+        } else {
+            block.span.start
+        };
+
+        for comment in self.comments.comments_between(after_pos, block.span.end) {
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_blank_lines_to(comment.span.line);
+                self.write_indent();
+                self.emit_comment(comment);
+                self.output.push('\n');
+                self.last_source_line = comment.span.line;
+            }
+        }
+    }
+
+    fn emit_comment(&mut self, comment: &Comment) {
+        match comment.kind {
+            CommentKind::Line => {
+                self.output.push_str("//");
+                self.output.push_str(&comment.text);
+            }
+            CommentKind::Block => {
+                self.output.push_str("/*");
+                self.output.push_str(&comment.text);
+                self.output.push_str("*/");
+            }
+        }
+    }
+}
+
+// Helper functions
+
+fn get_item_span(item: &Item) -> Span {
+    match item {
+        Item::Use(u) => u.span,
+        Item::Function(f) => f.span,
+        Item::Struct(s) => s.span,
+        Item::Enum(e) => e.span,
+        Item::Type(t) => t.span,
+        Item::Impl(i) => i.span,
+        Item::Effect(e) => e.span,
+        Item::Resource(r) => r.span,
+        Item::World(w) => w.span,
+    }
+}
+
+fn get_stmt_span(stmt: &Stmt) -> Span {
+    match stmt {
+        Stmt::Let(l) => l.span,
+        Stmt::Expr(e) => e.span,
+        Stmt::Return(r) => r.span,
+        Stmt::If(i) => i.span,
+        Stmt::While(w) => w.span,
+        Stmt::For(f) => f.span,
+        Stmt::Assert(a) => a.span,
+    }
+}
+
+fn binary_op_str(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::Mod => "%",
+        BinaryOp::Eq => "==",
+        BinaryOp::NotEq => "!=",
+        BinaryOp::Lt => "<",
+        BinaryOp::LtEq => "<=",
+        BinaryOp::Gt => ">",
+        BinaryOp::GtEq => ">=",
+        BinaryOp::And => "&&",
+        BinaryOp::Or => "||",
+        BinaryOp::BitAnd => "&",
+        BinaryOp::BitOr => "|",
+        BinaryOp::BitXor => "^",
+        BinaryOp::Shl => "<<",
+        BinaryOp::Shr => ">>",
+    }
+}
+
+fn compound_op_str(op: CompoundAssignOp) -> &'static str {
+    match op {
+        CompoundAssignOp::Add => "+=",
+        CompoundAssignOp::Sub => "-=",
+        CompoundAssignOp::Mul => "*=",
+        CompoundAssignOp::Div => "/=",
+        CompoundAssignOp::Mod => "%=",
+    }
+}
+
+fn unary_op_str(op: UnaryOp) -> &'static str {
+    match op {
+        UnaryOp::Neg => "-",
+        UnaryOp::Not => "!",
+        UnaryOp::BitNot => "~",
+        UnaryOp::Ref => "&",
+        UnaryOp::Deref => "*",
+    }
+}
+
+fn binary_op_precedence(op: BinaryOp) -> u8 {
+    match op {
+        BinaryOp::Or => 2,
+        BinaryOp::And => 3,
+        BinaryOp::Eq
+        | BinaryOp::NotEq
+        | BinaryOp::Lt
+        | BinaryOp::LtEq
+        | BinaryOp::Gt
+        | BinaryOp::GtEq => 4,
+        BinaryOp::BitOr => 5,
+        BinaryOp::BitXor => 6,
+        BinaryOp::BitAnd => 7,
+        BinaryOp::Shl | BinaryOp::Shr => 8,
+        BinaryOp::Add | BinaryOp::Sub => 9,
+        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => 10,
+    }
+}
+
+fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
+    match expr {
+        Expr::Binary(inner) => {
+            let inner_prec = binary_op_precedence(inner.op);
+            let parent_prec = binary_op_precedence(parent_op);
+
+            if inner_prec < parent_prec {
+                return true;
+            }
+            if inner_prec == parent_prec && !is_left {
+                // Right-associative check for same precedence
+                return true;
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+fn escape_string(s: &str) -> String {
+    let mut result = String::new();
+    for c in s.chars() {
+        match c {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            '\0' => result.push_str("\\0"),
+            c if c.is_control() => {
+                result.push_str(&format!("\\u{{{:04X}}}", c as u32));
+            }
+            c => result.push(c),
+        }
+    }
+    result
+}
+
+fn escape_char(c: char) -> String {
+    match c {
+        '\'' => "\\'".to_string(),
+        '\\' => "\\\\".to_string(),
+        '\n' => "\\n".to_string(),
+        '\r' => "\\r".to_string(),
+        '\t' => "\\t".to_string(),
+        '\0' => "\\0".to_string(),
+        c if c.is_control() => format!("\\u{{{:04X}}}", c as u32),
+        c => c.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_escape_string() {
+        assert_eq!(escape_string("hello"), "hello");
+        assert_eq!(escape_string("hello\nworld"), "hello\\nworld");
+        assert_eq!(escape_string("say \"hi\""), "say \\\"hi\\\"");
+    }
+
+    #[test]
+    fn test_binary_op_str() {
+        assert_eq!(binary_op_str(BinaryOp::Add), "+");
+        assert_eq!(binary_op_str(BinaryOp::Eq), "==");
+        assert_eq!(binary_op_str(BinaryOp::And), "&&");
+    }
+
+    #[test]
+    fn test_compound_op_str() {
+        assert_eq!(compound_op_str(CompoundAssignOp::Add), "+=");
+        assert_eq!(compound_op_str(CompoundAssignOp::Div), "/=");
+    }
+}
