@@ -14,7 +14,44 @@ use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use std::path::Path;
+use std::sync::OnceLock;
 use wado_compiler::compile_file;
+
+/// Shared wasmtime Engine for all tests (initialized once)
+static ENGINE: OnceLock<Engine> = OnceLock::new();
+
+/// Shared tokio runtime for all tests (initialized once)
+static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+/// Get or initialize the shared wasmtime Engine
+fn get_engine() -> &'static Engine {
+    ENGINE.get_or_init(|| {
+        let mut config = Config::new();
+        config.async_support(true);
+        config.wasm_component_model(true);
+        config.wasm_component_model_gc(true);
+        config.wasm_component_model_async(true);
+        config.wasm_component_model_async_builtins(true);
+        config.wasm_component_model_async_stackful(true);
+        config.wasm_simd(true);
+        config.wasm_wide_arithmetic(true);
+        config.wasm_threads(true);
+        config.wasm_gc(true);
+        config.wasm_function_references(true);
+
+        Engine::new(&config).expect("Failed to create wasmtime Engine")
+    })
+}
+
+/// Get or initialize the shared tokio runtime
+fn get_runtime() -> &'static tokio::runtime::Runtime {
+    TOKIO_RT.get_or_init(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime")
+    })
+}
 
 struct TestWasiState {
     ctx: WasiCtx,
@@ -71,32 +108,16 @@ struct TestSpec {
 }
 
 fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
-    // Create a new tokio runtime for this test
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
+    // Use shared runtime and engine
+    let rt = get_runtime();
+    let engine = get_engine();
 
     rt.block_on(async {
-        let mut config = Config::new();
-        config.async_support(true);
-        config.wasm_component_model(true);
-        config.wasm_component_model_gc(true);
-        config.wasm_component_model_async(true);
-        config.wasm_component_model_async_builtins(true);
-        config.wasm_component_model_async_stackful(true);
-        config.wasm_simd(true);
-        config.wasm_wide_arithmetic(true);
-        config.wasm_threads(true);
-        config.wasm_gc(true);
-        config.wasm_function_references(true);
-
-        let engine = Engine::new(&config)?;
-
         // Create component from wasm bytes
-        let component = Component::new(&engine, &wasm)?;
+        let component = Component::new(engine, &wasm)?;
 
         // Set up linker with WASI P3
-        let mut linker: Linker<TestWasiState> = Linker::new(&engine);
+        let mut linker: Linker<TestWasiState> = Linker::new(engine);
         wasmtime_wasi::p3::add_to_linker(&mut linker)?;
 
         // Create stdout and stderr capture pipes
@@ -113,7 +134,7 @@ fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
         let table = ResourceTable::new();
 
         let state = TestWasiState { ctx, table };
-        let mut store = Store::new(&engine, state);
+        let mut store = Store::new(engine, state);
 
         // Instantiate the component
         let instance = linker.instantiate_async(&mut store, &component).await?;
