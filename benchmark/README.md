@@ -44,10 +44,10 @@ make benchmark-count-prime
 
 | Component  | Version                              |
 | ---------- | ------------------------------------ |
-| Wado       | commit `53e4f9d`                     |
+| Wado       | commit `8f2537f`                     |
 | wasmtime   | 40.0.0 (0807b003e 2025-12-22)        |
 | Node.js    | v24.11.0                             |
-| Python     | 3.x                                  |
+| Python     | 3.14.2 (CPython, no JIT)             |
 | C compiler | Apple clang 17.0.0                   |
 | Platform   | macOS (Darwin 24.6.0), Apple Silicon |
 
@@ -55,10 +55,10 @@ make benchmark-count-prime
 
 | Runtime       | Time (ms) | Relative |
 | ------------- | --------- | -------- |
-| JavaScript    | 116       | 1.00x    |
-| C (clang -O3) | 118       | 1.02x    |
-| **Wado**      | 136       | 1.17x    |
-| Python        | TBD       | TBD      |
+| C (clang -O3) | 136       | 1.00x    |
+| JavaScript    | 143       | 1.05x    |
+| **Wado**      | 173       | 1.27x    |
+| Python        | 4,137     | 30.42x   |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -66,10 +66,10 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime       | Time (ms) | Relative |
 | ------------- | --------- | -------- |
-| **Wado**      | 1,296     | 1.00x    |
-| C (clang -O3) | 1,350     | 1.04x    |
-| JavaScript    | 1,992     | 1.54x    |
-| Python        | TBD       | TBD      |
+| **Wado**      | 1,363     | 1.00x    |
+| C (clang -O3) | 1,496     | 1.10x    |
+| JavaScript    | 2,427     | 1.78x    |
+| Python        | 74,360    | 54.56x   |
 
 All implementations produce the same result: 664,579 primes.
 
