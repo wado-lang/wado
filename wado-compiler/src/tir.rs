@@ -1,0 +1,759 @@
+//! Typed Intermediate Representation (TIR) for Wado
+//!
+//! TIR is the post-type-resolution representation used for lowering,
+//! optimization, and code generation. Every expression has a resolved type.
+//!
+//! Key properties:
+//! - All types resolved to TypeId (no string-based type names)
+//! - All variable references resolved (local index known)
+//! - All function calls resolved
+//! - No syntactic sugar (desugared before TIR)
+
+use std::collections::HashMap;
+
+use crate::token::Span;
+
+// ============================================================================
+// Type System
+// ============================================================================
+
+pub type TypeId = u32;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PrimitiveType {
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    F32,
+    F64,
+    Bool,
+    Char,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ResolvedType {
+    Primitive(PrimitiveType),
+    Unit,
+    Never,
+    String,
+    Struct {
+        name: String,
+        module_path: Vec<String>,
+    },
+    Enum {
+        name: String,
+        module_path: Vec<String>,
+    },
+    Variant {
+        name: String,
+        module_path: Vec<String>,
+    },
+    Array(TypeId),
+    Option(TypeId),
+    Result {
+        ok: TypeId,
+        err: TypeId,
+    },
+    Stream(TypeId),
+    Future(TypeId),
+    Ref(TypeId),
+    MutRef(TypeId),
+    Function {
+        params: Vec<TypeId>,
+        return_type: TypeId,
+        effects: Vec<String>,
+    },
+    Tuple(Vec<TypeId>),
+    Dict {
+        key: TypeId,
+        value: TypeId,
+    },
+    Reactive(TypeId),
+    Unknown,
+    Error,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeTable {
+    types: Vec<ResolvedType>,
+    intern_map: HashMap<ResolvedType, TypeId>,
+}
+
+impl Default for TypeTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TypeTable {
+    pub const I8: TypeId = 0;
+    pub const I16: TypeId = 1;
+    pub const I32: TypeId = 2;
+    pub const I64: TypeId = 3;
+    pub const I128: TypeId = 4;
+    pub const U8: TypeId = 5;
+    pub const U16: TypeId = 6;
+    pub const U32: TypeId = 7;
+    pub const U64: TypeId = 8;
+    pub const U128: TypeId = 9;
+    pub const F32: TypeId = 10;
+    pub const F64: TypeId = 11;
+    pub const BOOL: TypeId = 12;
+    pub const CHAR: TypeId = 13;
+    pub const UNIT: TypeId = 14;
+    pub const NEVER: TypeId = 15;
+    pub const STRING: TypeId = 16;
+    pub const UNKNOWN: TypeId = 17;
+    pub const ERROR: TypeId = 18;
+
+    pub fn new() -> Self {
+        let mut table = Self {
+            types: Vec::new(),
+            intern_map: HashMap::new(),
+        };
+
+        // Pre-populate primitive types matching the constants above
+        table.intern(ResolvedType::Primitive(PrimitiveType::I8));
+        table.intern(ResolvedType::Primitive(PrimitiveType::I16));
+        table.intern(ResolvedType::Primitive(PrimitiveType::I32));
+        table.intern(ResolvedType::Primitive(PrimitiveType::I64));
+        table.intern(ResolvedType::Primitive(PrimitiveType::I128));
+        table.intern(ResolvedType::Primitive(PrimitiveType::U8));
+        table.intern(ResolvedType::Primitive(PrimitiveType::U16));
+        table.intern(ResolvedType::Primitive(PrimitiveType::U32));
+        table.intern(ResolvedType::Primitive(PrimitiveType::U64));
+        table.intern(ResolvedType::Primitive(PrimitiveType::U128));
+        table.intern(ResolvedType::Primitive(PrimitiveType::F32));
+        table.intern(ResolvedType::Primitive(PrimitiveType::F64));
+        table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
+        table.intern(ResolvedType::Primitive(PrimitiveType::Char));
+        table.intern(ResolvedType::Unit);
+        table.intern(ResolvedType::Never);
+        table.intern(ResolvedType::String);
+        table.intern(ResolvedType::Unknown);
+        table.intern(ResolvedType::Error);
+
+        table
+    }
+
+    pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
+        if let Some(&id) = self.intern_map.get(&ty) {
+            return id;
+        }
+        let id = self.types.len() as TypeId;
+        self.types.push(ty.clone());
+        self.intern_map.insert(ty, id);
+        id
+    }
+
+    pub fn get(&self, id: TypeId) -> &ResolvedType {
+        &self.types[id as usize]
+    }
+
+    pub fn is_integer(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::Primitive(
+                PrimitiveType::I8
+                    | PrimitiveType::I16
+                    | PrimitiveType::I32
+                    | PrimitiveType::I64
+                    | PrimitiveType::I128
+                    | PrimitiveType::U8
+                    | PrimitiveType::U16
+                    | PrimitiveType::U32
+                    | PrimitiveType::U64
+                    | PrimitiveType::U128
+            )
+        )
+    }
+
+    pub fn is_float(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
+        )
+    }
+
+    pub fn is_numeric(&self, id: TypeId) -> bool {
+        self.is_integer(id) || self.is_float(id)
+    }
+
+    pub fn len(&self) -> usize {
+        self.types.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.types.len() <= 19
+    }
+
+    pub fn make_array(&mut self, element: TypeId) -> TypeId {
+        self.intern(ResolvedType::Array(element))
+    }
+
+    pub fn make_option(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::Option(inner))
+    }
+
+    pub fn make_result(&mut self, ok: TypeId, err: TypeId) -> TypeId {
+        self.intern(ResolvedType::Result { ok, err })
+    }
+
+    pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
+        self.intern(ResolvedType::Tuple(elements))
+    }
+
+    pub fn make_function(
+        &mut self,
+        params: Vec<TypeId>,
+        return_type: TypeId,
+        effects: Vec<String>,
+    ) -> TypeId {
+        self.intern(ResolvedType::Function {
+            params,
+            return_type,
+            effects,
+        })
+    }
+
+    pub fn make_struct(&mut self, name: String, module_path: Vec<String>) -> TypeId {
+        self.intern(ResolvedType::Struct { name, module_path })
+    }
+
+    pub fn make_enum(&mut self, name: String, module_path: Vec<String>) -> TypeId {
+        self.intern(ResolvedType::Enum { name, module_path })
+    }
+
+    pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::Ref(inner))
+    }
+
+    pub fn make_mut_ref(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::MutRef(inner))
+    }
+}
+
+// ============================================================================
+// Expressions
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct TirExpr {
+    pub kind: TirExprKind,
+    pub type_id: TypeId,
+    pub span: Span,
+}
+
+impl TirExpr {
+    pub fn new(kind: TirExprKind, type_id: TypeId, span: Span) -> Self {
+        Self {
+            kind,
+            type_id,
+            span,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TirExprKind {
+    IntLiteral {
+        value: i64,
+        repr: String,
+    },
+    FloatLiteral {
+        value: f64,
+        repr: String,
+    },
+    BoolLiteral(bool),
+    CharLiteral(char),
+    StringLiteral(String),
+    Null,
+    Unit,
+
+    Local {
+        index: u32,
+        name: String,
+    },
+    Global {
+        module_path: Vec<String>,
+        name: String,
+    },
+
+    Binary {
+        left: Box<TirExpr>,
+        op: TirBinaryOp,
+        right: Box<TirExpr>,
+    },
+    Unary {
+        op: TirUnaryOp,
+        expr: Box<TirExpr>,
+    },
+    Assign {
+        target: Box<TirExpr>,
+        value: Box<TirExpr>,
+    },
+    Cast {
+        expr: Box<TirExpr>,
+        target_type: TypeId,
+    },
+
+    Call {
+        module_path: Vec<String>,
+        func_name: String,
+        args: Vec<TirExpr>,
+    },
+    EffectCall {
+        effect_name: String,
+        op_name: String,
+        args: Vec<TirExpr>,
+    },
+    MethodCall {
+        receiver: Box<TirExpr>,
+        method_name: String,
+        args: Vec<TirExpr>,
+    },
+
+    FieldAccess {
+        expr: Box<TirExpr>,
+        field_index: u32,
+        field_name: String,
+    },
+    Index {
+        expr: Box<TirExpr>,
+        index: Box<TirExpr>,
+    },
+
+    Block(TirBlock),
+    If {
+        condition: Box<TirExpr>,
+        then_branch: TirBlock,
+        else_branch: Option<TirBlock>,
+    },
+    Match {
+        expr: Box<TirExpr>,
+        arms: Vec<TirMatchArm>,
+    },
+
+    StructLiteral {
+        struct_type: TypeId,
+        struct_name: String,
+        fields: Vec<TirStructField>,
+    },
+    ArrayLiteral {
+        elements: Vec<TirExpr>,
+    },
+    TupleLiteral {
+        elements: Vec<TirExpr>,
+    },
+
+    Closure {
+        params: Vec<(String, TypeId)>,
+        body: Box<TirExpr>,
+        captures: Vec<TirCapture>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TirBinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    NotEq,
+    Lt,
+    LtEq,
+    Gt,
+    GtEq,
+    And,
+    Or,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TirUnaryOp {
+    Neg,
+    Not,
+    BitNot,
+    Ref,
+    MutRef,
+    Deref,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirMatchArm {
+    pub pattern: TirPattern,
+    pub body: TirExpr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum TirPattern {
+    Wildcard,
+    Binding {
+        name: String,
+        local_index: u32,
+    },
+    Literal(TirLiteralPattern),
+    Tuple(Vec<TirPattern>),
+    Variant {
+        enum_type: TypeId,
+        variant_name: String,
+        bindings: Vec<TirPattern>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum TirLiteralPattern {
+    Int(i64),
+    Bool(bool),
+    Char(char),
+    String(String),
+    Null,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStructField {
+    pub name: String,
+    pub value: TirExpr,
+    pub field_index: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirCapture {
+    pub name: String,
+    pub outer_index: u32,
+    pub type_id: TypeId,
+    pub is_mut: bool,
+}
+
+// ============================================================================
+// Statements
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct TirBlock {
+    pub stmts: Vec<TirStmt>,
+    pub span: Span,
+}
+
+impl TirBlock {
+    pub fn new(stmts: Vec<TirStmt>, span: Span) -> Self {
+        Self { stmts, span }
+    }
+
+    pub fn empty(span: Span) -> Self {
+        Self {
+            stmts: Vec::new(),
+            span,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStmt {
+    pub kind: TirStmtKind,
+    pub span: Span,
+}
+
+impl TirStmt {
+    pub fn new(kind: TirStmtKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TirStmtKind {
+    Let {
+        name: String,
+        local_index: u32,
+        is_mut: bool,
+        is_reactive: bool,
+        type_id: TypeId,
+        value: TirExpr,
+    },
+    Expr(TirExpr),
+    Return {
+        value: Option<TirExpr>,
+    },
+    If {
+        condition: TirExpr,
+        then_block: TirBlock,
+        else_block: Option<TirBlock>,
+    },
+    While {
+        condition: TirExpr,
+        body: TirBlock,
+    },
+    Loop {
+        body: TirBlock,
+    },
+    Break,
+    Continue,
+    Assert {
+        condition: TirExpr,
+        condition_source: String,
+        message: Option<TirExpr>,
+        intermediates: Vec<(String, TirExpr, TypeId)>,
+    },
+}
+
+// ============================================================================
+// Items (Top-level Declarations)
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct TirFunction {
+    pub name: String,
+    pub is_pub: bool,
+    pub params: Vec<TirParam>,
+    pub return_type: TypeId,
+    pub effects: Vec<String>,
+    pub body: Option<TirBlock>,
+    pub span: Span,
+    pub local_count: u32,
+    pub local_types: Vec<TypeId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirParam {
+    pub name: String,
+    pub type_id: TypeId,
+    pub local_index: u32,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStruct {
+    pub name: String,
+    pub is_pub: bool,
+    pub fields: Vec<TirField>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirField {
+    pub name: String,
+    pub type_id: TypeId,
+    pub index: u32,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirEnum {
+    pub name: String,
+    pub is_pub: bool,
+    pub variants: Vec<TirVariant>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirVariant {
+    pub name: String,
+    pub index: u32,
+    pub fields: Vec<TypeId>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirTypeAlias {
+    pub name: String,
+    pub is_pub: bool,
+    pub type_id: TypeId,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirEffect {
+    pub name: String,
+    pub is_pub: bool,
+    pub operations: Vec<TirEffectOp>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirEffectOp {
+    pub name: String,
+    pub params: Vec<TirParam>,
+    pub return_type: TypeId,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirImpl {
+    pub target_type: TypeId,
+    pub methods: Vec<TirFunction>,
+    pub span: Span,
+}
+
+// ============================================================================
+// Module
+// ============================================================================
+
+#[derive(Debug)]
+pub struct TirModule {
+    pub path: Vec<String>,
+    pub type_table: TypeTable,
+    pub functions: Vec<TirFunction>,
+    pub structs: Vec<TirStruct>,
+    pub enums: Vec<TirEnum>,
+    pub type_aliases: Vec<TirTypeAlias>,
+    pub effects: Vec<TirEffect>,
+    pub impls: Vec<TirImpl>,
+    pub data_section: Option<String>,
+    pub string_literals: Vec<String>,
+}
+
+impl TirModule {
+    pub fn new(path: Vec<String>) -> Self {
+        Self {
+            path,
+            type_table: TypeTable::new(),
+            functions: Vec::new(),
+            structs: Vec::new(),
+            enums: Vec::new(),
+            type_aliases: Vec::new(),
+            effects: Vec::new(),
+            impls: Vec::new(),
+            data_section: None,
+            string_literals: Vec::new(),
+        }
+    }
+
+    pub fn with_type_table(path: Vec<String>, type_table: TypeTable) -> Self {
+        Self {
+            path,
+            type_table,
+            functions: Vec::new(),
+            structs: Vec::new(),
+            enums: Vec::new(),
+            type_aliases: Vec::new(),
+            effects: Vec::new(),
+            impls: Vec::new(),
+            data_section: None,
+            string_literals: Vec::new(),
+        }
+    }
+
+    pub fn with_data_section(mut self, data_section: Option<String>) -> Self {
+        self.data_section = data_section;
+        self
+    }
+
+    pub fn data_section(&self) -> Option<&str> {
+        self.data_section.as_deref()
+    }
+
+    pub fn add_function(&mut self, func: TirFunction) {
+        self.functions.push(func);
+    }
+
+    pub fn add_struct(&mut self, s: TirStruct) {
+        self.structs.push(s);
+    }
+
+    pub fn add_enum(&mut self, e: TirEnum) {
+        self.enums.push(e);
+    }
+
+    pub fn add_type_alias(&mut self, alias: TirTypeAlias) {
+        self.type_aliases.push(alias);
+    }
+
+    pub fn add_effect(&mut self, effect: TirEffect) {
+        self.effects.push(effect);
+    }
+
+    pub fn add_impl(&mut self, impl_block: TirImpl) {
+        self.impls.push(impl_block);
+    }
+
+    pub fn find_function(&self, name: &str) -> Option<&TirFunction> {
+        self.functions.iter().find(|f| f.name == name)
+    }
+
+    pub fn find_struct(&self, name: &str) -> Option<&TirStruct> {
+        self.structs.iter().find(|s| s.name == name)
+    }
+
+    pub fn find_enum(&self, name: &str) -> Option<&TirEnum> {
+        self.enums.iter().find(|e| e.name == name)
+    }
+}
+
+#[derive(Debug)]
+pub struct TirProgram {
+    pub main_module: TirModule,
+    pub dependencies: Vec<TirModule>,
+    pub type_table: TypeTable,
+}
+
+impl TirProgram {
+    pub fn new(main_module: TirModule) -> Self {
+        Self {
+            type_table: TypeTable::new(),
+            main_module,
+            dependencies: Vec::new(),
+        }
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_primitive_constants() {
+        let table = TypeTable::new();
+        assert!(matches!(
+            table.get(TypeTable::I32),
+            ResolvedType::Primitive(PrimitiveType::I32)
+        ));
+        assert!(matches!(
+            table.get(TypeTable::BOOL),
+            ResolvedType::Primitive(PrimitiveType::Bool)
+        ));
+        assert!(matches!(table.get(TypeTable::STRING), ResolvedType::String));
+        assert!(matches!(table.get(TypeTable::UNIT), ResolvedType::Unit));
+    }
+
+    #[test]
+    fn test_intern_deduplication() {
+        let mut table = TypeTable::new();
+        let arr1 = table.make_array(TypeTable::I32);
+        let arr2 = table.make_array(TypeTable::I32);
+        assert_eq!(arr1, arr2);
+    }
+
+    #[test]
+    fn test_composite_types() {
+        let mut table = TypeTable::new();
+        let option_i32 = table.make_option(TypeTable::I32);
+        let result_i32_string = table.make_result(TypeTable::I32, TypeTable::STRING);
+
+        assert!(matches!(
+            table.get(option_i32),
+            ResolvedType::Option(id) if *id == TypeTable::I32
+        ));
+        assert!(matches!(
+            table.get(result_i32_string),
+            ResolvedType::Result { ok, err } if *ok == TypeTable::I32 && *err == TypeTable::STRING
+        ));
+    }
+}

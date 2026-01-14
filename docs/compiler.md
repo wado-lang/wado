@@ -4,13 +4,29 @@ This document tracks the current implementation status of the Wado compiler.
 
 ## Architecture
 
-The compiler follows a traditional pipeline:
+The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Analyzer → Desugar → Codegen → Component Model Wasm
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Lower → Optimize → Codegen
+                           ↓                       ↓
+                       Unparser              TIR (Typed IR)
                            ↓
-                       Unparser → Formatted Source (wado format)
+                   Formatted Source
 ```
+
+### Compilation Pipeline
+
+| Phase    | Input         | Output       | Description                          |
+| -------- | ------------- | ------------ | ------------------------------------ |
+| Lexer    | Source        | Tokens       | Tokenize, extract `__DATA__` section |
+| Parser   | Tokens        | AST          | Build abstract syntax tree           |
+| Bind     | AST           | Bind info    | Local name resolution (WIP)          |
+| Load     | AST           | All modules  | Load all dependencies recursively    |
+| Analyze  | All modules   | Symbol table | Build symbol table, validate imports |
+| Resolve  | AST + Symbols | TIR          | Type resolution, produce typed IR    |
+| Lower    | TIR           | TIR          | String collection, transformations   |
+| Optimize | TIR           | Hints        | DCE, conditional feature inclusion   |
+| Codegen  | TIR           | Wasm bytes   | Generate Component Model Wasm        |
 
 ### Modules
 
@@ -21,16 +37,23 @@ Source (.wado) → Lexer → Parser → Analyzer → Desugar → Codegen → Com
 | AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API |
 | Token           | `token.rs`            | Token types and spans                              |
 | Comment         | `comment.rs`          | Comment collection and CommentMap for formatting   |
-| Desugar         | `desugar.rs`          | AST transformations before codegen                 |
+| Bind            | `bind.rs`             | Local name binding (WIP)                           |
+| Loader          | `loader.rs`           | Module loading, dependency resolution              |
+| Desugar         | `desugar.rs`          | AST transformations (compound assign, etc.)        |
 | Unparser        | `unparse.rs`          | Converts AST back to canonical source code         |
 | Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction       |
 | Symbol          | `symbol.rs`           | Symbol table data structures                       |
 | Name            | `name.rs`             | Name mangling utilities for methods and symbols    |
-| Resolver        | `resolver.rs`         | Module resolution, loads core library              |
+| ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library         |
+| Resolver        | `resolver.rs`         | Type resolution, AST to TIR conversion             |
+| TIR             | `tir.rs`              | Typed Intermediate Representation                  |
+| Lower           | `lower.rs`            | TIR lowering (string collection, etc.)             |
+| Optimize        | `optimize.rs`         | DCE, optimization hints for codegen                |
 | Stdlib          | `stdlib.rs`           | Embedded core library sources                      |
-| WasiRegistry    | `wasi_registry.rs`    | WASI import registry for dynamic CM generation     |
+| WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution        |
 | BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`      |
 | WorldRegistry   | `world_registry.rs`   | World definitions registry for export signatures   |
+| WasmBuilder     | `wasm_builder.rs`     | Wasm index tracking utilities                      |
 | Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
 | Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
 | Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                        |
@@ -39,14 +62,15 @@ Source (.wado) → Lexer → Parser → Analyzer → Desugar → Codegen → Com
 
 The parser preserves source syntax literally to enable accurate formatting via the unparser. Syntactic sugar is transformed in the desugar pass before codegen.
 
-| Construct               | Parser Output           | Desugar Output                        |
-| ----------------------- | ----------------------- | ------------------------------------- |
-| `x += y`                | `CompoundAssignExpr`    | `AssignExpr` with `BinaryExpr`        |
-| `a < b < c`             | `ComparisonChainExpr`   | `BinaryExpr` chain with `&&`          |
-| `&self`                 | `Param` with `SelfKind` | (preserved, handled in codegen)       |
-| `{ x }` (struct field)  | `is_shorthand: true`    | (preserved for formatting)            |
+| Construct              | Parser Output           | Desugar Output                  |
+| ---------------------- | ----------------------- | ------------------------------- |
+| `x += y`               | `CompoundAssignExpr`    | `AssignExpr` with `BinaryExpr`  |
+| `a < b < c`            | `ComparisonChainExpr`   | `BinaryExpr` chain with `&&`    |
+| `&self`                | `Param` with `SelfKind` | (preserved, handled in codegen) |
+| `{ x }` (struct field) | `is_shorthand: true`    | (preserved for formatting)      |
 
 This separation ensures:
+
 - `wado format` outputs the original syntax (e.g., `x += 1` not `x = x + 1`)
 - Codegen receives simplified AST without syntactic variants
 
@@ -71,6 +95,25 @@ make check-bundled    # Verify committed WAT is up-to-date (used in CI)
 ```
 
 The bundled module is stored as WAT in `wado-compiler/lib/builtins/wado-bundled.wat` for version control visibility. It's parsed at compile time using the `wat` crate.
+
+### Optimizer
+
+The `optimize.rs` module implements optimization passes that analyze TIR and produce `OptimizationHints` for code generation.
+
+**Current Optimizations:**
+
+| Optimization            | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| Dead Code Elimination   | Removes unreachable functions/methods from output        |
+| Float-to-string removal | Excludes `f32_to_buffer`/`f64_to_buffer` when not needed |
+
+**CLI Control:**
+
+| Flag  | Effect                                              |
+| ----- | --------------------------------------------------- |
+| `-O2` | Default, DCE enabled, keeps debug names             |
+| `-Os` | Size optimization: DCE + strips debug name sections |
+| `-O0` | Disables DCE, includes all functions/features       |
 
 ### Standard Library
 
@@ -247,17 +290,6 @@ The `name.rs` module centralizes all naming and mangling logic for the compiler.
 | WASI qualified          | `wasi:{package}/{interface}::{function}`               | `wasi:cli/stdout::write-via-stream`  |
 | Module-qualified struct | `{module_path}::{struct_name}`                         | `./geometry.wado::Point`             |
 | Core internal           | `core::internal::{name}`                               | `core::internal::log_stdout`         |
-
-**Key Types:**
-
-```rust
-pub struct MethodNameInfo {
-    pub filename: String,        // e.g., "./geometry.wado"
-    pub struct_name: String,     // e.g., "Point"
-    pub trait_name: Option<String>, // e.g., Some("Display")
-    pub method_name: String,     // e.g., "sum"
-}
-```
 
 ### Module Path Canonicalization
 

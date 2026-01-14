@@ -6,8 +6,8 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
+use crate::module_loader::{ModuleLoadError, ModuleResolver};
 use crate::name::validate_module_path;
-use crate::resolver::{ModuleResolver, ResolveError};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
     SymbolTable, TypeAliasSymbol, WorldExportSymbol, WorldImportSymbol, WorldSymbol,
@@ -18,7 +18,7 @@ use crate::token::Span;
 #[derive(Debug, Clone)]
 pub enum AnalyzeError {
     /// Module resolution failed
-    ResolveError(ResolveError),
+    ModuleLoadError(ModuleLoadError),
     /// Symbol not found in module
     ImportNotFound {
         module_path: Vec<String>,
@@ -40,7 +40,7 @@ pub enum AnalyzeError {
 impl std::fmt::Display for AnalyzeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnalyzeError::ResolveError(e) => write!(f, "{e}"),
+            AnalyzeError::ModuleLoadError(e) => write!(f, "{e}"),
             AnalyzeError::ImportNotFound {
                 module_path,
                 name,
@@ -86,9 +86,9 @@ impl std::fmt::Display for AnalyzeError {
 
 impl std::error::Error for AnalyzeError {}
 
-impl From<ResolveError> for AnalyzeError {
-    fn from(e: ResolveError) -> Self {
-        AnalyzeError::ResolveError(e)
+impl From<ModuleLoadError> for AnalyzeError {
+    fn from(e: ModuleLoadError) -> Self {
+        AnalyzeError::ModuleLoadError(e)
     }
 }
 
@@ -344,7 +344,7 @@ impl Analyzer {
                         let source_module = match self.resolver.load_module(&source_path) {
                             Ok(m) => m.clone(),
                             Err(e) => {
-                                self.errors.push(AnalyzeError::ResolveError(e));
+                                self.errors.push(AnalyzeError::ModuleLoadError(e));
                                 continue;
                             }
                         };
@@ -456,7 +456,7 @@ impl Analyzer {
                 let imported_module = match self.resolver.load_module(&module_path) {
                     Ok(m) => m.clone(),
                     Err(e) => {
-                        self.errors.push(AnalyzeError::ResolveError(e));
+                        self.errors.push(AnalyzeError::ModuleLoadError(e));
                         continue;
                     }
                 };
@@ -570,6 +570,130 @@ impl Analyzer {
             self.resolver.into_modules(),
             self.implicit_modules,
         )
+    }
+
+    /// Analyze pre-loaded modules (new pipeline)
+    ///
+    /// This method takes modules that were already loaded by ModuleLoader
+    /// and builds a symbol table from them.
+    ///
+    /// # Arguments
+    /// * `modules` - All modules including entry and dependencies
+    /// * `entry_path` - Path of the entry module
+    /// * `implicit_modules` - Set of implicitly loaded modules
+    pub fn analyze_loaded_modules(
+        &mut self,
+        modules: &std::collections::HashMap<Vec<String>, Module>,
+        _entry_path: &[String],
+        implicit_modules: std::collections::HashSet<Vec<String>>,
+    ) -> Result<(), Vec<AnalyzeError>> {
+        self.implicit_modules = implicit_modules;
+
+        // First pass: collect definitions from all modules
+        for (path, module) in modules {
+            self.collect_definitions(module, path);
+        }
+
+        // Second pass: validate imports in each module
+        for (path, module) in modules {
+            self.validate_imports(module, path, modules)?;
+        }
+
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(std::mem::take(&mut self.errors))
+        }
+    }
+
+    /// Validate imports in a module (for pre-loaded modules)
+    fn validate_imports(
+        &mut self,
+        module: &Module,
+        from_module_path: &[String],
+        all_modules: &std::collections::HashMap<Vec<String>, Module>,
+    ) -> Result<(), Vec<AnalyzeError>> {
+        for item in &module.items {
+            if let Item::Use(use_decl) = item {
+                // Validate the import source
+                if let Err(message) = validate_module_path(&use_decl.source) {
+                    self.errors.push(AnalyzeError::InvalidModulePath {
+                        path: use_decl.source.clone(),
+                        message,
+                        span: use_decl.span,
+                    });
+                    continue;
+                }
+
+                // Resolve the import path
+                let module_path = self
+                    .resolver
+                    .resolve_import(from_module_path, &use_decl.source);
+
+                // Check the module exists in pre-loaded modules
+                if !all_modules.contains_key(&module_path) {
+                    self.errors.push(AnalyzeError::ModuleLoadError(
+                        crate::module_loader::ModuleLoadError::ModuleNotFound {
+                            path: module_path.clone(),
+                        },
+                    ));
+                    continue;
+                }
+
+                // Register imported symbols
+                for use_item in &use_decl.items {
+                    match use_item {
+                        UseItem::Simple { name, alias } => {
+                            if let Some(symbol) = self.symbols.lookup_in_module(&module_path, name)
+                            {
+                                let symbol_id = symbol.id;
+                                let import_name = alias.as_ref().unwrap_or(name);
+                                self.symbols.register_import(import_name, symbol_id);
+                            } else {
+                                self.errors.push(AnalyzeError::ImportNotFound {
+                                    module_path: module_path.clone(),
+                                    name: name.clone(),
+                                    span: use_decl.span,
+                                });
+                            }
+                        }
+                        UseItem::EffectFunctions {
+                            effect_name,
+                            functions,
+                        } => {
+                            for func_item in functions {
+                                let lookup_name = format!("{}::{}", effect_name, func_item.name);
+                                if let Some(symbol) =
+                                    self.symbols.lookup_in_module(&module_path, &lookup_name)
+                                {
+                                    let symbol_id = symbol.id;
+                                    let import_name =
+                                        func_item.alias.as_ref().unwrap_or(&func_item.name);
+                                    self.symbols.register_import(import_name, symbol_id);
+                                } else {
+                                    self.errors.push(AnalyzeError::ImportNotFound {
+                                        module_path: module_path.clone(),
+                                        name: lookup_name,
+                                        span: use_decl.span,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(std::mem::take(&mut self.errors))
+        }
+    }
+
+    /// Get a copy of the implicit modules set
+    pub fn get_implicit_modules(&self) -> &std::collections::HashSet<Vec<String>> {
+        &self.implicit_modules
     }
 }
 

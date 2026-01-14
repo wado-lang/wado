@@ -4,12 +4,12 @@ use std::process;
 
 use lexopt::prelude::*;
 
-/// Optimization level (not yet implemented)
+/// Optimization level
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
-    #[default]
     O0,
     O1,
+    #[default]
     O2,
     O3,
     Os,
@@ -46,7 +46,6 @@ pub struct CompileOptions {
     pub input: String,
     pub output: Option<String>,
     pub format: Option<OutputFormat>,
-    #[allow(dead_code)] // Not yet implemented
     pub opt_level: OptLevel,
     pub wat_to_stdout: bool,
 }
@@ -60,9 +59,7 @@ pub fn print_usage() {
     eprintln!(
         "  --wat-to-stdout  Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
     );
-    eprintln!(
-        "  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os, -Og (not yet implemented)"
-    );
+    eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os, -Og");
     eprintln!("  --help           Show this help message");
 }
 
@@ -160,9 +157,26 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     }
 }
 
+/// Convert CLI OptLevel to compiler OptLevel
+fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
+    match level {
+        OptLevel::O0 => wado_compiler::OptLevel::None,
+        OptLevel::O1 => wado_compiler::OptLevel::Basic,
+        OptLevel::O2 | OptLevel::O3 => wado_compiler::OptLevel::Full,
+        OptLevel::Os => wado_compiler::OptLevel::Size, // Size optimization (strips debug names)
+        OptLevel::Og => wado_compiler::OptLevel::None, // Debug mode = no optimization
+    }
+}
+
 /// Compile a Wado source file and return the Wasm binary
 pub fn compile(filename: &str) -> Vec<u8> {
-    match wado_compiler::compile_file(Path::new(filename)) {
+    compile_with_opts(filename, OptLevel::default())
+}
+
+/// Compile a Wado source file with optimization options
+pub fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
+    let compiler_opt_level = to_compiler_opt_level(opt_level);
+    match wado_compiler::compile_file_with_opts(Path::new(filename), compiler_opt_level) {
         Ok(result) => result.wasm,
         Err(e) => {
             eprintln!("{e}");
@@ -186,7 +200,7 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 }
 
 pub fn run(opts: CompileOptions) {
-    let wasm = compile(&opts.input);
+    let wasm = compile_with_opts(&opts.input, opts.opt_level);
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {

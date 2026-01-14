@@ -40,6 +40,29 @@ impl BuiltinRegistry {
         Self::default()
     }
 
+    /// Build the registry from the embedded stdlib
+    ///
+    /// Parses lib/core/builtin.wado and registers all function signatures.
+    pub fn build_from_stdlib() -> Self {
+        use crate::lexer::Lexer;
+        use crate::parser::Parser;
+        use crate::stdlib;
+
+        let source = stdlib::CORE_BUILTIN;
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer error in core:builtin");
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse().expect("parser error in core:builtin");
+
+        let mut registry = Self::new();
+        for item in &module.items {
+            if let crate::ast::Item::Function(func) = item {
+                registry.register(func);
+            }
+        }
+        registry
+    }
+
     /// Register a builtin function from a parsed function declaration
     pub fn register(&mut self, func: &Function) {
         let params: Vec<(String, Type)> = func

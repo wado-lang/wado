@@ -1,26 +1,37 @@
 pub mod analyze;
 pub mod ast;
+pub mod bind;
 pub mod builtin_registry;
 pub mod bundled;
 pub mod codegen;
 pub mod comment;
 pub mod desugar;
 pub mod lexer;
+pub mod loader;
+pub mod lower;
+pub mod module_loader;
 pub mod name;
+pub mod optimize;
 pub mod parser;
 pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
+pub mod tir;
 pub mod token;
 pub mod unparse;
 pub mod wasi_registry;
+pub mod wasm_builder;
 pub mod wasm_postprocess;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
+pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
 pub use lexer::{LexError, Lexer};
+pub use lower::lower;
+pub use optimize::{OptLevel, OptimizationHints, analyze_all_modules};
 pub use parser::{ParseError, Parser};
+pub use resolver::{Resolver, TypeError};
 pub use token::Span;
 
 use std::path::Path;
@@ -39,12 +50,16 @@ pub struct CompileResult {
 pub struct DumpResult {
     /// The main module's AST
     pub ast: ast::Module,
+    /// Desugared AST
+    pub desugared_ast: ast::Module,
     /// Symbol table after analysis
     pub symbols: symbol::SymbolTable,
     /// Loaded module paths (in resolution order)
     pub loaded_modules: Vec<Vec<String>>,
     /// Modules loaded implicitly by the compiler
     pub implicit_modules: Vec<Vec<String>>,
+    /// TIR (Typed IR) after resolution
+    pub tir: Option<tir::TirModule>,
 }
 
 /// Compile Wado source code to Component Model WebAssembly bytes.
@@ -67,12 +82,12 @@ pub struct DumpResult {
 /// assert_eq!(&wasm[0..4], b"\0asm");
 /// ```
 pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, None).map(|r| r.wasm)
+    compile_impl(source, None, None, OptLevel::default()).map(|r| r.wasm)
 }
 
 /// Compile Wado source code with a base path for relative imports.
 pub fn compile_with_base_path(source: &str, base_path: &Path) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, Some(base_path)).map(|r| r.wasm)
+    compile_impl(source, None, Some(base_path), OptLevel::default()).map(|r| r.wasm)
 }
 
 /// Format Wado source code.
@@ -135,6 +150,17 @@ pub fn format_file(path: &Path) -> Result<String, CompileError> {
 /// in error messages. Also supports relative imports from the file's directory.
 /// Returns a [`CompileResult`] containing both the wasm bytes and the parsed module.
 pub fn compile_file(path: &Path) -> Result<CompileResult, CompileError> {
+    compile_file_with_opts(path, OptLevel::default())
+}
+
+/// Compile a Wado source file with optimization level control.
+///
+/// Like [`compile_file`], but allows specifying the optimization level.
+/// Use `OptLevel::None` (O0) to disable optimizations.
+pub fn compile_file_with_opts(
+    path: &Path,
+    opt_level: OptLevel,
+) -> Result<CompileResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
         path: path.display().to_string(),
         message: e.to_string(),
@@ -147,13 +173,16 @@ pub fn compile_file(path: &Path) -> Result<CompileResult, CompileError> {
         &source,
         Some(path.display().to_string()),
         base_path.as_deref(),
+        opt_level,
     )
 }
 
 /// Dump compiler internal state for a Wado source file.
 ///
-/// This runs the compilation pipeline up through analysis (without code generation)
+/// This runs the compilation pipeline up through resolution (without code generation)
 /// and returns diagnostic information about the internal state.
+///
+/// Pipeline: lexer -> parser -> bind -> desugar -> analyze -> resolve
 pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
         path: path.display().to_string(),
@@ -182,13 +211,21 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
         filename: filename.clone(),
     })?;
 
-    // Analyzer
+    // Bind (local name resolution) - errors are warnings for now
+    let mut binder = Binder::new();
+    let _bind_result = binder.bind_module(&ast);
+    // Note: bind errors are not fatal during this transition period
+
+    // Desugar
+    let desugared_ast = desugar::desugar_module(&ast);
+
+    // Analyzer (module resolution + symbol table)
     let mut analyzer = if let Some(base) = base_path.as_deref() {
         Analyzer::with_base_path(base)
     } else {
         Analyzer::new()
     };
-    analyzer.analyze(&ast, &[]).map_err(|errors| {
+    analyzer.analyze(&desugared_ast, &[]).map_err(|errors| {
         let msg = errors
             .into_iter()
             .map(|e| e.to_string())
@@ -203,11 +240,19 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
     // Get loaded modules, symbols, and implicit modules
     let (symbols, loaded_modules, implicit_modules) = analyzer.into_parts();
 
+    // Resolve (type resolution -> TIR) - optional for now
+    let tir = {
+        let mut resolver = Resolver::new(&symbols, &loaded_modules, &source);
+        resolver.resolve_module(&desugared_ast, vec![]).ok()
+    };
+
     Ok(DumpResult {
         ast,
+        desugared_ast,
         symbols,
         loaded_modules: loaded_modules.keys().cloned().collect(),
         implicit_modules: implicit_modules.into_iter().collect(),
+        tir,
     })
 }
 
@@ -215,8 +260,9 @@ fn compile_impl(
     source: &str,
     filename: Option<String>,
     base_path: Option<&Path>,
+    opt_level: OptLevel,
 ) -> Result<CompileResult, CompileError> {
-    // Lexer
+    // === Phase 1: Lexer (for original AST) ===
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
         message: e.message,
@@ -226,7 +272,7 @@ fn compile_impl(
     })?;
     let data_section = lexer.into_data_section();
 
-    // Parser (with data section from lexer)
+    // === Phase 2: Parser (for original AST) ===
     let mut parser = Parser::with_data_section(tokens, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
@@ -235,14 +281,56 @@ fn compile_impl(
         filename: filename.clone(),
     })?;
 
-    // Analyzer (with base path for local imports if provided)
-    let mut analyzer = if let Some(base) = base_path {
-        Analyzer::with_base_path(base)
-    } else {
-        Analyzer::new()
+    // === Phase 3: Bind (local name resolution) ===
+    // Note: Errors are not fatal during transition - will be enforced later
+    let mut binder = Binder::new();
+    let _bind_result = binder.bind_module(&ast);
+
+    // === Phase 4: Load all modules upfront ===
+    let load_result = {
+        let module_loader = if let Some(base) = base_path {
+            loader::ModuleLoader::with_base_path(base)
+        } else {
+            loader::ModuleLoader::new()
+        };
+        module_loader
+            .load_all(source)
+            .map_err(|e| CompileError::Analyzer {
+                message: e.to_string(),
+                filename: filename.clone(),
+            })?
     };
-    analyzer.analyze(&ast, &[]).map_err(|errors| {
-        // Take the first error for now
+
+    // === Phase 5: Analyze all modules ===
+    let mut analyzer = Analyzer::new();
+    analyzer
+        .analyze_loaded_modules(
+            &load_result.modules,
+            &load_result.entry_path,
+            load_result.implicit_modules.clone(),
+        )
+        .map_err(|errors| {
+            let msg = errors
+                .into_iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            CompileError::Analyzer {
+                message: msg,
+                filename: filename.clone(),
+            }
+        })?;
+
+    let symbols = analyzer.into_symbols();
+
+    // === Phase 6: Resolve all modules to TIR ===
+    let tir_modules = Resolver::resolve_all_modules(
+        &symbols,
+        &load_result.modules,
+        &load_result.entry_path,
+        source,
+    )
+    .map_err(|errors| {
         let msg = errors
             .into_iter()
             .map(|e| e.to_string())
@@ -254,30 +342,38 @@ fn compile_impl(
         }
     })?;
 
-    // Get loaded modules, symbols, and implicit modules for codegen
-    let (symbols, loaded_modules, implicit_modules) = analyzer.into_parts();
+    // === Phase 7: Lower all modules (string collection, etc.) ===
+    let tir_modules: std::collections::HashMap<Vec<String>, _> = tir_modules
+        .into_iter()
+        .map(|(path, module)| (path, lower(module)))
+        .collect();
 
-    // Desugar the main module and loaded modules
-    let desugared_ast = desugar::desugar_module(&ast);
-    let desugared_loaded_modules: std::collections::HashMap<Vec<String>, crate::ast::Module> =
-        loaded_modules
-            .iter()
-            .map(|(path, module)| (path.clone(), desugar::desugar_module(module)))
-            .collect();
+    // Get the entry module TIR
+    let entry_tir = tir_modules
+        .get(&load_result.entry_path)
+        .expect("entry module should exist in TIR modules");
 
-    // Convert HashMap to Vec of references for codegen
-    let loaded_modules_vec: Vec<(&Vec<String>, &crate::ast::Module)> =
-        desugared_loaded_modules.iter().collect();
+    // === Phase 8: Optimize (analyze modules for DCE and optimization hints) ===
+    // When O0, disable optimizations (no DCE, include all features)
+    let mut hints = if opt_level == OptLevel::None {
+        OptimizationHints::no_optimization()
+    } else {
+        analyze_all_modules(&tir_modules, &load_result.entry_path)
+    };
+    // Strip debug names in size-optimized builds (-Os)
+    if opt_level == OptLevel::Size {
+        hints.strip_names = true;
+    }
 
-    // Codegen (pass source code for power-assert messages)
-    // Use catch_unwind to convert codegen panics to proper errors
-    let mut codegen = Codegen::new_with_source(source.to_string());
+    // === Phase 9: Codegen ===
+    let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        codegen.generate_wasm_with_modules(
-            &desugared_ast,
-            &loaded_modules_vec,
+        codegen.generate_wasm(
+            entry_tir,
+            &tir_modules,
             &symbols,
-            &implicit_modules,
+            &load_result.implicit_modules,
+            &hints,
         )
     }))
     .map_err(|e| {
