@@ -1,0 +1,18 @@
+// Test basic infinite loop with break
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let mut count = 0;
+    loop {
+        println(`count: {count}`);
+        count = count + 1;
+        if count >= 3 {
+            break;
+        }
+    }
+    println("done");
+}
+
+__DATA__
+{"stdout": "count: 0\ncount: 1\ncount: 2\ndone\n"}

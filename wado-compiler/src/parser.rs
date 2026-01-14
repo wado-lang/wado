@@ -584,6 +584,9 @@ impl Parser {
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
             TokenKind::For => self.parse_for_stmt(),
+            TokenKind::Loop => self.parse_loop_stmt(),
+            TokenKind::Break => self.parse_break_stmt(),
+            TokenKind::Continue => self.parse_continue_stmt(),
             TokenKind::Assert => self.parse_assert_stmt(),
             _ => self.parse_expr_stmt(),
         }
@@ -719,11 +722,17 @@ impl Parser {
         }))
     }
 
-    /// Parse C-style for loop: `for (init; condition; update) { body }`
+    /// Parse C-style for loop: `for (init; condition; update) { body }` or `for init; condition; update { body }`
+    /// Parentheses are optional.
     fn parse_for_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::For)?;
-        self.expect(&TokenKind::LParen)?;
+
+        // Parentheses are optional
+        let has_parens = self.check(&TokenKind::LParen);
+        if has_parens {
+            self.advance();
+        }
 
         // Parse init (optional): `let i = 0` or expression statement
         let init = if self.check(&TokenKind::Semicolon) {
@@ -748,12 +757,22 @@ impl Parser {
         self.expect(&TokenKind::Semicolon)?;
 
         // Parse update (optional): `i = i + 1`
-        let update = if self.check(&TokenKind::RParen) {
+        // Without parens, update ends at `{`; with parens, it ends at `)`
+        let update = if has_parens {
+            if self.check(&TokenKind::RParen) {
+                None
+            } else {
+                Some(self.parse_expr()?)
+            }
+        } else if self.check(&TokenKind::LBrace) {
             None
         } else {
             Some(self.parse_expr()?)
         };
-        self.expect(&TokenKind::RParen)?;
+
+        if has_parens {
+            self.expect(&TokenKind::RParen)?;
+        }
 
         let body = self.parse_block()?;
         let span = start_span.merge(&body.span);
@@ -765,6 +784,35 @@ impl Parser {
             body,
             span,
         }))
+    }
+
+    /// Parse infinite loop: `loop { body }`
+    fn parse_loop_stmt(&mut self) -> ParseResult<Stmt> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Loop)?;
+
+        let body = self.parse_block()?;
+        let span = start_span.merge(&body.span);
+
+        Ok(Stmt::Loop(LoopStmt { body, span }))
+    }
+
+    /// Parse break statement: `break;`
+    fn parse_break_stmt(&mut self) -> ParseResult<Stmt> {
+        let span = self.peek().span;
+        self.expect(&TokenKind::Break)?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(Stmt::Break(BreakStmt { span }))
+    }
+
+    /// Parse continue statement: `continue;`
+    fn parse_continue_stmt(&mut self) -> ParseResult<Stmt> {
+        let span = self.peek().span;
+        self.expect(&TokenKind::Continue)?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(Stmt::Continue(ContinueStmt { span }))
     }
 
     #[allow(dead_code)]

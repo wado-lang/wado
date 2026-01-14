@@ -1,0 +1,27 @@
+// Test deeply nested loops: for -> while -> loop -> for
+// Tests break and continue at different nesting levels
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    for let mut i = 0; i < 2; i = i + 1 {
+        let mut j = 0;
+        while j < 2 {
+            j = j + 1;
+            let mut k = 0;
+            loop {
+                k = k + 1;
+                for let mut l = 0; l < 2; l = l + 1 {
+                    println(`{i}-{j}-{k}-{l}`);
+                }
+                if k >= 2 {
+                    break;
+                }
+            }
+        }
+    }
+    println("done");
+}
+
+__DATA__
+{"stdout": "0-1-1-0\n0-1-1-1\n0-1-2-0\n0-1-2-1\n0-2-1-0\n0-2-1-1\n0-2-2-0\n0-2-2-1\n1-1-1-0\n1-1-1-1\n1-1-2-0\n1-1-2-1\n1-2-1-0\n1-2-1-1\n1-2-2-0\n1-2-2-1\ndone\n"}

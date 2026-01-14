@@ -7,9 +7,9 @@ use crate::ast::{
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, EffectDecl,
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForStmt, Function,
     FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LetStmt, Literal,
-    MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl, ReturnStmt,
-    SelfKind, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, Type,
-    TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, WhileStmt, WorldDecl,
+    LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl,
+    ReturnStmt, SelfKind, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr,
+    Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -583,6 +583,9 @@ impl<'a> Unparser<'a> {
             Stmt::If(i) => self.unparse_if_stmt(i),
             Stmt::While(w) => self.unparse_while(w),
             Stmt::For(f) => self.unparse_for(f),
+            Stmt::Loop(l) => self.unparse_loop(l),
+            Stmt::Break(_) => self.unparse_break(),
+            Stmt::Continue(_) => self.unparse_continue(),
             Stmt::Assert(a) => self.unparse_assert(a),
         }
     }
@@ -667,7 +670,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_for(&mut self, f: &ForStmt) {
         self.write_indent();
-        self.output.push_str("for (");
+        self.output.push_str("for ");
 
         if let Some(init) = &f.init {
             self.unparse_for_init(init);
@@ -683,7 +686,7 @@ impl<'a> Unparser<'a> {
             self.unparse_expr(update);
         }
 
-        self.output.push_str(") {\n");
+        self.output.push_str(" {\n");
 
         self.indent_level += 1;
         self.unparse_block(&f.body);
@@ -713,6 +716,28 @@ impl<'a> Unparser<'a> {
             }
             _ => {}
         }
+    }
+
+    fn unparse_loop(&mut self, l: &LoopStmt) {
+        self.write_indent();
+        self.output.push_str("loop {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&l.body);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_break(&mut self) {
+        self.write_indent();
+        self.output.push_str("break;\n");
+    }
+
+    fn unparse_continue(&mut self) {
+        self.write_indent();
+        self.output.push_str("continue;\n");
     }
 
     fn unparse_assert(&mut self, a: &AssertStmt) {
@@ -1142,6 +1167,9 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::If(i) => i.span,
         Stmt::While(w) => w.span,
         Stmt::For(f) => f.span,
+        Stmt::Loop(l) => l.span,
+        Stmt::Break(b) => b.span,
+        Stmt::Continue(c) => c.span,
         Stmt::Assert(a) => a.span,
     }
 }

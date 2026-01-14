@@ -261,6 +261,9 @@ pub enum Stmt {
     If(IfStmt),
     While(WhileStmt),
     For(ForStmt),
+    Loop(LoopStmt),
+    Break(BreakStmt),
+    Continue(ContinueStmt),
     Assert(AssertStmt),
 }
 
@@ -321,6 +324,25 @@ pub struct ForStmt {
     /// Update expression (e.g., `i = i + 1`)
     pub update: Option<Expr>,
     pub body: Block,
+    pub span: Span,
+}
+
+/// Infinite loop: `loop { body }`
+#[derive(Debug, Clone)]
+pub struct LoopStmt {
+    pub body: Block,
+    pub span: Span,
+}
+
+/// Break statement: `break;`
+#[derive(Debug, Clone)]
+pub struct BreakStmt {
+    pub span: Span,
+}
+
+/// Continue statement: `continue;`
+#[derive(Debug, Clone)]
+pub struct ContinueStmt {
     pub span: Span,
 }
 

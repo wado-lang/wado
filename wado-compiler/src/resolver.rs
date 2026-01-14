@@ -11,8 +11,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    self, AssertStmt, BinaryOp, Block, Expr, ExprStmt, ForStmt, Function, IfExpr, IfStmt, Item,
-    LetStmt, Literal, MatchArm, Module, Pattern, ReturnStmt, Stmt, Type, UnaryOp, WhileStmt,
+    self, AssertStmt, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForStmt, Function,
+    IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt,
+    Type, UnaryOp, WhileStmt,
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
@@ -675,6 +676,9 @@ impl<'a> Resolver<'a> {
             Stmt::If(if_stmt) => vec![self.resolve_if_stmt(if_stmt, ctx)],
             Stmt::While(while_stmt) => vec![self.resolve_while(while_stmt, ctx)],
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
+            Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
+            Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt)],
+            Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
             Stmt::Assert(assert_stmt) => self.resolve_assert(assert_stmt, ctx),
         }
     }
@@ -742,8 +746,8 @@ impl<'a> Resolver<'a> {
         TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
     }
 
-    /// Resolve a for statement - desugars to init + while
-    /// for (init; cond; update) { body } → { init; while (cond) { body; update; } }
+    /// Resolve a for statement - generates init + For node
+    /// The For node handles continue correctly (executes update before next iteration)
     fn resolve_for(&mut self, for_stmt: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         let mut result = Vec::new();
 
@@ -752,40 +756,46 @@ impl<'a> Resolver<'a> {
             result.extend(self.resolve_stmt(init_stmt, ctx));
         }
 
-        // Build the while body: original body statements + update expression
-        let mut body_stmts = self.resolve_block(&for_stmt.body, ctx).stmts;
-        if let Some(update_expr) = &for_stmt.update {
-            let update_tir = self.resolve_expr(update_expr, ctx);
-            body_stmts.push(TirStmt::new(
-                TirStmtKind::Expr(update_tir),
-                update_expr.span(),
-            ));
-        }
+        // Resolve the body
+        let body = self.resolve_block(&for_stmt.body, ctx);
 
-        // Build condition (default to true if none - infinite loop)
+        // Resolve condition (None means infinite loop)
         let condition = for_stmt
             .condition
             .as_ref()
-            .map(|c| self.resolve_expr(c, ctx))
-            .unwrap_or_else(|| {
-                TirExpr::new(
-                    TirExprKind::BoolLiteral(true),
-                    TypeTable::BOOL,
-                    for_stmt.span,
-                )
-            });
+            .map(|c| self.resolve_expr(c, ctx));
 
-        // Create while statement
-        let while_stmt = TirStmt::new(
-            TirStmtKind::While {
+        // Resolve update expression
+        let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
+
+        // Create For statement
+        let for_tir = TirStmt::new(
+            TirStmtKind::For {
                 condition,
-                body: TirBlock::new(body_stmts, for_stmt.body.span),
+                body,
+                update,
             },
             for_stmt.span,
         );
-        result.push(while_stmt);
+        result.push(for_tir);
 
         result
+    }
+
+    /// Resolve a loop statement (infinite loop)
+    fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) -> TirStmt {
+        let body = self.resolve_block(&loop_stmt.body, ctx);
+        TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)
+    }
+
+    /// Resolve a break statement
+    fn resolve_break(&mut self, break_stmt: &BreakStmt) -> TirStmt {
+        TirStmt::new(TirStmtKind::Break, break_stmt.span)
+    }
+
+    /// Resolve a continue statement
+    fn resolve_continue(&mut self, continue_stmt: &ContinueStmt) -> TirStmt {
+        TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
     }
 
     /// Resolve an assert statement - creates TirStmtKind::Assert for power-assert

@@ -5,11 +5,12 @@
 // - ComparisonChainExpr (a < b < c) → BinaryExpr chain ((a < b) && (b < c))
 
 use crate::ast::{
-    AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, CallExpr, CastExpr, ClosureExpr,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, EffectDecl, EnumDecl, Expr,
-    FieldAccessExpr, ForStmt, Function, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LetStmt,
-    MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt, Stmt, StructDecl, StructLiteralExpr,
-    StructLiteralField, TemplateStringExpr, TypeAlias, UnaryExpr, WhileStmt,
+    AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
+    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
+    EffectDecl, EnumDecl, Expr, FieldAccessExpr, ForStmt, Function, IfExpr, IfStmt, ImplBlock,
+    IndexExpr, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt,
+    Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplateStringExpr, TypeAlias,
+    UnaryExpr, WhileStmt,
 };
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
@@ -119,6 +120,12 @@ fn desugar_stmt(stmt: &Stmt) -> Stmt {
             message: a.message.as_ref().map(desugar_expr),
             span: a.span,
         }),
+        Stmt::Loop(l) => Stmt::Loop(LoopStmt {
+            body: desugar_block(&l.body),
+            span: l.span,
+        }),
+        Stmt::Break(b) => Stmt::Break(BreakStmt { span: b.span }),
+        Stmt::Continue(c) => Stmt::Continue(ContinueStmt { span: c.span }),
     }
 }
 

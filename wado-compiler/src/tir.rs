@@ -497,6 +497,12 @@ pub enum TirStmtKind {
         condition: TirExpr,
         body: TirBlock,
     },
+    /// C-style for loop: continue executes update, break exits loop
+    For {
+        condition: Option<TirExpr>,
+        body: TirBlock,
+        update: Option<TirExpr>,
+    },
     Loop {
         body: TirBlock,
     },

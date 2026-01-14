@@ -76,6 +76,12 @@ struct FunctionContext {
     branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
+    /// Stack of (extra_depth, break_offset) for each loop level.
+    /// extra_depth: incremented by if statements inside the loop
+    /// break_offset: 1 for while/loop, 2 for for loops (because for loops have an extra body block)
+    /// For break: use break_offset + extra_depth
+    /// For continue: use extra_depth
+    loop_info: Vec<(u32, u32)>,
 }
 
 impl FunctionContext {
@@ -90,6 +96,7 @@ impl FunctionContext {
             pending_branch_hint: None,
             branch_hints: Vec::new(),
             current_module_path: Vec::new(),
+            loop_info: Vec::new(),
         }
     }
 
@@ -104,6 +111,7 @@ impl FunctionContext {
             pending_branch_hint: None,
             branch_hints: Vec::new(),
             current_module_path: module_path,
+            loop_info: Vec::new(),
         }
     }
 
@@ -2940,44 +2948,143 @@ impl Codegen {
             } => {
                 self.generate_expr(func, condition, type_table, ctx, builder);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                // If creates a block level - increment extra depth if we're inside a loop
+                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
                 self.generate_block(func, then_block, type_table, ctx, builder);
                 if let Some(else_blk) = else_block {
                     func.instruction(&Instruction::Else);
+                    // Else branch is at the same depth as then branch
                     self.generate_block(func, else_blk, type_table, ctx, builder);
+                }
+                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
                 }
                 func.instruction(&Instruction::End);
             }
 
             TirStmtKind::While { condition, body } => {
+                // Push new loop context: (extra_depth=0, break_offset=1)
+                ctx.loop_info.push((0, 1));
+
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
                 // Check condition, break if false
                 self.generate_expr(func, condition, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Eqz);
-                func.instruction(&Instruction::BrIf(1)); // Break out of block
+                let (extra, break_offset) = *ctx.loop_info.last().unwrap();
+                func.instruction(&Instruction::BrIf(break_offset + extra));
+
                 // Execute body
                 self.generate_block(func, body, type_table, ctx, builder);
+
                 // Continue loop
-                func.instruction(&Instruction::Br(0));
+                let (extra, _) = *ctx.loop_info.last().unwrap();
+                func.instruction(&Instruction::Br(extra));
+
                 func.instruction(&Instruction::End); // End loop
                 func.instruction(&Instruction::End); // End block
+
+                ctx.loop_info.pop();
             }
 
             TirStmtKind::Loop { body } => {
+                // Push new loop context: (extra_depth=0, break_offset=1)
+                ctx.loop_info.push((0, 1));
+
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
                 self.generate_block(func, body, type_table, ctx, builder);
-                func.instruction(&Instruction::Br(0)); // Continue loop
+
+                // Continue loop
+                let (extra, _) = *ctx.loop_info.last().unwrap();
+                func.instruction(&Instruction::Br(extra));
+
                 func.instruction(&Instruction::End); // End loop
                 func.instruction(&Instruction::End); // End block
+
+                ctx.loop_info.pop();
+            }
+
+            TirStmtKind::For {
+                condition,
+                body,
+                update,
+            } => {
+                // For loop structure:
+                // block $exit        ; break target
+                //   loop $loop       ; for loop header
+                //     ;; condition check (if present)
+                //     block $body    ; continue target
+                //       ;; body
+                //     end
+                //     ;; update (if present)
+                //     br $loop
+                //   end
+                // end
+                //
+                // From inside body:
+                // - continue: br 0 (to end of $body, then update executes, then br $loop)
+                // - break: br 2 (to $exit)
+
+                // Push new loop context: (extra_depth=0, break_offset=2)
+                // break_offset=2 because break needs to skip body block + loop
+                ctx.loop_info.push((0, 2));
+
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+                func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
+                // Check condition if present
+                if let Some(cond) = condition {
+                    self.generate_expr(func, cond, type_table, ctx, builder);
+                    func.instruction(&Instruction::I32Eqz);
+                    // At this point we're not inside the body block yet, so br 1 exits to $exit
+                    func.instruction(&Instruction::BrIf(1));
+                }
+
+                // Body block (continue target)
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+                self.generate_block(func, body, type_table, ctx, builder);
+
+                func.instruction(&Instruction::End); // End body block
+
+                // Update expression if present
+                if let Some(upd) = update {
+                    self.generate_expr(func, upd, type_table, ctx, builder);
+                    func.instruction(&Instruction::Drop); // Discard result of update expression
+                }
+
+                // Continue to loop header (br 0 from here)
+                func.instruction(&Instruction::Br(0));
+
+                func.instruction(&Instruction::End); // End loop
+                func.instruction(&Instruction::End); // End exit block
+
+                ctx.loop_info.pop();
             }
 
             TirStmtKind::Break => {
-                func.instruction(&Instruction::Br(1)); // Break to outer block
+                if let Some((extra, break_offset)) = ctx.loop_info.last() {
+                    // Break to outer block: break_offset + extra_depth
+                    func.instruction(&Instruction::Br(break_offset + extra));
+                } else {
+                    // No enclosing loop - this should have been caught earlier
+                    panic!("break outside of loop");
+                }
             }
 
             TirStmtKind::Continue => {
-                func.instruction(&Instruction::Br(0)); // Continue to loop start
+                if let Some((extra, _)) = ctx.loop_info.last() {
+                    // Continue to loop/body block: extra_depth
+                    func.instruction(&Instruction::Br(*extra));
+                } else {
+                    // No enclosing loop - this should have been caught earlier
+                    panic!("continue outside of loop");
+                }
             }
 
             TirStmtKind::Assert {
@@ -3514,6 +3621,9 @@ impl Codegen {
                 );
             }
             TirStmtKind::While { body, .. } => {
+                self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
+            }
+            TirStmtKind::For { body, .. } => {
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
             TirStmtKind::Loop { body } => {

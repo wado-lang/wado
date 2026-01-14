@@ -1,0 +1,21 @@
+// Test infinite loop with continue
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let mut count = 0;
+    loop {
+        count = count + 1;
+        if count >= 5 {
+            break;
+        }
+        if count == 2 {
+            continue;
+        }
+        println(`count: {count}`);
+    }
+    println("done");
+}
+
+__DATA__
+{"stdout": "count: 1\ncount: 3\ncount: 4\ndone\n"}

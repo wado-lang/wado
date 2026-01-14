@@ -293,6 +293,19 @@ fn analyze_block(
                 analyze_expr(condition, current_module, type_table, analysis);
                 analyze_block(body, current_module, type_table, analysis);
             }
+            TirStmtKind::For {
+                condition,
+                body,
+                update,
+            } => {
+                if let Some(cond) = condition {
+                    analyze_expr(cond, current_module, type_table, analysis);
+                }
+                analyze_block(body, current_module, type_table, analysis);
+                if let Some(upd) = update {
+                    analyze_expr(upd, current_module, type_table, analysis);
+                }
+            }
             TirStmtKind::Loop { body } => {
                 analyze_block(body, current_module, type_table, analysis);
             }

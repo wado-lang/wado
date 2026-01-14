@@ -230,6 +230,95 @@ a != b != c     // Error: != chaining not allowed
 
 See `docs/adr-2026-01-11-operator-precedence.md` for detailed rationale.
 
+## Control Flow
+
+### Conditional Statements
+
+```wado
+if condition {
+    // then block
+} else {
+    // else block
+}
+
+// else-if chains
+if x < 0 {
+    println("negative");
+} else if x == 0 {
+    println("zero");
+} else {
+    println("positive");
+}
+```
+
+### While Loop
+
+```wado
+let mut i = 0;
+while i < 10 {
+    println(`i = {i}`);
+    i = i + 1;
+}
+```
+
+### For Loop
+
+C-style for loop with initialization, condition, and update. Parentheses are optional:
+
+```wado
+for let mut i = 0; i < 10; i = i + 1 {
+    println(`i = {i}`);
+}
+
+// With parentheses (also valid)
+for (let mut i = 0; i < 10; i = i + 1) {
+    println(`i = {i}`);
+}
+
+// All parts are optional
+for ;; {
+    // infinite loop
+}
+```
+
+**Note:** `continue` in a for loop executes the update expression before the next iteration, matching C semantics.
+
+### Infinite Loop
+
+```wado
+loop {
+    // runs forever until break
+    if should_exit() {
+        break;
+    }
+}
+```
+
+### Break and Continue
+
+`break` exits the innermost enclosing loop. `continue` skips to the next iteration.
+
+```wado
+// break example
+let mut i = 0;
+while i < 100 {
+    if i == 10 {
+        break;  // exit the loop
+    }
+    i = i + 1;
+}
+
+// continue example
+for let mut i = 0; i < 10; i = i + 1 {
+    if i == 5 {
+        continue;  // skip printing 5
+    }
+    println(`{i}`);
+}
+```
+
+Both `break` and `continue` work with `while`, `for`, and `loop`.
+
 ## Memory Model
 
 ### Core Principles

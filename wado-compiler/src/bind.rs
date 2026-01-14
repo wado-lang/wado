@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use crate::ast::{
     AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForStmt, Function, IfExpr, IfStmt, Item,
-    LetStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
+    LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
 };
 use crate::token::Span;
 
@@ -192,6 +192,9 @@ impl Binder {
             Stmt::If(if_stmt) => self.bind_if_stmt(if_stmt),
             Stmt::While(while_stmt) => self.bind_while(while_stmt),
             Stmt::For(for_stmt) => self.bind_for(for_stmt),
+            Stmt::Loop(loop_stmt) => self.bind_loop(loop_stmt),
+            Stmt::Break(_) => {}    // No bindings for break
+            Stmt::Continue(_) => {} // No bindings for continue
             Stmt::Assert(assert_stmt) => self.bind_assert(assert_stmt),
         }
     }
@@ -260,6 +263,11 @@ impl Binder {
         self.bind_block(&for_stmt.body);
 
         self.exit_scope();
+    }
+
+    /// Bind a loop statement
+    fn bind_loop(&mut self, loop_stmt: &LoopStmt) {
+        self.bind_block(&loop_stmt.body);
     }
 
     /// Bind an assert statement

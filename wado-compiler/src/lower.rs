@@ -96,6 +96,19 @@ impl StringCollector {
                 self.collect_expr(condition);
                 self.collect_block(body);
             }
+            TirStmtKind::For {
+                condition,
+                body,
+                update,
+            } => {
+                if let Some(cond) = condition {
+                    self.collect_expr(cond);
+                }
+                self.collect_block(body);
+                if let Some(upd) = update {
+                    self.collect_expr(upd);
+                }
+            }
             TirStmtKind::Loop { body } => {
                 self.collect_block(body);
             }
