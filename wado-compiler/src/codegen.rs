@@ -5,7 +5,11 @@
 use crate::ast::Type;
 use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
-use crate::name::{build_core_internal_name, build_qualified_name, build_simple_method_name};
+use crate::name::{
+    MethodNameInfo, build_core_internal_name, build_method_mangled_name, build_qualified_name,
+    build_simple_method_name,
+};
+use crate::optimize::OptimizationHints;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
@@ -231,6 +235,7 @@ impl Codegen {
         all_tir_modules: &HashMap<Vec<String>, TirModule>,
         symbols: &SymbolTable,
         implicit_modules: &std::collections::HashSet<Vec<String>>,
+        hints: &OptimizationHints,
     ) -> Vec<u8> {
         // Collect pre-computed string literals from all TIR modules
         for tir_module in all_tir_modules.values() {
@@ -242,7 +247,8 @@ impl Codegen {
         }
 
         // Generate binary Wasm from TIR
-        let wasm = self.generate_component(entry_tir, all_tir_modules, symbols, implicit_modules);
+        let wasm =
+            self.generate_component(entry_tir, all_tir_modules, symbols, implicit_modules, hints);
 
         // Validate the generated Wasm
         Self::validate_wasm(&wasm);
@@ -259,6 +265,7 @@ impl Codegen {
         symbols: &SymbolTable,
         _implicit_modules: &std::collections::HashSet<Vec<String>>,
         string_data: &[u8],
+        hints: &OptimizationHints,
     ) -> Vec<u8> {
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
@@ -302,6 +309,10 @@ impl Codegen {
                     }
                 }
                 let qualified_name = build_qualified_name(path, &tir_func.name);
+                // Skip functions not reachable from entry point (DCE)
+                if !hints.is_reachable(&qualified_name) {
+                    continue;
+                }
                 loaded_funcs.push((path.clone(), tir_func, &tir_mod.type_table, qualified_name));
             }
         }
@@ -346,6 +357,17 @@ impl Codegen {
                     }
                     // Skip bodyless methods
                     if method.body.is_none() {
+                        continue;
+                    }
+                    // Build method qualified name for DCE check
+                    let method_qualified = build_method_mangled_name(&MethodNameInfo {
+                        filename: path.join("/"),
+                        struct_name: struct_name.clone(),
+                        trait_name: None,
+                        method_name: method.name.clone(),
+                    });
+                    // Skip methods not reachable from entry point (DCE)
+                    if !hints.is_reachable(&method_qualified) {
                         continue;
                     }
                     let mangled_name = build_simple_method_name(&struct_lookup_name, &method.name);
@@ -553,8 +575,12 @@ impl Codegen {
             builder.import_func("wasi", &monotonic_import_name, &monotonic_import_name);
         }
         builder.import_func("env", "realloc", "realloc");
-        builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
-        builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
+        if hints.needs_f64_to_string {
+            builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
+        }
+        if hints.needs_f32_to_string {
+            builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
+        }
         builder.import_memory("env", "memory", 1);
         module.section(builder.imports());
 
@@ -682,9 +708,11 @@ impl Codegen {
             module.section(&data);
         }
 
-        // Name section
-        let names = builder.build_name_section();
-        module.section(&names);
+        // Name section (skip in size-optimized builds)
+        if !hints.strip_names {
+            let names = builder.build_name_section();
+            module.section(&names);
+        }
 
         module.finish()
     }
@@ -697,6 +725,7 @@ impl Codegen {
         all_tir_modules: &HashMap<Vec<String>, TirModule>,
         symbols: &SymbolTable,
         implicit_modules: &std::collections::HashSet<Vec<String>>,
+        hints: &OptimizationHints,
     ) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
         let mut ctx = ComponentModelContext::new();
@@ -736,7 +765,7 @@ impl Codegen {
         // ========================================
         // Core memory module
         // ========================================
-        let mem_module = self.build_memory_module(&string_data);
+        let mem_module = self.build_memory_module(&string_data, hints);
         ctx.register_core_module("mem-mod");
         builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -765,45 +794,50 @@ impl Codegen {
         );
 
         // ========================================
-        // Float-to-string conversion module
+        // Float-to-string conversion module (conditionally included)
         // ========================================
-        let fts_module =
-            wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
-                .expect("Failed to process float-to-string module");
-        ctx.register_core_module("fts-mod");
-        builder.core_module_raw(Some("fts-mod"), &fts_module);
+        if hints.needs_float_to_string() {
+            let fts_module =
+                wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
+                    .expect("Failed to process float-to-string module");
+            ctx.register_core_module("fts-mod");
+            builder.core_module_raw(Some("fts-mod"), &fts_module);
 
-        // Create env instance for float-to-string (just memory)
-        // Note: core_instantiate_exports creates an instance, so we must track it
-        ctx.register_core_instance("fts-env");
-        let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
-        let fts_env_instance =
-            builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
+            // Create env instance for float-to-string (just memory)
+            ctx.register_core_instance("fts-env");
+            let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+            let fts_env_instance =
+                builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
 
-        // Instantiate float-to-string module with memory
-        ctx.register_core_instance("fts");
-        builder.core_instantiate(
-            Some("fts"),
-            ctx.core_module_idx("fts-mod"),
-            [("env", ModuleArg::Instance(fts_env_instance))],
-        );
+            // Instantiate float-to-string module with memory
+            ctx.register_core_instance("fts");
+            builder.core_instantiate(
+                Some("fts"),
+                ctx.core_module_idx("fts-mod"),
+                [("env", ModuleArg::Instance(fts_env_instance))],
+            );
 
-        // Alias float-to-string exports
-        ctx.register_core_func("f64-to-buffer");
-        builder.core_alias_export(
-            Some("f64-to-buffer"),
-            ctx.core_instance_idx("fts"),
-            "f64_to_buffer",
-            ExportKind::Func,
-        );
+            // Alias float-to-string exports (only the ones needed)
+            if hints.needs_f64_to_string {
+                ctx.register_core_func("f64-to-buffer");
+                builder.core_alias_export(
+                    Some("f64-to-buffer"),
+                    ctx.core_instance_idx("fts"),
+                    "f64_to_buffer",
+                    ExportKind::Func,
+                );
+            }
 
-        ctx.register_core_func("f32-to-buffer");
-        builder.core_alias_export(
-            Some("f32-to-buffer"),
-            ctx.core_instance_idx("fts"),
-            "f32_to_buffer",
-            ExportKind::Func,
-        );
+            if hints.needs_f32_to_string {
+                ctx.register_core_func("f32-to-buffer");
+                builder.core_alias_export(
+                    Some("f32-to-buffer"),
+                    ctx.core_instance_idx("fts"),
+                    "f32_to_buffer",
+                    ExportKind::Func,
+                );
+            }
+        }
 
         // ========================================
         // Stream canonical intrinsics for stream<u8>
@@ -894,6 +928,7 @@ impl Codegen {
             symbols,
             implicit_modules,
             &string_data,
+            hints,
         );
         // Validate main module before embedding
         {
@@ -982,20 +1017,24 @@ impl Codegen {
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
         ctx.register_core_instance("wasi");
 
-        let env_exports = [
+        let mut env_exports: Vec<(&str, ExportKind, u32)> = vec![
             ("memory", ExportKind::Memory, ctx.memory_idx()),
             ("realloc", ExportKind::Func, ctx.core_func_idx("realloc")),
-            (
+        ];
+        if hints.needs_f64_to_string {
+            env_exports.push((
                 "f64_to_buffer",
                 ExportKind::Func,
                 ctx.core_func_idx("f64-to-buffer"),
-            ),
-            (
+            ));
+        }
+        if hints.needs_f32_to_string {
+            env_exports.push((
                 "f32_to_buffer",
                 ExportKind::Func,
                 ctx.core_func_idx("f32-to-buffer"),
-            ),
-        ];
+            ));
+        }
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
         ctx.register_core_instance("env");
 
@@ -1048,6 +1087,12 @@ impl Codegen {
             ctx.comp_func_idx("run"),
             None,
         );
+
+        // Add component-level debug names (skip in size-optimized builds)
+        if !hints.strip_names {
+            builder.append_names();
+        }
+
         builder.finish()
     }
 
@@ -3613,9 +3658,8 @@ impl Codegen {
         }
     }
 
-    /// Generate expression code using cached values where available
-    /// This prevents re-evaluation of side-effectful expressions in assert conditions
-    fn build_memory_module(&self, string_data: &[u8]) -> Vec<u8> {
+    /// Build the memory module (provides shared memory and realloc for all core modules)
+    fn build_memory_module(&self, string_data: &[u8], hints: &OptimizationHints) -> Vec<u8> {
         let mut module = Module::new();
 
         // Type section: realloc type
@@ -3671,12 +3715,17 @@ impl Codegen {
             module.section(&data);
         }
 
-        // Name section (for debugging)
-        let mut names = NameSection::new();
-        let mut func_names = NameMap::new();
-        func_names.append(0, "realloc");
-        names.functions(&func_names);
-        module.section(&names);
+        // Name section (skip in size-optimized builds)
+        if !hints.strip_names {
+            let mut names = NameSection::new();
+            let mut func_names = NameMap::new();
+            func_names.append(0, "realloc");
+            names.functions(&func_names);
+            let mut type_names = NameMap::new();
+            type_names.append(0, "realloc");
+            names.types(&type_names);
+            module.section(&names);
+        }
 
         module.finish()
     }

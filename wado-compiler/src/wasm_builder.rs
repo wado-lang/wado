@@ -263,14 +263,24 @@ impl CoreModuleBuilder {
         &self.exports
     }
 
-    /// Build the name section from tracked function names
+    /// Build the name section from tracked type and function names
     pub fn build_name_section(&self) -> NameSection {
         let mut names = NameSection::new();
+
+        // Function names
         let mut func_names = NameMap::new();
         for (name, &idx) in &self.func_names {
             func_names.append(idx, name);
         }
         names.functions(&func_names);
+
+        // Type names (must come after functions according to spec)
+        let mut type_names = NameMap::new();
+        for (name, &idx) in &self.type_names {
+            type_names.append(idx, name);
+        }
+        names.types(&type_names);
+
         names
     }
 

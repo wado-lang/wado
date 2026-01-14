@@ -29,7 +29,7 @@ pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
 pub use lexer::{LexError, Lexer};
 pub use lower::lower;
-pub use optimize::{OptLevel, optimize};
+pub use optimize::{OptLevel, OptimizationHints, analyze_all_modules};
 pub use parser::{ParseError, Parser};
 pub use resolve::{ResolveError, Resolver};
 pub use token::Span;
@@ -82,12 +82,12 @@ pub struct DumpResult {
 /// assert_eq!(&wasm[0..4], b"\0asm");
 /// ```
 pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, None).map(|r| r.wasm)
+    compile_impl(source, None, None, OptLevel::default()).map(|r| r.wasm)
 }
 
 /// Compile Wado source code with a base path for relative imports.
 pub fn compile_with_base_path(source: &str, base_path: &Path) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, Some(base_path)).map(|r| r.wasm)
+    compile_impl(source, None, Some(base_path), OptLevel::default()).map(|r| r.wasm)
 }
 
 /// Format Wado source code.
@@ -150,6 +150,17 @@ pub fn format_file(path: &Path) -> Result<String, CompileError> {
 /// in error messages. Also supports relative imports from the file's directory.
 /// Returns a [`CompileResult`] containing both the wasm bytes and the parsed module.
 pub fn compile_file(path: &Path) -> Result<CompileResult, CompileError> {
+    compile_file_with_opts(path, OptLevel::default())
+}
+
+/// Compile a Wado source file with optimization level control.
+///
+/// Like [`compile_file`], but allows specifying the optimization level.
+/// Use `OptLevel::None` (O0) to disable optimizations.
+pub fn compile_file_with_opts(
+    path: &Path,
+    opt_level: OptLevel,
+) -> Result<CompileResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
         path: path.display().to_string(),
         message: e.to_string(),
@@ -162,6 +173,7 @@ pub fn compile_file(path: &Path) -> Result<CompileResult, CompileError> {
         &source,
         Some(path.display().to_string()),
         base_path.as_deref(),
+        opt_level,
     )
 }
 
@@ -248,6 +260,7 @@ fn compile_impl(
     source: &str,
     filename: Option<String>,
     base_path: Option<&Path>,
+    opt_level: OptLevel,
 ) -> Result<CompileResult, CompileError> {
     // === Phase 1: Lexer (for original AST) ===
     let mut lexer = Lexer::new(source);
@@ -340,8 +353,17 @@ fn compile_impl(
         .get(&load_result.entry_path)
         .expect("entry module should exist in TIR modules");
 
-    // === Phase 8: Optimize (stub - pass-through) ===
-    // Future: optimize::optimize(lowered_tir, OptLevel::default())
+    // === Phase 8: Optimize (analyze modules for DCE and optimization hints) ===
+    // When O0, disable optimizations (no DCE, include all features)
+    let mut hints = if opt_level == OptLevel::None {
+        OptimizationHints::no_optimization()
+    } else {
+        analyze_all_modules(&tir_modules, &load_result.entry_path)
+    };
+    // Strip debug names in size-optimized builds (-Os)
+    if opt_level == OptLevel::Size {
+        hints.strip_names = true;
+    }
 
     // === Phase 9: Codegen ===
     let mut codegen = Codegen::new();
@@ -351,6 +373,7 @@ fn compile_impl(
             &tir_modules,
             &symbols,
             &load_result.implicit_modules,
+            &hints,
         )
     }))
     .map_err(|e| {
