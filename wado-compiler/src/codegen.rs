@@ -5,9 +5,7 @@
 use crate::ast::Type;
 use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
-use crate::name::{
-    MethodNameInfo, build_core_internal_name, build_method_mangled_name, build_qualified_name,
-};
+use crate::name::{FreeFunctionName, FunctionId, MethodName, StructName, build_core_internal_name};
 use crate::optimize::OptimizationHints;
 use crate::symbol::SymbolTable;
 use crate::tir::{
@@ -51,8 +49,8 @@ pub struct Codegen {
     world_registry: WorldRegistry,
     /// Type index for string-array (GC array<u8>), set when types are defined
     string_array_type_idx: u32,
-    /// Registry of user-defined struct types
-    struct_types: HashMap<String, StructTypeInfo>,
+    /// Registry of user-defined struct types (keyed by StructName for type safety)
+    struct_types: HashMap<StructName, StructTypeInfo>,
 }
 
 /// Context for tracking local variables during function code generation
@@ -227,6 +225,24 @@ impl Codegen {
         }
     }
 
+    /// Look up a struct type by name and module path.
+    /// Tries qualified StructName first, falls back to simple name (empty module_path).
+    fn lookup_struct_type(&self, name: &str, module_path: &[String]) -> Option<&StructTypeInfo> {
+        if !module_path.is_empty() {
+            // Try qualified name first
+            let qualified = StructName::from_path_and_name(module_path, name);
+            if let Some(info) = self.struct_types.get(&qualified) {
+                return Some(info);
+            }
+        }
+        // Fall back to simple name (empty module_path)
+        let simple = StructName {
+            module_path: Vec::new(),
+            name: name.to_string(),
+        };
+        self.struct_types.get(&simple)
+    }
+
     /// Generate Component Model binary Wasm
     pub fn generate_wasm(
         &mut self,
@@ -296,6 +312,10 @@ impl Codegen {
                 if tir_func.body.is_none() {
                     continue;
                 }
+                // Skip methods (names containing "::") - they're handled in loaded_methods
+                if tir_func.name.contains("::") {
+                    continue;
+                }
                 // Skip functions with unsupported effects
                 // Currently only Stdout, Stderr, and MonotonicClock effects are supported
                 if !tir_func.effects.is_empty() {
@@ -307,12 +327,14 @@ impl Codegen {
                         continue;
                     }
                 }
-                let qualified_name = build_qualified_name(path, &tir_func.name);
+                let func_id =
+                    FunctionId::Free(FreeFunctionName::from_path_and_name(path, &tir_func.name));
                 // Skip functions not reachable from entry point (DCE)
-                if !hints.is_reachable(&qualified_name) {
+                if !hints.is_reachable(&func_id) {
                     continue;
                 }
-                loaded_funcs.push((path.clone(), tir_func, &tir_mod.type_table, qualified_name));
+                let mangled_name = func_id.to_string();
+                loaded_funcs.push((path.clone(), tir_func, &tir_mod.type_table, mangled_name));
             }
         }
 
@@ -325,7 +347,7 @@ impl Codegen {
         // (with mangled names like "Point::sum") in tir_mod.functions, not in impls.
         // This loop is kept for future when impls may be populated.
         // Format: (module_path, struct_lookup_name, tir_func, type_table, mangled_name)
-        let mut loaded_methods: Vec<(Vec<String>, String, &TirFunction, &TypeTable, String)> =
+        let mut loaded_methods: Vec<(Vec<String>, StructName, &TirFunction, &TypeTable, String)> =
             Vec::new();
         for (path, tir_mod) in all_tir_modules {
             // Skip entry module (handled separately)
@@ -352,24 +374,25 @@ impl Codegen {
                     if func.body.is_none() {
                         continue;
                     }
-                    // Build fully mangled name for DCE check: path/Struct::method
-                    let method_mangled = build_method_mangled_name(&MethodNameInfo {
-                        filename: path.join("/"),
-                        struct_name: struct_name.to_string(),
-                        trait_name: None,
-                        method_name: method_name.to_string(),
-                    });
+                    // Build function ID for DCE check: path/Struct::method
+                    let method_id = FunctionId::Method(MethodName::new(
+                        path.join("/"),
+                        struct_name.to_string(),
+                        None,
+                        method_name.to_string(),
+                    ));
                     // Skip methods not reachable from entry point (DCE)
-                    if !hints.is_reachable(&method_mangled) {
+                    if !hints.is_reachable(&method_id) {
                         continue;
                     }
+                    let method_mangled = method_id.to_string();
                     // Determine struct lookup name - use qualified name if there's a collision
                     let struct_lookup_name = if main_module_struct_names.contains(struct_name) {
-                        // Collision - use qualified name to look up the imported struct
-                        build_qualified_name(path, struct_name)
+                        // Collision - use qualified StructName
+                        StructName::from_path_and_name(path, struct_name)
                     } else {
-                        // No collision - simple name is fine
-                        struct_name.to_string()
+                        // No collision - use simple StructName (empty module path)
+                        StructName::new(vec![], struct_name.to_string())
                     };
                     // Use the same fully mangled name for registration
                     // This ensures consistency between DCE tracking and codegen
@@ -410,15 +433,16 @@ impl Codegen {
 
         let _string_array_idx_for_structs = builder.type_idx("string-array");
 
-        // Register main module structs from TIR (with simple names)
+        // Register main module structs from TIR (with simple names - empty module path)
         // Note: main_module_struct_names was collected earlier for method collision detection
         for tir_struct in &entry_tir.structs {
-            self.register_struct_type(tir_struct, type_table, &mut builder);
+            let struct_name = StructName::new(vec![], tir_struct.name.clone());
+            self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
         }
 
         // Second pass: register loaded module structs with collision handling
-        // - If no collision: register with simple name
-        // - If collision with main module: register with qualified name
+        // - If no collision: register with simple name (empty module path)
+        // - If collision with main module: register with qualified name (full module path)
         for (path, tir_mod) in all_tir_modules {
             // Skip entry module (already handled)
             if path == &entry_tir.path {
@@ -428,35 +452,38 @@ impl Codegen {
                 if !tir_struct.is_pub {
                     continue;
                 }
-                if main_module_struct_names.contains(&tir_struct.name) {
-                    // Collision - register with qualified name
-                    let qualified_name = build_qualified_name(path, &tir_struct.name);
-                    self.register_struct_type_with_name(
-                        &qualified_name,
-                        tir_struct,
-                        &tir_mod.type_table,
-                        &mut builder,
-                    );
+                let struct_name = if main_module_struct_names.contains(&tir_struct.name) {
+                    // Collision - use qualified name with full module path
+                    StructName::from_path_and_name(path, &tir_struct.name)
                 } else {
-                    // No collision - register with simple name
-                    self.register_struct_type(tir_struct, &tir_mod.type_table, &mut builder);
-                }
+                    // No collision - use simple name (empty module path)
+                    StructName::new(vec![], tir_struct.name.clone())
+                };
+                self.register_struct_type(
+                    struct_name,
+                    tir_struct,
+                    &tir_mod.type_table,
+                    &mut builder,
+                );
             }
         }
 
         // Register struct type aliases (e.g., `Point as OtherPoint`)
         for (alias_name, alias_module_path, original_name) in symbols.get_struct_aliases() {
+            let alias_struct_name = StructName::new(vec![], alias_name.clone());
             // Check if there's a collision (main module has same-named struct)
             if main_module_struct_names.contains(&original_name) && !alias_module_path.is_empty() {
                 // Collision case - use qualified name from the alias's module
-                let qualified_name = build_qualified_name(&alias_module_path, &original_name);
+                let qualified_name =
+                    StructName::from_path_and_name(&alias_module_path, &original_name);
                 if let Some(info) = self.struct_types.get(&qualified_name).cloned() {
-                    self.struct_types.insert(alias_name, info);
+                    self.struct_types.insert(alias_struct_name, info);
                 }
             } else {
-                // No collision - use simple name
-                if let Some(info) = self.struct_types.get(&original_name).cloned() {
-                    self.struct_types.insert(alias_name, info);
+                // No collision - use simple name (empty module path)
+                let original_struct_name = StructName::new(vec![], original_name.clone());
+                if let Some(info) = self.struct_types.get(&original_struct_name).cloned() {
+                    self.struct_types.insert(alias_struct_name, info);
                 }
             }
         }
@@ -492,12 +519,13 @@ impl Codegen {
             let type_name = if let Some(sep_pos) = tir_func.name.find("::") {
                 let struct_name = &tir_func.name[..sep_pos];
                 let method_name = &tir_func.name[sep_pos + 2..];
-                build_method_mangled_name(&MethodNameInfo {
-                    filename: entry_tir.path.join("/"),
-                    struct_name: struct_name.to_string(),
-                    trait_name: None,
-                    method_name: method_name.to_string(),
-                })
+                MethodName::new(
+                    entry_tir.path.join("/"),
+                    struct_name.to_string(),
+                    None,
+                    method_name.to_string(),
+                )
+                .to_string()
             } else {
                 tir_func.name.clone()
             };
@@ -628,12 +656,13 @@ impl Codegen {
             if let Some(sep_pos) = tir_func.name.find("::") {
                 let struct_name = &tir_func.name[..sep_pos];
                 let method_name = &tir_func.name[sep_pos + 2..];
-                let mangled_name = build_method_mangled_name(&MethodNameInfo {
-                    filename: entry_tir.path.join("/"),
-                    struct_name: struct_name.to_string(),
-                    trait_name: None,
-                    method_name: method_name.to_string(),
-                });
+                let mangled_name = MethodName::new(
+                    entry_tir.path.join("/"),
+                    struct_name.to_string(),
+                    None,
+                    method_name.to_string(),
+                )
+                .to_string();
                 builder.define_func(&mangled_name, &mangled_name);
             } else {
                 builder.define_func(&tir_func.name, &tir_func.name);
@@ -1564,9 +1593,10 @@ impl Codegen {
         panic!("String not found in literals: {s}");
     }
 
-    /// Register a struct type from TIR (used for main module structs)
+    /// Register a struct type from TIR with a StructName key
     fn register_struct_type(
         &mut self,
+        struct_name: StructName,
         tir_struct: &crate::tir::TirStruct,
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
@@ -1589,44 +1619,11 @@ impl Codegen {
             });
         }
 
-        let type_idx = builder.define_gc_struct_type(&tir_struct.name, &fields);
+        // Use the struct name's string representation for Wasm type naming
+        let type_idx = builder.define_gc_struct_type(&struct_name.name, &fields);
 
         self.struct_types
-            .insert(tir_struct.name.clone(), StructTypeInfo { type_idx });
-
-        type_idx
-    }
-
-    /// Register a TIR struct type with a custom name (for qualified names)
-    fn register_struct_type_with_name(
-        &mut self,
-        name: &str,
-        tir_struct: &crate::tir::TirStruct,
-        type_table: &TypeTable,
-        builder: &mut CoreModuleBuilder,
-    ) -> u32 {
-        let mut fields = Vec::new();
-
-        for field in &tir_struct.fields {
-            let wasm_type = self.type_id_to_valtype(type_table, field.type_id);
-            let storage_type = match wasm_type {
-                ValType::I32 => StorageType::Val(ValType::I32),
-                ValType::I64 => StorageType::Val(ValType::I64),
-                ValType::F32 => StorageType::Val(ValType::F32),
-                ValType::F64 => StorageType::Val(ValType::F64),
-                ValType::Ref(rt) => StorageType::Val(ValType::Ref(rt)),
-                _ => StorageType::Val(ValType::I32), // Default fallback
-            };
-            fields.push(FieldType {
-                element_type: storage_type,
-                mutable: true, // All fields are mutable by default
-            });
-        }
-
-        let type_idx = builder.define_gc_struct_type(name, &fields);
-
-        self.struct_types
-            .insert(name.to_string(), StructTypeInfo { type_idx });
+            .insert(struct_name, StructTypeInfo { type_idx });
 
         type_idx
     }
@@ -1666,26 +1663,13 @@ impl Codegen {
 
             // Struct type
             ResolvedType::Struct { name, module_path } => {
-                // Try qualified name first (for collision handling), then simple name
-                let lookup_name = if !module_path.is_empty() {
-                    let qualified = build_qualified_name(module_path, name);
-                    if self.struct_types.contains_key(&qualified) {
-                        qualified
-                    } else {
-                        name.clone()
-                    }
-                } else {
-                    name.clone()
-                };
-                if let Some(struct_info) = self.struct_types.get(&lookup_name) {
+                if let Some(struct_info) = self.lookup_struct_type(name, module_path) {
                     ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(struct_info.type_idx),
                     })
                 } else {
-                    panic!(
-                        "unknown struct type in type_id_to_valtype: {name} (lookup: {lookup_name})"
-                    )
+                    panic!("unknown struct type in type_id_to_valtype: {name}")
                 }
             }
 
@@ -2099,24 +2083,10 @@ impl Codegen {
                         // Get the struct type from the receiver expression
                         let struct_type_idx = match type_table.get(expr.type_id) {
                             ResolvedType::Struct { name, module_path } => {
-                                // Build qualified lookup name for imported structs
-                                let lookup_name = if !module_path.is_empty() {
-                                    let qualified = build_qualified_name(module_path, name);
-                                    if self.struct_types.contains_key(&qualified) {
-                                        qualified
-                                    } else {
-                                        name.clone()
-                                    }
-                                } else {
-                                    name.clone()
-                                };
-                                if let Some(info) = self.struct_types.get(&lookup_name) {
+                                if let Some(info) = self.lookup_struct_type(name, module_path) {
                                     info.type_idx
                                 } else {
-                                    panic!(
-                                        "unknown struct type in field assignment: {} (lookup: {})",
-                                        name, lookup_name
-                                    );
+                                    panic!("unknown struct type in field assignment: {name}");
                                 }
                             }
                             other => {
@@ -2370,12 +2340,13 @@ impl Codegen {
                     // Struct method call
                     ResolvedType::Struct { name, module_path } => {
                         // Build the fully mangled method name: path/Struct::method
-                        let mangled_name = build_method_mangled_name(&MethodNameInfo {
-                            filename: module_path.join("/"),
-                            struct_name: name.clone(),
-                            trait_name: None,
-                            method_name: method_name.to_string(),
-                        });
+                        let mangled_name = MethodName::new(
+                            module_path.join("/"),
+                            name.clone(),
+                            None,
+                            method_name.to_string(),
+                        )
+                        .to_string();
 
                         // Look up the method function index
                         if let Some(idx) = builder.try_func_idx(&mangled_name) {
@@ -2407,14 +2378,14 @@ impl Codegen {
                                 | PrimitiveType::I16
                                 | PrimitiveType::U8
                                 | PrimitiveType::U16
-                                | PrimitiveType::U32 => "core::internal::i32_to_string",
+                                | PrimitiveType::U32 => "core/internal/i32_to_string",
                                 PrimitiveType::I64 | PrimitiveType::U64 => {
-                                    "core::internal::i64_to_string"
+                                    "core/internal/i64_to_string"
                                 }
-                                PrimitiveType::F32 => "core::internal::f32_to_string",
-                                PrimitiveType::F64 => "core::internal::f64_to_string",
-                                PrimitiveType::Bool => "core::internal::bool_to_string",
-                                PrimitiveType::Char => "core::internal::char_to_string",
+                                PrimitiveType::F32 => "core/internal/f32_to_string",
+                                PrimitiveType::F64 => "core/internal/f64_to_string",
+                                PrimitiveType::Bool => "core/internal/bool_to_string",
+                                PrimitiveType::Char => "core/internal/char_to_string",
                                 _ => {
                                     panic!("to_string not supported for primitive type: {:?}", prim)
                                 }
@@ -2450,24 +2421,10 @@ impl Codegen {
                 // Get the struct type from the inner expression
                 let struct_type_idx = match type_table.get(inner.type_id) {
                     ResolvedType::Struct { name, module_path } => {
-                        // Build qualified lookup name for imported structs
-                        let lookup_name = if !module_path.is_empty() {
-                            let qualified = build_qualified_name(module_path, name);
-                            if self.struct_types.contains_key(&qualified) {
-                                qualified
-                            } else {
-                                name.clone()
-                            }
-                        } else {
-                            name.clone()
-                        };
-                        if let Some(info) = self.struct_types.get(&lookup_name) {
+                        if let Some(info) = self.lookup_struct_type(name, module_path) {
                             info.type_idx
                         } else {
-                            panic!(
-                                "unknown struct type in field access: {} (lookup: {})",
-                                name, lookup_name
-                            );
+                            panic!("unknown struct type in field access: {name}");
                         }
                     }
                     other => {
@@ -2535,30 +2492,19 @@ impl Codegen {
                 }
                 // Create struct using struct.new
                 // Use the struct_type to get the correct lookup name (handles name collisions)
-                let lookup_name = if let ResolvedType::Struct { name, module_path } =
+                let struct_info = if let ResolvedType::Struct { name, module_path } =
                     type_table.get(*struct_type)
                 {
-                    if module_path.is_empty() {
-                        // Local struct - use simple name
-                        name.clone()
-                    } else {
-                        // Imported struct - try qualified name first (for collision handling)
-                        let qualified_name = build_qualified_name(module_path, name);
-                        if self.struct_types.contains_key(&qualified_name) {
-                            qualified_name
-                        } else {
-                            // Fall back to simple name (no collision)
-                            name.clone()
-                        }
-                    }
+                    self.lookup_struct_type(name, module_path)
                 } else {
-                    struct_name.clone()
+                    // Fall back to simple name lookup using struct_name
+                    self.lookup_struct_type(struct_name, &[])
                 };
 
-                if let Some(struct_info) = self.struct_types.get(&lookup_name) {
+                if let Some(struct_info) = struct_info {
                     func.instruction(&Instruction::StructNew(struct_info.type_idx));
                 } else {
-                    panic!("unknown struct type: {lookup_name} (original: {struct_name})");
+                    panic!("unknown struct type: {struct_name}");
                 }
             }
 
@@ -3109,7 +3055,7 @@ impl Codegen {
                     func.instruction(&Instruction::RefAsNonNull);
                     self.generate_expr(func, msg_expr, type_table, ctx, builder);
                     func.instruction(&Instruction::Call(
-                        builder.func_idx("core::internal::string_concat"),
+                        builder.func_idx("core/internal/string_concat"),
                     ));
                     func.instruction(&Instruction::LocalSet(result_local));
 
@@ -3118,7 +3064,7 @@ impl Codegen {
                     func.instruction(&Instruction::RefAsNonNull);
                     self.generate_string_from_data(func, "\n", builder);
                     func.instruction(&Instruction::Call(
-                        builder.func_idx("core::internal::string_concat"),
+                        builder.func_idx("core/internal/string_concat"),
                     ));
                     func.instruction(&Instruction::LocalSet(result_local));
                 } else {
@@ -3133,7 +3079,7 @@ impl Codegen {
                 let condition_line = format!("condition: {}\n", condition_source);
                 self.generate_string_from_data(func, &condition_line, builder);
                 func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internal::string_concat"),
+                    builder.func_idx("core/internal/string_concat"),
                 ));
                 func.instruction(&Instruction::LocalSet(result_local));
 
@@ -3145,7 +3091,7 @@ impl Codegen {
                     let name_prefix = format!("{}: ", name);
                     self.generate_string_from_data(func, &name_prefix, builder);
                     func.instruction(&Instruction::Call(
-                        builder.func_idx("core::internal::string_concat"),
+                        builder.func_idx("core/internal/string_concat"),
                     ));
                     func.instruction(&Instruction::LocalSet(result_local));
 
@@ -3155,7 +3101,7 @@ impl Codegen {
                     func.instruction(&Instruction::LocalGet(*local_idx));
                     self.generate_value_to_string_from_type_id(func, *type_id, type_table, builder);
                     func.instruction(&Instruction::Call(
-                        builder.func_idx("core::internal::string_concat"),
+                        builder.func_idx("core/internal/string_concat"),
                     ));
                     func.instruction(&Instruction::LocalSet(result_local));
 
@@ -3164,7 +3110,7 @@ impl Codegen {
                     func.instruction(&Instruction::RefAsNonNull);
                     self.generate_string_from_data(func, "\n", builder);
                     func.instruction(&Instruction::Call(
-                        builder.func_idx("core::internal::string_concat"),
+                        builder.func_idx("core/internal/string_concat"),
                     ));
                     func.instruction(&Instruction::LocalSet(result_local));
                 }
@@ -3350,37 +3296,46 @@ impl Codegen {
             }
         }
 
-        // Strategy 3: Build qualified name and try lookup
-        let qualified_name = if module_path.is_empty() {
+        // Invariant: TirExprKind::Call should never have method names (containing "::")
+        // Methods use TirExprKind::MethodCall instead. The only exception is "builtin::*".
+        debug_assert!(
+            !func_name.contains("::") || func_name.starts_with("builtin::"),
+            "TirExprKind::Call should not have method-style names: {}",
+            func_name
+        );
+
+        // Strategy 3: Build mangled name and try lookup
+        let mangled_name = if module_path.is_empty() {
             func_name.to_string()
         } else {
-            build_qualified_name(module_path, func_name)
+            FreeFunctionName::from_path_and_name(module_path, func_name).to_string()
         };
 
-        if let Some(idx) = builder.try_func_idx(&qualified_name) {
+        if let Some(idx) = builder.try_func_idx(&mangled_name) {
             return idx;
         }
 
         // Strategy 4: Try current module path for local function calls
         // When module_path is empty, try the current function's module
         if module_path.is_empty() && !current_module_path.is_empty() {
-            let current_qualified_name = build_qualified_name(current_module_path, func_name);
-            if let Some(idx) = builder.try_func_idx(&current_qualified_name) {
+            let current_mangled_name =
+                FreeFunctionName::from_path_and_name(current_module_path, func_name).to_string();
+            if let Some(idx) = builder.try_func_idx(&current_mangled_name) {
                 return idx;
             }
         }
 
         // Strategy 5: Try core internal name format
         if module_path == ["core", "internal"] {
-            let internal_name = build_core_internal_name(func_name);
+            let internal_name = build_core_internal_name(func_name).to_string();
             if let Some(idx) = builder.try_func_idx(&internal_name) {
                 return idx;
             }
         }
 
-        // Strategy 6: Try core:cli function format (for println, eprintln, etc.)
+        // Strategy 6: Try core/cli function format (for println, eprintln, etc.)
         if module_path == ["core", "cli"] {
-            let cli_name = format!("core::cli::{}", func_name);
+            let cli_name = FreeFunctionName::from_strs(&["core", "cli"], func_name).to_string();
             if let Some(idx) = builder.try_func_idx(&cli_name) {
                 return idx;
             }
@@ -3685,12 +3640,12 @@ impl Codegen {
                     | PrimitiveType::I16
                     | PrimitiveType::U8
                     | PrimitiveType::U16
-                    | PrimitiveType::U32 => "core::internal::i32_to_string",
-                    PrimitiveType::I64 | PrimitiveType::U64 => "core::internal::i64_to_string",
-                    PrimitiveType::F32 => "core::internal::f32_to_string",
-                    PrimitiveType::F64 => "core::internal::f64_to_string",
-                    PrimitiveType::Bool => "core::internal::bool_to_string",
-                    PrimitiveType::Char => "core::internal::char_to_string",
+                    | PrimitiveType::U32 => "core/internal/i32_to_string",
+                    PrimitiveType::I64 | PrimitiveType::U64 => "core/internal/i64_to_string",
+                    PrimitiveType::F32 => "core/internal/f32_to_string",
+                    PrimitiveType::F64 => "core/internal/f64_to_string",
+                    PrimitiveType::Bool => "core/internal/bool_to_string",
+                    PrimitiveType::Char => "core/internal/char_to_string",
                     _ => return, // I128, U128 not yet supported
                 };
                 func.instruction(&Instruction::Call(builder.func_idx(func_name)));
@@ -3779,28 +3734,8 @@ impl Codegen {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::analyze::Analyzer;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
-    use crate::symbol::SymbolTable;
-
-    fn parse(source: &str) -> crate::ast::Module {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("lexer error");
-        let mut parser = Parser::new(tokens);
-        parser.parse().expect("parser error")
-    }
-
-    fn analyze(module: &crate::ast::Module) -> SymbolTable {
-        let mut analyzer = Analyzer::new();
-        analyzer.analyze(module, &[]).expect("analysis error");
-        analyzer.into_symbols()
-    }
-
     #[test]
     fn test_generate_binary() {
-        // Test via compile() which uses TIR path
         let wasm = crate::compile(
             r#"
             fn add(a: i32, b: i32) -> i32 {

@@ -4,7 +4,7 @@
 //! - Dead Code Elimination (DCE) at function level
 //! - Optimization hints for conditional feature inclusion
 
-use crate::name::{MethodNameInfo, build_method_mangled_name, build_qualified_name};
+use crate::name::{FreeFunctionName, FunctionId, MethodName};
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
     TirStmtKind, TypeId, TypeTable,
@@ -24,8 +24,8 @@ pub enum OptLevel {
 /// Hints collected during optimization that inform code generation
 #[derive(Debug, Clone, Default)]
 pub struct OptimizationHints {
-    /// Set of reachable function qualified names (from DCE analysis)
-    pub reachable_functions: HashSet<String>,
+    /// Set of reachable functions (from DCE analysis)
+    pub reachable_functions: HashSet<FunctionId>,
     /// Whether float-to-string conversion is needed (derived from reachable functions)
     pub needs_f32_to_string: bool,
     pub needs_f64_to_string: bool,
@@ -67,8 +67,8 @@ impl OptimizationHints {
     }
 
     /// Check if a function is reachable (should be included in the binary)
-    pub fn is_reachable(&self, qualified_name: &str) -> bool {
-        self.all_reachable || self.reachable_functions.contains(qualified_name)
+    pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
+        self.all_reachable || self.reachable_functions.contains(func_id)
     }
 
     /// Check if an effect is used (should be imported)
@@ -90,7 +90,7 @@ impl OptimizationHints {
 #[derive(Debug, Clone, Default)]
 struct FunctionAnalysis {
     /// Functions called by this function
-    callees: HashSet<String>,
+    callees: HashSet<FunctionId>,
     /// Effect calls: (effect_name, op_name)
     effect_calls: HashSet<(String, String)>,
 }
@@ -104,7 +104,7 @@ pub fn analyze_all_modules(
     let (call_graph, effect_usage) = build_analysis_graph(modules);
 
     // Find entry function (run in entry module)
-    let entry_func = build_qualified_name(entry_path, "run");
+    let entry_func = FunctionId::Free(FreeFunctionName::from_path_and_name(entry_path, "run"));
 
     // Compute reachable functions from entry point
     let reachable = compute_reachable(&call_graph, &entry_func);
@@ -112,8 +112,8 @@ pub fn analyze_all_modules(
     // Collect used effects from reachable functions
     let mut used_effects: HashSet<String> = HashSet::new();
     let mut used_wasi_functions: HashSet<String> = HashSet::new();
-    for func_name in &reachable {
-        if let Some(effects) = effect_usage.get(func_name) {
+    for func_id in &reachable {
+        if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
                 used_effects.insert(effect_name.clone());
                 used_wasi_functions.insert(format!("{}::{}", effect_name, op_name));
@@ -121,32 +121,39 @@ pub fn analyze_all_modules(
         }
     }
 
+    // Helper to check if a core/internal function is reachable
+    let core_internal = |name: &str| -> FunctionId {
+        FunctionId::Free(FreeFunctionName::from_strs(&["core", "internal"], name))
+    };
+
     // Derive feature hints from reachable functions
-    let needs_f32_to_string = reachable.contains("core::internal::f32_to_string");
-    let needs_f64_to_string = reachable.contains("core::internal::f64_to_string");
-    let needs_bool_to_string = reachable.contains("core::internal::bool_to_string");
+    let needs_f32_to_string = reachable.contains(&core_internal("f32_to_string"));
+    let needs_f64_to_string = reachable.contains(&core_internal("f64_to_string"));
+    let needs_bool_to_string = reachable.contains(&core_internal("bool_to_string"));
 
     // Check if stream intrinsics are needed by looking for:
     // 1. Stdout/Stderr effects being used
     // 2. Any builtin::stream_* functions being called (for ambient logging)
     // 3. Any builtin::call_indirect_* functions (ambient effect calls)
-    let uses_stream_builtins = reachable.iter().any(|name| {
-        name.contains("builtin::stream_")
-            || name.contains("builtin::call_indirect_stdout")
-            || name.contains("builtin::call_indirect_stderr")
+    let uses_stream_builtins = reachable.iter().any(|func_id| {
+        if let FunctionId::Free(f) = func_id {
+            f.name.starts_with("builtin::stream_")
+                || f.name.starts_with("builtin::call_indirect_stdout")
+                || f.name.starts_with("builtin::call_indirect_stderr")
+        } else {
+            false
+        }
     });
 
     // Also mark effects as used if indirect calls are present
-    if reachable
-        .iter()
-        .any(|name| name.contains("builtin::call_indirect_stdout"))
-    {
+    if reachable.iter().any(|func_id| {
+        matches!(func_id, FunctionId::Free(f) if f.name.contains("builtin::call_indirect_stdout"))
+    }) {
         used_effects.insert("Stdout".to_string());
     }
-    if reachable
-        .iter()
-        .any(|name| name.contains("builtin::call_indirect_stderr"))
-    {
+    if reachable.iter().any(|func_id| {
+        matches!(func_id, FunctionId::Free(f) if f.name.contains("builtin::call_indirect_stderr"))
+    }) {
         used_effects.insert("Stderr".to_string());
     }
 
@@ -174,16 +181,16 @@ pub fn analyze_all_modules(
 
 /// Build call graph and effect usage from all TIR modules
 /// Returns:
-/// - Call graph: map from function qualified name to set of called function names
-/// - Effect usage: map from function qualified name to set of (effect, operation) pairs
+/// - Call graph: map from function ID to set of called function IDs
+/// - Effect usage: map from function ID to set of (effect, operation) pairs
 fn build_analysis_graph(
     modules: &HashMap<Vec<String>, TirModule>,
 ) -> (
-    HashMap<String, HashSet<String>>,
-    HashMap<String, HashSet<(String, String)>>,
+    HashMap<FunctionId, HashSet<FunctionId>>,
+    HashMap<FunctionId, HashSet<(String, String)>>,
 ) {
-    let mut call_graph: HashMap<String, HashSet<String>> = HashMap::new();
-    let mut effect_usage: HashMap<String, HashSet<(String, String)>> = HashMap::new();
+    let mut call_graph: HashMap<FunctionId, HashSet<FunctionId>> = HashMap::new();
+    let mut effect_usage: HashMap<FunctionId, HashSet<(String, String)>> = HashMap::new();
 
     for (path, module) in modules {
         let type_table = &module.type_table;
@@ -191,24 +198,24 @@ fn build_analysis_graph(
         // Analyze functions (including methods stored as functions)
         for func in &module.functions {
             // Methods have names like "Point::sum", regular functions don't contain "::"
-            let func_name = if let Some(sep_pos) = func.name.find("::") {
-                // This is a method - use fully mangled name format: path/Struct::method
+            let func_id = if let Some(sep_pos) = func.name.find("::") {
+                // This is a method - use MethodName
                 let struct_name = &func.name[..sep_pos];
                 let method_name = &func.name[sep_pos + 2..];
-                build_method_mangled_name(&MethodNameInfo {
-                    filename: path.join("/"),
-                    struct_name: struct_name.to_string(),
-                    trait_name: None,
-                    method_name: method_name.to_string(),
-                })
+                FunctionId::Method(MethodName::new(
+                    path.join("/"),
+                    struct_name.to_string(),
+                    None,
+                    method_name.to_string(),
+                ))
             } else {
-                // Regular function - use qualified name format: path::func
-                build_qualified_name(path, &func.name)
+                // Regular function - use FreeFunctionName
+                FunctionId::Free(FreeFunctionName::from_path_and_name(path, &func.name))
             };
             let analysis = analyze_function(func, path, type_table);
-            call_graph.insert(func_name.clone(), analysis.callees);
+            call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
-                effect_usage.insert(func_name, analysis.effect_calls);
+                effect_usage.insert(func_id, analysis.effect_calls);
             }
         }
 
@@ -221,16 +228,16 @@ fn build_analysis_graph(
             };
 
             for method in &impl_block.methods {
-                let method_mangled = build_method_mangled_name(&MethodNameInfo {
-                    filename: path.join("/"),
-                    struct_name: struct_name.clone(),
-                    trait_name: None,
-                    method_name: method.name.clone(),
-                });
+                let method_id = FunctionId::Method(MethodName::new(
+                    path.join("/"),
+                    struct_name.clone(),
+                    None,
+                    method.name.clone(),
+                ));
                 let analysis = analyze_function(method, path, type_table);
-                call_graph.insert(method_mangled.clone(), analysis.callees);
+                call_graph.insert(method_id.clone(), analysis.callees);
                 if !analysis.effect_calls.is_empty() {
-                    effect_usage.insert(method_mangled, analysis.effect_calls);
+                    effect_usage.insert(method_id, analysis.effect_calls);
                 }
             }
         }
@@ -307,8 +314,16 @@ fn analyze_block(
                 // Assert codegen uses string_concat and panic directly
                 analysis
                     .callees
-                    .insert("core::internal::string_concat".to_string());
-                analysis.callees.insert("core::prelude::panic".to_string());
+                    .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                        &["core", "internal"],
+                        "string_concat",
+                    )));
+                analysis
+                    .callees
+                    .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                        &["core", "prelude"],
+                        "panic",
+                    )));
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
         }
@@ -327,14 +342,23 @@ fn analyze_expr(
             func_name,
             args,
         } => {
-            // Build qualified name for the called function
+            // Invariant: TirExprKind::Call should never have method names (containing "::")
+            // Methods use TirExprKind::MethodCall instead. The only exception is "builtin::*".
+            debug_assert!(
+                !func_name.contains("::") || func_name.starts_with("builtin::"),
+                "TirExprKind::Call should not have method-style names: {}",
+                func_name
+            );
+
+            // Build function ID for the called function
             let callee_path = if module_path.is_empty() {
                 current_module
             } else {
                 module_path.as_slice()
             };
-            let callee_name = build_qualified_name(callee_path, func_name);
-            analysis.callees.insert(callee_name);
+            let callee_id =
+                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, func_name));
+            analysis.callees.insert(callee_id);
 
             // Detect effect calls: single-element module_path with PascalCase name
             // (e.g., ["Stdout"], ["Stderr"], ["MonotonicClock"])
@@ -370,14 +394,14 @@ fn analyze_expr(
                 ResolvedType::Struct {
                     name, module_path, ..
                 } => {
-                    // Struct method call - use fully mangled name format: path/Struct::method
-                    let method_mangled = build_method_mangled_name(&MethodNameInfo {
-                        filename: module_path.join("/"),
-                        struct_name: name.clone(),
-                        trait_name: None,
-                        method_name: method_name.to_string(),
-                    });
-                    analysis.callees.insert(method_mangled);
+                    // Struct method call - use FunctionId::Method
+                    let method_id = FunctionId::Method(MethodName::new(
+                        module_path.join("/"),
+                        name.clone(),
+                        None,
+                        method_name.to_string(),
+                    ));
+                    analysis.callees.insert(method_id);
                 }
                 ResolvedType::Primitive(_) => {
                     // Primitive method call (e.g., i32.to_string())
@@ -477,6 +501,7 @@ fn analyze_expr(
 
 /// Add the appropriate to_string function call for a type
 fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut FunctionAnalysis) {
+    let core_internal: &[&str] = &["core", "internal"];
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => {
             let func_name = match prim {
@@ -485,15 +510,20 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
                 | PrimitiveType::I16
                 | PrimitiveType::U8
                 | PrimitiveType::U16
-                | PrimitiveType::U32 => "core::internal::i32_to_string",
-                PrimitiveType::I64 | PrimitiveType::U64 => "core::internal::i64_to_string",
-                PrimitiveType::F32 => "core::internal::f32_to_string",
-                PrimitiveType::F64 => "core::internal::f64_to_string",
-                PrimitiveType::Bool => "core::internal::bool_to_string",
-                PrimitiveType::Char => "core::internal::char_to_string",
+                | PrimitiveType::U32 => "i32_to_string",
+                PrimitiveType::I64 | PrimitiveType::U64 => "i64_to_string",
+                PrimitiveType::F32 => "f32_to_string",
+                PrimitiveType::F64 => "f64_to_string",
+                PrimitiveType::Bool => "bool_to_string",
+                PrimitiveType::Char => "char_to_string",
                 _ => return,
             };
-            analysis.callees.insert(func_name.to_string());
+            analysis
+                .callees
+                .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                    core_internal,
+                    func_name,
+                )));
         }
         ResolvedType::String => {
             // String.to_string() is a no-op, no function call needed
@@ -504,11 +534,11 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
 
 /// Compute the set of reachable functions from an entry point
 fn compute_reachable(
-    call_graph: &HashMap<String, HashSet<String>>,
-    entry: &str,
-) -> HashSet<String> {
+    call_graph: &HashMap<FunctionId, HashSet<FunctionId>>,
+    entry: &FunctionId,
+) -> HashSet<FunctionId> {
     let mut reachable = HashSet::new();
-    let mut worklist = vec![entry.to_string()];
+    let mut worklist = vec![entry.clone()];
 
     while let Some(func) = worklist.pop() {
         if reachable.contains(&func) {
@@ -533,26 +563,31 @@ fn compute_reachable(
 mod tests {
     use super::*;
 
+    fn free_fn(name: &str) -> FunctionId {
+        FunctionId::Free(FreeFunctionName::from_strs(&["test"], name))
+    }
+
     #[test]
     fn test_empty_reachable_set() {
         let call_graph = HashMap::new();
-        let reachable = compute_reachable(&call_graph, "run");
-        assert!(reachable.contains("run"));
+        let entry = free_fn("run");
+        let reachable = compute_reachable(&call_graph, &entry);
+        assert!(reachable.contains(&free_fn("run")));
         assert_eq!(reachable.len(), 1);
     }
 
     #[test]
     fn test_transitive_reachability() {
         let mut call_graph = HashMap::new();
-        call_graph.insert("run".to_string(), HashSet::from(["foo".to_string()]));
-        call_graph.insert("foo".to_string(), HashSet::from(["bar".to_string()]));
-        call_graph.insert("bar".to_string(), HashSet::new());
-        call_graph.insert("unused".to_string(), HashSet::from(["bar".to_string()]));
+        call_graph.insert(free_fn("run"), HashSet::from([free_fn("foo")]));
+        call_graph.insert(free_fn("foo"), HashSet::from([free_fn("bar")]));
+        call_graph.insert(free_fn("bar"), HashSet::new());
+        call_graph.insert(free_fn("unused"), HashSet::from([free_fn("bar")]));
 
-        let reachable = compute_reachable(&call_graph, "run");
-        assert!(reachable.contains("run"));
-        assert!(reachable.contains("foo"));
-        assert!(reachable.contains("bar"));
-        assert!(!reachable.contains("unused"));
+        let reachable = compute_reachable(&call_graph, &free_fn("run"));
+        assert!(reachable.contains(&free_fn("run")));
+        assert!(reachable.contains(&free_fn("foo")));
+        assert!(reachable.contains(&free_fn("bar")));
+        assert!(!reachable.contains(&free_fn("unused")));
     }
 }
