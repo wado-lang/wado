@@ -44,8 +44,8 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction       |
 | Symbol          | `symbol.rs`           | Symbol table data structures                       |
 | Name            | `name.rs`             | Name mangling utilities for methods and symbols    |
-| Resolver        | `resolver.rs`         | Module path resolution, loads core library         |
-| Resolve         | `resolve.rs`          | Type resolution, AST to TIR conversion             |
+| ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library         |
+| Resolver        | `resolver.rs`         | Type resolution, AST to TIR conversion             |
 | TIR             | `tir.rs`              | Typed Intermediate Representation                  |
 | Lower           | `lower.rs`            | TIR lowering (string collection, etc.)             |
 | Optimize        | `optimize.rs`         | DCE, optimization hints for codegen                |

@@ -9,15 +9,15 @@ pub mod desugar;
 pub mod lexer;
 pub mod loader;
 pub mod lower;
+pub mod module_loader;
 pub mod name;
 pub mod optimize;
 pub mod parser;
-pub mod resolve;
-pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
 pub mod tir;
 pub mod token;
+pub mod resolver;
 pub mod unparse;
 pub mod wasi_registry;
 pub mod wasm_builder;
@@ -31,8 +31,8 @@ pub use lexer::{LexError, Lexer};
 pub use lower::lower;
 pub use optimize::{OptLevel, OptimizationHints, analyze_all_modules};
 pub use parser::{ParseError, Parser};
-pub use resolve::{ResolveError, Resolver};
 pub use token::Span;
+pub use resolver::{Resolver, TypeError};
 
 use std::path::Path;
 

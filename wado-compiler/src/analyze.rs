@@ -6,8 +6,8 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
+use crate::module_loader::{ModuleLoadError, ModuleResolver};
 use crate::name::validate_module_path;
-use crate::resolver::{ModuleResolver, ResolveError};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
     SymbolTable, TypeAliasSymbol, WorldExportSymbol, WorldImportSymbol, WorldSymbol,
@@ -18,7 +18,7 @@ use crate::token::Span;
 #[derive(Debug, Clone)]
 pub enum AnalyzeError {
     /// Module resolution failed
-    ResolveError(ResolveError),
+    ModuleLoadError(ModuleLoadError),
     /// Symbol not found in module
     ImportNotFound {
         module_path: Vec<String>,
@@ -40,7 +40,7 @@ pub enum AnalyzeError {
 impl std::fmt::Display for AnalyzeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnalyzeError::ResolveError(e) => write!(f, "{e}"),
+            AnalyzeError::ModuleLoadError(e) => write!(f, "{e}"),
             AnalyzeError::ImportNotFound {
                 module_path,
                 name,
@@ -86,9 +86,9 @@ impl std::fmt::Display for AnalyzeError {
 
 impl std::error::Error for AnalyzeError {}
 
-impl From<ResolveError> for AnalyzeError {
-    fn from(e: ResolveError) -> Self {
-        AnalyzeError::ResolveError(e)
+impl From<ModuleLoadError> for AnalyzeError {
+    fn from(e: ModuleLoadError) -> Self {
+        AnalyzeError::ModuleLoadError(e)
     }
 }
 
@@ -344,7 +344,7 @@ impl Analyzer {
                         let source_module = match self.resolver.load_module(&source_path) {
                             Ok(m) => m.clone(),
                             Err(e) => {
-                                self.errors.push(AnalyzeError::ResolveError(e));
+                                self.errors.push(AnalyzeError::ModuleLoadError(e));
                                 continue;
                             }
                         };
@@ -456,7 +456,7 @@ impl Analyzer {
                 let imported_module = match self.resolver.load_module(&module_path) {
                     Ok(m) => m.clone(),
                     Err(e) => {
-                        self.errors.push(AnalyzeError::ResolveError(e));
+                        self.errors.push(AnalyzeError::ModuleLoadError(e));
                         continue;
                     }
                 };
@@ -632,8 +632,8 @@ impl Analyzer {
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_path) {
-                    self.errors.push(AnalyzeError::ResolveError(
-                        crate::resolver::ResolveError::ModuleNotFound {
+                    self.errors.push(AnalyzeError::ModuleLoadError(
+                        crate::module_loader::ModuleLoadError::ModuleNotFound {
                             path: module_path.clone(),
                         },
                     ));
