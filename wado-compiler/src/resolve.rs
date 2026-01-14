@@ -1226,12 +1226,19 @@ impl<'a> Resolver<'a> {
                 else if self.function_return_types.contains_key(&ident.name) {
                     (Vec::new(), ident.name.clone(), true)
                 }
-                // Check for built-in type constructors (Ok, Err, Some, None, etc.)
-                else if matches!(
-                    ident.name.as_str(),
-                    "Ok" | "Err" | "Some" | "None" | "panic" | "unreachable"
-                ) {
+                // Check for built-in type constructors (Ok, Err, Some, None)
+                // These are variant constructors, generated inline
+                else if matches!(ident.name.as_str(), "Ok" | "Err" | "Some" | "None") {
                     (Vec::new(), ident.name.clone(), true)
+                }
+                // Check for prelude functions (panic, unreachable)
+                // These are actual functions in core::prelude
+                else if matches!(ident.name.as_str(), "panic" | "unreachable") {
+                    (
+                        vec!["core".to_string(), "prelude".to_string()],
+                        ident.name.clone(),
+                        true,
+                    )
                 }
                 // Check if this is an imported function (per-module imports)
                 else if self.imported_functions.contains(&ident.name) {

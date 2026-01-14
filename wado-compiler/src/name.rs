@@ -117,81 +117,6 @@ pub fn parse_method_mangled_name(mangled: &str) -> Option<MethodNameInfo> {
     }
 }
 
-/// Build a simple method mangled name without filename.
-///
-/// Format: `{struct_name}::{method_name}`
-///
-/// Example: `Point::sum`
-pub fn build_simple_method_name(struct_name: &str, method_name: &str) -> String {
-    format!("{}::{}", struct_name, method_name)
-}
-
-/// Transform a method name by replacing its struct prefix.
-///
-/// Given `Point::sum` and alias `OtherPoint`, returns `OtherPoint::sum`.
-///
-/// Returns `None` if the mangled name doesn't start with the expected struct prefix.
-pub fn transform_method_alias(
-    mangled_name: &str,
-    original_struct: &str,
-    alias_struct: &str,
-) -> Option<String> {
-    let prefix = format!("{}::", original_struct);
-    mangled_name
-        .strip_prefix(&prefix)
-        .map(|method_name| build_simple_method_name(alias_struct, method_name))
-}
-
-// =============================================================================
-// Effect Operation Names
-// =============================================================================
-
-/// Build a qualified effect operation name.
-///
-/// Format: `{effect_name}::{operation_name}`
-///
-/// Example: `Stdout::write_via_stream`
-pub fn build_effect_operation_name(effect_name: &str, operation_name: &str) -> String {
-    format!("{}::{}", effect_name, operation_name)
-}
-
-/// Parse a qualified effect operation name.
-///
-/// Given `Stdout::write_via_stream`, returns `Some(("Stdout", "write_via_stream"))`.
-pub fn parse_effect_operation_name(qualified: &str) -> Option<(&str, &str)> {
-    let pos = qualified.find("::")?;
-    Some((&qualified[..pos], &qualified[pos + 2..]))
-}
-
-// =============================================================================
-// WASI Names
-// =============================================================================
-
-/// Build a fully qualified WASI function name.
-///
-/// Format: `wasi:{package}/{interface}::{function}`
-///
-/// Example: `wasi:cli/stdout::write-via-stream`
-pub fn build_wasi_qualified_name(package: &str, interface: &str, function: &str) -> String {
-    format!("wasi:{}/{}::{}", package, interface, function)
-}
-
-/// Parse a fully qualified WASI function name.
-///
-/// Returns `Some((package, interface, function))` or `None` if invalid.
-pub fn parse_wasi_qualified_name(qualified: &str) -> Option<(&str, &str, &str)> {
-    let rest = qualified.strip_prefix("wasi:")?;
-    let slash_pos = rest.find('/')?;
-    let package = &rest[..slash_pos];
-    let after_slash = &rest[slash_pos + 1..];
-
-    let colon_pos = after_slash.find("::")?;
-    let interface = &after_slash[..colon_pos];
-    let function = &after_slash[colon_pos + 2..];
-
-    Some((package, interface, function))
-}
-
 // =============================================================================
 // Module-Qualified Names
 // =============================================================================
@@ -211,24 +136,6 @@ pub fn build_qualified_name(module_path: &[String], name: &str) -> String {
     }
 }
 
-/// Alias for `build_qualified_name` specifically for struct types.
-///
-/// Format: `{module_path}::{struct_name}`
-///
-/// Example: `./geometry.wado::Point`
-pub fn build_qualified_struct_name(module_path: &[String], struct_name: &str) -> String {
-    build_qualified_name(module_path, struct_name)
-}
-
-/// Build a qualified function name with module path.
-///
-/// Format: `{module_path}::{function_name}`
-///
-/// Example: `./utils.wado::helper`
-pub fn build_qualified_function_name(module_path: &[String], function_name: &str) -> String {
-    build_qualified_name(module_path, function_name)
-}
-
 /// Build a core::internal qualified name.
 ///
 /// Format: `core::internal::{name}`
@@ -236,38 +143,6 @@ pub fn build_qualified_function_name(module_path: &[String], function_name: &str
 /// Example: `core::internal::log_stdout`
 pub fn build_core_internal_name(name: &str) -> String {
     format!("core::internal::{}", name)
-}
-
-// =============================================================================
-// Extraction Utilities
-// =============================================================================
-
-/// Extract the method name from a mangled name.
-///
-/// Given `Point::sum`, returns `Some("sum")`.
-/// Given `./geometry.wado/Point::sum`, returns `Some("sum")`.
-pub fn extract_method_name(mangled: &str) -> Option<&str> {
-    mangled.rfind("::").map(|pos| &mangled[pos + 2..])
-}
-
-/// Extract the struct name from a simple mangled name.
-///
-/// Given `Point::sum`, returns `Some("Point")`.
-/// Given `OtherPoint::sum`, returns `Some("OtherPoint")`.
-///
-/// Note: This only works for simple names without filename prefix.
-pub fn extract_struct_name_simple(mangled: &str) -> Option<&str> {
-    let double_colon_pos = mangled.find("::")?;
-    Some(&mangled[..double_colon_pos])
-}
-
-/// Check if a mangled method name belongs to a specific struct.
-///
-/// Given `Point::sum` and struct `Point`, returns `true`.
-/// Given `OtherPoint::sum` and struct `Point`, returns `false`.
-pub fn is_method_of_struct(mangled_name: &str, struct_name: &str) -> bool {
-    let prefix = format!("{}::", struct_name);
-    mangled_name.starts_with(&prefix)
 }
 
 // =============================================================================
@@ -577,132 +452,14 @@ mod tests {
         assert!(parse_method_mangled_name("./geometry.wado/Point").is_none());
     }
 
-    #[test]
-    fn test_build_simple_method_name() {
-        let name = build_simple_method_name("Point", "sum");
-        assert_eq!(name, "Point::sum");
-    }
-
-    #[test]
-    fn test_transform_method_alias() {
-        let result = transform_method_alias("Point::sum", "Point", "OtherPoint");
-        assert_eq!(result, Some("OtherPoint::sum".to_string()));
-    }
-
-    #[test]
-    fn test_transform_method_alias_no_match() {
-        let result = transform_method_alias("OtherPoint::sum", "Point", "AliasPoint");
-        assert_eq!(result, None);
-    }
-
-    // =========================================================================
-    // Effect Operation Tests
-    // =========================================================================
-
-    #[test]
-    fn test_build_effect_operation_name() {
-        let name = build_effect_operation_name("Stdout", "write_via_stream");
-        assert_eq!(name, "Stdout::write_via_stream");
-    }
-
-    #[test]
-    fn test_parse_effect_operation_name() {
-        let (effect, op) = parse_effect_operation_name("Stdout::write_via_stream").unwrap();
-        assert_eq!(effect, "Stdout");
-        assert_eq!(op, "write_via_stream");
-    }
-
-    #[test]
-    fn test_parse_effect_operation_name_invalid() {
-        assert!(parse_effect_operation_name("no_double_colon").is_none());
-    }
-
-    // =========================================================================
-    // WASI Name Tests
-    // =========================================================================
-
-    #[test]
-    fn test_build_wasi_qualified_name() {
-        let name = build_wasi_qualified_name("cli", "stdout", "write-via-stream");
-        assert_eq!(name, "wasi:cli/stdout::write-via-stream");
-    }
-
-    #[test]
-    fn test_parse_wasi_qualified_name() {
-        let (package, interface, function) =
-            parse_wasi_qualified_name("wasi:cli/stdout::write-via-stream").unwrap();
-        assert_eq!(package, "cli");
-        assert_eq!(interface, "stdout");
-        assert_eq!(function, "write-via-stream");
-    }
-
-    #[test]
-    fn test_parse_wasi_qualified_name_invalid() {
-        assert!(parse_wasi_qualified_name("not-wasi-format").is_none());
-        assert!(parse_wasi_qualified_name("wasi:no-slash").is_none());
-    }
-
     // =========================================================================
     // Module-Qualified Name Tests
     // =========================================================================
 
     #[test]
-    fn test_build_qualified_struct_name_empty_path() {
-        let name = build_qualified_struct_name(&[], "Point");
-        assert_eq!(name, "Point");
-    }
-
-    #[test]
-    fn test_build_qualified_struct_name_with_path() {
-        let path = vec!["./geometry.wado".to_string()];
-        let name = build_qualified_struct_name(&path, "Point");
-        assert_eq!(name, "./geometry.wado::Point");
-    }
-
-    #[test]
-    fn test_build_qualified_function_name() {
-        let path = vec!["./utils.wado".to_string()];
-        let name = build_qualified_function_name(&path, "helper");
-        assert_eq!(name, "./utils.wado::helper");
-    }
-
-    #[test]
     fn test_build_core_internal_name() {
         let name = build_core_internal_name("log_stdout");
         assert_eq!(name, "core::internal::log_stdout");
-    }
-
-    // =========================================================================
-    // Extraction Tests
-    // =========================================================================
-
-    #[test]
-    fn test_extract_method_name() {
-        assert_eq!(extract_method_name("Point::sum"), Some("sum"));
-        assert_eq!(
-            extract_method_name("./geometry.wado/Point::sum"),
-            Some("sum")
-        );
-        assert_eq!(extract_method_name("Point^Display::fmt"), Some("fmt"));
-        assert_eq!(extract_method_name("no_double_colon"), None);
-    }
-
-    #[test]
-    fn test_extract_struct_name_simple() {
-        assert_eq!(extract_struct_name_simple("Point::sum"), Some("Point"));
-        assert_eq!(
-            extract_struct_name_simple("OtherPoint::sum"),
-            Some("OtherPoint")
-        );
-        assert_eq!(extract_struct_name_simple("no_double_colon"), None);
-    }
-
-    #[test]
-    fn test_is_method_of_struct() {
-        assert!(is_method_of_struct("Point::sum", "Point"));
-        assert!(is_method_of_struct("Point::product", "Point"));
-        assert!(!is_method_of_struct("OtherPoint::sum", "Point"));
-        assert!(!is_method_of_struct("Point", "Point"));
     }
 
     // =========================================================================

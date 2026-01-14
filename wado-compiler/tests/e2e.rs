@@ -15,7 +15,7 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use std::path::Path;
 use std::sync::OnceLock;
-use wado_compiler::compile_file;
+use wado_compiler::{OptLevel, compile_file_with_opts};
 
 /// Shared wasmtime Engine for all tests (initialized once)
 static ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -224,31 +224,41 @@ fn verify_result(result: &WasmRunResult, spec: &TestSpec, fixture_name: &str) {
     }
 }
 
-/// Run a single fixture test by path
-fn run_fixture_test(fixture_path: &Path) {
+/// Get human-readable name for optimization level
+fn opt_level_name(opt: OptLevel) -> &'static str {
+    match opt {
+        OptLevel::None => "O0",
+        OptLevel::Basic => "O1",
+        OptLevel::Full => "O2",
+        OptLevel::Size => "Os",
+    }
+}
+
+/// Run a single fixture test at a specific optimization level
+fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
     let fixture_name = fixture_path
         .file_name()
         .unwrap()
         .to_string_lossy()
         .to_string();
+    let opt_name = opt_level_name(opt_level);
+    let test_id = format!("{fixture_name} ({opt_name})");
 
     // Read the source file to extract __DATA__ section before compilation
     let source = std::fs::read_to_string(fixture_path).unwrap_or_else(|e| {
-        panic!("[{fixture_name}] failed to read file: {e}");
+        panic!("[{test_id}] failed to read file: {e}");
     });
 
     // Get the __DATA__ section - required for all fixtures
     let data_section = extract_data_section(&source).unwrap_or_else(|| {
-        panic!(
-            "[{fixture_name}] missing __DATA__ section - all fixtures must have test expectations"
-        );
+        panic!("[{test_id}] missing __DATA__ section - all fixtures must have test expectations");
     });
 
     // Parse the test spec from JSON
-    let spec = parse_test_spec(data_section, &fixture_name);
+    let spec = parse_test_spec(data_section, &test_id);
 
     // Try to compile the fixture
-    let compile_result = compile_file(fixture_path);
+    let compile_result = compile_file_with_opts(fixture_path, opt_level);
 
     // Handle expected compile errors
     if let Some(expected_error) = &spec.compile_error {
@@ -257,13 +267,13 @@ fn run_fixture_test(fixture_path: &Path) {
                 let error_msg = e.to_string();
                 assert!(
                     error_msg.contains(expected_error),
-                    "[{fixture_name}] compile error mismatch:\n  expected to contain: {expected_error}\n  actual error: {error_msg}"
+                    "[{test_id}] compile error mismatch:\n  expected to contain: {expected_error}\n  actual error: {error_msg}"
                 );
                 return; // Test passed - expected compile error occurred
             }
             Ok(_) => {
                 panic!(
-                    "[{fixture_name}] expected compile error containing '{expected_error}', but compilation succeeded"
+                    "[{test_id}] expected compile error containing '{expected_error}', but compilation succeeded"
                 );
             }
         }
@@ -271,16 +281,26 @@ fn run_fixture_test(fixture_path: &Path) {
 
     // No compile error expected - compilation must succeed
     let compile_result = compile_result.unwrap_or_else(|e| {
-        panic!("[{fixture_name}] compilation failed: {e}");
+        panic!("[{test_id}] compilation failed: {e}");
     });
 
     // Run and capture output
     let result = run_wasm(compile_result.wasm).unwrap_or_else(|e| {
-        panic!("[{fixture_name}] runtime error: {e}");
+        panic!("[{test_id}] runtime error: {e}");
     });
 
     // Verify the result matches expectations
-    verify_result(&result, &spec, &fixture_name);
+    verify_result(&result, &spec, &test_id);
+}
+
+/// Run a single fixture test at all optimization levels: None, Full, Size
+fn run_fixture_test(fixture_path: &Path) {
+    // Test at O0 (no optimization)
+    run_fixture_test_with_opt(fixture_path, OptLevel::None);
+    // Test at O2 (full optimization with DCE)
+    run_fixture_test_with_opt(fixture_path, OptLevel::Full);
+    // Test at Os (size optimization with DCE + name stripping)
+    run_fixture_test_with_opt(fixture_path, OptLevel::Size);
 }
 
 /// Test function for datatest-stable - runs each .wado fixture file

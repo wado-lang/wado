@@ -7,7 +7,6 @@ use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
 use crate::name::{
     MethodNameInfo, build_core_internal_name, build_method_mangled_name, build_qualified_name,
-    build_simple_method_name,
 };
 use crate::optimize::OptimizationHints;
 use crate::symbol::SymbolTable;
@@ -337,46 +336,49 @@ impl Codegen {
             if path.first().map(|s| s == "wasi").unwrap_or(false) {
                 continue;
             }
-            for impl_block in &tir_mod.impls {
-                // Get struct name from the target type
-                let struct_name = match tir_mod.type_table.get(impl_block.target_type) {
-                    ResolvedType::Struct { name, .. } => name.clone(),
-                    _ => continue,
-                };
-                // Determine the lookup name for the struct
-                let struct_lookup_name = if main_module_struct_names.contains(&struct_name) {
-                    // Collision - use qualified name
-                    build_qualified_name(path, &struct_name)
-                } else {
-                    struct_name.clone()
-                };
-                for method in &impl_block.methods {
+            // Methods are stored as functions with mangled names like "Point::sum"
+            // (resolver adds them to functions, not impls)
+            for func in &tir_mod.functions {
+                // Check if this is a method (name contains ::)
+                if let Some(sep_pos) = func.name.find("::") {
+                    let struct_name = &func.name[..sep_pos];
+                    let method_name = &func.name[sep_pos + 2..];
+
                     // Skip non-pub methods
-                    if !method.is_pub {
+                    if !func.is_pub {
                         continue;
                     }
                     // Skip bodyless methods
-                    if method.body.is_none() {
+                    if func.body.is_none() {
                         continue;
                     }
-                    // Build method qualified name for DCE check
-                    let method_qualified = build_method_mangled_name(&MethodNameInfo {
+                    // Build fully mangled name for DCE check: path/Struct::method
+                    let method_mangled = build_method_mangled_name(&MethodNameInfo {
                         filename: path.join("/"),
-                        struct_name: struct_name.clone(),
+                        struct_name: struct_name.to_string(),
                         trait_name: None,
-                        method_name: method.name.clone(),
+                        method_name: method_name.to_string(),
                     });
                     // Skip methods not reachable from entry point (DCE)
-                    if !hints.is_reachable(&method_qualified) {
+                    if !hints.is_reachable(&method_mangled) {
                         continue;
                     }
-                    let mangled_name = build_simple_method_name(&struct_lookup_name, &method.name);
+                    // Determine struct lookup name - use qualified name if there's a collision
+                    let struct_lookup_name = if main_module_struct_names.contains(struct_name) {
+                        // Collision - use qualified name to look up the imported struct
+                        build_qualified_name(path, struct_name)
+                    } else {
+                        // No collision - simple name is fine
+                        struct_name.to_string()
+                    };
+                    // Use the same fully mangled name for registration
+                    // This ensures consistency between DCE tracking and codegen
                     loaded_methods.push((
                         path.clone(),
-                        struct_lookup_name.clone(),
-                        method,
+                        struct_lookup_name,
+                        func,
                         &tir_mod.type_table,
-                        mangled_name,
+                        method_mangled,
                     ));
                 }
             }
@@ -486,7 +488,20 @@ impl Codegen {
                 vec![self.type_id_to_valtype(type_table, tir_func.return_type)]
             };
 
-            builder.define_func_type(&tir_func.name, &param_types, &return_types);
+            // Methods have names like "Point::sum" - use fully mangled name for type
+            let type_name = if let Some(sep_pos) = tir_func.name.find("::") {
+                let struct_name = &tir_func.name[..sep_pos];
+                let method_name = &tir_func.name[sep_pos + 2..];
+                build_method_mangled_name(&MethodNameInfo {
+                    filename: entry_tir.path.join("/"),
+                    struct_name: struct_name.to_string(),
+                    trait_name: None,
+                    method_name: method_name.to_string(),
+                })
+            } else {
+                tir_func.name.clone()
+            };
+            builder.define_func_type(&type_name, &param_types, &return_types);
         }
 
         // Types for loaded module functions (TIR)
@@ -557,20 +572,37 @@ impl Codegen {
         // ========================================
         // Import section
         // ========================================
-        builder.import_func("wasi", "stream-new", "stream-new");
-        builder.import_func("wasi", "stream-write", "stream-write");
-        builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
-        builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
-        let stdout_import_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        let stderr_import_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        builder.import_func("wasi", &stdout_import_name, &stdout_import_name);
-        builder.import_func("wasi", &stderr_import_name, &stderr_import_name);
-        builder.import_func("wasi", "task-return", "task-return");
-        builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
-        builder.import_func("wasi", "waitable-join", "waitable-join");
-        builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
-        builder.import_func("wasi", "subtask-drop", "subtask-drop");
-        if self.wasi_registry.has_interface("monotonic-clock") {
+        // DCE: Only import stream intrinsics if Stdout/Stderr used or stream builtins called
+        if hints.needs_stream_intrinsics {
+            builder.import_func("wasi", "stream-new", "stream-new");
+            builder.import_func("wasi", "stream-write", "stream-write");
+            builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
+            builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
+        }
+
+        // DCE: Only import Stdout/Stderr write functions if used
+        if hints.is_effect_used("Stdout") {
+            let stdout_import_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
+            builder.import_func("wasi", &stdout_import_name, &stdout_import_name);
+        }
+        if hints.is_effect_used("Stderr") {
+            let stderr_import_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
+            builder.import_func("wasi", &stderr_import_name, &stderr_import_name);
+        }
+
+        // DCE: Only import async primitives if stream/effects are used
+        if hints.needs_async_primitives {
+            builder.import_func("wasi", "task-return", "task-return");
+            builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
+            builder.import_func("wasi", "waitable-join", "waitable-join");
+            builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
+            builder.import_func("wasi", "subtask-drop", "subtask-drop");
+        }
+
+        // DCE: Only import MonotonicClock if used
+        if hints.is_effect_used("MonotonicClock")
+            && self.wasi_registry.has_interface("monotonic-clock")
+        {
             let monotonic_import_name = build_local_alias_name("clocks", "MonotonicClock", "now");
             builder.import_func("wasi", &monotonic_import_name, &monotonic_import_name);
         }
@@ -589,7 +621,21 @@ impl Codegen {
         // ========================================
         // Declare all TIR functions except 'run' (which is handled as entry point)
         for tir_func in &entry_tir.functions {
-            if tir_func.name != "run" {
+            if tir_func.name == "run" {
+                continue;
+            }
+            // Methods have names like "Point::sum" - use fully mangled name
+            if let Some(sep_pos) = tir_func.name.find("::") {
+                let struct_name = &tir_func.name[..sep_pos];
+                let method_name = &tir_func.name[sep_pos + 2..];
+                let mangled_name = build_method_mangled_name(&MethodNameInfo {
+                    filename: entry_tir.path.join("/"),
+                    struct_name: struct_name.to_string(),
+                    trait_name: None,
+                    method_name: method_name.to_string(),
+                });
+                builder.define_func(&mangled_name, &mangled_name);
+            } else {
                 builder.define_func(&tir_func.name, &tir_func.name);
             }
         }
@@ -741,7 +787,7 @@ impl Codegen {
         // Generate WASI imports dynamically from registry
         // (same as AST path - imports all supported interfaces)
         // ========================================
-        self.generate_wasi_imports(&mut builder, &mut ctx);
+        self.generate_wasi_imports(&mut builder, &mut ctx, hints);
 
         // ========================================
         // Type: stream<u8> for stream intrinsics
@@ -1104,6 +1150,7 @@ impl Codegen {
         &self,
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
+        hints: &OptimizationHints,
     ) {
         // Get the CLI version from the registry
         let cli_version = self
@@ -1163,6 +1210,14 @@ impl Codegen {
                 .all(is_wasi_function_supported);
 
             if !all_functions_supported {
+                continue;
+            }
+
+            // DCE: Skip interfaces where the effect is not used
+            // Get effect name from first function (all functions in an interface share the same effect)
+            if let Some(first_func) = interface_info.functions.first()
+                && !hints.is_effect_used(&first_func.effect_name)
+            {
                 continue;
             }
 
@@ -1301,24 +1356,26 @@ impl Codegen {
             }
         }
 
-        // Always import stdout/stderr if not already imported from registry
-        // These are needed by core infrastructure (panic, log functions)
-        self.ensure_stdout_stderr_imported(builder, ctx, cli_version);
+        // Import stdout/stderr if needed but not already imported from registry
+        // (previously always imported for panic support, now DCE-aware)
+        self.ensure_stdout_stderr_imported(builder, ctx, cli_version, hints);
     }
 
-    /// Ensure stdout and stderr are imported (for panic/logging support)
+    /// Ensure stdout and stderr are imported if they're used.
     ///
-    /// These are needed by core infrastructure even if wasi:cli isn't explicitly imported.
+    /// This provides a fallback if the effect wasn't imported through the registry loop
+    /// but is still needed (e.g., for panic/logging support).
     /// Uses the version from the registry.
     fn ensure_stdout_stderr_imported(
         &self,
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
         cli_version: &str,
+        hints: &OptimizationHints,
     ) {
-        // Import stdout if not already imported
+        // Import stdout if used but not already imported
         let stdout_local_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        if !ctx.has_comp_func(&stdout_local_name) {
+        if hints.is_effect_used("Stdout") && !ctx.has_comp_func(&stdout_local_name) {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stdout_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -1371,9 +1428,9 @@ impl Codegen {
             );
         }
 
-        // Import stderr if not already imported
+        // Import stderr if used but not already imported
         let stderr_local_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        if !ctx.has_comp_func(&stderr_local_name) {
+        if hints.is_effect_used("Stderr") && !ctx.has_comp_func(&stderr_local_name) {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stderr_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -2312,24 +2369,16 @@ impl Codegen {
                 match type_table.get(receiver.type_id) {
                     // Struct method call
                     ResolvedType::Struct { name, module_path } => {
-                        // Build the mangled method name: {struct}::{method}
-                        let mangled_name = build_simple_method_name(name, method_name);
-
-                        // Look up the method function index
-                        // Try simple name first, then qualified name for collision handling
-                        let func_idx = builder.try_func_idx(&mangled_name).or_else(|| {
-                            if !module_path.is_empty() {
-                                // Try qualified name: module::Struct::method
-                                let qualified_struct_name = build_qualified_name(module_path, name);
-                                let qualified_mangled =
-                                    build_simple_method_name(&qualified_struct_name, method_name);
-                                builder.try_func_idx(&qualified_mangled)
-                            } else {
-                                None
-                            }
+                        // Build the fully mangled method name: path/Struct::method
+                        let mangled_name = build_method_mangled_name(&MethodNameInfo {
+                            filename: module_path.join("/"),
+                            struct_name: name.clone(),
+                            trait_name: None,
+                            method_name: method_name.to_string(),
                         });
 
-                        if let Some(idx) = func_idx {
+                        // Look up the method function index
+                        if let Some(idx) = builder.try_func_idx(&mangled_name) {
                             // Generate code for the receiver (self parameter)
                             self.generate_expr(func, receiver, type_table, ctx, builder);
 
@@ -2987,12 +3036,13 @@ impl Codegen {
                 let string_array_type = builder.type_idx("string-array");
 
                 // 1. Allocate locals for intermediates (don't add to cache yet)
-                let mut cached_locals: Vec<(String, u32, ValType)> = Vec::new();
+                // Store TypeId (not ValType) so we can call the correct to_string function
+                let mut cached_locals: Vec<(String, u32, TypeId)> = Vec::new();
                 for (name, _, type_id) in intermediates {
                     let val_type = self.type_id_to_valtype(type_table, *type_id);
                     let local_idx =
                         ctx.alloc_local(&format!("__assert_{}", name.replace(' ', "_")), val_type);
-                    cached_locals.push((name.clone(), local_idx, val_type));
+                    cached_locals.push((name.clone(), local_idx, *type_id));
                 }
 
                 // 2. Evaluate intermediates and build cache incrementally
@@ -3088,7 +3138,7 @@ impl Codegen {
                 func.instruction(&Instruction::LocalSet(result_local));
 
                 // For each cached value, append "<name>: <value>\n"
-                for (name, local_idx, val_type) in &cached_locals {
+                for (name, local_idx, type_id) in &cached_locals {
                     // Append "<name>: "
                     func.instruction(&Instruction::LocalGet(result_local));
                     func.instruction(&Instruction::RefAsNonNull);
@@ -3103,7 +3153,7 @@ impl Codegen {
                     func.instruction(&Instruction::LocalGet(result_local));
                     func.instruction(&Instruction::RefAsNonNull);
                     func.instruction(&Instruction::LocalGet(*local_idx));
-                    self.generate_value_to_string(func, val_type, builder);
+                    self.generate_value_to_string_from_type_id(func, *type_id, type_table, builder);
                     func.instruction(&Instruction::Call(
                         builder.func_idx("core::internal::string_concat"),
                     ));
@@ -3618,42 +3668,38 @@ impl Codegen {
         });
     }
 
-    /// Generate code to convert a value to string based on its Wasm type
-    fn generate_value_to_string(
+    /// Generate value to string conversion based on TypeId (semantic type)
+    /// This preserves the distinction between bool and i32 (both are ValType::I32 in Wasm)
+    fn generate_value_to_string_from_type_id(
         &self,
         func: &mut Function,
-        val_type: &ValType,
+        type_id: TypeId,
+        type_table: &TypeTable,
         builder: &CoreModuleBuilder,
     ) {
-        match val_type {
-            ValType::I32 => {
-                func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internal::i32_to_string"),
-                ));
+        match type_table.get(type_id) {
+            ResolvedType::Primitive(prim) => {
+                let func_name = match prim {
+                    PrimitiveType::I32
+                    | PrimitiveType::I8
+                    | PrimitiveType::I16
+                    | PrimitiveType::U8
+                    | PrimitiveType::U16
+                    | PrimitiveType::U32 => "core::internal::i32_to_string",
+                    PrimitiveType::I64 | PrimitiveType::U64 => "core::internal::i64_to_string",
+                    PrimitiveType::F32 => "core::internal::f32_to_string",
+                    PrimitiveType::F64 => "core::internal::f64_to_string",
+                    PrimitiveType::Bool => "core::internal::bool_to_string",
+                    PrimitiveType::Char => "core::internal::char_to_string",
+                    _ => return, // I128, U128 not yet supported
+                };
+                func.instruction(&Instruction::Call(builder.func_idx(func_name)));
             }
-            ValType::I64 => {
-                func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internal::i64_to_string"),
-                ));
+            ResolvedType::String => {
+                // String is already a string - no conversion needed
             }
-            ValType::F32 => {
-                func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internal::f32_to_string"),
-                ));
-            }
-            ValType::F64 => {
-                func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internal::f64_to_string"),
-                ));
-            }
-            ValType::Ref(_) => {
-                // Assume it's already a string - no conversion needed
-            }
-            ValType::V128 => {
-                // Not supported - treat as i32
-                func.instruction(&Instruction::Call(
-                    builder.func_idx("core::internal::i32_to_string"),
-                ));
+            _ => {
+                // For other types (structs, etc.), treat as string (no conversion)
             }
         }
     }
