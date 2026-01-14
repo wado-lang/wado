@@ -264,8 +264,11 @@ impl CoreModuleBuilder {
     }
 
     /// Build the name section from tracked type and function names
-    pub fn build_name_section(&self) -> NameSection {
+    pub fn build_name_section(&self, module_name: &str) -> NameSection {
         let mut names = NameSection::new();
+
+        // Module name (must come first according to spec)
+        names.module(module_name);
 
         // Function names
         let mut func_names = NameMap::new();

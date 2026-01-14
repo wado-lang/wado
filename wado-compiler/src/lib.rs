@@ -366,6 +366,14 @@ fn compile_impl(
     }
 
     // === Phase 9: Codegen ===
+    // Extract module name from filename (file stem without extension)
+    let module_name = filename
+        .as_ref()
+        .and_then(|f| std::path::Path::new(f).file_stem())
+        .and_then(|s| s.to_str())
+        .unwrap_or("module")
+        .to_string();
+
     let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         codegen.generate_wasm(
@@ -374,6 +382,7 @@ fn compile_impl(
             &symbols,
             &load_result.implicit_modules,
             &hints,
+            &module_name,
         )
     }))
     .map_err(|e| {

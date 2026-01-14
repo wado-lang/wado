@@ -251,6 +251,7 @@ impl Codegen {
         symbols: &SymbolTable,
         implicit_modules: &std::collections::HashSet<Vec<String>>,
         hints: &OptimizationHints,
+        module_name: &str,
     ) -> Vec<u8> {
         // Collect pre-computed string literals from all TIR modules
         for tir_module in all_tir_modules.values() {
@@ -262,8 +263,14 @@ impl Codegen {
         }
 
         // Generate binary Wasm from TIR
-        let wasm =
-            self.generate_component(entry_tir, all_tir_modules, symbols, implicit_modules, hints);
+        let wasm = self.generate_component(
+            entry_tir,
+            all_tir_modules,
+            symbols,
+            implicit_modules,
+            hints,
+            module_name,
+        );
 
         // Validate the generated Wasm
         Self::validate_wasm(&wasm);
@@ -281,6 +288,7 @@ impl Codegen {
         _implicit_modules: &std::collections::HashSet<Vec<String>>,
         string_data: &[u8],
         hints: &OptimizationHints,
+        module_name: &str,
     ) -> Vec<u8> {
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
@@ -785,7 +793,7 @@ impl Codegen {
 
         // Name section (skip in size-optimized builds)
         if !hints.strip_names {
-            let names = builder.build_name_section();
+            let names = builder.build_name_section(module_name);
             module.section(&names);
         }
 
@@ -801,6 +809,7 @@ impl Codegen {
         symbols: &SymbolTable,
         implicit_modules: &std::collections::HashSet<Vec<String>>,
         hints: &OptimizationHints,
+        module_name: &str,
     ) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
         let mut ctx = ComponentModelContext::new();
@@ -1004,6 +1013,7 @@ impl Codegen {
             implicit_modules,
             &string_data,
             hints,
+            module_name,
         );
         // Validate main module before embedding
         {
