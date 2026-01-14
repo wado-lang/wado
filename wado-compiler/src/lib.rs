@@ -13,11 +13,11 @@ pub mod module_loader;
 pub mod name;
 pub mod optimize;
 pub mod parser;
+pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
 pub mod tir;
 pub mod token;
-pub mod resolver;
 pub mod unparse;
 pub mod wasi_registry;
 pub mod wasm_builder;
@@ -31,8 +31,8 @@ pub use lexer::{LexError, Lexer};
 pub use lower::lower;
 pub use optimize::{OptLevel, OptimizationHints, analyze_all_modules};
 pub use parser::{ParseError, Parser};
-pub use token::Span;
 pub use resolver::{Resolver, TypeError};
+pub use token::Span;
 
 use std::path::Path;
 
