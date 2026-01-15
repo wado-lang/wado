@@ -487,6 +487,12 @@ char
 - GC-managed: Memory is automatically managed by Wasm GC
 - UTF-8 encoding: Direct mapping to Component Model `string`
 
+**Semantics and Encoding**:
+- Semantically, a `String` is a sequence of Unicode scalar values
+- Internally represented as a UTF-8 byte array (`Array<u8>`)
+- Invalid UTF-8 byte sequences are not allowed; all String values must be valid UTF-8
+- This ensures interoperability with Component Model `string` type and safe string operations
+
 **Internal Structure**:
 ```wado
 // Conceptual representation (not user-visible)
