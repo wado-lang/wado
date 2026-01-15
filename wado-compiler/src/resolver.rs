@@ -1034,8 +1034,7 @@ impl<'a> Resolver<'a> {
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
 
         if clean.starts_with("0x") || clean.starts_with("0X") {
-            u64::from_str_radix(&clean[2..], 16)
-                .map_err(|_| format!("invalid hex literal: {repr}"))
+            u64::from_str_radix(&clean[2..], 16).map_err(|_| format!("invalid hex literal: {repr}"))
         } else if clean.starts_with("0b") || clean.starts_with("0B") {
             u64::from_str_radix(&clean[2..], 2)
                 .map_err(|_| format!("invalid binary literal: {repr}"))

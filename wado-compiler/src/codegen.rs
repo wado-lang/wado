@@ -2488,12 +2488,12 @@ impl Codegen {
 
                             // Call the appropriate builtin to_string function
                             let func_name = match prim {
-                                PrimitiveType::I32
-                                | PrimitiveType::I8
-                                | PrimitiveType::I16 => "core/internal/i32_to_string",
-                                PrimitiveType::U32
-                                | PrimitiveType::U8
-                                | PrimitiveType::U16 => "core/internal/u32_to_string",
+                                PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => {
+                                    "core/internal/i32_to_string"
+                                }
+                                PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => {
+                                    "core/internal/u32_to_string"
+                                }
                                 PrimitiveType::I64 => "core/internal/i64_to_string",
                                 PrimitiveType::U64 => "core/internal/u64_to_string",
                                 PrimitiveType::F32 => "core/internal/f32_to_string",

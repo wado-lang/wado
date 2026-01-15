@@ -31,14 +31,14 @@ The type is defined by its **semantics** (key-value association), not by how it'
 
 A comprehensive survey of dictionary/associative array naming across programming languages (excluding `Map` and `HashMap` due to collision with the `map()` function):
 
-| Name              | Languages                                      | Notes                                    |
-|-------------------|------------------------------------------------|------------------------------------------|
-| **dict/Dict**     | Python, Julia                                  | Most influential; abbreviated form       |
-| **Dictionary**    | C#, Swift, Objective-C (NSDictionary), Smalltalk | Full word; explicit and formal          |
-| **Hash**          | Ruby, Perl, Crystal, R (package)               | Implementation-based naming              |
-| **hash-table**    | Common Lisp, Racket                            | Hyphenated; formal terminology           |
-| **Table**         | Nim, Lua                                       | Table metaphor                           |
-| **array**         | PHP (all arrays), D (associative array)        | Generic container term                   |
+| Name           | Languages                                        | Notes                              |
+| -------------- | ------------------------------------------------ | ---------------------------------- |
+| **dict/Dict**  | Python, Julia                                    | Most influential; abbreviated form |
+| **Dictionary** | C#, Swift, Objective-C (NSDictionary), Smalltalk | Full word; explicit and formal     |
+| **Hash**       | Ruby, Perl, Crystal, R (package)                 | Implementation-based naming        |
+| **hash-table** | Common Lisp, Racket                              | Hyphenated; formal terminology     |
+| **Table**      | Nim, Lua                                         | Table metaphor                     |
+| **array**      | PHP (all arrays), D (associative array)          | Generic container term             |
 
 **Key observations:**
 
@@ -97,11 +97,13 @@ Adopt **`Dict<K, V>`** as the name for Wado's associative array type.
 ### Dictionary (Full Word)
 
 **Pros:**
+
 - Completely unambiguous
 - Used by C#, Swift, Objective-C, Smalltalk
 - No abbreviation confusion
 
 **Cons:**
+
 - Verbose (10 characters)
 - Inconsistent with Wado's brevity preference (`String` not `StringType`, `Array` not `ArrayList`)
 - Feels heavyweight for such a common type
@@ -111,11 +113,13 @@ Adopt **`Dict<K, V>`** as the name for Wado's associative array type.
 ### Hash
 
 **Pros:**
+
 - Short (4 characters)
 - Used by Ruby, Perl, Crystal
 - Familiar to many programmers
 
 **Cons:**
+
 - **Leaks implementation details**: Implies hash table implementation
 - **Component Model mismatch**: At CM boundary, it's `list<tuple<K, V>>`, not a hash table
 - **Contradicts design philosophy**: Wado emphasizes semantic naming over implementation
@@ -126,10 +130,12 @@ Adopt **`Dict<K, V>`** as the name for Wado's associative array type.
 ### Table
 
 **Pros:**
+
 - Database/relational metaphor
 - Used by Nim, Lua
 
 **Cons:**
+
 - Low adoption (only 2 languages)
 - Potential confusion with database tables or HTML tables
 - Less intuitive than Dict/Dictionary for key-value mapping
@@ -139,10 +145,12 @@ Adopt **`Dict<K, V>`** as the name for Wado's associative array type.
 ### hash-table
 
 **Pros:**
+
 - Formally correct terminology
 - Used by Common Lisp, Racket
 
 **Cons:**
+
 - Hyphenated names don't fit Wado's UpperCamelCase convention
 - Would need to be `HashTable`, which has same issues as `Hash`
 - Implementation-specific
@@ -152,11 +160,13 @@ Adopt **`Dict<K, V>`** as the name for Wado's associative array type.
 ### Map/HashMap
 
 **Pros:**
+
 - Extremely common (Go, Java, C++, Kotlin, Scala, Rust, etc.)
 - Well-understood by professional programmers
 - Industry standard in many contexts
 
 **Cons:**
+
 - **Fatal flaw**: Collision with `map()` function
   - `items.map(...)` vs `Map<K, V>` creates ambiguity
   - Difficult to discuss in documentation: "map the map" is awkward
@@ -197,7 +207,7 @@ None needed - this is the initial naming decision. No existing code uses a diffe
 
 ## References
 
-- [Comparison of programming languages (associative array) - Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_programming_languages_(associative_array))
+- [Comparison of programming languages (associative array) - Wikipedia](<https://en.wikipedia.org/wiki/Comparison_of_programming_languages_(associative_array)>)
 - [Python dict documentation](https://docs.python.org/3/library/stdtypes.html#dict)
 - [Julia Dict documentation](https://docs.julialang.org/en/v1/base/collections/#Dictionaries)
 - Component Model specification: list<tuple<K, V>> mapping
