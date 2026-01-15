@@ -1,0 +1,14 @@
+// Edge case: double dereference assignment
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let mut a = 42;
+    let mut r = &mut a;  // r must be mutable to take &mut r
+    let rr = &mut r;
+    **rr = 99;  // Assign through double reference
+    println(`{a}`);
+}
+
+__DATA__
+{"stdout": "99\n"}

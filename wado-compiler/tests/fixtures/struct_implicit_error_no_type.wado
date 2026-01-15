@@ -1,0 +1,16 @@
+// Error: implicit struct literal without type annotation
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn run() with Stdout {
+    let p = { x: 1, y: 2 };  // Error: no type context
+    println(`test`);
+}
+
+__DATA__
+{"compile_error": "implicit struct literal without type context"}

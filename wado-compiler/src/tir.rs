@@ -238,6 +238,65 @@ impl TypeTable {
     pub fn make_mut_ref(&mut self, inner: TypeId) -> TypeId {
         self.intern(ResolvedType::MutRef(inner))
     }
+
+    /// Get a human-readable name for a type
+    pub fn type_name(&self, id: TypeId) -> String {
+        match self.get(id) {
+            ResolvedType::Primitive(p) => match p {
+                PrimitiveType::I8 => "i8".to_string(),
+                PrimitiveType::I16 => "i16".to_string(),
+                PrimitiveType::I32 => "i32".to_string(),
+                PrimitiveType::I64 => "i64".to_string(),
+                PrimitiveType::I128 => "i128".to_string(),
+                PrimitiveType::U8 => "u8".to_string(),
+                PrimitiveType::U16 => "u16".to_string(),
+                PrimitiveType::U32 => "u32".to_string(),
+                PrimitiveType::U64 => "u64".to_string(),
+                PrimitiveType::U128 => "u128".to_string(),
+                PrimitiveType::F32 => "f32".to_string(),
+                PrimitiveType::F64 => "f64".to_string(),
+                PrimitiveType::Bool => "bool".to_string(),
+                PrimitiveType::Char => "char".to_string(),
+            },
+            ResolvedType::Unit => "()".to_string(),
+            ResolvedType::Never => "!".to_string(),
+            ResolvedType::String => "String".to_string(),
+            ResolvedType::Unknown => "unknown".to_string(),
+            ResolvedType::Error => "error".to_string(),
+            ResolvedType::Array(elem) => format!("Array<{}>", self.type_name(*elem)),
+            ResolvedType::Tuple(elems) => {
+                let elem_names: Vec<String> = elems.iter().map(|e| self.type_name(*e)).collect();
+                format!("[{}]", elem_names.join(", "))
+            }
+            ResolvedType::Option(inner) => format!("Option<{}>", self.type_name(*inner)),
+            ResolvedType::Result { ok, err } => {
+                format!("Result<{}, {}>", self.type_name(*ok), self.type_name(*err))
+            }
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::Enum { name, .. } => name.clone(),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                let param_names: Vec<String> = params.iter().map(|p| self.type_name(*p)).collect();
+                format!(
+                    "fn({}) -> {}",
+                    param_names.join(", "),
+                    self.type_name(*return_type)
+                )
+            }
+            ResolvedType::Ref(inner) => format!("&{}", self.type_name(*inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", self.type_name(*inner)),
+            ResolvedType::Variant { name, .. } => name.clone(),
+            ResolvedType::Stream(inner) => format!("Stream<{}>", self.type_name(*inner)),
+            ResolvedType::Future(inner) => format!("Future<{}>", self.type_name(*inner)),
+            ResolvedType::Dict { key, value } => {
+                format!("Dict<{}, {}>", self.type_name(*key), self.type_name(*value))
+            }
+            ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
+        }
+    }
 }
 
 // ============================================================================
@@ -506,6 +565,20 @@ pub enum TirStmtKind {
     Loop {
         body: TirBlock,
     },
+    /// For-of loop: `for let item of array { ... }`
+    ForOf {
+        /// Local index for the loop binding variable
+        binding_local: u32,
+        /// Type of the binding (element type of the array)
+        binding_type: TypeId,
+        /// Whether the binding is mutable
+        is_mut: bool,
+        /// The array expression to iterate over
+        iterable: TirExpr,
+        /// Type of the iterable (should be Array<T>)
+        iterable_type: TypeId,
+        body: TirBlock,
+    },
     Break,
     Continue,
     Assert {
@@ -531,6 +604,9 @@ pub struct TirFunction {
     pub span: Span,
     pub local_count: u32,
     pub local_types: Vec<TypeId>,
+    /// Local indices that have their address taken (&x or &mut x).
+    /// For mutable primitives, these locals are stored in box structs.
+    pub address_taken_locals: std::collections::HashSet<u32>,
 }
 
 #[derive(Debug, Clone)]

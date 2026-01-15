@@ -1,0 +1,20 @@
+// Basic struct reference
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn print_point(p: &Point) with Stdout {
+    println(`{p.x},{p.y}`);
+}
+
+fn run() with Stdout {
+    let p = Point { x: 10, y: 20 };
+    print_point(&p);
+}
+
+__DATA__
+{"stdout": "10,20\n"}

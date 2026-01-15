@@ -1,0 +1,19 @@
+// Basic tuple reference test
+
+use { println, Stdout } from "core:cli";
+
+fn modify_tuple(t: &mut [i32, i32]) {
+    t.0 = 100;
+}
+
+fn run() with Stdout {
+    let mut pair: [i32, i32] = [1, 2];
+    let before = pair.0;
+    println(`before: {before}`);
+    modify_tuple(&mut pair);
+    let after = pair.0;
+    println(`after: {after}`);
+}
+
+__DATA__
+{"stdout": "before: 1\nafter: 100\n"}

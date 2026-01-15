@@ -1,0 +1,21 @@
+// Reference to primitive types
+
+use { println, Stdout } from "core:cli";
+
+fn increment(x: &mut i32) {
+    *x = *x + 1;
+}
+
+fn read_value(x: &i32) -> i32 {
+    return *x;
+}
+
+fn run() with Stdout {
+    let mut a = 10;
+    println(`{read_value(&a)}`);
+    increment(&mut a);
+    println(`{a}`);
+}
+
+__DATA__
+{"stdout": "10\n11\n"}

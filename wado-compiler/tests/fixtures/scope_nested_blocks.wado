@@ -1,0 +1,20 @@
+// Test: nested block scoping
+// Uses "if true" as a workaround since standalone blocks are not yet supported
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let a = 1;
+    if true {
+        let b = 2;
+        if true {
+            let c = 3;
+            println(`{a},{b},{c}`);  // 1,2,3 - all visible
+        }
+        println(`{a},{b}`);  // 1,2 - c not visible
+    }
+    println(`{a}`);  // 1 - b,c not visible
+}
+
+__DATA__
+{"stdout": "1,2,3\n1,2\n1\n"}

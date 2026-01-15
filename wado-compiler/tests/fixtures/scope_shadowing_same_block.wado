@@ -1,0 +1,11 @@
+// Test: shadowing in the same block is NOT allowed (unlike Rust)
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let x = 1;
+    let x = x + 1;  // Error: cannot redeclare 'x' in the same scope
+}
+
+__DATA__
+{"compile_error": "redeclare"}

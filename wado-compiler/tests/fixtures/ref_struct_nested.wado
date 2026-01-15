@@ -1,0 +1,29 @@
+// Nested field access through references
+
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    value: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn get_inner_value(o: &Outer) -> i32 {
+    return o.inner.value;
+}
+
+fn set_inner_value(o: &mut Outer, v: i32) {
+    o.inner.value = v;
+}
+
+fn run() with Stdout {
+    let mut o = Outer { inner: Inner { value: 42 } };
+    println(`{get_inner_value(&o)}`);
+    set_inner_value(&mut o, 100);
+    println(`{get_inner_value(&o)}`);
+}
+
+__DATA__
+{"stdout": "42\n100\n"}

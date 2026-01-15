@@ -11,11 +11,11 @@
 //! - Resolve cross-module references (that's the resolve phase)
 //! - Perform type checking (that's the resolve phase)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForStmt, Function, IfExpr, IfStmt, Item,
-    LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
+    AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
+    Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
 };
 use crate::token::Span;
 
@@ -38,14 +38,12 @@ pub struct BindingInfo {
 #[derive(Debug)]
 struct Scope {
     bindings: HashMap<String, BindingInfo>,
-    depth: u32,
 }
 
 impl Scope {
-    fn new(depth: u32) -> Self {
+    fn new() -> Self {
         Self {
             bindings: HashMap::new(),
-            depth,
         }
     }
 }
@@ -73,7 +71,7 @@ impl std::fmt::Display for BindError {
             BindError::UseBeforeDefine { name, used_at } => {
                 write!(
                     f,
-                    "{}:{}: error: use of undeclared variable '{}'",
+                    "{}:{}: error: '{}' is not in scope",
                     used_at.line, used_at.column, name
                 )
             }
@@ -84,7 +82,7 @@ impl std::fmt::Display for BindError {
             } => {
                 write!(
                     f,
-                    "{}:{}: error: duplicate definition '{}' (first defined at {}:{})",
+                    "{}:{}: error: cannot redeclare '{}' in the same scope (first defined at {}:{})",
                     second.line, second.column, name, first.line, first.column
                 )
             }
@@ -106,6 +104,9 @@ pub struct Binder {
     scopes: Vec<Scope>,
     errors: Vec<BindError>,
     current_depth: u32,
+    /// All local variable names defined in the current function
+    /// Used to distinguish "out of scope" errors from "global reference"
+    local_names_in_function: HashSet<String>,
 }
 
 impl Default for Binder {
@@ -118,9 +119,10 @@ impl Binder {
     /// Create a new binder
     pub fn new() -> Self {
         Self {
-            scopes: vec![Scope::new(0)], // Global scope
+            scopes: vec![Scope::new()], // Global scope
             errors: Vec::new(),
             current_depth: 0,
+            local_names_in_function: HashSet::new(),
         }
     }
 
@@ -154,6 +156,9 @@ impl Binder {
 
     /// Bind a function's local variables
     fn bind_function(&mut self, func: &Function) {
+        // Clear local names for this function
+        self.local_names_in_function.clear();
+
         self.enter_scope();
 
         // Bind parameters as local variables
@@ -192,6 +197,7 @@ impl Binder {
             Stmt::If(if_stmt) => self.bind_if_stmt(if_stmt),
             Stmt::While(while_stmt) => self.bind_while(while_stmt),
             Stmt::For(for_stmt) => self.bind_for(for_stmt),
+            Stmt::ForOf(for_of_stmt) => self.bind_for_of(for_of_stmt),
             Stmt::Loop(loop_stmt) => self.bind_loop(loop_stmt),
             Stmt::Break(_) => {}    // No bindings for break
             Stmt::Continue(_) => {} // No bindings for continue
@@ -265,6 +271,28 @@ impl Binder {
         self.exit_scope();
     }
 
+    /// Bind a for-of statement: `for let item of array { ... }`
+    fn bind_for_of(&mut self, for_of_stmt: &ForOfStmt) {
+        // First bind the iterable expression (uses variables from outer scope)
+        self.bind_expr(&for_of_stmt.iterable);
+
+        // Enter a new scope for the loop binding and body
+        self.enter_scope();
+
+        // Define the loop variable
+        self.define(
+            &for_of_stmt.binding,
+            for_of_stmt.is_mut,
+            false, // not reactive
+            for_of_stmt.span,
+        );
+
+        // Bind body
+        self.bind_block(&for_of_stmt.body);
+
+        self.exit_scope();
+    }
+
     /// Bind a loop statement
     fn bind_loop(&mut self, loop_stmt: &LoopStmt) {
         self.bind_block(&loop_stmt.body);
@@ -282,14 +310,18 @@ impl Binder {
     fn bind_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Ident(ident) => {
-                // Check if the identifier is defined
+                // Check if the identifier is defined in any scope
                 if self.lookup(&ident.name).is_none() {
-                    // Only report error for local-looking names
-                    // (not module paths like Stdout::write)
-                    self.errors.push(BindError::UseBeforeDefine {
-                        name: ident.name.clone(),
-                        used_at: ident.span,
-                    });
+                    // Only report error if this name was defined as a local variable
+                    // somewhere in this function (but is now out of scope).
+                    // Unknown names might be global functions/constants - those are
+                    // resolved later by the analyzer.
+                    if self.local_names_in_function.contains(&ident.name) {
+                        self.errors.push(BindError::UseBeforeDefine {
+                            name: ident.name.clone(),
+                            used_at: ident.span,
+                        });
+                    }
                 }
             }
 
@@ -396,6 +428,12 @@ impl Binder {
                 }
             }
 
+            Expr::TupleLiteral(tuple_lit) => {
+                for element in &tuple_lit.elements {
+                    self.bind_expr(element);
+                }
+            }
+
             // Literals don't reference variables
             Expr::Literal(_) => {}
         }
@@ -459,7 +497,7 @@ impl Binder {
     /// Enter a new scope
     fn enter_scope(&mut self) {
         self.current_depth += 1;
-        self.scopes.push(Scope::new(self.current_depth));
+        self.scopes.push(Scope::new());
     }
 
     /// Exit the current scope
@@ -481,6 +519,9 @@ impl Binder {
             });
             return;
         }
+
+        // Track this name as a local variable in the current function
+        self.local_names_in_function.insert(name.to_string());
 
         scope.bindings.insert(
             name.to_string(),
@@ -539,12 +580,15 @@ mod tests {
     }
 
     #[test]
-    fn test_use_before_define() {
+    fn test_out_of_scope() {
+        // Test that a variable defined in an inner scope is not accessible outside
         let module = parse(
             r#"
             fn run() {
+                if true {
+                    let x = 1;
+                }
                 let y = x;
-                let x = 1;
             }
         "#,
         );

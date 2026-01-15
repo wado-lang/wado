@@ -12,6 +12,8 @@ Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 | Typing    | Static, Strong, Inferred            |
 | Target    | Wasm/WASI                           |
 
+See also: [Cheatsheet](docs/cheatsheet.md) for quick syntax reference.
+
 ## Design Philosophy
 
 - **Wasm only**: Zero abstraction to Wasm
@@ -119,6 +121,40 @@ Identifiers are case-sensitive.
 - `expr;` makes a statement. A semicolon is required for every statement including the last one.
 - `return expr;` is necessary for a function to return a value.
 - Control flow statements do not need to be followed by a semicolon.
+
+### Variable Scoping
+
+Variables are scoped to their enclosing block. Variables declared inside control flow bodies (`if`, `while`, `for`, `loop`) are not accessible outside.
+
+```wado
+for let mut i = 0; i < 10; i = i + 1 {
+    let x = i * 2;
+}
+// i and x are not in scope here
+
+if true {
+    let y = 42;
+}
+// y is not in scope here
+```
+
+Shadowing in an inner block creates a new binding:
+
+```wado
+let x = 1;
+if true {
+    let x = x + 1;  // New binding, initialized from outer x
+    println(`{x}`); // 2
+}
+println(`{x}`);     // 1 (outer x unchanged)
+```
+
+Same-scope redeclaration is not allowed (unlike Rust):
+
+```wado
+let x = 1;
+let x = 2;  // Error: cannot redeclare 'x' in the same scope
+```
 
 ### Operators
 
@@ -283,6 +319,25 @@ for ;; {
 
 **Note:** `continue` in a for loop executes the update expression before the next iteration, matching C semantics.
 
+### For-Of Loop
+
+For iterating over arrays:
+
+```wado
+let numbers: Array<i32> = [1, 2, 3, 4, 5];
+for let n of numbers {
+    println(`{n}`);
+}
+
+// With mutable binding
+for let mut item of items {
+    item = item * 2;  // Can modify the local binding
+    println(`{item}`);
+}
+```
+
+**Note:** For-of loops are for arrays only, not tuples. The binding is a copy of each element, so modifying it does not affect the original array.
+
 ### Infinite Loop
 
 ```wado
@@ -369,7 +424,7 @@ All Wado types map directly to WebAssembly Component Model types:
 | `String`                  | `string`                             | UTF-8 string type                            |
 | `Array<T>`                | `list<T>`                            | Dynamic array type                           |
 | `Dict<K, V>`              | `list<tuple<K, V>>`                  | As list of tuples at CM boundary             |
-| `Tuple<T1, T2, ...>`      | `tuple<T1, T2, ...>`                 | Tuple types                                  |
+| `[T1, T2, ...]`           | `tuple<T1, T2, ...>`                 | Tuple types                                  |
 | `Option<T>`               | `option<T>`                          | Optional value                               |
 | `Result<T, E>`            | `result<T, E>`                       | Result type                                  |
 | `Result<(), ()>`          | `result`                             | Unit result (no payload)                     |
@@ -390,7 +445,7 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 - `String` - UTF-8 string type
 - `Array<T>` - Dynamic array type
 - `Dict<K, V>` - Dictionary type
-- `Tuple<T1, T2, ...>` - Tuple type
+- `Tuple<T1, T2, ...>` - Alias for `[T1, T2, ...]`
 - `Reactive<T>` - Reactive value
 - `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
@@ -636,12 +691,12 @@ let octal = 0o755;                 // Octal
 let hex = 0xFF_AA_BB;              // Hexadecimal
 ```
 
-**Type suffixes** (optional):
+**Type conversion** (via `as`):
 
 ```wado
-let byte: i8 = 127i8;
-let long: i64 = 9_223_372_036_854_775_807i64;
-let unsigned: u32 = 4_294_967_295u32;
+let byte: i8 = 127 as i8;
+let long: i64 = 9_223_372_036_854_775_807 as i64;
+let unsigned: u32 = 4_294_967_295 as u32;
 ```
 
 #### Floating-Point Literals
@@ -654,11 +709,11 @@ let negative_exp = 1.6e-19;        // 1.6 × 10⁻¹⁹
 let explicit_positive = 2.5e+10;
 ```
 
-**Type suffixes** (optional):
+**Type conversion** (via `as`):
 
 ```wado
-let single: f32 = 3.14f32;
-let double: f64 = 3.14159265358979f64;
+let single: f32 = 3.14 as f32;
+let double: f64 = 3.14159265358979 as f64;
 ```
 
 #### String Literals
@@ -713,22 +768,95 @@ let pi = 3.14159;
 let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
 ```
 
-#### Array Literals
-
-Array literals create `Array<T>` values.
-
-```wado
-let numbers = [1, 2, 3, 4, 5];  // Type: Array<i32>
-let empty: Array<i32> = [];
-let mixed = [1, 2, 3,];          // Trailing comma allowed
-```
-
 #### Tuple Literals
 
+Bracket syntax `[...]` creates tuple values by default. This aligns with TypeScript conventions and JSON interoperability.
+
 ```wado
-let pair = (1, "hello");
-let triple: Tuple<i32, String, bool> = (42, "answer", true);
+let pair = [1, "hello"];              // Type: [i32, String]
+let triple = [42, "answer", true];    // Type: [i32, String, bool]
+let single = [42];                    // Type: [i32] (1-tuple)
+let empty_tuple: [] = [];             // Empty tuple (distinct from unit ())
+let trailing = [1, 2, 3,];            // Trailing comma allowed
 ```
+
+**Tuple Types:**
+
+Tuple types use bracket syntax `[T1, T2, ...]`. `Tuple<T1, T2, ...>` is available as an alias.
+
+```wado
+let point: [i32, i32] = [10, 20];
+let record: [String, i32, bool] = ["Alice", 30, true];
+```
+
+**Tuple Element Access:**
+
+Tuple elements are accessed by constant index using dot notation or bracket notation:
+
+```wado
+let t = [10, "hello", true];
+let x = t.0;      // 10 - dot notation
+let y = t[1];     // "hello" - bracket notation
+let z = t.2;      // true
+
+// Variable index is not allowed (compile error)
+let i = 1;
+let w = t[i];     // Error: tuple index must be a constant integer
+```
+
+**Unit vs Empty Tuple:**
+
+The unit type `()` and empty tuple `[]` are distinct:
+
+```wado
+let unit: () = ();    // Unit type/value
+let empty: [] = [];   // Empty tuple (rarely used)
+```
+
+#### Array Literals
+
+Arrays require explicit conversion from tuple literals using `as` or implicit coercion when the target type is known at compile time.
+
+```wado
+// Explicit conversion with `as`
+let numbers = [1, 2, 3, 4, 5] as Array<i32>;
+
+// Implicit coercion (target type known)
+fn takes_array(a: Array<i32>) { ... }
+takes_array([1, 2, 3]);  // OK - compiler knows Array<i32> is expected
+
+// Type annotation
+let explicit: Array<i32> = [1, 2, 3];  // Coerced to array
+```
+
+**Coercion Rules:**
+
+- **Compile-time**: When the target type is known (function parameter, type annotation), implicit coercion is allowed
+- **Runtime/ambiguous**: Explicit `as Array<T>` is required
+
+```wado
+let t = [1, 2, 3];               // Tuple [i32, i32, i32] - no context
+let a = [1, 2, 3] as Array<i32>; // Array - explicit conversion
+
+fn process(data: Array<i32>) { ... }
+process([1, 2, 3]);              // OK - implicit coercion
+```
+
+**Design Rationale:**
+
+This design aligns with TypeScript (primary target audience) and enables intuitive JSON interoperability. JSON arrays are heterogeneous and map naturally to tuples:
+
+```json
+{ "point": [10, 20], "mixed": [1, "hello", true] }
+```
+
+```wado
+use config from "./config.json" with { type: "json" };
+// config::point is [i32, i32]
+// config::mixed is [i32, String, bool]
+```
+
+See `docs/adr-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
 
 ### Tagged Template Literals
 
@@ -957,10 +1085,11 @@ Object literal syntax supports unquoted keys and shorthand properties.
 ### Struct Initialization
 
 ```wado
-let user: User = { name: "Alice", age: 30, active: true };
+// Named struct literal
+let user = User { name: "Alice", age: 30, active: true };
 
-// With quoted keys
-let user: User = { "name": "Alice", "age": 30, "active": true };
+// Implicit struct literal (requires type annotation)
+let user: User = { name: "Alice", age: 30, active: true };
 
 // Shorthand
 let name = "Bob";
@@ -1383,7 +1512,7 @@ fn main() with Http {
 
 // Concurrent execution
 fn load_data() -> Data with Http {
-    let (users, posts) = join(
+    let [users, posts] = join(
         || fetch_users(),
         || fetch_posts(),
     );
@@ -1420,7 +1549,7 @@ effect Stderr {
 }
 
 effect Environment {
-    fn get_environment() -> Array<Tuple<String, String>>;
+    fn get_environment() -> Array<[String, String]>;
     fn get_arguments() -> Array<String>;
     fn get_initial_cwd() -> Option<String>;
 }
@@ -1500,7 +1629,7 @@ pub fn println(message: String) with Stdout {
 
 pub fn env(name: String) -> Option<String> with Environment {
     let vars = get_environment();  // No need for Environment:: prefix
-    for (key, value) in vars {
+    for [key, value] in vars {
         if key == name {
             return Some(value);
         }

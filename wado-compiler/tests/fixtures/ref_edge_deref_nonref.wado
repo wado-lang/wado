@@ -1,0 +1,11 @@
+// Edge case: dereference non-reference (should error)
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let a = 42;
+    println(`{*a}`);  // Error: a is not a reference
+}
+
+__DATA__
+{"compile_error": "expected 'reference type'"}

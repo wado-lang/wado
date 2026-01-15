@@ -141,7 +141,7 @@ let x: i64 = 100;
 let y: i32 = x as i32;  // Intent is clear
 
 // ✅ Good: Type annotations guide inference
-let coords: Tuple<f64, f64> = (0, 0);  // Integers → f64
+let coords: [f64, f64] = [0, 0];  // Integers → f64
 
 // ❌ Error: Requires explicit cast
 let a: i64 = 42;

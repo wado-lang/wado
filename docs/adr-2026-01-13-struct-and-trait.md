@@ -84,8 +84,8 @@ impl Point {
     }
 
     // Method that consumes self (takes ownership)
-    pub fn into_tuple(self) -> Tuple<i32, i32> {
-        return (self.x, self.y);
+    pub fn into_tuple(self) -> [i32, i32] {
+        return [self.x, self.y];
     }
 }
 

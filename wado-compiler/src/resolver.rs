@@ -11,9 +11,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    self, AssertStmt, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForStmt, Function,
-    IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt,
-    Type, UnaryOp, WhileStmt,
+    self, AssertStmt, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt,
+    Function, IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern,
+    ReturnStmt, Stmt, Type, UnaryOp, WhileStmt,
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
@@ -128,36 +128,54 @@ struct LocalVar {
     name: String,
     type_id: TypeId,
     index: u32,
+    #[allow(dead_code)] // For future mutability checking
     is_mut: bool,
 }
 
-/// Function context during resolution
+/// Function context during resolution with scope tracking
 struct FunctionContext {
-    /// Local variables (name -> info)
-    locals: HashMap<String, LocalVar>,
-    /// Next local index
+    /// Stack of scopes (each scope maps name -> LocalVar)
+    scopes: Vec<HashMap<String, LocalVar>>,
+    /// Next local index (Wasm locals are function-wide)
     next_local: u32,
     /// Return type of the function
+    #[allow(dead_code)] // For future return type checking
     return_type: TypeId,
-    /// Local variable types in order
+    /// Local variable types in order (for Wasm local declarations)
     local_types: Vec<TypeId>,
+    /// Local indices that have their address taken (&x or &mut x)
+    address_taken_locals: HashSet<u32>,
 }
 
 impl FunctionContext {
     fn new(return_type: TypeId) -> Self {
         Self {
-            locals: HashMap::new(),
+            scopes: vec![HashMap::new()], // Start with one scope for function parameters
             next_local: 0,
             return_type,
             local_types: Vec::new(),
+            address_taken_locals: HashSet::new(),
         }
     }
 
+    /// Enter a new scope (for blocks, if/while/for/loop bodies)
+    fn enter_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    /// Exit the current scope
+    fn exit_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    /// Add a local variable to the current scope
     fn add_local(&mut self, name: String, type_id: TypeId, is_mut: bool) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
         self.local_types.push(type_id);
-        self.locals.insert(
+
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
             name.clone(),
             LocalVar {
                 name,
@@ -169,8 +187,14 @@ impl FunctionContext {
         index
     }
 
+    /// Look up a variable by name (searches from innermost to outermost scope)
     fn lookup(&self, name: &str) -> Option<&LocalVar> {
-        self.locals.get(name)
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(local);
+            }
+        }
+        None
     }
 }
 
@@ -198,6 +222,8 @@ pub struct Resolver<'a> {
     source_code: &'a str,
     /// Current module path being resolved (for struct type module_path)
     current_module_path: Vec<String>,
+    /// Current module items (for local function parameter lookup)
+    current_module_items: Vec<Item>,
 }
 
 impl<'a> Resolver<'a> {
@@ -218,6 +244,7 @@ impl<'a> Resolver<'a> {
             errors: Vec::new(),
             source_code,
             current_module_path: Vec::new(),
+            current_module_items: Vec::new(),
         }
     }
 
@@ -238,6 +265,8 @@ impl<'a> Resolver<'a> {
     ) -> Result<TirModule, Vec<TypeError>> {
         // Set current module path for struct type creation
         self.current_module_path = module_path.clone();
+        // Store current module items for local function parameter lookup
+        self.current_module_items = module.items.clone();
 
         // First pass: collect type definitions
         self.collect_types(module);
@@ -394,6 +423,7 @@ impl<'a> Resolver<'a> {
                 errors: Vec::new(),
                 source_code: source,
                 current_module_path: Vec::new(), // Set in resolve_module
+                current_module_items: Vec::new(), // Set in resolve_module
             };
 
             match resolver.resolve_module(module, path.clone()) {
@@ -602,6 +632,7 @@ impl<'a> Resolver<'a> {
             span: func.span,
             local_count: ctx.next_local,
             local_types: ctx.local_types,
+            address_taken_locals: ctx.address_taken_locals,
         })
     }
 
@@ -650,6 +681,7 @@ impl<'a> Resolver<'a> {
             span: func.span,
             local_count: ctx.next_local,
             local_types: ctx.local_types,
+            address_taken_locals: ctx.address_taken_locals,
         })
     }
 
@@ -665,11 +697,13 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a block
     fn resolve_block(&mut self, block: &Block, ctx: &mut FunctionContext) -> TirBlock {
+        ctx.enter_scope();
         let stmts: Vec<TirStmt> = block
             .stmts
             .iter()
             .flat_map(|s| self.resolve_stmt(s, ctx))
             .collect();
+        ctx.exit_scope();
         TirBlock::new(stmts, block.span)
     }
 
@@ -682,6 +716,7 @@ impl<'a> Resolver<'a> {
             Stmt::If(if_stmt) => vec![self.resolve_if_stmt(if_stmt, ctx)],
             Stmt::While(while_stmt) => vec![self.resolve_while(while_stmt, ctx)],
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
+            Stmt::ForOf(for_of_stmt) => vec![self.resolve_for_of(for_of_stmt, ctx)],
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
@@ -691,12 +726,148 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a let statement
     fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let value = self.resolve_expr(&let_stmt.value, ctx);
-        let type_id = let_stmt
-            .ty
-            .as_ref()
-            .map(|t| self.resolve_type(t))
-            .unwrap_or(value.type_id);
+        // Check for tuple literal to array coercion when type annotation is present
+        let (value, type_id) = if let Some(annotated_type) = &let_stmt.ty {
+            let target_type = self.resolve_type(annotated_type);
+
+            // Special case: tuple literal with Array<T> or Tuple type annotation
+            if let ast::Expr::TupleLiteral(tuple_lit) = &let_stmt.value {
+                match self.type_table.get(target_type) {
+                    // let a: Array<i32> = [1, 2, 3]
+                    ResolvedType::Array(element_type) => {
+                        let element_type = *element_type;
+                        let elements: Vec<TirExpr> = tuple_lit
+                            .elements
+                            .iter()
+                            .map(|elem| {
+                                let resolved = self.resolve_expr(elem, ctx);
+                                if resolved.type_id != element_type
+                                    && resolved.type_id != TypeTable::UNKNOWN
+                                {
+                                    self.errors.push(TypeError::TypeMismatch {
+                                        expected: self.type_table.type_name(element_type),
+                                        found: self.type_table.type_name(resolved.type_id),
+                                        span: elem.span(),
+                                    });
+                                }
+                                resolved
+                            })
+                            .collect();
+
+                        let value = TirExpr::new(
+                            TirExprKind::ArrayLiteral { elements },
+                            target_type,
+                            let_stmt.value.span(),
+                        );
+                        (value, target_type)
+                    }
+                    // let t: [i32, String] = [1, "hello"] - check element types
+                    ResolvedType::Tuple(expected_elem_types) => {
+                        let expected_elem_types = expected_elem_types.clone();
+                        let elements: Vec<TirExpr> = tuple_lit
+                            .elements
+                            .iter()
+                            .enumerate()
+                            .map(|(i, elem)| {
+                                let resolved = self.resolve_expr(elem, ctx);
+                                // Check if element type matches expected
+                                if let Some(&expected_type) = expected_elem_types.get(i)
+                                    && resolved.type_id != expected_type
+                                    && resolved.type_id != TypeTable::UNKNOWN
+                                {
+                                    self.errors.push(TypeError::TypeMismatch {
+                                        expected: self.type_table.type_name(expected_type),
+                                        found: self.type_table.type_name(resolved.type_id),
+                                        span: elem.span(),
+                                    });
+                                }
+                                resolved
+                            })
+                            .collect();
+
+                        // Also check length mismatch
+                        if tuple_lit.elements.len() != expected_elem_types.len() {
+                            self.errors.push(TypeError::TypeMismatch {
+                                expected: format!(
+                                    "tuple with {} elements",
+                                    expected_elem_types.len()
+                                ),
+                                found: format!("tuple with {} elements", tuple_lit.elements.len()),
+                                span: let_stmt.value.span(),
+                            });
+                        }
+
+                        let value = TirExpr::new(
+                            TirExprKind::TupleLiteral { elements },
+                            target_type,
+                            let_stmt.value.span(),
+                        );
+                        (value, target_type)
+                    }
+                    _ => {
+                        let value = self.resolve_expr(&let_stmt.value, ctx);
+                        (value, target_type)
+                    }
+                }
+            } else if let ast::Expr::StructLiteral(struct_lit) = &let_stmt.value {
+                // Handle implicit struct literal: let p: Point = { x: 1, y: 2 }
+                if struct_lit.name.is_none() {
+                    // Check if target type is a struct
+                    if let ResolvedType::Struct {
+                        name,
+                        module_path: _,
+                    } = self.type_table.get(target_type)
+                    {
+                        let name = name.clone();
+                        let struct_type = target_type;
+
+                        let fields: Vec<TirStructField> = struct_lit
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .map(|(index, field)| {
+                                let value = self.resolve_expr(&field.value, ctx);
+                                TirStructField {
+                                    name: field.name.clone(),
+                                    value,
+                                    field_index: index as u32,
+                                }
+                            })
+                            .collect();
+
+                        let value = TirExpr::new(
+                            TirExprKind::StructLiteral {
+                                struct_type,
+                                struct_name: name,
+                                fields,
+                            },
+                            struct_type,
+                            struct_lit.span,
+                        );
+                        (value, target_type)
+                    } else {
+                        // Target type is not a struct - error
+                        self.errors.push(TypeError::TypeMismatch {
+                            expected: self.type_table.type_name(target_type),
+                            found: "implicit struct literal".into(),
+                            span: struct_lit.span,
+                        });
+                        let value = self.resolve_expr(&let_stmt.value, ctx);
+                        (value, target_type)
+                    }
+                } else {
+                    // Named struct literal - resolve normally
+                    let value = self.resolve_expr(&let_stmt.value, ctx);
+                    (value, target_type)
+                }
+            } else {
+                let value = self.resolve_expr(&let_stmt.value, ctx);
+                (value, target_type)
+            }
+        } else {
+            let value = self.resolve_expr(&let_stmt.value, ctx);
+            (value.clone(), value.type_id)
+        };
 
         let local_index = ctx.add_local(let_stmt.name.clone(), type_id, let_stmt.is_mut);
 
@@ -721,7 +892,38 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a return statement
     fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let value = ret_stmt.value.as_ref().map(|e| self.resolve_expr(e, ctx));
+        let value = ret_stmt.value.as_ref().map(|expr| {
+            // Check for tuple literal to array coercion based on function return type
+            if let ast::Expr::TupleLiteral(tuple_lit) = expr
+                && let ResolvedType::Array(element_type) = self.type_table.get(ctx.return_type)
+            {
+                let element_type = *element_type;
+                let elements: Vec<TirExpr> = tuple_lit
+                    .elements
+                    .iter()
+                    .map(|elem| {
+                        let resolved = self.resolve_expr(elem, ctx);
+                        if resolved.type_id != element_type
+                            && resolved.type_id != TypeTable::UNKNOWN
+                        {
+                            self.errors.push(TypeError::TypeMismatch {
+                                expected: self.type_table.type_name(element_type),
+                                found: self.type_table.type_name(resolved.type_id),
+                                span: elem.span(),
+                            });
+                        }
+                        resolved
+                    })
+                    .collect();
+
+                return TirExpr::new(
+                    TirExprKind::ArrayLiteral { elements },
+                    ctx.return_type,
+                    expr.span(),
+                );
+            }
+            self.resolve_expr(expr, ctx)
+        });
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
     }
 
@@ -752,9 +954,13 @@ impl<'a> Resolver<'a> {
         TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
     }
 
-    /// Resolve a for statement - generates init + For node
+    /// Resolve a for statement - generates init + For node wrapped in a scope
     /// The For node handles continue correctly (executes update before next iteration)
+    /// The init variable is scoped to the for loop and not visible after it
     fn resolve_for(&mut self, for_stmt: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+        // Enter scope for the for loop's init variable
+        ctx.enter_scope();
+
         let mut result = Vec::new();
 
         // Add init statement if present (e.g., let i = 0)
@@ -762,7 +968,7 @@ impl<'a> Resolver<'a> {
             result.extend(self.resolve_stmt(init_stmt, ctx));
         }
 
-        // Resolve the body
+        // Resolve the body (note: resolve_block enters its own scope for body variables)
         let body = self.resolve_block(&for_stmt.body, ctx);
 
         // Resolve condition (None means infinite loop)
@@ -785,7 +991,58 @@ impl<'a> Resolver<'a> {
         );
         result.push(for_tir);
 
+        // Exit the for loop's scope
+        ctx.exit_scope();
+
         result
+    }
+
+    /// Resolve a for-of statement: `for let item of array { ... }`
+    fn resolve_for_of(&mut self, for_of_stmt: &ForOfStmt, ctx: &mut FunctionContext) -> TirStmt {
+        // Resolve the iterable expression
+        let iterable = self.resolve_expr(&for_of_stmt.iterable, ctx);
+        let iterable_type = iterable.type_id;
+
+        // Get the element type from the array type
+        let element_type = match self.type_table.get(iterable_type) {
+            ResolvedType::Array(elem_type) => *elem_type,
+            _ => {
+                self.errors.push(TypeError::TypeMismatch {
+                    expected: "Array<T>".to_string(),
+                    found: self.type_table.type_name(iterable_type),
+                    span: for_of_stmt.iterable.span(),
+                });
+                TypeTable::UNKNOWN
+            }
+        };
+
+        // Enter a scope for the loop binding and body
+        ctx.enter_scope();
+
+        // Add the loop variable
+        let binding_local = ctx.add_local(
+            for_of_stmt.binding.clone(),
+            element_type,
+            for_of_stmt.is_mut,
+        );
+
+        // Resolve the body
+        let body = self.resolve_block(&for_of_stmt.body, ctx);
+
+        // Exit the scope
+        ctx.exit_scope();
+
+        TirStmt::new(
+            TirStmtKind::ForOf {
+                binding_local,
+                binding_type: element_type,
+                is_mut: for_of_stmt.is_mut,
+                iterable,
+                iterable_type,
+                body,
+            },
+            for_of_stmt.span,
+        )
     }
 
     /// Resolve a loop statement (infinite loop)
@@ -1025,6 +1282,7 @@ impl<'a> Resolver<'a> {
             Expr::StructLiteral(struct_lit) => self.resolve_struct_literal(struct_lit, ctx),
             Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
             Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
+            Expr::TupleLiteral(tuple_lit) => self.resolve_tuple_literal(tuple_lit, ctx),
         }
     }
 
@@ -1185,9 +1443,30 @@ impl<'a> Resolver<'a> {
         let expr = self.resolve_expr(&unary.expr, ctx);
         let op = convert_unary_op(unary.op);
 
+        // Track address-taken locals for &x and &mut x
+        if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
+            && let TirExprKind::Local { index, .. } = &expr.kind
+        {
+            ctx.address_taken_locals.insert(*index);
+        }
+
+        // Check that &mut is only applied to mutable locals
+        if unary.op == UnaryOp::MutRef
+            && let TirExprKind::Local { name, .. } = &expr.kind
+            && let Some(local) = ctx.lookup(name)
+            && !local.is_mut
+        {
+            self.errors.push(TypeError::TypeMismatch {
+                expected: "mutable variable".to_string(),
+                found: format!("immutable variable '{}'", name),
+                span: unary.span,
+            });
+        }
+
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
             UnaryOp::Ref => self.type_table.make_ref(expr.type_id),
+            UnaryOp::MutRef => self.type_table.make_mut_ref(expr.type_id),
             UnaryOp::Deref => {
                 // Dereference returns the inner type
                 if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
@@ -1195,7 +1474,13 @@ impl<'a> Resolver<'a> {
                 {
                     *inner
                 } else {
-                    expr.type_id
+                    // Cannot dereference non-reference type
+                    self.errors.push(TypeError::TypeMismatch {
+                        expected: "reference type".to_string(),
+                        found: self.type_table.type_name(expr.type_id),
+                        span: unary.span,
+                    });
+                    TypeTable::ERROR
                 }
             }
             _ => expr.type_id,
@@ -1278,10 +1563,18 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a call expression
     fn resolve_call(&mut self, call: &ast::CallExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // First, determine expected parameter types to handle coercion
+        let param_types = self.lookup_function_param_types(&call.callee);
+
+        // Resolve arguments with coercion awareness
         let args: Vec<TirExpr> = call
             .args
             .iter()
-            .map(|a| self.resolve_expr(a, ctx))
+            .enumerate()
+            .map(|(i, arg)| {
+                let expected_type = param_types.get(i).copied();
+                self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+            })
             .collect();
 
         // Get function name from callee
@@ -1370,11 +1663,18 @@ impl<'a> Resolver<'a> {
     }
 
     /// Look up the return type of a function
-    fn lookup_function_return_type(&self, module_path: &[String], func_name: &str) -> TypeId {
+    fn lookup_function_return_type(&mut self, module_path: &[String], func_name: &str) -> TypeId {
         // Handle builtin functions (builtin::name pattern)
         if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
             // Skip "builtin::"
             return self.get_builtin_return_type(builtin_name);
+        }
+
+        // Handle WASI effect operations (e.g., Environment::get_arguments)
+        if module_path.len() == 1
+            && let Some(return_type) = self.get_wasi_effect_return_type(&module_path[0], func_name)
+        {
+            return return_type;
         }
 
         // First, try local functions (no module path)
@@ -1385,19 +1685,22 @@ impl<'a> Resolver<'a> {
         }
 
         // Try looking up in loaded modules
-        if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(module_path)
-        {
-            for item in &module.items {
-                if let Item::Function(func) = item
-                    && func.name == func_name
-                {
-                    return func
-                        .return_type
-                        .as_ref()
-                        .map(|t| self.resolve_type_no_register(t))
-                        .unwrap_or(TypeTable::UNIT);
-                }
+        if !module_path.is_empty() {
+            // Clone the return type AST to avoid borrow issues
+            let return_type_ast = self.loaded_modules.get(module_path).and_then(|module| {
+                module.items.iter().find_map(|item| {
+                    if let Item::Function(func) = item
+                        && func.name == func_name
+                    {
+                        func.return_type.clone()
+                    } else {
+                        None
+                    }
+                })
+            });
+
+            if let Some(ty) = return_type_ast {
+                return self.resolve_type(&ty);
             }
         }
 
@@ -1405,18 +1708,48 @@ impl<'a> Resolver<'a> {
         TypeTable::UNIT
     }
 
+    /// Get the return type of a WASI effect operation
+    fn get_wasi_effect_return_type(&mut self, effect: &str, operation: &str) -> Option<TypeId> {
+        match (effect, operation) {
+            // Environment effect operations
+            ("Environment", "get_arguments") => Some(
+                self.type_table
+                    .intern(ResolvedType::Array(TypeTable::STRING)),
+            ),
+            ("Environment", "get_environment") => {
+                // Returns Array<[String, String]> - array of key-value tuple pairs
+                let tuple_type = self.type_table.intern(ResolvedType::Tuple(vec![
+                    TypeTable::STRING,
+                    TypeTable::STRING,
+                ]));
+                Some(self.type_table.intern(ResolvedType::Array(tuple_type)))
+            }
+            ("Environment", "get_initial_cwd") => Some(
+                self.type_table
+                    .intern(ResolvedType::Option(TypeTable::STRING)),
+            ),
+            _ => None,
+        }
+    }
+
     /// Get the return type of a builtin function
-    fn get_builtin_return_type(&self, name: &str) -> TypeId {
+    fn get_builtin_return_type(&mut self, name: &str) -> TypeId {
         match name {
             // Array operations
             "array_len" => TypeTable::I32,
             "array_get_u8" => TypeTable::I32, // Returns u8 as i32
             "array_set_u8" => TypeTable::UNIT,
             "string_new" => TypeTable::STRING,
+            "array_new_string" => self
+                .type_table
+                .intern(ResolvedType::Array(TypeTable::STRING)),
+            "array_get_string" => TypeTable::STRING,
+            "array_set_string" => TypeTable::UNIT,
 
             // Memory operations
             "realloc" => TypeTable::I32, // Returns pointer (i32)
             "memory_load8_u" => TypeTable::I32,
+            "memory_load32" => TypeTable::I32,
             "memory_store8" => TypeTable::UNIT,
 
             // Float-to-string (returns length)
@@ -1447,7 +1780,101 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Look up function parameter types from callee expression
+    fn lookup_function_param_types(&mut self, callee: &Expr) -> Vec<TypeId> {
+        match callee {
+            Expr::Ident(ident) => {
+                // Check for qualified name (Effect::operation)
+                if ident.name.contains("::") {
+                    return Vec::new(); // Effect operations handled separately
+                }
+
+                // Check if it's a local function (defined in this module)
+                if self.function_return_types.contains_key(&ident.name) {
+                    // Clone params to avoid borrow issues
+                    let params: Option<Vec<_>> =
+                        self.current_module_items.iter().find_map(|item| {
+                            if let Item::Function(func) = item
+                                && func.name == ident.name
+                            {
+                                return Some(func.params.clone());
+                            }
+                            None
+                        });
+
+                    if let Some(params) = params {
+                        return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                    }
+                }
+
+                // Check imported functions
+                if let Some(symbol) = self.symbols.lookup(&ident.name)
+                    && let Some(module) = self.loaded_modules.get(&symbol.module_path)
+                {
+                    // Clone params to avoid borrow issues
+                    let params: Option<Vec<_>> = module.items.iter().find_map(|item| {
+                        if let Item::Function(func) = item
+                            && func.name == symbol.name
+                        {
+                            return Some(func.params.clone());
+                        }
+                        None
+                    });
+
+                    if let Some(params) = params {
+                        return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                    }
+                }
+
+                Vec::new()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Resolve an expression with an expected type for coercion
+    fn resolve_expr_with_expected_type(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
+        // Handle tuple literal to array coercion
+        if let Some(target_type) = expected_type
+            && let Expr::TupleLiteral(tuple_lit) = expr
+            && let ResolvedType::Array(element_type) = self.type_table.get(target_type)
+        {
+            let element_type = *element_type;
+            let elements: Vec<TirExpr> = tuple_lit
+                .elements
+                .iter()
+                .map(|elem| {
+                    let resolved = self.resolve_expr(elem, ctx);
+                    if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
+                        self.errors.push(TypeError::TypeMismatch {
+                            expected: self.type_table.type_name(element_type),
+                            found: self.type_table.type_name(resolved.type_id),
+                            span: elem.span(),
+                        });
+                    }
+                    resolved
+                })
+                .collect();
+
+            return TirExpr::new(
+                TirExprKind::ArrayLiteral { elements },
+                target_type,
+                expr.span(),
+            );
+        }
+
+        // Normal expression resolution
+        self.resolve_expr(expr, ctx)
+    }
+
     /// Resolve a type without registering new types
+    /// This is used for lookups where we need immutable access. It only handles
+    /// primitive types and type aliases. For generic types, use resolve_type instead.
     fn resolve_type_no_register(&self, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => match named.name.as_str() {
@@ -1527,6 +1954,20 @@ impl<'a> Resolver<'a> {
                 }
                 return TypeTable::UNKNOWN;
             }
+            // Array types have built-in methods like len()
+            ResolvedType::Array(_) => {
+                if method_name == "len" {
+                    return TypeTable::I32;
+                }
+                return TypeTable::UNKNOWN;
+            }
+            // String type has built-in methods like len()
+            ResolvedType::String => {
+                if method_name == "len" {
+                    return TypeTable::I32;
+                }
+                return TypeTable::UNKNOWN;
+            }
             _ => return TypeTable::UNKNOWN,
         };
 
@@ -1584,21 +2025,37 @@ impl<'a> Resolver<'a> {
         )
     }
 
-    /// Look up field type from a struct type
+    /// Look up field type from a struct or tuple type
     fn lookup_field_type(
         &self,
         struct_type: TypeId,
         field_name: &str,
-        _span: Span,
+        span: Span,
     ) -> (u32, TypeId) {
-        if let ResolvedType::Struct { name, .. } = self.type_table.get(struct_type)
-            && let Some(fields) = self.struct_fields.get(name)
-        {
-            for (index, (fname, ftype)) in fields.iter().enumerate() {
-                if fname == field_name {
-                    return (index as u32, *ftype);
+        match self.type_table.get(struct_type) {
+            // Struct field access
+            ResolvedType::Struct { name, .. } => {
+                if let Some(fields) = self.struct_fields.get(name) {
+                    for (index, (fname, ftype)) in fields.iter().enumerate() {
+                        if fname == field_name {
+                            return (index as u32, *ftype);
+                        }
+                    }
                 }
             }
+            // Tuple field access (numeric field names: 0, 1, 2, ...)
+            ResolvedType::Tuple(elements) => {
+                if let Ok(index) = field_name.parse::<usize>()
+                    && index < elements.len()
+                {
+                    return (index as u32, elements[index]);
+                }
+            }
+            // Reference types - look through to inner type
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                return self.lookup_field_type(*inner, field_name, span);
+            }
+            _ => {}
         }
         (0, TypeTable::UNKNOWN)
     }
@@ -1606,14 +2063,63 @@ impl<'a> Resolver<'a> {
     /// Resolve an index expression
     fn resolve_index(&mut self, index: &ast::IndexExpr, ctx: &mut FunctionContext) -> TirExpr {
         let expr = self.resolve_expr(&index.expr, ctx);
-        let index_expr = self.resolve_expr(&index.index, ctx);
 
-        // Get element type from array type
-        let element_type = if let ResolvedType::Array(elem) = self.type_table.get(expr.type_id) {
+        // Get base type (unwrap reference if needed)
+        let base_type_id = match self.type_table.get(expr.type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => expr.type_id,
+        };
+        let base_type = self.type_table.get(base_type_id);
+
+        // Handle tuple indexing: t[0] is equivalent to t.0
+        if let ResolvedType::Tuple(elements) = base_type {
+            let elements = elements.clone();
+            // Tuple indexing requires a constant integer index
+            if let ast::Expr::Literal(ast::LiteralExpr {
+                value: ast::Literal::Int(int_lit),
+                ..
+            }) = &index.index
+                && let Ok(idx) = int_lit.repr.parse::<usize>()
+            {
+                if idx < elements.len() {
+                    let field_type = elements[idx];
+                    return TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(expr),
+                            field_index: idx as u32,
+                            field_name: idx.to_string(),
+                        },
+                        field_type,
+                        index.span,
+                    );
+                } else {
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!(
+                            "tuple index {} out of bounds, tuple has {} elements",
+                            idx,
+                            elements.len()
+                        ),
+                        span: index.span,
+                    });
+                    // Return a placeholder expression with unknown type
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
+                }
+            }
+            // Non-constant index on tuple
+            self.errors.push(TypeError::InvalidLiteral {
+                message: "tuple index must be a constant integer".to_string(),
+                span: index.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
+        }
+
+        // Array indexing
+        let element_type = if let ResolvedType::Array(elem) = base_type {
             *elem
         } else {
             TypeTable::UNKNOWN
         };
+        let index_expr = self.resolve_expr(&index.index, ctx);
 
         TirExpr::new(
             TirExprKind::Index {
@@ -1863,8 +2369,41 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a cast expression
     fn resolve_cast(&mut self, cast: &ast::CastExpr, ctx: &mut FunctionContext) -> TirExpr {
-        let expr = self.resolve_expr(&cast.expr, ctx);
         let target_type = self.resolve_type(&cast.target_type);
+
+        // Special case: tuple literal cast to Array<T>
+        // [1, 2, 3] as Array<i32> should become an ArrayLiteral, not a Cast of TupleLiteral
+        if let ast::Expr::TupleLiteral(tuple_lit) = &cast.expr
+            && let ResolvedType::Array(element_type) = self.type_table.get(target_type)
+        {
+            let element_type = *element_type;
+            // Resolve each element and check type compatibility
+            let elements: Vec<TirExpr> = tuple_lit
+                .elements
+                .iter()
+                .map(|elem| {
+                    let resolved = self.resolve_expr(elem, ctx);
+                    // Type check: each element must match Array element type
+                    if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
+                        self.errors.push(TypeError::TypeMismatch {
+                            expected: self.type_table.type_name(element_type),
+                            found: self.type_table.type_name(resolved.type_id),
+                            span: elem.span(),
+                        });
+                    }
+                    resolved
+                })
+                .collect();
+
+            return TirExpr::new(
+                TirExprKind::ArrayLiteral { elements },
+                target_type,
+                cast.span,
+            );
+        }
+
+        // Normal cast
+        let expr = self.resolve_expr(&cast.expr, ctx);
 
         TirExpr::new(
             TirExprKind::Cast {
@@ -1882,18 +2421,36 @@ impl<'a> Resolver<'a> {
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        // Handle implicit struct literals (name is None)
+        let Some(name) = &struct_lit.name else {
+            // Implicit struct literal without type context - error
+            self.errors.push(TypeError::TypeMismatch {
+                expected: "named struct literal (e.g., Point { x: 1, y: 2 })".into(),
+                found: "implicit struct literal without type context".into(),
+                span: struct_lit.span,
+            });
+            // Return a dummy expression with unknown type
+            return TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: 0,
+                    repr: "0".into(),
+                },
+                TypeTable::UNKNOWN,
+                struct_lit.span,
+            );
+        };
+
         // Look up the struct in the symbol table to resolve imports/aliases
-        let (struct_name, module_path) = if let Some(symbol) = self.symbols.lookup(&struct_lit.name)
-        {
+        let (struct_name, module_path) = if let Some(symbol) = self.symbols.lookup(name) {
             match &symbol.kind {
                 crate::symbol::SymbolKind::Struct(_) => {
                     (symbol.name.clone(), symbol.module_path.clone())
                 }
-                _ => (struct_lit.name.clone(), Vec::new()),
+                _ => (name.clone(), Vec::new()),
             }
         } else {
             // Fall back to local struct (no module path)
-            (struct_lit.name.clone(), Vec::new())
+            (name.clone(), Vec::new())
         };
 
         let struct_type = self
@@ -1922,6 +2479,30 @@ impl<'a> Resolver<'a> {
             },
             struct_type,
             struct_lit.span,
+        )
+    }
+
+    /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
+    fn resolve_tuple_literal(
+        &mut self,
+        tuple_lit: &ast::TupleLiteralExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        // Resolve each element expression
+        let elements: Vec<TirExpr> = tuple_lit
+            .elements
+            .iter()
+            .map(|elem| self.resolve_expr(elem, ctx))
+            .collect();
+
+        // Collect element types for the tuple type
+        let elem_types: Vec<TypeId> = elements.iter().map(|e| e.type_id).collect();
+        let tuple_type = self.type_table.make_tuple(elem_types);
+
+        TirExpr::new(
+            TirExprKind::TupleLiteral { elements },
+            tuple_type,
+            tuple_lit.span,
         )
     }
 
@@ -2089,6 +2670,7 @@ fn convert_unary_op(op: UnaryOp) -> TirUnaryOp {
         UnaryOp::Not => TirUnaryOp::Not,
         UnaryOp::BitNot => TirUnaryOp::BitNot,
         UnaryOp::Ref => TirUnaryOp::Ref,
+        UnaryOp::MutRef => TirUnaryOp::MutRef,
         UnaryOp::Deref => TirUnaryOp::Deref,
     }
 }

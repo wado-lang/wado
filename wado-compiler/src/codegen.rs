@@ -14,20 +14,21 @@ use crate::tir::{
 };
 use crate::wasi_registry::{
     WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
-    wasi_type_to_valtype,
+    return_type_requires_outptr, wasi_type_to_valtype,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder};
 use crate::wasm_postprocess;
 use crate::world_registry::{WorldExportInfo, WorldRegistry};
 use heck::ToKebabCase;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use wasm_encoder::{
-    Alias, BranchHint, BranchHints, CanonicalOption, CodeSection, ComponentBuilder,
-    ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr, DataCountSection,
-    DataSection, DataSegment, DataSegmentMode, ExportKind, ExportSection, FieldType, Function,
-    FunctionSection, HeapType, InstanceType, Instruction, MemArg, MemorySection, MemoryType,
-    Module, ModuleArg, NameMap, NameSection, PrimitiveValType, RefType, StorageType, TypeBounds,
-    TypeSection, ValType,
+    AbstractHeapType, Alias, BranchHint, BranchHints, CanonicalOption, CodeSection,
+    ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr,
+    DataCountSection, DataSection, DataSegment, DataSegmentMode, ExportKind, ExportSection,
+    FieldType, Function, FunctionSection, HeapType, InstanceType, Instruction, MemArg,
+    MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection, PrimitiveValType, RefType,
+    StorageType, TypeBounds, TypeSection, ValType,
 };
 use wasmparser::{Validator, WasmFeatures};
 
@@ -35,6 +36,7 @@ use wasmparser::{Validator, WasmFeatures};
 #[derive(Debug, Clone)]
 struct StructTypeInfo {
     type_idx: u32,
+    field_count: usize,
 }
 
 /// Code generator that produces Component Model components
@@ -51,6 +53,14 @@ pub struct Codegen {
     string_array_type_idx: u32,
     /// Registry of user-defined struct types (keyed by StructName for type safety)
     struct_types: HashMap<StructName, StructTypeInfo>,
+    /// Registry of tuple types (keyed by element TypeIds, maps to GC struct type index)
+    /// Uses RefCell for lazy registration during codegen
+    tuple_types: RefCell<HashMap<Vec<TypeId>, u32>>,
+    /// Registry of array types (keyed by element TypeId, maps to GC array type index)
+    array_types: HashMap<TypeId, u32>,
+    /// Registry of box types for primitive references (keyed by ValType, maps to GC struct type index)
+    /// Box types are single-field mutable structs that allow references to primitives
+    box_types: HashMap<ValType, u32>,
 }
 
 /// Context for tracking local variables during function code generation
@@ -82,6 +92,13 @@ struct FunctionContext {
     /// For break: use break_offset + extra_depth
     /// For continue: use extra_depth
     loop_info: Vec<(u32, u32)>,
+    /// Counter for generating unique for-of local names (to support nested for-of loops)
+    for_of_counter: u32,
+    /// Local indices that have their address taken (&x or &mut x).
+    /// For mutable primitives, these locals store a box reference instead of the raw value.
+    address_taken_locals: std::collections::HashSet<u32>,
+    /// Map from local index to its box type index (for address-taken primitive locals)
+    local_box_types: HashMap<u32, u32>,
 }
 
 impl FunctionContext {
@@ -97,6 +114,9 @@ impl FunctionContext {
             branch_hints: Vec::new(),
             current_module_path: Vec::new(),
             loop_info: Vec::new(),
+            for_of_counter: 0,
+            address_taken_locals: std::collections::HashSet::new(),
+            local_box_types: HashMap::new(),
         }
     }
 
@@ -112,7 +132,22 @@ impl FunctionContext {
             branch_hints: Vec::new(),
             current_module_path: module_path,
             loop_info: Vec::new(),
+            for_of_counter: 0,
+            address_taken_locals: std::collections::HashSet::new(),
+            local_box_types: HashMap::new(),
         }
+    }
+
+    /// Reset for-of counter (called between pre-allocation and code generation phases)
+    fn reset_for_of_counter(&mut self) {
+        self.for_of_counter = 0;
+    }
+
+    /// Get next for-of loop ID and increment counter
+    fn next_for_of_id(&mut self) -> u32 {
+        let id = self.for_of_counter;
+        self.for_of_counter += 1;
+        id
     }
 
     /// Set a pending branch hint (from builtin::likely/unlikely)
@@ -197,6 +232,30 @@ fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
 }
 
+/// Convert a Wado type to a Component Model primitive value type.
+/// Used for type parameters in generic types like Array<T> and Option<T>.
+fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
+    match ty {
+        Type::Named(named) => match named.name.as_str() {
+            "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
+            "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
+            "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
+            "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
+            "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
+            "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
+            "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
+            "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
+            "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
+            "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
+            "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+            "char" => ComponentValType::Primitive(PrimitiveValType::Char),
+            "String" => ComponentValType::Primitive(PrimitiveValType::String),
+            _ => panic!("unsupported Wado primitive type for CM: {}", named.name),
+        },
+        _ => panic!("unsupported Wado type for CM primitive: {:?}", ty),
+    }
+}
+
 impl Codegen {
     /// Create a new code generator with registries built from stdlib
     pub fn new() -> Self {
@@ -210,6 +269,9 @@ impl Codegen {
             world_registry,
             string_array_type_idx: 0, // Set when types are defined
             struct_types: HashMap::new(),
+            tuple_types: RefCell::new(HashMap::new()),
+            array_types: HashMap::new(),
+            box_types: HashMap::new(),
         }
     }
 
@@ -333,12 +395,21 @@ impl Codegen {
                     continue;
                 }
                 // Skip functions with unsupported effects
-                // Currently only Stdout, Stderr, and MonotonicClock effects are supported
+                // Supported effects: Stdout, Stderr, MonotonicClock, Environment
+                // Exit is only supported if explicitly used (runtime may not support it)
                 if !tir_func.effects.is_empty() {
-                    let has_unsupported_effects = tir_func
-                        .effects
-                        .iter()
-                        .any(|e| e != "Stdout" && e != "Stderr" && e != "MonotonicClock");
+                    let exit_available = hints.is_effect_explicitly_used("Exit");
+                    let has_unsupported_effects = tir_func.effects.iter().any(|e| {
+                        let effect_name = e.as_str();
+                        // Exit effect requires explicit usage tracking
+                        if effect_name == "Exit" {
+                            return !exit_available;
+                        }
+                        !matches!(
+                            effect_name,
+                            "Stdout" | "Stderr" | "MonotonicClock" | "Environment"
+                        )
+                    });
                     if has_unsupported_effects {
                         continue;
                     }
@@ -504,6 +575,25 @@ impl Codegen {
             }
         }
 
+        // Register tuple types from all TIR modules
+        self.register_tuple_types_from_table(type_table, &mut builder);
+        for (path, tir_mod) in all_tir_modules {
+            if path != &entry_tir.path {
+                self.register_tuple_types_from_table(&tir_mod.type_table, &mut builder);
+            }
+        }
+
+        // Register array types from all TIR modules
+        self.register_array_types_from_table(type_table, &mut builder);
+        for (path, tir_mod) in all_tir_modules {
+            if path != &entry_tir.path {
+                self.register_array_types_from_table(&tir_mod.type_table, &mut builder);
+            }
+        }
+
+        // Register box types for primitive references (&i32, &mut f64, etc.)
+        self.register_box_types(&mut builder);
+
         // WASI effect function types - derived from wasi/*.wado definitions
         for interface in self.wasi_registry.interfaces() {
             for func in &interface.functions {
@@ -650,6 +740,27 @@ impl Codegen {
             let monotonic_import_name = build_local_alias_name("clocks", "MonotonicClock", "now");
             builder.import_func("wasi", &monotonic_import_name, &monotonic_import_name);
         }
+
+        // DCE: Only import Environment functions if used
+        if hints.is_effect_used("Environment") {
+            let get_args_name = build_local_alias_name("cli", "Environment", "get_arguments");
+            builder.import_func("wasi", &get_args_name, &get_args_name);
+            let get_env_name = build_local_alias_name("cli", "Environment", "get_environment");
+            builder.import_func("wasi", &get_env_name, &get_env_name);
+            let get_cwd_name = build_local_alias_name("cli", "Environment", "get_initial_cwd");
+            builder.import_func("wasi", &get_cwd_name, &get_cwd_name);
+        }
+
+        // DCE: Only import Exit functions if explicitly used
+        // Note: Use is_effect_explicitly_used here because Exit interface may not be
+        // supported by all runtimes, so we only import it when explicitly called.
+        if hints.is_effect_explicitly_used("Exit") {
+            let exit_name = build_local_alias_name("cli", "Exit", "exit");
+            builder.import_func("wasi", &exit_name, &exit_name);
+            let exit_code_name = build_local_alias_name("cli", "Exit", "exit_with_code");
+            builder.import_func("wasi", &exit_code_name, &exit_code_name);
+        }
+
         builder.import_func("env", "realloc", "realloc");
         if hints.needs_f64_to_string {
             builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
@@ -994,6 +1105,65 @@ impl Codegen {
             );
         }
 
+        // Lower Environment functions (if available)
+        // These return list<string> or option<string>, need memory/realloc
+        let get_args_name = build_local_alias_name("cli", "Environment", "get_arguments");
+        if ctx.has_comp_func(&get_args_name) {
+            ctx.register_core_func(&get_args_name);
+            builder.lower_func(
+                Some(&get_args_name),
+                ctx.comp_func_idx(&get_args_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        let get_env_name = build_local_alias_name("cli", "Environment", "get_environment");
+        if ctx.has_comp_func(&get_env_name) {
+            ctx.register_core_func(&get_env_name);
+            builder.lower_func(
+                Some(&get_env_name),
+                ctx.comp_func_idx(&get_env_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        let get_cwd_name = build_local_alias_name("cli", "Environment", "get_initial_cwd");
+        if ctx.has_comp_func(&get_cwd_name) {
+            ctx.register_core_func(&get_cwd_name);
+            builder.lower_func(
+                Some(&get_cwd_name),
+                ctx.comp_func_idx(&get_cwd_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        // Lower Exit functions (if available)
+        // exit takes result, exit-with-code takes u8
+        let exit_name = build_local_alias_name("cli", "Exit", "exit");
+        if ctx.has_comp_func(&exit_name) {
+            ctx.register_core_func(&exit_name);
+            builder.lower_func(Some(&exit_name), ctx.comp_func_idx(&exit_name), []);
+        }
+
+        let exit_code_name = build_local_alias_name("cli", "Exit", "exit_with_code");
+        if ctx.has_comp_func(&exit_code_name) {
+            ctx.register_core_func(&exit_code_name);
+            builder.lower_func(
+                Some(&exit_code_name),
+                ctx.comp_func_idx(&exit_code_name),
+                [],
+            );
+        }
+
         // task.return for completing async tasks
         ctx.register_core_func("task-return");
         builder.task_return(Some(ComponentValType::Type(result_unit_type)), []);
@@ -1027,6 +1197,12 @@ impl Codegen {
         {
             let mut validator = Validator::new_with_features(WasmFeatures::all());
             if let Err(e) = validator.validate_all(&main_module) {
+                // Print WAT for debugging before panicking
+                eprintln!("=== MAIN MODULE WAT (for debugging) ===");
+                if let Ok(wat) = wasmprinter::print_bytes(&main_module) {
+                    eprintln!("{}", wat);
+                }
+                eprintln!("=== END MAIN MODULE WAT ===");
                 panic!("Core module validation failed: {e}");
             }
         }
@@ -1105,6 +1281,48 @@ impl Codegen {
                 &monotonic_clock_func_name,
                 ExportKind::Func,
                 ctx.core_func_idx(&monotonic_clock_func_name),
+            ));
+        }
+        // Conditionally add Environment functions if registered
+        let get_args_func_name = build_local_alias_name("cli", "Environment", "get_arguments");
+        if ctx.has_core_func(&get_args_func_name) {
+            wasi_exports.push((
+                &get_args_func_name,
+                ExportKind::Func,
+                ctx.core_func_idx(&get_args_func_name),
+            ));
+        }
+        let get_env_func_name = build_local_alias_name("cli", "Environment", "get_environment");
+        if ctx.has_core_func(&get_env_func_name) {
+            wasi_exports.push((
+                &get_env_func_name,
+                ExportKind::Func,
+                ctx.core_func_idx(&get_env_func_name),
+            ));
+        }
+        let get_cwd_func_name = build_local_alias_name("cli", "Environment", "get_initial_cwd");
+        if ctx.has_core_func(&get_cwd_func_name) {
+            wasi_exports.push((
+                &get_cwd_func_name,
+                ExportKind::Func,
+                ctx.core_func_idx(&get_cwd_func_name),
+            ));
+        }
+        // Conditionally add Exit functions if registered
+        let exit_func_name = build_local_alias_name("cli", "Exit", "exit");
+        if ctx.has_core_func(&exit_func_name) {
+            wasi_exports.push((
+                &exit_func_name,
+                ExportKind::Func,
+                ctx.core_func_idx(&exit_func_name),
+            ));
+        }
+        let exit_with_code_func_name = build_local_alias_name("cli", "Exit", "exit_with_code");
+        if ctx.has_core_func(&exit_with_code_func_name) {
+            wasi_exports.push((
+                &exit_with_code_func_name,
+                ExportKind::Func,
+                ctx.core_func_idx(&exit_with_code_func_name),
             ));
         }
         let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
@@ -1262,10 +1480,17 @@ impl Codegen {
 
             // DCE: Skip interfaces where the effect is not used
             // Get effect name from first function (all functions in an interface share the same effect)
-            if let Some(first_func) = interface_info.functions.first()
-                && !hints.is_effect_used(&first_func.effect_name)
-            {
-                continue;
+            if let Some(first_func) = interface_info.functions.first() {
+                let effect_name = &first_func.effect_name;
+                // Exit requires explicit usage tracking (runtime may not support it)
+                let effect_is_used = if effect_name == "Exit" {
+                    hints.is_effect_explicitly_used(effect_name)
+                } else {
+                    hints.is_effect_used(effect_name)
+                };
+                if !effect_is_used {
+                    continue;
+                }
             }
 
             // All functions are supported, so use them all
@@ -1291,6 +1516,11 @@ impl Codegen {
                         .return_type
                         .as_ref()
                         .is_some_and(|ty| matches!(ty, Type::Generic(g) if g.name == "Result"));
+                    // Check if params contain Result (e.g., exit(status: Result<(), ()>))
+                    let needs_result_param = func
+                        .params
+                        .iter()
+                        .any(|(_, ty)| matches!(ty, Type::Generic(g) if g.name == "Result"));
 
                     // Stream<u8> type
                     let stream_type_idx = if needs_stream_u8 {
@@ -1320,7 +1550,7 @@ impl Codegen {
                         None
                     };
 
-                    // Result type (if needed)
+                    // Result type for return type (with error-code)
                     let result_type_idx = if let Some(err_idx) = error_code_idx {
                         instance_type
                             .ty()
@@ -1333,14 +1563,76 @@ impl Codegen {
                         None
                     };
 
+                    // Result type for params (Result<(), ()> - no payloads)
+                    let result_param_type_idx = if needs_result_param {
+                        // Define a simple result with no ok/error payloads
+                        instance_type.ty().defined_type().result(None, None);
+                        let idx = local_type_idx;
+                        local_type_idx += 1;
+                        Some(idx)
+                    } else {
+                        None
+                    };
+
+                    // Array<T> type (CM list type) - define element type first if needed
+                    let array_type_idx = if let Some(Type::Generic(g)) = &func.return_type {
+                        if g.name == "Array" && !g.args.is_empty() {
+                            let element_type = &g.args[0];
+                            // Check if element is a tuple type that needs definition
+                            let element_val_type = match element_type {
+                                Type::Generic(elem_g)
+                                    if elem_g.name == "Tuple" && !elem_g.args.is_empty() =>
+                                {
+                                    // Define tuple type first
+                                    let tuple_types: Vec<ComponentValType> =
+                                        elem_g.args.iter().map(wado_type_to_cm_primitive).collect();
+                                    instance_type.ty().defined_type().tuple(tuple_types);
+                                    let tuple_idx = local_type_idx;
+                                    local_type_idx += 1;
+                                    ComponentValType::Type(tuple_idx)
+                                }
+                                _ => wado_type_to_cm_primitive(element_type),
+                            };
+                            // Define list type
+                            instance_type.ty().defined_type().list(element_val_type);
+                            let idx = local_type_idx;
+                            local_type_idx += 1;
+                            Some(idx)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Option<T> type (CM option type)
+                    let option_type_idx = if let Some(Type::Generic(g)) = &func.return_type {
+                        if g.name == "Option" && !g.args.is_empty() {
+                            let element_type = &g.args[0];
+                            let element_val_type = wado_type_to_cm_primitive(element_type);
+                            instance_type.ty().defined_type().option(element_val_type);
+                            let idx = local_type_idx;
+                            local_type_idx += 1;
+                            Some(idx)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     // Build function type
                     // Build params - convert names to kebab-case for CM
                     let kebab_params: Vec<(String, ComponentValType)> = func
                         .params
                         .iter()
                         .map(|(name, ty)| {
-                            let val_type =
-                                self.wado_type_to_cm_val_type(ty, stream_type_idx, error_code_idx);
+                            let val_type = self.wado_type_to_cm_val_type(
+                                ty,
+                                stream_type_idx,
+                                error_code_idx,
+                                result_param_type_idx,
+                            );
                             (to_kebab_case(name), val_type)
                         })
                         .collect();
@@ -1351,10 +1643,14 @@ impl Codegen {
                         .collect();
 
                     // Build result
-                    let result_type = func
-                        .return_type
-                        .as_ref()
-                        .map(|ty| self.wado_type_to_cm_result_type(ty, result_type_idx));
+                    let result_type = func.return_type.as_ref().map(|ty| {
+                        self.wado_type_to_cm_result_type(
+                            ty,
+                            result_type_idx,
+                            array_type_idx,
+                            option_type_idx,
+                        )
+                    });
 
                     // Create function type with params, result, and async flag
                     let mut func_encoder = instance_type.ty().function();
@@ -1406,6 +1702,12 @@ impl Codegen {
         // Import stdout/stderr if needed but not already imported from registry
         // (previously always imported for panic support, now DCE-aware)
         self.ensure_stdout_stderr_imported(builder, ctx, cli_version, hints);
+
+        // Import environment interface if needed
+        self.ensure_environment_imported(builder, ctx, cli_version, hints);
+
+        // Import exit interface if needed
+        self.ensure_exit_imported(builder, ctx, cli_version, hints);
     }
 
     /// Ensure stdout and stderr are imported if they're used.
@@ -1531,6 +1833,197 @@ impl Codegen {
         }
     }
 
+    /// Ensure Environment interface is imported if it's used.
+    ///
+    /// Environment provides:
+    /// - get-arguments: func() -> list<string>
+    /// - get-environment: func() -> list<tuple<string, string>>
+    /// - initial-cwd: func() -> option<string>
+    fn ensure_environment_imported(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+        cli_version: &str,
+        hints: &OptimizationHints,
+    ) {
+        let get_args_local = build_local_alias_name("cli", "Environment", "get_arguments");
+        let get_env_local = build_local_alias_name("cli", "Environment", "get_environment");
+        let get_cwd_local = build_local_alias_name("cli", "Environment", "get_initial_cwd");
+
+        // Check if any Environment function is used
+        let needs_environment = hints.is_effect_used("Environment")
+            && (!ctx.has_comp_func(&get_args_local)
+                || !ctx.has_comp_func(&get_env_local)
+                || !ctx.has_comp_func(&get_cwd_local));
+
+        if !needs_environment {
+            return;
+        }
+
+        // Import the environment interface
+        let env_instance_type = ctx.register_type("environment-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("environment-instance-type"));
+            let mut instance_type = InstanceType::new();
+
+            // Type 0: list<string> (for get-arguments)
+            instance_type
+                .ty()
+                .defined_type()
+                .list(ComponentValType::Primitive(PrimitiveValType::String));
+
+            // Type 1: tuple<string, string> (for get-environment entries)
+            instance_type.ty().defined_type().tuple([
+                ComponentValType::Primitive(PrimitiveValType::String),
+                ComponentValType::Primitive(PrimitiveValType::String),
+            ]);
+
+            // Type 2: list<tuple<string, string>> (for get-environment)
+            instance_type
+                .ty()
+                .defined_type()
+                .list(ComponentValType::Type(1));
+
+            // Type 3: option<string> (for initial-cwd)
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Primitive(PrimitiveValType::String));
+
+            // Type 4: func() -> list<string> (get-arguments)
+            instance_type
+                .ty()
+                .function()
+                .result(Some(ComponentValType::Type(0)));
+
+            // Type 5: func() -> list<tuple<string, string>> (get-environment)
+            instance_type
+                .ty()
+                .function()
+                .result(Some(ComponentValType::Type(2)));
+
+            // Type 6: func() -> option<string> (initial-cwd)
+            instance_type
+                .ty()
+                .function()
+                .result(Some(ComponentValType::Type(3)));
+
+            instance_type.export("get-arguments", wasm_encoder::ComponentTypeRef::Func(4));
+            instance_type.export("get-environment", wasm_encoder::ComponentTypeRef::Func(5));
+            instance_type.export("initial-cwd", wasm_encoder::ComponentTypeRef::Func(6));
+
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("environment");
+        let env_import_path = format!("wasi:cli/environment@{}", cli_version);
+        builder.import(
+            &env_import_path,
+            wasm_encoder::ComponentTypeRef::Instance(env_instance_type),
+        );
+
+        // Export get-arguments
+        if !ctx.has_comp_func(&get_args_local) {
+            ctx.register_comp_func(&get_args_local);
+            builder.alias_export(
+                ctx.instance_idx("environment"),
+                "get-arguments",
+                ComponentExportKind::Func,
+            );
+        }
+
+        // Export get-environment
+        if !ctx.has_comp_func(&get_env_local) {
+            ctx.register_comp_func(&get_env_local);
+            builder.alias_export(
+                ctx.instance_idx("environment"),
+                "get-environment",
+                ComponentExportKind::Func,
+            );
+        }
+
+        // Export initial-cwd
+        if !ctx.has_comp_func(&get_cwd_local) {
+            ctx.register_comp_func(&get_cwd_local);
+            builder.alias_export(
+                ctx.instance_idx("environment"),
+                "initial-cwd",
+                ComponentExportKind::Func,
+            );
+        }
+    }
+
+    fn ensure_exit_imported(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+        cli_version: &str,
+        hints: &OptimizationHints,
+    ) {
+        let exit_local = build_local_alias_name("cli", "Exit", "exit");
+        let exit_code_local = build_local_alias_name("cli", "Exit", "exit_with_code");
+
+        // Check if any Exit function is used
+        // Note: Use is_effect_explicitly_used here because Exit interface may not be
+        // supported by all runtimes, so we only import it when explicitly called.
+        let needs_exit = hints.is_effect_explicitly_used("Exit")
+            && (!ctx.has_comp_func(&exit_local) || !ctx.has_comp_func(&exit_code_local));
+
+        if !needs_exit {
+            return;
+        }
+
+        // Import the exit interface
+        let exit_instance_type = ctx.register_type("exit-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("exit-instance-type"));
+            let mut instance_type = InstanceType::new();
+
+            // Type 0: result (for exit status)
+            instance_type.ty().defined_type().result(None, None);
+
+            // Type 1: func(result) (exit)
+            instance_type
+                .ty()
+                .function()
+                .params([("status", ComponentValType::Type(0))]);
+
+            // Type 2: func(u8) (exit-with-code)
+            instance_type.ty().function().params([(
+                "status-code",
+                ComponentValType::Primitive(PrimitiveValType::U8),
+            )]);
+
+            instance_type.export("exit", wasm_encoder::ComponentTypeRef::Func(1));
+            instance_type.export("exit-with-code", wasm_encoder::ComponentTypeRef::Func(2));
+
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("exit");
+        let exit_import_path = format!("wasi:cli/exit@{}", cli_version);
+        builder.import(
+            &exit_import_path,
+            wasm_encoder::ComponentTypeRef::Instance(exit_instance_type),
+        );
+
+        // Export exit
+        if !ctx.has_comp_func(&exit_local) {
+            ctx.register_comp_func(&exit_local);
+            builder.alias_export(ctx.instance_idx("exit"), "exit", ComponentExportKind::Func);
+        }
+
+        // Export exit-with-code
+        if !ctx.has_comp_func(&exit_code_local) {
+            ctx.register_comp_func(&exit_code_local);
+            builder.alias_export(
+                ctx.instance_idx("exit"),
+                "exit-with-code",
+                ComponentExportKind::Func,
+            );
+        }
+    }
+
     /// Convert a Wado type to a Component Model value type
     ///
     /// Panics if the type is not supported - callers must validate with
@@ -1540,6 +2033,7 @@ impl Codegen {
         ty: &Type,
         stream_type_idx: Option<u32>,
         _error_code_idx: Option<u32>,
+        result_param_type_idx: Option<u32>,
     ) -> ComponentValType {
         match ty {
             Type::Named(named) => match named.name.as_str() {
@@ -1561,6 +2055,12 @@ impl Codegen {
                     // Use the pre-defined stream type index
                     ComponentValType::Type(stream_type_idx.expect("stream type not defined"))
                 }
+                "Result" => {
+                    // Use the pre-defined result type index for params (Result<(), ()>)
+                    ComponentValType::Type(
+                        result_param_type_idx.expect("result param type not defined"),
+                    )
+                }
                 _ => panic!("unsupported generic param type for CM: {}", generic.name),
             },
             _ => panic!("unsupported Wado param type for CM: {:?}", ty),
@@ -1575,6 +2075,8 @@ impl Codegen {
         &self,
         ty: &Type,
         result_type_idx: Option<u32>,
+        array_type_idx: Option<u32>,
+        option_type_idx: Option<u32>,
     ) -> ComponentValType {
         match ty {
             Type::Named(named) => match named.name.as_str() {
@@ -1591,10 +2093,21 @@ impl Codegen {
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
                 _ => panic!("unsupported Wado return type for CM: {}", named.name),
             },
-            Type::Generic(generic) if generic.name == "Result" => {
-                // Use the pre-defined result type index
-                ComponentValType::Type(result_type_idx.expect("result type not defined"))
-            }
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Result" => {
+                    // Use the pre-defined result type index
+                    ComponentValType::Type(result_type_idx.expect("result type not defined"))
+                }
+                "Array" => {
+                    // Use the pre-defined array/list type index
+                    ComponentValType::Type(array_type_idx.expect("array type not defined"))
+                }
+                "Option" => {
+                    // Use the pre-defined option type index
+                    ComponentValType::Type(option_type_idx.expect("option type not defined"))
+                }
+                _ => panic!("unsupported generic return type for CM: {}", generic.name),
+            },
             _ => panic!("unsupported Wado return type for CM: {:?}", ty),
         }
     }
@@ -1640,10 +2153,518 @@ impl Codegen {
         // Use the struct name's string representation for Wasm type naming
         let type_idx = builder.define_gc_struct_type(&struct_name.name, &fields);
 
-        self.struct_types
-            .insert(struct_name, StructTypeInfo { type_idx });
+        let field_count = tir_struct.fields.len();
+        self.struct_types.insert(
+            struct_name,
+            StructTypeInfo {
+                type_idx,
+                field_count,
+            },
+        );
 
         type_idx
+    }
+
+    /// Register box types for primitive references.
+    /// Box types are single-field mutable structs that wrap primitive values,
+    /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
+    fn register_box_types(&mut self, builder: &mut CoreModuleBuilder) {
+        let primitives = [
+            (ValType::I32, "$box_i32"),
+            (ValType::I64, "$box_i64"),
+            (ValType::F32, "$box_f32"),
+            (ValType::F64, "$box_f64"),
+        ];
+
+        for (val_type, name) in primitives {
+            let fields = vec![FieldType {
+                element_type: StorageType::Val(val_type),
+                mutable: true,
+            }];
+            let type_idx = builder.define_gc_struct_type(name, &fields);
+            self.box_types.insert(val_type, type_idx);
+        }
+    }
+
+    /// Get the box type index for a primitive ValType.
+    /// Returns None if no box type is registered for this ValType.
+    fn get_box_type_idx(&self, val_type: ValType) -> Option<u32> {
+        self.box_types.get(&val_type).copied()
+    }
+
+    /// Get the tuple type index for a TypeId that is known to be a tuple.
+    /// Returns None if the type is not a registered tuple.
+    fn get_tuple_type_idx(&self, element_types: &[TypeId]) -> Option<u32> {
+        self.tuple_types.borrow().get(element_types).copied()
+    }
+
+    /// Get the Wasm GC type index for a struct or tuple type.
+    /// Handles reference types by looking through to the inner type.
+    fn get_struct_or_tuple_type_idx(&self, type_id: TypeId, type_table: &TypeTable) -> u32 {
+        match type_table.get(type_id) {
+            ResolvedType::Struct { name, module_path } => {
+                if let Some(info) = self.lookup_struct_type(name, module_path) {
+                    info.type_idx
+                } else {
+                    panic!("unknown struct type: {name}");
+                }
+            }
+            ResolvedType::Tuple(elements) => {
+                if let Some(type_idx) = self.get_tuple_type_idx(elements) {
+                    type_idx
+                } else {
+                    panic!("unknown tuple type");
+                }
+            }
+            // For references, look through to the inner type
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.get_struct_or_tuple_type_idx(*inner, type_table)
+            }
+            other => {
+                panic!("expected struct or tuple type, got: {:?}", other);
+            }
+        }
+    }
+
+    /// Check if a type requires value copy (struct, array, tuple, string, option).
+    /// Primitive types and references don't need copying.
+    /// Empty tuples don't need copying (no fields to copy).
+    /// Option<T> needs copying if T needs copying.
+    fn needs_value_copy(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::Struct { .. } | ResolvedType::Array(_) | ResolvedType::String => true,
+            ResolvedType::Tuple(elements) => !elements.is_empty(),
+            ResolvedType::Option(inner) => self.needs_value_copy(*inner, type_table),
+            _ => false,
+        }
+    }
+
+    /// Check if an expression produces a fresh value that doesn't need copying.
+    /// Builtin calls like `string_new` and `array_new_string` create new values.
+    fn is_fresh_value_expr(&self, expr: &TirExpr) -> bool {
+        if let TirExprKind::Call {
+            module_path,
+            func_name,
+            ..
+        } = &expr.kind
+        {
+            // Builtin functions that create fresh values
+            // In TIR, builtin calls have empty module_path and func_name like "builtin::string_new"
+            if module_path.is_empty()
+                && let Some(builtin_name) = func_name.strip_prefix("builtin::")
+            {
+                return matches!(
+                    builtin_name,
+                    "string_new" | "array_new_string" | "array_new"
+                );
+            }
+        }
+        false
+    }
+
+    /// Generate code to copy a value for value semantics.
+    /// Assumes the source value is on the stack. Leaves the copied value on the stack.
+    fn generate_value_copy(
+        &self,
+        func: &mut Function,
+        type_id: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        match type_table.get(type_id) {
+            ResolvedType::Struct { name, module_path } => {
+                if let Some(info) = self.lookup_struct_type(name, module_path) {
+                    self.generate_struct_copy(func, info.type_idx, info.field_count, ctx);
+                } else {
+                    panic!("unknown struct type: {name}");
+                }
+            }
+            ResolvedType::Tuple(elements) => {
+                let field_count = elements.len();
+                if let Some(type_idx) = self.get_tuple_type_idx(elements) {
+                    self.generate_struct_copy(func, type_idx, field_count, ctx);
+                } else {
+                    panic!("unknown tuple type");
+                }
+            }
+            ResolvedType::Array(elem_type) => {
+                // For Array<String>, use the internal.wado helper function
+                if matches!(type_table.get(*elem_type), ResolvedType::String) {
+                    let copy_func_idx = builder.func_idx("core/internal/array_copy_string");
+                    func.instruction(&Instruction::Call(copy_func_idx));
+                } else if let Some(&array_type_idx) = self.array_types.get(elem_type) {
+                    self.generate_array_copy(func, array_type_idx, false, ctx);
+                } else {
+                    panic!("unknown array type");
+                }
+            }
+            ResolvedType::String => {
+                // Strings are Array<u8> internally (packed i8 storage)
+                self.generate_array_copy(func, self.string_array_type_idx, true, ctx);
+            }
+            ResolvedType::Option(inner) => {
+                // Option<T> where T needs copying: conditionally copy the inner value
+                // Stack: [option_val]
+                // If null, keep as-is. If not null, copy the inner value.
+                if self.needs_value_copy(*inner, type_table) {
+                    self.generate_option_copy(func, *inner, type_table, ctx, builder);
+                }
+                // If inner doesn't need copying, the option value is already on stack
+            }
+            _ => {
+                // Primitives, references, etc. don't need copying
+            }
+        }
+    }
+
+    /// Generate code to copy a struct/tuple value.
+    /// Assumes source struct reference is on the stack.
+    /// Leaves the copied struct reference on the stack.
+    fn generate_struct_copy(
+        &self,
+        func: &mut Function,
+        type_idx: u32,
+        field_count: usize,
+        ctx: &mut FunctionContext,
+    ) {
+        // Use pre-allocated temp local for the source struct reference
+        let source_local = ctx.alloc_local(
+            &format!("__copy_source_{}", type_idx),
+            ValType::Ref(RefType {
+                nullable: true,
+                heap_type: HeapType::Concrete(type_idx),
+            }),
+        );
+
+        // Store source to temp local (stack is now empty)
+        func.instruction(&Instruction::LocalSet(source_local));
+
+        // For each field, push the field value onto the stack
+        for field_index in 0..field_count as u32 {
+            func.instruction(&Instruction::LocalGet(source_local));
+            func.instruction(&Instruction::StructGet {
+                struct_type_index: type_idx,
+                field_index,
+            });
+        }
+
+        // Create a new struct with all field values
+        func.instruction(&Instruction::StructNew(type_idx));
+    }
+
+    /// Generate code to copy an array value.
+    /// Assumes source array reference is on the stack.
+    /// Leaves the copied array reference on the stack.
+    /// `is_packed` should be true for arrays with packed storage (e.g., i8/i16 for strings).
+    fn generate_array_copy(
+        &self,
+        func: &mut Function,
+        array_type_idx: u32,
+        is_packed: bool,
+        ctx: &mut FunctionContext,
+    ) {
+        // Use pre-allocated temp locals for the array copy
+        let source_local = ctx.alloc_local(
+            &format!("__copy_array_source_{}", array_type_idx),
+            ValType::Ref(RefType {
+                nullable: true,
+                heap_type: HeapType::Concrete(array_type_idx),
+            }),
+        );
+        let counter_local = ctx.alloc_local(
+            &format!("__copy_array_counter_{}", array_type_idx),
+            ValType::I32,
+        );
+        let dest_local = ctx.alloc_local(
+            &format!("__copy_array_dest_{}", array_type_idx),
+            ValType::Ref(RefType {
+                nullable: true,
+                heap_type: HeapType::Concrete(array_type_idx),
+            }),
+        );
+        let len_local = ctx.alloc_local(
+            &format!("__copy_array_len_{}", array_type_idx),
+            ValType::I32,
+        );
+
+        // Store source to temp local
+        func.instruction(&Instruction::LocalSet(source_local));
+
+        // Get array length and store it
+        func.instruction(&Instruction::LocalGet(source_local));
+        func.instruction(&Instruction::ArrayLen);
+        func.instruction(&Instruction::LocalSet(len_local));
+
+        // Create destination array:
+        // - If length == 0: create empty array with array.new_fixed 0
+        // - If length > 0: use first element and array.new to create array of that length
+        // Block structure for conditional:
+        // block $done (result (ref $array))
+        //   block $non_empty
+        //     br_if $non_empty (len > 0)
+        //     array.new_fixed 0
+        //     br $done
+        //   end
+        //   ;; non-empty case: use first element
+        //   source[0]
+        //   len
+        //   array.new
+        // end
+
+        // Result type for the blocks
+        let array_ref_type = wasm_encoder::BlockType::Result(ValType::Ref(RefType {
+            nullable: true,
+            heap_type: HeapType::Concrete(array_type_idx),
+        }));
+
+        func.instruction(&Instruction::Block(array_ref_type)); // $done block
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $non_empty block
+
+        // Check if length > 0
+        func.instruction(&Instruction::LocalGet(len_local));
+        func.instruction(&Instruction::I32Const(0));
+        func.instruction(&Instruction::I32GtU);
+        func.instruction(&Instruction::BrIf(0)); // br $non_empty if len > 0
+
+        // Empty case: create empty array
+        func.instruction(&Instruction::ArrayNewFixed {
+            array_type_index: array_type_idx,
+            array_size: 0,
+        });
+        func.instruction(&Instruction::Br(1)); // br $done
+
+        func.instruction(&Instruction::End); // end $non_empty
+
+        // Non-empty case: use first element to create array
+        func.instruction(&Instruction::LocalGet(source_local));
+        func.instruction(&Instruction::I32Const(0));
+        if is_packed {
+            func.instruction(&Instruction::ArrayGetU(array_type_idx)); // get first element (packed)
+        } else {
+            func.instruction(&Instruction::ArrayGet(array_type_idx)); // get first element
+        }
+        func.instruction(&Instruction::LocalGet(len_local));
+        func.instruction(&Instruction::ArrayNew(array_type_idx)); // create array filled with first element
+
+        func.instruction(&Instruction::End); // end $done
+
+        // Store destination array
+        func.instruction(&Instruction::LocalSet(dest_local));
+
+        // Copy loop: for i = 1; i < len; i++ (start from 1 since element 0 is already correct)
+        // Initialize counter to 1
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::LocalSet(counter_local));
+
+        // Loop start
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
+        // Check: counter < len
+        func.instruction(&Instruction::LocalGet(counter_local));
+        func.instruction(&Instruction::LocalGet(len_local));
+        func.instruction(&Instruction::I32GeU);
+        func.instruction(&Instruction::BrIf(1)); // Break if counter >= len
+
+        // dest[counter] = source[counter]
+        func.instruction(&Instruction::LocalGet(dest_local));
+        func.instruction(&Instruction::RefAsNonNull); // array.set requires non-null ref
+        func.instruction(&Instruction::LocalGet(counter_local));
+        func.instruction(&Instruction::LocalGet(source_local));
+        func.instruction(&Instruction::RefAsNonNull); // array.get requires non-null ref
+        func.instruction(&Instruction::LocalGet(counter_local));
+        if is_packed {
+            func.instruction(&Instruction::ArrayGetU(array_type_idx));
+        } else {
+            func.instruction(&Instruction::ArrayGet(array_type_idx));
+        }
+        func.instruction(&Instruction::ArraySet(array_type_idx));
+
+        // counter++
+        func.instruction(&Instruction::LocalGet(counter_local));
+        func.instruction(&Instruction::I32Const(1));
+        func.instruction(&Instruction::I32Add);
+        func.instruction(&Instruction::LocalSet(counter_local));
+
+        // Continue loop
+        func.instruction(&Instruction::Br(0));
+
+        // End loop and block
+        func.instruction(&Instruction::End); // End loop
+        func.instruction(&Instruction::End); // End block
+
+        // Push the destination array onto the stack
+        func.instruction(&Instruction::LocalGet(dest_local));
+    }
+
+    /// Generate code to copy an Option<T> value where T needs copying.
+    /// Assumes source option value is on the stack.
+    /// Leaves the copied option value on the stack.
+    fn generate_option_copy(
+        &self,
+        func: &mut Function,
+        inner_type_id: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Get the Wasm type for the option (nullable ref)
+        let inner_valtype = self.type_id_to_valtype(type_table, inner_type_id);
+        let option_valtype = match inner_valtype {
+            ValType::Ref(ref_type) => ValType::Ref(RefType {
+                nullable: true,
+                ..ref_type
+            }),
+            _ => {
+                // For primitive inner types, option is boxed - but primitives don't need copying
+                // This shouldn't happen since we check needs_value_copy first
+                return;
+            }
+        };
+
+        // Allocate temp local
+        let source_local = ctx.alloc_local("__copy_option_source", option_valtype);
+
+        // Store source to local
+        func.instruction(&Instruction::LocalSet(source_local));
+
+        // Block structure:
+        // block $done (result option_type)
+        //   block $is_null
+        //     local.get source
+        //     ref.is_null
+        //     br_if $is_null  ; if null, jump to null handling
+        //     ;; not null case: copy inner value
+        //     local.get source
+        //     ref.as_non_null
+        //     <copy inner value>
+        //     br $done
+        //   end
+        //   ;; null case
+        //   ref.null
+        // end
+
+        let result_type = wasm_encoder::BlockType::Result(option_valtype);
+
+        func.instruction(&Instruction::Block(result_type)); // $done
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $is_null
+
+        // Check if null
+        func.instruction(&Instruction::LocalGet(source_local));
+        func.instruction(&Instruction::RefIsNull);
+        func.instruction(&Instruction::BrIf(0)); // br $is_null if null
+
+        // Not null case: get the value and copy it
+        func.instruction(&Instruction::LocalGet(source_local));
+        func.instruction(&Instruction::RefAsNonNull);
+        // Now we have the inner value on stack, copy it
+        self.generate_value_copy(func, inner_type_id, type_table, ctx, builder);
+        func.instruction(&Instruction::Br(1)); // br $done
+
+        func.instruction(&Instruction::End); // end $is_null
+
+        // Null case: push null
+        if let ValType::Ref(ref_type) = option_valtype {
+            func.instruction(&Instruction::RefNull(ref_type.heap_type));
+        }
+
+        func.instruction(&Instruction::End); // end $done
+    }
+
+    /// Pre-register all tuple types found in a TypeTable.
+    /// This must be called before code generation to ensure tuple types are available.
+    fn register_tuple_types_from_table(
+        &mut self,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        for type_id in 0..type_table.len() as TypeId {
+            if let ResolvedType::Tuple(elements) = type_table.get(type_id)
+                && !elements.is_empty()
+                && !self.tuple_types.borrow().contains_key(elements)
+            {
+                // Create the tuple type
+                let mut fields = Vec::new();
+                for &elem_type_id in elements {
+                    let wasm_type = self.type_id_to_valtype(type_table, elem_type_id);
+                    let storage_type = match wasm_type {
+                        ValType::I32 => StorageType::Val(ValType::I32),
+                        ValType::I64 => StorageType::Val(ValType::I64),
+                        ValType::F32 => StorageType::Val(ValType::F32),
+                        ValType::F64 => StorageType::Val(ValType::F64),
+                        ValType::Ref(rt) => StorageType::Val(ValType::Ref(rt)),
+                        _ => StorageType::Val(ValType::I32),
+                    };
+                    fields.push(FieldType {
+                        element_type: storage_type,
+                        mutable: true,
+                    });
+                }
+
+                let type_name = format!("tuple_{}", elements.len());
+                let type_idx = builder.define_gc_struct_type(&type_name, &fields);
+                self.tuple_types
+                    .borrow_mut()
+                    .insert(elements.clone(), type_idx);
+            }
+        }
+    }
+
+    /// Get or create an array type for a given element TypeId.
+    /// Returns the Wasm type index for the GC array type.
+    fn get_or_create_array_type(
+        &mut self,
+        element_type_id: TypeId,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) -> u32 {
+        // Check if already registered
+        if let Some(&type_idx) = self.array_types.get(&element_type_id) {
+            return type_idx;
+        }
+
+        // Special case: u8 arrays use the existing string_array_type_idx
+        if element_type_id == TypeTable::U8 {
+            return self.string_array_type_idx;
+        }
+
+        // Create new array type
+        let wasm_type = self.type_id_to_valtype(type_table, element_type_id);
+        let storage_type = match wasm_type {
+            ValType::I32 => StorageType::Val(ValType::I32),
+            ValType::I64 => StorageType::Val(ValType::I64),
+            ValType::F32 => StorageType::Val(ValType::F32),
+            ValType::F64 => StorageType::Val(ValType::F64),
+            // For reference types, make them nullable so array.new_default works
+            ValType::Ref(rt) => StorageType::Val(ValType::Ref(RefType {
+                nullable: true,
+                ..rt
+            })),
+            _ => StorageType::Val(ValType::I32),
+        };
+
+        // Generate a type name based on element type
+        let type_name = format!("array_{}", element_type_id);
+        let type_idx = builder.define_gc_array_type(&type_name, storage_type, true);
+
+        self.array_types.insert(element_type_id, type_idx);
+        type_idx
+    }
+
+    /// Pre-register all array types found in a TypeTable.
+    fn register_array_types_from_table(
+        &mut self,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        for type_id in 0..type_table.len() as TypeId {
+            if let ResolvedType::Array(element_type_id) = type_table.get(type_id)
+                && !self.array_types.contains_key(element_type_id)
+            {
+                self.get_or_create_array_type(*element_type_id, type_table, builder);
+            }
+        }
     }
 
     /// Convert TIR TypeId to Wasm ValType
@@ -1692,12 +2713,16 @@ impl Codegen {
             }
 
             // Array<T> - GC array
-            ResolvedType::Array(_element_type) => {
-                // For now, use the generic array type
-                // TODO: Create specialized array types based on element type
+            ResolvedType::Array(element_type) => {
+                // Look up registered array type or fall back to string_array_type_idx
+                let type_idx = self
+                    .array_types
+                    .get(element_type)
+                    .copied()
+                    .unwrap_or(self.string_array_type_idx);
                 ValType::Ref(RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(self.string_array_type_idx),
+                    heap_type: HeapType::Concrete(type_idx),
                 })
             }
 
@@ -1714,8 +2739,19 @@ impl Codegen {
                 }
             }
 
-            // Reference types - pass through to inner type
+            // Reference types
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                // For primitive references, use the box type
+                if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                    let val_type = primitive_to_valtype(prim);
+                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                        return ValType::Ref(RefType {
+                            nullable: false,
+                            heap_type: HeapType::Concrete(box_type_idx),
+                        });
+                    }
+                }
+                // For non-primitive references (structs, arrays, etc.), pass through
                 self.type_id_to_valtype(type_table, *inner)
             }
 
@@ -1726,27 +2762,45 @@ impl Codegen {
             // Tuple type
             ResolvedType::Tuple(elements) => {
                 if elements.is_empty() {
-                    ValType::I32 // Unit-like
-                } else {
-                    // TODO: Create GC struct for tuples
+                    ValType::I32 // Empty tuple represented as i32(0)
+                } else if let Some(&type_idx) = self.tuple_types.borrow().get(elements) {
+                    // Use registered tuple type
                     ValType::Ref(RefType {
                         nullable: false,
-                        heap_type: HeapType::Concrete(self.string_array_type_idx),
+                        heap_type: HeapType::Concrete(type_idx),
+                    })
+                } else {
+                    // Tuple type not yet registered - return placeholder.
+                    // The actual type will be created during expression codegen.
+                    ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Abstract {
+                            shared: false,
+                            ty: AbstractHeapType::Struct,
+                        },
                     })
                 }
             }
 
             // Complex types that need special handling
             ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Result { .. }
             | ResolvedType::Stream(_)
             | ResolvedType::Future(_)
-            | ResolvedType::Dict { .. }
             | ResolvedType::Reactive(_) => {
                 // TODO: Implement proper handling for these types
                 // Use i32 as placeholder for now
                 ValType::I32
+            }
+
+            // Types not yet implemented
+            ResolvedType::Result { .. } => {
+                panic!("Result type codegen not yet implemented")
+            }
+            ResolvedType::Variant { .. } => {
+                panic!("Variant type codegen not yet implemented")
+            }
+            ResolvedType::Dict { .. } => {
+                panic!("Dict type codegen not yet implemented")
             }
 
             // Placeholder types (shouldn't appear in final TIR)
@@ -2055,7 +3109,12 @@ impl Codegen {
             }
 
             TirExprKind::Null => {
-                func.instruction(&Instruction::I32Const(0));
+                // Null for Option<T> - generates ref.null none
+                // This is a polymorphic null that can be used for any nullable reference type
+                func.instruction(&Instruction::RefNull(HeapType::Abstract {
+                    shared: false,
+                    ty: AbstractHeapType::None,
+                }));
             }
 
             TirExprKind::Unit => {
@@ -2065,11 +3124,20 @@ impl Codegen {
             // === Variables ===
             TirExprKind::Local { index, .. } => {
                 func.instruction(&Instruction::LocalGet(*index));
-                // For reference types, locals are nullable but we may need non-nullable
-                // Check if this is a reference type and add RefAsNonNull
-                let val_type = self.type_id_to_valtype(type_table, expr.type_id);
-                if matches!(val_type, ValType::Ref(rt) if !rt.nullable) {
-                    func.instruction(&Instruction::RefAsNonNull);
+
+                // For address-taken primitive locals, unbox to get the value
+                if let Some(&box_type_idx) = ctx.local_box_types.get(index) {
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: box_type_idx,
+                        field_index: 0,
+                    });
+                } else {
+                    // For reference types, locals are nullable but we may need non-nullable
+                    // Check if this is a reference type and add RefAsNonNull
+                    let val_type = self.type_id_to_valtype(type_table, expr.type_id);
+                    if matches!(val_type, ValType::Ref(rt) if !rt.nullable) {
+                        func.instruction(&Instruction::RefAsNonNull);
+                    }
                 }
             }
 
@@ -2179,6 +3247,19 @@ impl Codegen {
 
             // === Unary Operations ===
             TirExprKind::Unary { op, expr: inner } => {
+                // Special case: &local or &mut local where local is address-taken
+                // The local already stores a box, so just return it without re-boxing
+                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                    && let TirExprKind::Local { index, .. } = &inner.kind
+                    && ctx.local_box_types.contains_key(index)
+                {
+                    // Local is address-taken, just get the box reference
+                    func.instruction(&Instruction::LocalGet(*index));
+                    // Convert nullable ref to non-nullable for function call
+                    func.instruction(&Instruction::RefAsNonNull);
+                    return;
+                }
+
                 self.generate_expr(func, inner, type_table, ctx, builder);
                 self.generate_unary_op(func, *op, inner.type_id, type_table);
             }
@@ -2187,44 +3268,143 @@ impl Codegen {
             TirExprKind::Assign { target, value } => {
                 match &target.kind {
                     TirExprKind::Local { index, .. } => {
-                        self.generate_expr(func, value, type_table, ctx, builder);
-                        // Use local.tee to both store and keep value on stack
-                        func.instruction(&Instruction::LocalTee(*index));
+                        // For address-taken primitive locals, update the box
+                        if let Some(&box_type_idx) = ctx.local_box_types.get(index) {
+                            // Stack order: box_ref, value
+                            func.instruction(&Instruction::LocalGet(*index));
+                            self.generate_expr(func, value, type_table, ctx, builder);
+                            func.instruction(&Instruction::StructSet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                            // Push the assigned value back for expression result
+                            func.instruction(&Instruction::LocalGet(*index));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                        } else {
+                            self.generate_expr(func, value, type_table, ctx, builder);
+                            // Apply value copy for struct/array/tuple types, but skip for
+                            // fresh values (e.g., builtin::string_new creates a new value)
+                            if self.needs_value_copy(value.type_id, type_table)
+                                && !self.is_fresh_value_expr(value)
+                            {
+                                self.generate_value_copy(
+                                    func,
+                                    value.type_id,
+                                    type_table,
+                                    ctx,
+                                    builder,
+                                );
+                            }
+                            // Use local.tee to both store and keep value on stack
+                            func.instruction(&Instruction::LocalTee(*index));
+                        }
                     }
                     TirExprKind::FieldAccess {
                         expr, field_index, ..
                     } => {
                         // For struct.set, stack order is: struct_ref, value
-                        // Get the struct type from the receiver expression
-                        let struct_type_idx = match type_table.get(expr.type_id) {
-                            ResolvedType::Struct { name, module_path } => {
-                                if let Some(info) = self.lookup_struct_type(name, module_path) {
-                                    info.type_idx
-                                } else {
-                                    panic!("unknown struct type in field assignment: {name}");
-                                }
-                            }
-                            other => {
-                                panic!("field assignment on non-struct type: {:?}", other);
-                            }
-                        };
+                        // Get the struct/tuple type from the receiver expression (handles references)
+                        let type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
 
-                        // Generate struct reference first
+                        // Generate struct/tuple reference first
                         self.generate_expr(func, expr, type_table, ctx, builder);
                         // Then generate value
                         self.generate_expr(func, value, type_table, ctx, builder);
                         // Emit struct.set (consumes both values, leaves nothing)
                         func.instruction(&Instruction::StructSet {
-                            struct_type_index: struct_type_idx,
+                            struct_type_index: type_idx,
                             field_index: *field_index,
                         });
                         // Push the assigned value back for expression result
                         // (Regenerate the field access to get the value)
                         self.generate_expr(func, expr, type_table, ctx, builder);
                         func.instruction(&Instruction::StructGet {
-                            struct_type_index: struct_type_idx,
+                            struct_type_index: type_idx,
                             field_index: *field_index,
                         });
+                    }
+                    TirExprKind::Index {
+                        expr: array_expr,
+                        index: index_expr,
+                    } => {
+                        // For array.set, stack order is: array_ref, index, value
+                        // Get the array type from the array expression (unwrap reference if needed)
+                        let base_type = match type_table.get(array_expr.type_id) {
+                            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                                type_table.get(*inner)
+                            }
+                            other => other,
+                        };
+                        let array_type_idx = match base_type {
+                            ResolvedType::Array(element_type) => self
+                                .array_types
+                                .get(element_type)
+                                .copied()
+                                .unwrap_or(self.string_array_type_idx),
+                            ResolvedType::String => self.string_array_type_idx,
+                            other => {
+                                panic!("index assignment on non-array type: {:?}", other);
+                            }
+                        };
+
+                        // Generate array reference first
+                        self.generate_expr(func, array_expr, type_table, ctx, builder);
+                        // Then generate index
+                        self.generate_expr(func, index_expr, type_table, ctx, builder);
+                        // Then generate value
+                        self.generate_expr(func, value, type_table, ctx, builder);
+                        // Emit array.set (consumes all three values, leaves nothing)
+                        func.instruction(&Instruction::ArraySet(array_type_idx));
+                        // Push the assigned value back for expression result
+                        // (Regenerate the index access to get the value)
+                        self.generate_expr(func, array_expr, type_table, ctx, builder);
+                        self.generate_expr(func, index_expr, type_table, ctx, builder);
+                        func.instruction(&Instruction::ArrayGet(array_type_idx));
+                    }
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: ref_expr,
+                    } => {
+                        // Assignment through dereference: *x = value
+                        // For primitive refs: update the box struct
+                        // For struct/tuple refs: this assigns the whole value (not field)
+                        let ref_type = type_table.get(ref_expr.type_id);
+                        if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = ref_type {
+                            if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                                // Primitive ref: use box struct.set
+                                let val_type = primitive_to_valtype(prim);
+                                if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                                    // Stack order: box_ref, value
+                                    self.generate_expr(func, ref_expr, type_table, ctx, builder);
+                                    self.generate_expr(func, value, type_table, ctx, builder);
+                                    func.instruction(&Instruction::StructSet {
+                                        struct_type_index: box_type_idx,
+                                        field_index: 0,
+                                    });
+                                    // Push the assigned value back for expression result
+                                    self.generate_expr(func, ref_expr, type_table, ctx, builder);
+                                    func.instruction(&Instruction::StructGet {
+                                        struct_type_index: box_type_idx,
+                                        field_index: 0,
+                                    });
+                                } else {
+                                    panic!(
+                                        "no box type for primitive in deref assignment: {:?}",
+                                        prim
+                                    );
+                                }
+                            } else {
+                                // Non-primitive ref: not yet supported
+                                panic!(
+                                    "deref assignment for non-primitive types not yet supported"
+                                );
+                            }
+                        } else {
+                            panic!("deref assignment target is not a reference type");
+                        }
                     }
                     _ => panic!("invalid assignment target in TIR"),
                 }
@@ -2321,6 +3501,52 @@ impl Codegen {
                         align: 0,
                         memory_index: 0,
                     }));
+                } else if is_builtin("memory_load32") {
+                    // builtin::memory_load32(addr) -> i32.load
+                    for arg in args {
+                        self.generate_expr(func, arg, type_table, ctx, builder);
+                    }
+                    func.instruction(&Instruction::I32Load(MemArg {
+                        offset: 0,
+                        align: 2, // 4-byte alignment
+                        memory_index: 0,
+                    }));
+                } else if is_builtin("array_new_string") {
+                    // builtin::array_new_string(count) -> array.new_default for Array<String>
+                    // This creates a GC array of string references (nullable ref to string-array)
+                    for arg in args {
+                        self.generate_expr(func, arg, type_table, ctx, builder);
+                    }
+                    // Get or create the Array<String> type
+                    // The element type is string (which is ref to string-array)
+                    let string_type_id = TypeTable::STRING;
+                    let array_of_string_type = *self
+                        .array_types
+                        .get(&string_type_id)
+                        .expect("Array<String> type should be registered");
+                    func.instruction(&Instruction::ArrayNewDefault(array_of_string_type));
+                } else if is_builtin("array_set_string") {
+                    // builtin::array_set_string(arr, idx, str) -> array.set
+                    for arg in args {
+                        self.generate_expr(func, arg, type_table, ctx, builder);
+                    }
+                    let string_type_id = TypeTable::STRING;
+                    let array_of_string_type = *self
+                        .array_types
+                        .get(&string_type_id)
+                        .expect("Array<String> type should be registered");
+                    func.instruction(&Instruction::ArraySet(array_of_string_type));
+                } else if is_builtin("array_get_string") {
+                    // builtin::array_get_string(arr, idx) -> array.get
+                    for arg in args {
+                        self.generate_expr(func, arg, type_table, ctx, builder);
+                    }
+                    let string_type_id = TypeTable::STRING;
+                    let array_of_string_type = *self
+                        .array_types
+                        .get(&string_type_id)
+                        .expect("Array<String> type should be registered");
+                    func.instruction(&Instruction::ArrayGet(array_of_string_type));
                 } else if is_builtin("i32_and") {
                     // builtin::i32_and(a, b) -> i32.and
                     for arg in args {
@@ -2359,6 +3585,61 @@ impl Codegen {
                     // Store subtask handle in the pre-allocated local for later waiting
                     let subtask_local = ctx.get_local("__subtask").expect("__subtask should be pre-allocated for functions with Stdout/Stderr effects");
                     func.instruction(&Instruction::LocalSet(subtask_local));
+                } else if module_path.is_empty()
+                    && matches!(func_name.as_str(), "Ok" | "Err" | "Some" | "None")
+                {
+                    // Handle variant constructors for Result and Option types
+                    // These generate inline Wasm instructions
+                    match func_name.as_str() {
+                        "Ok" => {
+                            // Ok(value) - Result ok variant
+                            // For Result<(), ()> (no payloads), just generate discriminant 0
+                            // For Result<T, E>, would need to handle the payload
+                            let is_unit_payload = args.is_empty()
+                                || (args.len() == 1 && matches!(&args[0].kind, TirExprKind::Unit));
+                            if is_unit_payload {
+                                // Result<(), _> - no ok payload, just push 0 as discriminant
+                                func.instruction(&Instruction::I32Const(0));
+                            } else {
+                                // Generate the payload value
+                                for arg in args {
+                                    self.generate_expr(func, arg, type_table, ctx, builder);
+                                }
+                            }
+                        }
+                        "Err" => {
+                            // Err(value) - Result error variant
+                            let is_unit_payload = args.is_empty()
+                                || (args.len() == 1 && matches!(&args[0].kind, TirExprKind::Unit));
+                            if is_unit_payload {
+                                // Result<_, ()> - no error payload, just push 1 as discriminant
+                                func.instruction(&Instruction::I32Const(1));
+                            } else {
+                                // Generate the payload value
+                                for arg in args {
+                                    self.generate_expr(func, arg, type_table, ctx, builder);
+                                }
+                            }
+                        }
+                        "Some" => {
+                            // Some(value) - Option some variant
+                            // For Option<T> with GC, this creates a non-null ref
+                            for arg in args {
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                            }
+                            // Value is on stack - will be used as the Option value
+                        }
+                        "None" => {
+                            // None - Option none variant
+                            // For Option<T> with GC, this is a null reference
+                            // For simple discriminant-based: push 1 for None
+                            func.instruction(&Instruction::RefNull(HeapType::Abstract {
+                                shared: false,
+                                ty: AbstractHeapType::None,
+                            }));
+                        }
+                        _ => unreachable!(),
+                    }
                 } else if (module_path == &["Stdout"] || module_path == &["Stderr"])
                     && func_name == "write_via_stream"
                 {
@@ -2386,6 +3667,61 @@ impl Codegen {
                         "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
                     );
                     func.instruction(&Instruction::LocalSet(subtask_local));
+                } else if module_path == &["Environment"]
+                    && matches!(func_name.as_str(), "get_arguments" | "get_environment")
+                {
+                    // Environment operations that return list<string> or list<tuple<string, string>>
+                    // CM ABI: function takes outptr, writes (base_ptr, count) to it
+                    // We need to convert to GC array
+
+                    // Allocate outptr for CM result (8 bytes: ptr + count)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(8)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("cli", "Environment", func_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Load outptr and call conversion function
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    let conv_idx = builder.func_idx("core/internal/cm_list_string_to_array");
+                    func.instruction(&Instruction::Call(conv_idx));
+                } else if module_path == &["Environment"] && func_name == "get_initial_cwd" {
+                    // get_initial_cwd returns Option<String>
+                    // CM ABI: function takes outptr, writes option<string> to it
+                    // Layout: discriminant (1 byte at offset 0, padded) + str_ptr (4 bytes) + str_len (4 bytes)
+                    // Total: 12 bytes
+
+                    // Allocate outptr for CM result (12 bytes)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(12)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("cli", "Environment", func_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Load outptr and call conversion function
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    let conv_idx = builder.func_idx("core/internal/cm_option_string_to_option");
+                    func.instruction(&Instruction::Call(conv_idx));
                 } else {
                     // Generate arguments first
                     for arg in args {
@@ -2431,6 +3767,61 @@ impl Codegen {
                         "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
                     );
                     func.instruction(&Instruction::LocalSet(subtask_local));
+                } else if effect_name == "Environment"
+                    && matches!(op_name.as_str(), "get_arguments" | "get_environment")
+                {
+                    // Environment operations that return list<string> or list<tuple<string, string>>
+                    // CM ABI: function takes outptr, writes (base_ptr, count) to it
+                    // We need to convert to GC array
+
+                    // Allocate outptr for CM result (8 bytes: ptr + count)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(8)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("cli", effect_name, op_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Load outptr and call conversion function
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    let conv_idx = builder.func_idx("core/internal/cm_list_string_to_array");
+                    func.instruction(&Instruction::Call(conv_idx));
+                } else if effect_name == "Environment" && op_name == "get_initial_cwd" {
+                    // get_initial_cwd returns Option<String>
+                    // CM ABI: function takes outptr, writes option<string> to it
+                    // Layout: discriminant (1 byte at offset 0, padded) + str_ptr (4 bytes) + str_len (4 bytes)
+                    // Total: 12 bytes
+
+                    // Allocate outptr for CM result (12 bytes)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(12)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("cli", effect_name, op_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Load outptr and call conversion function
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    let conv_idx = builder.func_idx("core/internal/cm_option_string_to_option");
+                    func.instruction(&Instruction::Call(conv_idx));
                 } else {
                     // Regular effect call
                     for arg in args {
@@ -2517,6 +3908,30 @@ impl Codegen {
                         }
                     }
 
+                    // Array method calls (e.g., array.len())
+                    ResolvedType::Array(_) => {
+                        if method_name == "len" {
+                            // Generate the receiver (the array)
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            // array.len generates the Wasm array.len instruction directly
+                            func.instruction(&Instruction::ArrayLen);
+                        } else {
+                            panic!("unknown method {} on Array type", method_name);
+                        }
+                    }
+
+                    // String method calls (e.g., string.len())
+                    ResolvedType::String => {
+                        if method_name == "len" {
+                            // Generate the receiver (the string)
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            // string.len generates the Wasm array.len instruction (strings are byte arrays)
+                            func.instruction(&Instruction::ArrayLen);
+                        } else {
+                            panic!("unknown method {} on String type", method_name);
+                        }
+                    }
+
                     other => {
                         panic!(
                             "method call receiver is not a struct or primitive type: {:?}",
@@ -2532,19 +3947,9 @@ impl Codegen {
                 field_index,
                 ..
             } => {
-                // Get the struct type from the inner expression
-                let struct_type_idx = match type_table.get(inner.type_id) {
-                    ResolvedType::Struct { name, module_path } => {
-                        if let Some(info) = self.lookup_struct_type(name, module_path) {
-                            info.type_idx
-                        } else {
-                            panic!("unknown struct type in field access: {name}");
-                        }
-                    }
-                    other => {
-                        panic!("field access on non-struct type: {:?}", other);
-                    }
-                };
+                // Get the struct/tuple type from the inner expression
+                // For references, look through to the inner type
+                let struct_type_idx = self.get_struct_or_tuple_type_idx(inner.type_id, type_table);
 
                 self.generate_expr(func, inner, type_table, ctx, builder);
                 func.instruction(&Instruction::StructGet {
@@ -2557,7 +3962,39 @@ impl Codegen {
             TirExprKind::Index { expr: array, index } => {
                 self.generate_expr(func, array, type_table, ctx, builder);
                 self.generate_expr(func, index, type_table, ctx, builder);
-                func.instruction(&Instruction::ArrayGet(self.string_array_type_idx));
+
+                // Get the array type index from the array expression's type (unwrap reference if needed)
+                let base_type = match type_table.get(array.type_id) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                        type_table.get(*inner)
+                    }
+                    other => other,
+                };
+                let (array_type_idx, element_is_ref) = match base_type {
+                    ResolvedType::Array(element_type) => {
+                        let is_ref = matches!(
+                            type_table.get(*element_type),
+                            ResolvedType::String
+                                | ResolvedType::Array(_)
+                                | ResolvedType::Struct { .. }
+                        );
+                        (
+                            self.array_types
+                                .get(element_type)
+                                .copied()
+                                .unwrap_or(self.string_array_type_idx),
+                            is_ref,
+                        )
+                    }
+                    ResolvedType::String => (self.string_array_type_idx, false),
+                    _ => (self.string_array_type_idx, false),
+                };
+                func.instruction(&Instruction::ArrayGet(array_type_idx));
+                // For reference element types, convert nullable to non-null
+                // (array elements are stored as nullable refs, but we expect non-null at usage)
+                if element_is_ref {
+                    func.instruction(&Instruction::RefAsNonNull);
+                }
             }
 
             // === Block Expression ===
@@ -2624,23 +4061,57 @@ impl Codegen {
 
             // === Array Literal ===
             TirExprKind::ArrayLiteral { elements } => {
-                // TODO: Create proper GC array
+                // Push all element values onto the stack
                 for elem in elements {
                     self.generate_expr(func, elem, type_table, ctx, builder);
                 }
-                panic!("array literals not yet implemented in TIR codegen");
+
+                // Get the array type from the expression's type
+                if let ResolvedType::Array(element_type_id) = type_table.get(expr.type_id) {
+                    let array_type_idx = self
+                        .array_types
+                        .get(element_type_id)
+                        .copied()
+                        .unwrap_or(self.string_array_type_idx);
+
+                    // Create the array from values on stack
+                    func.instruction(&Instruction::ArrayNewFixed {
+                        array_type_index: array_type_idx,
+                        array_size: elements.len() as u32,
+                    });
+                } else {
+                    panic!(
+                        "expected array type for ArrayLiteral, got {:?}",
+                        type_table.get(expr.type_id)
+                    );
+                }
             }
 
             // === Tuple Literal ===
             TirExprKind::TupleLiteral { elements } => {
-                // TODO: Create proper tuple representation
-                for elem in elements {
-                    self.generate_expr(func, elem, type_table, ctx, builder);
-                }
                 if elements.is_empty() {
-                    func.instruction(&Instruction::I32Const(0)); // Unit
+                    // Empty tuple is represented as i32(0)
+                    func.instruction(&Instruction::I32Const(0));
                 } else {
-                    panic!("non-unit tuple literals not yet implemented in TIR codegen");
+                    // Push all element values onto the stack
+                    for elem in elements {
+                        self.generate_expr(func, elem, type_table, ctx, builder);
+                    }
+
+                    // Get the tuple type from the expression's type
+                    if let ResolvedType::Tuple(elem_type_ids) = type_table.get(expr.type_id) {
+                        if let Some(type_idx) = self.get_tuple_type_idx(elem_type_ids) {
+                            // Create the tuple struct
+                            func.instruction(&Instruction::StructNew(type_idx));
+                        } else {
+                            panic!("tuple type not registered: {:?}", elem_type_ids);
+                        }
+                    } else {
+                        panic!(
+                            "expected tuple type for TupleLiteral, got {:?}",
+                            type_table.get(expr.type_id)
+                        );
+                    }
                 }
             }
 
@@ -2919,8 +4390,34 @@ impl Codegen {
                     func.instruction(&Instruction::I32Xor);
                 }
             }
-            TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref => {
-                // References are transparent in Wasm GC - no operation needed
+            TirUnaryOp::Ref | TirUnaryOp::MutRef => {
+                // For primitives, box the value in a single-field struct
+                // For GC types (structs, arrays, tuples), references are transparent
+                if let ResolvedType::Primitive(prim) = type_table.get(operand_type) {
+                    let val_type = primitive_to_valtype(prim);
+                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                        func.instruction(&Instruction::StructNew(box_type_idx));
+                    }
+                    // else: no box type for this primitive, treat as transparent
+                }
+                // For non-primitives (structs, arrays, tuples), no operation needed
+            }
+            TirUnaryOp::Deref => {
+                // For references to primitives, unbox by extracting from the box struct
+                // For references to GC types, references are transparent
+                if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                    type_table.get(operand_type)
+                    && let ResolvedType::Primitive(prim) = type_table.get(*inner)
+                {
+                    let val_type = primitive_to_valtype(prim);
+                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                        func.instruction(&Instruction::StructGet {
+                            struct_type_index: box_type_idx,
+                            field_index: 0,
+                        });
+                    }
+                }
+                // For non-primitive references, no operation needed
             }
         }
     }
@@ -3050,6 +4547,19 @@ impl Codegen {
                     if is_i32_to_i64 {
                         func.instruction(&Instruction::I64ExtendI32S);
                     }
+                }
+
+                // Apply value copy for struct/array/tuple types (value semantics)
+                // Skip for fresh values (e.g., builtin::string_new creates a new value)
+                if self.needs_value_copy(value.type_id, type_table)
+                    && !self.is_fresh_value_expr(value)
+                {
+                    self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
+                }
+
+                // For address-taken primitives, wrap in a box
+                if let Some(&box_type_idx) = ctx.local_box_types.get(local_index) {
+                    func.instruction(&Instruction::StructNew(box_type_idx));
                 }
 
                 // Store to local
@@ -3193,6 +4703,110 @@ impl Codegen {
 
                 func.instruction(&Instruction::End); // End loop
                 func.instruction(&Instruction::End); // End exit block
+
+                ctx.loop_info.pop();
+            }
+
+            TirStmtKind::ForOf {
+                binding_local,
+                binding_type,
+                is_mut: _,
+                iterable,
+                iterable_type,
+                body,
+            } => {
+                // For-of loop structure:
+                // block $exit        ; break target
+                //   loop $loop       ; for loop header
+                //     block $body    ; continue target
+                //       ;; Check: counter < array.len()
+                //       ;; Get element: array[counter]
+                //       ;; body
+                //     end
+                //     ;; Increment counter
+                //     br $loop
+                //   end
+                // end
+                //
+                // From inside body:
+                // - continue: br 0 (to end of $body, then counter++, then br $loop)
+                // - break: br 2 (to $exit)
+
+                // Get the array type index for array.get
+                let array_type_idx = match type_table.get(*iterable_type) {
+                    ResolvedType::Array(element_type) => self
+                        .array_types
+                        .get(element_type)
+                        .copied()
+                        .unwrap_or(self.string_array_type_idx),
+                    _ => self.string_array_type_idx,
+                };
+
+                // Get ValType for temporary locals (pre-allocated by preallocate_assert_locals_from_stmt)
+                let _ = binding_type; // binding_local is pre-allocated by resolver
+                let array_valtype = self.type_id_to_valtype(type_table, *iterable_type);
+
+                // Get pre-allocated for-of temporary locals (unique names for nested loops)
+                let for_of_id = ctx.next_for_of_id();
+                let array_local =
+                    ctx.alloc_local(&format!("__for_of_array_{for_of_id}"), array_valtype);
+                let counter_local =
+                    ctx.alloc_local(&format!("__for_of_counter_{for_of_id}"), ValType::I32);
+
+                // Evaluate the iterable and store in array_local
+                self.generate_expr(func, iterable, type_table, ctx, builder);
+                func.instruction(&Instruction::LocalSet(array_local));
+
+                // Initialize counter to 0
+                func.instruction(&Instruction::I32Const(0));
+                func.instruction(&Instruction::LocalSet(counter_local));
+
+                // Push loop context: break_offset=2 (same as For)
+                ctx.loop_info.push((0, 2));
+
+                // block $exit
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+                // loop $loop
+                func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+                // block $body
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+                // Check: counter < array.len()
+                func.instruction(&Instruction::LocalGet(counter_local));
+                func.instruction(&Instruction::LocalGet(array_local));
+                func.instruction(&Instruction::ArrayLen);
+                func.instruction(&Instruction::I32LtU);
+                func.instruction(&Instruction::I32Eqz);
+                // If counter >= length, exit (br 2 to $exit from inside $body block)
+                func.instruction(&Instruction::BrIf(2));
+
+                // Get element: array[counter] and store in binding_local
+                func.instruction(&Instruction::LocalGet(array_local));
+                func.instruction(&Instruction::LocalGet(counter_local));
+                func.instruction(&Instruction::ArrayGet(array_type_idx));
+                // Store in the binding local (pre-allocated by resolver via tir_func.local_types)
+                // Use the TIR's local index directly, same as TirStmtKind::Let
+                func.instruction(&Instruction::LocalSet(*binding_local));
+
+                // Generate body
+                self.generate_block(func, body, type_table, ctx, builder);
+
+                // End $body block
+                func.instruction(&Instruction::End);
+
+                // Increment counter
+                func.instruction(&Instruction::LocalGet(counter_local));
+                func.instruction(&Instruction::I32Const(1));
+                func.instruction(&Instruction::I32Add);
+                func.instruction(&Instruction::LocalSet(counter_local));
+
+                // Branch back to loop
+                func.instruction(&Instruction::Br(0));
+
+                // End $loop
+                func.instruction(&Instruction::End);
+                // End $exit block
+                func.instruction(&Instruction::End);
 
                 ctx.loop_info.pop();
             }
@@ -3389,6 +5003,9 @@ impl Codegen {
         let mut func_ctx =
             FunctionContext::with_module_path(tir_func.params.len() as u32, module_path.to_vec());
 
+        // Copy address-taken locals from TIR
+        func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
+
         // Set return type
         if tir_func.return_type != TypeTable::UNIT {
             func_ctx.set_return_type(self.type_id_to_valtype(type_table, tir_func.return_type));
@@ -3407,7 +5024,30 @@ impl Codegen {
             if local_idx < tir_func.params.len() as u32 {
                 continue;
             }
-            let local_type = self.type_id_to_valtype(type_table, local_type_id);
+
+            // For address-taken primitive locals, use box type instead
+            let local_type = if func_ctx.address_taken_locals.contains(&local_idx) {
+                if let ResolvedType::Primitive(prim) = type_table.get(local_type_id) {
+                    let val_type = primitive_to_valtype(prim);
+                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                        // Track the box type for this local
+                        func_ctx.local_box_types.insert(local_idx, box_type_idx);
+                        // Use nullable reference for locals (they start uninitialized)
+                        ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(box_type_idx),
+                        })
+                    } else {
+                        self.type_id_to_valtype(type_table, local_type_id)
+                    }
+                } else {
+                    // Non-primitive address-taken locals don't need boxing
+                    self.type_id_to_valtype(type_table, local_type_id)
+                }
+            } else {
+                self.type_id_to_valtype(type_table, local_type_id)
+            };
+
             let local_name = format!("_local_{}", local_idx);
             func_ctx.alloc_local(&local_name, local_type);
         }
@@ -3418,6 +5058,11 @@ impl Codegen {
             self.preallocate_assert_locals(body, type_table, &mut func_ctx, string_array_type);
         }
 
+        // Pre-allocate locals for value copy operations (struct, array, tuple)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
+        }
+
         // Pre-allocate scratch locals for stream handling
         // These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
         // and builtin::effect_wait (used by ambient logging functions like log_stdout)
@@ -3426,6 +5071,9 @@ impl Codegen {
             let string_array_type = builder.type_idx("string-array");
             self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
         }
+
+        // Reset for-of counter so code generation uses the same indices as pre-allocation
+        func_ctx.reset_for_of_counter();
 
         // Generate the function code
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
@@ -3460,19 +5108,46 @@ impl Codegen {
         // Create function context
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
 
+        // Copy address-taken locals from TIR
+        func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
+
         // Add parameters to context
         for param in &tir_func.params {
             let param_type = self.type_id_to_valtype(type_table, param.type_id);
             func_ctx.add_param(&param.name, param_type);
         }
 
-        // Pre-allocate locals from TIR
+        // Pre-allocate locals from TIR (skip params which are already added)
         for (i, &local_type_id) in tir_func.local_types.iter().enumerate() {
             let local_idx = i as u32;
+            // Skip if it's a param (already added)
             if local_idx < tir_func.params.len() as u32 {
                 continue;
             }
-            let local_type = self.type_id_to_valtype(type_table, local_type_id);
+
+            // For address-taken primitive locals, use box type instead
+            let local_type = if func_ctx.address_taken_locals.contains(&local_idx) {
+                if let ResolvedType::Primitive(prim) = type_table.get(local_type_id) {
+                    let val_type = primitive_to_valtype(prim);
+                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                        // Track the box type for this local
+                        func_ctx.local_box_types.insert(local_idx, box_type_idx);
+                        // Use nullable reference for locals (they start uninitialized)
+                        ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(box_type_idx),
+                        })
+                    } else {
+                        self.type_id_to_valtype(type_table, local_type_id)
+                    }
+                } else {
+                    // Non-primitive address-taken locals don't need boxing
+                    self.type_id_to_valtype(type_table, local_type_id)
+                }
+            } else {
+                self.type_id_to_valtype(type_table, local_type_id)
+            };
+
             let local_name = format!("_local_{}", local_idx);
             func_ctx.alloc_local(&local_name, local_type);
         }
@@ -3483,6 +5158,11 @@ impl Codegen {
             self.preallocate_assert_locals(body, type_table, &mut func_ctx, string_array_type);
         }
 
+        // Pre-allocate locals for value copy operations (struct, array, tuple)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
+        }
+
         // Pre-allocate scratch locals for stream handling
         // These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
         // and builtin::effect_wait (used by ambient logging functions like log_stdout)
@@ -3490,6 +5170,9 @@ impl Codegen {
             let string_array_type = builder.type_idx("string-array");
             self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
         }
+
+        // Reset for-of counter so code generation uses the same indices as pre-allocation
+        func_ctx.reset_for_of_counter();
 
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
 
@@ -3707,6 +5390,259 @@ impl Codegen {
         );
         ctx.alloc_local("__result_len", ValType::I32);
         ctx.alloc_local("__part_len", ValType::I32);
+        // Scratch local for CM list to GC array conversion (Environment::get_arguments, etc.)
+        ctx.alloc_local("__cm_outptr", ValType::I32);
+    }
+
+    /// Pre-allocate locals for value copy operations (struct, array, tuple).
+    /// This must be called before code generation to ensure copy locals are available.
+    fn preallocate_value_copy_locals(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        let mut needed_types: std::collections::HashSet<TypeId> = std::collections::HashSet::new();
+        self.collect_copy_types(block, type_table, &mut needed_types);
+
+        for type_id in needed_types {
+            match type_table.get(type_id) {
+                ResolvedType::Struct { name, module_path } => {
+                    if let Some(info) = self.lookup_struct_type(name, module_path) {
+                        ctx.alloc_local(
+                            &format!("__copy_source_{}", info.type_idx),
+                            ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(info.type_idx),
+                            }),
+                        );
+                    }
+                }
+                ResolvedType::Tuple(elements) => {
+                    if let Some(type_idx) = self.get_tuple_type_idx(elements) {
+                        ctx.alloc_local(
+                            &format!("__copy_source_{}", type_idx),
+                            ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(type_idx),
+                            }),
+                        );
+                    }
+                }
+                ResolvedType::Array(elem_type) => {
+                    if let Some(&array_type_idx) = self.array_types.get(elem_type) {
+                        ctx.alloc_local(
+                            &format!("__copy_array_source_{}", array_type_idx),
+                            ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(array_type_idx),
+                            }),
+                        );
+                        ctx.alloc_local(
+                            &format!("__copy_array_dest_{}", array_type_idx),
+                            ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(array_type_idx),
+                            }),
+                        );
+                        ctx.alloc_local(
+                            &format!("__copy_array_counter_{}", array_type_idx),
+                            ValType::I32,
+                        );
+                        ctx.alloc_local(
+                            &format!("__copy_array_len_{}", array_type_idx),
+                            ValType::I32,
+                        );
+                    }
+                }
+                ResolvedType::String => {
+                    // Strings use string_array_type_idx
+                    let array_type_idx = self.string_array_type_idx;
+                    ctx.alloc_local(
+                        &format!("__copy_array_source_{}", array_type_idx),
+                        ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(array_type_idx),
+                        }),
+                    );
+                    ctx.alloc_local(
+                        &format!("__copy_array_dest_{}", array_type_idx),
+                        ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(array_type_idx),
+                        }),
+                    );
+                    ctx.alloc_local(
+                        &format!("__copy_array_counter_{}", array_type_idx),
+                        ValType::I32,
+                    );
+                    ctx.alloc_local(
+                        &format!("__copy_array_len_{}", array_type_idx),
+                        ValType::I32,
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Collect all types that need value copy from a block
+    fn collect_copy_types(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        needed_types: &mut std::collections::HashSet<TypeId>,
+    ) {
+        for stmt in &block.stmts {
+            self.collect_copy_types_from_stmt(stmt, type_table, needed_types);
+        }
+    }
+
+    /// Collect copy types from a statement
+    fn collect_copy_types_from_stmt(
+        &self,
+        stmt: &TirStmt,
+        type_table: &TypeTable,
+        needed_types: &mut std::collections::HashSet<TypeId>,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } => {
+                self.collect_copy_types_from_expr(value, type_table, needed_types);
+                if self.needs_value_copy(value.type_id, type_table) {
+                    needed_types.insert(value.type_id);
+                }
+            }
+            TirStmtKind::Expr(expr) => {
+                self.collect_copy_types_from_expr(expr, type_table, needed_types);
+            }
+            TirStmtKind::While { condition, body } => {
+                self.collect_copy_types_from_expr(condition, type_table, needed_types);
+                self.collect_copy_types(body, type_table, needed_types);
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                if let Some(e) = condition {
+                    self.collect_copy_types_from_expr(e, type_table, needed_types);
+                }
+                if let Some(e) = update {
+                    self.collect_copy_types_from_expr(e, type_table, needed_types);
+                }
+                self.collect_copy_types(body, type_table, needed_types);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                self.collect_copy_types_from_expr(iterable, type_table, needed_types);
+                self.collect_copy_types(body, type_table, needed_types);
+            }
+            TirStmtKind::Loop { body } => {
+                self.collect_copy_types(body, type_table, needed_types);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.collect_copy_types_from_expr(condition, type_table, needed_types);
+                self.collect_copy_types(then_block, type_table, needed_types);
+                if let Some(e) = else_block {
+                    self.collect_copy_types(e, type_table, needed_types);
+                }
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                self.collect_copy_types_from_expr(expr, type_table, needed_types);
+            }
+            TirStmtKind::Assert { condition, .. } => {
+                self.collect_copy_types_from_expr(condition, type_table, needed_types);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect copy types from an expression
+    fn collect_copy_types_from_expr(
+        &self,
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        needed_types: &mut std::collections::HashSet<TypeId>,
+    ) {
+        match &expr.kind {
+            TirExprKind::Assign { target, value } => {
+                self.collect_copy_types_from_expr(target, type_table, needed_types);
+                self.collect_copy_types_from_expr(value, type_table, needed_types);
+                // Check if assigning to a local variable with value type
+                if matches!(target.kind, TirExprKind::Local { .. })
+                    && self.needs_value_copy(value.type_id, type_table)
+                {
+                    needed_types.insert(value.type_id);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.collect_copy_types_from_expr(left, type_table, needed_types);
+                self.collect_copy_types_from_expr(right, type_table, needed_types);
+            }
+            TirExprKind::Unary { expr, .. } => {
+                self.collect_copy_types_from_expr(expr, type_table, needed_types);
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    self.collect_copy_types_from_expr(arg, type_table, needed_types);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.collect_copy_types_from_expr(receiver, type_table, needed_types);
+                for arg in args {
+                    self.collect_copy_types_from_expr(arg, type_table, needed_types);
+                }
+            }
+            TirExprKind::FieldAccess { expr, .. } => {
+                self.collect_copy_types_from_expr(expr, type_table, needed_types);
+            }
+            TirExprKind::Index { expr, index } => {
+                self.collect_copy_types_from_expr(expr, type_table, needed_types);
+                self.collect_copy_types_from_expr(index, type_table, needed_types);
+            }
+            TirExprKind::ArrayLiteral { elements } => {
+                for e in elements {
+                    self.collect_copy_types_from_expr(e, type_table, needed_types);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.collect_copy_types_from_expr(&field.value, type_table, needed_types);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for e in elements {
+                    self.collect_copy_types_from_expr(e, type_table, needed_types);
+                }
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.collect_copy_types_from_expr(condition, type_table, needed_types);
+                self.collect_copy_types(then_branch, type_table, needed_types);
+                if let Some(e) = else_branch {
+                    self.collect_copy_types(e, type_table, needed_types);
+                }
+            }
+            TirExprKind::Block(block) => {
+                self.collect_copy_types(block, type_table, needed_types);
+            }
+            TirExprKind::Match { expr, arms } => {
+                self.collect_copy_types_from_expr(expr, type_table, needed_types);
+                for arm in arms {
+                    self.collect_copy_types_from_expr(&arm.body, type_table, needed_types);
+                }
+            }
+            TirExprKind::Cast { expr, .. } => {
+                self.collect_copy_types_from_expr(expr, type_table, needed_types);
+            }
+            _ => {}
+        }
     }
 
     /// Pre-allocate locals for TIR assert statements in a block
@@ -3756,6 +5692,19 @@ impl Codegen {
             TirStmtKind::For { body, .. } => {
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
+            TirStmtKind::ForOf {
+                iterable_type,
+                body,
+                ..
+            } => {
+                // Pre-allocate for-of temporary locals with unique names for nested loops
+                let for_of_id = ctx.next_for_of_id();
+                let array_valtype = self.type_id_to_valtype(type_table, *iterable_type);
+                ctx.alloc_local(&format!("__for_of_array_{for_of_id}"), array_valtype);
+                ctx.alloc_local(&format!("__for_of_counter_{for_of_id}"), ValType::I32);
+                // Recursively handle body
+                self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
+            }
             TirStmtKind::Loop { body } => {
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
@@ -3776,7 +5725,8 @@ impl Codegen {
     /// Convert a WASI function type to Core Wasm params
     ///
     /// For async functions, an extra i32 param (outptr) is added per Component Model ABI.
-    /// For sync functions, params are mapped directly.
+    /// For sync functions with complex return types, an outptr is also added.
+    /// For sync functions with simple return types, params are mapped directly.
     fn wasi_func_to_core_params(&self, func: &WasiFunctionInfo) -> Vec<ValType> {
         let mut params: Vec<ValType> = func
             .params
@@ -3788,6 +5738,12 @@ impl Codegen {
         if func.is_async {
             params.push(ValType::I32); // outptr
         }
+        // Sync functions with complex return types also need an outptr
+        else if let Some(ret_ty) = &func.return_type
+            && return_type_requires_outptr(ret_ty)
+        {
+            params.push(ValType::I32); // outptr
+        }
 
         params
     }
@@ -3795,13 +5751,19 @@ impl Codegen {
     /// Convert a WASI function type to Core Wasm results
     ///
     /// For async functions, the result is always i32 (subtask handle).
-    /// For sync functions, the return type is mapped directly.
+    /// For sync functions with complex return types, returns nothing (result via outptr).
+    /// For sync functions with simple return types, the return type is mapped directly.
     fn wasi_func_to_core_results(&self, func: &WasiFunctionInfo) -> Vec<ValType> {
         if func.is_async {
             // Async functions return a subtask handle (i32)
             vec![ValType::I32]
         } else if let Some(ret_ty) = &func.return_type {
-            vec![wasi_type_to_valtype(ret_ty)]
+            // Complex types are returned via outptr, so no direct return value
+            if return_type_requires_outptr(ret_ty) {
+                vec![]
+            } else {
+                vec![wasi_type_to_valtype(ret_ty)]
+            }
         } else {
             vec![]
         }
@@ -3980,6 +5942,27 @@ impl Codegen {
         }
 
         module.finish()
+    }
+}
+
+/// Convert a PrimitiveType to its corresponding Wasm ValType.
+/// Used for boxing primitives in references.
+fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
+    match prim {
+        PrimitiveType::I8
+        | PrimitiveType::I16
+        | PrimitiveType::I32
+        | PrimitiveType::U8
+        | PrimitiveType::U16
+        | PrimitiveType::U32
+        | PrimitiveType::Bool
+        | PrimitiveType::Char => ValType::I32,
+        PrimitiveType::I64 | PrimitiveType::U64 => ValType::I64,
+        PrimitiveType::F32 => ValType::F32,
+        PrimitiveType::F64 => ValType::F64,
+        PrimitiveType::I128 | PrimitiveType::U128 => {
+            panic!("i128/u128 references not yet supported")
+        }
     }
 }
 

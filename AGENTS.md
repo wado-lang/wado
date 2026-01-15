@@ -1,10 +1,12 @@
 # Wado Project
 
-This is the specification and implementation of Wado, a programming language targeting Wasm/WASI.
+This is the specification and the toolchain of Wado, a programming language targeting Wasm/WASI.
 
 ## The Spec
 
-Read @spec.md to understand the new language.
+Read @docs/cheatsheet.md to understand Wado syntax and standard library.
+
+If you need detailed specification, read spec.md.
 
 When updating spec.md, keep it mutually exclusive and collectively exhaustive (MECE).
 
@@ -17,6 +19,10 @@ Standard libraries are implemented in `wado-compiler/lib`, with `wasi/` for WASI
 See also `docs/compiler.md` for the implementation details and the feature checklist.
 
 There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
+
+Builtin functions that are directly mapped to wasm instructions or external functions are implemented in `wado-compiler/lib/core/builtin.wado`.
+
+Internal functions that are used to provide language features are implemented in `wado-compiler/lib/core/internal.wado`.
 
 ### E2E Test Specification
 
@@ -76,7 +82,6 @@ cargo run --bin wado -- compile -o file.wasm file.wado    # generates Wasm
 cargo run --bin wado -- compile -o file.wat file.wado     # generates WAT
 cargo run --bin wado -- compile --wat-to-stdout file.wado # outputs WAT to stdout
 cargo run --bin wado -- run file.wado                     # run it directly using wasmtime
-cargo run --bin wado -- dump file.wado                    # dump compiler internal state
 ```
 
 ### Dump Command
@@ -106,19 +111,20 @@ There are external references in the module for convenience:
 - `vendor/wasm/` - WebAssembly/spec
 - `vendor/wasi/` - WebAssembly/WASI
 - `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
+- `vendor/wasm-tools/` - a Wasm toolchain, where the Wado compiler relies on.
 
 ### Wasm and WASI Features
 
-This project relies on the following features:
+This project relies on the following Wasm features:
 
+- Wasm 3.0 (2025-09-17)
 - Wasm GC
 - Wasm Reference Types
 - Wasm Wide Arithmetic for i128 and u128
 - Wasm Threads
-- Wasm Stack Switching
+- Wasm Stack Switching (not yet implemented in wasmtime)
 - Wasm Component Model
-- WASI
-  - Current target: WASI 0.3 (P3) with native stream/future types
+- WASI 0.3.0 (P3)
   - P3 (`0.3.0-rc-2025-09-16`) is supported by wasmtime v40 with `-W component-model-async=y`
   - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
@@ -132,7 +138,7 @@ This project relies on the following features:
 ## Rules for Rust
 
 - Do not use wildcard imports (`use ...::*;`).
-- Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/` directory.
+- Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/`.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Avoid using well-known floating point number constants like PI, E, etc. in tests not to violate the Clippy `approx_constant` rule.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
@@ -142,13 +148,29 @@ This project relies on the following features:
 ## Rules for Markdown
 
 - Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
-- Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`), instead of `~~...~~` (strike-through).
+- Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`), instead of `~~...~~` (strike-through) and emojis.
 
 ## Architecture Decision Records (ADR)
 
 Significant architectural decisions are documented as ADRs in `docs/adr-{yyyy-mm-dd}-{feature}.md`.
 
 Format: `docs/adr-YYYY-MM-DD-feature-name.md`
+
+### List of ADRs
+
+- [Target WASI P3 Only](./docs/adr-2025-01-11-wasi-p3-only.md)
+- [Deterministic Math Library (libm) Integration](./docs/adr-2026-01-10-deterministic-libm.md)
+- [Tagged Template Literals for Compile-Time Execution](./docs/adr-2026-01-10-tagged-template-literals.md)
+- [WebAssembly Module Import Support](./docs/adr-2026-01-10-wasm-import.md)
+- [Operator Precedence and Associativity](./docs/adr-2026-01-11-operator-precedence.md)
+- [Ambient Logging Functions](./docs/adr-2026-01-12-ambient-logging.md)
+- [Data Section (`__DATA__`)](./docs/adr-2026-01-12-data-section.md)
+- [Literal Type Conversion Rules](./docs/adr-2026-01-12-literal-type-conversion.md)
+- [Resource Lifecycle Management (RAII)](./docs/adr-2026-01-12-resource-lifecycle.md)
+- [Value Semantics and Reference Captures](./docs/adr-2026-01-12-value-semantics-and-captures.md)
+- [Struct and Trait System](./docs/adr-2026-01-13-struct-and-trait.md)
+- [Compiler Pipeline Refactoring](./docs/adr-2026-01-14-compiler-pipeline-refactoring.md)
+- [Tuple and Array Literal Syntax](./docs/adr-2026-01-15-tuple-and-array-literals.md)
 
 ### Structure
 
@@ -160,23 +182,23 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 
 ## Project Development
 
+You can use `cargo` to manage the project, and also `Makefile` is provided for convenience:
+
 ```sh
 make build
 make test
-make clippy-fix
 
-make hello    # generates example/hello.wat
+make hello     # generates example/hello.wat and example/hello.wasm
 make hello-run # simple smoke test
-
-make format # format code and documents
 ```
-
-See `Makefile` for all the development tasks.
 
 ## On Your Task Done
 
 When you have completed a task, make sure everything is up-to-date and tested:
 
+- Update docs if necessary:
+  - spec.md if the language specification is updated.
+  - docs/compiler.md if the new features are implemented.
+  - docs/cheatsheet.md if the syntax/stdlib is updated.
+- Update docs/cheatsheet.md if necessary.
 - `make on-task-done` for format, clippy-fix, update-bundled, test.
-- Update spec.md if necessary.
-- Update docs/compiler.md if necessary.

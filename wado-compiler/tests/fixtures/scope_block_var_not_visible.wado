@@ -1,0 +1,14 @@
+// Test: block variable should not be accessible outside the block
+// Uses "if true" as a workaround since standalone blocks are not yet supported
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    if true {
+        let y = 100;
+    }
+    println(`{y}`);  // Error: y is not in scope here
+}
+
+__DATA__
+{"compile_error": "not in scope"}

@@ -261,6 +261,7 @@ pub enum Stmt {
     If(IfStmt),
     While(WhileStmt),
     For(ForStmt),
+    ForOf(ForOfStmt),
     Loop(LoopStmt),
     Break(BreakStmt),
     Continue(ContinueStmt),
@@ -327,6 +328,20 @@ pub struct ForStmt {
     pub span: Span,
 }
 
+/// For-of loop: `for let item of array { body }`
+/// Iterates over elements of an Array<T>
+#[derive(Debug, Clone)]
+pub struct ForOfStmt {
+    /// Variable name to bind each element
+    pub binding: String,
+    /// Whether the binding is mutable
+    pub is_mut: bool,
+    /// The array expression to iterate over
+    pub iterable: Expr,
+    pub body: Block,
+    pub span: Span,
+}
+
 /// Infinite loop: `loop { body }`
 #[derive(Debug, Clone)]
 pub struct LoopStmt {
@@ -366,6 +381,7 @@ pub enum Expr {
     TemplateString(Box<TemplateStringExpr>),
     Cast(Box<CastExpr>),
     StructLiteral(Box<StructLiteralExpr>),
+    TupleLiteral(Box<TupleLiteralExpr>),
 }
 
 impl Expr {
@@ -390,6 +406,7 @@ impl Expr {
             Expr::TemplateString(e) => e.span,
             Expr::Cast(e) => e.span,
             Expr::StructLiteral(e) => e.span,
+            Expr::TupleLiteral(e) => e.span,
         }
     }
 }
@@ -402,10 +419,12 @@ pub struct CastExpr {
     pub span: Span,
 }
 
-/// Struct literal expression: `Point { x: 10, y: 20 }`
+/// Struct literal expression: `Point { x: 10, y: 20 }` or implicit `{ x: 10, y: 20 }`
 #[derive(Debug, Clone)]
 pub struct StructLiteralExpr {
-    pub name: String,
+    /// The struct type name. None for implicit struct literals like `{ x: 1, y: 2 }`
+    /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
+    pub name: Option<String>,
     pub fields: Vec<StructLiteralField>,
     pub span: Span,
 }
@@ -417,6 +436,15 @@ pub struct StructLiteralField {
     pub value: Expr,
     /// Whether this field uses shorthand syntax `{ x }` instead of `{ x: x }`
     pub is_shorthand: bool,
+    pub span: Span,
+}
+
+/// Tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
+/// This uses bracket syntax following TypeScript conventions.
+/// Can be coerced to Array<T> when all elements have the same type.
+#[derive(Debug, Clone)]
+pub struct TupleLiteralExpr {
+    pub elements: Vec<Expr>,
     pub span: Span,
 }
 
@@ -543,6 +571,7 @@ pub enum UnaryOp {
     Not,
     BitNot,
     Ref,
+    MutRef,
     Deref,
 }
 

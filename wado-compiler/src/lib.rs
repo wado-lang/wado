@@ -211,10 +211,19 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
         filename: filename.clone(),
     })?;
 
-    // Bind (local name resolution) - errors are warnings for now
+    // Bind (local name resolution)
     let mut binder = Binder::new();
-    let _bind_result = binder.bind_module(&ast);
-    // Note: bind errors are not fatal during this transition period
+    binder.bind_module(&ast).map_err(|errors| {
+        let msg = errors
+            .into_iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        CompileError::Bind {
+            message: msg,
+            filename: filename.clone(),
+        }
+    })?;
 
     // Desugar
     let desugared_ast = desugar::desugar_module(&ast);
@@ -282,9 +291,18 @@ fn compile_impl(
     })?;
 
     // === Phase 3: Bind (local name resolution) ===
-    // Note: Errors are not fatal during transition - will be enforced later
     let mut binder = Binder::new();
-    let _bind_result = binder.bind_module(&ast);
+    binder.bind_module(&ast).map_err(|errors| {
+        let msg = errors
+            .into_iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        CompileError::Bind {
+            message: msg,
+            filename: filename.clone(),
+        }
+    })?;
 
     // === Phase 4: Load all modules upfront ===
     let load_result = {
@@ -422,6 +440,11 @@ pub enum CompileError {
         column: usize,
         filename: Option<String>,
     },
+    /// Binding error (local name resolution)
+    Bind {
+        message: String,
+        filename: Option<String>,
+    },
     /// Semantic analysis error
     Analyzer {
         message: String,
@@ -462,6 +485,13 @@ impl std::fmt::Display for CompileError {
                     write!(f, "{file}:{line}:{column}: parse error: {message}")
                 } else {
                     write!(f, "line {line}, column {column}: parse error: {message}")
+                }
+            }
+            CompileError::Bind { message, filename } => {
+                if let Some(file) = filename {
+                    write!(f, "{file}: {message}")
+                } else {
+                    write!(f, "{message}")
                 }
             }
             CompileError::Analyzer { message, filename } => {

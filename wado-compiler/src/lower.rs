@@ -112,6 +112,10 @@ impl StringCollector {
             TirStmtKind::Loop { body } => {
                 self.collect_block(body);
             }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                self.collect_expr(iterable);
+                self.collect_block(body);
+            }
             TirStmtKind::Break | TirStmtKind::Continue => {}
             TirStmtKind::Assert {
                 condition,
