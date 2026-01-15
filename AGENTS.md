@@ -89,11 +89,28 @@ cargo run --bin wado -- run file.wado                     # run it directly usin
 Use `wado dump` to inspect compiler internal state for debugging:
 
 ```sh
-wado dump file.wado           # show all: modules, symbols, AST
-wado dump --modules file.wado # show loaded modules only
-wado dump --symbols file.wado # show symbol table only
-wado dump --ast file.wado     # show AST only
+wado dump file.wado                  # show all phases (Debug format)
+wado dump --ast file.wado            # show AST structure (Debug format)
+wado dump --ast --unparse file.wado  # show AST as Wado source code
+wado dump --desugar file.wado        # show desugared AST (Debug format)
+wado dump --desugar --unparse file.wado  # show desugared AST as source
+wado dump --modules file.wado        # show loaded modules only
+wado dump --symbols file.wado        # show symbol table only
+wado dump --tir file.wado            # show TIR (Typed IR)
+wado dump --lower file.wado          # show lowered TIR
+wado dump --optimize file.wado       # show optimization hints
 ```
+
+Available phases (in compilation order):
+
+1. `--tokens` - Lexer output
+2. `--ast` - Parser output (supports `--unparse`)
+3. `--desugar` - Desugared AST (supports `--unparse`)
+4. `--modules` - Loaded modules
+5. `--symbols` - Symbol table
+6. `--tir` - Typed IR (will support `--unparse` in future)
+7. `--lower` - Lowered TIR (will support `--unparse` in future)
+8. `--optimize` - Optimization hints
 
 ## Bundled Library
 
