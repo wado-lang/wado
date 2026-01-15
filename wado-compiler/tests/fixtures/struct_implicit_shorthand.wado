@@ -1,0 +1,18 @@
+// Implicit struct literal with shorthand field syntax
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn run() with Stdout {
+    let x = 10;
+    let y = 20;
+    let p: Point = { x, y };  // shorthand: { x, y } = { x: x, y: y }
+    println(`{p.x}, {p.y}`);
+}
+
+__DATA__
+{"stdout": "10, 20\n"}

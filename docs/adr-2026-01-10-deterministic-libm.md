@@ -216,10 +216,10 @@ pub fn pow(x: f64, y: f64) -> f64 {
 ```wado
 use {sin, cos, pow} from "core:math";
 
-fn calculate_orbit(angle: f64, radius: f64) -> Tuple<f64, f64> {
+fn calculate_orbit(angle: f64, radius: f64) -> [f64, f64] {
     let x = radius * cos(angle);
     let y = radius * sin(angle);
-    return (x, y);
+    return [x, y];
 }
 
 // ✅ Deterministic: Same results on all platforms

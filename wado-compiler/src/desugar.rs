@@ -7,10 +7,10 @@
 use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
-    EffectDecl, EnumDecl, Expr, FieldAccessExpr, ForStmt, Function, IfExpr, IfStmt, ImplBlock,
-    IndexExpr, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt,
-    Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplateStringExpr, TypeAlias,
-    UnaryExpr, WhileStmt,
+    EffectDecl, EnumDecl, Expr, FieldAccessExpr, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
+    ImplBlock, IndexExpr, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
+    ReturnStmt, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplateStringExpr,
+    TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
 };
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
@@ -112,6 +112,13 @@ fn desugar_stmt(stmt: &Stmt) -> Stmt {
             init: f.init.as_ref().map(|s| Box::new(desugar_stmt(s))),
             condition: f.condition.as_ref().map(desugar_expr),
             update: f.update.as_ref().map(desugar_expr),
+            body: desugar_block(&f.body),
+            span: f.span,
+        }),
+        Stmt::ForOf(f) => Stmt::ForOf(ForOfStmt {
+            binding: f.binding.clone(),
+            is_mut: f.is_mut,
+            iterable: desugar_expr(&f.iterable),
             body: desugar_block(&f.body),
             span: f.span,
         }),
@@ -221,6 +228,10 @@ fn desugar_expr(expr: &Expr) -> Expr {
                 })
                 .collect(),
             span: s.span,
+        })),
+        Expr::TupleLiteral(t) => Expr::TupleLiteral(Box::new(TupleLiteralExpr {
+            elements: t.elements.iter().map(desugar_expr).collect(),
+            span: t.span,
         })),
     }
 }

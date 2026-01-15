@@ -411,6 +411,11 @@ impl ComponentModelContext {
             .unwrap_or_else(|| panic!("unknown core function: {name}"))
     }
 
+    /// Check if a core function exists
+    pub fn has_core_func(&self, name: &str) -> bool {
+        self.core_func_names.contains_key(name)
+    }
+
     /// Set the core memory index
     pub fn set_memory(&mut self, idx: u32) {
         self.core_memory_idx = Some(idx);

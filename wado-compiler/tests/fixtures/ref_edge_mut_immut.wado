@@ -1,0 +1,13 @@
+// Edge case: &mut on immutable variable (should error)
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let a = 42;       // immutable
+    let r = &mut a;   // Error: can't take &mut of immutable
+    *r = 99;
+    println(`{a}`);
+}
+
+__DATA__
+{"compile_error": "mutable"}

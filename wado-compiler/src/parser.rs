@@ -74,6 +74,17 @@ impl Parser {
         &self.tokens[self.pos].kind
     }
 
+    /// Peek at the nth token ahead (0 = current, 1 = next, etc.)
+    fn peek_nth(&self, n: usize) -> &Token {
+        let idx = self.pos + n;
+        if idx < self.tokens.len() {
+            &self.tokens[idx]
+        } else {
+            // Return the last token (should be Eof)
+            &self.tokens[self.tokens.len() - 1]
+        }
+    }
+
     fn is_at_end(&self) -> bool {
         matches!(self.peek_kind(), TokenKind::Eof)
     }
@@ -722,13 +733,56 @@ impl Parser {
         }))
     }
 
-    /// Parse C-style for loop: `for (init; condition; update) { body }` or `for init; condition; update { body }`
-    /// Parentheses are optional.
+    /// Parse for loop: either C-style or for-of
+    /// - C-style: `for (init; condition; update) { body }` or `for init; condition; update { body }`
+    /// - For-of: `for let item of array { body }`
     fn parse_for_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::For)?;
 
-        // Parentheses are optional
+        // Check for for-of syntax: `for let [mut] item of array { ... }`
+        if self.check(&TokenKind::Let) {
+            // Save position for potential backtrack
+            let saved_pos = self.pos;
+
+            self.advance(); // consume 'let'
+
+            // Check for optional 'mut'
+            let is_mut = self.check(&TokenKind::Mut);
+            if is_mut {
+                self.advance();
+            }
+
+            // Check if identifier followed by 'of'
+            if let TokenKind::Ident(binding) = &self.peek().kind {
+                let binding = binding.clone();
+                self.advance(); // consume identifier
+
+                // Check if next token is 'of'
+                if let TokenKind::Ident(kw) = &self.peek().kind
+                    && kw == "of"
+                {
+                    // This is a for-of loop
+                    self.advance(); // consume 'of'
+                    let iterable = self.parse_expr()?;
+                    let body = self.parse_block()?;
+                    let span = start_span.merge(&body.span);
+
+                    return Ok(Stmt::ForOf(ForOfStmt {
+                        binding,
+                        is_mut,
+                        iterable,
+                        body,
+                        span,
+                    }));
+                }
+            }
+
+            // Not a for-of loop, backtrack and parse as C-style for
+            self.pos = saved_pos;
+        }
+
+        // Parentheses are optional for C-style for
         let has_parens = self.check(&TokenKind::LParen);
         if has_parens {
             self.advance();
@@ -1213,11 +1267,28 @@ impl Parser {
     }
 
     fn parse_unary_expr(&mut self) -> ParseResult<Expr> {
+        // Handle &mut as a special case (two-token operator)
+        if *self.peek_kind() == TokenKind::Ampersand {
+            let start_span = self.peek().span;
+            self.advance();
+            let op = if *self.peek_kind() == TokenKind::Mut {
+                self.advance();
+                UnaryOp::MutRef
+            } else {
+                UnaryOp::Ref
+            };
+            let expr = self.parse_unary_expr()?;
+            return Ok(Expr::Unary(Box::new(UnaryExpr {
+                op,
+                expr,
+                span: start_span,
+            })));
+        }
+
         let op = match self.peek_kind() {
             TokenKind::Minus => Some(UnaryOp::Neg),
             TokenKind::Not => Some(UnaryOp::Not),
             TokenKind::Tilde => Some(UnaryOp::BitNot),
-            TokenKind::Ampersand => Some(UnaryOp::Ref),
             TokenKind::Star => Some(UnaryOp::Deref),
             _ => None,
         };
@@ -1258,7 +1329,36 @@ impl Parser {
                     let receiver_span = expr.span();
                     self.advance();
                     let field_span = self.peek().span;
-                    let field = self.consume_ident()?;
+
+                    // Support identifier, integer literal, and float literal for field access
+                    // Integer literals are used for tuple field access: t.0, t.1, etc.
+                    // Float literals like "0.0" after a dot are split into two field accesses.
+                    let (field, second_field) = if let TokenKind::IntLit(s) = &self.peek().kind {
+                        let field_name = s.clone();
+                        self.advance();
+                        (field_name, None)
+                    } else if let TokenKind::FloatLit(s) = &self.peek().kind {
+                        // Handle cases like `t.0.0` where the lexer tokenizes "0.0" as a float
+                        // Split the float literal into two field indices
+                        let parts: Vec<&str> = s.split('.').collect();
+                        if parts.len() == 2
+                            && parts[0].chars().all(|c| c.is_ascii_digit())
+                            && parts[1].chars().all(|c| c.is_ascii_digit())
+                        {
+                            let first = parts[0].to_string();
+                            let second = parts[1].to_string();
+                            self.advance();
+                            (first, Some(second))
+                        } else {
+                            // Not a valid tuple field sequence
+                            return Err(ParseError {
+                                message: format!("expected identifier, found FloatLit({s:?})"),
+                                span: field_span,
+                            });
+                        }
+                    } else {
+                        (self.consume_ident()?, None)
+                    };
 
                     if self.check(&TokenKind::LParen) {
                         self.advance();
@@ -1279,6 +1379,17 @@ impl Parser {
                             field,
                             span: merged_span,
                         }));
+
+                        // If we parsed a float literal as two fields (e.g., "0.0" -> "0", "0"),
+                        // add the second field access
+                        if let Some(second) = second_field {
+                            let second_span = expr.span();
+                            expr = Expr::FieldAccess(Box::new(FieldAccessExpr {
+                                expr,
+                                field: second,
+                                span: second_span,
+                            }));
+                        }
                     }
                 }
                 TokenKind::LBracket => {
@@ -1332,7 +1443,7 @@ impl Parser {
                     // Struct literal: `Point { x: 10, y: 20 }`
                     // Only parse as struct literal if name starts with uppercase
                     // (struct naming convention: UpperCamelCase)
-                    self.parse_struct_literal(name, start_span)
+                    self.parse_struct_literal(Some(name), start_span)
                 } else {
                     Ok(Expr::Ident(IdentExpr {
                         name,
@@ -1407,12 +1518,82 @@ impl Parser {
                 self.expect(&TokenKind::RParen)?;
                 Ok(expr)
             }
+            TokenKind::LBracket => {
+                self.advance();
+                self.parse_tuple_literal(start_span)
+            }
             TokenKind::Pipe => self.parse_closure(),
+            TokenKind::LBrace => {
+                // Implicit struct literal: `{ field: value, ... }`
+                // Look ahead to check if this is a struct literal (ident followed by : or ,)
+                // vs a future block expression
+                self.advance(); // consume `{`
+
+                // Check if this looks like a struct literal
+                // Pattern: `{ ident :` or `{ ident ,` or `{ ident }`
+                if let TokenKind::Ident(_) = self.peek_kind() {
+                    // Peek at the token after the identifier
+                    let after_ident = self.peek_nth(1);
+                    if matches!(
+                        after_ident.kind,
+                        TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
+                    ) {
+                        // This is an implicit struct literal
+                        return self.parse_struct_literal(None, start_span);
+                    }
+                }
+
+                // Empty struct literal: `{}`
+                if self.check(&TokenKind::RBrace) {
+                    return self.parse_struct_literal(None, start_span);
+                }
+
+                // Not a valid implicit struct literal
+                Err(ParseError {
+                    message: "implicit struct literal requires field syntax: { field: value }"
+                        .into(),
+                    span: start_span,
+                })
+            }
             _ => Err(ParseError {
                 message: format!("expected expression, found {:?}", self.peek_kind()),
                 span: start_span,
             }),
         }
+    }
+
+    /// Parse tuple literal: `[expr, expr, ...]` or `[]`
+    fn parse_tuple_literal(&mut self, start_span: Span) -> ParseResult<Expr> {
+        let mut elements = Vec::new();
+
+        // Handle empty tuple: []
+        if self.check(&TokenKind::RBracket) {
+            self.advance();
+            return Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
+                elements,
+                span: start_span,
+            })));
+        }
+
+        // Parse first element
+        elements.push(self.parse_expr()?);
+
+        // Parse remaining elements
+        while self.check(&TokenKind::Comma) {
+            self.advance();
+            // Handle trailing comma: [1, 2, 3,]
+            if self.check(&TokenKind::RBracket) {
+                break;
+            }
+            elements.push(self.parse_expr()?);
+        }
+
+        self.expect(&TokenKind::RBracket)?;
+
+        Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
+            elements,
+            span: start_span,
+        })))
     }
 
     fn parse_arg_list(&mut self) -> ParseResult<Vec<Expr>> {
@@ -1498,24 +1679,41 @@ impl Parser {
             });
         }
 
-        // Tuple type: () or (T, U, ...)
+        // Unit type: ()
         if self.check(&TokenKind::LParen) {
             self.advance();
             if self.check(&TokenKind::RParen) {
                 self.advance();
-                // Unit type ()
+                // Unit type () - distinct from empty tuple []
+                return Ok(Type::Named(NamedType {
+                    name: "()".to_string(),
+                    span: start_span,
+                }));
+            }
+            // Parenthesized type for grouping (not tuple in this case)
+            let inner = self.parse_type()?;
+            self.expect(&TokenKind::RParen)?;
+            return Ok(inner);
+        }
+
+        // Tuple type: [] or [T1, T2, ...]
+        if self.check(&TokenKind::LBracket) {
+            self.advance();
+            if self.check(&TokenKind::RBracket) {
+                self.advance();
+                // Empty tuple type []
                 return Ok(Type::Tuple(Vec::new()));
             }
             // Tuple with elements
             let mut types = vec![self.parse_type()?];
             while self.check(&TokenKind::Comma) {
                 self.advance();
-                if self.check(&TokenKind::RParen) {
+                if self.check(&TokenKind::RBracket) {
                     break;
                 }
                 types.push(self.parse_type()?);
             }
-            self.expect(&TokenKind::RParen)?;
+            self.expect(&TokenKind::RBracket)?;
             return Ok(Type::Tuple(types));
         }
 
@@ -2080,8 +2278,17 @@ impl Parser {
     }
 
     /// Parse struct literal: `Point { x: 10, y: 20 }` or `Point { x, y }` (shorthand)
-    fn parse_struct_literal(&mut self, name: String, start_span: Span) -> ParseResult<Expr> {
-        self.expect(&TokenKind::LBrace)?;
+    /// Also handles implicit struct literals `{ x: 10, y: 20 }` where name is None.
+    fn parse_struct_literal(
+        &mut self,
+        name: Option<String>,
+        start_span: Span,
+    ) -> ParseResult<Expr> {
+        // For named struct literals, the `{` comes after the name
+        // For implicit struct literals, the `{` is already consumed
+        if name.is_some() {
+            self.expect(&TokenKind::LBrace)?;
+        }
 
         let mut fields = Vec::new();
 

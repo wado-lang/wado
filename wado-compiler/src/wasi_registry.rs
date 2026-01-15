@@ -527,7 +527,7 @@ pub fn is_param_type_supported(ty: &Type) -> bool {
                 | "char"
                 | "String"
         ),
-        Type::Generic(generic) => matches!(generic.name.as_str(), "Stream"),
+        Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
         _ => false,
     }
 }
@@ -552,7 +552,43 @@ pub fn is_return_type_supported(ty: &Type) -> bool {
                 | "char"
                 | "String"
         ),
-        Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
+        Type::Generic(generic) => match generic.name.as_str() {
+            "Stream" | "Result" => true,
+            "Array" | "Option" => {
+                // Recursively check that inner types are supported primitives
+                generic.args.iter().all(is_primitive_type_supported)
+            }
+            "Tuple" => {
+                // All tuple elements must be supported primitives
+                generic.args.iter().all(is_primitive_type_supported)
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Check if a type is a supported primitive type (for inner types of Array/Option/Tuple)
+fn is_primitive_type_supported(ty: &Type) -> bool {
+    match ty {
+        Type::Named(named) => matches!(
+            named.name.as_str(),
+            "i32"
+                | "i64"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "f32"
+                | "f64"
+                | "bool"
+                | "char"
+                | "String"
+        ),
+        Type::Generic(generic) if generic.name == "Tuple" => {
+            // Tuples are allowed if all elements are primitives
+            generic.args.iter().all(is_primitive_type_supported)
+        }
         _ => false,
     }
 }
@@ -572,6 +608,28 @@ pub fn is_wasi_function_supported(func: &WasiFunctionInfo) -> bool {
         return false;
     }
     true
+}
+
+/// Check if a return type requires an outptr parameter in Component Model ABI
+///
+/// Complex types (list, string, option, result) are returned via linear memory
+/// rather than as direct return values. The function signature changes to:
+/// - Add an outptr: i32 parameter
+/// - Return nothing (result is written to outptr)
+pub fn return_type_requires_outptr(ty: &Type) -> bool {
+    match ty {
+        // Simple types are returned directly
+        Type::Named(named) => matches!(
+            named.name.as_str(),
+            "String" // String (list<u8> in CM) requires outptr
+        ),
+        // Generic types that require outptr
+        Type::Generic(generic) => matches!(
+            generic.name.as_str(),
+            "Array" | "Option" | "Result" | "Tuple"
+        ),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -730,6 +788,64 @@ mod tests {
         assert_eq!(
             func_info.local_alias_name(),
             "wasi:cli/Stdout::write_via_stream"
+        );
+    }
+
+    #[test]
+    fn test_array_and_option_type_support() {
+        use crate::ast::{GenericType, NamedType};
+
+        // Array<String> should be supported
+        let array_string = Type::Generic(GenericType {
+            name: "Array".to_string(),
+            args: vec![Type::Named(NamedType {
+                name: "String".to_string(),
+                span: make_span(),
+            })],
+            span: make_span(),
+        });
+        assert!(
+            is_return_type_supported(&array_string),
+            "Array<String> should be supported"
+        );
+
+        // Array<Tuple<String, String>> should be supported
+        let tuple_ss = Type::Generic(GenericType {
+            name: "Tuple".to_string(),
+            args: vec![
+                Type::Named(NamedType {
+                    name: "String".to_string(),
+                    span: make_span(),
+                }),
+                Type::Named(NamedType {
+                    name: "String".to_string(),
+                    span: make_span(),
+                }),
+            ],
+            span: make_span(),
+        });
+        let array_tuple = Type::Generic(GenericType {
+            name: "Array".to_string(),
+            args: vec![tuple_ss],
+            span: make_span(),
+        });
+        assert!(
+            is_return_type_supported(&array_tuple),
+            "Array<Tuple<String, String>> should be supported"
+        );
+
+        // Option<String> should be supported
+        let option_string = Type::Generic(GenericType {
+            name: "Option".to_string(),
+            args: vec![Type::Named(NamedType {
+                name: "String".to_string(),
+                span: make_span(),
+            })],
+            span: make_span(),
+        });
+        assert!(
+            is_return_type_supported(&option_string),
+            "Option<String> should be supported"
         );
     }
 }

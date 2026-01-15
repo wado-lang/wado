@@ -7,56 +7,57 @@ This document tracks the current implementation status of the Wado compiler.
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Lower → Optimize → Codegen
-                           ↓                       ↓
-                       Unparser              TIR (Typed IR)
+Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze → Resolve → Lower → Optimize → Codegen
+                           ↓                                           ↓
+                       Unparser                                  TIR (Typed IR)
                            ↓
                    Formatted Source
 ```
 
 ### Compilation Pipeline
 
-| Phase    | Input         | Output       | Description                          |
-| -------- | ------------- | ------------ | ------------------------------------ |
-| Lexer    | Source        | Tokens       | Tokenize, extract `__DATA__` section |
-| Parser   | Tokens        | AST          | Build abstract syntax tree           |
-| Bind     | AST           | Bind info    | Local name resolution (WIP)          |
-| Load     | AST           | All modules  | Load all dependencies recursively    |
-| Analyze  | All modules   | Symbol table | Build symbol table, validate imports |
-| Resolve  | AST + Symbols | TIR          | Type resolution, produce typed IR    |
-| Lower    | TIR           | TIR          | String collection, transformations   |
-| Optimize | TIR           | Hints        | DCE, conditional feature inclusion   |
-| Codegen  | TIR           | Wasm bytes   | Generate Component Model Wasm        |
+| Phase    | Input         | Output       | Description                           |
+| -------- | ------------- | ------------ | ------------------------------------- |
+| Lexer    | Source        | Tokens       | Tokenize, extract `__DATA__` section  |
+| Parser   | Tokens        | AST          | Build abstract syntax tree            |
+| Bind     | AST           | Bind info    | Local name resolution, scope tracking |
+| Desugar  | AST           | AST          | Transform syntactic sugar             |
+| Load     | AST           | All modules  | Load all dependencies recursively     |
+| Analyze  | All modules   | Symbol table | Build symbol table, validate imports  |
+| Resolve  | AST + Symbols | TIR          | Type resolution, produce typed IR     |
+| Lower    | TIR           | TIR          | String collection, transformations    |
+| Optimize | TIR           | Hints        | DCE, conditional feature inclusion    |
+| Codegen  | TIR           | Wasm bytes   | Generate Component Model Wasm         |
 
 ### Modules
 
-| Module          | File                  | Description                                        |
-| --------------- | --------------------- | -------------------------------------------------- |
-| Lexer           | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section |
-| Parser          | `parser.rs`           | Recursive descent parser, builds AST               |
-| AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API |
-| Token           | `token.rs`            | Token types and spans                              |
-| Comment         | `comment.rs`          | Comment collection and CommentMap for formatting   |
-| Bind            | `bind.rs`             | Local name binding (WIP)                           |
-| Loader          | `loader.rs`           | Module loading, dependency resolution              |
-| Desugar         | `desugar.rs`          | AST transformations (compound assign, etc.)        |
-| Unparser        | `unparse.rs`          | Converts AST back to canonical source code         |
-| Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction       |
-| Symbol          | `symbol.rs`           | Symbol table data structures                       |
-| Name            | `name.rs`             | Name mangling utilities for methods and symbols    |
-| ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library         |
-| Resolver        | `resolver.rs`         | Type resolution, AST to TIR conversion             |
-| TIR             | `tir.rs`              | Typed Intermediate Representation                  |
-| Lower           | `lower.rs`            | TIR lowering (string collection, etc.)             |
-| Optimize        | `optimize.rs`         | DCE, optimization hints for codegen                |
-| Stdlib          | `stdlib.rs`           | Embedded core library sources                      |
-| WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution        |
-| BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`      |
-| WorldRegistry   | `world_registry.rs`   | World definitions registry for export signatures   |
-| WasmBuilder     | `wasm_builder.rs`     | Wasm index tracking utilities                      |
-| Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder    |
-| Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)    |
-| Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                        |
+| Module          | File                  | Description                                          |
+| --------------- | --------------------- | ---------------------------------------------------- |
+| Lexer           | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section   |
+| Parser          | `parser.rs`           | Recursive descent parser, builds AST                 |
+| AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API   |
+| Token           | `token.rs`            | Token types and spans                                |
+| Comment         | `comment.rs`          | Comment collection and CommentMap for formatting     |
+| Bind            | `bind.rs`             | Local name binding, scope analysis, mutability check |
+| Loader          | `loader.rs`           | Module loading, dependency resolution                |
+| Desugar         | `desugar.rs`          | AST transformations (compound assign, etc.)          |
+| Unparser        | `unparse.rs`          | Converts AST back to canonical source code           |
+| Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction         |
+| Symbol          | `symbol.rs`           | Symbol table data structures                         |
+| Name            | `name.rs`             | Name mangling utilities for methods and symbols      |
+| ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library           |
+| Resolver        | `resolver.rs`         | Type resolution, AST to TIR conversion               |
+| TIR             | `tir.rs`              | Typed Intermediate Representation                    |
+| Lower           | `lower.rs`            | TIR lowering (string collection, etc.)               |
+| Optimize        | `optimize.rs`         | DCE, optimization hints for codegen                  |
+| Stdlib          | `stdlib.rs`           | Embedded core library sources                        |
+| WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution          |
+| BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`        |
+| WorldRegistry   | `world_registry.rs`   | World definitions registry for export signatures     |
+| WasmBuilder     | `wasm_builder.rs`     | Wasm index tracking utilities                        |
+| Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder      |
+| Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)      |
+| Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                          |
 
 ### Parser and Desugar Separation
 
@@ -499,8 +500,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `if` statements
 - [x] `while` loops
 - [x] C-style `for` loops
-- [ ] `loop` loops
-- [ ] `for-of` loops
+- [x] `loop` loops
+- [x] `for-of` loops
 - [ ] `match` statements
 
 #### Expressions
@@ -527,10 +528,11 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] `if` expressions
 - [ ] `match` expressions
 - [ ] Block expressions
-- [ ] Struct literals (`{ field: value }`)
-- [ ] Array literals (`[1, 2, 3]`)
+- [x] Struct literals (`Point { x: 1, y: 2 }`)
+- [x] Implicit struct literals with type context (`let p: Point = { x: 1, y: 2 }`)
+- [x] Tuple literals (`[1, 2, 3]` creates `[i32, i32, i32]`)
+- [x] Array literals (`[1, 2, 3] as Array<i32>` or via type coercion)
 - [ ] Dict literals (`{ "key": "value" }`)
-- [ ] Tuple expressions
 - [ ] Range expressions
 - [ ] `?` operator (error propagation)
 
@@ -539,11 +541,10 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Named types
 - [x] Generic types (`Array<T>`, `Result<T, E>`)
 - [x] Reference types (`&T`)
-- [x] Tuple types (`(T, U)`)
+- [x] Tuple types (`[T, U]`)
 - [x] Unit type `()`
 - [x] Never type `!`
 - [ ] Function types
-- [ ] Infix tuple syntax `(a, b)` vs `Tuple<A, B>`
 
 #### Patterns
 
@@ -566,6 +567,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Effect checking
 - [ ] Borrow checking / move analysis
 - [x] Scope analysis for variables
+- [x] Immutable variable reassignment detection
 - [ ] Unused variable warnings
 
 ### Code Generation
@@ -580,7 +582,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Async function lifting/lowering
 - [x] Template strings (literals, integer interpolation, float interpolation via wado-bundled)
 - [x] Variables and locals (`let`, `let mut`)
-- [x] Control flow (`if` statements, `while`, `for`)
+- [x] Control flow (`if` statements, `while`, `for`, `loop`, `for-of`)
 - [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
 - [x] Type cast (`as T`) for primitive types (i32, i64, f32, f64)
 - [x] Assert statements with power-assert style error messages (intermediate values, value caching)
@@ -588,13 +590,25 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Branch hinting (`builtin::likely`, `builtin::unlikely`)
 - [x] WASI clocks (`wasi:clocks/monotonic-clock`, `now()`)
 - [x] Mixed-type arithmetic (i64 vs i32 literal promotion)
-- [ ] Struct construction
+- [x] Struct construction and field access
+- [x] Tuple construction and index access
+- [x] Array construction, index access, and iteration
+- [x] Reference types (`&T`, `&mut T`) for primitives, structs, tuples, and arrays
+- [x] Dereference operator (`*ref`)
 - [ ] Enum/variant construction
 - [ ] Pattern matching
 - [ ] Closures
 - [ ] Effect handlers
 - [x] Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
 - [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
+- [x] Value semantics for structs (field-by-field copy on assignment)
+- [x] Value semantics for arrays (element-by-element copy on assignment)
+- [x] Value semantics for tuples (field-by-field copy on assignment)
+- [x] Value semantics for strings (element-by-element copy on assignment)
+- [x] Value semantics for Option<T> (conditional copy of inner value)
+- [ ] Value semantics for Result<T, E> (blocked on Result codegen)
+- [ ] Value semantics for Variant (blocked on Variant codegen)
+- [ ] Value semantics for Dict<K, V> (blocked on Dict codegen)
 - [x] Template string array concatenation
 - [ ] Reactive signals (source values)
 - [ ] Reactive signals (derived values)
@@ -757,21 +771,7 @@ pub struct FormatSpec {
 }
 ```
 
-### Next Steps for Full Implementation
-
-1. **Implement format specifier handling**:
-   - Parse format spec (precision, padding, alignment)
-   - Pass to appropriate formatting function in wado-bundled
-
-2. ~~**Add boolean to string conversion**~~: ✅ **Done** (bool_to_string in core/internal.wado)
-   - `true` → "true", `false` → "false"
-
-3. ~~**Add char to string conversion**~~: ✅ **Done** (char_to_string in core/internal.wado)
-   - Char values converted to their UTF-8 string representation (supports full Unicode)
-
 ## The `assert` Statement Implementation
-
-✅ **Fully Implemented**
 
 `assert` behaves like a power-assert, which shows source conditions, collects intermediate values, and prints them if the assertion fails.
 
@@ -823,12 +823,6 @@ The compiler:
 4. On failure, builds the error message using cached values (no re-evaluation)
 
 This ensures that `get_value()` is called only once, not twice (once for caching and once for condition evaluation).
-
-### Implementation Details
-
-- **Branch hinting**: Uses `builtin::unlikely` for the failure branch since assertions typically pass
-- **Source text extraction**: Uses expression spans to extract the original source code
-- **Local pre-allocation**: All locals for caching are pre-allocated before code generation
 
 ## Reactive Signals Implementation
 
@@ -962,3 +956,24 @@ increment(&reactive count);  // doubled gets updated
 ```
 
 This requires the reactive reference to carry update callback information, implemented as a Wasm GC struct containing the value and a reference to the update dispatcher.
+
+## Value Semantics Implementation
+
+Wado uses value semantics for composite types: assignment creates a copy rather than sharing references. This matches the behavior users expect from languages like Swift and differs from reference semantics in languages like JavaScript.
+
+### Supported Types
+
+| Type        | Copy Strategy                                     | Status |
+| ----------- | ------------------------------------------------- | ------ |
+| Struct      | Field-by-field copy via `struct.get`/`struct.new` | ✅     |
+| Array<T>    | Element-by-element copy with loop                 | ✅     |
+| Tuple       | Same as struct (implemented as Wasm GC struct)    | ✅     |
+| String      | Element copy with `ArrayGetU` (packed i8)         | ✅     |
+| Option<T>   | Conditional copy if non-null                      | ✅     |
+| Result<T,E> | Not yet implemented (codegen blocked)             | ❌     |
+| Variant     | Not yet implemented (codegen blocked)             | ❌     |
+| Dict<K,V>   | Not yet implemented (codegen blocked)             | ❌     |
+
+### Reference Types
+
+Reference types (`&T`, `&mut T`) do **not** have value semantics - they share the underlying value. This is intentional: references provide a way to share data when needed.

@@ -80,6 +80,12 @@ impl OptimizationHints {
     pub fn is_wasi_function_used(&self, func_name: &str) -> bool {
         self.all_reachable || self.used_wasi_functions.contains(func_name)
     }
+
+    /// Check if an effect is explicitly tracked as used (ignores all_reachable)
+    /// Use this for effects that require explicit call tracking
+    pub fn is_effect_explicitly_used(&self, effect_name: &str) -> bool {
+        self.used_effects.contains(effect_name)
+    }
 }
 
 // =============================================================================
@@ -107,7 +113,7 @@ pub fn analyze_all_modules(
     let entry_func = FunctionId::Free(FreeFunctionName::from_path_and_name(entry_path, "run"));
 
     // Compute reachable functions from entry point
-    let reachable = compute_reachable(&call_graph, &entry_func);
+    let mut reachable = compute_reachable(&call_graph, &entry_func);
 
     // Collect used effects from reachable functions
     let mut used_effects: HashSet<String> = HashSet::new();
@@ -130,6 +136,21 @@ pub fn analyze_all_modules(
     let needs_f32_to_string = reachable.contains(&core_internal("f32_to_string"));
     let needs_f64_to_string = reachable.contains(&core_internal("f64_to_string"));
     let needs_bool_to_string = reachable.contains(&core_internal("bool_to_string"));
+
+    // Add cm_list_string_to_array and helper if Environment effect functions are used
+    // This conversion function is called from codegen, not Wado code
+    if used_wasi_functions.contains("Environment::get_arguments")
+        || used_wasi_functions.contains("Environment::get_environment")
+    {
+        reachable.insert(core_internal("cm_list_string_to_array"));
+        reachable.insert(core_internal("copy_string_from_linear"));
+    }
+
+    // Add array_copy_string if Array<String> value semantics are needed
+    // This is called from codegen for tuple-to-array coercion and value copying
+    // For now, include it if any string array operations are likely (conservative)
+    // TODO: Track actual Array<String> usage more precisely
+    reachable.insert(core_internal("array_copy_string"));
 
     // Check if stream intrinsics are needed by looking for:
     // 1. Stdout/Stderr effects being used
@@ -307,6 +328,10 @@ fn analyze_block(
                 }
             }
             TirStmtKind::Loop { body } => {
+                analyze_block(body, current_module, type_table, analysis);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                analyze_expr(iterable, current_module, type_table, analysis);
                 analyze_block(body, current_module, type_table, analysis);
             }
             TirStmtKind::Assert {

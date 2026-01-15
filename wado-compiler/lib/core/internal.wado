@@ -16,13 +16,13 @@ pub fn string_concat(a: String, b: String) -> String {
     let result = builtin::string_new(total);
 
     // Copy bytes from a
-    for (let mut i = 0; i < len_a; i = i + 1) {
+    for (let mut i = 0; i < len_a; i += 1) {
         let byte = builtin::array_get_u8(a, i);
         builtin::array_set_u8(result, i, byte);
     }
 
     // Copy bytes from b
-    for (let mut i = 0; i < len_b; i = i + 1) {
+    for (let mut i = 0; i < len_b; i += 1) {
         let byte = builtin::array_get_u8(b, i);
         builtin::array_set_u8(result, len_a + i, byte);
     }
@@ -40,7 +40,7 @@ pub fn f64_to_string(value: f64) -> String {
 
     // Create GC array and copy from linear memory
     let result = builtin::string_new(len);
-    for (let mut i = 0; i < len; i = i + 1) {
+    for (let mut i = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + i);
         builtin::array_set_u8(result, i, byte);
     }
@@ -58,7 +58,7 @@ pub fn f32_to_string(value: f32) -> String {
 
     // Create GC array and copy from linear memory
     let result = builtin::string_new(len);
-    for (let mut i = 0; i < len; i = i + 1) {
+    for (let mut i = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + i);
         builtin::array_set_u8(result, i, byte);
     }
@@ -94,21 +94,21 @@ pub fn i32_to_string(value: i32) -> String {
     // Convert digits in reverse order
     let mut pos = 11; // Start from end of buffer
     for (let mut temp = abs_value; temp > 0; temp = temp / 10) {
-        pos = pos - 1;
+        pos -= 1;
         let digit = temp % 10;
         builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
     }
 
     // Add sign if negative
     if is_negative {
-        pos = pos - 1;
+        pos -= 1;
         builtin::memory_store8(ptr + pos, '-' as i32);
     }
 
     // Calculate length and copy to GC string
     let len = 11 - pos;
     let result = builtin::string_new(len);
-    for (let mut i = 0; i < len; i = i + 1) {
+    for (let mut i = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + pos + i);
         builtin::array_set_u8(result, i, byte);
     }
@@ -141,7 +141,7 @@ pub fn u32_to_string(value: i32) -> String {
     let ten: i64 = 10 as i64;
     let zero: i64 = 0 as i64;
     for (let mut temp: i64 = unsigned_val; temp > zero; temp = temp / ten) {
-        pos = pos - 1;
+        pos -= 1;
         let digit: i32 = (temp % ten) as i32;
         builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
     }
@@ -149,7 +149,7 @@ pub fn u32_to_string(value: i32) -> String {
     // Calculate length and copy to GC string
     let len: i32 = 10 - pos;
     let result = builtin::string_new(len);
-    for (let mut i: i32 = 0; i < len; i = i + 1) {
+    for (let mut i: i32 = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + pos + i);
         builtin::array_set_u8(result, i, byte);
     }
@@ -190,21 +190,21 @@ pub fn i64_to_string(value: i64) -> String {
     let mut pos: i32 = 20; // Start from end of buffer
     let ten_i64: i64 = 10 as i64;
     for (let mut temp: i64 = abs_value; temp > zero_i64; temp = temp / ten_i64) {
-        pos = pos - 1;
+        pos -= 1;
         let digit: i32 = (temp % ten_i64) as i32;
         builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
     }
 
     // Add sign if negative
     if is_negative {
-        pos = pos - 1;
+        pos -= 1;
         builtin::memory_store8(ptr + pos, '-' as i32);
     }
 
     // Calculate length and copy to GC string
     let len: i32 = 20 - pos;
     let result = builtin::string_new(len);
-    for (let mut i: i32 = 0; i < len; i = i + 1) {
+    for (let mut i: i32 = 0; i < len; i += 1) {
         let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
         builtin::array_set_u8(result, i, byte);
     }
@@ -234,7 +234,7 @@ pub fn u64_to_string(value: i64) -> String {
     // Loop until temp is zero
     // We check the sign on each iteration because temp transitions from negative to positive
     while temp != zero {
-        pos = pos - 1;
+        pos -= 1;
         let mut digit: i32 = 0;
 
         if temp >= zero {
@@ -271,7 +271,7 @@ pub fn u64_to_string(value: i64) -> String {
     // Calculate length and copy to GC string
     let len: i32 = 20 - pos;
     let result = builtin::string_new(len);
-    for (let mut i: i32 = 0; i < len; i = i + 1) {
+    for (let mut i: i32 = 0; i < len; i += 1) {
         let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
         builtin::array_set_u8(result, i, byte);
     }
@@ -325,10 +325,6 @@ pub fn char_to_string(value: char) -> String {
     return result;
 }
 
-// ============================================================================
-// Ambient Logging Functions
-// ============================================================================
-
 /// Write a string to a stream handle with an optional newline
 /// Internal helper for log_stdout and log_stderr.
 pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
@@ -338,7 +334,7 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
         alloc_size = len + 1;
     }
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
-    for (let mut i = 0; i < len; i = i + 1) {
+    for (let mut i = 0; i < len; i += 1) {
         let byte = builtin::array_get_u8(message, i);
         builtin::memory_store8(ptr + i, byte);
     }
@@ -371,4 +367,80 @@ pub fn log_stderr(message: String) {
     builtin::call_indirect_stderr_write_via_stream(rx);
     write_string_to_stream(tx, message, true);
     builtin::effect_wait();
+}
+
+/// Convert a Component Model list<string> to a GC Array<String>
+/// The outptr points to the CM list representation in linear memory:
+///   outptr[0..4]: base_ptr - pointer to array of (ptr, len) pairs
+///   outptr[4..8]: count - number of strings
+/// Each string in the array is represented as:
+///   base_ptr[i*8+0..i*8+4]: str_ptr - pointer to UTF-8 bytes
+///   base_ptr[i*8+4..i*8+8]: str_len - length in bytes
+pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
+    let base_ptr = builtin::memory_load32(outptr);
+    let count = builtin::memory_load32(outptr + 4);
+
+    // Create GC array of strings (nullable elements)
+    let result = builtin::array_new_string(count);
+
+    // Convert each CM string to a GC string
+    for (let mut i = 0; i < count; i += 1) {
+        let str_ptr = builtin::memory_load32(base_ptr + i * 8);
+        let str_len = builtin::memory_load32(base_ptr + i * 8 + 4);
+
+        // Create GC string and copy bytes from linear memory
+        let s = builtin::string_new(str_len);
+        for (let mut j = 0; j < str_len; j += 1) {
+            let byte = builtin::memory_load8_u(str_ptr + j);
+            builtin::array_set_u8(s, j, byte);
+        }
+
+        builtin::array_set_string(result, i, s);
+    }
+
+    return result;
+}
+
+/// Convert a Component Model option<string> to a GC Option<String>
+/// The outptr points to the CM option representation in linear memory:
+///   outptr[0..3]: discriminant (0 = none, 1 = some)
+///   outptr[4..7]: str_ptr (if some)
+///   outptr[8..11]: str_len (if some)
+pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
+    let discriminant = builtin::memory_load8_u(outptr);
+
+    if discriminant == 0 {
+        // None
+        return null;
+    }
+
+    // Some - read string pointer and length
+    let str_ptr = builtin::memory_load32(outptr + 4);
+    let str_len = builtin::memory_load32(outptr + 8);
+
+    // Create GC string and copy bytes from linear memory
+    let s = builtin::string_new(str_len);
+    for (let mut i = 0; i < str_len; i += 1) {
+        let byte = builtin::memory_load8_u(str_ptr + i);
+        builtin::array_set_u8(s, i, byte);
+    }
+
+    return s;
+}
+
+/// Copy an Array<String> to a new array (deep copy of the array, shallow copy of strings)
+/// This is used by the compiler for tuple-to-array coercion and value semantics.
+pub fn array_copy_string(src: Array<String>) -> Array<String> {
+    let len = builtin::array_len(src);
+
+    if len == 0 {
+        return builtin::array_new_string(0);
+    }
+
+    let dest = builtin::array_new_string(len);
+    for (let mut i = 0; i < len; i += 1) {
+        builtin::array_set_string(dest, i, src[i]);
+    }
+
+    return dest;
 }

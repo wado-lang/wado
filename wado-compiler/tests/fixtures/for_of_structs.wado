@@ -1,0 +1,20 @@
+// For-of loop over array of structs
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn run() with Stdout {
+    let p1 = Point { x: 1, y: 2 };
+    let p2 = Point { x: 3, y: 4 };
+    let points: Array<Point> = [p1, p2];
+    for let p of points {
+        println(`{p.x},{p.y}`);
+    }
+}
+
+__DATA__
+{"stdout": "1,2\n3,4\n"}

@@ -14,8 +14,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForStmt, Function, IfExpr, IfStmt, Item,
-    LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
+    AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
+    Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
 };
 use crate::token::Span;
 
@@ -197,6 +197,7 @@ impl Binder {
             Stmt::If(if_stmt) => self.bind_if_stmt(if_stmt),
             Stmt::While(while_stmt) => self.bind_while(while_stmt),
             Stmt::For(for_stmt) => self.bind_for(for_stmt),
+            Stmt::ForOf(for_of_stmt) => self.bind_for_of(for_of_stmt),
             Stmt::Loop(loop_stmt) => self.bind_loop(loop_stmt),
             Stmt::Break(_) => {}    // No bindings for break
             Stmt::Continue(_) => {} // No bindings for continue
@@ -266,6 +267,28 @@ impl Binder {
 
         // Bind body
         self.bind_block(&for_stmt.body);
+
+        self.exit_scope();
+    }
+
+    /// Bind a for-of statement: `for let item of array { ... }`
+    fn bind_for_of(&mut self, for_of_stmt: &ForOfStmt) {
+        // First bind the iterable expression (uses variables from outer scope)
+        self.bind_expr(&for_of_stmt.iterable);
+
+        // Enter a new scope for the loop binding and body
+        self.enter_scope();
+
+        // Define the loop variable
+        self.define(
+            &for_of_stmt.binding,
+            for_of_stmt.is_mut,
+            false, // not reactive
+            for_of_stmt.span,
+        );
+
+        // Bind body
+        self.bind_block(&for_of_stmt.body);
 
         self.exit_scope();
     }
@@ -402,6 +425,12 @@ impl Binder {
                 self.bind_expr(&chain.first);
                 for comparison in &chain.comparisons {
                     self.bind_expr(&comparison.right);
+                }
+            }
+
+            Expr::TupleLiteral(tuple_lit) => {
+                for element in &tuple_lit.elements {
+                    self.bind_expr(element);
                 }
             }
 

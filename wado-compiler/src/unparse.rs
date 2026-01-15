@@ -5,11 +5,12 @@
 use crate::ast::{
     AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, EffectDecl,
-    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForStmt, Function,
-    FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LetStmt, Literal,
-    LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl,
+    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
+    Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LetStmt,
+    Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl,
     ReturnStmt, SelfKind, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr,
-    Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, WhileStmt, WorldDecl,
+    TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -512,14 +513,14 @@ impl<'a> Unparser<'a> {
             }
             Type::Function(f) => self.unparse_function_type(f),
             Type::Tuple(types) => {
-                self.output.push_str("Tuple<");
+                self.output.push('[');
                 for (i, t) in types.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
                     self.unparse_type(t);
                 }
-                self.output.push('>');
+                self.output.push(']');
             }
             Type::Reference(inner) => {
                 self.output.push('&');
@@ -583,6 +584,7 @@ impl<'a> Unparser<'a> {
             Stmt::If(i) => self.unparse_if_stmt(i),
             Stmt::While(w) => self.unparse_while(w),
             Stmt::For(f) => self.unparse_for(f),
+            Stmt::ForOf(f) => self.unparse_for_of(f),
             Stmt::Loop(l) => self.unparse_loop(l),
             Stmt::Break(_) => self.unparse_break(),
             Stmt::Continue(_) => self.unparse_continue(),
@@ -696,6 +698,27 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
+    fn unparse_for_of(&mut self, f: &ForOfStmt) {
+        self.write_indent();
+        self.output.push_str("for let ");
+
+        if f.is_mut {
+            self.output.push_str("mut ");
+        }
+
+        self.output.push_str(&f.binding);
+        self.output.push_str(" of ");
+        self.unparse_expr(&f.iterable);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&f.body);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
     fn unparse_for_init(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Let(l) => {
@@ -771,7 +794,19 @@ impl<'a> Unparser<'a> {
             Expr::TemplateString(t) => self.unparse_template_string(t),
             Expr::Cast(c) => self.unparse_cast(c),
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
+            Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
         }
+    }
+
+    fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
+        self.output.push('[');
+        for (i, elem) in tuple_lit.elements.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(elem);
+        }
+        self.output.push(']');
     }
 
     fn unparse_literal(&mut self, lit: &Literal) {
@@ -1046,8 +1081,12 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_struct_literal(&mut self, s: &StructLiteralExpr) {
-        self.output.push_str(&s.name);
-        self.output.push_str(" { ");
+        // For named struct literals, emit the name first
+        if let Some(name) = &s.name {
+            self.output.push_str(name);
+            self.output.push(' ');
+        }
+        self.output.push_str("{ ");
 
         for (i, field) in s.fields.iter().enumerate() {
             if i > 0 {
@@ -1167,6 +1206,7 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::If(i) => i.span,
         Stmt::While(w) => w.span,
         Stmt::For(f) => f.span,
+        Stmt::ForOf(f) => f.span,
         Stmt::Loop(l) => l.span,
         Stmt::Break(b) => b.span,
         Stmt::Continue(c) => c.span,
@@ -1213,6 +1253,7 @@ fn unary_op_str(op: UnaryOp) -> &'static str {
         UnaryOp::Not => "!",
         UnaryOp::BitNot => "~",
         UnaryOp::Ref => "&",
+        UnaryOp::MutRef => "&mut ",
         UnaryOp::Deref => "*",
     }
 }

@@ -1,0 +1,12 @@
+// Error: reassign to immutable variable
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let x = 42;
+    x = 99;  // Error: cannot assign to immutable variable
+    println(`{x}`);
+}
+
+__DATA__
+{"compile_error": "immutable"}

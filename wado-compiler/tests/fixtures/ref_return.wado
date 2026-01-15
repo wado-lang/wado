@@ -1,0 +1,16 @@
+// Returning a reference is safe with GC
+
+use { println, Stdout } from "core:cli";
+
+fn get_first(arr: &Array<i32>) -> &i32 {
+    return &arr[0];
+}
+
+fn run() with Stdout {
+    let nums: Array<i32> = [42, 99, 7];
+    let first = get_first(&nums);
+    println(`{*first}`);
+}
+
+__DATA__
+{"stdout": "42\n"}

@@ -96,6 +96,7 @@ wado compile -o example/hello.wat example/hello.wado  # ditto
 
 ## Documentation
 
+- [Cheatsheet](docs/cheatsheet.md) - Quick syntax reference
 - [Language Specification](spec.md) - Full language reference
 - [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
 - [Benchmarks](benchmark/README.md) - Performance benchmarks vs C and JavaScript, and so on
@@ -132,6 +133,12 @@ make on-task-done # format, clippy-fix, update-bundled, test
 
 There are E2E test fixtures in [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures).
 
+## Authors
+
+Copyright (c) 2026, FUJI Goro (a.k.a. gfx). Some rights reserved.
+
 ## License
 
 MIT
+
+See [LICENSE](LICENSE) for details.
