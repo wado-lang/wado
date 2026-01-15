@@ -482,12 +482,14 @@ char
 `String` is a built-in type representing UTF-8 encoded text with value semantics and GC management.
 
 **Design Principles**:
+
 - Value semantics: Conceptually behaves like a value type
 - Immutable content: String data cannot be modified in-place
 - GC-managed: Memory is automatically managed by Wasm GC
 - UTF-8 encoding: Direct mapping to Component Model `string`
 
 **Internal Structure**:
+
 ```wado
 // Conceptual representation (not user-visible)
 struct String {

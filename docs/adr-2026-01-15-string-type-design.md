@@ -27,6 +27,7 @@ Different languages have taken different approaches:
 - **Python/Swift**: Copy-on-Write strings, efficient but requires runtime reference counting
 
 For Wado, key tensions include:
+
 - Value semantics vs efficient mutation
 - Single type vs multiple types for different use cases
 - Explicitness vs hidden optimizations
@@ -64,6 +65,7 @@ s.is_empty() -> bool
 ```
 
 **Rationale**:
+
 - Avoids ambiguity between byte indexing and character indexing
 - Follows Rust's precedent
 - Forces explicit choice between byte/character semantics
@@ -84,6 +86,7 @@ s += " world";  // Desugars to: String::add_assign(&mut s, " world")
 ```
 
 **Implementation**:
+
 ```wado
 fn add_assign(target: &mut String, suffix: String) {
     if target.capacity >= target.len + suffix.len {
@@ -163,16 +166,19 @@ This makes the special treatment a general mechanism available to user types.
 ### Trade-offs vs Alternatives
 
 **vs String/MutString split**:
+
 - ✓ Simpler (one type vs two)
 - ✓ Better UX (no mental overhead of choosing)
 - ✗ Less explicit separation of mutable/immutable
 
 **vs Copy-on-Write**:
+
 - ✓ More predictable performance
 - ✓ Feasible with current Wasm GC (no RC introspection needed)
 - ✗ Requires explicit `+=` (but this is our goal anyway)
 
 **vs Immutable-only (like JavaScript)**:
+
 - ✓ Efficient mutation via `+=`
 - ✓ No need for builder pattern
 - ✗ Slightly more complex implementation
@@ -188,6 +194,7 @@ This makes the special treatment a general mechanism available to user types.
 ### Implementation Notes
 
 The `+=` operator implementation should:
+
 - Use growth factor (typically 2x) for reallocation
 - Provide `String::with_capacity(n)` for pre-allocation
 - Document performance characteristics clearly
@@ -196,6 +203,7 @@ The `+=` operator implementation should:
 ### Documentation Requirements
 
 User documentation must clarify:
+
 1. Why `s[i]` is prohibited (byte vs char ambiguity)
 2. Performance characteristics of `+=` vs `+`
 3. Recommended patterns for efficient string building

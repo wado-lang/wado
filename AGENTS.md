@@ -102,6 +102,7 @@ wado dump --optimize file.wado       # show optimization hints
 ```
 
 Available phases (in compilation order):
+
 1. `--tokens` - Lexer output
 2. `--ast` - Parser output (supports `--unparse`)
 3. `--desugar` - Desugared AST (supports `--unparse`)

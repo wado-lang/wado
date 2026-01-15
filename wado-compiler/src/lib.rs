@@ -300,9 +300,9 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
     });
 
     // === Phase 9: Optimize ===
-    let opt_hints = lowered_tir_modules.as_ref().map(|modules| {
-        analyze_all_modules(modules, &load_result.entry_path)
-    });
+    let opt_hints = lowered_tir_modules
+        .as_ref()
+        .map(|modules| analyze_all_modules(modules, &load_result.entry_path));
 
     Ok(DumpResult {
         source,
