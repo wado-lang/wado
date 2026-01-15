@@ -422,6 +422,167 @@ bool
 char
 ```
 
+### String Type
+
+`String` is a built-in type representing UTF-8 encoded text with value semantics and GC management.
+
+**Design Principles**:
+- Value semantics: Conceptually behaves like a value type
+- Immutable content: String data cannot be modified in-place
+- GC-managed: Memory is automatically managed by Wasm GC
+- UTF-8 encoding: Direct mapping to Component Model `string`
+
+**Internal Structure**:
+```wado
+// Conceptual representation (not user-visible)
+struct String {
+    data: GcArray<u8>,   // UTF-8 bytes
+    len: usize,          // Length in bytes
+    capacity: usize,     // Buffer capacity for += operations
+}
+```
+
+#### Index Access (Prohibited)
+
+Direct index access is prohibited to avoid ambiguity between byte and character indexing:
+
+```wado
+let s = "Hello世界";
+
+// Prohibited
+s[0]      // Compile error
+s[0..5]   // Compile error
+```
+
+Use explicit methods instead:
+
+```wado
+// Byte-level access
+let bytes: Array<u8> = s.bytes();
+let first_byte = bytes[0];
+
+// Character-level access
+let chars: Array<char> = s.chars();
+let first_char = chars[0];
+
+// Other methods
+s.len() -> usize           // Length in bytes
+s.is_empty() -> bool       // Check if empty
+```
+
+**Note**: `bytes()` and `chars()` currently return `Array<T>` (copy). Future versions will support slices and iterators for zero-copy access.
+
+#### Concatenation
+
+**New String (`+` operator)**:
+
+```wado
+let s1 = "hello";
+let s2 = " world";
+let s3 = s1 + s2;  // Creates new String
+```
+
+**Mutation (`+=` operator)**:
+
+The `+=` operator provides efficient in-place concatenation:
+
+```wado
+let mut s = "hello";
+s += " world";     // Efficient: uses internal capacity
+s += "!";          // May reallocate if capacity exceeded
+```
+
+**Implementation**: `+=` desugars to `String::add_assign(&mut s, suffix)` which manages an internal buffer with amortized O(1) complexity.
+
+**Pre-allocation**:
+
+```wado
+// Allocate capacity upfront for efficient building
+let mut result = String::with_capacity(1000);
+for item in items {
+    result += item;  // No reallocations if within capacity
+}
+```
+
+#### Semantic vs Implementation
+
+```wado
+// Semantically: value copy
+let s1 = "hello";
+let s2 = s1;  // s1 still usable
+
+// Implementation: reference sharing (safe because immutable)
+// No actual copy of string data occurs
+```
+
+**Explicit move**:
+
+```wado
+let s1 = "hello";
+let s2 = move s1;  // s1 invalidated, no copy
+// s1 is no longer accessible
+```
+
+**Implicit move optimization**:
+
+```wado
+let mut s = "hello";
+let temp = "world";
+s = temp;  // If temp is not used after, compiler may optimize to move
+```
+
+#### Operator Consistency
+
+The `+=` operator has special semantics for String:
+
+```wado
+// For numeric types
+x += 5  ≡  x = x + 5  // Exact equivalence
+
+// For String
+s += t  ≈  s = s + t  // Same result, different implementation
+                      // += is more efficient (no intermediate allocation)
+```
+
+This special treatment will be generalized via traits in the future, allowing user types to define their own `+=` behavior.
+
+#### Performance Guidelines
+
+**Efficient patterns**:
+
+```wado
+// 1. Pre-allocate when size is known
+let mut s = String::with_capacity(estimated_size);
+for item in items {
+    s += item;
+}
+
+// 2. Use += for repeated concatenation
+let mut result = String::new();
+result += "Line 1\n";
+result += "Line 2\n";
+result += "Line 3\n";
+
+// 3. Join arrays of strings (future)
+let parts = ["a", "b", "c"];
+let result = parts.join(",");
+```
+
+**Inefficient patterns**:
+
+```wado
+// Avoid: creates intermediate String objects
+let s = "a" + "b" + "c" + "d";
+
+// Prefer:
+let mut s = "a";
+s += "b";
+s += "c";
+s += "d";
+```
+
+See `docs/adr-2026-01-15-string-type-design.md` for design rationale.
+
 ### Primitive Literals
 
 #### Boolean Literals
