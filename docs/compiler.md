@@ -610,6 +610,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Value semantics for Variant (blocked on Variant codegen)
 - [ ] Value semantics for Dict<K, V> (blocked on Dict codegen)
 - [x] Template string array concatenation
+- [ ] String UTF-8 validation (reject invalid byte sequences at construction)
 - [ ] Reactive signals (source values)
 - [ ] Reactive signals (derived values)
 - [ ] Reactive effect blocks (syntax TBD)
