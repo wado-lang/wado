@@ -295,12 +295,21 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
 
 /// Run a single fixture test at all optimization levels: None, Full, Size
 fn run_fixture_test(fixture_path: &Path) {
-    // Test at O0 (no optimization)
+    // Check environment variable to control which optimization levels to test
+    // WADO_TEST_ALL_OPT_LEVELS=1 enables all levels (for CI)
+    // Otherwise, only test O0 (for fast local development)
+    let test_all = std::env::var("WADO_TEST_ALL_OPT_LEVELS")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false);
+
+    // Always test O0 (no optimization)
     run_fixture_test_with_opt(fixture_path, OptLevel::None);
-    // Test at O2 (full optimization with DCE)
-    run_fixture_test_with_opt(fixture_path, OptLevel::Full);
-    // Test at Os (size optimization with DCE + name stripping)
-    run_fixture_test_with_opt(fixture_path, OptLevel::Size);
+
+    if test_all {
+        // Additionally test O2 and Os when WADO_TEST_ALL_OPT_LEVELS is set
+        run_fixture_test_with_opt(fixture_path, OptLevel::Full);
+        run_fixture_test_with_opt(fixture_path, OptLevel::Size);
+    }
 }
 
 /// Test function for datatest-stable - runs each .wado fixture file

@@ -19,6 +19,10 @@ hello-run-wasmtime: hello
 test:
 	cargo test
 
+.PHONY: test-all
+test-all:
+	WADO_TEST_ALL_OPT_LEVELS=1 cargo test
+
 .PHONY: on-task-done
 on-task-done: clippy-fix format update-bundled test
 	@echo "All artifacts are up-to-date and tested."

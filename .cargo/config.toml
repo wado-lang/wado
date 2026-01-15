@@ -1,0 +1,20 @@
+[build]
+# Use multiple threads for faster compilation
+jobs = 4
+
+[target.x86_64-unknown-linux-gnu]
+# Use lld for faster linking
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[profile.dev]
+# Reduce debug info for faster compilation
+debug = 1
+
+[profile.test]
+# Optimize test binaries for faster execution
+opt-level = 1
+# Reduce debug info for faster linking
+debug = 1
+# Incremental compilation for faster rebuilds
+incremental = true

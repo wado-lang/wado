@@ -30,6 +30,13 @@ E2E tests are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__`
 
 Each test fixture group has the same prefix in their filenames.
 
+By default, E2E tests run only with O0 (no optimization) for fast local development. To test all optimization levels (O0, O2, Os) for comprehensive validation, use:
+
+```sh
+WADO_TEST_ALL_OPT_LEVELS=1 cargo test  # or
+make test-all
+```
+
 #### Data Section Schema
 
 | Field             | Type       | Description                              |
