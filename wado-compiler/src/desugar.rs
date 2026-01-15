@@ -340,7 +340,6 @@ mod tests {
             op: CompoundAssignOp::Add,
             value: Expr::Literal(LiteralExpr {
                 value: crate::ast::Literal::Int(crate::ast::IntLiteral {
-                    value: 1,
                     repr: "1".to_string(),
                 }),
                 span: dummy_span(),
@@ -380,7 +379,6 @@ mod tests {
         let chain = ComparisonChainExpr {
             first: Expr::Literal(LiteralExpr {
                 value: crate::ast::Literal::Int(crate::ast::IntLiteral {
-                    value: 0,
                     repr: "0".to_string(),
                 }),
                 span: dummy_span(),
@@ -398,7 +396,6 @@ mod tests {
                     op: BinaryOp::Lt,
                     right: Expr::Literal(LiteralExpr {
                         value: crate::ast::Literal::Int(crate::ast::IntLiteral {
-                            value: 10,
                             repr: "10".to_string(),
                         }),
                         span: dummy_span(),

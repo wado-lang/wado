@@ -71,59 +71,32 @@ pub fn f32_to_string(value: f32) -> String {
 pub fn i32_to_string(value: i32) -> String {
     // Handle zero case
     if value == 0 {
-        let result = builtin::string_new(1);
-        builtin::array_set_u8(result, 0, '0' as i32);
-        return result;
+        return "0";
+    }
+
+    // Special case for i32::MIN: In two's complement, negating MIN overflows
+    // because -(-2147483648) = 2147483648 which exceeds i32::MAX (2147483647).
+    // This is a well-known edge case in systems programming.
+    if value == -2147483648 {
+        return "-2147483648";
     }
 
     // Determine sign and work with absolute value
     let is_negative = value < 0;
-
-    // We'll convert to positive, but handle MIN specially since -MIN overflows
-    // For i32::MIN (-2147483648), we need special handling
     let mut abs_value = value;
     if is_negative {
-        // For most negative numbers, negate
-        // But for i32::MIN, we handle it specially below
-        if value != -2147483648 {
-            abs_value = 0 - value;
-        }
+        abs_value = 0 - value;
     }
 
-    // Count digits - max 10 for i32
     // Allocate buffer in linear memory (12 bytes max: sign + 10 digits + safety)
     let ptr = builtin::realloc(0, 0, 1, 12);
 
-    // Special case for i32::MIN which cannot be negated
-    if value == -2147483648 {
-        // "-2147483648" is 11 characters
-        builtin::memory_store8(ptr, '-' as i32);
-        builtin::memory_store8(ptr + 1, '2' as i32);
-        builtin::memory_store8(ptr + 2, '1' as i32);
-        builtin::memory_store8(ptr + 3, '4' as i32);
-        builtin::memory_store8(ptr + 4, '7' as i32);
-        builtin::memory_store8(ptr + 5, '4' as i32);
-        builtin::memory_store8(ptr + 6, '8' as i32);
-        builtin::memory_store8(ptr + 7, '3' as i32);
-        builtin::memory_store8(ptr + 8, '6' as i32);
-        builtin::memory_store8(ptr + 9, '4' as i32);
-        builtin::memory_store8(ptr + 10, '8' as i32);
-        let result = builtin::string_new(11);
-        for (let mut i = 0; i < 11; i = i + 1) {
-            let byte = builtin::memory_load8_u(ptr + i);
-            builtin::array_set_u8(result, i, byte);
-        }
-        return result;
-    }
-
     // Convert digits in reverse order
     let mut pos = 11; // Start from end of buffer
-    let mut temp = abs_value;
-    while temp > 0 {
+    for (let mut temp = abs_value; temp > 0; temp = temp / 10) {
         pos = pos - 1;
         let digit = temp % 10;
         builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
-        temp = temp / 10;
     }
 
     // Add sign if negative
@@ -143,83 +116,156 @@ pub fn i32_to_string(value: i32) -> String {
     return result;
 }
 
+/// Convert u32 to String (unsigned)
+/// Maximum u32 value is 4294967295 (10 digits)
+/// Takes i32 (Wasm type) but interprets as unsigned
+pub fn u32_to_string(value: i32) -> String {
+    // Handle zero case
+    if value == 0 {
+        return "0";
+    }
+
+    // Convert to i64 for unsigned arithmetic
+    // If value is negative as i32, it means the u32 value is >= 2^31
+    // We need to interpret it as unsigned by adding 2^32
+    let mut unsigned_val: i64 = value as i64;
+    if value < 0 {
+        unsigned_val = (value as i64) + 4294967296 as i64;
+    }
+
+    // Allocate buffer in linear memory (11 bytes max: 10 digits + safety)
+    let ptr = builtin::realloc(0, 0, 1, 11);
+
+    // Convert digits in reverse order using i64 arithmetic
+    let mut pos: i32 = 10;
+    let ten: i64 = 10 as i64;
+    let zero: i64 = 0 as i64;
+    for (let mut temp: i64 = unsigned_val; temp > zero; temp = temp / ten) {
+        pos = pos - 1;
+        let digit: i32 = (temp % ten) as i32;
+        builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
+    }
+
+    // Calculate length and copy to GC string
+    let len: i32 = 10 - pos;
+    let result = builtin::string_new(len);
+    for (let mut i: i32 = 0; i < len; i = i + 1) {
+        let byte = builtin::memory_load8_u(ptr + pos + i);
+        builtin::array_set_u8(result, i, byte);
+    }
+
+    return result;
+}
+
 /// Convert i64 to String
 /// Maximum i64 value is 9223372036854775807 (19 digits) + optional minus sign = 20 chars max
 pub fn i64_to_string(value: i64) -> String {
     // Handle zero case
     let zero_i64: i64 = 0 as i64;
     if value == zero_i64 {
-        let result = builtin::string_new(1);
-        builtin::array_set_u8(result, 0, '0' as i32);
-        return result;
+        return "0";
+    }
+
+    // Special case for i64::MIN: In two's complement, negating MIN overflows
+    // because -(-9223372036854775808) = 9223372036854775808 which exceeds i64::MAX.
+    // This is a well-known edge case in systems programming.
+    let i64_max: i64 = 9223372036854775807 as i64;
+    let one_i64: i64 = 1 as i64;
+    let i64_min: i64 = zero_i64 - i64_max - one_i64;
+    if value == i64_min {
+        return "-9223372036854775808";
     }
 
     // Determine sign and work with absolute value
     let is_negative = value < zero_i64;
-
     let mut abs_value: i64 = value;
-    // i64::MIN = 0x8000000000000000 = -9223372036854775808
-    // We can't negate it, so we use a trick: check if value == -1 - 9223372036854775807
-    let i64_max: i64 = 9223372036854775807 as i64;
-    let one_i64: i64 = 1 as i64;
-    let i64_min: i64 = zero_i64 - i64_max - one_i64;
     if is_negative {
-        // For most negative numbers, negate
-        // But for i64::MIN, we handle it specially below
-        if value != i64_min {
-            abs_value = zero_i64 - value;
-        }
+        abs_value = zero_i64 - value;
     }
 
     // Allocate buffer in linear memory (21 bytes max: sign + 19 digits + safety)
     let ptr: i32 = builtin::realloc(0, 0, 1, 21);
 
-    // Special case for i64::MIN which cannot be negated
-    if value == i64_min {
-        // "-9223372036854775808" is 20 characters
-        builtin::memory_store8(ptr, '-' as i32);
-        builtin::memory_store8(ptr + 1, '9' as i32);
-        builtin::memory_store8(ptr + 2, '2' as i32);
-        builtin::memory_store8(ptr + 3, '2' as i32);
-        builtin::memory_store8(ptr + 4, '3' as i32);
-        builtin::memory_store8(ptr + 5, '3' as i32);
-        builtin::memory_store8(ptr + 6, '7' as i32);
-        builtin::memory_store8(ptr + 7, '2' as i32);
-        builtin::memory_store8(ptr + 8, '0' as i32);
-        builtin::memory_store8(ptr + 9, '3' as i32);
-        builtin::memory_store8(ptr + 10, '6' as i32);
-        builtin::memory_store8(ptr + 11, '8' as i32);
-        builtin::memory_store8(ptr + 12, '5' as i32);
-        builtin::memory_store8(ptr + 13, '4' as i32);
-        builtin::memory_store8(ptr + 14, '7' as i32);
-        builtin::memory_store8(ptr + 15, '7' as i32);
-        builtin::memory_store8(ptr + 16, '5' as i32);
-        builtin::memory_store8(ptr + 17, '8' as i32);
-        builtin::memory_store8(ptr + 18, '0' as i32);
-        builtin::memory_store8(ptr + 19, '8' as i32);
-        let result = builtin::string_new(20);
-        for (let mut i: i32 = 0; i < 20; i = i + 1) {
-            let byte: i32 = builtin::memory_load8_u(ptr + i);
-            builtin::array_set_u8(result, i, byte);
-        }
-        return result;
-    }
-
     // Convert digits in reverse order
     let mut pos: i32 = 20; // Start from end of buffer
-    let mut temp: i64 = abs_value;
     let ten_i64: i64 = 10 as i64;
-    while temp > zero_i64 {
+    for (let mut temp: i64 = abs_value; temp > zero_i64; temp = temp / ten_i64) {
         pos = pos - 1;
         let digit: i32 = (temp % ten_i64) as i32;
         builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
-        temp = temp / ten_i64;
     }
 
     // Add sign if negative
     if is_negative {
         pos = pos - 1;
         builtin::memory_store8(ptr + pos, '-' as i32);
+    }
+
+    // Calculate length and copy to GC string
+    let len: i32 = 20 - pos;
+    let result = builtin::string_new(len);
+    for (let mut i: i32 = 0; i < len; i = i + 1) {
+        let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
+        builtin::array_set_u8(result, i, byte);
+    }
+
+    return result;
+}
+
+/// Convert u64 to String (unsigned)
+/// Maximum u64 value is 18446744073709551615 (20 digits)
+/// Takes i64 (Wasm type) but interprets as unsigned
+pub fn u64_to_string(value: i64) -> String {
+    // Handle zero case
+    let zero: i64 = 0 as i64;
+    if value == zero {
+        return "0";
+    }
+
+    // Allocate buffer in linear memory (21 bytes max: 20 digits + safety)
+    let ptr: i32 = builtin::realloc(0, 0, 1, 21);
+
+    // Convert digits in reverse order
+    let mut pos: i32 = 20;
+    let mut temp: i64 = value;
+    let ten: i64 = 10 as i64;
+    let offset_div: i64 = 1844674407370955161 as i64; // 2^64 / 10
+
+    // Loop until temp is zero
+    // We check the sign on each iteration because temp transitions from negative to positive
+    while temp != zero {
+        pos = pos - 1;
+        let mut digit: i32 = 0;
+
+        if temp >= zero {
+            // Positive temp: normal signed arithmetic works correctly
+            digit = (temp % ten) as i32;
+            temp = temp / ten;
+        } else {
+            // Negative temp: need unsigned semantics
+            // For unsigned modulo: (v + 2^64) % 10 = ((v % 10) + 6) adjusted to [0,9]
+            // For unsigned division: (v + 2^64) / 10 = v/10 + 2^64/10 + carry
+            // where carry = -1 if (v%10 + 6) < 0, else 0
+            let signed_rem: i64 = temp % ten;
+            let rem_adjusted: i64 = signed_rem + 6 as i64;
+
+            // Get digit in range [0, 9]
+            if rem_adjusted >= zero {
+                digit = rem_adjusted as i32;
+            } else {
+                digit = (rem_adjusted + ten) as i32;
+            }
+
+            // Calculate unsigned quotient
+            let signed_quot: i64 = temp / ten;
+            let mut carry: i64 = 0 as i64;
+            if rem_adjusted < zero {
+                carry = 0 - 1 as i64;
+            }
+            temp = signed_quot + offset_div + carry;
+        }
+
+        builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
     }
 
     // Calculate length and copy to GC string

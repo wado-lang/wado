@@ -1834,12 +1834,29 @@ impl Codegen {
                 let use_f64 = matches!(left_type, ResolvedType::Primitive(PrimitiveType::F64));
                 let use_f32 = matches!(left_type, ResolvedType::Primitive(PrimitiveType::F32));
 
+                // Check if the left operand is unsigned (determines operation signedness)
+                let is_unsigned = matches!(
+                    left_type,
+                    ResolvedType::Primitive(
+                        PrimitiveType::U8
+                            | PrimitiveType::U16
+                            | PrimitiveType::U32
+                            | PrimitiveType::U64
+                    )
+                );
+
                 if use_f64 {
                     self.emit_f64_binary_op(func, op);
                 } else if use_f32 {
                     self.emit_f32_binary_op(func, op);
                 } else if use_i64 {
-                    self.emit_i64_binary_op(func, op);
+                    if is_unsigned {
+                        self.emit_u64_binary_op(func, op);
+                    } else {
+                        self.emit_i64_binary_op(func, op);
+                    }
+                } else if is_unsigned {
+                    self.emit_u32_binary_op(func, op);
                 } else {
                     self.emit_i32_binary_op(func, op);
                 }
@@ -1903,6 +1920,54 @@ impl Codegen {
         };
     }
 
+    /// Emit u32 binary operation instruction (unsigned)
+    fn emit_u32_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
+        match op {
+            TirBinaryOp::Add => func.instruction(&Instruction::I32Add),
+            TirBinaryOp::Sub => func.instruction(&Instruction::I32Sub),
+            TirBinaryOp::Mul => func.instruction(&Instruction::I32Mul),
+            TirBinaryOp::Div => func.instruction(&Instruction::I32DivU), // Unsigned division
+            TirBinaryOp::Mod => func.instruction(&Instruction::I32RemU), // Unsigned remainder
+            TirBinaryOp::Eq => func.instruction(&Instruction::I32Eq),
+            TirBinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
+            TirBinaryOp::Lt => func.instruction(&Instruction::I32LtU), // Unsigned less than
+            TirBinaryOp::LtEq => func.instruction(&Instruction::I32LeU), // Unsigned less or equal
+            TirBinaryOp::Gt => func.instruction(&Instruction::I32GtU), // Unsigned greater than
+            TirBinaryOp::GtEq => func.instruction(&Instruction::I32GeU), // Unsigned greater or equal
+            TirBinaryOp::And => func.instruction(&Instruction::I32And),
+            TirBinaryOp::Or => func.instruction(&Instruction::I32Or),
+            TirBinaryOp::BitAnd => func.instruction(&Instruction::I32And),
+            TirBinaryOp::BitOr => func.instruction(&Instruction::I32Or),
+            TirBinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
+            TirBinaryOp::Shl => func.instruction(&Instruction::I32Shl),
+            TirBinaryOp::Shr => func.instruction(&Instruction::I32ShrU), // Unsigned right shift
+        };
+    }
+
+    /// Emit u64 binary operation instruction (unsigned)
+    fn emit_u64_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
+        match op {
+            TirBinaryOp::Add => func.instruction(&Instruction::I64Add),
+            TirBinaryOp::Sub => func.instruction(&Instruction::I64Sub),
+            TirBinaryOp::Mul => func.instruction(&Instruction::I64Mul),
+            TirBinaryOp::Div => func.instruction(&Instruction::I64DivU), // Unsigned division
+            TirBinaryOp::Mod => func.instruction(&Instruction::I64RemU), // Unsigned remainder
+            TirBinaryOp::Eq => func.instruction(&Instruction::I64Eq),
+            TirBinaryOp::NotEq => func.instruction(&Instruction::I64Ne),
+            TirBinaryOp::Lt => func.instruction(&Instruction::I64LtU), // Unsigned less than
+            TirBinaryOp::LtEq => func.instruction(&Instruction::I64LeU), // Unsigned less or equal
+            TirBinaryOp::Gt => func.instruction(&Instruction::I64GtU), // Unsigned greater than
+            TirBinaryOp::GtEq => func.instruction(&Instruction::I64GeU), // Unsigned greater or equal
+            TirBinaryOp::And => func.instruction(&Instruction::I32And), // Logical AND: result is i32
+            TirBinaryOp::Or => func.instruction(&Instruction::I32Or),   // Logical OR: result is i32
+            TirBinaryOp::BitAnd => func.instruction(&Instruction::I64And),
+            TirBinaryOp::BitOr => func.instruction(&Instruction::I64Or),
+            TirBinaryOp::BitXor => func.instruction(&Instruction::I64Xor),
+            TirBinaryOp::Shl => func.instruction(&Instruction::I64Shl),
+            TirBinaryOp::Shr => func.instruction(&Instruction::I64ShrU), // Unsigned right shift
+        };
+    }
+
     /// Emit f32 binary operation instruction
     fn emit_f32_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
         match op {
@@ -1950,9 +2015,10 @@ impl Codegen {
             // === Literals ===
             TirExprKind::IntLiteral { value, .. } => {
                 // Check the target type to generate appropriate instruction
+                // Reinterpret u64 bits as i64 for Wasm instruction
                 match type_table.get(expr.type_id) {
                     ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                        func.instruction(&Instruction::I64Const(*value));
+                        func.instruction(&Instruction::I64Const(*value as i64));
                     }
                     _ => {
                         func.instruction(&Instruction::I32Const(*value as i32));
@@ -2056,24 +2122,55 @@ impl Codegen {
                             | PrimitiveType::U8
                     )
                 );
+                let left_is_unsigned = matches!(
+                    type_table.get(left.type_id),
+                    ResolvedType::Primitive(
+                        PrimitiveType::U8
+                            | PrimitiveType::U16
+                            | PrimitiveType::U32
+                            | PrimitiveType::U64
+                    )
+                );
 
                 // Generate left operand
                 self.generate_expr(func, left, type_table, ctx, builder);
-                // Promote left if needed
+                // Promote left if needed (use unsigned extension for unsigned types)
                 if right_is_i64 && left_is_i32 {
-                    func.instruction(&Instruction::I64ExtendI32S);
+                    if left_is_unsigned {
+                        func.instruction(&Instruction::I64ExtendI32U);
+                    } else {
+                        func.instruction(&Instruction::I64ExtendI32S);
+                    }
                 }
 
                 // Generate right operand
                 self.generate_expr(func, right, type_table, ctx, builder);
-                // Promote right if needed
+                // Promote right if needed (use unsigned extension for unsigned types)
                 if left_is_i64 && right_is_i32 {
-                    func.instruction(&Instruction::I64ExtendI32S);
+                    let right_is_unsigned = matches!(
+                        type_table.get(right.type_id),
+                        ResolvedType::Primitive(
+                            PrimitiveType::U8
+                                | PrimitiveType::U16
+                                | PrimitiveType::U32
+                                | PrimitiveType::U64
+                        )
+                    );
+                    if right_is_unsigned {
+                        func.instruction(&Instruction::I64ExtendI32U);
+                    } else {
+                        func.instruction(&Instruction::I64ExtendI32S);
+                    }
                 }
 
-                // Use i64 instructions if either operand is i64
+                // Use i64 instructions if either operand is i64/u64
+                // Preserve unsigned type info for proper instruction selection
                 let effective_type = if left_is_i64 || right_is_i64 {
-                    TypeTable::I64
+                    if left_is_unsigned {
+                        TypeTable::U64
+                    } else {
+                        TypeTable::I64
+                    }
                 } else {
                     left.type_id
                 };
@@ -2147,7 +2244,7 @@ impl Codegen {
                 if let TirExprKind::IntLiteral { value, .. } = &inner.kind
                     && is_i64_target
                 {
-                    func.instruction(&Instruction::I64Const(*value));
+                    func.instruction(&Instruction::I64Const(*value as i64));
                     return;
                 }
                 self.generate_expr(func, inner, type_table, ctx, builder);
@@ -2393,13 +2490,12 @@ impl Codegen {
                             let func_name = match prim {
                                 PrimitiveType::I32
                                 | PrimitiveType::I8
-                                | PrimitiveType::I16
+                                | PrimitiveType::I16 => "core/internal/i32_to_string",
+                                PrimitiveType::U32
                                 | PrimitiveType::U8
-                                | PrimitiveType::U16
-                                | PrimitiveType::U32 => "core/internal/i32_to_string",
-                                PrimitiveType::I64 | PrimitiveType::U64 => {
-                                    "core/internal/i64_to_string"
-                                }
+                                | PrimitiveType::U16 => "core/internal/u32_to_string",
+                                PrimitiveType::I64 => "core/internal/i64_to_string",
+                                PrimitiveType::U64 => "core/internal/u64_to_string",
                                 PrimitiveType::F32 => "core/internal/f32_to_string",
                                 PrimitiveType::F64 => "core/internal/f64_to_string",
                                 PrimitiveType::Bool => "core/internal/bool_to_string",
@@ -2580,6 +2676,12 @@ impl Codegen {
             type_table.get(operand_type),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
+        let is_unsigned = matches!(
+            type_table.get(operand_type),
+            ResolvedType::Primitive(
+                PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
+            )
+        );
 
         let instr = match op {
             TirBinaryOp::Add => {
@@ -2620,15 +2722,23 @@ impl Codegen {
                     Instruction::F64Div
                 } else if is_f32 {
                     Instruction::F32Div
+                } else if is_i64 && is_unsigned {
+                    Instruction::I64DivU
                 } else if is_i64 {
                     Instruction::I64DivS
+                } else if is_unsigned {
+                    Instruction::I32DivU
                 } else {
                     Instruction::I32DivS
                 }
             }
             TirBinaryOp::Mod => {
-                if is_i64 {
+                if is_i64 && is_unsigned {
+                    Instruction::I64RemU
+                } else if is_i64 {
                     Instruction::I64RemS
+                } else if is_unsigned {
+                    Instruction::I32RemU
                 } else {
                     Instruction::I32RemS
                 }
@@ -2660,8 +2770,12 @@ impl Codegen {
                     Instruction::F64Lt
                 } else if is_f32 {
                     Instruction::F32Lt
+                } else if is_i64 && is_unsigned {
+                    Instruction::I64LtU
                 } else if is_i64 {
                     Instruction::I64LtS
+                } else if is_unsigned {
+                    Instruction::I32LtU
                 } else {
                     Instruction::I32LtS
                 }
@@ -2671,8 +2785,12 @@ impl Codegen {
                     Instruction::F64Le
                 } else if is_f32 {
                     Instruction::F32Le
+                } else if is_i64 && is_unsigned {
+                    Instruction::I64LeU
                 } else if is_i64 {
                     Instruction::I64LeS
+                } else if is_unsigned {
+                    Instruction::I32LeU
                 } else {
                     Instruction::I32LeS
                 }
@@ -2682,8 +2800,12 @@ impl Codegen {
                     Instruction::F64Gt
                 } else if is_f32 {
                     Instruction::F32Gt
+                } else if is_i64 && is_unsigned {
+                    Instruction::I64GtU
                 } else if is_i64 {
                     Instruction::I64GtS
+                } else if is_unsigned {
+                    Instruction::I32GtU
                 } else {
                     Instruction::I32GtS
                 }
@@ -2693,8 +2815,12 @@ impl Codegen {
                     Instruction::F64Ge
                 } else if is_f32 {
                     Instruction::F32Ge
+                } else if is_i64 && is_unsigned {
+                    Instruction::I64GeU
                 } else if is_i64 {
                     Instruction::I64GeS
+                } else if is_unsigned {
+                    Instruction::I32GeU
                 } else {
                     Instruction::I32GeS
                 }
@@ -2730,8 +2856,12 @@ impl Codegen {
                 }
             }
             TirBinaryOp::Shr => {
-                if is_i64 {
+                if is_i64 && is_unsigned {
+                    Instruction::I64ShrU
+                } else if is_i64 {
                     Instruction::I64ShrS
+                } else if is_unsigned {
+                    Instruction::I32ShrU
                 } else {
                     Instruction::I32ShrS
                 }
@@ -3755,13 +3885,14 @@ impl Codegen {
         match type_table.get(type_id) {
             ResolvedType::Primitive(prim) => {
                 let func_name = match prim {
-                    PrimitiveType::I32
-                    | PrimitiveType::I8
-                    | PrimitiveType::I16
-                    | PrimitiveType::U8
-                    | PrimitiveType::U16
-                    | PrimitiveType::U32 => "core/internal/i32_to_string",
-                    PrimitiveType::I64 | PrimitiveType::U64 => "core/internal/i64_to_string",
+                    PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => {
+                        "core/internal/i32_to_string"
+                    }
+                    PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => {
+                        "core/internal/u32_to_string"
+                    }
+                    PrimitiveType::I64 => "core/internal/i64_to_string",
+                    PrimitiveType::U64 => "core/internal/u64_to_string",
                     PrimitiveType::F32 => "core/internal/f32_to_string",
                     PrimitiveType::F64 => "core/internal/f64_to_string",
                     PrimitiveType::Bool => "core/internal/bool_to_string",

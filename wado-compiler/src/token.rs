@@ -42,8 +42,8 @@ pub enum TokenKind {
     StringLit(String),
     TemplateStringLit(String), // Raw template string content (without backticks)
     CharLit(char),
-    IntLit { value: i64, repr: String },
-    FloatLit { value: f64, repr: String },
+    IntLit(String),   // String representation only, parsed in resolver
+    FloatLit(String), // String representation only, parsed in resolver
     True,
     False,
     Null,

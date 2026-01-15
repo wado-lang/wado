@@ -1,0 +1,56 @@
+// Test u32 comparison operations - critical for unsigned semantics
+// Values above 2^31-1 must compare correctly using unsigned comparison
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let small: u32 = 100 as u32;
+    // 3000000000 is above i32 max, would be negative if signed
+    let large: u32 = 3000000000 as u32;
+    let zero: u32 = 0 as u32;
+
+    // Critical test: large > small must be true
+    // With signed comparison: -1294967296 < 100 (wrong!)
+    // With unsigned comparison: 3000000000 > 100 (correct!)
+    if large > small {
+        println("large > small: true");
+    } else {
+        println("large > small: false");
+    }
+
+    if large >= small {
+        println("large >= small: true");
+    } else {
+        println("large >= small: false");
+    }
+
+    if small < large {
+        println("small < large: true");
+    } else {
+        println("small < large: false");
+    }
+
+    if small <= large {
+        println("small <= large: true");
+    } else {
+        println("small <= large: false");
+    }
+
+    // Comparison with zero
+    if large > zero {
+        println("large > zero: true");
+    } else {
+        println("large > zero: false");
+    }
+
+    // Equality
+    let another_large: u32 = 3000000000 as u32;
+    if large == another_large {
+        println("large == another_large: true");
+    }
+    if large != small {
+        println("large != small: true");
+    }
+}
+
+__DATA__
+{"stdout": "large > small: true\nlarge >= small: true\nsmall < large: true\nsmall <= large: true\nlarge > zero: true\nlarge == another_large: true\nlarge != small: true\n"}

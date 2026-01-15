@@ -1,0 +1,29 @@
+// Test i64 edge cases: min/max values and negative numbers
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // Max value: 9223372036854775807 (2^63 - 1)
+    let max: i64 = 9223372036854775807 as i64;
+    println(`max: {max}`);
+
+    // Min value: -9223372036854775808 (-2^63)
+    let min: i64 = -9223372036854775808 as i64;
+    println(`min: {min}`);
+
+    // Negative arithmetic
+    let neg: i64 = -5000000000000 as i64;
+    let pos: i64 = 3000000000000 as i64;
+    let sum = neg + pos;
+    println(`neg + pos: {sum}`);
+
+    // Negative division
+    let div_result: i64 = -1000000000000 as i64 / 7 as i64;
+    println(`-1000000000000 / 7: {div_result}`);
+
+    // Negative modulo
+    let mod_result: i64 = -1000000000000 as i64 % 7 as i64;
+    println(`-1000000000000 % 7: {mod_result}`);
+}
+
+__DATA__
+{"stdout": "max: 9223372036854775807\nmin: -9223372036854775808\nneg + pos: -2000000000000\n-1000000000000 / 7: -142857142857\n-1000000000000 % 7: -1\n"}

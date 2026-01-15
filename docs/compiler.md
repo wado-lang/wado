@@ -593,7 +593,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Pattern matching
 - [ ] Closures
 - [ ] Effect handlers
-- [x] Template string type conversion (i32/i64/bool/char → string, f32/f64 → string via wado-bundled)
+- [x] Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
 - [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
 - [x] Template string array concatenation
 - [ ] Reactive signals (source values)
@@ -720,7 +720,7 @@ let outer = `Outer {`Inner {x}`}`;
 - String literal parts are collected and embedded in data section
 - Interpolation expressions are evaluated
 - Template strings produce `ref (array u8)` type
-- Integer interpolation (i32/i64 converted to decimal string in linear memory, then copied to GC array)
+- Integer interpolation (signed i8/i16/i32/i64 and unsigned u8/u16/u32/u64 converted to decimal string)
 - Float interpolation (f32/f64 via `wado-bundled` functions using the `ryu` algorithm)
 - String concatenation using GC array allocation and `array.copy`
 

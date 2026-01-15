@@ -518,13 +518,10 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => {
             let func_name = match prim {
-                PrimitiveType::I32
-                | PrimitiveType::I8
-                | PrimitiveType::I16
-                | PrimitiveType::U8
-                | PrimitiveType::U16
-                | PrimitiveType::U32 => "i32_to_string",
-                PrimitiveType::I64 | PrimitiveType::U64 => "i64_to_string",
+                PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => "i32_to_string",
+                PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => "u32_to_string",
+                PrimitiveType::I64 => "i64_to_string",
+                PrimitiveType::U64 => "u64_to_string",
                 PrimitiveType::F32 => "f32_to_string",
                 PrimitiveType::F64 => "f64_to_string",
                 PrimitiveType::Bool => "bool_to_string",

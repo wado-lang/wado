@@ -623,27 +623,12 @@ impl<'a> Lexer<'a> {
         };
 
         let text = &self.input[start..self.pos];
-        // Remove underscores for parsing
-        let clean_text: String = text.chars().filter(|&c| c != '_').collect();
 
+        // Just return the string representation; parsing happens in resolver
         if is_float || has_exponent {
-            let value: f64 = clean_text.parse().map_err(|_| LexError {
-                message: format!("invalid float literal: {text}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })?;
-            Ok(TokenKind::FloatLit {
-                value,
-                repr: text.to_string(),
-            })
+            Ok(TokenKind::FloatLit(text.to_string()))
         } else {
-            let value: i64 = clean_text.parse().map_err(|_| LexError {
-                message: format!("invalid integer literal: {text}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })?;
-            Ok(TokenKind::IntLit {
-                value,
-                repr: text.to_string(),
-            })
+            Ok(TokenKind::IntLit(text.to_string()))
         }
     }
 
@@ -670,17 +655,9 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        let text = &self.input[digit_start..self.pos];
-        let clean_text: String = text.chars().filter(|&c| c != '_').collect();
-
-        let value = i64::from_str_radix(&clean_text, 16).map_err(|_| LexError {
-            message: format!("invalid hex literal: 0x{text}"),
-            span: Span::new(start, self.pos, start_line, start_column),
-        })?;
-
-        // Include "0x" prefix in repr
+        // Include "0x" prefix in repr; actual parsing happens in resolver
         let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::IntLit { value, repr })
+        Ok(TokenKind::IntLit(repr))
     }
 
     fn lex_binary_number(
@@ -706,17 +683,9 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        let text = &self.input[digit_start..self.pos];
-        let clean_text: String = text.chars().filter(|&c| c != '_').collect();
-
-        let value = i64::from_str_radix(&clean_text, 2).map_err(|_| LexError {
-            message: format!("invalid binary literal: 0b{text}"),
-            span: Span::new(start, self.pos, start_line, start_column),
-        })?;
-
-        // Include "0b" prefix in repr
+        // Include "0b" prefix in repr; actual parsing happens in resolver
         let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::IntLit { value, repr })
+        Ok(TokenKind::IntLit(repr))
     }
 
     fn lex_octal_number(
@@ -742,17 +711,9 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        let text = &self.input[digit_start..self.pos];
-        let clean_text: String = text.chars().filter(|&c| c != '_').collect();
-
-        let value = i64::from_str_radix(&clean_text, 8).map_err(|_| LexError {
-            message: format!("invalid octal literal: 0o{text}"),
-            span: Span::new(start, self.pos, start_line, start_column),
-        })?;
-
-        // Include "0o" prefix in repr
+        // Include "0o" prefix in repr; actual parsing happens in resolver
         let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::IntLit { value, repr })
+        Ok(TokenKind::IntLit(repr))
     }
 
     fn lex_string(&mut self) -> Result<TokenKind, LexError> {

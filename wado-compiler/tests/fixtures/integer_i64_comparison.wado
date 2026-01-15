@@ -1,0 +1,45 @@
+// Test i64 comparison operations
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let a: i64 = 1000000000000 as i64;
+    let b: i64 = 2000000000000 as i64;
+    let c: i64 = -500000000000 as i64;
+
+    // Positive comparisons
+    if a < b {
+        println("a < b: true");
+    }
+    if a <= b {
+        println("a <= b: true");
+    }
+    if b > a {
+        println("b > a: true");
+    }
+    if b >= a {
+        println("b >= a: true");
+    }
+
+    // Negative comparisons (critical for signed types)
+    if c < a {
+        println("c < a: true");
+    }
+    if c < 0 as i64 {
+        println("c < 0: true");
+    }
+    if a > c {
+        println("a > c: true");
+    }
+
+    // Equality
+    let d: i64 = 1000000000000 as i64;
+    if a == d {
+        println("a == d: true");
+    }
+    if a != b {
+        println("a != b: true");
+    }
+}
+
+__DATA__
+{"stdout": "a < b: true\na <= b: true\nb > a: true\nb >= a: true\nc < a: true\nc < 0: true\na > c: true\na == d: true\na != b: true\n"}

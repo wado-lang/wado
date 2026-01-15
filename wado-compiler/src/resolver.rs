@@ -55,6 +55,9 @@ pub enum TypeError {
         found: usize,
         span: Span,
     },
+
+    /// Invalid numeric literal
+    InvalidLiteral { message: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -109,6 +112,9 @@ impl std::fmt::Display for TypeError {
                     "{}:{}: expected {} arguments, found {}",
                     span.line, span.column, expected, found
                 )
+            }
+            TypeError::InvalidLiteral { message, span } => {
+                write!(f, "{}:{}: {}", span.line, span.column, message)
             }
         }
     }
@@ -1022,23 +1028,89 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Parse an integer literal string into a u64 value
+    fn parse_int_literal(repr: &str) -> Result<u64, String> {
+        // Remove underscores for parsing
+        let clean: String = repr.chars().filter(|&c| c != '_').collect();
+
+        if clean.starts_with("0x") || clean.starts_with("0X") {
+            u64::from_str_radix(&clean[2..], 16)
+                .map_err(|_| format!("invalid hex literal: {repr}"))
+        } else if clean.starts_with("0b") || clean.starts_with("0B") {
+            u64::from_str_radix(&clean[2..], 2)
+                .map_err(|_| format!("invalid binary literal: {repr}"))
+        } else if clean.starts_with("0o") || clean.starts_with("0O") {
+            u64::from_str_radix(&clean[2..], 8)
+                .map_err(|_| format!("invalid octal literal: {repr}"))
+        } else {
+            clean
+                .parse()
+                .map_err(|_| format!("invalid integer literal: {repr}"))
+        }
+    }
+
+    /// Parse a float literal string into an f64 value
+    fn parse_float_literal(repr: &str) -> Result<f64, String> {
+        // Remove underscores for parsing
+        let clean: String = repr.chars().filter(|&c| c != '_').collect();
+        clean
+            .parse()
+            .map_err(|_| format!("invalid float literal: {repr}"))
+    }
+
     /// Resolve a literal expression
     fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TirExpr {
         let (kind, type_id) = match &lit.value {
-            Literal::Int(int_lit) => (
-                TirExprKind::IntLiteral {
-                    value: int_lit.value,
-                    repr: int_lit.repr.clone(),
-                },
-                TypeTable::I32,
-            ),
-            Literal::Float(float_lit) => (
-                TirExprKind::FloatLiteral {
-                    value: float_lit.value,
-                    repr: float_lit.repr.clone(),
-                },
-                TypeTable::F64,
-            ),
+            Literal::Int(int_lit) => {
+                match Self::parse_int_literal(&int_lit.repr) {
+                    Ok(value) => (
+                        TirExprKind::IntLiteral {
+                            value,
+                            repr: int_lit.repr.clone(),
+                        },
+                        TypeTable::I32,
+                    ),
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        // Return 0 as fallback to continue resolution
+                        (
+                            TirExprKind::IntLiteral {
+                                value: 0,
+                                repr: int_lit.repr.clone(),
+                            },
+                            TypeTable::I32,
+                        )
+                    }
+                }
+            }
+            Literal::Float(float_lit) => {
+                match Self::parse_float_literal(&float_lit.repr) {
+                    Ok(value) => (
+                        TirExprKind::FloatLiteral {
+                            value,
+                            repr: float_lit.repr.clone(),
+                        },
+                        TypeTable::F64,
+                    ),
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        // Return 0.0 as fallback to continue resolution
+                        (
+                            TirExprKind::FloatLiteral {
+                                value: 0.0,
+                                repr: float_lit.repr.clone(),
+                            },
+                            TypeTable::F64,
+                        )
+                    }
+                }
+            }
             Literal::Bool(b) => (TirExprKind::BoolLiteral(*b), TypeTable::BOOL),
             Literal::Char(c) => (TirExprKind::CharLiteral(*c), TypeTable::CHAR),
             Literal::String(s) => (TirExprKind::StringLiteral(s.clone()), TypeTable::STRING),
@@ -1639,7 +1711,16 @@ impl<'a> Resolver<'a> {
             }
             Pattern::Literal(lit) => {
                 let tir_lit = match lit {
-                    Literal::Int(i) => TirLiteralPattern::Int(i.value),
+                    Literal::Int(i) => {
+                        // Parse the integer literal
+                        match Self::parse_int_literal(&i.repr) {
+                            Ok(value) => TirLiteralPattern::Int(value),
+                            Err(_) => {
+                                // Error was already reported during literal resolution
+                                TirLiteralPattern::Int(0)
+                            }
+                        }
+                    }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     Literal::Char(c) => TirLiteralPattern::Char(*c),
                     Literal::String(s) => TirLiteralPattern::String(s.clone()),

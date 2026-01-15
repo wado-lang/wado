@@ -471,16 +471,16 @@ pub enum Literal {
 }
 
 /// Integer literal with original representation (e.g., "0b1100", "0xFF", "42")
+/// The actual value is parsed in the resolver phase to provide better error messages.
 #[derive(Debug, Clone)]
 pub struct IntLiteral {
-    pub value: i64,
     pub repr: String,
 }
 
 /// Float literal with original representation (e.g., "3.14", "6.022e23")
+/// The actual value is parsed in the resolver phase to provide better error messages.
 #[derive(Debug, Clone)]
 pub struct FloatLiteral {
-    pub value: f64,
     pub repr: String,
 }
 

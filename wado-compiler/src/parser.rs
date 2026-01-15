@@ -1340,23 +1340,17 @@ impl Parser {
                     }))
                 }
             }
-            TokenKind::IntLit { value, repr } => {
+            TokenKind::IntLit(repr) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Int(IntLiteral {
-                        value,
-                        repr: repr.clone(),
-                    }),
+                    value: Literal::Int(IntLiteral { repr: repr.clone() }),
                     span: start_span,
                 }))
             }
-            TokenKind::FloatLit { value, repr } => {
+            TokenKind::FloatLit(repr) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Float(FloatLiteral {
-                        value,
-                        repr: repr.clone(),
-                    }),
+                    value: Literal::Float(FloatLiteral { repr: repr.clone() }),
                     span: start_span,
                 }))
             }

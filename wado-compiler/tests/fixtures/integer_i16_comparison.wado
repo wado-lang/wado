@@ -1,0 +1,45 @@
+// Test i16 comparison operations
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let a: i16 = 1000 as i16;
+    let b: i16 = 2000 as i16;
+    let c: i16 = -500 as i16;
+
+    // Positive comparisons
+    if a < b {
+        println("a < b: true");
+    }
+    if a <= b {
+        println("a <= b: true");
+    }
+    if b > a {
+        println("b > a: true");
+    }
+    if b >= a {
+        println("b >= a: true");
+    }
+
+    // Negative comparisons (critical for signed types)
+    if c < a {
+        println("c < a: true");
+    }
+    if c < 0 as i16 {
+        println("c < 0: true");
+    }
+    if a > c {
+        println("a > c: true");
+    }
+
+    // Equality
+    let d: i16 = 1000 as i16;
+    if a == d {
+        println("a == d: true");
+    }
+    if a != b {
+        println("a != b: true");
+    }
+}
+
+__DATA__
+{"stdout": "a < b: true\na <= b: true\nb > a: true\nb >= a: true\nc < a: true\nc < 0: true\na > c: true\na == d: true\na != b: true\n"}

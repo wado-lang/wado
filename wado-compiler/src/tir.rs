@@ -264,7 +264,7 @@ impl TirExpr {
 #[derive(Debug, Clone)]
 pub enum TirExprKind {
     IntLiteral {
-        value: i64,
+        value: u64,
         repr: String,
     },
     FloatLiteral {
@@ -417,7 +417,7 @@ pub enum TirPattern {
 
 #[derive(Debug, Clone)]
 pub enum TirLiteralPattern {
-    Int(i64),
+    Int(u64),
     Bool(bool),
     Char(char),
     String(String),
