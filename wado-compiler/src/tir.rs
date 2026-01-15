@@ -685,6 +685,7 @@ pub struct TirImpl {
 // ============================================================================
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct TirModule {
     pub path: Vec<String>,
     pub type_table: TypeTable,

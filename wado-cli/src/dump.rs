@@ -5,9 +5,14 @@ use lexopt::prelude::*;
 
 pub struct DumpOptions {
     pub input: String,
+    pub show_tokens: bool,
     pub show_ast: bool,
+    pub show_desugar: bool,
     pub show_symbols: bool,
     pub show_modules: bool,
+    pub show_tir: bool,
+    pub show_lower: bool,
+    pub show_optimize: bool,
 }
 
 pub fn print_usage() {
@@ -16,18 +21,28 @@ pub fn print_usage() {
     eprintln!("Dump compiler internal state for debugging.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  --ast        Show the AST (abstract syntax tree)");
-    eprintln!("  --symbols    Show the symbol table");
+    eprintln!("  --tokens     Show tokens from lexer");
+    eprintln!("  --ast        Show AST from parser (unparsed to Wado source)");
+    eprintln!("  --desugar    Show desugared AST (unparsed to Wado source)");
+    eprintln!("  --symbols    Show symbol table from analyzer");
     eprintln!("  --modules    Show loaded modules");
+    eprintln!("  --tir        Show TIR (Typed IR) from resolver");
+    eprintln!("  --lower      Show lowered TIR");
+    eprintln!("  --optimize   Show optimization hints");
     eprintln!("  --all        Show all information (default if no options)");
     eprintln!("  --help       Show this help message");
 }
 
 pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut input: Option<String> = None;
+    let mut show_tokens = false;
     let mut show_ast = false;
+    let mut show_desugar = false;
     let mut show_symbols = false;
     let mut show_modules = false;
+    let mut show_tir = false;
+    let mut show_lower = false;
+    let mut show_optimize = false;
 
     while let Some(arg) = parser.next().unwrap_or_else(|e| {
         eprintln!("Error: {e}");
@@ -38,8 +53,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                 print_usage();
                 process::exit(0);
             }
+            Long("tokens") => {
+                show_tokens = true;
+            }
             Long("ast") => {
                 show_ast = true;
+            }
+            Long("desugar") => {
+                show_desugar = true;
             }
             Long("symbols") => {
                 show_symbols = true;
@@ -47,10 +68,24 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
             Long("modules") => {
                 show_modules = true;
             }
+            Long("tir") => {
+                show_tir = true;
+            }
+            Long("lower") => {
+                show_lower = true;
+            }
+            Long("optimize") => {
+                show_optimize = true;
+            }
             Long("all") => {
+                show_tokens = true;
                 show_ast = true;
+                show_desugar = true;
                 show_symbols = true;
                 show_modules = true;
+                show_tir = true;
+                show_lower = true;
+                show_optimize = true;
             }
             Value(val) => {
                 if input.is_some() {
@@ -77,17 +112,35 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     };
 
     // Default: show all
-    if !show_ast && !show_symbols && !show_modules {
+    if !show_tokens
+        && !show_ast
+        && !show_desugar
+        && !show_symbols
+        && !show_modules
+        && !show_tir
+        && !show_lower
+        && !show_optimize
+    {
+        show_tokens = true;
         show_ast = true;
+        show_desugar = true;
         show_symbols = true;
         show_modules = true;
+        show_tir = true;
+        show_lower = true;
+        show_optimize = true;
     }
 
     DumpOptions {
         input,
+        show_tokens,
         show_ast,
+        show_desugar,
         show_symbols,
         show_modules,
+        show_tir,
+        show_lower,
+        show_optimize,
     }
 }
 
@@ -100,9 +153,36 @@ pub fn run(opts: DumpOptions) {
         }
     };
 
-    // Modules section
+    // Tokens section (Lexer phase)
+    if opts.show_tokens {
+        println!("=== Tokens (Lexer) ===");
+        for (i, token) in result.tokens.iter().enumerate() {
+            println!("  [{}] {:?}", i, token);
+        }
+        println!();
+    }
+
+    // AST section (Parser phase)
+    if opts.show_ast {
+        println!("=== AST (Parser, unparsed) ===");
+        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+        let unparsed = unparser.unparse(&result.ast);
+        println!("{}", unparsed);
+        println!();
+    }
+
+    // Desugared AST section (Desugar phase)
+    if opts.show_desugar {
+        println!("=== Desugared AST (Desugar, unparsed) ===");
+        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+        let unparsed = unparser.unparse(&result.desugared_ast);
+        println!("{}", unparsed);
+        println!();
+    }
+
+    // Modules section (Load phase)
     if opts.show_modules {
-        println!("=== Loaded Modules ===");
+        println!("=== Loaded Modules (Load) ===");
         for module_path in &result.loaded_modules {
             let path_str = module_path.join("::");
             let is_implicit = result.implicit_modules.contains(module_path);
@@ -121,9 +201,9 @@ pub fn run(opts: DumpOptions) {
         println!();
     }
 
-    // Symbols section
+    // Symbols section (Analyze phase)
     if opts.show_symbols {
-        println!("=== Symbol Table ===");
+        println!("=== Symbol Table (Analyze) ===");
         for symbol in result.symbols.all_symbols() {
             let module_path = if symbol.module_path.is_empty() {
                 "(local)".to_string()
@@ -206,16 +286,48 @@ pub fn run(opts: DumpOptions) {
         println!();
     }
 
-    // AST section
-    if opts.show_ast {
-        println!("=== AST ===");
-        for (i, item) in result.ast.items.iter().enumerate() {
-            println!("  [{}] {:?}", i, item);
-        }
-        if let Some(data) = result.ast.data_section() {
+    // TIR section (Resolve phase)
+    if opts.show_tir {
+        if let Some(ref tir_modules) = result.tir_modules {
+            println!("=== TIR (Resolve) ===");
+            for (path, module) in tir_modules {
+                println!("--- Module: {} ---", path.join("::"));
+                println!("{:#?}", module);
+                println!();
+            }
+        } else {
+            println!("=== TIR (Resolve) ===");
+            println!("(TIR resolution failed or not available)");
             println!();
-            println!("=== Data Section ===");
-            println!("{}", data);
+        }
+    }
+
+    // Lowered TIR section (Lower phase)
+    if opts.show_lower {
+        if let Some(ref lowered_modules) = result.lowered_tir_modules {
+            println!("=== Lowered TIR (Lower) ===");
+            for (path, module) in lowered_modules {
+                println!("--- Module: {} ---", path.join("::"));
+                println!("{:#?}", module);
+                println!();
+            }
+        } else {
+            println!("=== Lowered TIR (Lower) ===");
+            println!("(TIR lowering failed or not available)");
+            println!();
+        }
+    }
+
+    // Optimization hints section (Optimize phase)
+    if opts.show_optimize {
+        if let Some(ref hints) = result.opt_hints {
+            println!("=== Optimization Hints (Optimize) ===");
+            println!("{:#?}", hints);
+            println!();
+        } else {
+            println!("=== Optimization Hints (Optimize) ===");
+            println!("(Optimization analysis failed or not available)");
+            println!();
         }
     }
 }

@@ -48,18 +48,30 @@ pub struct CompileResult {
 /// Result of dumping compiler internal state
 #[derive(Debug)]
 pub struct DumpResult {
-    /// The main module's AST
+    /// Source code
+    pub source: String,
+    /// Tokens from lexer
+    pub tokens: Vec<token::Token>,
+    /// The main module's AST (after parser)
     pub ast: ast::Module,
-    /// Desugared AST
+    /// Desugared AST (after desugar pass)
     pub desugared_ast: ast::Module,
     /// Symbol table after analysis
     pub symbols: symbol::SymbolTable,
-    /// Loaded module paths (in resolution order)
+    /// Loaded module paths
     pub loaded_modules: Vec<Vec<String>>,
     /// Modules loaded implicitly by the compiler
     pub implicit_modules: Vec<Vec<String>>,
-    /// TIR (Typed IR) after resolution
-    pub tir: Option<tir::TirModule>,
+    /// Entry module path
+    pub entry_path: Vec<String>,
+    /// All TIR modules after resolution
+    pub tir_modules: Option<std::collections::HashMap<Vec<String>, tir::TirModule>>,
+    /// All lowered TIR modules
+    pub lowered_tir_modules: Option<std::collections::HashMap<Vec<String>, tir::TirModule>>,
+    /// Optimization hints
+    pub opt_hints: Option<OptimizationHints>,
+    /// Comments for unparsing
+    pub comments: comment::CommentMap,
 }
 
 /// Compile Wado source code to Component Model WebAssembly bytes.
@@ -179,10 +191,10 @@ pub fn compile_file_with_opts(
 
 /// Dump compiler internal state for a Wado source file.
 ///
-/// This runs the compilation pipeline up through resolution (without code generation)
+/// This runs the compilation pipeline up through optimization (without code generation)
 /// and returns diagnostic information about the internal state.
 ///
-/// Pipeline: lexer -> parser -> bind -> desugar -> analyze -> resolve
+/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> optimize
 pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
         path: path.display().to_string(),
@@ -192,7 +204,7 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
     let base_path = path.parent().map(|p| p.to_path_buf());
     let filename = Some(path.display().to_string());
 
-    // Lexer
+    // === Phase 1: Lexer ===
     let mut lexer = Lexer::new(&source);
     let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
         message: e.message,
@@ -200,9 +212,14 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
         column: e.span.column,
         filename: filename.clone(),
     })?;
+    let comments = lexer.comments().to_vec();
     let data_section = lexer.into_data_section();
 
-    // Parser
+    // Build comment map
+    let comment_map = comment::CommentMap::from_comments(comments, &source);
+
+    // === Phase 2: Parser ===
+    let tokens_for_dump = tokens.clone();
     let mut parser = Parser::with_data_section(tokens, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
@@ -211,7 +228,7 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
         filename: filename.clone(),
     })?;
 
-    // Bind (local name resolution)
+    // === Phase 3: Bind ===
     let mut binder = Binder::new();
     binder.bind_module(&ast).map_err(|errors| {
         let msg = errors
@@ -225,43 +242,81 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
         }
     })?;
 
-    // Desugar
+    // === Phase 4: Desugar ===
     let desugared_ast = desugar::desugar_module(&ast);
 
-    // Analyzer (module resolution + symbol table)
-    let mut analyzer = if let Some(base) = base_path.as_deref() {
-        Analyzer::with_base_path(base)
-    } else {
-        Analyzer::new()
+    // === Phase 5: Load all modules ===
+    let load_result = {
+        let module_loader = if let Some(base) = base_path.as_deref() {
+            loader::ModuleLoader::with_base_path(base)
+        } else {
+            loader::ModuleLoader::new()
+        };
+        module_loader
+            .load_all(&source)
+            .map_err(|e| CompileError::Analyzer {
+                message: e.to_string(),
+                filename: filename.clone(),
+            })?
     };
-    analyzer.analyze(&desugared_ast, &[]).map_err(|errors| {
-        let msg = errors
-            .into_iter()
-            .map(|e| e.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        CompileError::Analyzer {
-            message: msg,
-            filename: filename.clone(),
-        }
-    })?;
 
-    // Get loaded modules, symbols, and implicit modules
-    let (symbols, loaded_modules, implicit_modules) = analyzer.into_parts();
+    // === Phase 6: Analyze all modules ===
+    let mut analyzer = Analyzer::new();
+    analyzer
+        .analyze_loaded_modules(
+            &load_result.modules,
+            &load_result.entry_path,
+            load_result.implicit_modules.clone(),
+        )
+        .map_err(|errors| {
+            let msg = errors
+                .into_iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            CompileError::Analyzer {
+                message: msg,
+                filename: filename.clone(),
+            }
+        })?;
 
-    // Resolve (type resolution -> TIR) - optional for now
-    let tir = {
-        let mut resolver = Resolver::new(&symbols, &loaded_modules, &source);
-        resolver.resolve_module(&desugared_ast, vec![]).ok()
-    };
+    let symbols = analyzer.into_symbols();
+
+    // === Phase 7: Resolve all modules to TIR ===
+    let tir_modules = Resolver::resolve_all_modules(
+        &symbols,
+        &load_result.modules,
+        &load_result.entry_path,
+        &source,
+    )
+    .ok();
+
+    // === Phase 8: Lower all modules ===
+    let lowered_tir_modules = tir_modules.as_ref().map(|modules| {
+        modules
+            .iter()
+            .map(|(path, module)| (path.clone(), lower(module.clone())))
+            .collect()
+    });
+
+    // === Phase 9: Optimize ===
+    let opt_hints = lowered_tir_modules.as_ref().map(|modules| {
+        analyze_all_modules(modules, &load_result.entry_path)
+    });
 
     Ok(DumpResult {
+        source,
+        tokens: tokens_for_dump,
         ast,
         desugared_ast,
         symbols,
-        loaded_modules: loaded_modules.keys().cloned().collect(),
-        implicit_modules: implicit_modules.into_iter().collect(),
-        tir,
+        loaded_modules: load_result.modules.keys().cloned().collect(),
+        implicit_modules: load_result.implicit_modules.into_iter().collect(),
+        entry_path: load_result.entry_path,
+        tir_modules,
+        lowered_tir_modules,
+        opt_hints,
+        comments: comment_map,
     })
 }
 
