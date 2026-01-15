@@ -13,6 +13,7 @@ pub struct DumpOptions {
     pub show_tir: bool,
     pub show_lower: bool,
     pub show_optimize: bool,
+    pub unparse: bool,
 }
 
 pub fn print_usage() {
@@ -20,16 +21,22 @@ pub fn print_usage() {
     eprintln!();
     eprintln!("Dump compiler internal state for debugging.");
     eprintln!();
-    eprintln!("Options:");
-    eprintln!("  --tokens     Show tokens from lexer");
-    eprintln!("  --ast        Show AST from parser (unparsed to Wado source)");
-    eprintln!("  --desugar    Show desugared AST (unparsed to Wado source)");
-    eprintln!("  --symbols    Show symbol table from analyzer");
-    eprintln!("  --modules    Show loaded modules");
-    eprintln!("  --tir        Show TIR (Typed IR) from resolver");
-    eprintln!("  --lower      Show lowered TIR");
-    eprintln!("  --optimize   Show optimization hints");
-    eprintln!("  --all        Show all information (default if no options)");
+    eprintln!("Compilation Phases:");
+    eprintln!("  --tokens     (Phase 1: Lexer) Show tokens");
+    eprintln!("  --ast        (Phase 2: Parser) Show AST structure");
+    eprintln!("  --desugar    (Phase 3: Desugar) Show desugared AST");
+    eprintln!("  --modules    (Phase 4: Load) Show loaded modules");
+    eprintln!("  --symbols    (Phase 5: Analyze) Show symbol table");
+    eprintln!("  --tir        (Phase 6: Resolve) Show TIR (Typed IR)");
+    eprintln!("  --lower      (Phase 7: Lower) Show lowered TIR");
+    eprintln!("  --optimize   (Phase 8: Optimize) Show optimization hints");
+    eprintln!("  --all        Show all phases (default if no phase specified)");
+    eprintln!();
+    eprintln!("Display Options:");
+    eprintln!("  --unparse    Unparse to Wado source code (for ast/desugar/tir/lower)");
+    eprintln!("               Default: Debug/tree format");
+    eprintln!();
+    eprintln!("Other:");
     eprintln!("  --help       Show this help message");
 }
 
@@ -43,6 +50,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_tir = false;
     let mut show_lower = false;
     let mut show_optimize = false;
+    let mut unparse = false;
 
     while let Some(arg) = parser.next().unwrap_or_else(|e| {
         eprintln!("Error: {e}");
@@ -76,6 +84,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
             }
             Long("optimize") => {
                 show_optimize = true;
+            }
+            Long("unparse") => {
+                unparse = true;
             }
             Long("all") => {
                 show_tokens = true;
@@ -141,6 +152,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_tir,
         show_lower,
         show_optimize,
+        unparse,
     }
 }
 
@@ -164,19 +176,43 @@ pub fn run(opts: DumpOptions) {
 
     // AST section (Parser phase)
     if opts.show_ast {
-        println!("=== AST (Parser, unparsed) ===");
-        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
-        let unparsed = unparser.unparse(&result.ast);
-        println!("{}", unparsed);
+        if opts.unparse {
+            println!("=== AST (Parser, unparsed) ===");
+            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+            let unparsed = unparser.unparse(&result.ast);
+            println!("{}", unparsed);
+        } else {
+            println!("=== AST (Parser) ===");
+            for (i, item) in result.ast.items.iter().enumerate() {
+                println!("  [{}] {:#?}", i, item);
+            }
+            if let Some(data) = result.ast.data_section() {
+                println!();
+                println!("--- Data Section ---");
+                println!("{}", data);
+            }
+        }
         println!();
     }
 
     // Desugared AST section (Desugar phase)
     if opts.show_desugar {
-        println!("=== Desugared AST (Desugar, unparsed) ===");
-        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
-        let unparsed = unparser.unparse(&result.desugared_ast);
-        println!("{}", unparsed);
+        if opts.unparse {
+            println!("=== Desugared AST (Desugar, unparsed) ===");
+            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+            let unparsed = unparser.unparse(&result.desugared_ast);
+            println!("{}", unparsed);
+        } else {
+            println!("=== Desugared AST (Desugar) ===");
+            for (i, item) in result.desugared_ast.items.iter().enumerate() {
+                println!("  [{}] {:#?}", i, item);
+            }
+            if let Some(data) = result.desugared_ast.data_section() {
+                println!();
+                println!("--- Data Section ---");
+                println!("{}", data);
+            }
+        }
         println!();
     }
 
@@ -289,11 +325,17 @@ pub fn run(opts: DumpOptions) {
     // TIR section (Resolve phase)
     if opts.show_tir {
         if let Some(ref tir_modules) = result.tir_modules {
-            println!("=== TIR (Resolve) ===");
-            for (path, module) in tir_modules {
-                println!("--- Module: {} ---", path.join("::"));
-                println!("{:#?}", module);
+            if opts.unparse {
+                println!("=== TIR (Resolve, unparsed) ===");
+                println!("(TIR unparsing not yet implemented)");
                 println!();
+            } else {
+                println!("=== TIR (Resolve) ===");
+                for (path, module) in tir_modules {
+                    println!("--- Module: {} ---", path.join("::"));
+                    println!("{:#?}", module);
+                    println!();
+                }
             }
         } else {
             println!("=== TIR (Resolve) ===");
@@ -305,11 +347,17 @@ pub fn run(opts: DumpOptions) {
     // Lowered TIR section (Lower phase)
     if opts.show_lower {
         if let Some(ref lowered_modules) = result.lowered_tir_modules {
-            println!("=== Lowered TIR (Lower) ===");
-            for (path, module) in lowered_modules {
-                println!("--- Module: {} ---", path.join("::"));
-                println!("{:#?}", module);
+            if opts.unparse {
+                println!("=== Lowered TIR (Lower, unparsed) ===");
+                println!("(TIR unparsing not yet implemented)");
                 println!();
+            } else {
+                println!("=== Lowered TIR (Lower) ===");
+                for (path, module) in lowered_modules {
+                    println!("--- Module: {} ---", path.join("::"));
+                    println!("{:#?}", module);
+                    println!();
+                }
             }
         } else {
             println!("=== Lowered TIR (Lower) ===");
