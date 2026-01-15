@@ -127,7 +127,7 @@ This project relies on the following features:
 - All the documents and comments must be written in English.
 - Everything is under discussion. We can change the spec at any time.
 - When referring to WAT, use folded style syntax.
-- Do not commit changes unless the user requests so.
+- Do not commit changes unless the user requests so. When commit, no need to explain the implementation details.
 
 ## Rules for Rust
 
