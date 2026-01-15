@@ -565,7 +565,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Type inference
 - [ ] Effect checking
 - [ ] Borrow checking / move analysis
-- [ ] Scope analysis for variables
+- [x] Scope analysis for variables
 - [ ] Unused variable warnings
 
 ### Code Generation

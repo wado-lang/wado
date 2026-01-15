@@ -1,0 +1,13 @@
+// Test: for loop variable should not be accessible outside the loop
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    for let mut x = 0; x < 10; x = x + 1 {
+        // x is valid here
+    }
+    println(`{x}`);  // Error: x is not in scope here
+}
+
+__DATA__
+{"compile_error": "not in scope"}

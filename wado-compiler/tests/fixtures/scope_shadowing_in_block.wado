@@ -1,0 +1,17 @@
+// Test: Rust-style shadowing - let x = x + 1 should work in inner block
+// Uses "if true" as a workaround since standalone blocks are not yet supported
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let x = 42;
+    if true {
+        // This shadows outer x, using outer x's value for initialization
+        let x = x + 1;
+        println(`inner: {x}`);  // Should print 43
+    }
+    println(`outer: {x}`);  // Should print 42 (outer x unchanged)
+}
+
+__DATA__
+{"stdout": "inner: 43\nouter: 42\n"}

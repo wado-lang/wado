@@ -120,6 +120,40 @@ Identifiers are case-sensitive.
 - `return expr;` is necessary for a function to return a value.
 - Control flow statements do not need to be followed by a semicolon.
 
+### Variable Scoping
+
+Variables are scoped to their enclosing block. Variables declared inside control flow bodies (`if`, `while`, `for`, `loop`) are not accessible outside.
+
+```wado
+for let mut i = 0; i < 10; i = i + 1 {
+    let x = i * 2;
+}
+// i and x are not in scope here
+
+if true {
+    let y = 42;
+}
+// y is not in scope here
+```
+
+Shadowing in an inner block creates a new binding:
+
+```wado
+let x = 1;
+if true {
+    let x = x + 1;  // New binding, initialized from outer x
+    println(`{x}`); // 2
+}
+println(`{x}`);     // 1 (outer x unchanged)
+```
+
+Same-scope redeclaration is not allowed (unlike Rust):
+
+```wado
+let x = 1;
+let x = 2;  // Error: cannot redeclare 'x' in the same scope
+```
+
 ### Operators
 
 **Binary Operators** (in order of precedence, lowest to highest):

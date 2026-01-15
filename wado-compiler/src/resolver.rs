@@ -128,36 +128,51 @@ struct LocalVar {
     name: String,
     type_id: TypeId,
     index: u32,
+    #[allow(dead_code)] // For future mutability checking
     is_mut: bool,
 }
 
-/// Function context during resolution
+/// Function context during resolution with scope tracking
 struct FunctionContext {
-    /// Local variables (name -> info)
-    locals: HashMap<String, LocalVar>,
-    /// Next local index
+    /// Stack of scopes (each scope maps name -> LocalVar)
+    scopes: Vec<HashMap<String, LocalVar>>,
+    /// Next local index (Wasm locals are function-wide)
     next_local: u32,
     /// Return type of the function
+    #[allow(dead_code)] // For future return type checking
     return_type: TypeId,
-    /// Local variable types in order
+    /// Local variable types in order (for Wasm local declarations)
     local_types: Vec<TypeId>,
 }
 
 impl FunctionContext {
     fn new(return_type: TypeId) -> Self {
         Self {
-            locals: HashMap::new(),
+            scopes: vec![HashMap::new()], // Start with one scope for function parameters
             next_local: 0,
             return_type,
             local_types: Vec::new(),
         }
     }
 
+    /// Enter a new scope (for blocks, if/while/for/loop bodies)
+    fn enter_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    /// Exit the current scope
+    fn exit_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    /// Add a local variable to the current scope
     fn add_local(&mut self, name: String, type_id: TypeId, is_mut: bool) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
         self.local_types.push(type_id);
-        self.locals.insert(
+
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
             name.clone(),
             LocalVar {
                 name,
@@ -169,8 +184,14 @@ impl FunctionContext {
         index
     }
 
+    /// Look up a variable by name (searches from innermost to outermost scope)
     fn lookup(&self, name: &str) -> Option<&LocalVar> {
-        self.locals.get(name)
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(local);
+            }
+        }
+        None
     }
 }
 
@@ -665,11 +686,13 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a block
     fn resolve_block(&mut self, block: &Block, ctx: &mut FunctionContext) -> TirBlock {
+        ctx.enter_scope();
         let stmts: Vec<TirStmt> = block
             .stmts
             .iter()
             .flat_map(|s| self.resolve_stmt(s, ctx))
             .collect();
+        ctx.exit_scope();
         TirBlock::new(stmts, block.span)
     }
 
@@ -752,9 +775,13 @@ impl<'a> Resolver<'a> {
         TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
     }
 
-    /// Resolve a for statement - generates init + For node
+    /// Resolve a for statement - generates init + For node wrapped in a scope
     /// The For node handles continue correctly (executes update before next iteration)
+    /// The init variable is scoped to the for loop and not visible after it
     fn resolve_for(&mut self, for_stmt: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+        // Enter scope for the for loop's init variable
+        ctx.enter_scope();
+
         let mut result = Vec::new();
 
         // Add init statement if present (e.g., let i = 0)
@@ -762,7 +789,7 @@ impl<'a> Resolver<'a> {
             result.extend(self.resolve_stmt(init_stmt, ctx));
         }
 
-        // Resolve the body
+        // Resolve the body (note: resolve_block enters its own scope for body variables)
         let body = self.resolve_block(&for_stmt.body, ctx);
 
         // Resolve condition (None means infinite loop)
@@ -784,6 +811,9 @@ impl<'a> Resolver<'a> {
             for_stmt.span,
         );
         result.push(for_tir);
+
+        // Exit the for loop's scope
+        ctx.exit_scope();
 
         result
     }

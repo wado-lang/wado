@@ -1,0 +1,15 @@
+// Test: while loop body variable should not be accessible outside
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let mut i = 0;
+    while i < 1 {
+        let z = 999;
+        i = i + 1;
+    }
+    println(`{z}`);  // Error: z is not in scope here
+}
+
+__DATA__
+{"compile_error": "not in scope"}
