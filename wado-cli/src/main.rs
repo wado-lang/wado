@@ -1,3 +1,4 @@
+mod args;
 mod compile;
 mod dump;
 mod format;
@@ -5,7 +6,7 @@ mod run;
 
 use std::process;
 
-use lexopt::prelude::*;
+use lexopt::Arg::{Long, Value};
 
 fn print_usage() {
     eprintln!("Usage: wado <command> [options]");

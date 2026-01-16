@@ -1,49 +1,117 @@
 //! wado-from-wit CLI
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::process;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use lexopt::Arg::Long;
 use wit_parser::Resolve;
 
 use wado_from_wit::{Transformer, WadoCodeGenerator};
 
-#[derive(Parser)]
-#[command(name = "wado-from-wit")]
-#[command(about = "Generate Wado standard library from WIT files")]
-#[command(long_about = "Generate Wado standard library from WIT files.\n\n\
-    Filter mode (default): Reads WIT from stdin, writes Wado to stdout.\n\
-    Directory mode: Use --wit-dir and --output-dir to batch process files.")]
+// Helper functions for lexopt argument parsing
+
+fn exit_error(msg: &str) -> ! {
+    eprintln!("Error: {msg}");
+    process::exit(1);
+}
+
+fn next_arg(parser: &mut lexopt::Parser) -> Option<lexopt::Arg<'_>> {
+    match parser.next() {
+        Ok(arg) => arg,
+        Err(e) => exit_error(&e.to_string()),
+    }
+}
+
+fn require_string(parser: &mut lexopt::Parser) -> String {
+    parser
+        .value()
+        .unwrap_or_else(|e| exit_error(&e.to_string()))
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn require_path(parser: &mut lexopt::Parser) -> PathBuf {
+    PathBuf::from(
+        parser
+            .value()
+            .unwrap_or_else(|e| exit_error(&e.to_string())),
+    )
+}
+
 struct Cli {
-    /// Directory containing WIT files (enables directory mode)
-    #[arg(long, value_name = "DIR")]
     wit_dir: Option<PathBuf>,
-
-    /// Output directory for generated Wado files (required with --wit-dir)
-    #[arg(long, value_name = "DIR")]
     output_dir: Option<PathBuf>,
-
-    /// Only generate for specific package (e.g., "cli", "filesystem")
-    #[arg(long)]
     package: Option<String>,
-
-    /// Package name for filter mode (default: "wasi")
-    #[arg(long, default_value = "wasi")]
     package_name: String,
-
-    /// Package version for filter mode (default: "0.0.0")
-    #[arg(long, default_value = "0.0.0")]
     package_version: String,
-
-    /// Skip @unstable items (by default, all items including unstable are included)
-    #[arg(long)]
     skip_unstable: bool,
 }
 
+fn print_usage() {
+    eprintln!("wado-from-wit - Generate Wado standard library from WIT files");
+    eprintln!();
+    eprintln!("Filter mode (default): Reads WIT from stdin, writes Wado to stdout.");
+    eprintln!("Directory mode: Use --wit-dir and --output-dir to batch process files.");
+    eprintln!();
+    eprintln!("Usage: wado-from-wit [options]");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!(
+        "  --wit-dir <DIR>           Directory containing WIT files (enables directory mode)"
+    );
+    eprintln!(
+        "  --output-dir <DIR>        Output directory for generated Wado files (required with --wit-dir)"
+    );
+    eprintln!(
+        "  --package <NAME>          Only generate for specific package (e.g., \"cli\", \"filesystem\")"
+    );
+    eprintln!("  --package-name <NAME>     Package name for filter mode (default: \"wasi\")");
+    eprintln!("  --package-version <VER>   Package version for filter mode (default: \"0.0.0\")");
+    eprintln!("  --skip-unstable           Skip @unstable items");
+    eprintln!("  --help                    Show this help message");
+}
+
+fn parse_args() -> Cli {
+    let mut cli = Cli {
+        wit_dir: None,
+        output_dir: None,
+        package: None,
+        package_name: "wasi".to_string(),
+        package_version: "0.0.0".to_string(),
+        skip_unstable: false,
+    };
+
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = next_arg(&mut parser) {
+        match arg {
+            Long("help") => {
+                print_usage();
+                process::exit(0);
+            }
+            Long("wit-dir") => cli.wit_dir = Some(require_path(&mut parser)),
+            Long("output-dir") => cli.output_dir = Some(require_path(&mut parser)),
+            Long("package") => cli.package = Some(require_string(&mut parser)),
+            Long("package-name") => cli.package_name = require_string(&mut parser),
+            Long("package-version") => cli.package_version = require_string(&mut parser),
+            Long("skip-unstable") => cli.skip_unstable = true,
+            _ => {
+                eprintln!("Error: unexpected argument");
+                print_usage();
+                process::exit(1);
+            }
+        }
+    }
+
+    cli
+}
+
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = parse_args();
 
     if let Some(ref wit_dir) = cli.wit_dir {
         // Directory mode
@@ -210,8 +278,6 @@ fn run_directory_mode(
 
     Ok(())
 }
-
-use std::collections::HashMap;
 
 /// Build a map from interface/world name to the WIT file that defines it
 fn build_interface_to_file_map(dir: &PathBuf) -> Result<HashMap<String, String>> {

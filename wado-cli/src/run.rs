@@ -1,11 +1,12 @@
 use std::process;
 
 use anyhow::Result;
-use lexopt::prelude::*;
+use lexopt::Arg::{Long, Value};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
+use crate::args::{next_arg, reject_multiple_inputs, require_input, unexpected_arg};
 use crate::compile;
 
 pub struct RunOptions {
@@ -22,40 +23,23 @@ pub fn print_usage() {
 pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut input: Option<String> = None;
 
-    while let Some(arg) = parser.next().unwrap_or_else(|e| {
-        eprintln!("Error: {e}");
-        process::exit(1);
-    }) {
+    while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
                 process::exit(0);
             }
             Value(val) => {
-                if input.is_some() {
-                    eprintln!("Error: multiple input files not supported");
-                    process::exit(1);
-                }
+                reject_multiple_inputs(&input);
                 input = Some(val.to_string_lossy().into_owned());
             }
-            _ => {
-                eprintln!("Error: {}", arg.unexpected());
-                print_usage();
-                process::exit(1);
-            }
+            _ => unexpected_arg(arg, print_usage),
         }
     }
 
-    let input = match input {
-        Some(f) => f,
-        None => {
-            eprintln!("Error: no input file specified");
-            print_usage();
-            process::exit(1);
-        }
-    };
-
-    RunOptions { input }
+    RunOptions {
+        input: require_input(input, print_usage),
+    }
 }
 
 struct WasiState {
