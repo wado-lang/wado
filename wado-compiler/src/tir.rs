@@ -76,6 +76,25 @@ pub enum ResolvedType {
         value: TypeId,
     },
     Reactive(TypeId),
+    /// Type parameter (e.g., `T` in `struct Box<T>`)
+    /// Used before monomorphization; should be substituted with concrete types
+    TypeParam {
+        name: String,
+        /// Index of the type parameter in the generic definition (0 for first param)
+        index: u32,
+    },
+    /// Generic struct instantiation (e.g., `Box<i32>`)
+    /// Used to track instantiation sites before monomorphization
+    GenericInstance {
+        /// Base generic type name (e.g., "Box")
+        name: String,
+        module_path: Vec<String>,
+        /// Concrete type arguments (e.g., [i32])
+        type_args: Vec<TypeId>,
+    },
+    /// Raw GC array intrinsic (`builtin::array<T>`)
+    /// This is the underlying storage type for String and Array<T> structs
+    BuiltinArray(TypeId),
     Unknown,
     Error,
 }
@@ -109,9 +128,9 @@ impl TypeTable {
     pub const CHAR: TypeId = 13;
     pub const UNIT: TypeId = 14;
     pub const NEVER: TypeId = 15;
-    pub const STRING: TypeId = 16;
-    pub const UNKNOWN: TypeId = 17;
-    pub const ERROR: TypeId = 18;
+    // STRING removed - String is now a user-defined struct in core/prelude
+    pub const UNKNOWN: TypeId = 16;
+    pub const ERROR: TypeId = 17;
 
     pub fn new() -> Self {
         let mut table = Self {
@@ -136,7 +155,7 @@ impl TypeTable {
         table.intern(ResolvedType::Primitive(PrimitiveType::Char));
         table.intern(ResolvedType::Unit);
         table.intern(ResolvedType::Never);
-        table.intern(ResolvedType::String);
+        // ResolvedType::String removed - String is now a user-defined struct
         table.intern(ResolvedType::Unknown);
         table.intern(ResolvedType::Error);
 
@@ -198,6 +217,11 @@ impl TypeTable {
         self.intern(ResolvedType::Array(element))
     }
 
+    /// Create a raw GC array type (`builtin::array<T>`)
+    pub fn make_builtin_array(&mut self, element: TypeId) -> TypeId {
+        self.intern(ResolvedType::BuiltinArray(element))
+    }
+
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {
         self.intern(ResolvedType::Option(inner))
     }
@@ -227,6 +251,16 @@ impl TypeTable {
         self.intern(ResolvedType::Struct { name, module_path })
     }
 
+    /// Find the type_id for a struct by name and module path (O(1) lookup via intern_map)
+    pub fn find_struct_type(&self, name: &str, module_path: &[String]) -> Option<TypeId> {
+        // Use the existing intern_map for O(1) lookup
+        let key = ResolvedType::Struct {
+            name: name.to_string(),
+            module_path: module_path.to_vec(),
+        };
+        self.intern_map.get(&key).copied()
+    }
+
     pub fn make_enum(&mut self, name: String, module_path: Vec<String>) -> TypeId {
         self.intern(ResolvedType::Enum { name, module_path })
     }
@@ -237,6 +271,58 @@ impl TypeTable {
 
     pub fn make_mut_ref(&mut self, inner: TypeId) -> TypeId {
         self.intern(ResolvedType::MutRef(inner))
+    }
+
+    /// Create a type parameter (e.g., `T` in `struct Box<T>`)
+    pub fn make_type_param(&mut self, name: String, index: u32) -> TypeId {
+        self.intern(ResolvedType::TypeParam { name, index })
+    }
+
+    /// Create a generic instance (e.g., `Box<i32>`)
+    pub fn make_generic_instance(
+        &mut self,
+        name: String,
+        module_path: Vec<String>,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        self.intern(ResolvedType::GenericInstance {
+            name,
+            module_path,
+            type_args,
+        })
+    }
+
+    /// Check if a type is or contains type parameters
+    pub fn contains_type_param(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } => true,
+            ResolvedType::Array(inner)
+            | ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Option(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Stream(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
+            ResolvedType::Result { ok, err }
+            | ResolvedType::Dict {
+                key: ok,
+                value: err,
+            } => self.contains_type_param(*ok) || self.contains_type_param(*err),
+            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(*e)),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_type_param(*p))
+                    || self.contains_type_param(*return_type)
+            }
+            ResolvedType::GenericInstance { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_type_param(*t))
+            }
+            _ => false,
+        }
     }
 
     /// Get a human-readable name for a type
@@ -264,6 +350,9 @@ impl TypeTable {
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
             ResolvedType::Array(elem) => format!("Array<{}>", self.type_name(*elem)),
+            ResolvedType::BuiltinArray(elem) => {
+                format!("builtin::array<{}>", self.type_name(*elem))
+            }
             ResolvedType::Tuple(elems) => {
                 let elem_names: Vec<String> = elems.iter().map(|e| self.type_name(*e)).collect();
                 format!("[{}]", elem_names.join(", "))
@@ -295,6 +384,13 @@ impl TypeTable {
                 format!("Dict<{}, {}>", self.type_name(*key), self.type_name(*value))
             }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
+            ResolvedType::TypeParam { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
+                format!("{}<{}>", name, arg_names.join(", "))
+            }
         }
     }
 }
@@ -366,6 +462,8 @@ pub enum TirExprKind {
     Call {
         module_path: Vec<String>,
         func_name: String,
+        /// Explicit type arguments for generic functions: `identity::<i32>(x)`
+        type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
     },
     EffectCall {
@@ -376,6 +474,8 @@ pub enum TirExprKind {
     MethodCall {
         receiver: Box<TirExpr>,
         method_name: String,
+        /// Explicit type arguments for generic methods: `obj.method::<i32>()`
+        type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
     },
 
@@ -593,10 +693,31 @@ pub enum TirStmtKind {
 // Items (Top-level Declarations)
 // ============================================================================
 
+/// Generic type parameter in TIR (from AST GenericParam)
+#[derive(Debug, Clone)]
+pub struct TirTypeParam {
+    pub name: String,
+    pub bounds: Vec<String>,
+    pub index: u32,
+}
+
+/// Information about monomorphization origin for instantiated items
+#[derive(Debug, Clone)]
+pub struct MonomorphInfo {
+    /// Original generic name (e.g., "Box" for "Box$i32")
+    pub generic_name: String,
+    /// Concrete type arguments used for this instantiation
+    pub type_args: Vec<TypeId>,
+}
+
 #[derive(Debug, Clone)]
 pub struct TirFunction {
     pub name: String,
     pub is_pub: bool,
+    /// Generic type parameters (empty for non-generic functions)
+    pub type_params: Vec<TirTypeParam>,
+    /// If this function was created by monomorphization, contains the origin info
+    pub monomorph_info: Option<MonomorphInfo>,
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
     pub effects: Vec<String>,
@@ -621,6 +742,10 @@ pub struct TirParam {
 pub struct TirStruct {
     pub name: String,
     pub is_pub: bool,
+    /// Generic type parameters (empty for non-generic structs)
+    pub type_params: Vec<TirTypeParam>,
+    /// If this struct was created by monomorphization, contains the origin info
+    pub monomorph_info: Option<MonomorphInfo>,
     pub fields: Vec<TirField>,
     pub span: Span,
 }
@@ -637,6 +762,10 @@ pub struct TirField {
 pub struct TirEnum {
     pub name: String,
     pub is_pub: bool,
+    /// Generic type parameters (empty for non-generic enums)
+    pub type_params: Vec<TirTypeParam>,
+    /// If this enum was created by monomorphization, contains the origin info
+    pub monomorph_info: Option<MonomorphInfo>,
     pub variants: Vec<TirVariant>,
     pub span: Span,
 }
@@ -675,6 +804,8 @@ pub struct TirEffectOp {
 
 #[derive(Debug, Clone)]
 pub struct TirImpl {
+    /// Generic type parameters for the impl block (e.g., `impl<T> Box<T>`)
+    pub type_params: Vec<TirTypeParam>,
     pub target_type: TypeId,
     pub methods: Vec<TirFunction>,
     pub span: Span,
@@ -683,6 +814,15 @@ pub struct TirImpl {
 // ============================================================================
 // Module
 // ============================================================================
+
+/// Tracks a requested instantiation of a generic item
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InstantiationKey {
+    /// Name of the generic item (struct, function, or enum)
+    pub name: String,
+    /// Concrete type arguments for instantiation
+    pub type_args: Vec<TypeId>,
+}
 
 #[derive(Debug, Clone)]
 pub struct TirModule {
@@ -696,6 +836,14 @@ pub struct TirModule {
     pub impls: Vec<TirImpl>,
     pub data_section: Option<String>,
     pub string_literals: Vec<String>,
+    /// Generic struct definitions (before monomorphization)
+    /// Key: struct name
+    pub generic_structs: HashMap<String, TirStruct>,
+    /// Generic function definitions (before monomorphization)
+    /// Key: function name
+    pub generic_functions: HashMap<String, TirFunction>,
+    /// Requested instantiations (populated during resolution, processed in lower)
+    pub instantiation_requests: std::collections::HashSet<InstantiationKey>,
 }
 
 impl TirModule {
@@ -711,6 +859,9 @@ impl TirModule {
             impls: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
+            generic_structs: HashMap::new(),
+            generic_functions: HashMap::new(),
+            instantiation_requests: std::collections::HashSet::new(),
         }
     }
 
@@ -726,6 +877,9 @@ impl TirModule {
             impls: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
+            generic_structs: HashMap::new(),
+            generic_functions: HashMap::new(),
+            instantiation_requests: std::collections::HashSet::new(),
         }
     }
 
@@ -811,7 +965,7 @@ mod tests {
             table.get(TypeTable::BOOL),
             ResolvedType::Primitive(PrimitiveType::Bool)
         ));
-        assert!(matches!(table.get(TypeTable::STRING), ResolvedType::String));
+        // Note: String is now a user-defined struct, not a builtin type
         assert!(matches!(table.get(TypeTable::UNIT), ResolvedType::Unit));
     }
 
@@ -827,15 +981,16 @@ mod tests {
     fn test_composite_types() {
         let mut table = TypeTable::new();
         let option_i32 = table.make_option(TypeTable::I32);
-        let result_i32_string = table.make_result(TypeTable::I32, TypeTable::STRING);
+        // Use I64 as error type since String is now a user-defined struct
+        let result_i32_i64 = table.make_result(TypeTable::I32, TypeTable::I64);
 
         assert!(matches!(
             table.get(option_i32),
             ResolvedType::Option(id) if *id == TypeTable::I32
         ));
         assert!(matches!(
-            table.get(result_i32_string),
-            ResolvedType::Result { ok, err } if *ok == TypeTable::I32 && *err == TypeTable::STRING
+            table.get(result_i32_i64),
+            ResolvedType::Result { ok, err } if *ok == TypeTable::I32 && *err == TypeTable::I64
         ));
     }
 }

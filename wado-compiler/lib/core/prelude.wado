@@ -5,6 +5,46 @@
 
 use {log_stderr} from "core:internal";
 
+/// UTF-8 encoded string type
+pub struct String {
+    repr: builtin::array<u8>,
+}
+
+impl String {
+    /// Get the length of the string in bytes
+    pub fn len(&self) -> i32 {
+        return builtin::array_len(self.repr);
+    }
+
+    /// Get a byte at the given index
+    pub fn get(&self, index: i32) -> i32 {
+        return builtin::array_get_u8(self.repr, index);
+    }
+
+    /// Set a byte at the given index
+    pub fn set(&mut self, index: i32, value: i32) {
+        builtin::array_set_u8(self.repr, index, value);
+    }
+}
+
+/// Dynamic array type with O(1) amortized append
+pub struct Array<T> {
+    repr: builtin::array<T>,
+    used: i32,
+}
+
+impl Array<T> {
+    /// Get the number of elements in the array
+    pub fn len(&self) -> i32 {
+        return self.used;
+    }
+
+    /// Get the capacity (allocated size) of the array
+    pub fn capacity(&self) -> i32 {
+        return builtin::array_len(self.repr);
+    }
+}
+
 /// Traps with a message
 /// Logs the message to stderr (ambient, no effect required) and traps.
 pub fn panic(message: String) -> ! {

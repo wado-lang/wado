@@ -430,14 +430,8 @@ impl Parser {
 
         let name = self.consume_ident()?;
 
-        // Skip generic parameters like <T, E>
-        if self.check(&TokenKind::Lt) {
-            self.advance();
-            while !self.check(&TokenKind::Gt) && !self.is_at_end() {
-                self.advance();
-            }
-            self.expect(&TokenKind::Gt)?;
-        }
+        // Parse generic parameters like <T, U> or <T: Ord>
+        let type_params = self.parse_generic_params()?;
 
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
@@ -473,6 +467,7 @@ impl Parser {
         Ok(Function {
             name,
             is_pub,
+            type_params,
             attrs,
             params,
             return_type,
@@ -1321,9 +1316,37 @@ impl Parser {
                     let merged_span = callee_span.merge(&rparen_span);
                     expr = Expr::Call(Box::new(CallExpr {
                         callee: expr,
+                        type_args: vec![],
                         args,
                         span: merged_span,
                     }));
+                }
+                // Turbofish syntax for explicit type arguments: foo::<T>(x)
+                TokenKind::ColonColon => {
+                    // Check if this is turbofish (:: followed by <)
+                    // Peek at the token after ::
+                    let checkpoint = self.pos;
+                    self.advance(); // consume ::
+                    if self.check(&TokenKind::Lt) {
+                        // This is turbofish syntax: foo::<T>(x)
+                        let callee_span = expr.span();
+                        let type_args = self.parse_call_type_args()?;
+                        self.expect(&TokenKind::LParen)?;
+                        let args = self.parse_arg_list()?;
+                        let rparen_span = self.peek().span;
+                        self.expect(&TokenKind::RParen)?;
+                        let merged_span = callee_span.merge(&rparen_span);
+                        expr = Expr::Call(Box::new(CallExpr {
+                            callee: expr,
+                            type_args,
+                            args,
+                            span: merged_span,
+                        }));
+                    } else {
+                        // Not turbofish, backtrack
+                        self.pos = checkpoint;
+                        break;
+                    }
                 }
                 TokenKind::Dot => {
                     let receiver_span = expr.span();
@@ -1360,7 +1383,31 @@ impl Parser {
                         (self.consume_ident()?, None)
                     };
 
-                    if self.check(&TokenKind::LParen) {
+                    // Check for method call with turbofish: obj.method::<T>(x)
+                    if self.check(&TokenKind::ColonColon) {
+                        self.advance(); // consume ::
+                        if self.check(&TokenKind::Lt) {
+                            let type_args = self.parse_call_type_args()?;
+                            self.expect(&TokenKind::LParen)?;
+                            let args = self.parse_arg_list()?;
+                            let rparen_span = self.peek().span;
+                            self.expect(&TokenKind::RParen)?;
+                            let merged_span = receiver_span.merge(&rparen_span);
+                            expr = Expr::MethodCall(Box::new(MethodCallExpr {
+                                receiver: expr,
+                                method: field,
+                                type_args,
+                                args,
+                                span: merged_span,
+                            }));
+                        } else {
+                            // :: not followed by <, this is an error
+                            return Err(ParseError {
+                                message: "expected '<' after '::'".to_string(),
+                                span: self.peek().span,
+                            });
+                        }
+                    } else if self.check(&TokenKind::LParen) {
                         self.advance();
                         let args = self.parse_arg_list()?;
                         let rparen_span = self.peek().span;
@@ -1369,6 +1416,7 @@ impl Parser {
                         expr = Expr::MethodCall(Box::new(MethodCallExpr {
                             receiver: expr,
                             method: field,
+                            type_args: vec![],
                             args,
                             span: merged_span,
                         }));
@@ -1428,15 +1476,27 @@ impl Parser {
         match self.peek_kind().clone() {
             TokenKind::Ident(name) => {
                 self.advance();
-                // Check for qualified name (Effect::function)
+                // Check for qualified name (Effect::function) but not turbofish (foo::<T>)
                 if self.check(&TokenKind::ColonColon) {
-                    self.advance();
-                    let method = self.consume_ident()?;
-                    let qualified_name = format!("{}::{}", name, method);
-                    Ok(Expr::Ident(IdentExpr {
-                        name: qualified_name,
-                        span: start_span,
-                    }))
+                    // Peek ahead to check if this is turbofish (::< for type args)
+                    let checkpoint = self.pos;
+                    self.advance(); // consume ::
+                    if self.check(&TokenKind::Lt) {
+                        // This is turbofish, backtrack and let postfix expression handle it
+                        self.pos = checkpoint;
+                        Ok(Expr::Ident(IdentExpr {
+                            name,
+                            span: start_span,
+                        }))
+                    } else {
+                        // This is a qualified name like Effect::function
+                        let method = self.consume_ident()?;
+                        let qualified_name = format!("{}::{}", name, method);
+                        Ok(Expr::Ident(IdentExpr {
+                            name: qualified_name,
+                            span: start_span,
+                        }))
+                    }
                 } else if self.check(&TokenKind::LBrace)
                     && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
                 {
@@ -1719,6 +1779,38 @@ impl Parser {
 
         let name = self.consume_ident()?;
 
+        // Check for namespaced type: namespace::type<T>
+        if self.check(&TokenKind::ColonColon) {
+            self.advance();
+            let type_name = self.consume_ident()?;
+
+            // Namespaced generic type: namespace::type<T>
+            if self.check(&TokenKind::Lt) {
+                self.advance();
+                let mut args = vec![self.parse_type()?];
+                while self.check(&TokenKind::Comma) {
+                    self.advance();
+                    args.push(self.parse_type()?);
+                }
+                self.expect_gt()?;
+
+                return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                    namespace: name,
+                    name: type_name,
+                    args,
+                    span: start_span,
+                }));
+            } else {
+                // Namespaced type without generics: namespace::type
+                return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                    namespace: name,
+                    name: type_name,
+                    args: Vec::new(),
+                    span: start_span,
+                }));
+            }
+        }
+
         if self.check(&TokenKind::Lt) {
             self.advance();
             let mut args = vec![self.parse_type()?];
@@ -1819,10 +1911,74 @@ impl Parser {
         })
     }
 
+    /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`
+    fn parse_generic_params(&mut self) -> ParseResult<Vec<crate::ast::GenericParam>> {
+        if !self.check(&TokenKind::Lt) {
+            return Ok(Vec::new());
+        }
+
+        self.advance(); // consume '<'
+
+        let mut params = Vec::new();
+
+        while !self.check(&TokenKind::Gt) && !self.is_at_end() {
+            let start_span = self.peek().span;
+            let name = self.consume_ident()?;
+
+            // Parse optional trait bounds: `T: Ord` or `T: Ord + Clone`
+            let bounds = if self.check(&TokenKind::Colon) {
+                self.advance();
+                let mut bounds = vec![self.consume_ident()?];
+                while self.check(&TokenKind::Plus) {
+                    self.advance();
+                    bounds.push(self.consume_ident()?);
+                }
+                bounds
+            } else {
+                Vec::new()
+            };
+
+            params.push(crate::ast::GenericParam {
+                name,
+                bounds,
+                span: start_span,
+            });
+
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        self.expect(&TokenKind::Gt)?;
+        Ok(params)
+    }
+
+    /// Parse type arguments for turbofish syntax: `<T1, T2, ...>`
+    /// Used in function calls like `identity::<i32>(x)`
+    fn parse_call_type_args(&mut self) -> ParseResult<Vec<Type>> {
+        // Must start with '<'
+        self.expect(&TokenKind::Lt)?;
+
+        let mut types = vec![self.parse_type()?];
+        while self.check(&TokenKind::Comma) {
+            self.advance();
+            types.push(self.parse_type()?);
+        }
+
+        self.expect_gt()?;
+        Ok(types)
+    }
+
     fn parse_struct_decl(&mut self, is_pub: bool) -> ParseResult<StructDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Struct)?;
         let name = self.consume_ident()?;
+
+        // Parse generic parameters like <T, U>
+        let type_params = self.parse_generic_params()?;
+
         self.expect(&TokenKind::LBrace)?;
 
         let fields = self.parse_struct_fields()?;
@@ -1832,6 +1988,7 @@ impl Parser {
         Ok(StructDecl {
             name,
             is_pub,
+            type_params,
             fields,
             span: start_span.merge(&end_span),
         })
@@ -1864,6 +2021,10 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Enum)?;
         let name = self.consume_ident()?;
+
+        // Parse generic parameters like <T>
+        let type_params = self.parse_generic_params()?;
+
         self.expect(&TokenKind::LBrace)?;
 
         let mut variants = Vec::new();
@@ -1879,6 +2040,7 @@ impl Parser {
         Ok(EnumDecl {
             name,
             is_pub,
+            type_params,
             variants,
             span: start_span.merge(&end_span),
         })
@@ -1927,6 +2089,10 @@ impl Parser {
     fn parse_impl_block(&mut self) -> ParseResult<ImplBlock> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Impl)?;
+
+        // Parse generic parameters like <T>
+        let type_params = self.parse_generic_params()?;
+
         let ty = self.parse_type()?;
         self.expect(&TokenKind::LBrace)?;
 
@@ -1945,6 +2111,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(ImplBlock {
+            type_params,
             ty,
             methods,
             span: start_span.merge(&end_span),

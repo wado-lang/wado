@@ -222,6 +222,8 @@ pub struct UseDecl {
 pub struct Function {
     pub name: String,
     pub is_pub: bool,
+    /// Generic type parameters: `fn swap<T>(a: T, b: T) -> T`
+    pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
@@ -578,6 +580,8 @@ pub enum UnaryOp {
 #[derive(Debug, Clone)]
 pub struct CallExpr {
     pub callee: Expr,
+    /// Explicit type arguments for generic functions: `foo::<i32>(x)`
+    pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
     pub span: Span,
 }
@@ -586,6 +590,8 @@ pub struct CallExpr {
 pub struct MethodCallExpr {
     pub receiver: Expr,
     pub method: String,
+    /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
+    pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
     pub span: Span,
 }
@@ -677,6 +683,8 @@ pub struct FormatSpec {
 pub enum Type {
     Named(NamedType),
     Generic(GenericType),
+    /// Namespaced generic type like `builtin::array<T>`
+    NamespacedGeneric(NamespacedGenericType),
     Function(Box<FunctionType>),
     Tuple(Vec<Type>),
     Reference(Box<Type>),
@@ -692,6 +700,18 @@ pub struct NamedType {
 #[derive(Debug, Clone)]
 pub struct GenericType {
     pub name: String,
+    pub args: Vec<Type>,
+    pub span: Span,
+}
+
+/// Namespaced generic type like `builtin::array<T>`
+#[derive(Debug, Clone)]
+pub struct NamespacedGenericType {
+    /// Namespace (e.g., "builtin")
+    pub namespace: String,
+    /// Type name (e.g., "array")
+    pub name: String,
+    /// Generic arguments
     pub args: Vec<Type>,
     pub span: Span,
 }
@@ -723,10 +743,21 @@ pub struct EffectMethod {
     pub span: Span,
 }
 
+/// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`
+#[derive(Debug, Clone)]
+pub struct GenericParam {
+    pub name: String,
+    /// Trait bounds (e.g., `Ord`, `Clone`) - for future constraint checking
+    pub bounds: Vec<String>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
     pub is_pub: bool,
+    /// Generic type parameters: `struct Pair<T, U> { ... }`
+    pub type_params: Vec<GenericParam>,
     pub fields: Vec<StructField>,
     pub span: Span,
 }
@@ -742,6 +773,8 @@ pub struct StructField {
 pub struct EnumDecl {
     pub name: String,
     pub is_pub: bool,
+    /// Generic type parameters: `enum Option<T> { Some(T), None }`
+    pub type_params: Vec<GenericParam>,
     pub variants: Vec<EnumVariant>,
     pub span: Span,
 }
@@ -763,6 +796,8 @@ pub struct TypeAlias {
 
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
+    /// Generic type parameters: `impl<T> Box<T> { ... }`
+    pub type_params: Vec<GenericParam>,
     pub ty: Type,
     pub methods: Vec<Function>,
     pub span: Span,

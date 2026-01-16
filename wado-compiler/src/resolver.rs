@@ -8,7 +8,9 @@
 //! All type resolution happens in this phase. The output TIR has fully
 //! resolved types on every expression, making code generation mechanical.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use indexmap::IndexMap;
 
 use crate::ast::{
     self, AssertStmt, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt,
@@ -22,6 +24,20 @@ use crate::tir::{
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
+
+/// Module path for the String struct in core/prelude
+const STRING_MODULE_PATH: &[&str] = &["core", "prelude"];
+
+/// Helper to convert STRING_MODULE_PATH to Vec<String>
+fn string_module_path() -> Vec<String> {
+    STRING_MODULE_PATH
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect()
+}
+
+/// Struct field info: (module_path, fields) where fields is a list of (name, type_id) pairs
+type StructFieldInfo = (Vec<String>, Vec<(String, TypeId)>);
 
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
@@ -210,8 +226,8 @@ pub struct Resolver<'a> {
     loaded_modules: &'a HashMap<Vec<String>, Module>,
     /// Type aliases (name -> resolved type)
     type_aliases: HashMap<String, TypeId>,
-    /// Struct field info (struct name -> fields)
-    struct_fields: HashMap<String, Vec<(String, TypeId)>>,
+    /// Struct field info (struct name -> (module_path, fields))
+    struct_fields: HashMap<String, StructFieldInfo>,
     /// Function return types (name -> return type)
     function_return_types: HashMap<String, TypeId>,
     /// Imported function names for the current module
@@ -224,6 +240,18 @@ pub struct Resolver<'a> {
     current_module_path: Vec<String>,
     /// Current module items (for local function parameter lookup)
     current_module_items: Vec<Item>,
+    /// Type parameters currently in scope (name -> (index, TypeId))
+    /// Set when resolving generic structs or functions
+    current_type_params: HashMap<String, (u32, TypeId)>,
+    /// Generic struct definitions (name -> type param count)
+    /// Used to determine if a struct is generic
+    generic_struct_names: HashSet<String>,
+    /// Generic function type parameters (func_name -> type_params)
+    /// Used for substituting type parameters in return types
+    generic_function_params: HashMap<String, Vec<(String, TypeId)>>,
+    /// Generic method type parameters (mangled_name -> type_params)
+    /// Used for substituting type parameters in method return types
+    generic_method_params: HashMap<String, Vec<(String, TypeId)>>,
 }
 
 impl<'a> Resolver<'a> {
@@ -245,6 +273,10 @@ impl<'a> Resolver<'a> {
             source_code,
             current_module_path: Vec::new(),
             current_module_items: Vec::new(),
+            current_type_params: HashMap::new(),
+            generic_struct_names: HashSet::new(),
+            generic_function_params: HashMap::new(),
+            generic_method_params: HashMap::new(),
         }
     }
 
@@ -292,7 +324,9 @@ impl<'a> Resolver<'a> {
                     // Resolve impl block methods with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
                     for method in &impl_block.methods {
-                        if let Some(mut tir_func) = self.resolve_method(method, &struct_name) {
+                        if let Some(mut tir_func) =
+                            self.resolve_method(method, &struct_name, &impl_block.ty)
+                        {
                             // Mangle the method name: StructName::method_name
                             tir_func.name = format!("{}::{}", struct_name, method.name);
                             tir_module.add_function(tir_func);
@@ -323,13 +357,14 @@ impl<'a> Resolver<'a> {
     ///
     /// This resolves every module (entry and dependencies) to TIR,
     /// enabling TIR-only code generation.
+    /// Modules are returned in topological order based on struct field dependencies.
     pub fn resolve_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a HashMap<Vec<String>, Module>,
         entry_path: &[String],
         entry_source: &'a str,
-    ) -> Result<HashMap<Vec<String>, TirModule>, Vec<TypeError>> {
-        let mut result = HashMap::new();
+    ) -> Result<IndexMap<Vec<String>, TirModule>, Vec<TypeError>> {
+        let mut result = IndexMap::new();
         let mut all_errors = Vec::new();
 
         // Create a shared type table
@@ -337,8 +372,18 @@ impl<'a> Resolver<'a> {
         let mut type_aliases = HashMap::new();
         let mut struct_fields = HashMap::new();
 
-        // First pass: collect types from all modules
-        for module in modules.values() {
+        // First pass: collect struct names from all modules (for forward references)
+        for (path, module) in modules {
+            for item in &module.items {
+                if let Item::Struct(struct_decl) = item {
+                    // Insert with empty fields first - will be populated in second sub-pass
+                    struct_fields.insert(struct_decl.name.clone(), (path.clone(), Vec::new()));
+                }
+            }
+        }
+
+        // Second sub-pass: resolve struct fields and type aliases
+        for (path, module) in modules {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -348,16 +393,19 @@ impl<'a> Resolver<'a> {
                                 &field.ty,
                                 &mut type_table,
                                 &type_aliases,
+                                &struct_fields,
                             );
                             fields.push((field.name.clone(), type_id));
                         }
-                        struct_fields.insert(struct_decl.name.clone(), fields);
+                        // Update the struct_fields entry with actual fields
+                        struct_fields.insert(struct_decl.name.clone(), (path.clone(), fields));
                     }
                     Item::Type(type_alias) => {
                         let type_id = Self::resolve_type_static(
                             &type_alias.ty,
                             &mut type_table,
                             &type_aliases,
+                            &struct_fields,
                         );
                         type_aliases.insert(type_alias.name.clone(), type_id);
                     }
@@ -366,15 +414,25 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Topologically sort modules based on struct field type dependencies
+        // A module depends on another if it has a struct with a field of a type defined there
+        let sorted_paths = Self::topological_sort_modules(modules, &struct_fields, &type_table);
+
         // Second pass: resolve each module with per-module function_return_types and imports
-        for (path, module) in modules {
+        for path in &sorted_paths {
+            let module = modules.get(path).expect("module should exist");
             // Build function_return_types for this module only
             // (functions defined in this module)
             let mut function_return_types = HashMap::new();
             for item in &module.items {
                 if let Item::Function(func) = item {
                     let return_type = if let Some(ret_ty) = &func.return_type {
-                        Self::resolve_type_static(ret_ty, &mut type_table, &type_aliases)
+                        Self::resolve_type_static(
+                            ret_ty,
+                            &mut type_table,
+                            &type_aliases,
+                            &struct_fields,
+                        )
                     } else {
                         TypeTable::UNIT
                     };
@@ -424,6 +482,10 @@ impl<'a> Resolver<'a> {
                 source_code: source,
                 current_module_path: Vec::new(), // Set in resolve_module
                 current_module_items: Vec::new(), // Set in resolve_module
+                current_type_params: HashMap::new(),
+                generic_struct_names: HashSet::new(),
+                generic_function_params: HashMap::new(),
+                generic_method_params: HashMap::new(),
             };
 
             match resolver.resolve_module(module, path.clone()) {
@@ -445,11 +507,100 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Topologically sort modules based on struct field type dependencies.
+    ///
+    /// A module A depends on module B if A contains a struct with a field whose type
+    /// is a struct defined in B. This ensures that when we register struct types in
+    /// codegen, dependency structs are registered before the structs that reference them.
+    fn topological_sort_modules(
+        modules: &HashMap<Vec<String>, Module>,
+        struct_fields: &HashMap<String, StructFieldInfo>,
+        type_table: &TypeTable,
+    ) -> Vec<Vec<String>> {
+        // Collect and sort paths for deterministic ordering
+        let mut paths: Vec<&Vec<String>> = modules.keys().collect();
+        paths.sort();
+        let path_to_idx: HashMap<&Vec<String>, usize> =
+            paths.iter().enumerate().map(|(i, p)| (*p, i)).collect();
+
+        // Track dependency counts directly (no need for full dependency sets)
+        let mut dependency_count: Vec<usize> = vec![0; paths.len()];
+        // Track which edges we've already added to avoid duplicates
+        let mut seen_edges: HashSet<(usize, usize)> = HashSet::new();
+        // Build reverse graph: dependents[i] = modules that depend on module i
+        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); paths.len()];
+
+        // Analyze struct fields to find cross-module dependencies
+        for (struct_name, (module_path, fields)) in struct_fields {
+            let Some(&from_idx) = path_to_idx.get(module_path) else {
+                continue;
+            };
+            for (_field_name, field_type_id) in fields {
+                if let ResolvedType::Struct {
+                    name: ref_struct_name,
+                    module_path: ref_module_path,
+                } = type_table.get(*field_type_id)
+                {
+                    // Skip self-references (same struct or same module)
+                    if ref_struct_name == struct_name || ref_module_path == module_path {
+                        continue;
+                    }
+                    if let Some(&to_idx) = path_to_idx.get(ref_module_path) {
+                        // from_idx depends on to_idx (dependency edge)
+                        if seen_edges.insert((from_idx, to_idx)) {
+                            dependency_count[from_idx] += 1;
+                            dependents[to_idx].push(from_idx);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Kahn's algorithm: start with modules that have no dependencies
+        let mut queue: VecDeque<usize> = dependency_count
+            .iter()
+            .enumerate()
+            .filter(|(_, count)| **count == 0)
+            .map(|(i, _)| i)
+            .collect();
+
+        let mut sorted_indices = Vec::with_capacity(paths.len());
+        while let Some(idx) = queue.pop_front() {
+            sorted_indices.push(idx);
+            // Update dependents using reverse graph (O(1) per edge)
+            for &dependent_idx in &dependents[idx] {
+                dependency_count[dependent_idx] -= 1;
+                if dependency_count[dependent_idx] == 0 {
+                    queue.push_back(dependent_idx);
+                }
+            }
+        }
+
+        // Cycle detection with warning (O(n) using HashSet)
+        if sorted_indices.len() < paths.len() {
+            let sorted_set: HashSet<usize> = sorted_indices.iter().copied().collect();
+            let in_cycle: Vec<usize> = (0..paths.len())
+                .filter(|i| !sorted_set.contains(i))
+                .collect();
+            let cycle_modules: Vec<_> = in_cycle.iter().map(|&i| paths[i].join("::")).collect();
+            eprintln!(
+                "Warning: circular struct dependencies detected among modules: {}",
+                cycle_modules.join(", ")
+            );
+            // Append remaining in deterministic order (already sorted by index)
+            sorted_indices.extend(in_cycle);
+        }
+
+        // Convert indices back to paths
+        sorted_indices.iter().map(|&i| paths[i].clone()).collect()
+    }
+
     /// Static version of resolve_type for use before the resolver is fully constructed
     fn resolve_type_static(
         ty: &Type,
         type_table: &mut TypeTable,
         type_aliases: &HashMap<String, TypeId>,
+        struct_fields: &HashMap<String, StructFieldInfo>,
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -472,37 +623,102 @@ impl<'a> Resolver<'a> {
                     "u64" => TypeTable::U64,
                     "f32" => TypeTable::F32,
                     "f64" => TypeTable::F64,
-                    "String" => TypeTable::STRING,
                     "()" => TypeTable::UNIT,
                     "!" => TypeTable::NEVER,
-                    _ => TypeTable::UNKNOWN,
+                    _ => {
+                        // Check if it's a struct type
+                        if let Some((module_path, _)) = struct_fields.get(&named.name) {
+                            type_table.make_struct(named.name.clone(), module_path.clone())
+                        } else {
+                            TypeTable::UNKNOWN
+                        }
+                    }
                 }
             }
             Type::Generic(generic) => match generic.name.as_str() {
                 "Option" if !generic.args.is_empty() => {
-                    let inner =
-                        Self::resolve_type_static(&generic.args[0], type_table, type_aliases);
+                    let inner = Self::resolve_type_static(
+                        &generic.args[0],
+                        type_table,
+                        type_aliases,
+                        struct_fields,
+                    );
                     type_table.intern(ResolvedType::Option(inner))
                 }
                 "Result" if generic.args.len() >= 2 => {
-                    let ok = Self::resolve_type_static(&generic.args[0], type_table, type_aliases);
-                    let err = Self::resolve_type_static(&generic.args[1], type_table, type_aliases);
+                    let ok = Self::resolve_type_static(
+                        &generic.args[0],
+                        type_table,
+                        type_aliases,
+                        struct_fields,
+                    );
+                    let err = Self::resolve_type_static(
+                        &generic.args[1],
+                        type_table,
+                        type_aliases,
+                        struct_fields,
+                    );
                     type_table.intern(ResolvedType::Result { ok, err })
                 }
+                // Special case: Array<T> is defined as a struct in prelude, but we use
+                // ResolvedType::Array(elem) for codegen compatibility until proper
+                // generic struct monomorphization is implemented
                 "Array" if !generic.args.is_empty() => {
-                    let elem =
-                        Self::resolve_type_static(&generic.args[0], type_table, type_aliases);
+                    let elem = Self::resolve_type_static(
+                        &generic.args[0],
+                        type_table,
+                        type_aliases,
+                        struct_fields,
+                    );
                     type_table.intern(ResolvedType::Array(elem))
                 }
-                _ => TypeTable::UNKNOWN,
+                _ => {
+                    // Check if it's a generic struct type
+                    if let Some((module_path, _)) = struct_fields.get(&generic.name) {
+                        // Resolve type arguments
+                        let type_args: Vec<TypeId> = generic
+                            .args
+                            .iter()
+                            .map(|arg| {
+                                Self::resolve_type_static(
+                                    arg,
+                                    type_table,
+                                    type_aliases,
+                                    struct_fields,
+                                )
+                            })
+                            .collect();
+                        type_table.make_generic_instance(
+                            generic.name.clone(),
+                            module_path.clone(),
+                            type_args,
+                        )
+                    } else {
+                        TypeTable::UNKNOWN
+                    }
+                }
             },
             Type::Reference(inner) => {
-                let inner_type = Self::resolve_type_static(inner, type_table, type_aliases);
+                let inner_type =
+                    Self::resolve_type_static(inner, type_table, type_aliases, struct_fields);
                 type_table.make_ref(inner_type)
             }
             Type::MutReference(inner) => {
-                let inner_type = Self::resolve_type_static(inner, type_table, type_aliases);
+                let inner_type =
+                    Self::resolve_type_static(inner, type_table, type_aliases, struct_fields);
                 type_table.make_mut_ref(inner_type)
+            }
+            Type::NamespacedGeneric(namespaced) => {
+                // Handle builtin::array<T>
+                if namespaced.namespace == "builtin"
+                    && namespaced.name == "array"
+                    && let Some(elem_ty) = namespaced.args.first()
+                {
+                    let elem =
+                        Self::resolve_type_static(elem_ty, type_table, type_aliases, struct_fields);
+                    return type_table.make_builtin_array(elem);
+                }
+                TypeTable::UNKNOWN
             }
             _ => TypeTable::UNKNOWN,
         }
@@ -523,16 +739,52 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Then collect from the main module
+        // First pass: collect generic struct names from loaded modules (needed for resolve_generic_type)
+        for loaded_module in self.loaded_modules.values() {
+            for item in &loaded_module.items {
+                if let Item::Struct(struct_decl) = item
+                    && !struct_decl.type_params.is_empty()
+                {
+                    self.generic_struct_names.insert(struct_decl.name.clone());
+                }
+            }
+        }
+
+        // Also collect generic struct names from the current module
+        for item in &module.items {
+            if let Item::Struct(struct_decl) = item
+                && !struct_decl.type_params.is_empty()
+            {
+                self.generic_struct_names.insert(struct_decl.name.clone());
+            }
+        }
+
+        // Then collect struct fields from the main module
         for item in &module.items {
             match item {
                 Item::Struct(struct_decl) => {
+                    // Set up type parameters in scope for resolving field types
+                    let old_type_params = std::mem::take(&mut self.current_type_params);
+                    for (index, param) in struct_decl.type_params.iter().enumerate() {
+                        let type_id = self
+                            .type_table
+                            .make_type_param(param.name.clone(), index as u32);
+                        self.current_type_params
+                            .insert(param.name.clone(), (index as u32, type_id));
+                    }
+
                     let mut fields = Vec::new();
                     for field in &struct_decl.fields {
                         let type_id = self.resolve_type(&field.ty);
                         fields.push((field.name.clone(), type_id));
                     }
-                    self.struct_fields.insert(struct_decl.name.clone(), fields);
+                    self.struct_fields.insert(
+                        struct_decl.name.clone(),
+                        (self.current_module_path.clone(), fields),
+                    );
+
+                    // Restore type params scope
+                    self.current_type_params = old_type_params;
                 }
                 Item::Type(type_alias) => {
                     let type_id = self.resolve_type(&type_alias.ty);
@@ -576,6 +828,16 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a struct declaration
     fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
+        // Set up type parameters in scope before resolving fields
+        let old_type_params = std::mem::take(&mut self.current_type_params);
+        for (index, param) in struct_decl.type_params.iter().enumerate() {
+            let type_id = self
+                .type_table
+                .make_type_param(param.name.clone(), index as u32);
+            self.current_type_params
+                .insert(param.name.clone(), (index as u32, type_id));
+        }
+
         let mut fields = Vec::new();
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = self.resolve_type(&field.ty);
@@ -587,9 +849,26 @@ impl<'a> Resolver<'a> {
             });
         }
 
+        // Restore previous type params scope
+        self.current_type_params = old_type_params;
+
+        // Convert AST type params to TIR type params
+        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                bounds: p.bounds.clone(),
+                index: i as u32,
+            })
+            .collect();
+
         TirStruct {
             name: struct_decl.name.clone(),
             is_pub: struct_decl.is_pub,
+            type_params,
+            monomorph_info: None, // Not from monomorphization
             fields,
             span: struct_decl.span,
         }
@@ -597,12 +876,35 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a function
     fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
+        // Set up type parameters in scope before resolving types
+        let old_type_params = std::mem::take(&mut self.current_type_params);
+        let mut type_param_list = Vec::new();
+        for (index, param) in func.type_params.iter().enumerate() {
+            let type_id = self
+                .type_table
+                .make_type_param(param.name.clone(), index as u32);
+            self.current_type_params
+                .insert(param.name.clone(), (index as u32, type_id));
+            type_param_list.push((param.name.clone(), type_id));
+        }
+
+        // Store type parameters for generic functions (for call site substitution)
+        if !func.type_params.is_empty() {
+            self.generic_function_params
+                .insert(func.name.clone(), type_param_list);
+        }
+
         // Resolve return type
         let return_type = func
             .return_type
             .as_ref()
             .map(|t| self.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
+
+        // Update the function_return_types with the resolved return type
+        // (This replaces the potentially incorrect type from static resolution)
+        self.function_return_types
+            .insert(func.name.clone(), return_type);
 
         let mut ctx = FunctionContext::new(return_type);
 
@@ -622,9 +924,26 @@ impl<'a> Resolver<'a> {
         // Resolve body
         let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx));
 
+        // Restore previous type params scope
+        self.current_type_params = old_type_params;
+
+        // Convert AST type params to TIR type params
+        let type_params: Vec<crate::tir::TirTypeParam> = func
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                bounds: p.bounds.clone(),
+                index: i as u32,
+            })
+            .collect();
+
         Some(TirFunction {
             name: func.name.clone(),
             is_pub: func.is_pub,
+            type_params,
+            monomorph_info: None, // Not from monomorphization
             params,
             return_type,
             effects: func.effects.clone(),
@@ -637,13 +956,36 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a method (function with &self parameter)
-    fn resolve_method(&mut self, func: &Function, struct_name: &str) -> Option<TirFunction> {
+    fn resolve_method(
+        &mut self,
+        func: &Function,
+        struct_name: &str,
+        impl_type: &Type,
+    ) -> Option<TirFunction> {
+        // Set up type parameters in scope before resolving types
+        let old_type_params = std::mem::take(&mut self.current_type_params);
+        let mut type_param_list = Vec::new();
+        for (index, param) in func.type_params.iter().enumerate() {
+            let type_id = self
+                .type_table
+                .make_type_param(param.name.clone(), index as u32);
+            self.current_type_params
+                .insert(param.name.clone(), (index as u32, type_id));
+            type_param_list.push((param.name.clone(), type_id));
+        }
+
         // Resolve return type
         let return_type = func
             .return_type
             .as_ref()
             .map(|t| self.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
+
+        // Update the function_return_types with the resolved return type
+        // (This replaces the potentially incorrect type from static resolution)
+        let mangled_name = format!("{}::{}", struct_name, func.name);
+        self.function_return_types
+            .insert(mangled_name.clone(), return_type);
 
         let mut ctx = FunctionContext::new(return_type);
 
@@ -652,10 +994,8 @@ impl<'a> Resolver<'a> {
         for param in &func.params {
             let is_self = !matches!(param.self_kind, ast::SelfKind::None);
             let type_id = if is_self {
-                // &self parameter is a reference to the struct type
-                // Use current_module_path so the type is correctly qualified
-                self.type_table
-                    .make_struct(struct_name.to_string(), self.current_module_path.clone())
+                // &self parameter type is the impl type (e.g., Box<i32> for `impl Box<i32>`)
+                self.resolve_type(impl_type)
             } else {
                 self.resolve_type(&param.ty)
             };
@@ -671,9 +1011,32 @@ impl<'a> Resolver<'a> {
         // Resolve body
         let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx));
 
+        // Restore previous type params scope
+        self.current_type_params = old_type_params;
+
+        // Store type parameters for generic methods (for call site substitution)
+        if !func.type_params.is_empty() {
+            self.generic_method_params
+                .insert(mangled_name, type_param_list);
+        }
+
+        // Convert AST type params to TIR type params
+        let type_params: Vec<crate::tir::TirTypeParam> = func
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                bounds: p.bounds.clone(),
+                index: i as u32,
+            })
+            .collect();
+
         Some(TirFunction {
             name: func.name.clone(), // Will be mangled by caller
             is_pub: func.is_pub,
+            type_params,
+            monomorph_info: None, // Not from monomorphization
             params,
             return_type,
             effects: func.effects.clone(),
@@ -689,6 +1052,7 @@ impl<'a> Resolver<'a> {
     fn get_type_name(&self, ty: &Type) -> String {
         match ty {
             Type::Named(named) => named.name.clone(),
+            Type::Generic(generic) => generic.name.clone(),
             Type::Reference(inner) => self.get_type_name(inner),
             Type::MutReference(inner) => self.get_type_name(inner),
             _ => "Unknown".to_string(),
@@ -1195,26 +1559,29 @@ impl<'a> Resolver<'a> {
         // Build panic call with message
         let message_expr = if let Some(msg) = &assert_stmt.message {
             // User provided message: "Assertion failed: {message}"
+            let string_type = self.get_string_struct_type();
             let user_msg = self.resolve_expr(msg, ctx);
             let prefix = TirExpr::new(
                 TirExprKind::StringLiteral("Assertion failed: ".to_string()),
-                TypeTable::STRING,
+                string_type,
                 assert_stmt.span,
             );
             TirExpr::new(
                 TirExprKind::Call {
                     module_path: vec!["core".to_string(), "internal".to_string()],
                     func_name: "string_concat".to_string(),
+                    type_args: vec![],
                     args: vec![prefix, user_msg],
                 },
-                TypeTable::STRING,
+                string_type,
                 assert_stmt.span,
             )
         } else {
             // No message: "Assertion failed:"
+            let string_type = self.get_string_struct_type();
             TirExpr::new(
                 TirExprKind::StringLiteral("Assertion failed:".to_string()),
-                TypeTable::STRING,
+                string_type,
                 assert_stmt.span,
             )
         };
@@ -1224,6 +1591,7 @@ impl<'a> Resolver<'a> {
             TirExprKind::Call {
                 module_path: vec!["core".to_string(), "prelude".to_string()],
                 func_name: "panic".to_string(),
+                type_args: vec![],
                 args: vec![message_expr],
             },
             TypeTable::NEVER,
@@ -1370,7 +1738,10 @@ impl<'a> Resolver<'a> {
             }
             Literal::Bool(b) => (TirExprKind::BoolLiteral(*b), TypeTable::BOOL),
             Literal::Char(c) => (TirExprKind::CharLiteral(*c), TypeTable::CHAR),
-            Literal::String(s) => (TirExprKind::StringLiteral(s.clone()), TypeTable::STRING),
+            Literal::String(s) => {
+                let string_type = self.get_string_struct_type();
+                (TirExprKind::StringLiteral(s.clone()), string_type)
+            }
             Literal::Null => {
                 // Null is Option<T> where T is unknown
                 let option_unknown = self.type_table.make_option(TypeTable::UNKNOWN);
@@ -1596,13 +1967,11 @@ impl<'a> Resolver<'a> {
                         (vec![prefix.to_string()], suffix.to_string(), true)
                     }
                 }
-                // First, check if it's a local function (defined in this module)
-                else if self.function_return_types.contains_key(&ident.name) {
-                    (Vec::new(), ident.name.clone(), true)
-                }
-                // Check for built-in type constructors (Ok, Err, Some, None)
-                // These are variant constructors, generated inline
-                else if matches!(ident.name.as_str(), "Ok" | "Err" | "Some" | "None") {
+                // Check if it's a local function (defined in this module) or
+                // a built-in type constructor (Ok, Err, Some, None)
+                else if self.function_return_types.contains_key(&ident.name)
+                    || matches!(ident.name.as_str(), "Ok" | "Err" | "Some" | "None")
+                {
                     (Vec::new(), ident.name.clone(), true)
                 }
                 // Check for prelude functions (panic, unreachable)
@@ -1648,13 +2017,26 @@ impl<'a> Resolver<'a> {
             });
         }
 
+        // Resolve explicit type arguments
+        let type_args: Vec<TypeId> = call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
         // Look up function return type
-        let return_type = self.lookup_function_return_type(&module_path, &func_name);
+        let mut return_type = self.lookup_function_return_type(&module_path, &func_name);
+
+        // If we have explicit type args, substitute type parameters in the return type
+        if !type_args.is_empty() {
+            return_type = self.substitute_type_params(return_type, &type_args);
+        }
 
         TirExpr::new(
             TirExprKind::Call {
                 module_path,
                 func_name,
+                type_args,
                 args,
             },
             return_type,
@@ -1710,26 +2092,32 @@ impl<'a> Resolver<'a> {
 
     /// Get the return type of a WASI effect operation
     fn get_wasi_effect_return_type(&mut self, effect: &str, operation: &str) -> Option<TypeId> {
+        let string_type = self.get_string_struct_type();
         match (effect, operation) {
             // Environment effect operations
-            ("Environment", "get_arguments") => Some(
-                self.type_table
-                    .intern(ResolvedType::Array(TypeTable::STRING)),
-            ),
+            ("Environment", "get_arguments") => {
+                Some(self.type_table.intern(ResolvedType::Array(string_type)))
+            }
             ("Environment", "get_environment") => {
                 // Returns Array<[String, String]> - array of key-value tuple pairs
-                let tuple_type = self.type_table.intern(ResolvedType::Tuple(vec![
-                    TypeTable::STRING,
-                    TypeTable::STRING,
-                ]));
+                let tuple_type = self
+                    .type_table
+                    .intern(ResolvedType::Tuple(vec![string_type, string_type]));
                 Some(self.type_table.intern(ResolvedType::Array(tuple_type)))
             }
-            ("Environment", "get_initial_cwd") => Some(
-                self.type_table
-                    .intern(ResolvedType::Option(TypeTable::STRING)),
-            ),
+            ("Environment", "get_initial_cwd") => {
+                Some(self.type_table.intern(ResolvedType::Option(string_type)))
+            }
             _ => None,
         }
+    }
+
+    /// Get the String struct type (from prelude)
+    fn get_string_struct_type(&mut self) -> TypeId {
+        self.type_table.make_struct(
+            "String".to_string(),
+            vec!["core".to_string(), "prelude".to_string()],
+        )
     }
 
     /// Get the return type of a builtin function
@@ -1739,11 +2127,14 @@ impl<'a> Resolver<'a> {
             "array_len" => TypeTable::I32,
             "array_get_u8" => TypeTable::I32, // Returns u8 as i32
             "array_set_u8" => TypeTable::UNIT,
-            "string_new" => TypeTable::STRING,
-            "array_new_string" => self
-                .type_table
-                .intern(ResolvedType::Array(TypeTable::STRING)),
-            "array_get_string" => TypeTable::STRING,
+            "string_new" => self.get_string_struct_type(),
+            "array_new_string" => {
+                // Returns builtin::array<String>, not Array<String>
+                let string_type = self.get_string_struct_type();
+                self.type_table
+                    .intern(ResolvedType::BuiltinArray(string_type))
+            }
+            "array_get_string" => self.get_string_struct_type(),
             "array_set_string" => TypeTable::UNIT,
 
             // Memory operations
@@ -1892,7 +2283,6 @@ impl<'a> Resolver<'a> {
                 "f64" => TypeTable::F64,
                 "bool" => TypeTable::BOOL,
                 "char" => TypeTable::CHAR,
-                "String" => TypeTable::STRING,
                 "!" => TypeTable::NEVER,
                 "()" => TypeTable::UNIT,
                 _ => {
@@ -1921,13 +2311,26 @@ impl<'a> Resolver<'a> {
             .map(|a| self.resolve_expr(a, ctx))
             .collect();
 
+        // Resolve explicit type arguments
+        let type_args: Vec<TypeId> = method_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
         // Look up method return type based on receiver type
-        let return_type = self.lookup_method_return_type(receiver.type_id, &method_call.method);
+        let mut return_type = self.lookup_method_return_type(receiver.type_id, &method_call.method);
+
+        // If we have explicit type args, substitute type parameters in the return type
+        if !type_args.is_empty() {
+            return_type = self.substitute_type_params(return_type, &type_args);
+        }
 
         TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 method_name: method_call.method.clone(),
+                type_args,
                 args,
             },
             return_type,
@@ -1940,17 +2343,29 @@ impl<'a> Resolver<'a> {
         // Get the struct name and module path from the receiver type
         let (struct_name, module_path) = match self.type_table.get(receiver_type) {
             ResolvedType::Struct { name, module_path } => (name.clone(), module_path.clone()),
+            // Generic instances like Box<i32> use the base name "Box" for method lookup
+            ResolvedType::GenericInstance {
+                name, module_path, ..
+            } => (name.clone(), module_path.clone()),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                if let ResolvedType::Struct { name, module_path } = self.type_table.get(*inner) {
-                    (name.clone(), module_path.clone())
-                } else {
-                    return TypeTable::UNKNOWN;
+                match self.type_table.get(*inner) {
+                    ResolvedType::Struct { name, module_path } => {
+                        (name.clone(), module_path.clone())
+                    }
+                    ResolvedType::GenericInstance {
+                        name, module_path, ..
+                    } => (name.clone(), module_path.clone()),
+                    _ => return TypeTable::UNKNOWN,
                 }
             }
             // Primitive types have built-in methods like to_string()
             ResolvedType::Primitive(_) => {
                 if method_name == "to_string" {
-                    return TypeTable::STRING;
+                    // Return String struct type
+                    return self
+                        .type_table
+                        .find_struct_type("String", &string_module_path())
+                        .unwrap_or(TypeTable::UNKNOWN);
                 }
                 return TypeTable::UNKNOWN;
             }
@@ -1961,12 +2376,14 @@ impl<'a> Resolver<'a> {
                 }
                 return TypeTable::UNKNOWN;
             }
-            // String type has built-in methods like len()
+            // String type (legacy - String is now a struct, but handle for backwards compat)
             ResolvedType::String => {
-                if method_name == "len" {
-                    return TypeTable::I32;
+                match method_name {
+                    "len" => return TypeTable::I32,
+                    "get" => return TypeTable::I32, // returns u8 as i32
+                    "set" => return TypeTable::UNIT, // mutating method
+                    _ => return TypeTable::UNKNOWN,
                 }
-                return TypeTable::UNKNOWN;
             }
             _ => return TypeTable::UNKNOWN,
         };
@@ -1992,6 +2409,28 @@ impl<'a> Resolver<'a> {
                                     .as_ref()
                                     .map(|t| self.resolve_type_no_register(t))
                                     .unwrap_or(TypeTable::UNIT);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search all loaded modules if module_path is empty (for prelude types)
+        if module_path.is_empty() {
+            for (_, module) in self.loaded_modules.iter() {
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item {
+                        let impl_struct_name = self.get_type_name(&impl_block.ty);
+                        if impl_struct_name == struct_name {
+                            for method in &impl_block.methods {
+                                if method.name == method_name {
+                                    return method
+                                        .return_type
+                                        .as_ref()
+                                        .map(|t| self.resolve_type_no_register(t))
+                                        .unwrap_or(TypeTable::UNIT);
+                                }
                             }
                         }
                     }
@@ -2027,15 +2466,17 @@ impl<'a> Resolver<'a> {
 
     /// Look up field type from a struct or tuple type
     fn lookup_field_type(
-        &self,
+        &mut self,
         struct_type: TypeId,
         field_name: &str,
-        span: Span,
+        _span: Span,
     ) -> (u32, TypeId) {
-        match self.type_table.get(struct_type) {
+        // Clone the type to avoid borrow issues
+        let resolved = self.type_table.get(struct_type).clone();
+        match resolved {
             // Struct field access
             ResolvedType::Struct { name, .. } => {
-                if let Some(fields) = self.struct_fields.get(name) {
+                if let Some((_, fields)) = self.struct_fields.get(&name) {
                     for (index, (fname, ftype)) in fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
@@ -2053,11 +2494,76 @@ impl<'a> Resolver<'a> {
             }
             // Reference types - look through to inner type
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                return self.lookup_field_type(*inner, field_name, span);
+                return self.lookup_field_type(inner, field_name, _span);
+            }
+            // Generic instance - look up field from generic struct definition
+            // and substitute type parameters with concrete type args
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                // Clone fields to avoid borrow issues
+                let fields_clone = self.struct_fields.get(&name).cloned();
+                if let Some((_, fields)) = fields_clone {
+                    for (index, (fname, ftype)) in fields.iter().enumerate() {
+                        if fname == field_name {
+                            // Substitute type parameters with concrete types
+                            let concrete_type = self.substitute_type_params(*ftype, &type_args);
+                            return (index as u32, concrete_type);
+                        }
+                    }
+                }
             }
             _ => {}
         }
         (0, TypeTable::UNKNOWN)
+    }
+
+    /// Substitute type parameters in a type with concrete type arguments
+    fn substitute_type_params(&mut self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
+        match self.type_table.get(type_id).clone() {
+            ResolvedType::TypeParam { index, .. } => {
+                // Direct substitution: T -> type_args[index]
+                type_args.get(index as usize).copied().unwrap_or(type_id)
+            }
+            ResolvedType::Array(elem) => {
+                let new_elem = self.substitute_type_params(elem, type_args);
+                self.type_table.make_array(new_elem)
+            }
+            ResolvedType::Option(inner) => {
+                let new_inner = self.substitute_type_params(inner, type_args);
+                self.type_table.make_option(new_inner)
+            }
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute_type_params(inner, type_args);
+                self.type_table.make_ref(new_inner)
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute_type_params(inner, type_args);
+                self.type_table.make_mut_ref(new_inner)
+            }
+            ResolvedType::Tuple(elems) => {
+                let new_elems: Vec<TypeId> = elems
+                    .iter()
+                    .map(|&e| self.substitute_type_params(e, type_args))
+                    .collect();
+                self.type_table.make_tuple(new_elems)
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_path,
+                type_args: inner_args,
+            } => {
+                // Recursively substitute in nested generic instances
+                let new_args: Vec<TypeId> = inner_args
+                    .iter()
+                    .map(|&arg| self.substitute_type_params(arg, type_args))
+                    .collect();
+                self.type_table
+                    .make_generic_instance(name, module_path, new_args)
+            }
+            // Other types don't contain type parameters
+            _ => type_id,
+        }
     }
 
     /// Resolve an index expression
@@ -2298,6 +2804,9 @@ impl<'a> Resolver<'a> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        // Get the String struct type
+        let string_type = self.get_string_struct_type();
+
         // Collect all parts as expressions
         let mut parts: Vec<TirExpr> = Vec::new();
 
@@ -2307,7 +2816,7 @@ impl<'a> Resolver<'a> {
                     if !s.is_empty() {
                         parts.push(TirExpr::new(
                             TirExprKind::StringLiteral(s.clone()),
-                            TypeTable::STRING,
+                            string_type,
                             template.span,
                         ));
                     }
@@ -2317,7 +2826,7 @@ impl<'a> Resolver<'a> {
                     let resolved = self.resolve_expr(expr, ctx);
                     // TODO: handle format specifiers
                     // For now, wrap in to_string if not already a string
-                    let string_expr = if resolved.type_id == TypeTable::STRING {
+                    let string_expr = if resolved.type_id == string_type {
                         resolved
                     } else {
                         // Call to_string method
@@ -2325,9 +2834,10 @@ impl<'a> Resolver<'a> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(resolved.clone()),
                                 method_name: "to_string".to_string(),
+                                type_args: vec![],
                                 args: vec![],
                             },
-                            TypeTable::STRING,
+                            string_type,
                             expr.span(),
                         )
                     };
@@ -2345,7 +2855,7 @@ impl<'a> Resolver<'a> {
         if parts.is_empty() {
             return TirExpr::new(
                 TirExprKind::StringLiteral(String::new()),
-                TypeTable::STRING,
+                string_type,
                 template.span,
             );
         }
@@ -2358,9 +2868,10 @@ impl<'a> Resolver<'a> {
                 TirExprKind::Call {
                     module_path: vec!["core".to_string(), "internal".to_string()],
                     func_name: "string_concat".to_string(),
+                    type_args: vec![],
                     args: vec![result, part],
                 },
-                TypeTable::STRING,
+                string_type,
                 template.span,
             );
         }
@@ -2453,10 +2964,7 @@ impl<'a> Resolver<'a> {
             (name.clone(), Vec::new())
         };
 
-        let struct_type = self
-            .type_table
-            .make_struct(struct_name.clone(), module_path);
-
+        // Resolve field expressions first
         let fields: Vec<TirStructField> = struct_lit
             .fields
             .iter()
@@ -2471,6 +2979,17 @@ impl<'a> Resolver<'a> {
             })
             .collect();
 
+        // Check if this is a generic struct and infer type arguments
+        let struct_type = if self.generic_struct_names.contains(&struct_name) {
+            // This is a generic struct - infer type arguments from field values
+            let type_args = self.infer_type_args_from_fields(&struct_name, &fields);
+            self.type_table
+                .make_generic_instance(struct_name.clone(), module_path, type_args)
+        } else {
+            self.type_table
+                .make_struct(struct_name.clone(), module_path)
+        };
+
         TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
@@ -2480,6 +2999,46 @@ impl<'a> Resolver<'a> {
             struct_type,
             struct_lit.span,
         )
+    }
+
+    /// Infer type arguments for a generic struct from field values
+    fn infer_type_args_from_fields(
+        &self,
+        struct_name: &str,
+        fields: &[TirStructField],
+    ) -> Vec<TypeId> {
+        // Get the generic struct's field type information
+        let Some((_, field_types)) = self.struct_fields.get(struct_name) else {
+            return vec![];
+        };
+
+        // Build a map from type param TypeId to concrete TypeId
+        let mut type_param_map: HashMap<TypeId, TypeId> = HashMap::new();
+
+        for (struct_field, (_, expected_type_id)) in fields.iter().zip(field_types.iter()) {
+            let actual_type_id = struct_field.value.type_id;
+
+            // Check if expected type is a type parameter
+            if let ResolvedType::TypeParam { .. } = self.type_table.get(*expected_type_id) {
+                // Map this type param to the actual type
+                type_param_map.insert(*expected_type_id, actual_type_id);
+            }
+        }
+
+        // Collect type args in order (by TypeParam index)
+        let mut type_args: Vec<(u32, TypeId)> = type_param_map
+            .iter()
+            .filter_map(|(&param_id, &concrete_id)| {
+                if let ResolvedType::TypeParam { index, .. } = self.type_table.get(param_id) {
+                    Some((*index, concrete_id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        type_args.sort_by_key(|(index, _)| *index);
+        type_args.into_iter().map(|(_, type_id)| type_id).collect()
     }
 
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
@@ -2534,11 +3093,54 @@ impl<'a> Resolver<'a> {
                 let inner_type = self.resolve_type(inner);
                 self.type_table.make_mut_ref(inner_type)
             }
+            Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
+        }
+    }
+
+    /// Resolve a namespaced generic type like `builtin::array<T>`
+    fn resolve_namespaced_generic_type(
+        &mut self,
+        namespaced: &crate::ast::NamespacedGenericType,
+    ) -> TypeId {
+        match namespaced.namespace.as_str() {
+            "builtin" => match namespaced.name.as_str() {
+                "array" => {
+                    if namespaced.args.len() != 1 {
+                        self.errors.push(TypeError::ArgumentCountMismatch {
+                            expected: 1,
+                            found: namespaced.args.len(),
+                            span: namespaced.span,
+                        });
+                        return TypeTable::ERROR;
+                    }
+                    let element_type = self.resolve_type(&namespaced.args[0]);
+                    self.type_table.make_builtin_array(element_type)
+                }
+                _ => {
+                    self.errors.push(TypeError::UnknownType {
+                        name: format!("builtin::{}", namespaced.name),
+                        span: namespaced.span,
+                    });
+                    TypeTable::ERROR
+                }
+            },
+            _ => {
+                self.errors.push(TypeError::UnknownType {
+                    name: format!("{}::{}", namespaced.namespace, namespaced.name),
+                    span: namespaced.span,
+                });
+                TypeTable::ERROR
+            }
         }
     }
 
     /// Resolve a named type
     fn resolve_named_type(&mut self, name: &str, _span: Span) -> TypeId {
+        // First check if it's a type parameter in scope
+        if let Some(&(_, type_id)) = self.current_type_params.get(name) {
+            return type_id;
+        }
+
         match name {
             // Primitives
             "i8" => TypeTable::I8,
@@ -2557,17 +3159,15 @@ impl<'a> Resolver<'a> {
             "char" => TypeTable::CHAR,
             "()" => TypeTable::UNIT,
             "!" => TypeTable::NEVER,
-            "String" => TypeTable::STRING,
 
-            // Check type aliases
+            // Check type aliases, then struct definitions
             _ => {
                 if let Some(&type_id) = self.type_aliases.get(name) {
                     type_id
-                } else if self.struct_fields.contains_key(name) {
-                    // It's a struct defined in the current module (or a previously collected module)
-                    // Use current_module_path to properly qualify the type
+                } else if let Some((module_path, _)) = self.struct_fields.get(name) {
+                    // It's a struct - use the module path where it was defined
                     self.type_table
-                        .make_struct(name.to_string(), self.current_module_path.clone())
+                        .make_struct(name.to_string(), module_path.clone())
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN
@@ -2579,13 +3179,6 @@ impl<'a> Resolver<'a> {
     /// Resolve a generic type
     fn resolve_generic_type(&mut self, name: &str, args: &[Type]) -> TypeId {
         match name {
-            "Array" | "Vec" => {
-                let elem_type = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.make_array(elem_type)
-            }
             "Option" => {
                 let inner = args
                     .first()
@@ -2629,7 +3222,37 @@ impl<'a> Resolver<'a> {
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.type_table.intern(ResolvedType::Dict { key, value })
             }
-            _ => TypeTable::UNKNOWN,
+            // Special case: Array<T> is defined as a struct in prelude, but we use
+            // ResolvedType::Array(elem) for codegen compatibility until proper
+            // generic struct monomorphization is implemented
+            "Array" => {
+                let elem = args
+                    .first()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNKNOWN);
+                self.type_table.intern(ResolvedType::Array(elem))
+            }
+            _ => {
+                // Check if it's a user-defined generic struct
+                if self.generic_struct_names.contains(name) {
+                    // Resolve type arguments
+                    let type_args: Vec<TypeId> =
+                        args.iter().map(|t| self.resolve_type(t)).collect();
+
+                    // Get the module path where the struct was defined
+                    let module_path = self
+                        .struct_fields
+                        .get(name)
+                        .map(|(path, _)| path.clone())
+                        .unwrap_or_else(|| self.current_module_path.clone());
+
+                    // Create a GenericInstance type
+                    self.type_table
+                        .make_generic_instance(name.to_string(), module_path, type_args)
+                } else {
+                    TypeTable::UNKNOWN
+                }
+            }
         }
     }
 

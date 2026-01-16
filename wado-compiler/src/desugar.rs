@@ -39,6 +39,7 @@ fn desugar_function(func: &Function) -> Function {
     Function {
         name: func.name.clone(),
         is_pub: func.is_pub,
+        type_params: func.type_params.clone(),
         attrs: func.attrs.clone(),
         params: func.params.clone(),
         return_type: func.return_type.clone(),
@@ -50,6 +51,7 @@ fn desugar_function(func: &Function) -> Function {
 
 fn desugar_impl(impl_block: &ImplBlock) -> ImplBlock {
     ImplBlock {
+        type_params: impl_block.type_params.clone(),
         ty: impl_block.ty.clone(),
         methods: impl_block.methods.iter().map(desugar_function).collect(),
         span: impl_block.span,
@@ -165,12 +167,14 @@ fn desugar_expr(expr: &Expr) -> Expr {
         })),
         Expr::Call(c) => Expr::Call(Box::new(CallExpr {
             callee: desugar_expr(&c.callee),
+            type_args: c.type_args.clone(),
             args: c.args.iter().map(desugar_expr).collect(),
             span: c.span,
         })),
         Expr::MethodCall(m) => Expr::MethodCall(Box::new(MethodCallExpr {
             receiver: desugar_expr(&m.receiver),
             method: m.method.clone(),
+            type_args: m.type_args.clone(),
             args: m.args.iter().map(desugar_expr).collect(),
             span: m.span,
         })),

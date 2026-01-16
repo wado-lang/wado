@@ -1,0 +1,23 @@
+// Test: generic struct as function parameter and return value
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+fn make_box(v: i32) -> Box<i32> {
+    return Box { value: v };
+}
+
+fn get_value(b: Box<i32>) -> i32 {
+    return b.value;
+}
+
+fn run() with Stdout {
+    let b = make_box(42);
+    let v = get_value(b);
+    println(`value: {v}`);
+}
+
+__DATA__
+{"stdout": "value: 42\n"}

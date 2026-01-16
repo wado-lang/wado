@@ -75,17 +75,25 @@ fn i32_eqz(a: i32) -> i32;
 // GC Array Operations
 // ============================================================================
 
-/// Get the length of a GC array (String or Array<T>)
-fn array_len(arr: String) -> i32;
+/// Get the length of a GC array
+fn array_len(arr: builtin::array<u8>) -> i32;
 
 /// Get a byte from a u8 array at the given index
-fn array_get_u8(arr: String, idx: i32) -> i32;
+fn array_get_u8(arr: builtin::array<u8>, idx: i32) -> i32;
 
 /// Set a byte in a u8 array at the given index
-fn array_set_u8(arr: String, idx: i32, value: i32);
+fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: i32);
 
-/// Create a new String (GC array<u8>) with given length, initialized to zeros
+/// Create a new builtin::array<u8> with given length, initialized to zeros
+fn array_u8_new(len: i32) -> builtin::array<u8>;
+
+/// Create a new String struct with given capacity
 fn string_new(len: i32) -> String;
+
+/// Wrap a raw string array into an Array<String> struct
+/// repr: the raw builtin::array<String>
+/// used: number of elements actually used
+fn array_wrap_string(repr: builtin::array<String>, used: i32) -> Array<String>;
 
 // ============================================================================
 // Linear Memory Operations

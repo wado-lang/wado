@@ -327,8 +327,11 @@ pub fn run(opts: DumpOptions) {
         if let Some(ref tir_modules) = result.tir_modules {
             if opts.unparse {
                 println!("=== TIR (Resolve, unparsed) ===");
-                println!("(TIR unparsing not yet implemented)");
-                println!();
+                for (path, module) in tir_modules {
+                    println!("// --- Module: {} ---", path.join("::"));
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    println!("{}", unparsed);
+                }
             } else {
                 println!("=== TIR (Resolve) ===");
                 for (path, module) in tir_modules {
@@ -349,8 +352,11 @@ pub fn run(opts: DumpOptions) {
         if let Some(ref lowered_modules) = result.lowered_tir_modules {
             if opts.unparse {
                 println!("=== Lowered TIR (Lower, unparsed) ===");
-                println!("(TIR unparsing not yet implemented)");
-                println!();
+                for (path, module) in lowered_modules {
+                    println!("// --- Module: {} ---", path.join("::"));
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    println!("{}", unparsed);
+                }
             } else {
                 println!("=== Lowered TIR (Lower) ===");
                 for (path, module) in lowered_modules {
