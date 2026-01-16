@@ -142,16 +142,16 @@ The `lower.rs` module implements monomorphization for generic structs. Generic t
 
 **Supported Features:**
 
-| Feature                  | Example                      | Status |
-| ------------------------ | ---------------------------- | ------ |
-| Single type parameter    | `Box<i32>`                   | ✅     |
-| Multiple type parameters | `Pair<i32, String>`          | ✅     |
-| Nested generics          | `Box<Box<i32>>`              | ✅     |
-| Generics in Array        | `Array<Pair<i32, String>>`   | ✅     |
-| Struct type parameters   | `Box<Point>`                 | ✅     |
-| Impl on specialization   | `impl Box<i32> { fn get() }` | ✅     |
-| Generic functions        | `fn identity<T>(x: T) -> T`  | ✅     |
-| Generic methods          | `impl T { fn foo<U>(&self) }`| ✅     |
+| Feature                  | Example                       | Status |
+| ------------------------ | ----------------------------- | ------ |
+| Single type parameter    | `Box<i32>`                    | ✅     |
+| Multiple type parameters | `Pair<i32, String>`           | ✅     |
+| Nested generics          | `Box<Box<i32>>`               | ✅     |
+| Generics in Array        | `Array<Pair<i32, String>>`    | ✅     |
+| Struct type parameters   | `Box<Point>`                  | ✅     |
+| Impl on specialization   | `impl Box<i32> { fn get() }`  | ✅     |
+| Generic functions        | `fn identity<T>(x: T) -> T`   | ✅     |
+| Generic methods          | `impl T { fn foo<U>(&self) }` | ✅     |
 
 **Name Mangling:**
 
