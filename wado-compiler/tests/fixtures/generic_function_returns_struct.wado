@@ -1,0 +1,24 @@
+// Test: Function that returns a generic struct (non-generic function)
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+fn make_box_i32(v: i32) -> Box<i32> {
+    return Box { value: v };
+}
+
+fn make_box_i64(v: i64) -> Box<i64> {
+    return Box { value: v };
+}
+
+fn run() with Stdout {
+    let b1 = make_box_i32(42);
+    let b2 = make_box_i64(100 as i64);
+    println(`b1: {b1.value}`);
+    println(`b2: {b2.value}`);
+}
+
+__DATA__
+{"stdout": "b1: 42\nb2: 100\n"}

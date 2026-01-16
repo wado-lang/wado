@@ -1,0 +1,21 @@
+// Test: generic struct with impl block
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+impl Box<i32> {
+    fn get(&self) -> i32 {
+        return self.value;
+    }
+}
+
+fn run() with Stdout {
+    let b = Box { value: 42 };
+    let v = b.get();
+    println(`{v}`);
+}
+
+__DATA__
+{"stdout": "42\n"}

@@ -1,0 +1,21 @@
+// Test: Basic generic method with turbofish syntax
+use { println, Stdout } from "core:cli";
+
+struct Container {
+    value: i32,
+}
+
+impl Container {
+    fn transform<T>(&self, other: T) -> T {
+        return other;
+    }
+}
+
+fn run() with Stdout {
+    let c = Container { value: 42 };
+    let result = c.transform::<i64>(100 as i64);
+    println(`result: {result}`);
+}
+
+__DATA__
+{"stdout": "result: 100\n"}

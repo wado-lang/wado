@@ -44,6 +44,7 @@ contract World;
 - Does NOT generate code by itself; purely declarative/verification
 
 **Multiple worlds example:**
+
 ```wado
 contract Command;
 contract HttpHandler;
@@ -60,6 +61,7 @@ export pub fn function_name() { ... }
 - Automatically maps to world export if function name matches
 
 **Explicit mapping for name conflicts:**
+
 ```wado
 export(World::export_name) pub fn wado_function_name() { ... }
 ```
@@ -115,15 +117,16 @@ export pub fn multiply(a: i32, b: i32) -> i32 {
 
 We evaluated multiple keyword options:
 
-| Keyword | Pros | Cons | Decision |
-|---------|------|------|----------|
-| `implements` | Most common in OOP languages | Strong class-level connotation | Rejected |
-| `conforms` | Clear protocol conformance meaning | Slightly verbose | Considered |
-| `satisfies` | TypeScript-like, emphasizes validation | Value-level connotation | Rejected |
-| `entrypoint` | Emphasizes CM connection point | Implies singularity | Rejected |
-| `contract` | Clear boundary contract semantics | N/A | **Accepted** |
+| Keyword      | Pros                                   | Cons                           | Decision     |
+| ------------ | -------------------------------------- | ------------------------------ | ------------ |
+| `implements` | Most common in OOP languages           | Strong class-level connotation | Rejected     |
+| `conforms`   | Clear protocol conformance meaning     | Slightly verbose               | Considered   |
+| `satisfies`  | TypeScript-like, emphasizes validation | Value-level connotation        | Rejected     |
+| `entrypoint` | Emphasizes CM connection point         | Implies singularity            | Rejected     |
+| `contract`   | Clear boundary contract semantics      | N/A                            | **Accepted** |
 
 **Why `contract`:**
+
 - Emphasizes the contract between component and runtime
 - Natural for multiple declarations: `contract A; contract B;`
 - Aligns with Component Model terminology

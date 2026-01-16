@@ -1,0 +1,17 @@
+// Test: Generic function with reference parameter
+use { println, Stdout } from "core:cli";
+
+fn get_value<T>(r: &T) -> T {
+    return *r;
+}
+
+fn run() with Stdout {
+    let x = 42;
+    let y = 100 as i64;
+    let a = get_value::<i32>(&x);
+    let b = get_value::<i64>(&y);
+    println(`a: {a}, b: {b}`);
+}
+
+__DATA__
+{"stdout": "a: 42, b: 100\n"}

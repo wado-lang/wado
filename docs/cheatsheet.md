@@ -112,8 +112,14 @@ struct Point {
     y: i32,
 }
 
+// Generic struct
+struct Box<T> {
+    value: T,
+}
+
 // Construction
 let p = Point { x: 10, y: 20 };
+let b = Box { value: 42 };  // T is inferred as i32
 
 // Shorthand (variable name matches field)
 let x = 10;
@@ -122,6 +128,7 @@ let p: Point = { x, y };
 
 // Field access
 let sum = p.x + p.y;
+let v = b.value;
 ```
 
 ## Enums (parsing only, codegen not yet implemented)
@@ -318,6 +325,26 @@ use {now, MonotonicClock} from "core:clocks";
 let t = now();            // current time in nanoseconds
 ```
 
+## Generic Functions and Methods
+
+```wado
+// Generic function
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+// Generic method
+impl Container {
+    fn transform<T, U>(&self, a: T, b: U) -> T {
+        return a;
+    }
+}
+
+// Calling with turbofish syntax (explicit type arguments)
+let x = identity::<i32>(42);
+let y = container.transform::<i32, i64>(10, 20 as i64);
+```
+
 ## Not Yet Implemented
 
 - `enum` construction (parsed but no codegen)
@@ -331,8 +358,7 @@ let t = now();            // current time in nanoseconds
 - `Dict<K, V>`
 - postfix `?` operator (error propagation)
 - JSX
-- Generic type parameters on user-defined types
-- Generic functions and methods
+- Generic function/method type inference
 
 ## See Also
 

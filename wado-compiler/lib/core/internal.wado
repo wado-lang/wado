@@ -8,23 +8,23 @@
 /// Concatenate two strings into a new string
 /// This is the core operation for template string building
 pub fn string_concat(a: String, b: String) -> String {
-    let len_a = builtin::array_len(a);
-    let len_b = builtin::array_len(b);
+    let len_a = a.len();
+    let len_b = b.len();
     let total = len_a + len_b;
 
-    // Create new array with total length
+    // Create new string with total length
     let result = builtin::string_new(total);
 
     // Copy bytes from a
     for (let mut i = 0; i < len_a; i += 1) {
-        let byte = builtin::array_get_u8(a, i);
-        builtin::array_set_u8(result, i, byte);
+        let byte = a.get(i);
+        result.set(i, byte);
     }
 
     // Copy bytes from b
     for (let mut i = 0; i < len_b; i += 1) {
-        let byte = builtin::array_get_u8(b, i);
-        builtin::array_set_u8(result, len_a + i, byte);
+        let byte = b.get(i);
+        result.set(len_a + i, byte);
     }
 
     return result;
@@ -38,11 +38,11 @@ pub fn f64_to_string(value: f64) -> String {
     // Convert float to bytes in linear memory
     let len = builtin::f64_to_buffer(value, ptr);
 
-    // Create GC array and copy from linear memory
+    // Create GC string and copy from linear memory
     let result = builtin::string_new(len);
     for (let mut i = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + i);
-        builtin::array_set_u8(result, i, byte);
+        result.set(i, byte);
     }
 
     return result;
@@ -56,11 +56,11 @@ pub fn f32_to_string(value: f32) -> String {
     // Convert float to bytes in linear memory
     let len = builtin::f32_to_buffer(value, ptr);
 
-    // Create GC array and copy from linear memory
+    // Create GC string and copy from linear memory
     let result = builtin::string_new(len);
     for (let mut i = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + i);
-        builtin::array_set_u8(result, i, byte);
+        result.set(i, byte);
     }
 
     return result;
@@ -110,7 +110,7 @@ pub fn i32_to_string(value: i32) -> String {
     let result = builtin::string_new(len);
     for (let mut i = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(result, i, byte);
+        result.set(i, byte);
     }
 
     return result;
@@ -151,7 +151,7 @@ pub fn u32_to_string(value: i32) -> String {
     let result = builtin::string_new(len);
     for (let mut i: i32 = 0; i < len; i += 1) {
         let byte = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(result, i, byte);
+        result.set(i, byte);
     }
 
     return result;
@@ -206,7 +206,7 @@ pub fn i64_to_string(value: i64) -> String {
     let result = builtin::string_new(len);
     for (let mut i: i32 = 0; i < len; i += 1) {
         let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(result, i, byte);
+        result.set(i, byte);
     }
 
     return result;
@@ -273,7 +273,7 @@ pub fn u64_to_string(value: i64) -> String {
     let result = builtin::string_new(len);
     for (let mut i: i32 = 0; i < len; i += 1) {
         let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(result, i, byte);
+        result.set(i, byte);
     }
 
     return result;
@@ -295,47 +295,47 @@ pub fn char_to_string(value: char) -> String {
     if code < 0x80 {
         // ASCII: single byte
         let result = builtin::string_new(1);
-        builtin::array_set_u8(result, 0, code);
+        result.set(0, code);
         return result;
     }
 
     if code < 0x800 {
         // 2-byte UTF-8: 110xxxxx 10xxxxxx
         let result = builtin::string_new(2);
-        builtin::array_set_u8(result, 0, 0xC0 | (code >> 6));
-        builtin::array_set_u8(result, 1, 0x80 | (code & 0x3F));
+        result.set(0, 0xC0 | (code >> 6));
+        result.set(1, 0x80 | (code & 0x3F));
         return result;
     }
 
     if code < 0x10000 {
         // 3-byte UTF-8: 1110xxxx 10xxxxxx 10xxxxxx
         let result = builtin::string_new(3);
-        builtin::array_set_u8(result, 0, 0xE0 | (code >> 12));
-        builtin::array_set_u8(result, 1, 0x80 | ((code >> 6) & 0x3F));
-        builtin::array_set_u8(result, 2, 0x80 | (code & 0x3F));
+        result.set(0, 0xE0 | (code >> 12));
+        result.set(1, 0x80 | ((code >> 6) & 0x3F));
+        result.set(2, 0x80 | (code & 0x3F));
         return result;
     }
 
     // 4-byte UTF-8: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
     let result = builtin::string_new(4);
-    builtin::array_set_u8(result, 0, 0xF0 | (code >> 18));
-    builtin::array_set_u8(result, 1, 0x80 | ((code >> 12) & 0x3F));
-    builtin::array_set_u8(result, 2, 0x80 | ((code >> 6) & 0x3F));
-    builtin::array_set_u8(result, 3, 0x80 | (code & 0x3F));
+    result.set(0, 0xF0 | (code >> 18));
+    result.set(1, 0x80 | ((code >> 12) & 0x3F));
+    result.set(2, 0x80 | ((code >> 6) & 0x3F));
+    result.set(3, 0x80 | (code & 0x3F));
     return result;
 }
 
 /// Write a string to a stream handle with an optional newline
 /// Internal helper for log_stdout and log_stderr.
 pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
-    let len = builtin::array_len(message);
+    let len = message.len();
     let mut alloc_size = len;
     if add_newline {
         alloc_size = len + 1;
     }
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
     for (let mut i = 0; i < len; i += 1) {
-        let byte = builtin::array_get_u8(message, i);
+        let byte = message.get(i);
         builtin::memory_store8(ptr + i, byte);
     }
     if add_newline {
@@ -380,8 +380,8 @@ pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
     let base_ptr = builtin::memory_load32(outptr);
     let count = builtin::memory_load32(outptr + 4);
 
-    // Create GC array of strings (nullable elements)
-    let result = builtin::array_new_string(count);
+    // Create raw GC array of strings (nullable elements)
+    let repr = builtin::array_new_string(count);
 
     // Convert each CM string to a GC string
     for (let mut i = 0; i < count; i += 1) {
@@ -392,13 +392,14 @@ pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
         let s = builtin::string_new(str_len);
         for (let mut j = 0; j < str_len; j += 1) {
             let byte = builtin::memory_load8_u(str_ptr + j);
-            builtin::array_set_u8(s, j, byte);
+            s.set(j, byte);
         }
 
-        builtin::array_set_string(result, i, s);
+        builtin::array_set_string(repr, i, s);
     }
 
-    return result;
+    // Wrap raw array into Array struct with used = count
+    return builtin::array_wrap_string(repr, count);
 }
 
 /// Convert a Component Model option<string> to a GC Option<String>
@@ -422,7 +423,7 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
     let s = builtin::string_new(str_len);
     for (let mut i = 0; i < str_len; i += 1) {
         let byte = builtin::memory_load8_u(str_ptr + i);
-        builtin::array_set_u8(s, i, byte);
+        s.set(i, byte);
     }
 
     return s;
@@ -431,16 +432,16 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
 /// Copy an Array<String> to a new array (deep copy of the array, shallow copy of strings)
 /// This is used by the compiler for tuple-to-array coercion and value semantics.
 pub fn array_copy_string(src: Array<String>) -> Array<String> {
-    let len = builtin::array_len(src);
+    let len = src.len();
 
     if len == 0 {
-        return builtin::array_new_string(0);
+        return builtin::array_wrap_string(builtin::array_new_string(0), 0);
     }
 
-    let dest = builtin::array_new_string(len);
+    let repr = builtin::array_new_string(len);
     for (let mut i = 0; i < len; i += 1) {
-        builtin::array_set_string(dest, i, src[i]);
+        builtin::array_set_string(repr, i, src[i]);
     }
 
-    return dest;
+    return builtin::array_wrap_string(repr, len);
 }

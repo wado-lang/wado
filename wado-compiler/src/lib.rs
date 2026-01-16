@@ -36,6 +36,8 @@ pub use token::Span;
 
 use std::path::Path;
 
+use indexmap::IndexMap;
+
 /// Result of compiling a Wado source file
 #[derive(Debug)]
 pub struct CompileResult {
@@ -64,10 +66,10 @@ pub struct DumpResult {
     pub implicit_modules: Vec<Vec<String>>,
     /// Entry module path
     pub entry_path: Vec<String>,
-    /// All TIR modules after resolution
-    pub tir_modules: Option<std::collections::HashMap<Vec<String>, tir::TirModule>>,
-    /// All lowered TIR modules
-    pub lowered_tir_modules: Option<std::collections::HashMap<Vec<String>, tir::TirModule>>,
+    /// All TIR modules after resolution (in topological order)
+    pub tir_modules: Option<IndexMap<Vec<String>, tir::TirModule>>,
+    /// All lowered TIR modules (in topological order)
+    pub lowered_tir_modules: Option<IndexMap<Vec<String>, tir::TirModule>>,
     /// Optimization hints
     pub opt_hints: Option<OptimizationHints>,
     /// Comments for unparsing
@@ -416,7 +418,7 @@ fn compile_impl(
     })?;
 
     // === Phase 7: Lower all modules (string collection, etc.) ===
-    let tir_modules: std::collections::HashMap<Vec<String>, _> = tir_modules
+    let tir_modules: IndexMap<Vec<String>, _> = tir_modules
         .into_iter()
         .map(|(path, module)| (path, lower(module)))
         .collect();

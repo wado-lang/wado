@@ -8,10 +8,10 @@ The compiler follows a multi-phase pipeline:
 
 ```
 Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze → Resolve → Lower → Optimize → Codegen
-                           ↓                                           ↓
-                       Unparser                                  TIR (Typed IR)
-                           ↓
-                   Formatted Source
+                           ↓                                           ↓         ↓
+                       Unparser                                  TIR (Typed IR) TIR Unparser
+                           ↓                                                        ↓
+                   Formatted Source                                         Pseudo-Wado Source
 ```
 
 ### Compilation Pipeline
@@ -41,14 +41,14 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | Bind            | `bind.rs`             | Local name binding, scope analysis, mutability check |
 | Loader          | `loader.rs`           | Module loading, dependency resolution                |
 | Desugar         | `desugar.rs`          | AST transformations (compound assign, etc.)          |
-| Unparser        | `unparse.rs`          | Converts AST back to canonical source code           |
+| Unparser        | `unparse.rs`          | Converts AST/TIR back to source code                 |
 | Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction         |
 | Symbol          | `symbol.rs`           | Symbol table data structures                         |
 | Name            | `name.rs`             | Name mangling utilities for methods and symbols      |
 | ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library           |
 | Resolver        | `resolver.rs`         | Type resolution, AST to TIR conversion               |
 | TIR             | `tir.rs`              | Typed Intermediate Representation                    |
-| Lower           | `lower.rs`            | TIR lowering (string collection, etc.)               |
+| Lower           | `lower.rs`            | Monomorphization, string collection, TIR lowering    |
 | Optimize        | `optimize.rs`         | DCE, optimization hints for codegen                  |
 | Stdlib          | `stdlib.rs`           | Embedded core library sources                        |
 | WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution          |
@@ -75,6 +75,37 @@ This separation ensures:
 - `wado format` outputs the original syntax (e.g., `x += 1` not `x = x + 1`)
 - Codegen receives simplified AST without syntactic variants
 
+### TIR Unparser
+
+The `unparse.rs` module also provides a TIR unparser that converts Typed IR back to pseudo-Wado source code. This is useful for debugging the lowering and monomorphization phases.
+
+**Usage:**
+
+```sh
+wado dump --tir --unparse file.wado    # Show TIR before lowering
+wado dump --lower --unparse file.wado  # Show TIR after monomorphization
+```
+
+**Output Characteristics:**
+
+- Shows monomorphized type names (e.g., `Box$i32` instead of `Box<T>`)
+- Includes fully qualified function calls (e.g., `core::cli::println`)
+- Preserves the `__DATA__` section if present
+- Output is pseudo-Wado (not compilable due to mangled names)
+
+**Example Output:**
+
+```wado
+struct Box$i32 {
+    value: i32,
+}
+
+fn run() with Stdout {
+    let b: Box$i32 = Box$i32 { value: 42 };
+    core::cli::println(core::internal::string_concat("value: ", b.value.to_string()));
+}
+```
+
 ### Bundled Builtins (wado-bundled)
 
 The `wado-bundled` crate provides pre-compiled Wasm functions for operations that are complex to implement in pure Wasm instructions. These are statically linked into the generated component.
@@ -96,6 +127,47 @@ make check-bundled    # Verify committed WAT is up-to-date (used in CI)
 ```
 
 The bundled module is stored as WAT in `wado-compiler/lib/builtins/wado-bundled.wat` for version control visibility. It's parsed at compile time using the `wat` crate.
+
+### Monomorphization
+
+The `lower.rs` module implements monomorphization for generic structs. Generic types like `Box<T>` are instantiated into concrete types like `Box$i32` at compile time.
+
+**Process:**
+
+1. **Collection**: Scan the type table for all `GenericInstance` types (e.g., `Box<i32>`)
+2. **Instantiation**: For each unique instantiation, create a concrete struct with substituted field types
+3. **Naming**: Mangle type names using `$` separator (e.g., `Box$i32`, `Pair$i32$String`)
+4. **Rewriting**: Replace all `GenericInstance` type references with concrete struct types
+5. **Container handling**: Recursively rewrite nested types in Array, Option, Tuple, Result
+
+**Supported Features:**
+
+| Feature                  | Example                       | Status |
+| ------------------------ | ----------------------------- | ------ |
+| Single type parameter    | `Box<i32>`                    | ✅     |
+| Multiple type parameters | `Pair<i32, String>`           | ✅     |
+| Nested generics          | `Box<Box<i32>>`               | ✅     |
+| Generics in Array        | `Array<Pair<i32, String>>`    | ✅     |
+| Struct type parameters   | `Box<Point>`                  | ✅     |
+| Impl on specialization   | `impl Box<i32> { fn get() }`  | ✅     |
+| Generic functions        | `fn identity<T>(x: T) -> T`   | ✅     |
+| Generic methods          | `impl T { fn foo<U>(&self) }` | ✅     |
+
+**Name Mangling:**
+
+```
+// Struct types
+Box<i32>           → Box$i32
+Pair<i32, String>  → Pair$i32$String
+Box<Box<i32>>      → Box$Box$i32
+
+// Generic functions (suffix is unique instantiation ID)
+identity::<i32>    → identity$1
+identity::<i64>    → identity$2
+
+// Generic methods
+Container::transform::<i32, i64> → Container::transform$1
+```
 
 ### Optimizer
 
@@ -489,7 +561,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] `variant` declarations (with payloads)
 - [ ] `flags` declarations (bit flags)
 - [ ] Inner attributes (`#![...]`)
-- [ ] Generic parameters on types
+- [x] Generic parameters on structs (monomorphization)
 
 #### Statements
 
@@ -595,6 +667,15 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Array construction, index access, and iteration
 - [x] Reference types (`&T`, `&mut T`) for primitives, structs, tuples, and arrays
 - [x] Dereference operator (`*ref`)
+- [x] Generic structs with monomorphization (`Box<T>`, `Pair<A, B>`)
+- [x] Generic struct instantiation with type inference
+- [x] Generic struct field access
+- [x] Impl blocks on generic struct specializations (`impl Box<i32>`)
+- [x] Nested generic types (`Box<Box<i32>>`, `Array<Pair<i32, String>>`)
+- [x] Generic structs as function parameters and return types
+- [x] Generic functions with explicit turbofish syntax (`identity::<i32>(x)`)
+- [x] Generic methods with explicit turbofish syntax (`obj.method::<T, U>(...)`)
+- [ ] Generic function/method type inference
 - [ ] Enum/variant construction
 - [ ] Pattern matching
 - [ ] Closures
@@ -651,7 +732,8 @@ fn run() with Stdout {
 1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
 2. **No `variant` keyword**: Parser doesn't recognize `variant` declarations (sum types with payloads)
 3. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
-4. **Template strings - mostly implemented**:
+4. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
+5. **Template strings - mostly implemented**:
    - [x] Syntax parsing with interpolation `{expr}` works
    - [x] Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished
    - [x] Nested template strings supported
@@ -661,9 +743,9 @@ fn run() with Stdout {
    - [x] Char interpolation (char → UTF-8 string)
    - [x] String concatenation with GC array copy
    - [ ] Format specifiers (`.2f`, etc.) not implemented in codegen
-5. **No type checking**: The analyzer doesn't perform type checking yet
-6. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
-7. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
+6. **No type checking**: The analyzer doesn't perform type checking yet
+7. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
+8. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
 
 ---
 

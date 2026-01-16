@@ -1,0 +1,23 @@
+// Test: generic struct with different primitive types
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+fn run() with Stdout {
+    let int_box = Box { value: 42 };
+    let float_box = Box { value: 3.14 };
+    let str_box = Box { value: "hello" };
+    let bool_box = Box { value: true };
+    let char_box = Box { value: 'A' };
+
+    println(`i32: {int_box.value}`);
+    println(`f64: {float_box.value}`);
+    println(`str: {str_box.value}`);
+    println(`bool: {bool_box.value}`);
+    println(`char: {char_box.value}`);
+}
+
+__DATA__
+{"stdout": "i32: 42\nf64: 3.14\nstr: hello\nbool: true\nchar: A\n"}

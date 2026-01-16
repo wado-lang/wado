@@ -165,6 +165,7 @@ mod tests {
         let func = Function {
             name: "stream_new".to_string(),
             is_pub: false,
+            type_params: vec![],
             attrs: vec![],
             params: vec![],
             return_type: Some(Type::Named(NamedType {
@@ -194,6 +195,7 @@ mod tests {
         let func = Function {
             name: "unreachable".to_string(),
             is_pub: false,
+            type_params: vec![],
             attrs: vec![],
             params: vec![],
             return_type: Some(Type::Named(NamedType {
@@ -218,6 +220,7 @@ mod tests {
         let func = Function {
             name: "stream_write".to_string(),
             is_pub: false,
+            type_params: vec![],
             attrs: vec![],
             params: vec![
                 Param {

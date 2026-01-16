@@ -459,6 +459,17 @@ impl WasiRegistry {
                     effects: func_ty.effects.clone(),
                 }))
             }
+            // NamespacedGeneric types (like builtin::array<T>) are passed through
+            Type::NamespacedGeneric(ng) => {
+                let resolved_args: Vec<Type> =
+                    ng.args.iter().map(|arg| self.resolve_type(arg)).collect();
+                Type::NamespacedGeneric(crate::ast::NamespacedGenericType {
+                    namespace: ng.namespace.clone(),
+                    name: ng.name.clone(),
+                    args: resolved_args,
+                    span: ng.span,
+                })
+            }
         }
     }
 }

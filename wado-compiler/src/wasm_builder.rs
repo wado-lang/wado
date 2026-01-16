@@ -111,11 +111,12 @@ impl CoreModuleBuilder {
     }
 
     /// Define a GC struct type and return its index
+    /// Uses is_final: false to allow more flexible subtyping with exact types
     pub fn define_gc_struct_type(&mut self, name: &str, fields: &[FieldType]) -> u32 {
         use wasm_encoder::StructType;
         let idx = self.next_type_idx;
         self.types.ty().subtype(&SubType {
-            is_final: true,
+            is_final: false, // Non-final allows (ref (exact $T)) to be subtype of (ref $T)
             supertype_idx: None,
             composite_type: CompositeType {
                 inner: CompositeInnerType::Struct(StructType {

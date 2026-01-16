@@ -1,0 +1,29 @@
+// Test: generic struct with struct type parameters
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+struct Box<T> {
+    value: T,
+}
+
+fn run() with Stdout {
+    // Box containing a non-generic struct
+    let point_box = Box { value: Point { x: 10, y: 20 } };
+    println(`point: ({point_box.value.x}, {point_box.value.y})`);
+
+    // Box containing a generic struct
+    let pair_box = Box { value: Pair { first: 1, second: "one" } };
+    println(`pair: ({pair_box.value.first}, {pair_box.value.second})`);
+}
+
+__DATA__
+{"stdout": "point: (10, 20)\npair: (1, one)\n"}

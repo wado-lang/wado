@@ -97,7 +97,9 @@ wado dump --desugar --unparse file.wado  # show desugared AST as source
 wado dump --modules file.wado        # show loaded modules only
 wado dump --symbols file.wado        # show symbol table only
 wado dump --tir file.wado            # show TIR (Typed IR)
+wado dump --tir --unparse file.wado  # show TIR as pseudo-Wado source
 wado dump --lower file.wado          # show lowered TIR
+wado dump --lower --unparse file.wado  # show lowered TIR as pseudo-Wado source
 wado dump --optimize file.wado       # show optimization hints
 ```
 
@@ -108,8 +110,8 @@ Available phases (in compilation order):
 3. `--desugar` - Desugared AST (supports `--unparse`)
 4. `--modules` - Loaded modules
 5. `--symbols` - Symbol table
-6. `--tir` - Typed IR (will support `--unparse` in future)
-7. `--lower` - Lowered TIR (will support `--unparse` in future)
+6. `--tir` - Typed IR (supports `--unparse`)
+7. `--lower` - Lowered TIR (supports `--unparse`)
 8. `--optimize` - Optimization hints
 
 ## Bundled Library

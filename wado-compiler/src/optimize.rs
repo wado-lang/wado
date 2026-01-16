@@ -9,7 +9,14 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
     TirStmtKind, TypeId, TypeTable,
 };
+use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
+
+/// Call graph: function ID -> set of called function IDs
+type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
+
+/// Effect usage: function ID -> set of (effect_name, operation_name) pairs
+type EffectUsageMap = HashMap<FunctionId, HashSet<(String, String)>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
@@ -103,7 +110,7 @@ struct FunctionAnalysis {
 
 /// Analyze all TIR modules and compute optimization hints including DCE
 pub fn analyze_all_modules(
-    modules: &HashMap<Vec<String>, TirModule>,
+    modules: &IndexMap<Vec<String>, TirModule>,
     entry_path: &[String],
 ) -> OptimizationHints {
     // Build call graph and effect usage from all modules
@@ -201,17 +208,10 @@ pub fn analyze_all_modules(
 }
 
 /// Build call graph and effect usage from all TIR modules
-/// Returns:
-/// - Call graph: map from function ID to set of called function IDs
-/// - Effect usage: map from function ID to set of (effect, operation) pairs
-fn build_analysis_graph(
-    modules: &HashMap<Vec<String>, TirModule>,
-) -> (
-    HashMap<FunctionId, HashSet<FunctionId>>,
-    HashMap<FunctionId, HashSet<(String, String)>>,
-) {
-    let mut call_graph: HashMap<FunctionId, HashSet<FunctionId>> = HashMap::new();
-    let mut effect_usage: HashMap<FunctionId, HashSet<(String, String)>> = HashMap::new();
+/// Returns (call_graph, effect_usage)
+fn build_analysis_graph(modules: &IndexMap<Vec<String>, TirModule>) -> (CallGraph, EffectUsageMap) {
+    let mut call_graph: CallGraph = HashMap::new();
+    let mut effect_usage: EffectUsageMap = HashMap::new();
 
     for (path, module) in modules {
         let type_table = &module.type_table;
@@ -379,6 +379,7 @@ fn analyze_expr(
             module_path,
             func_name,
             args,
+            ..
         } => {
             // Invariant: TirExprKind::Call should never have method names (containing "::")
             // Methods use TirExprKind::MethodCall instead. The only exception is "builtin::*".
@@ -425,6 +426,7 @@ fn analyze_expr(
             receiver,
             method_name,
             args,
+            ..
         } => {
             // Get receiver type to determine method target
             let receiver_type = type_table.get(receiver.type_id);
