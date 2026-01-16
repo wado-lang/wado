@@ -692,6 +692,18 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::If)?;
 
+        // Check for if-let-init: `if let x = expr; condition { ... }`
+        let init = if self.check(&TokenKind::Let) {
+            let let_stmt = self.parse_let_stmt_inner()?;
+            self.expect(&TokenKind::Semicolon)?;
+            match let_stmt {
+                Stmt::Let(ls) => Some(Box::new(ls)),
+                _ => unreachable!(),
+            }
+        } else {
+            None
+        };
+
         let condition = self.parse_expr()?;
         let then_block = self.parse_block()?;
 
@@ -706,6 +718,7 @@ impl Parser {
         let span = start_span.merge(end_span);
 
         Ok(Stmt::If(IfStmt {
+            init,
             condition,
             then_block,
             else_block,
@@ -1689,7 +1702,13 @@ impl Parser {
 
         self.expect(&TokenKind::Pipe)?;
 
-        let body = self.parse_expr()?;
+        // Check for block body: |params| { ... }
+        let body = if self.check(&TokenKind::LBrace) {
+            let block = self.parse_block()?;
+            Expr::Block(Box::new(block))
+        } else {
+            self.parse_expr()?
+        };
 
         Ok(Expr::Closure(Box::new(ClosureExpr {
             params,
@@ -1719,6 +1738,43 @@ impl Parser {
                 name: "!".to_string(),
                 span: start_span,
             }));
+        }
+
+        // Function type: fn(T1, T2) -> R
+        if self.check(&TokenKind::Fn) {
+            self.advance();
+            self.expect(&TokenKind::LParen)?;
+
+            // Parse parameter types
+            let mut params = Vec::new();
+            if !self.check(&TokenKind::RParen) {
+                params.push(self.parse_type()?);
+                while self.check(&TokenKind::Comma) {
+                    self.advance();
+                    if self.check(&TokenKind::RParen) {
+                        break;
+                    }
+                    params.push(self.parse_type()?);
+                }
+            }
+            self.expect(&TokenKind::RParen)?;
+
+            // Parse return type (optional)
+            let return_type = if self.check(&TokenKind::Arrow) {
+                self.advance();
+                self.parse_type()?
+            } else {
+                Type::Named(NamedType {
+                    name: "()".to_string(),
+                    span: start_span,
+                })
+            };
+
+            return Ok(Type::Function(Box::new(FunctionType {
+                params,
+                return_type,
+                effects: Vec::new(),
+            })));
         }
 
         // Reference type: &T or &mut T

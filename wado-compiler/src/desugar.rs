@@ -81,6 +81,17 @@ fn desugar_block(block: &Block) -> Block {
     }
 }
 
+fn desugar_let_stmt(l: &LetStmt) -> LetStmt {
+    LetStmt {
+        name: l.name.clone(),
+        is_mut: l.is_mut,
+        is_reactive: l.is_reactive,
+        ty: l.ty.clone(),
+        value: desugar_expr(&l.value),
+        span: l.span,
+    }
+}
+
 fn desugar_stmt(stmt: &Stmt) -> Stmt {
     match stmt {
         Stmt::Let(l) => Stmt::Let(LetStmt {
@@ -100,6 +111,7 @@ fn desugar_stmt(stmt: &Stmt) -> Stmt {
             span: r.span,
         }),
         Stmt::If(i) => Stmt::If(IfStmt {
+            init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
             condition: desugar_expr(&i.condition),
             then_block: desugar_block(&i.then_block),
             else_block: i.else_block.as_ref().map(desugar_block),
@@ -190,6 +202,7 @@ fn desugar_expr(expr: &Expr) -> Expr {
         })),
         Expr::Block(b) => Expr::Block(Box::new(desugar_block(b))),
         Expr::If(i) => Expr::If(Box::new(IfExpr {
+            init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
             condition: desugar_expr(&i.condition),
             then_block: desugar_block(&i.then_block),
             else_block: i.else_block.as_ref().map(desugar_block),

@@ -19,9 +19,9 @@ use crate::ast::{
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
-    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirUnaryOp, TypeId, TypeTable,
+    ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction,
+    TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -161,6 +161,12 @@ struct FunctionContext {
     local_types: Vec<TypeId>,
     /// Local indices that have their address taken (&x or &mut x)
     address_taken_locals: HashSet<u32>,
+    /// Outer context locals for closure capture detection (name -> LocalVar snapshot)
+    /// Only set for closure contexts
+    outer_locals: HashMap<String, LocalVar>,
+    /// Captured variables detected during resolution (name -> capture index)
+    /// Only used for closure contexts
+    captured_vars: HashMap<String, u32>,
 }
 
 impl FunctionContext {
@@ -171,6 +177,29 @@ impl FunctionContext {
             return_type,
             local_types: Vec::new(),
             address_taken_locals: HashSet::new(),
+            outer_locals: HashMap::new(),
+            captured_vars: HashMap::new(),
+        }
+    }
+
+    /// Create a closure context with outer scope access for capture detection
+    fn new_closure(return_type: TypeId, outer_ctx: &FunctionContext) -> Self {
+        // Snapshot all locals from outer context
+        let mut outer_locals = HashMap::new();
+        for scope in &outer_ctx.scopes {
+            for (name, local) in scope {
+                outer_locals.insert(name.clone(), local.clone());
+            }
+        }
+
+        Self {
+            scopes: vec![HashMap::new()],
+            next_local: 0,
+            return_type,
+            local_types: Vec::new(),
+            address_taken_locals: HashSet::new(),
+            outer_locals,
+            captured_vars: HashMap::new(),
         }
     }
 
@@ -212,6 +241,64 @@ impl FunctionContext {
         }
         None
     }
+
+    /// Look up a variable, checking outer context for captures if in a closure.
+    /// Returns either a local variable reference or a capture reference.
+    fn lookup_or_capture(&mut self, name: &str) -> Option<VarRef> {
+        // First check local scopes
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(VarRef::Local {
+                    index: local.index,
+                    type_id: local.type_id,
+                });
+            }
+        }
+
+        // Check outer context (for closures)
+        if let Some(outer_local) = self.outer_locals.get(name) {
+            // Check if we already captured this variable
+            if let Some(&capture_index) = self.captured_vars.get(name) {
+                return Some(VarRef::Capture {
+                    index: capture_index,
+                    type_id: outer_local.type_id,
+                });
+            }
+
+            // Record a new capture
+            let capture_index = self.captured_vars.len() as u32;
+            self.captured_vars.insert(name.to_string(), capture_index);
+
+            return Some(VarRef::Capture {
+                index: capture_index,
+                type_id: outer_local.type_id,
+            });
+        }
+
+        None
+    }
+
+    /// Get the list of captures for building TirCapture entries
+    fn get_captures(&self) -> Vec<(String, u32, &LocalVar)> {
+        let mut captures: Vec<_> = self
+            .captured_vars
+            .iter()
+            .filter_map(|(name, &index)| {
+                self.outer_locals
+                    .get(name)
+                    .map(|local| (name.clone(), index, local))
+            })
+            .collect();
+        // Sort by capture index for consistent ordering
+        captures.sort_by_key(|(_, index, _)| *index);
+        captures
+    }
+}
+
+/// Reference to a variable (either local or captured)
+enum VarRef {
+    Local { index: u32, type_id: TypeId },
+    Capture { index: u32, type_id: TypeId },
 }
 
 /// The resolver converts AST to TIR with resolved types
@@ -1077,7 +1164,7 @@ impl<'a> Resolver<'a> {
             Stmt::Let(let_stmt) => vec![self.resolve_let(let_stmt, ctx)],
             Stmt::Expr(expr_stmt) => vec![self.resolve_expr_stmt(expr_stmt, ctx)],
             Stmt::Return(ret_stmt) => vec![self.resolve_return(ret_stmt, ctx)],
-            Stmt::If(if_stmt) => vec![self.resolve_if_stmt(if_stmt, ctx)],
+            Stmt::If(if_stmt) => self.resolve_if_stmt(if_stmt, ctx),
             Stmt::While(while_stmt) => vec![self.resolve_while(while_stmt, ctx)],
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
             Stmt::ForOf(for_of_stmt) => vec![self.resolve_for_of(for_of_stmt, ctx)],
@@ -1292,7 +1379,19 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve an if statement
-    fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) -> TirStmt {
+    /// Returns Vec<TirStmt> to handle if-let-init scoping: let binding + if statement
+    fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+        let mut result = Vec::new();
+
+        // Handle optional init binding (scoped to this if statement)
+        if if_stmt.init.is_some() {
+            ctx.enter_scope();
+        }
+
+        if let Some(init) = &if_stmt.init {
+            result.push(self.resolve_let(init, ctx));
+        }
+
         let condition = self.resolve_expr(&if_stmt.condition, ctx);
         let then_block = self.resolve_block(&if_stmt.then_block, ctx);
         let else_block = if_stmt
@@ -1300,14 +1399,20 @@ impl<'a> Resolver<'a> {
             .as_ref()
             .map(|b| self.resolve_block(b, ctx));
 
-        TirStmt::new(
+        result.push(TirStmt::new(
             TirStmtKind::If {
                 condition,
                 then_block,
                 else_block,
             },
             if_stmt.span,
-        )
+        ));
+
+        if if_stmt.init.is_some() {
+            ctx.exit_scope();
+        }
+
+        result
     }
 
     /// Resolve a while statement
@@ -1753,17 +1858,31 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve an identifier expression
-    fn resolve_ident(&mut self, ident: &ast::IdentExpr, ctx: &FunctionContext) -> TirExpr {
-        // First check local variables
-        if let Some(local) = ctx.lookup(&ident.name) {
-            return TirExpr::new(
-                TirExprKind::Local {
-                    index: local.index,
-                    name: local.name.clone(),
-                },
-                local.type_id,
-                ident.span,
-            );
+    fn resolve_ident(&mut self, ident: &ast::IdentExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Check local variables, including captures from outer scope
+        if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
+            match var_ref {
+                VarRef::Local { index, type_id } => {
+                    return TirExpr::new(
+                        TirExprKind::Local {
+                            index,
+                            name: ident.name.clone(),
+                        },
+                        type_id,
+                        ident.span,
+                    );
+                }
+                VarRef::Capture { index, type_id } => {
+                    return TirExpr::new(
+                        TirExprKind::Capture {
+                            index,
+                            name: ident.name.clone(),
+                        },
+                        type_id,
+                        ident.span,
+                    );
+                }
+            }
         }
 
         // Otherwise it's a global reference (function, constant, etc.)
@@ -1934,6 +2053,59 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a call expression
     fn resolve_call(&mut self, call: &ast::CallExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Check if this is a closure call (calling a local variable with function type)
+        if let Expr::Ident(ident) = &call.callee {
+            // No :: means it could be a local variable
+            if !ident.name.contains("::")
+                && let Some(local) = ctx.lookup(&ident.name)
+            {
+                // Check if the local has a function type
+                if let ResolvedType::Function {
+                    params: fn_params,
+                    return_type,
+                    ..
+                } = self.type_table.get(local.type_id)
+                {
+                    // This is a closure call!
+                    let local_index = local.index;
+                    let local_type_id = local.type_id;
+                    let fn_return_type = *return_type;
+                    // Clone fn_params to avoid borrow conflict
+                    let fn_params = fn_params.clone();
+
+                    // Resolve arguments with coercion awareness based on closure param types
+                    let args: Vec<TirExpr> = call
+                        .args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, arg)| {
+                            let expected_type = fn_params.get(i).copied();
+                            self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                        })
+                        .collect();
+
+                    // Create closure expression (Local reference)
+                    let closure_expr = TirExpr::new(
+                        TirExprKind::Local {
+                            index: local_index,
+                            name: ident.name.clone(),
+                        },
+                        local_type_id,
+                        ident.span,
+                    );
+
+                    return TirExpr::new(
+                        TirExprKind::IndirectCall {
+                            callee: Box::new(closure_expr),
+                            args,
+                        },
+                        fn_return_type,
+                        call.span,
+                    );
+                }
+            }
+        }
+
         // First, determine expected parameter types to handle coercion
         let param_types = self.lookup_function_param_types(&call.callee);
 
@@ -2369,13 +2541,13 @@ impl<'a> Resolver<'a> {
                 }
                 return TypeTable::UNKNOWN;
             }
-            // Array types have built-in methods like len()
-            ResolvedType::Array(_) => {
-                if method_name == "len" {
-                    return TypeTable::I32;
-                }
-                return TypeTable::UNKNOWN;
-            }
+            // Array types have built-in methods
+            // Note: append() is handled inline in codegen using generic builtins
+            ResolvedType::Array(_) => match method_name {
+                "len" => return TypeTable::I32,
+                "append" => return TypeTable::UNIT,
+                _ => return TypeTable::UNKNOWN,
+            },
             // String type (legacy - String is now a struct, but handle for backwards compat)
             ResolvedType::String => {
                 match method_name {
@@ -2639,6 +2811,20 @@ impl<'a> Resolver<'a> {
 
     /// Resolve an if expression
     fn resolve_if_expr(&mut self, if_expr: &IfExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Handle optional init binding (scoped to this if expression)
+        if if_expr.init.is_some() {
+            ctx.enter_scope();
+        }
+
+        // Note: init binding for if expressions would need special handling
+        // in codegen since expressions can't contain statements. For now,
+        // we just resolve it for scoping purposes but codegen doesn't support it.
+        if let Some(init) = &if_expr.init {
+            // The let binding is resolved for name resolution but not emitted as TIR
+            // This is a limitation for now - full support would require block expressions
+            let _init_stmt = self.resolve_let(init, ctx);
+        }
+
         let condition = self.resolve_expr(&if_expr.condition, ctx);
         let then_block = self.resolve_block(&if_expr.then_block, ctx);
         let else_block = if_expr
@@ -2656,7 +2842,7 @@ impl<'a> Resolver<'a> {
             })
             .unwrap_or(TypeTable::UNIT);
 
-        TirExpr::new(
+        let result = TirExpr::new(
             TirExprKind::If {
                 condition: Box::new(condition),
                 then_branch: then_block,
@@ -2664,7 +2850,13 @@ impl<'a> Resolver<'a> {
             },
             type_id,
             if_expr.span,
-        )
+        );
+
+        if if_expr.init.is_some() {
+            ctx.exit_scope();
+        }
+
+        result
     }
 
     /// Resolve a match expression
@@ -2754,10 +2946,10 @@ impl<'a> Resolver<'a> {
     fn resolve_closure(
         &mut self,
         closure: &ast::ClosureExpr,
-        _ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Create a new context for the closure
-        let mut closure_ctx = FunctionContext::new(TypeTable::UNKNOWN);
+        // Create a closure context with access to outer scope for capture detection
+        let mut closure_ctx = FunctionContext::new_closure(TypeTable::UNKNOWN, ctx);
 
         // Add closure parameters
         let params: Vec<(String, TypeId)> = closure
@@ -2773,17 +2965,35 @@ impl<'a> Resolver<'a> {
             })
             .collect();
 
-        // Resolve body
+        // Resolve body - this will detect captured variables
         let body = self.resolve_expr(&closure.body, &mut closure_ctx);
 
-        // TODO: Capture analysis
-        let captures = Vec::new();
+        // Build capture list from detected captures
+        let captures: Vec<TirCapture> = closure_ctx
+            .get_captures()
+            .into_iter()
+            .map(|(name, _index, local)| TirCapture {
+                name,
+                outer_index: local.index,
+                type_id: local.type_id,
+                is_mut: local.is_mut,
+            })
+            .collect();
+
+        // Determine return type:
+        // - For block bodies, check for return statements
+        // - Fall back to the body expression's type
+        let return_type = if let TirExprKind::Block(ref block) = body.kind {
+            Self::find_return_type_in_block(block).unwrap_or(body.type_id)
+        } else {
+            body.type_id
+        };
 
         // Create function type
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self
             .type_table
-            .make_function(param_types, body.type_id, Vec::new());
+            .make_function(param_types, return_type, Vec::new());
 
         TirExpr::new(
             TirExprKind::Closure {
@@ -2924,6 +3134,44 @@ impl<'a> Resolver<'a> {
             target_type,
             cast.span,
         )
+    }
+
+    /// Find the return type from return statements in a block.
+    /// Returns the type of the first return statement found, or None if no returns.
+    fn find_return_type_in_block(block: &TirBlock) -> Option<TypeId> {
+        for stmt in &block.stmts {
+            if let Some(type_id) = Self::find_return_type_in_stmt(stmt) {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
+    fn find_return_type_in_stmt(stmt: &TirStmt) -> Option<TypeId> {
+        match &stmt.kind {
+            TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),
+            TirStmtKind::Return { value: None } => Some(TypeTable::UNIT),
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if let Some(t) = Self::find_return_type_in_block(then_block) {
+                    return Some(t);
+                }
+                if let Some(else_blk) = else_block
+                    && let Some(t) = Self::find_return_type_in_block(else_blk)
+                {
+                    return Some(t);
+                }
+                None
+            }
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::ForOf { body, .. }
+            | TirStmtKind::Loop { body } => Self::find_return_type_in_block(body),
+            _ => None,
+        }
     }
 
     /// Resolve a struct literal

@@ -1,0 +1,16 @@
+// Test closure called multiple times in a loop
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let double = |x: i32| x * 2;
+
+    let mut sum = 0;
+    for let mut i = 1; i <= 5; i += 1 {
+        sum += double(i);
+    }
+    // sum = 2 + 4 + 6 + 8 + 10 = 30
+    println(`{sum}`);
+}
+
+__DATA__
+{"stdout": "30\n"}

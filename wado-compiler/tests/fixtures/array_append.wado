@@ -1,0 +1,25 @@
+// Test Array#append() method
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<i32> = [];
+
+    // Test basic append
+    arr.append(10);
+    arr.append(20);
+    arr.append(30);
+
+    println(`len={arr.len()}`);
+    println(`{arr[0]},{arr[1]},{arr[2]}`);
+
+    // Test growth (initial capacity is 4, so adding more will trigger resize)
+    arr.append(40);
+    arr.append(50);  // This should trigger resize (capacity 4 -> 8)
+    arr.append(60);
+
+    println(`after_growth_len={arr.len()}`);
+    println(`{arr[3]},{arr[4]},{arr[5]}`);
+}
+
+__DATA__
+{"stdout": "len=3\n10,20,30\nafter_growth_len=6\n40,50,60\n"}

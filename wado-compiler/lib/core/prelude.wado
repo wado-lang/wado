@@ -43,6 +43,31 @@ impl Array<T> {
     pub fn capacity(&self) -> i32 {
         return builtin::array_len(self.repr);
     }
+
+    /// Append an element to the end of the array
+    /// Grows the array if necessary (O(1) amortized)
+    pub fn append(&mut self, value: T) {
+        let used = self.used;
+        let capacity = builtin::array_len(self.repr);
+
+        // Grow if needed
+        if builtin::unlikely(used >= capacity) {
+            // Calculate new capacity: 4 if empty, otherwise double
+            let mut new_capacity = capacity * 2;
+            if capacity == 0 {
+                new_capacity = 4;
+            }
+
+            // Create new array and copy elements
+            let new_repr = builtin::array_new::<T>(new_capacity);
+            builtin::array_copy::<T>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+
+        // Set the new element
+        builtin::array_set::<T>(self.repr, used, value);
+        self.used = used + 1;
+    }
 }
 
 /// Traps with a message

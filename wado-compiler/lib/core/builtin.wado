@@ -87,6 +87,19 @@ fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: i32);
 /// Create a new builtin::array<u8> with given length, initialized to zeros
 fn array_u8_new(len: i32) -> builtin::array<u8>;
 
+/// Create a new builtin::array<T> with given length, initialized to default values
+fn array_new<T>(len: i32) -> builtin::array<T>;
+
+/// Get an element from a builtin::array<T> at the given index
+fn array_get<T>(arr: builtin::array<T>, idx: i32) -> T;
+
+/// Set an element in a builtin::array<T> at the given index
+fn array_set<T>(arr: builtin::array<T>, idx: i32, value: T);
+
+/// Copy elements between builtin::arrays
+/// Copies `len` elements from src[src_offset..] to dst[dst_offset..]
+fn array_copy<T>(dst: builtin::array<T>, dst_offset: i32, src: builtin::array<T>, src_offset: i32, len: i32);
+
 /// Create a new String struct with given capacity
 fn string_new(len: i32) -> String;
 

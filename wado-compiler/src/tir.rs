@@ -512,10 +512,26 @@ pub enum TirExprKind {
         elements: Vec<TirExpr>,
     },
 
+    /// Access to a captured variable inside a closure body
+    Capture {
+        /// Index into the closure's captures array
+        index: u32,
+        /// Variable name (for debugging)
+        name: String,
+    },
+
     Closure {
         params: Vec<(String, TypeId)>,
         body: Box<TirExpr>,
         captures: Vec<TirCapture>,
+    },
+
+    /// Indirect call through a callable value (closure or funcref)
+    IndirectCall {
+        /// The callee expression (closure struct or funcref)
+        callee: Box<TirExpr>,
+        /// Arguments to pass to the callee
+        args: Vec<TirExpr>,
     },
 }
 

@@ -226,6 +226,7 @@ fn trampoline_inc() {
 4. **Invasive transformation**: All references to captured variables change, not just in closures
 
 This is essentially **re-implementing Option 1** (environment struct) but with:
+
 - More implicit magic (hidden Cell wrappers)
 - Less efficient (separate Cell per variable instead of one struct for all captures)
 - More confusing semantics (why does `count` behave differently when captured?)
@@ -416,14 +417,14 @@ A pure function can be used where a capturing function is expected, but not vice
 
 ### Comparison with Other Languages
 
-| Language     | Approach                                               | Wasm Target           |
-| ------------ | ------------------------------------------------------ | --------------------- |
-| **Rust**     | Closure traits (Fn, FnMut, FnOnce) + struct for env   | Struct + funcref      |
-| **Go**       | Closure struct with env pointer                        | Struct + funcref      |
-| **Swift**    | Closure = function + captured vars in struct           | Struct + funcref      |
-| **OCaml**    | Closure = code pointer + environment block             | Similar to struct     |
-| **Scheme**   | First-class continuations, heap-allocated environments | GC struct + funcref   |
-| **AssemblyScript** | Closure = funcref + trampolines                    | Trampolines (no GC)   |
+| Language           | Approach                                               | Wasm Target         |
+| ------------------ | ------------------------------------------------------ | ------------------- |
+| **Rust**           | Closure traits (Fn, FnMut, FnOnce) + struct for env    | Struct + funcref    |
+| **Go**             | Closure struct with env pointer                        | Struct + funcref    |
+| **Swift**          | Closure = function + captured vars in struct           | Struct + funcref    |
+| **OCaml**          | Closure = code pointer + environment block             | Similar to struct   |
+| **Scheme**         | First-class continuations, heap-allocated environments | GC struct + funcref |
+| **AssemblyScript** | Closure = funcref + trampolines                        | Trampolines (no GC) |
 
 Most languages with GC targeting Wasm use **Option 1** (struct + funcref) because it provides:
 

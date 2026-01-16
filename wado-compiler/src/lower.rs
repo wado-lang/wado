@@ -357,7 +357,14 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. } => {}
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => {}
+            TirExprKind::IndirectCall { callee, args } => {
+                self.rewrite_types_in_expr(callee, type_table);
+                for arg in args {
+                    self.rewrite_types_in_expr(arg, type_table);
+                }
+            }
         }
     }
 
@@ -896,6 +903,20 @@ impl Monomorphizer {
                     );
                 }
             }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.collect_func_instantiation_sites_in_expr(
+                    callee,
+                    generic_functions,
+                    type_table,
+                );
+                for arg in args {
+                    self.collect_func_instantiation_sites_in_expr(
+                        arg,
+                        generic_functions,
+                        type_table,
+                    );
+                }
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -905,7 +926,8 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. } => {}
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => {}
         }
     }
 
@@ -1180,6 +1202,12 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(&mut field.value, substitution, type_table);
                 }
             }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.substitute_types_in_expr(callee, substitution, type_table);
+                for arg in args {
+                    self.substitute_types_in_expr(arg, substitution, type_table);
+                }
+            }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1189,7 +1217,8 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. } => {}
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => {}
         }
     }
 
@@ -1379,6 +1408,12 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_expr(&mut field.value, type_table);
                 }
             }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.rewrite_function_calls_in_expr(callee, type_table);
+                for arg in args {
+                    self.rewrite_function_calls_in_expr(arg, type_table);
+                }
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1388,7 +1423,8 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. } => {}
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => {}
         }
     }
 }
@@ -1585,6 +1621,12 @@ impl StringCollector {
             TirExprKind::Closure { body, .. } => {
                 self.collect_expr(body);
             }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.collect_expr(callee);
+                for arg in args {
+                    self.collect_expr(arg);
+                }
+            }
             // Literals and simple expressions don't contain strings
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1593,7 +1635,8 @@ impl StringCollector {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. } => {}
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => {}
         }
     }
 }

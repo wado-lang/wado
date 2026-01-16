@@ -654,7 +654,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Async function lifting/lowering
 - [x] Template strings (literals, integer interpolation, float interpolation via wado-bundled)
 - [x] Variables and locals (`let`, `let mut`)
-- [x] Control flow (`if` statements, `while`, `for`, `loop`, `for-of`)
+- [x] Control flow (`if` statements, `if let init`, `while`, `for`, `loop`, `for-of`)
 - [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
 - [x] Type cast (`as T`) for primitive types (i32, i64, f32, f64)
 - [x] Assert statements with power-assert style error messages (intermediate values, value caching)
@@ -678,7 +678,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Generic function/method type inference
 - [ ] Enum/variant construction
 - [ ] Pattern matching
-- [ ] Closures
+- [x] Closures - pure (no captures)
+- [ ] Closures - with captures (see ADR)
 - [ ] Effect handlers
 - [x] Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
 - [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)

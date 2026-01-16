@@ -304,6 +304,8 @@ pub struct ReturnStmt {
 
 #[derive(Debug, Clone)]
 pub struct IfStmt {
+    /// Optional init binding: `if let x = expr; condition { ... }`
+    pub init: Option<Box<LetStmt>>,
     pub condition: Expr,
     pub then_block: Block,
     pub else_block: Option<Block>,
@@ -612,6 +614,8 @@ pub struct IndexExpr {
 
 #[derive(Debug, Clone)]
 pub struct IfExpr {
+    /// Optional init binding: `if let x = expr; condition { ... }`
+    pub init: Option<Box<LetStmt>>,
     pub condition: Expr,
     pub then_block: Block,
     pub else_block: Option<Block>,

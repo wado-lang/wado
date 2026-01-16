@@ -526,6 +526,12 @@ fn analyze_expr(
         TirExprKind::Closure { body, .. } => {
             analyze_expr(body, current_module, type_table, analysis);
         }
+        TirExprKind::IndirectCall { callee, args } => {
+            analyze_expr(callee, current_module, type_table, analysis);
+            for arg in args {
+                analyze_expr(arg, current_module, type_table, analysis);
+            }
+        }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -535,7 +541,8 @@ fn analyze_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. } => {}
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. } => {}
     }
 }
 

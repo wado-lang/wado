@@ -678,6 +678,23 @@ impl<'a> Unparser<'a> {
     fn unparse_if_stmt(&mut self, i: &IfStmt) {
         self.write_indent();
         self.output.push_str("if ");
+
+        // Handle optional init binding
+        if let Some(init) = &i.init {
+            self.output.push_str("let ");
+            if init.is_mut {
+                self.output.push_str("mut ");
+            }
+            self.output.push_str(&init.name);
+            if let Some(ty) = &init.ty {
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
+            self.output.push_str(" = ");
+            self.unparse_expr(&init.value);
+            self.output.push_str("; ");
+        }
+
         self.unparse_expr(&i.condition);
         self.output.push_str(" {\n");
 
@@ -1022,6 +1039,23 @@ impl<'a> Unparser<'a> {
 
     fn unparse_if_expr(&mut self, i: &IfExpr) {
         self.output.push_str("if ");
+
+        // Handle optional init binding
+        if let Some(init) = &i.init {
+            self.output.push_str("let ");
+            if init.is_mut {
+                self.output.push_str("mut ");
+            }
+            self.output.push_str(&init.name);
+            if let Some(ty) = &init.ty {
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
+            self.output.push_str(" = ");
+            self.unparse_expr(&init.value);
+            self.output.push_str("; ");
+        }
+
         self.unparse_expr(&i.condition);
         self.output.push_str(" {\n");
 
@@ -1770,6 +1804,11 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push_str(name);
             }
+            TirExprKind::Capture { name, index } => {
+                // Display as captured variable with index for debugging
+                self.output
+                    .push_str(&format!("@capture[{}]:{}", index, name));
+            }
             TirExprKind::Binary { left, op, right } => {
                 self.output.push('(');
                 self.unparse_expr(left);
@@ -1973,7 +2012,11 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(']');
             }
-            TirExprKind::Closure { params, body, .. } => {
+            TirExprKind::Closure {
+                params,
+                body,
+                captures,
+            } => {
                 self.output.push('|');
                 for (i, (name, type_id)) in params.iter().enumerate() {
                     if i > 0 {
@@ -1983,8 +2026,31 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str(": ");
                     self.output.push_str(&self.type_table.type_name(*type_id));
                 }
-                self.output.push_str("| ");
+                self.output.push('|');
+                // Show captures if any
+                if !captures.is_empty() {
+                    self.output.push_str(" captures[");
+                    for (i, cap) in captures.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.output.push_str(&cap.name);
+                    }
+                    self.output.push(']');
+                }
+                self.output.push(' ');
                 self.unparse_expr(body);
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.unparse_expr(callee);
+                self.output.push('(');
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_expr(arg);
+                }
+                self.output.push(')');
             }
         }
     }
