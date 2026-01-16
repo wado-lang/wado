@@ -192,6 +192,7 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 - [Tuple and Array Literal Syntax](./docs/adr-2026-01-15-tuple-and-array-literals.md)
 - [World Conformance and Export Syntax](./docs/adr-2026-01-16-world-conformance-and-export.md)
 - [Closure Implementation](./docs/adr-2026-01-16-closure-implementation.md)
+- [Function Return Type Syntax](./docs/adr-2026-01-16-function-return-type-syntax.md)
 
 ### Structure
 
