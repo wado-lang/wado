@@ -206,12 +206,27 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 You can use `cargo` to manage the project, and also `Makefile` is provided for convenience:
 
 ```sh
+make install-deps  # install all dependency tools (wasm-tools, wasmtime, etc.)
+
 make build
 make test
 
 make hello     # generates example/hello.wat and example/hello.wasm
 make hello-run # simple smoke test
 ```
+
+### Dependencies
+
+Run `make install-deps` to install the required tools:
+
+- `wasm32-unknown-unknown` Rust target (for wado-bundled)
+- `wasm-tools` (for WAT generation)
+- `wasmtime-cli` (for running Wasm)
+
+Prerequisites (install manually):
+
+- `rustup` and `cargo` (Rust toolchain)
+- `npx` (Node.js package runner, for prettier in `make format`)
 
 ## On Your Task Done
 

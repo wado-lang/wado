@@ -1,3 +1,26 @@
+.PHONY: install-deps
+install-deps:
+	@echo "Installing Rust wasm32-unknown-unknown target..."
+	rustup target add wasm32-unknown-unknown
+	@echo ""
+	@echo "Installing wasm-tools..."
+	cargo install wasm-tools
+	@echo ""
+	@echo "Installing wasmtime..."
+	cargo install wasmtime-cli
+	@echo ""
+	@echo "All dependencies installed successfully."
+	@echo ""
+	@echo "Required tools (install manually if not present):"
+	@echo "  - rustup (Rust toolchain manager)"
+	@echo "  - cargo (Rust package manager)"
+	@echo "  - npx (Node.js package runner, for prettier)"
+	@echo ""
+	@echo "Optional dependencies for benchmarks:"
+	@echo "  - cc (C compiler)"
+	@echo "  - node (Node.js)"
+	@echo "  - python3 (Python 3)"
+
 .PHONY: build
 build: wado-compiler/lib/builtins/wado-bundled.wat
 	cargo build
