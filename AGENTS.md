@@ -189,6 +189,7 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 - [Compiler Pipeline Refactoring](./docs/adr-2026-01-14-compiler-pipeline-refactoring.md)
 - [Tuple and Array Literal Syntax](./docs/adr-2026-01-15-tuple-and-array-literals.md)
 - [World Conformance and Export Syntax](./docs/adr-2026-01-16-world-conformance-and-export.md)
+- [Closure Implementation](./docs/adr-2026-01-16-closure-implementation.md)
 
 ### Structure
 
