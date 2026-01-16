@@ -1718,6 +1718,46 @@ pub fn api_function() with Http, FileSystem {
 }
 ```
 
+### Reference Storage (`stores[...]`)
+
+The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion.
+
+**Syntax**: `with stores[param1, param2, ...]`
+
+```wado
+// Function that stores a reference parameter
+fn register(data: &Data) -> Handle with stores[data] {
+    registry.push(data);  // Stores the reference
+    return new_handle();
+}
+
+// Function that does NOT store (no stores declaration)
+fn process(data: &Data) -> Result {
+    return compute(*data);  // Uses but doesn't store
+}
+
+// Combined with effects
+fn store_and_log(data: &Data) -> Handle with Stdout, stores[data] {
+    println("Storing data...");
+    return register(data);
+}
+```
+
+**Naming Rationale**: The keyword is `stores` (not `captures`) because:
+
+- "Capture" is established terminology for closures (`let f = || x + 1` captures `x`)
+- `stores` describes what the function *does* with the reference—it stores it for later use
+- This avoids conflating two different concepts: closures capturing variables vs functions storing parameters
+
+**Functor types** can also declare stores (positional: 0 = first parameter):
+
+```wado
+fn take_storing(f: Fn(&Data) with stores[0]) { ... }
+fn take_pure(f: Fn(&Data) -> Result) { ... }  // cannot store
+```
+
+See `docs/adr-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
+
 ### Handlers
 
 > **TBD**: The handler system is in an early design stage. The syntax and semantics below are provisional and subject to change.

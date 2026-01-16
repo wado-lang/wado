@@ -314,6 +314,27 @@ fn add(a: i32, b: i32) -> i32 {
 }
 ```
 
+## Reference Storage (`stores`)
+
+```wado
+// Declare that function stores a reference parameter
+fn register(data: &Data) -> Handle with stores[data] {
+    registry.push(data);  // stores the reference
+    return new_handle();
+}
+
+// Combined with effects
+fn store_and_log(data: &Data) with Stdout, stores[data] {
+    println("Storing...");
+    save(data);
+}
+
+// Functor type that stores its parameter
+fn take_storing(f: Fn(&Data) with stores[0]) { ... }
+```
+
+Note: `stores` is for function parameters. Closures use "capture" terminology (`|| x + 1` captures `x`).
+
 ## Entrypoint
 
 ```wado
@@ -389,7 +410,7 @@ let result = compute(4);  // 20
 let make_point = |x: i32, y: i32| Point { x, y };
 ```
 
-Note: Closures with `captures` are not yet implemented.
+Note: Closures that capture outer variables are not yet implemented (pure closures work).
 
 ## Attributes
 
@@ -418,7 +439,8 @@ Wado intentionally does not support macros.
 - `trait` declarations
 - Effect handlers
 - `reactive` values and `observe()`
-- Closures with captures (pure closures work)
+- Closures that capture outer variables (pure closures work)
+- `stores[...]` syntax for reference storage
 - `Dict<K, V>`
 - postfix `?` operator (error propagation)
 - JSX
