@@ -972,6 +972,59 @@ let id = 42;
 let query = sql`SELECT * FROM users WHERE id = ${id}`;
 ```
 
+### Type Alias
+
+A type alias creates an alternative name for an existing type. The alias is **identical** to the original type for all purposes—they are interchangeable in type checking.
+
+```wado
+type Kilometers = i32;
+type UserID = String;
+type Point2D = [f64, f64];
+type Callback = fn(i32) -> bool;
+
+let distance: Kilometers = 100;
+let m: i32 = distance;  // OK - same type
+
+fn process(id: UserID) { /* ... */ }
+process("abc");  // OK - UserID is String
+```
+
+**Key characteristics:**
+
+- `type T = U` makes `T` and `U` completely interchangeable
+- No runtime overhead—purely a compile-time construct
+- Useful for documentation and readability
+
+**Type alias vs Newtype:**
+
+Type aliases do not provide type safety—they are just alternative names. For distinct types that should not be interchangeable, use a struct wrapper (newtype pattern):
+
+```wado
+// Type alias - interchangeable with i32
+type Kilometers = i32;
+
+// Newtype - distinct type, NOT interchangeable with i32
+struct Miles {
+    value: i32,
+}
+
+let km: Kilometers = 100;
+let m: i32 = km;           // OK - same type
+
+let miles = Miles { value: 50 };
+// let m: i32 = miles;     // Error - different types
+let m: i32 = miles.value;  // OK - explicit field access
+```
+
+Future versions will support tuple structs for more ergonomic newtype definitions:
+
+```wado
+// Future syntax (not yet implemented)
+struct Miles(i32);
+let miles = Miles(50);
+let m: i32 = miles.0;
+```
+
 ### Literal Types
 
 ```wado
