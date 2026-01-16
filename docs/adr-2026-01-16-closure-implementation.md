@@ -47,7 +47,60 @@ The analyzer identifies which outer variables are captured and tracks them in th
 
 Create a Wasm GC struct to hold the environment, paired with a function reference.
 
-**Representation:**
+**Conceptual representation (desugared Wado):**
+
+```wado
+// Original code:
+let mut count = 0;
+let inc = || { count += 1; };
+let get = || { return count; };
+
+// Desugared to (conceptually):
+struct ClosureEnv_0 {
+    mut count: i32,
+}
+
+fn closure_inc_impl(env: &mut ClosureEnv_0) {
+    env.count += 1;
+}
+
+fn closure_get_impl(env: &ClosureEnv_0) -> i32 {
+    return env.count;
+}
+
+struct Closure_Inc {
+    env: &mut ClosureEnv_0,
+    func: FnRef(&mut ClosureEnv_0),
+}
+
+struct Closure_Get {
+    env: &ClosureEnv_0,
+    func: FnRef(&ClosureEnv_0) -> i32,
+}
+
+// Shared environment (allocated once)
+let shared_env = ClosureEnv_0 { count: 0 };
+
+// Both closures reference the same environment
+let inc = Closure_Inc {
+    env: &mut shared_env,
+    func: closure_inc_impl,
+};
+
+let get = Closure_Get {
+    env: &shared_env,
+    func: closure_get_impl,
+};
+
+// Calling closures:
+inc.func(inc.env);      // count becomes 1
+inc.func(inc.env);      // count becomes 2
+println(get.func(get.env));  // Prints "2" ✓
+```
+
+**Key insight:** Both `inc` and `get` share the same `shared_env` struct, so mutations in one closure are visible to the other.
+
+**Wasm representation:**
 
 ```wat
 ;; Environment struct (one per closure type)
@@ -95,23 +148,23 @@ Create a Wasm GC struct to hold the environment, paired with a function referenc
 
 Convert closures to plain functions by passing captured variables as additional parameters. Use trampolines to adapt call sites.
 
-**Representation:**
+**Representation (desugared Wado):**
 
-```wat
-;; Original closure: |x| { return x + count; }
-;; Generated function with captures as params:
-(func $closure_impl (param $x i32) (param $count_capture i32) (result i32)
-  (i32.add (local.get $x) (local.get $count_capture))
-)
+```wado
+// Original closure: |x| { return x + count; }
+// Generated implementation function:
+fn closure_impl(x: i32, count_capture: i32) -> i32 {
+    return x + count_capture;
+}
 
-;; Trampoline created at closure creation site:
-;; let f = |x| { return x + count; };
-(func $trampoline_0 (param $x i32) (result i32)
-  (call $closure_impl
-    (local.get $x)
-    (local.get $count)  ;; Capture bound here
-  )
-)
+// Trampoline created at closure creation site:
+// let f = |x| { return x + count; };
+fn trampoline_0(x: i32) -> i32 {
+    return closure_impl(x, count);  // count captured by value
+}
+
+// Closure value: funcref to trampoline_0
+let f = trampoline_0;
 ```
 
 **Closure value:** Just a function reference (funcref)
@@ -125,11 +178,10 @@ Convert closures to plain functions by passing captured variables as additional 
 
 **Cons:**
 
-- **Cannot share mutable state**: Each trampoline captures by value, not reference
-  - Violates the design requirement that closures capture by reference
+- **Cannot share mutable state** (without additional indirection):
+  - Each trampoline captures by value, not reference
   - Multiple closures capturing the same variable get independent copies
-- Trampolines increase code size (one per closure creation site)
-- Doesn't support mutable captures correctly (mutations don't propagate)
+  - Mutations don't propagate between closures
 
 **Example of the problem:**
 
@@ -145,11 +197,88 @@ println(get());  // Should print 2, but trampoline approach would print 0
 
 With trampolines, `inc` and `get` each get their own copy of `count`—mutations don't propagate.
 
+**Could this work with references?**
+
+Yes, but requires **implicit heap allocation and wrapping**:
+
+```wado
+// Compiler must transform:
+let mut count = 0;
+let inc = || { count += 1; };
+
+// Into:
+struct Cell<T> { mut value: T }
+let count_cell = Cell { value: 0 };
+
+// Trampoline captures reference to cell:
+fn trampoline_inc() {
+    return closure_inc_impl(&mut count_cell);
+}
+
+// All accesses to 'count' become 'count_cell.value'
+```
+
+**Issues with this approach:**
+
+1. **Implicit heap allocation**: Every captured mutable variable requires a heap-allocated Cell
+2. **Hidden complexity**: User writes `count` but compiler generates `count_cell.value` everywhere
+3. **Reference lifetime complexity**: Need to track which variables escape via closures
+4. **Invasive transformation**: All references to captured variables change, not just in closures
+
+This is essentially **re-implementing Option 1** (environment struct) but with:
+- More implicit magic (hidden Cell wrappers)
+- Less efficient (separate Cell per variable instead of one struct for all captures)
+- More confusing semantics (why does `count` behave differently when captured?)
+
+Therefore, **Option 1 is cleaner**: explicitly create an environment struct with all captures, rather than wrapping each variable individually.
+
 #### Option 3: Defunctionalization
 
 Convert closures to an enum of closure types and an interpreter function.
 
-**Representation:**
+**Conceptual representation (desugared Wado):**
+
+```wado
+// Original closures:
+let mut count = 0;
+let inc = || { count += 1; };
+let get = || { return count; };
+let add = |x| { return x + count; };
+
+// Desugared to:
+enum ClosureKind {
+    Inc { env: &mut CountEnv },
+    Get { env: &CountEnv },
+    Adder { env: &CountEnv, x: i32 },
+}
+
+struct CountEnv {
+    mut count: i32,
+}
+
+// Single interpreter function for all closures
+fn call_closure(kind: ClosureKind) -> i32 {
+    match kind {
+        ClosureKind::Inc { env } => {
+            env.count += 1;
+            return 0;  // unit
+        }
+        ClosureKind::Get { env } => {
+            return env.count;
+        }
+        ClosureKind::Adder { env, x } => {
+            return x + env.count;
+        }
+    }
+}
+
+// Closures are enum values
+let shared_env = CountEnv { count: 0 };
+let inc = ClosureKind::Inc { env: &mut shared_env };
+let get = ClosureKind::Get { env: &shared_env };
+```
+
+**Wasm representation:**
 
 ```wat
 ;; Closure types as enum variants
@@ -185,7 +314,47 @@ Convert closures to an enum of closure types and an interpreter function.
 
 Use Component Model resources to represent closures with explicit lifetime management.
 
-**Representation:**
+**Conceptual representation (desugared Wado):**
+
+```wado
+// Original closure:
+let mut count = 0;
+let inc = || { count += 1; };
+
+// Desugared to use resource handles:
+struct ClosureEnv {
+    mut count: i32,
+}
+
+// Global handle table (runtime-managed)
+static mut CLOSURE_TABLE: Dict<i32, (ClosureEnv, FnRef)> = {};
+static mut NEXT_HANDLE: i32 = 0;
+
+fn create_closure(env: ClosureEnv, func: FnRef) -> i32 {
+    let handle = NEXT_HANDLE;
+    NEXT_HANDLE += 1;
+    CLOSURE_TABLE[handle] = (env, func);
+    return handle;  // Return handle as closure value
+}
+
+fn call_closure(handle: i32) {
+    let (env, func) = CLOSURE_TABLE[handle];
+    func(env);
+}
+
+fn drop_closure(handle: i32) {
+    CLOSURE_TABLE.remove(handle);  // Manual cleanup
+}
+
+// Usage:
+let env = ClosureEnv { count: 0 };
+let inc_handle = create_closure(env, inc_impl);
+
+call_closure(inc_handle);  // Indirect lookup in table
+drop_closure(inc_handle);  // Manual drop required
+```
+
+**WIT representation:**
 
 ```wit
 // In WIT
@@ -193,6 +362,8 @@ resource closure-env {
     call: func(arg: s32) -> s32;
 }
 ```
+
+**Wasm representation:**
 
 ```wat
 ;; In core Wasm
@@ -379,12 +550,47 @@ f(10)
 #### Multiple Closures Sharing Environment
 
 ```wado
+// Source
 let mut count = 0;
 let inc = || { count += 1; };
 let get = || { return count; };
 ```
 
-Both closures share the same environment struct:
+**Desugared (conceptual):**
+
+```wado
+// Environment struct definition
+struct ClosureEnv_0 {
+    mut count: i32,
+}
+
+// Implementation functions
+fn inc_impl(env: &mut ClosureEnv_0) {
+    env.count += 1;
+}
+
+fn get_impl(env: &ClosureEnv_0) -> i32 {
+    return env.count;
+}
+
+// Closure struct types (simplified)
+struct Closure_Inc { env: &mut ClosureEnv_0, func: FnRef }
+struct Closure_Get { env: &ClosureEnv_0, func: FnRef }
+
+// Shared environment (allocated once)
+let shared_env = ClosureEnv_0 { count: 0 };
+
+// Both closures reference the same environment
+let inc = Closure_Inc { env: &mut shared_env, func: inc_impl };
+let get = Closure_Get { env: &shared_env, func: get_impl };
+
+// Usage:
+inc.func(inc.env);  // shared_env.count = 1
+inc.func(inc.env);  // shared_env.count = 2
+println(get.func(get.env));  // Prints 2 ✓
+```
+
+**Wasm representation:**
 
 ```wat
 ;; Shared environment
@@ -413,6 +619,7 @@ When `inc` modifies `count`, `get` sees the updated value because they share the
 When a closure escapes (returned from function, stored in struct, etc.), captured variables are heap-promoted:
 
 ```wado
+// Source
 fn make_counter() -> Fn() -> i32 with captures[count] {
     let mut count = 0;
     return || {
@@ -420,6 +627,45 @@ fn make_counter() -> Fn() -> i32 with captures[count] {
         return count;
     };
 }
+```
+
+**Desugared (with heap promotion):**
+
+```wado
+// Environment struct (heap-allocated)
+struct ClosureEnv_Counter {
+    mut count: i32,
+}
+
+// Implementation function
+fn counter_impl(env: &mut ClosureEnv_Counter) -> i32 {
+    env.count += 1;
+    return env.count;
+}
+
+// Closure type
+struct Closure_Counter {
+    env: &mut ClosureEnv_Counter,
+    func: FnRef,
+}
+
+fn make_counter() -> Closure_Counter {
+    // Heap-allocate environment at function start
+    let env = ClosureEnv_Counter { count: 0 };
+
+    // Return closure that owns the environment
+    return Closure_Counter {
+        env: &mut env,
+        func: counter_impl,
+    };
+    // env outlives the function because it's returned via closure
+}
+
+// Usage:
+let c = make_counter();
+println(c.func(c.env));  // 1
+println(c.func(c.env));  // 2
+println(c.func(c.env));  // 3
 ```
 
 **Compilation:**
