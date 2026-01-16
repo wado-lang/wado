@@ -28,6 +28,14 @@ Counts prime numbers up to 10,000,000 using trial division.
 make benchmark-count-prime
 ```
 
+## Prerequisites
+
+To run all benchmarks, ensure you have the following tools installed:
+
+- `cc` (C compiler, e.g., clang or gcc)
+- `node` (Node.js)
+- `python3` (Python 3)
+
 ## Running Benchmarks
 
 ```bash

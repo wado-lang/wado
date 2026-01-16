@@ -207,6 +207,8 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 You can use `cargo` to manage the project, and also `Makefile` is provided for convenience:
 
 ```sh
+make install-deps  # install all dependency tools (wasm-tools, wasmtime, etc.)
+
 make build
 make test
 
