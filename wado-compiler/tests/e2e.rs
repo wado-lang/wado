@@ -303,13 +303,13 @@ fn run_fixture_test(fixture_path: &Path) {
     run_fixture_test_with_opt(fixture_path, OptLevel::Size);
 }
 
-/// Test function for datatest-stable - runs each .wado fixture file
-fn fixture_test(path: &Path) -> datatest_stable::Result<()> {
+/// Test function for datatest-mini - runs each .wado fixture file
+fn fixture_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test(path);
     Ok(())
 }
 
-datatest_stable::harness! {
+datatest_mini::harness! {
     // Pattern matches .wado files directly in fixtures/ but not in subdirectories
     // (subdirectories contain helper modules that are imported, not run as tests)
     { test = fixture_test, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
