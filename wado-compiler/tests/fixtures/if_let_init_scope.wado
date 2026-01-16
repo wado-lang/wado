@@ -1,0 +1,12 @@
+// If-let-init scope test: variable should not be visible after if statement
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    if let x = 10; x > 5 {
+        println(`{x}`);
+    }
+    println(`{x}`);
+}
+
+__DATA__
+{"compile_error": "not in scope"}

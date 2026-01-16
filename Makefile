@@ -37,6 +37,15 @@ hello-run-wasmtime: hello
 test:
 	cargo test
 
+.PHONY: test-cov
+test-cov:
+	cargo llvm-cov --all-features --workspace
+
+.PHONY: test-cov-html
+test-cov-html:
+	cargo llvm-cov --all-features --workspace --html
+	@echo "Coverage report generated at target/llvm-cov/html/index.html"
+
 .PHONY: on-task-done
 on-task-done: clippy-fix format update-bundled test
 	@echo "All artifacts are up-to-date and tested."
@@ -59,7 +68,7 @@ clippy-fix:
 clean:
 	cargo clean
 	rm -f example/*.wat example/*.wasm
-	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c
+	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c benchmark/sieve_c
 
 .PHONY: update-vendor
 update-vendor:
@@ -106,6 +115,9 @@ benchmark-count-prime: build
 	@echo "=== Python ==="
 	@python3 benchmark/count_prime.py
 	@echo ""
+	@echo "=== Ruby ==="
+	@ruby benchmark/count_prime.rb
+	@echo ""
 	@echo "=== Wado (wasmtime) ==="
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
 
@@ -126,5 +138,31 @@ benchmark-mandelbrot: build
 	@echo "=== Python ==="
 	@python3 benchmark/mandelbrot.py
 	@echo ""
+	@echo "=== Ruby ==="
+	@ruby benchmark/mandelbrot.rb
+	@echo ""
 	@echo "=== Wado (wasmtime) ==="
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
+
+.PHONY: benchmark-sieve
+benchmark-sieve: build
+	@echo "=== Compiling Wado benchmark ==="
+	cargo run --bin wado --quiet -- compile -o benchmark/sieve.wasm benchmark/sieve.wado
+	@echo ""
+	@echo "=== Compiling C benchmark ==="
+	cc -O3 -o benchmark/sieve_c benchmark/sieve.c
+	@echo ""
+	@echo "=== C (cc -O3) ==="
+	@./benchmark/sieve_c
+	@echo ""
+	@echo "=== JavaScript (Node.js) ==="
+	@node benchmark/sieve.js
+	@echo ""
+	@echo "=== Python ==="
+	@python3 benchmark/sieve.py
+	@echo ""
+	@echo "=== Ruby ==="
+	@ruby benchmark/sieve.rb
+	@echo ""
+	@echo "=== Wado (wasmtime) ==="
+	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/sieve.wasm

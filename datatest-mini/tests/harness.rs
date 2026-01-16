@@ -44,7 +44,7 @@ fn run_fixture(path: &Path) -> TestResult {
 }
 
 // This generates test functions for each .txt file at root that starts with "test_"
-// Expected: test_a_txt, test_b_txt (2 tests)
+// Expected: fixtures::test_a_txt, fixtures::test_b_txt (2 tests)
 // Excluded: skip_me.json (wrong extension), subdir/nested.txt (in subdirectory)
 datatest_mini::harness! {
     { test = run_fixture, root = "tests/fixtures", pattern = r"^test_[^/]+\.txt$" },
