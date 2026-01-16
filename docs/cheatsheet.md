@@ -81,15 +81,12 @@ Result<T, E>            // result type (not yet implemented)
 ```wado
 type Kilometers = i32;    // alias - same type as i32
 type UserID = String;
-type Point2D = [f64, f64];
 
 let km: Kilometers = 100;
 let m: i32 = km;          // OK - interchangeable
 
 // For distinct types, use struct wrapper (newtype pattern)
-struct Miles {
-    value: i32,
-}
+struct Miles { value: i32 }
 ```
 
 ## Tuples and Arrays
