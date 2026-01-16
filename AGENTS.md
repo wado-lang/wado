@@ -215,19 +215,6 @@ make hello     # generates example/hello.wat and example/hello.wasm
 make hello-run # simple smoke test
 ```
 
-### Dependencies
-
-Run `make install-deps` to install the required tools:
-
-- `wasm32-unknown-unknown` Rust target (for wado-bundled)
-- `wasm-tools` (for WAT generation)
-- `wasmtime-cli` (for running Wasm)
-
-Prerequisites (install manually):
-
-- `rustup` and `cargo` (Rust toolchain)
-- `npx` (Node.js package runner, for prettier in `make format`)
-
 ## On Your Task Done
 
 When you have completed a task, make sure everything is up-to-date and tested:
