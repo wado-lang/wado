@@ -1,0 +1,71 @@
+// Sieve of Eratosthenes benchmark for Wado
+// Counts primes up to LIMIT using the sieve algorithm
+// Reference: π(10,000,000) = 664,579
+//
+// How to run:
+//   make benchmark-sieve
+//
+// Or manually:
+//   1. Compile to Wasm:
+//      cargo run --bin wado -- compile -o benchmark/sieve.wasm benchmark/sieve.wado
+//
+//   2. Run with wasmtime:
+//      wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/sieve.wasm
+
+use {println, Stdout} from "core:cli";
+use {now, MonotonicClock} from "core:clocks";
+
+fn sieve_count(limit: i32) -> i32 {
+    // Build the sieve array using append
+    let mut is_prime: Array<bool> = [];
+    let mut i = 0;
+    while i <= limit {
+        is_prime.append(true);
+        i += 1;
+    }
+
+    // 0 and 1 are not prime
+    is_prime[0] = false;
+    is_prime[1] = false;
+
+    // Sieve: mark multiples of each prime as not prime
+    let mut p = 2;
+    while p * p <= limit {
+        if is_prime[p] {
+            // Mark all multiples of p starting from p*p
+            let mut multiple = p * p;
+            while multiple <= limit {
+                is_prime[multiple] = false;
+                multiple += p;
+            }
+        }
+        p += 1;
+    }
+
+    // Count primes
+    let mut count = 0;
+    let mut n = 0;
+    while n <= limit {
+        if is_prime[n] {
+            count += 1;
+        }
+        n += 1;
+    }
+
+    return count;
+}
+
+fn run() with Stdout, MonotonicClock {
+    let limit = 10000000;
+
+    let start = now();
+    let count = sieve_count(limit);
+    let end = now();
+
+    let elapsed_ns = end - start;
+    // Convert nanoseconds to milliseconds (integer division)
+    let elapsed_ms = elapsed_ns / (1000000 as i64);
+
+    println(`Sieve prime count up to {limit}: {count}`);
+    println(`Elapsed: {elapsed_ms} ms`);
+}
