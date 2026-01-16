@@ -972,6 +972,27 @@ let id = 42;
 let query = sql`SELECT * FROM users WHERE id = ${id}`;
 ```
 
+### Type Alias
+
+`type T = U` creates an alias where `T` and `U` are identical types—completely interchangeable in type checking.
+
+```wado
+type Kilometers = i32;
+type UserID = String;
+
+let km: Kilometers = 100;
+let m: i32 = km;  // OK - same type
+```
+
+For distinct types that should not be interchangeable, use a struct wrapper (newtype pattern):
+
+```wado
+struct Miles { value: i32 }
+
+let miles = Miles { value: 50 };
+let m: i32 = miles.value;  // explicit access required
+```
+
 ### Literal Types
 
 ```wado
