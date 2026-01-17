@@ -121,6 +121,7 @@ fn memory_load8_u(addr: i32) -> i32;
 /// Allocate/reallocate memory in linear memory
 /// Standard WASI realloc signature
 #[canonical("realloc")]
+#[namespace("env")]
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 // ============================================================================
@@ -130,11 +131,13 @@ fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 /// Convert f64 to string bytes in linear memory buffer
 /// Returns the number of bytes written
 #[canonical("f64_to_buffer")]
+#[namespace("env")]
 fn f64_to_buffer(value: f64, ptr: i32) -> i32;
 
 /// Convert f32 to string bytes in linear memory buffer
 /// Returns the number of bytes written
 #[canonical("f32_to_buffer")]
+#[namespace("env")]
 fn f32_to_buffer(value: f32, ptr: i32) -> i32;
 
 // ============================================================================

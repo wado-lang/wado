@@ -143,6 +143,14 @@ impl CanonBuiltin {
         CanonBuiltin::WaitableSetWait,
         CanonBuiltin::SubtaskDrop,
     ];
+
+    /// Waitable-set builtins (only needed when effect_wait is called)
+    pub const WAITABLE_SET: &'static [CanonBuiltin] = &[
+        CanonBuiltin::WaitableSetNew,
+        CanonBuiltin::WaitableJoin,
+        CanonBuiltin::WaitableSetWait,
+        CanonBuiltin::SubtaskDrop,
+    ];
 }
 
 /// Call graph: function ID -> set of called function IDs
@@ -204,8 +212,10 @@ fn analyze_project(project: &mut Project) {
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
     // Find entry function (run in entry module)
-    let entry_func =
-        FunctionId::Free(FreeFunctionName::from_path_and_name(&project.entry_path, "run"));
+    let entry_func = FunctionId::Free(FreeFunctionName::from_path_and_name(
+        &project.entry_path,
+        "run",
+    ));
 
     // Compute reachable functions from entry point
     let mut reachable = compute_reachable(&call_graph, &entry_func);
@@ -233,6 +243,11 @@ fn analyze_project(project: &mut Project) {
         FunctionId::Free(FreeFunctionName::from_strs(&["core", "internal"], name))
     };
 
+    // Helper to check if a core/builtin function is reachable
+    let core_builtin = |name: &str| -> FunctionId {
+        FunctionId::Free(FreeFunctionName::from_strs(&["core", "builtin"], name))
+    };
+
     // Derive builtin usage from reachable internal functions
     // f64_to_string/f32_to_string call the bundled f64_to_buffer/f32_to_buffer
     let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
@@ -247,11 +262,8 @@ fn analyze_project(project: &mut Project) {
         reachable.insert(core_internal("copy_string_from_linear"));
     }
 
-    // Add array_copy_string if Array<String> value semantics are needed
-    // This is called from codegen for tuple-to-array coercion and value copying
-    // For now, include it if any string array operations are likely (conservative)
-    // TODO: Track actual Array<String> usage more precisely
-    reachable.insert(core_internal("array_copy_string"));
+    // Note: array_copy_string is tracked via call graph analysis
+    // It will be included if called from reachable user code
 
     // Check if stream intrinsics are needed by looking for:
     // 1. Stdout/Stderr effects being used
@@ -319,32 +331,32 @@ fn analyze_project(project: &mut Project) {
 
     // Map builtin function names to canonical CanonBuiltin variants
     for func_id in &reachable {
-        if let FunctionId::Free(f) = func_id {
-            if is_builtin_func(f) {
-                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-                match name {
-                    "stream_new" => {
-                        used_builtins.insert(CanonBuiltin::StreamNew);
-                    }
-                    "stream_write" => {
-                        used_builtins.insert(CanonBuiltin::StreamWrite);
-                    }
-                    "stream_drop_writable" => {
-                        used_builtins.insert(CanonBuiltin::StreamDropWritable);
-                    }
-                    "stream_drop_readable" => {
-                        used_builtins.insert(CanonBuiltin::StreamDropReadable);
-                    }
-                    // Ambient logging builtins also need stream intrinsics
-                    n if n.starts_with("call_indirect_stdout")
-                        || n.starts_with("call_indirect_stderr") =>
-                    {
-                        used_builtins.insert(CanonBuiltin::StreamNew);
-                        used_builtins.insert(CanonBuiltin::StreamWrite);
-                        used_builtins.insert(CanonBuiltin::StreamDropWritable);
-                    }
-                    _ => {}
+        if let FunctionId::Free(f) = func_id
+            && is_builtin_func(f)
+        {
+            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+            match name {
+                "stream_new" => {
+                    used_builtins.insert(CanonBuiltin::StreamNew);
                 }
+                "stream_write" => {
+                    used_builtins.insert(CanonBuiltin::StreamWrite);
+                }
+                "stream_drop_writable" => {
+                    used_builtins.insert(CanonBuiltin::StreamDropWritable);
+                }
+                "stream_drop_readable" => {
+                    used_builtins.insert(CanonBuiltin::StreamDropReadable);
+                }
+                // Ambient logging builtins also need stream intrinsics
+                n if n.starts_with("call_indirect_stdout")
+                    || n.starts_with("call_indirect_stderr") =>
+                {
+                    used_builtins.insert(CanonBuiltin::StreamNew);
+                    used_builtins.insert(CanonBuiltin::StreamWrite);
+                    used_builtins.insert(CanonBuiltin::StreamDropWritable);
+                }
+                _ => {}
             }
         }
     }
@@ -360,20 +372,66 @@ fn analyze_project(project: &mut Project) {
         used_builtins.insert(CanonBuiltin::F32ToBuffer);
     }
 
-    // Effect usage requires async builtins for waiting on subtasks
+    // Effect usage requires TaskReturn for async entry point
+    // But waitable-set builtins are only needed when effect_wait is actually called
     if !used_effects.is_empty() || uses_stream_builtins {
-        for builtin in CanonBuiltin::ASYNC {
-            used_builtins.insert(*builtin);
+        // TaskReturn is always needed for async exports
+        used_builtins.insert(CanonBuiltin::TaskReturn);
+
+        // Waitable-set builtins only needed when effect_wait is called
+        // effect_wait is used by ambient logging functions (log_stdout, log_stderr)
+        // but NOT by regular println/eprintln which don't wait for completion
+        if reachable.contains(&core_builtin("effect_wait")) {
+            for builtin in CanonBuiltin::WAITABLE_SET {
+                used_builtins.insert(*builtin);
+            }
         }
     }
 
     // Apply results to project
-    project.reachable_functions = reachable;
+    project.reachable_functions = reachable.clone();
     project.all_reachable = false;
     project.used_effects = used_effects;
     project.used_wasi_functions = used_wasi_functions;
     project.used_builtins = used_builtins;
     project.used_box_primitives = used_box_primitives;
+
+    // Filter string literals in each module to only include strings from reachable functions
+    for module in project.tir_modules.values_mut() {
+        let module_path = &module.path.clone();
+        let mut reachable_strings: Vec<String> = Vec::new();
+
+        for (func_name, strings) in &module.function_strings {
+            // Build function ID to check if it's reachable
+            let func_id = if func_name.contains("::") {
+                // Method name like "Point::sum" - use MethodName
+                let parts: Vec<&str> = func_name.splitn(2, "::").collect();
+                if parts.len() == 2 {
+                    FunctionId::Method(MethodName::new(
+                        module_path.join("/"),
+                        parts[0].to_string(),
+                        None,
+                        parts[1].to_string(),
+                    ))
+                } else {
+                    FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, func_name))
+                }
+            } else {
+                // Regular function
+                FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, func_name))
+            };
+
+            if reachable.contains(&func_id) {
+                for s in strings {
+                    if !reachable_strings.contains(s) {
+                        reachable_strings.push(s.clone());
+                    }
+                }
+            }
+        }
+
+        module.string_literals = reachable_strings;
+    }
 }
 
 /// Populate project with all features enabled (no DCE, for O0 mode).
@@ -479,10 +537,9 @@ fn analyze_function(
     for param in &func.params {
         if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
             type_table.get(param.type_id)
+            && let ResolvedType::Primitive(prim) = type_table.get(*inner)
         {
-            if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
-                analysis.used_box_primitives.insert(*prim);
-            }
+            analysis.used_box_primitives.insert(*prim);
         }
     }
 
@@ -505,10 +562,9 @@ fn analyze_block(
                 // Check locals for references to primitives (e.g., let r: &i32 = ...)
                 if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
                     type_table.get(*type_id)
+                    && let ResolvedType::Primitive(prim) = type_table.get(*inner)
                 {
-                    if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
-                        analysis.used_box_primitives.insert(*prim);
-                    }
+                    analysis.used_box_primitives.insert(*prim);
                 }
             }
             TirStmtKind::Expr(expr) => {
@@ -689,10 +745,10 @@ fn analyze_expr(
         TirExprKind::Unary { op, expr } => {
             analyze_expr(expr, current_module, type_table, analysis);
             // Track box types needed for references to primitives
-            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef) {
-                if let ResolvedType::Primitive(prim) = type_table.get(expr.type_id) {
-                    analysis.used_box_primitives.insert(*prim);
-                }
+            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                && let ResolvedType::Primitive(prim) = type_table.get(expr.type_id)
+            {
+                analysis.used_box_primitives.insert(*prim);
             }
         }
         TirExprKind::Assign { target, value } => {

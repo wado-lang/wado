@@ -27,10 +27,12 @@ pub fn lower(mut module: TirModule) -> TirModule {
     let mut monomorph = Monomorphizer::new();
     module = monomorph.monomorphize(module);
 
-    // Collect string literals
+    // Collect string literals and their function mappings
     let mut collector = StringCollector::new();
     collector.collect_module(&module);
-    module.string_literals = collector.into_strings();
+    let (strings, function_strings) = collector.into_results();
+    module.string_literals = strings;
+    module.function_strings = function_strings;
 
     module
 }
@@ -81,10 +83,12 @@ fn lower_with_cross_module_generics(
     let mut monomorph = Monomorphizer::new();
     module = monomorph.monomorphize_with_externals(module, all_generic_functions);
 
-    // Collect string literals
+    // Collect string literals and their function mappings
     let mut collector = StringCollector::new();
     collector.collect_module(&module);
-    module.string_literals = collector.into_strings();
+    let (strings, function_strings) = collector.into_results();
+    module.string_literals = strings;
+    module.function_strings = function_strings;
 
     module
 }
@@ -2182,32 +2186,48 @@ impl Monomorphizer {
 // String Literal Collection
 // ============================================================================
 
-/// Collects all string literals from a TIR module for the data section
+/// Collects all string literals from a TIR module for the data section,
+/// tracking which function each string comes from for DCE
 struct StringCollector {
     strings: Vec<String>,
+    /// Map of function name → strings in that function (for DCE filtering)
+    function_strings: HashMap<String, Vec<String>>,
+    /// Current function being collected (for tracking)
+    current_function: Option<String>,
 }
 
 impl StringCollector {
     fn new() -> Self {
         Self {
             strings: Vec::new(),
+            function_strings: HashMap::new(),
+            current_function: None,
         }
     }
 
-    fn into_strings(self) -> Vec<String> {
-        self.strings
+    fn into_results(self) -> (Vec<String>, HashMap<String, Vec<String>>) {
+        (self.strings, self.function_strings)
     }
 
     fn add_string(&mut self, s: String) {
         if !self.strings.contains(&s) {
-            self.strings.push(s);
+            self.strings.push(s.clone());
+        }
+        // Also track which function this string belongs to
+        if let Some(func_name) = &self.current_function {
+            let func_strings = self.function_strings.entry(func_name.clone()).or_default();
+            if !func_strings.contains(&s) {
+                func_strings.push(s);
+            }
         }
     }
 
     fn collect_module(&mut self, module: &TirModule) {
         for func in &module.functions {
             if let Some(body) = &func.body {
+                self.current_function = Some(func.name.clone());
                 self.collect_block(body);
+                self.current_function = None;
             }
         }
     }

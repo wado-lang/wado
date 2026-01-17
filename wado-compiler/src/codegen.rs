@@ -618,6 +618,7 @@ impl Codegen {
         let module_name = &project.module_name;
 
         // Collect pre-computed string literals from all TIR modules
+        // Note: String DCE is performed in the optimizer, so we just collect all strings here
         for tir_module in all_tir_modules.values() {
             for s in &tir_module.string_literals {
                 if !self.string_literals.contains(s) {
@@ -1527,12 +1528,18 @@ impl Codegen {
             );
         }
 
-        if project.used_builtins.contains(&CanonBuiltin::StreamDropWritable) {
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::StreamDropWritable)
+        {
             ctx.register_core_func("stream-drop-writable");
             builder.stream_drop_writable(stream_u8_type);
         }
 
-        if project.used_builtins.contains(&CanonBuiltin::StreamDropReadable) {
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::StreamDropReadable)
+        {
             ctx.register_core_func("stream-drop-readable");
             builder.stream_drop_readable(stream_u8_type);
         }
@@ -1644,7 +1651,10 @@ impl Codegen {
             builder.task_return(Some(ComponentValType::Type(result_unit_type)), []);
         }
 
-        if project.used_builtins.contains(&CanonBuiltin::WaitableSetNew) {
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::WaitableSetNew)
+        {
             ctx.register_core_func("waitable-set-new");
             builder.waitable_set_new();
         }
@@ -1654,7 +1664,10 @@ impl Codegen {
             builder.waitable_join();
         }
 
-        if project.used_builtins.contains(&CanonBuiltin::WaitableSetWait) {
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::WaitableSetWait)
+        {
             ctx.register_core_func("waitable-set-wait");
             builder.waitable_set_wait(false, ctx.memory_idx());
         }
@@ -1712,14 +1725,14 @@ impl Codegen {
         // Add canonical builtins with namespace "wasi"
         for builtin in &project.used_builtins {
             let canonical_name = builtin.canonical_name();
-            if let Some(info) = self.builtin_registry.get_by_canonical(canonical_name) {
-                if info.namespace == "wasi" {
-                    wasi_exports.push((
-                        canonical_name.to_string(),
-                        ExportKind::Func,
-                        ctx.core_func_idx(canonical_name),
-                    ));
-                }
+            if let Some(info) = self.builtin_registry.get_by_canonical(canonical_name)
+                && info.namespace == "wasi"
+            {
+                wasi_exports.push((
+                    canonical_name.to_string(),
+                    ExportKind::Func,
+                    ctx.core_func_idx(canonical_name),
+                ));
             }
         }
 
@@ -2132,7 +2145,9 @@ impl Codegen {
     ) {
         // Import stdout if used but not already imported
         let stdout_local_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        if project.used_effects.contains(&WasiEffect::Stdout) && !ctx.has_comp_func(&stdout_local_name) {
+        if project.used_effects.contains(&WasiEffect::Stdout)
+            && !ctx.has_comp_func(&stdout_local_name)
+        {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stdout_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -2187,7 +2202,9 @@ impl Codegen {
 
         // Import stderr if used but not already imported
         let stderr_local_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        if project.used_effects.contains(&WasiEffect::Stderr) && !ctx.has_comp_func(&stderr_local_name) {
+        if project.used_effects.contains(&WasiEffect::Stderr)
+            && !ctx.has_comp_func(&stderr_local_name)
+        {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stderr_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -2576,18 +2593,18 @@ impl Codegen {
     /// Register box types for primitive references.
     /// Box types are single-field mutable structs that wrap primitive values,
     /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
-    fn register_box_types(
-        &mut self,
-        builder: &mut CoreModuleBuilder,
-        project: &Project,
-    ) {
+    fn register_box_types(&mut self, builder: &mut CoreModuleBuilder, project: &Project) {
         use PrimitiveType::*;
 
         // Check which ValTypes are needed based on used_box_primitives
-        let needs_box_i32 = project.used_box_primitives.iter().any(|p| {
-            matches!(p, I32 | I16 | I8 | U32 | U16 | U8 | Bool | Char)
-        });
-        let needs_box_i64 = project.used_box_primitives.iter().any(|p| matches!(p, I64 | U64));
+        let needs_box_i32 = project
+            .used_box_primitives
+            .iter()
+            .any(|p| matches!(p, I32 | I16 | I8 | U32 | U16 | U8 | Bool | Char));
+        let needs_box_i64 = project
+            .used_box_primitives
+            .iter()
+            .any(|p| matches!(p, I64 | U64));
         let needs_box_f32 = project.used_box_primitives.contains(&F32);
         let needs_box_f64 = project.used_box_primitives.contains(&F64);
 
@@ -4478,14 +4495,22 @@ impl Codegen {
             TirExprKind::StringLiteral(s) => {
                 // String is a struct with one field: repr (builtin::array<u8>)
                 // 1. Create the raw byte array
-                let offset = self.get_string_offset(s);
                 let len = s.len();
-                func.instruction(&Instruction::I32Const(offset as i32));
-                func.instruction(&Instruction::I32Const(len as i32));
-                func.instruction(&Instruction::ArrayNewData {
-                    array_type_index: self.string_array_type_idx,
-                    array_data_index: 0,
-                });
+
+                if len == 0 {
+                    // Empty string - create empty array without data section reference
+                    func.instruction(&Instruction::I32Const(0)); // length
+                    func.instruction(&Instruction::ArrayNewDefault(self.string_array_type_idx));
+                } else {
+                    // Non-empty string - reference data section
+                    let offset = self.get_string_offset(s);
+                    func.instruction(&Instruction::I32Const(offset as i32));
+                    func.instruction(&Instruction::I32Const(len as i32));
+                    func.instruction(&Instruction::ArrayNewData {
+                        array_type_index: self.string_array_type_idx,
+                        array_data_index: 0,
+                    });
+                }
 
                 // 2. Create the String struct
                 let string_struct_info = self
@@ -5234,7 +5259,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -5261,7 +5288,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -5334,7 +5363,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -5361,7 +5392,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -7083,13 +7116,18 @@ impl Codegen {
             self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
         }
 
-        // Pre-allocate scratch locals for stream handling
-        // These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
-        // and builtin::effect_wait (used by ambient logging functions like log_stdout)
-        // The overhead of unused locals is negligible
-        if tir_func.body.is_some() {
-            let string_array_type = builder.type_idx("string-array");
-            self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+        // Pre-allocate scratch locals for async effect handling (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_async_scratch_locals(body)
+        {
+            Self::preallocate_async_scratch_locals(&mut func_ctx);
+        }
+
+        // Pre-allocate scratch locals for Environment calls (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_environment_scratch_locals(body)
+        {
+            Self::preallocate_environment_scratch_locals(&mut func_ctx);
         }
 
         // Pre-allocate locals for closure calls
@@ -7284,12 +7322,18 @@ impl Codegen {
             self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
         }
 
-        // Pre-allocate scratch locals for stream handling
-        // These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
-        // and builtin::effect_wait (used by ambient logging functions like log_stdout)
-        if tir_func.body.is_some() {
-            let string_array_type = builder.type_idx("string-array");
-            self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+        // Pre-allocate scratch locals for async effect handling (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_async_scratch_locals(body)
+        {
+            Self::preallocate_async_scratch_locals(&mut func_ctx);
+        }
+
+        // Pre-allocate scratch locals for Environment calls (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_environment_scratch_locals(body)
+        {
+            Self::preallocate_environment_scratch_locals(&mut func_ctx);
         }
 
         // Pre-allocate locals for closure calls
@@ -7475,61 +7519,343 @@ impl Codegen {
         func.instruction(&Instruction::End); // end if
     }
 
-    /// Pre-allocate scratch locals that builtins might need during code generation
+    /// Pre-allocate scratch locals for async effect handling
     ///
-    /// Some builtins allocate temporary locals at runtime.
-    /// These need to be declared in the function's local declarations.
-    fn preallocate_builtin_scratch_locals(
-        &self,
-        ctx: &mut FunctionContext,
-        string_array_type: u32,
-    ) {
-        // Get String struct type for template string locals
-        let string_struct_type = self
-            .lookup_struct_type("String", &string_module_path())
-            .map(|info| info.type_idx)
-            .unwrap_or(string_array_type); // fallback to array type if struct not found
-
-        // Scratch locals for stream handling builtins (uses raw array type)
-        // Use nullable refs so they default to ref.null and don't require initialization
-        ctx.alloc_local(
-            "__arr_ref",
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(string_array_type),
-            }),
-        );
-        ctx.alloc_local("__len", ValType::I32);
-        ctx.alloc_local("__ptr", ValType::I32);
-        ctx.alloc_local("__i", ValType::I32);
-        ctx.alloc_local("__ret64", ValType::I64);
-        ctx.alloc_local("__rx", ValType::I32);
-        ctx.alloc_local("__tx", ValType::I32);
-        ctx.alloc_local("__alloc_size", ValType::I32);
+    /// These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
+    /// and builtin::effect_wait (used by ambient logging functions like log_stdout).
+    /// Only allocate when the function actually uses these builtins.
+    fn preallocate_async_scratch_locals(ctx: &mut FunctionContext) {
         // Scratch locals for write_via_stream async handling
         ctx.alloc_local("__subtask", ValType::I32);
         ctx.alloc_local("__waitable_set", ValType::I32);
-        // Scratch locals for template string accumulation and concatenation
-        // Use nullable refs so they default to ref.null and don't require initialization
-        // These now use String struct type since String is a struct
-        ctx.alloc_local(
-            "__template_result",
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(string_struct_type),
-            }),
-        );
-        ctx.alloc_local(
-            "__concat_new",
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(string_struct_type),
-            }),
-        );
-        ctx.alloc_local("__result_len", ValType::I32);
-        ctx.alloc_local("__part_len", ValType::I32);
-        // Scratch local for CM list to GC array conversion (Environment::get_arguments, etc.)
+    }
+
+    /// Pre-allocate scratch locals for Environment calls
+    ///
+    /// Environment calls (get_arguments, get_environment, get_initial_cwd) need
+    /// a local to hold the outptr for CM ABI conversion.
+    fn preallocate_environment_scratch_locals(ctx: &mut FunctionContext) {
         ctx.alloc_local("__cm_outptr", ValType::I32);
+    }
+
+    /// Check if a function body uses Environment calls that need scratch locals.
+    fn needs_environment_scratch_locals(block: &TirBlock) -> bool {
+        for stmt in &block.stmts {
+            if Self::stmt_needs_environment_scratch_locals(stmt) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn stmt_needs_environment_scratch_locals(stmt: &TirStmt) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::expr_needs_environment_scratch_locals(value)
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::expr_needs_environment_scratch_locals(condition)
+                    || Self::needs_environment_scratch_locals(then_block)
+                    || else_block
+                        .as_ref()
+                        .is_some_and(Self::needs_environment_scratch_locals)
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::expr_needs_environment_scratch_locals(condition)
+                    || Self::needs_environment_scratch_locals(body)
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                condition
+                    .as_ref()
+                    .is_some_and(Self::expr_needs_environment_scratch_locals)
+                    || update
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_environment_scratch_locals)
+                    || Self::needs_environment_scratch_locals(body)
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::expr_needs_environment_scratch_locals(iterable)
+                    || Self::needs_environment_scratch_locals(body)
+            }
+            TirStmtKind::Loop { body } => Self::needs_environment_scratch_locals(body),
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+            }
+            _ => false,
+        }
+    }
+
+    fn expr_needs_environment_scratch_locals(expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Call {
+                module_path,
+                func_name,
+                args,
+                ..
+            } => {
+                // Check for Environment calls that need scratch locals
+                if module_path.len() == 1
+                    && module_path[0] == "Environment"
+                    && matches!(
+                        func_name.as_str(),
+                        "get_arguments" | "get_environment" | "get_initial_cwd"
+                    )
+                {
+                    return true;
+                }
+                args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::expr_needs_environment_scratch_locals(receiver)
+                    || args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::expr_needs_environment_scratch_locals(left)
+                    || Self::expr_needs_environment_scratch_locals(right)
+            }
+            TirExprKind::Unary { expr, .. } => Self::expr_needs_environment_scratch_locals(expr),
+            TirExprKind::Assign { target, value } => {
+                Self::expr_needs_environment_scratch_locals(target)
+                    || Self::expr_needs_environment_scratch_locals(value)
+            }
+            TirExprKind::Cast { expr, .. } => Self::expr_needs_environment_scratch_locals(expr),
+            TirExprKind::EffectCall { args, .. } | TirExprKind::StaticCall { args, .. } => {
+                args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::FieldAccess { expr, .. } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+            }
+            TirExprKind::Index { expr, index } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+                    || Self::expr_needs_environment_scratch_locals(index)
+            }
+            TirExprKind::Block(block) => Self::needs_environment_scratch_locals(block),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::expr_needs_environment_scratch_locals(condition)
+                    || Self::needs_environment_scratch_locals(then_branch)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(Self::needs_environment_scratch_locals)
+            }
+            TirExprKind::StructLiteral { fields, .. } => fields
+                .iter()
+                .any(|f| Self::expr_needs_environment_scratch_locals(&f.value)),
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                elements
+                    .iter()
+                    .any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::Closure { body, .. } => Self::expr_needs_environment_scratch_locals(body),
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::expr_needs_environment_scratch_locals(callee)
+                    || args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::Match { expr, arms } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+                    || arms
+                        .iter()
+                        .any(|arm| Self::expr_needs_environment_scratch_locals(&arm.body))
+            }
+            // Leaf nodes
+            _ => false,
+        }
+    }
+
+    /// Check if a function body uses async builtins that need scratch locals.
+    ///
+    /// Returns true if the body calls:
+    /// - builtin::call_indirect_stdout_write_via_stream
+    /// - builtin::call_indirect_stderr_write_via_stream
+    /// - builtin::effect_wait
+    fn needs_async_scratch_locals(block: &TirBlock) -> bool {
+        for stmt in &block.stmts {
+            if Self::stmt_needs_async_scratch_locals(stmt) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn stmt_needs_async_scratch_locals(stmt: &TirStmt) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::expr_needs_async_scratch_locals(value)
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || Self::needs_async_scratch_locals(then_block)
+                    || else_block
+                        .as_ref()
+                        .is_some_and(Self::needs_async_scratch_locals)
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || Self::needs_async_scratch_locals(body)
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                condition
+                    .as_ref()
+                    .is_some_and(Self::expr_needs_async_scratch_locals)
+                    || update
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_async_scratch_locals)
+                    || Self::needs_async_scratch_locals(body)
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::expr_needs_async_scratch_locals(iterable)
+                    || Self::needs_async_scratch_locals(body)
+            }
+            TirStmtKind::Loop { body } => Self::needs_async_scratch_locals(body),
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::expr_needs_async_scratch_locals(expr)
+            }
+            TirStmtKind::Assert {
+                condition, message, ..
+            } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || message
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_async_scratch_locals)
+            }
+            _ => false,
+        }
+    }
+
+    fn expr_needs_async_scratch_locals(expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Call {
+                module_path,
+                func_name,
+                args,
+                ..
+            } => {
+                // Check if this is a builtin call that needs async scratch locals
+                let is_builtin_func = (module_path.len() == 2
+                    && module_path[0] == "core"
+                    && module_path[1] == "builtin")
+                    || func_name.starts_with("builtin::");
+
+                if is_builtin_func {
+                    let name = func_name.strip_prefix("builtin::").unwrap_or(func_name);
+                    if matches!(
+                        name,
+                        "call_indirect_stdout_write_via_stream"
+                            | "call_indirect_stderr_write_via_stream"
+                            | "effect_wait"
+                    ) {
+                        return true;
+                    }
+                }
+
+                // Check if this is a direct WASI effect call (Stdout/Stderr::write_via_stream)
+                if module_path.len() == 1
+                    && (module_path[0] == "Stdout" || module_path[0] == "Stderr")
+                    && func_name == "write_via_stream"
+                {
+                    return true;
+                }
+
+                // Check args recursively
+                args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::expr_needs_async_scratch_locals(receiver)
+                    || args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::expr_needs_async_scratch_locals(left)
+                    || Self::expr_needs_async_scratch_locals(right)
+            }
+            TirExprKind::Unary { expr, .. } => Self::expr_needs_async_scratch_locals(expr),
+            TirExprKind::Assign { target, value } => {
+                Self::expr_needs_async_scratch_locals(target)
+                    || Self::expr_needs_async_scratch_locals(value)
+            }
+            TirExprKind::Cast { expr, .. } => Self::expr_needs_async_scratch_locals(expr),
+            TirExprKind::EffectCall {
+                effect_name,
+                op_name,
+                args,
+            } => {
+                // Stdout/Stderr write_via_stream effect calls need async scratch locals
+                if (effect_name == "Stdout" || effect_name == "Stderr")
+                    && op_name == "write_via_stream"
+                {
+                    return true;
+                }
+                args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::StaticCall { args, .. } => {
+                args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::FieldAccess { expr, .. } => Self::expr_needs_async_scratch_locals(expr),
+            TirExprKind::Block(block) => Self::needs_async_scratch_locals(block),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || Self::needs_async_scratch_locals(then_branch)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(Self::needs_async_scratch_locals)
+            }
+            TirExprKind::StructLiteral { fields, .. } => fields
+                .iter()
+                .any(|f| Self::expr_needs_async_scratch_locals(&f.value)),
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                elements.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::Closure { body, .. } => Self::expr_needs_async_scratch_locals(body),
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::expr_needs_async_scratch_locals(callee)
+                    || args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::Index { expr, index } => {
+                Self::expr_needs_async_scratch_locals(expr)
+                    || Self::expr_needs_async_scratch_locals(index)
+            }
+            TirExprKind::Match { expr, arms } => {
+                Self::expr_needs_async_scratch_locals(expr)
+                    || arms
+                        .iter()
+                        .any(|arm| Self::expr_needs_async_scratch_locals(&arm.body))
+            }
+            // Leaf nodes - no calls
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => false,
+        }
     }
 
     /// Pre-allocate locals for value copy operations (struct, array, tuple).
