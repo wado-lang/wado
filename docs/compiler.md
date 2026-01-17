@@ -593,6 +593,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Parentheses for grouping `(expr)`
 - [x] Function calls
 - [x] Method calls
+- [x] Static method calls (`Point::origin()`)
+- [x] Static method calls on generic types (`Array::<i32>::with_capacity()`)
 - [x] Field access
 - [x] Index access (`[]`)
 - [x] Type cast (`as T`) for primitive types

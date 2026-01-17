@@ -86,13 +86,13 @@ let b = move a;  // a is invalidated
 
 When a reference escapes, the referenced value is automatically heap-promoted. The compiler detects escape through these conditions:
 
-| Escape Condition                      | Example                                        |
-| ------------------------------------- | ---------------------------------------------- |
+| Escape Condition                      | Example                                          |
+| ------------------------------------- | ------------------------------------------------ |
 | Passed to function with `stores[...]` | `store(&local)` where `store` has `stores[data]` |
-| Returned from function                | `return &local;`                               |
-| Stored in global variable             | `GLOBAL = Some(&local);`                       |
-| Stored in struct field                | `Container { data: &local }`                   |
-| Captured by escaping closure          | `return` closure that uses `local`             |
+| Returned from function                | `return &local;`                                 |
+| Stored in global variable             | `GLOBAL = Some(&local);`                         |
+| Stored in struct field                | `Container { data: &local }`                     |
+| Captured by escaping closure          | `return` closure that uses `local`               |
 
 ```wado
 fn example() {
@@ -139,18 +139,19 @@ fn process(data: &Data) -> Result {
 - Only `stores` can use `[...]` syntax; regular effects cannot
 
 **Naming Rationale**: The keyword is `stores` (not `captures`) because:
+
 - "Capture" is used in closure semantics (`let f = || x + 1` captures `x`)
-- `stores` describes what the function *does* with the reference—it stores it
+- `stores` describes what the function _does_ with the reference—it stores it
 - This avoids conflating two different concepts: closures capturing variables vs functions storing references
 
 ### 4. Stores Rules
 
-| Declaration                    | Stores Behavior                              |
-| ------------------------------ | -------------------------------------------- |
-| Named function with `&T` param | Must declare `stores[param]` if storing      |
-| Closure using outer variable   | Closure captures inferred from usage         |
-| Functor type (`Fn(...)`)       | Must declare `stores[0]` etc. if it stores   |
-| Functor value itself           | No stores needed (functors are value types)  |
+| Declaration                    | Stores Behavior                             |
+| ------------------------------ | ------------------------------------------- |
+| Named function with `&T` param | Must declare `stores[param]` if storing     |
+| Closure using outer variable   | Closure captures inferred from usage        |
+| Functor type (`Fn(...)`)       | Must declare `stores[0]` etc. if it stores  |
+| Functor value itself           | No stores needed (functors are value types) |
 
 **Note on functors**: In Wasm, functors are `funcref` values. Storing a functor itself (not its parameters) does not require `stores[...]` because functors have value semantics—they are copied when assigned or passed.
 
@@ -213,7 +214,7 @@ fn make_counter() -> Fn() -> i32 {
 }
 ```
 
-Note: Closures that capture variables use "capture" terminology (closures capture). The `stores[...]` keyword is for functions that store *parameters* passed to them.
+Note: Closures that capture variables use "capture" terminology (closures capture). The `stores[...]` keyword is for functions that store _parameters_ passed to them.
 
 **Rationale**:
 

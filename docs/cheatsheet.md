@@ -174,6 +174,7 @@ A function must have `return` if it returns a value. This is applied to methods 
 
 ```wado
 impl Point {
+    // Instance method (has self parameter)
     fn sum(&self) -> i32 {
         return self.x + self.y;
     }
@@ -182,11 +183,23 @@ impl Point {
         self.x = 0;
         self.y = 0;
     }
+
+    // Static method (no self parameter)
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
 }
 
+// Instance method call
 let mut p = Point { x: 1, y: 2 };
 let s = p.sum();
 p.reset();
+
+// Static method call
+let origin = Point::origin();
+
+// Static method on generic type (turbofish syntax)
+let arr = Array::<i32>::with_capacity(10);
 ```
 
 ## Control Flow
