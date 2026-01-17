@@ -223,24 +223,29 @@ impl Parser {
 
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
-            // Parse attribute arguments as a string literal for now
-            let arg = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+            // Parse comma-separated string literal arguments
+            let mut args = Vec::new();
+            while let TokenKind::StringLit(s) = self.peek_kind().clone() {
                 self.advance();
-                Some(s)
-            } else {
-                None
-            };
+                args.push(s);
+                // Check for comma to continue parsing more arguments
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
             self.expect(&TokenKind::RParen)?;
-            arg
+            args
         } else {
-            None
+            Vec::new()
         };
 
         self.expect(&TokenKind::RBracket)?;
 
         // Parse WASI import path if this is a wasi attribute
         let wasi_import = if name == "wasi" {
-            args.as_ref().and_then(|s| WasiImport::parse(s))
+            args.first().and_then(|s| WasiImport::parse(s))
         } else {
             None
         };

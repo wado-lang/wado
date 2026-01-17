@@ -12,6 +12,7 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 
+use crate::project::Project;
 use crate::tir::{
     InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
     TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
@@ -40,6 +41,15 @@ pub fn lower(mut module: TirModule) -> TirModule {
 /// Lower multiple modules
 pub fn lower_modules(modules: Vec<TirModule>) -> Vec<TirModule> {
     modules.into_iter().map(lower).collect()
+}
+
+/// Lower a Project (Project -> Project)
+///
+/// This is the main entry point for the lower phase. It lowers all TIR modules
+/// in the project with cross-module generic function support.
+pub fn lower_project(mut project: Project) -> Project {
+    project.tir_modules = lower_modules_indexed(project.tir_modules);
+    project
 }
 
 /// Lower multiple modules with cross-module generic function support

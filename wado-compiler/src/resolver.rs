@@ -17,6 +17,7 @@ use crate::ast::{
     Function, IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern,
     ReturnStmt, Stmt, Type, UnaryOp, WhileStmt,
 };
+use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
@@ -4004,4 +4005,27 @@ pub fn resolve_module(
 ) -> Result<TirModule, Vec<TypeError>> {
     let mut resolver = Resolver::new(symbols, loaded_modules, source_code);
     resolver.resolve_module(module, module_path)
+}
+
+/// Resolve all modules and return a Project ready for lowering.
+///
+/// This is the main entry point for the resolve phase. It resolves all modules
+/// to TIR and packages them into a Project struct.
+pub fn resolve_to_project(
+    symbols: SymbolTable,
+    modules: &HashMap<Vec<String>, Module>,
+    entry_path: Vec<String>,
+    implicit_modules: HashSet<Vec<String>>,
+    module_name: String,
+    entry_source: &str,
+) -> Result<Project, Vec<TypeError>> {
+    let tir_modules = Resolver::resolve_all_modules(&symbols, modules, &entry_path, entry_source)?;
+
+    Ok(Project::new(
+        entry_path,
+        tir_modules,
+        symbols,
+        implicit_modules,
+        module_name,
+    ))
 }

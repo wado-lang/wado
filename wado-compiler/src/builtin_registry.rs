@@ -15,6 +15,9 @@ pub struct BuiltinFunctionInfo {
     /// Canonical name from #[canonical("...")] attribute (e.g., "stream-new")
     /// None means this builtin compiles to Wasm instructions directly
     pub canonical_name: Option<String>,
+    /// Import namespace from #[namespace("...")] attribute (default: "wasi")
+    /// Only relevant for functions with canonical_name
+    pub namespace: String,
     /// Parameter types
     pub params: Vec<(String, Type)>,
     /// Return type (None for void/diverging functions)
@@ -82,16 +85,31 @@ impl BuiltinRegistry {
             (None, false)
         };
 
-        // Extract canonical name from #[canonical("...")] attribute
-        let canonical_name = func
-            .attrs
-            .iter()
-            .find(|a| a.name == "canonical")
-            .and_then(|a| a.args.clone());
+        // Extract canonical info from #[canonical("namespace", "name")] attribute
+        // args[0] = namespace, args[1] = canonical name
+        let canonical_attr = func.attrs.iter().find(|a| a.name == "canonical");
+        let (namespace, canonical_name) = if let Some(attr) = canonical_attr {
+            if attr.args.len() >= 2 {
+                // New format: #[canonical("wasi", "stream-new")]
+                (attr.args[0].clone(), Some(attr.args[1].clone()))
+            } else if attr.args.len() == 1 {
+                // Legacy single-arg format not supported anymore
+                panic!(
+                    "Invalid #[canonical] attribute: expected 2 arguments (namespace, name), got 1"
+                );
+            } else {
+                // No arguments - this is an error
+                panic!("Invalid #[canonical] attribute: expected 2 arguments (namespace, name)");
+            }
+        } else {
+            // No canonical attribute - not an imported builtin
+            ("wasi".to_string(), None)
+        };
 
         let info = BuiltinFunctionInfo {
             name: func.name.clone(),
             canonical_name,
+            namespace,
             params,
             return_type,
             diverges,
@@ -103,6 +121,13 @@ impl BuiltinRegistry {
     /// Get function info by name
     pub fn get(&self, name: &str) -> Option<&BuiltinFunctionInfo> {
         self.functions.get(name)
+    }
+
+    /// Get function info by canonical name (e.g., "stream-new", "realloc")
+    pub fn get_by_canonical(&self, canonical_name: &str) -> Option<&BuiltinFunctionInfo> {
+        self.functions
+            .values()
+            .find(|f| f.canonical_name.as_deref() == Some(canonical_name))
     }
 
     /// Get the return type of a builtin function

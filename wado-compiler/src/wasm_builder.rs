@@ -132,15 +132,16 @@ impl CoreModuleBuilder {
         idx
     }
 
-    /// Import a function and return its function index
-    pub fn import_func(&mut self, module: &str, name: &str, type_name: &str) -> u32 {
-        let type_idx = self.type_idx(type_name);
+    /// Import a function and return its function index.
+    /// The function type is looked up by name (import name == type name).
+    pub fn import_func(&mut self, module: &str, name: &str) -> u32 {
+        let type_idx = self.type_idx(name);
         self.imports
             .import(module, name, EntityType::Function(type_idx));
         let func_idx = self.next_func_idx;
         self.func_names.insert(name.to_string(), func_idx);
         self.func_type_names
-            .insert(name.to_string(), type_name.to_string());
+            .insert(name.to_string(), name.to_string());
         self.next_func_idx += 1;
         self.import_func_count += 1;
         func_idx

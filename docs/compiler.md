@@ -24,40 +24,41 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | Desugar  | AST           | AST          | Transform syntactic sugar             |
 | Load     | AST           | All modules  | Load all dependencies recursively     |
 | Analyze  | All modules   | Symbol table | Build symbol table, validate imports  |
-| Resolve  | AST + Symbols | TIR          | Type resolution, produce typed IR     |
-| Lower    | TIR           | TIR          | String collection, transformations    |
-| Optimize | TIR           | Hints        | DCE, conditional feature inclusion    |
-| Codegen  | TIR           | Wasm bytes   | Generate Component Model Wasm         |
+| Resolve  | AST + Symbols | Project      | Type resolution, produce Project      |
+| Lower    | Project       | Project      | String collection, monomorphization   |
+| Optimize | Project       | Project      | DCE, usage analysis, feature flags    |
+| Codegen  | Project       | Wasm bytes   | Generate Component Model Wasm         |
 
 ### Modules
 
-| Module          | File                  | Description                                          |
-| --------------- | --------------------- | ---------------------------------------------------- |
-| Lexer           | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section   |
-| Parser          | `parser.rs`           | Recursive descent parser, builds AST                 |
-| AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API   |
-| Token           | `token.rs`            | Token types and spans                                |
-| Comment         | `comment.rs`          | Comment collection and CommentMap for formatting     |
-| Bind            | `bind.rs`             | Local name binding, scope analysis, mutability check |
-| Loader          | `loader.rs`           | Module loading, dependency resolution                |
-| Desugar         | `desugar.rs`          | AST transformations (compound assign, etc.)          |
-| Unparser        | `unparse.rs`          | Converts AST/TIR back to source code                 |
-| Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction         |
-| Symbol          | `symbol.rs`           | Symbol table data structures                         |
-| Name            | `name.rs`             | Name mangling utilities for methods and symbols      |
-| ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library           |
-| Resolver        | `resolver.rs`         | Type resolution, AST to TIR conversion               |
-| TIR             | `tir.rs`              | Typed Intermediate Representation                    |
-| Lower           | `lower.rs`            | Monomorphization, string collection, TIR lowering    |
-| Optimize        | `optimize.rs`         | DCE, optimization hints for codegen                  |
-| Stdlib          | `stdlib.rs`           | Embedded core library sources                        |
-| WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution          |
-| BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`        |
-| WorldRegistry   | `world_registry.rs`   | World definitions registry for export signatures     |
-| WasmBuilder     | `wasm_builder.rs`     | Wasm index tracking utilities                        |
-| Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder      |
-| Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)      |
-| Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                          |
+| Module          | File                  | Description                                           |
+| --------------- | --------------------- | ----------------------------------------------------- |
+| Lexer           | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section    |
+| Parser          | `parser.rs`           | Recursive descent parser, builds AST                  |
+| AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API    |
+| Token           | `token.rs`            | Token types and spans                                 |
+| Comment         | `comment.rs`          | Comment collection and CommentMap for formatting      |
+| Bind            | `bind.rs`             | Local name binding, scope analysis, mutability check  |
+| Loader          | `loader.rs`           | Module loading, dependency resolution                 |
+| Desugar         | `desugar.rs`          | AST transformations (compound assign, etc.)           |
+| Unparser        | `unparse.rs`          | Converts AST/TIR back to source code                  |
+| Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction          |
+| Symbol          | `symbol.rs`           | Symbol table data structures                          |
+| Name            | `name.rs`             | Name mangling utilities for methods and symbols       |
+| ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library            |
+| Resolver        | `resolver.rs`         | Type resolution, AST to TIR, produces Project         |
+| TIR             | `tir.rs`              | Typed Intermediate Representation                     |
+| Lower           | `lower.rs`            | Monomorphization, string collection (Project→Project) |
+| Project         | `project.rs`          | Project: compilation context passed through pipeline  |
+| Optimize        | `optimize.rs`         | DCE, usage analysis, populates Project                |
+| Stdlib          | `stdlib.rs`           | Embedded core library sources                         |
+| WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution           |
+| BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`         |
+| WorldRegistry   | `world_registry.rs`   | World definitions registry for export signatures      |
+| WasmBuilder     | `wasm_builder.rs`     | Wasm index tracking utilities                         |
+| Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder       |
+| Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)       |
+| Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                           |
 
 ### Parser and Desugar Separation
 
@@ -171,7 +172,19 @@ Container::transform::<i32, i64> → Container::transform$1
 
 ### Optimizer
 
-The `optimize.rs` module implements optimization passes that analyze TIR and produce `OptimizationHints` for code generation.
+The `optimize.rs` module implements optimization passes that analyze TIR and populate usage analysis results in `Project`. The optimizer follows the ownership transfer pattern: `optimize(project: Project, opt_level: OptLevel) -> Project`.
+
+**Usage Analysis Fields (populated in Project):**
+
+| Field                 | Type                     | Description                                 |
+| --------------------- | ------------------------ | ------------------------------------------- |
+| `reachable_functions` | `HashSet<FunctionId>`    | Functions reachable from entry point (DCE)  |
+| `all_reachable`       | `bool`                   | When true, DCE is disabled                  |
+| `used_effects`        | `HashSet<WasiEffect>`    | WASI effects used (Stdout, Stderr, etc.)    |
+| `used_wasi_functions` | `HashSet<String>`        | WASI functions called                       |
+| `used_builtins`       | `HashSet<CanonBuiltin>`  | Canonical builtins used (stream ops, etc.)  |
+| `used_box_primitives` | `HashSet<PrimitiveType>` | Primitives needing box types for references |
+| `strip_names`         | `bool`                   | Whether to strip debug name sections        |
 
 **Current Optimizations:**
 
@@ -179,12 +192,14 @@ The `optimize.rs` module implements optimization passes that analyze TIR and pro
 | ----------------------- | -------------------------------------------------------- |
 | Dead Code Elimination   | Removes unreachable functions/methods from output        |
 | Float-to-string removal | Excludes `f32_to_buffer`/`f64_to_buffer` when not needed |
+| Conditional WASI import | Only imports WASI interfaces that are actually used      |
 
 **CLI Control:**
 
 | Flag  | Effect                                              |
 | ----- | --------------------------------------------------- |
-| `-O2` | Default, DCE enabled, keeps debug names             |
+| `-O1` | Default, DCE enabled, keeps debug names             |
+| `-O2` | Full optimizations, DCE enabled                     |
 | `-Os` | Size optimization: DCE + strips debug name sections |
 | `-O0` | Disables DCE, includes all functions/features       |
 

@@ -30,11 +30,11 @@ pub use analyze::Analyzer;
 pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
 pub use lexer::{LexError, Lexer};
-pub use lower::{lower, lower_modules_indexed};
+pub use lower::{lower, lower_modules_indexed, lower_project};
 pub use optimize::{CanonBuiltin, OptLevel, WasiEffect, optimize};
 pub use parser::{ParseError, Parser};
 pub use project::Project;
-pub use resolver::{Resolver, TypeError};
+pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
 
 use std::path::Path;
@@ -410,11 +410,21 @@ fn compile_impl(
 
     let symbols = analyzer.into_symbols();
 
-    // === Phase 6: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(
-        &symbols,
+    // Derive module name from filename
+    let module_name = filename
+        .as_ref()
+        .and_then(|f| std::path::Path::new(f).file_stem())
+        .and_then(|s| s.to_str())
+        .unwrap_or("module")
+        .to_string();
+
+    // === Phase 6: Resolve all modules to Project ===
+    let project = resolve_to_project(
+        symbols,
         &load_result.modules,
-        &load_result.entry_path,
+        load_result.entry_path.clone(),
+        load_result.implicit_modules.clone(),
+        module_name,
         source,
     )
     .map_err(|errors| {
@@ -429,30 +439,13 @@ fn compile_impl(
         }
     })?;
 
-    // === Phase 7: Lower all modules (string collection, etc.) ===
-    // Use lower_modules_indexed for cross-module generic function support
-    let tir_modules = lower_modules_indexed(tir_modules);
+    // === Phase 7: Lower (Project -> Project) ===
+    let project = lower_project(project);
 
-    // === Phase 8: Create Project ===
-    let module_name = filename
-        .as_ref()
-        .and_then(|f| std::path::Path::new(f).file_stem())
-        .and_then(|s| s.to_str())
-        .unwrap_or("module")
-        .to_string();
-
-    let project = Project::new(
-        load_result.entry_path.clone(),
-        tir_modules,
-        symbols,
-        load_result.implicit_modules.clone(),
-        module_name,
-    );
-
-    // === Phase 9: Optimize (Project -> Project) ===
+    // === Phase 8: Optimize (Project -> Project) ===
     let project = optimize(project, opt_level);
 
-    // === Phase 10: Codegen ===
+    // === Phase 9: Codegen ===
     let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         codegen.generate_wasm(&project)

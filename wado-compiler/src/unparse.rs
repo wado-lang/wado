@@ -255,11 +255,16 @@ impl<'a> Unparser<'a> {
     fn unparse_attribute(&mut self, attr: &Attribute) {
         self.output.push_str("#[");
         self.output.push_str(&attr.name);
-        if let Some(args) = &attr.args {
+        if !attr.args.is_empty() {
             self.output.push('(');
-            self.output.push('"');
-            self.output.push_str(args);
-            self.output.push('"');
+            for (i, arg) in attr.args.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push('"');
+                self.output.push_str(arg);
+                self.output.push('"');
+            }
             self.output.push(')');
         }
         self.output.push(']');
