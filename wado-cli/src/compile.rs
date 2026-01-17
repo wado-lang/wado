@@ -172,13 +172,8 @@ pub async fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
 
     // Compile using async API
     let compiler_opt_level = to_compiler_opt_level(opt_level);
-    let result = wado_compiler::compile_with_host(
-        &source,
-        &host,
-        Some(filename),
-        compiler_opt_level,
-    )
-    .await;
+    let result =
+        wado_compiler::compile_with_host(&source, &host, Some(filename), compiler_opt_level).await;
 
     match result {
         Ok(result) => result.wasm,

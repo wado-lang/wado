@@ -171,10 +171,7 @@ impl ModuleLoader {
     }
 
     /// Load implicit modules required by the compiler
-    async fn load_implicit_modules<H: CompilerHost>(
-        &mut self,
-        host: &H,
-    ) -> Result<(), LoadError> {
+    async fn load_implicit_modules<H: CompilerHost>(&mut self, host: &H) -> Result<(), LoadError> {
         let implicit_paths = [
             vec!["core".to_string(), "prelude".to_string()],
             vec!["core".to_string(), "internal".to_string()],

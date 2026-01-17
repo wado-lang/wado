@@ -241,10 +241,7 @@ pub trait CompilerHost: Send + Sync {
     ///
     /// # Returns
     /// The complete source code including `__DATA__` section if present
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl Future<Output = Result<String, SourceError>> + Send;
+    fn load_source(&self, path: &str) -> impl Future<Output = Result<String, SourceError>> + Send;
 
     /// Emit a diagnostic (error, warning, etc.)
     ///
