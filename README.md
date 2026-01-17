@@ -1,6 +1,6 @@
 # Wado
 
-A type-safe, high-level WebAssembly — Wasm in plain sight.
+A type-safe, high-level WebAssembly.
 
 ## Why Wado?
 
@@ -14,7 +14,7 @@ The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, 
 
 ### What You See Is What You Get
 
-No macros. The code you read is the code that runs.
+No macros. The code you read is the code that runs — Wasm in plain sight.
 
 ### Readable Without Context Switching
 
