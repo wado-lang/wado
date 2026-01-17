@@ -21,12 +21,12 @@ build: wado-compiler/lib/builtins/wado-bundled.wat
 	cargo build
 
 .PHONY: hello
-hello: build
+hello:
 	cargo run -p wado-cli --quiet -- compile -o example/hello.wat example/hello.wado
 	cargo run -p wado-cli --quiet -- compile -o example/hello.wasm example/hello.wado
 
 .PHONY: hello-run
-hello-run: build
+hello-run:
 	cargo run -p wado-cli --quiet -- run example/hello.wado
 
 .PHONY: hello-run-wasmtime
@@ -47,13 +47,16 @@ test-cov-html:
 	@echo "Coverage report generated at target/llvm-cov/html/index.html"
 
 .PHONY: on-task-done
-on-task-done: clippy-fix format update-bundled test
+on-task-done: clippy-fix update-bundled format test
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: format
-format: build
+format:
 	cargo fmt --verbose --all
 	npx prettier --write spec.md AGENTS.md README.md docs/*.md benchmark/*.md
+
+.PHONY: format-wado
+format-wado:
 	cargo run --bin wado --quiet -- format -w $$(grep -L '"compile_error"' wado-compiler/tests/fixtures/*.wado wado-compiler/tests/fixtures/**/*.wado)
 
 .PHONY: clippy
@@ -91,7 +94,7 @@ test-wado-vscode:
 	cd wado-vscode && npm install && npm run test:unit && npm run test
 
 .PHONY: update-wado-vscode-grammar
-update-wado-vscode-grammar: build
+update-wado-vscode-grammar:
 	cargo run --bin wado --quiet -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
 	cargo run --bin wado --quiet -- syntax --format language-config -o wado-vscode/language-configuration.json
 	@echo "Updated wado-vscode syntax files"
@@ -113,7 +116,7 @@ update-vendor:
 	git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime vendor/wasm-tools
 
 .PHONY: update-stdlib-wasi
-update-stdlib-wasi: build
+update-stdlib-wasi:
 	rm -f wado-compiler/lib/wasi/*.wado
 	cargo run -p wado-from-wit -- \
 		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
@@ -137,7 +140,7 @@ check-bundled:
 	@echo "wado-bundled.wat is up-to-date."
 
 .PHONY: benchmark-count-prime
-benchmark-count-prime: build
+benchmark-count-prime:
 	@echo "=== Compiling Wado benchmark ==="
 	cargo run --bin wado --quiet -- compile -o benchmark/count_prime.wasm benchmark/count_prime.wado
 	@echo ""
@@ -160,7 +163,7 @@ benchmark-count-prime: build
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
 
 .PHONY: benchmark-mandelbrot
-benchmark-mandelbrot: build
+benchmark-mandelbrot:
 	@echo "=== Compiling Wado benchmark ==="
 	cargo run --bin wado --quiet -- compile -o benchmark/mandelbrot.wasm benchmark/mandelbrot.wado
 	@echo ""
@@ -183,7 +186,7 @@ benchmark-mandelbrot: build
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
 
 .PHONY: benchmark-sieve
-benchmark-sieve: build
+benchmark-sieve:
 	@echo "=== Compiling Wado benchmark ==="
 	cargo run --bin wado --quiet -- compile -o benchmark/sieve.wasm benchmark/sieve.wado
 	@echo ""

@@ -124,11 +124,12 @@ cargo build
 cargo test
 ```
 
-### On Your Task Done
+### The Wado CLI
 
-```sh
-make on-task-done # format, clippy-fix, update-bundled, test
-```
+- [x] `wado compile FILE` - Compile Wado source to Wasm/WAT
+- [x] `wado run FILE` - Run Wado source directly using Wasmtime
+- [x] `wado dump FILE` - Dump internal compiler state for debugging
+- [x] `wado format FILE` - Format Wado source code
 
 ### What's Done
 
@@ -145,6 +146,12 @@ make update-wado-vscode-grammar # regenerate syntax files after changing syntax.
 ```
 
 See [wado-vscode/README.md](wado-vscode/README.md) for more details.
+
+### On Your Task Done
+
+```sh
+make on-task-done # format, clippy-fix, update-bundled, test
+```
 
 ## Authors
 

@@ -114,6 +114,14 @@ Available phases (in compilation order):
 7. `--lower` - Lowered TIR (supports `--unparse`)
 8. `--optimize` - Optimization hints
 
+## The Formatter
+
+There's `wado format` command to format Wado source code.
+
+`make format-wado` formats all the fixtures for compiler tests.
+
+CAUTION: `make format-wado` may break uncommitted test fixtures. So if the syntax is updated, make sure adding tests to `wado-compiler/tests/format.rs`.
+
 ## VS Code Extension
 
 The VS Code extension is implemented in `wado-vscode/`.
