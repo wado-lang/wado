@@ -217,7 +217,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [World Conformance and Export Syntax](./docs/wep-2026-01-16-world-conformance-and-export.md)
 - [Closure Implementation](./docs/wep-2026-01-16-closure-implementation.md)
 - [Function Return Type Syntax](./docs/wep-2026-01-16-function-return-type-syntax.md)
-- [SourceProvider Abstraction for Compiler I/O](./docs/wep-2026-01-16-source-provider-abstraction.md)
+- [CompilerHost Abstraction for Compiler I/O](./docs/wep-2026-01-16-source-provider-abstraction.md)
 - [Type Stringification](./docs/wep-2026-01-16-type-stringification.md)
 - [Template Format Specifiers](./docs/wep-2026-01-17-template-format-specifiers.md)
 
