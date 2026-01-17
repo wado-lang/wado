@@ -108,10 +108,6 @@ impl SubstitutionContext {
                 // Direct substitution: TypeParam at index -> concrete type
                 self.substitutions.get(&index).copied().unwrap_or(type_id)
             }
-            ResolvedType::Array(elem) => {
-                let new_elem = self.substitute(elem, type_table);
-                type_table.make_array(new_elem)
-            }
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute(elem, type_table);
                 type_table.make_builtin_array(new_elem)
@@ -237,7 +233,6 @@ pub enum ResolvedType {
         name: String,
         module_path: Vec<String>,
     },
-    Array(TypeId),
     Option(TypeId),
     Result {
         ok: TypeId,
@@ -395,10 +390,6 @@ impl TypeTable {
         self.types.len() <= 19
     }
 
-    pub fn make_array(&mut self, element: TypeId) -> TypeId {
-        self.intern(ResolvedType::Array(element))
-    }
-
     /// Create a raw GC array type (`builtin::array<T>`)
     pub fn make_builtin_array(&mut self, element: TypeId) -> TypeId {
         self.intern(ResolvedType::BuiltinArray(element))
@@ -474,12 +465,33 @@ impl TypeTable {
         })
     }
 
+    /// Create an Array<T> type (GenericInstance { name: "Array", ... })
+    pub fn make_array(&mut self, element: TypeId) -> TypeId {
+        self.make_generic_instance(
+            "Array".to_string(),
+            vec!["core".to_string(), "prelude".to_string()],
+            vec![element],
+        )
+    }
+
+    /// Check if a type is Array<T> and return the element type if so.
+    /// Also unwraps Ref/MutRef types to check the inner type.
+    pub fn as_array(&self, id: TypeId) -> Option<TypeId> {
+        match self.get(id) {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if name == "Array" && type_args.len() == 1 => Some(type_args[0]),
+            // Unwrap references and check the inner type
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_array(*inner),
+            _ => None,
+        }
+    }
+
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::Unknown | ResolvedType::Error => true,
-            ResolvedType::Array(inner)
-            | ResolvedType::BuiltinArray(inner)
+            ResolvedType::BuiltinArray(inner)
             | ResolvedType::Option(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
@@ -531,7 +543,6 @@ impl TypeTable {
             ResolvedType::String => "String".to_string(),
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
-            ResolvedType::Array(elem) => format!("Array<{}>", self.type_name(*elem)),
             ResolvedType::BuiltinArray(elem) => {
                 format!("builtin::array<{}>", self.type_name(*elem))
             }
@@ -1182,9 +1193,12 @@ mod tests {
     #[test]
     fn test_intern_deduplication() {
         let mut table = TypeTable::new();
+        // Test that interning the same type returns the same TypeId
         let arr1 = table.make_array(TypeTable::I32);
         let arr2 = table.make_array(TypeTable::I32);
         assert_eq!(arr1, arr2);
+        // Verify as_array works
+        assert_eq!(table.as_array(arr1), Some(TypeTable::I32));
     }
 
     #[test]

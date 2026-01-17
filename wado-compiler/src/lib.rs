@@ -29,7 +29,7 @@ pub use analyze::Analyzer;
 pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
 pub use lexer::{LexError, Lexer};
-pub use lower::lower;
+pub use lower::{lower, lower_modules_indexed};
 pub use optimize::{OptLevel, OptimizationHints, analyze_all_modules};
 pub use parser::{ParseError, Parser};
 pub use resolver::{Resolver, TypeError};
@@ -293,12 +293,8 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
     .ok();
 
     // === Phase 8: Lower all modules ===
-    let lowered_tir_modules = tir_modules.as_ref().map(|modules| {
-        modules
-            .iter()
-            .map(|(path, module)| (path.clone(), lower(module.clone())))
-            .collect()
-    });
+    // Use lower_modules_indexed for cross-module generic function support
+    let lowered_tir_modules = tir_modules.clone().map(lower_modules_indexed);
 
     // === Phase 9: Optimize ===
     let opt_hints = lowered_tir_modules
@@ -417,10 +413,8 @@ fn compile_impl(
     })?;
 
     // === Phase 7: Lower all modules (string collection, etc.) ===
-    let tir_modules: IndexMap<Vec<String>, _> = tir_modules
-        .into_iter()
-        .map(|(path, module)| (path, lower(module)))
-        .collect();
+    // Use lower_modules_indexed for cross-module generic function support
+    let tir_modules = lower_modules_indexed(tir_modules);
 
     // Get the entry module TIR
     let entry_tir = tir_modules

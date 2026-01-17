@@ -10,6 +10,8 @@
 
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
+
 use crate::tir::{
     InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
     TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
@@ -36,6 +38,55 @@ pub fn lower(mut module: TirModule) -> TirModule {
 /// Lower multiple modules
 pub fn lower_modules(modules: Vec<TirModule>) -> Vec<TirModule> {
     modules.into_iter().map(lower).collect()
+}
+
+/// Lower multiple modules with cross-module generic function support
+///
+/// This function enables monomorphization of generic functions defined in one module
+/// but used in another (e.g., Array methods from prelude used in user code).
+///
+/// IMPORTANT: Requires unified type tables - all modules must share the same TypeTable
+/// so that TypeIds are valid across modules.
+pub fn lower_modules_indexed(
+    modules: IndexMap<Vec<String>, TirModule>,
+) -> IndexMap<Vec<String>, TirModule> {
+    // First pass: collect all generic functions from all modules
+    let mut all_generic_functions: HashMap<String, TirFunction> = HashMap::new();
+    for module in modules.values() {
+        for func in &module.functions {
+            if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
+                all_generic_functions.insert(func.name.clone(), func.clone());
+            }
+        }
+    }
+
+    // Second pass: lower each module using the combined generic functions
+    modules
+        .into_iter()
+        .map(|(path, module)| {
+            (
+                path,
+                lower_with_cross_module_generics(module, &all_generic_functions),
+            )
+        })
+        .collect()
+}
+
+/// Lower a single module with access to cross-module generic functions
+fn lower_with_cross_module_generics(
+    mut module: TirModule,
+    all_generic_functions: &HashMap<String, TirFunction>,
+) -> TirModule {
+    // Perform monomorphization with cross-module generic function support
+    let mut monomorph = Monomorphizer::new();
+    module = monomorph.monomorphize_with_externals(module, all_generic_functions);
+
+    // Collect string literals
+    let mut collector = StringCollector::new();
+    collector.collect_module(&module);
+    module.string_literals = collector.into_strings();
+
+    module
 }
 
 // ============================================================================
@@ -148,6 +199,107 @@ impl Monomorphizer {
 
         // Phase 11: Remove generic functions from the functions list
         // (they stay in generic_functions for reference)
+        // Remove functions with type_params OR impl_type_params (unless monomorphized)
+        module.functions.retain(|f| {
+            (f.type_params.is_empty() && f.impl_type_params.is_empty())
+                || f.monomorph_info.is_some()
+        });
+
+        // Phase 12: Rewrite function calls to use monomorphized names
+        self.rewrite_function_calls_in_module(&mut module);
+
+        module
+    }
+
+    /// Perform monomorphization with access to external generic functions
+    ///
+    /// This enables monomorphization of generic functions defined in other modules
+    /// (e.g., Array methods from prelude used in user code).
+    ///
+    /// IMPORTANT: Requires unified type tables - TypeIds in external_generic_functions
+    /// must be valid in the module's type_table.
+    fn monomorphize_with_externals(
+        &mut self,
+        mut module: TirModule,
+        external_generic_functions: &HashMap<String, TirFunction>,
+    ) -> TirModule {
+        // ========================
+        // Struct Monomorphization
+        // ========================
+
+        // Phase 1: Collect all generic struct definitions
+        let generic_structs: HashMap<String, TirStruct> = module
+            .structs
+            .iter()
+            .filter(|s| !s.type_params.is_empty())
+            .map(|s| (s.name.clone(), s.clone()))
+            .collect();
+
+        // Store in module for later phases
+        module.generic_structs = generic_structs.clone();
+
+        // Phase 2: Collect all struct instantiation sites from the type table
+        self.collect_instantiation_sites(&module.type_table);
+
+        // Phase 3: Process struct instantiations and generate concrete structs
+        let mut new_structs = Vec::new();
+        while let Some(key) = self.pending.pop() {
+            if let Some(generic_struct) = generic_structs.get(&key.name)
+                && let Some(concrete) =
+                    self.instantiate_struct(generic_struct, &key, &mut module.type_table)
+            {
+                new_structs.push(concrete);
+            }
+        }
+
+        // Phase 4: Add monomorphized structs to module
+        module.structs.extend(new_structs);
+
+        // Phase 5: Remove generic structs from the concrete struct list
+        module
+            .structs
+            .retain(|s| s.type_params.is_empty() || s.monomorph_info.is_some());
+
+        // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
+        self.rewrite_types_in_module(&mut module);
+
+        // ============================
+        // Function Monomorphization
+        // ============================
+
+        // Phase 7: Collect all generic function definitions
+        // Include both local functions AND external generic functions from other modules
+        let mut generic_functions: HashMap<String, TirFunction> =
+            external_generic_functions.clone();
+
+        // Local generic functions override external ones (allows module-local specialization)
+        for func in &module.functions {
+            if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
+                generic_functions.insert(func.name.clone(), func.clone());
+            }
+        }
+
+        // Store in module for later phases
+        module.generic_functions = generic_functions.clone();
+
+        // Phase 8: Collect function instantiation sites from Call expressions
+        self.collect_function_instantiation_sites(&module, &generic_functions);
+
+        // Phase 9: Process function instantiations and generate concrete functions
+        let mut new_functions = Vec::new();
+        while let Some(key) = self.function_pending.pop() {
+            if let Some(generic_func) = generic_functions.get(&key.name)
+                && let Some(concrete) =
+                    self.instantiate_function(generic_func, &key, &mut module.type_table)
+            {
+                new_functions.push(concrete);
+            }
+        }
+
+        // Phase 10: Add monomorphized functions to module
+        module.functions.extend(new_functions);
+
+        // Phase 11: Remove generic functions from the functions list
         // Remove functions with type_params OR impl_type_params (unless monomorphized)
         module.functions.retain(|f| {
             (f.type_params.is_empty() && f.impl_type_params.is_empty())
@@ -381,14 +533,6 @@ impl Monomorphizer {
 
         // Handle container types that may contain GenericInstance
         match type_table.get(type_id).clone() {
-            ResolvedType::Array(elem_id) => {
-                let new_elem_id = self.rewrite_type_id(elem_id, type_table);
-                if new_elem_id != elem_id {
-                    type_table.make_array(new_elem_id)
-                } else {
-                    type_id
-                }
-            }
             ResolvedType::Option(inner_id) => {
                 let new_inner_id = self.rewrite_type_id(inner_id, type_table);
                 if new_inner_id != inner_id {
@@ -466,12 +610,6 @@ impl Monomorphizer {
             ResolvedType::String => "String".to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::Array(elem) => {
-                format!(
-                    "Array${}",
-                    self.type_id_to_name_component(*elem, type_table)
-                )
-            }
             ResolvedType::Option(inner) => {
                 format!(
                     "Option${}",
@@ -569,9 +707,9 @@ impl Monomorphizer {
                 // Direct substitution
                 *substitution.get(&index).unwrap_or(&type_id)
             }
-            ResolvedType::Array(elem) => {
+            ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute_type(elem, substitution, type_table);
-                type_table.make_array(new_elem)
+                type_table.intern(ResolvedType::BuiltinArray(new_elem))
             }
             ResolvedType::Option(inner) => {
                 let new_inner = self.substitute_type(inner, substitution, type_table);
@@ -1098,10 +1236,25 @@ impl Monomorphizer {
     }
 
     /// Get the struct name from a type_id, unwrapping references if needed
+    /// For generic instances, returns the mangled name with type args (e.g., "Array$i32")
     fn get_struct_name_from_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<String> {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => Some(name.clone()),
-            ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                // Return the mangled name with type args (e.g., "Array$i32", "Box$String")
+                if type_args.is_empty() {
+                    Some(name.clone())
+                } else {
+                    let mut result = name.clone();
+                    for arg in type_args {
+                        result.push('$');
+                        result.push_str(&self.type_id_to_name_component(*arg, type_table));
+                    }
+                    Some(result)
+                }
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_name_from_type(*inner, type_table)
             }
