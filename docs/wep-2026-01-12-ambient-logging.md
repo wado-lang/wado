@@ -1,8 +1,4 @@
-# ADR: Ambient Logging Functions
-
-**Date**: 2026-01-12
-**Status**: Accepted
-
+# WEP: Ambient Logging Functions
 ## Context
 
 ### Problem Statement

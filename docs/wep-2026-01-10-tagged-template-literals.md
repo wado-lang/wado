@@ -1,9 +1,4 @@
 # Tagged Template Literals for Compile-Time Execution
-
-**Status**: Proposed
-
-**Date**: 2026-01-10
-
 ## Context
 
 Wado programs frequently need to embed binary data (images, cryptographic keys, compiled assets) or validate complex string literals (regular expressions, SQL queries, DSL syntax) at compile time. Several challenges arise:

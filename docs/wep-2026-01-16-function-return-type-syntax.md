@@ -1,7 +1,5 @@
-# ADR: Function Return Type Syntax
-
+# WEP: Function Return Type Syntax
 **Status:** Accepted
-
 **Date:** 2026-01-16
 
 ## Context
@@ -81,7 +79,7 @@ This applies to:
 - Functions with effects
 - Generic functions
 
-Closures will use a separate syntax decision (see ADR 2026-01-16: Closure Implementation), but the arrow syntax remains consistent for any return type annotations.
+Closures will use a separate syntax decision (see WEP 2026-01-16: Closure Implementation), but the arrow syntax remains consistent for any return type annotations.
 
 ## Consequences
 
@@ -112,9 +110,9 @@ Closures will use a separate syntax decision (see ADR 2026-01-16: Closure Implem
 
 ## Related Decisions
 
-- ADR 2026-01-16: Closure Implementation - Defines closure syntax separately
-- ADR 2026-01-13: Struct and Trait System - Uses consistent type annotation patterns
-- ADR 2026-01-11: Operator Precedence and Associativity - Type expressions in function signatures
+- WEP 2026-01-16: Closure Implementation - Defines closure syntax separately
+- WEP 2026-01-13: Struct and Trait System - Uses consistent type annotation patterns
+- WEP 2026-01-11: Operator Precedence and Associativity - Type expressions in function signatures
 
 ## References
 
