@@ -6,7 +6,7 @@ A type-safe, high-level WebAssembly.
 
 Wado was born from a practical need: embedding small Wasm modules in JavaScript projects without the binary size explosion that comes with existing Wasm-targeting languages.
 
-Existing solutions bundle their own runtime and garbage collector into every `.wasm` file, resulting in bloated binaries even for simple tasks. Wado takes a different approach: by leveraging **Wasm GC**, the garbage collector is provided by the Wasm runtime itself (currently wasmtime; browser support pending Wasm Component Model), keeping your binaries minimal.
+Existing solutions bundle their own memory management runtime into every `.wasm` file, resulting in bloated binaries even for simple tasks. Wado takes a different approach: by leveraging **Wasm GC**, the garbage collector is provided by the Wasm runtime itself (currently wasmtime; browser support pending Wasm Component Model), keeping your binaries minimal.
 
 The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
 
