@@ -16,6 +16,7 @@ pub mod parser;
 pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
+pub mod syntax;
 pub mod tir;
 pub mod token;
 pub mod unparse;

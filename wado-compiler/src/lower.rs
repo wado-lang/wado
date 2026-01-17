@@ -118,10 +118,11 @@ impl Monomorphizer {
         // ============================
 
         // Phase 7: Collect all generic function definitions
+        // Include both functions with method-level type params AND methods from generic impl blocks
         let generic_functions: HashMap<String, TirFunction> = module
             .functions
             .iter()
-            .filter(|f| !f.type_params.is_empty())
+            .filter(|f| !f.type_params.is_empty() || !f.impl_type_params.is_empty())
             .map(|f| (f.name.clone(), f.clone()))
             .collect();
 
@@ -129,7 +130,7 @@ impl Monomorphizer {
         module.generic_functions = generic_functions.clone();
 
         // Phase 8: Collect function instantiation sites from Call expressions
-        self.collect_function_instantiation_sites(&module);
+        self.collect_function_instantiation_sites(&module, &generic_functions);
 
         // Phase 9: Process function instantiations and generate concrete functions
         let mut new_functions = Vec::new();
@@ -147,9 +148,11 @@ impl Monomorphizer {
 
         // Phase 11: Remove generic functions from the functions list
         // (they stay in generic_functions for reference)
-        module
-            .functions
-            .retain(|f| f.type_params.is_empty() || f.monomorph_info.is_some());
+        // Remove functions with type_params OR impl_type_params (unless monomorphized)
+        module.functions.retain(|f| {
+            (f.type_params.is_empty() && f.impl_type_params.is_empty())
+                || f.monomorph_info.is_some()
+        });
 
         // Phase 12: Rewrite function calls to use monomorphized names
         self.rewrite_function_calls_in_module(&mut module);
@@ -287,7 +290,7 @@ impl Monomorphizer {
             TirExprKind::Unary { expr: inner, .. } => {
                 self.rewrite_types_in_expr(inner, type_table);
             }
-            TirExprKind::Call { args, .. } => {
+            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     self.rewrite_types_in_expr(arg, type_table);
                 }
@@ -604,6 +607,27 @@ impl Monomorphizer {
                     .iter()
                     .map(|&arg| self.substitute_type(arg, substitution, type_table))
                     .collect();
+
+                // Check if there's already a monomorphized struct for this instance
+                // Build the mangled name: Counter$i32 (using type names)
+                let mut mangled_name = name.clone();
+                for &arg in &new_args {
+                    mangled_name.push('$');
+                    mangled_name.push_str(&self.type_id_to_name(arg, type_table));
+                }
+
+                // Look for existing struct with this name
+                for tid in 0..type_table.len() as u32 {
+                    if let ResolvedType::Struct {
+                        name: struct_name, ..
+                    } = type_table.get(tid)
+                        && struct_name == &mangled_name
+                    {
+                        return tid;
+                    }
+                }
+
+                // Fallback to GenericInstance if no monomorphized struct found
                 type_table.make_generic_instance(name, module_path, new_args)
             }
             // Other types don't contain type parameters
@@ -615,13 +639,17 @@ impl Monomorphizer {
     // Function Monomorphization
     // ========================================================================
 
-    /// Collect function instantiation sites from Call/MethodCall expressions with type_args
-    fn collect_function_instantiation_sites(&mut self, module: &TirModule) {
+    /// Collect function instantiation sites from Call/MethodCall/StaticCall expressions
+    fn collect_function_instantiation_sites(
+        &mut self,
+        module: &TirModule,
+        generic_functions: &HashMap<String, TirFunction>,
+    ) {
         for func in &module.functions {
             if let Some(body) = &func.body {
                 self.collect_func_instantiation_sites_in_block(
                     body,
-                    &module.generic_functions,
+                    generic_functions,
                     &module.type_table,
                 );
             }
@@ -786,8 +814,93 @@ impl Monomorphizer {
                                 self.function_pending.push(key);
                             }
                         }
+                        // Handle "double generics": method call with type_args on a monomorphized generic struct
+                        // e.g., c.transform::<i64>(100) where c: Container$i32 and transform<U>
+                        else if struct_name.contains('$')
+                            && let Some(dollar_pos) = struct_name.find('$')
+                        {
+                            let base_struct = &struct_name[..dollar_pos];
+                            let impl_type_args_str = &struct_name[dollar_pos + 1..];
+
+                            // Look for generic method: BaseStruct::method
+                            let generic_method_name = format!("{}::{}", base_struct, method_name);
+                            if let Some(generic_func) = generic_functions.get(&generic_method_name)
+                            {
+                                // Parse impl type args from struct name
+                                let impl_type_args: Vec<TypeId> = impl_type_args_str
+                                    .split('$')
+                                    .filter_map(|type_name| {
+                                        self.lookup_type_by_name(type_name, type_table)
+                                    })
+                                    .collect();
+
+                                // Verify we have the right number of impl type args
+                                if impl_type_args.len() == generic_func.impl_type_params.len() {
+                                    // Combine impl type args with method type args
+                                    let mut combined_type_args = impl_type_args;
+                                    combined_type_args.extend(type_args.iter().copied());
+
+                                    let key = InstantiationKey {
+                                        name: generic_method_name,
+                                        type_args: combined_type_args,
+                                    };
+                                    if !self.function_instantiated.contains_key(&key) {
+                                        let mangled = self.mangle_method_name(
+                                            &key,
+                                            type_table,
+                                            generic_func.impl_type_params.len(),
+                                        );
+                                        self.function_instantiated.insert(key.clone(), mangled);
+                                        self.function_pending.push(key);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+
+                // Also check if the receiver is a monomorphized generic struct
+                // e.g., c.get() where c: Counter$i32
+                if let Some(struct_name) =
+                    self.get_struct_name_from_type(receiver.type_id, type_table)
+                    && struct_name.contains('$')
+                {
+                    // Parse the base struct name and type args
+                    if let Some(dollar_pos) = struct_name.find('$') {
+                        let base_struct = &struct_name[..dollar_pos];
+                        let type_args_str = &struct_name[dollar_pos + 1..];
+
+                        // Look for generic method: BaseStruct::method
+                        let generic_method_name = format!("{}::{}", base_struct, method_name);
+                        if let Some(generic_func) = generic_functions.get(&generic_method_name) {
+                            // Parse type args from mangled struct name
+                            let impl_type_args: Vec<TypeId> = type_args_str
+                                .split('$')
+                                .filter_map(|type_name| {
+                                    self.lookup_type_by_name(type_name, type_table)
+                                })
+                                .collect();
+
+                            // Only queue if we have the right number of type args
+                            if impl_type_args.len() == generic_func.impl_type_params.len() {
+                                let key = InstantiationKey {
+                                    name: generic_method_name,
+                                    type_args: impl_type_args,
+                                };
+                                if !self.function_instantiated.contains_key(&key) {
+                                    let mangled = self.mangle_method_name(
+                                        &key,
+                                        type_table,
+                                        generic_func.impl_type_params.len(),
+                                    );
+                                    self.function_instantiated.insert(key.clone(), mangled);
+                                    self.function_pending.push(key);
+                                }
+                            }
+                        }
+                    }
+                }
+
                 self.collect_func_instantiation_sites_in_expr(
                     receiver,
                     generic_functions,
@@ -802,6 +915,59 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::EffectCall { args, .. } => {
+                for arg in args {
+                    self.collect_func_instantiation_sites_in_expr(
+                        arg,
+                        generic_functions,
+                        type_table,
+                    );
+                }
+            }
+            TirExprKind::StaticCall {
+                func_name, args, ..
+            } => {
+                // Check if this is a call to a method on a monomorphized struct
+                // e.g., func_name = "Counter$i32::zero" or "Counter$i32::default_value"
+                if let Some(sep_pos) = func_name.find("::") {
+                    let struct_part = &func_name[..sep_pos];
+                    let method_name = &func_name[sep_pos + 2..];
+
+                    // Check if struct_part contains $ (monomorphized)
+                    if let Some(dollar_pos) = struct_part.find('$') {
+                        let base_struct = &struct_part[..dollar_pos];
+                        let type_args_str = &struct_part[dollar_pos + 1..];
+
+                        // Look for generic method: BaseStruct::method
+                        let generic_method_name = format!("{}::{}", base_struct, method_name);
+                        if let Some(generic_func) = generic_functions.get(&generic_method_name) {
+                            // Parse type args from mangled name
+                            // Type args are type names like "i32" from Counter$i32::zero
+                            let type_args: Vec<TypeId> = type_args_str
+                                .split('$')
+                                .filter_map(|type_name| {
+                                    self.lookup_type_by_name(type_name, type_table)
+                                })
+                                .collect();
+
+                            // Only queue if we have the right number of type args
+                            if type_args.len() == generic_func.impl_type_params.len() {
+                                let key = InstantiationKey {
+                                    name: generic_method_name,
+                                    type_args,
+                                };
+                                if !self.function_instantiated.contains_key(&key) {
+                                    let mangled = self.mangle_method_name(
+                                        &key,
+                                        type_table,
+                                        generic_func.impl_type_params.len(),
+                                    );
+                                    self.function_instantiated.insert(key.clone(), mangled);
+                                    self.function_pending.push(key);
+                                }
+                            }
+                        }
+                    }
+                }
                 for arg in args {
                     self.collect_func_instantiation_sites_in_expr(
                         arg,
@@ -943,6 +1109,47 @@ impl Monomorphizer {
         }
     }
 
+    /// Look up a TypeId by type name (e.g., "i32" -> TypeId for i32)
+    fn lookup_type_by_name(&self, name: &str, type_table: &TypeTable) -> Option<TypeId> {
+        // First check primitive types
+        match name {
+            "i8" => return Some(TypeTable::I8),
+            "i16" => return Some(TypeTable::I16),
+            "i32" => return Some(TypeTable::I32),
+            "i64" => return Some(TypeTable::I64),
+            "i128" => return Some(TypeTable::I128),
+            "u8" => return Some(TypeTable::U8),
+            "u16" => return Some(TypeTable::U16),
+            "u32" => return Some(TypeTable::U32),
+            "u64" => return Some(TypeTable::U64),
+            "u128" => return Some(TypeTable::U128),
+            "f32" => return Some(TypeTable::F32),
+            "f64" => return Some(TypeTable::F64),
+            "bool" => return Some(TypeTable::BOOL),
+            "char" => return Some(TypeTable::CHAR),
+            _ => {}
+        }
+
+        // Search for struct/generic instance by name
+        for type_id in 0..type_table.len() as u32 {
+            match type_table.get(type_id) {
+                ResolvedType::Struct {
+                    name: struct_name, ..
+                } if struct_name == name => {
+                    return Some(type_id);
+                }
+                ResolvedType::GenericInstance {
+                    name: inst_name, ..
+                } if inst_name == name => {
+                    return Some(type_id);
+                }
+                _ => {}
+            }
+        }
+
+        None
+    }
+
     /// Generate mangled name for function instantiation: identity<i32> -> identity$i32
     fn mangle_function_name(&self, key: &InstantiationKey) -> String {
         let mut name = key.name.clone();
@@ -952,6 +1159,69 @@ impl Monomorphizer {
             name.push_str(&type_arg.to_string());
         }
         name
+    }
+
+    /// Generate mangled name for method instantiation
+    /// Format: StructWithImplArgs::methodWithMethodArgs
+    /// e.g., Container::transform with [i32, i64] and impl_type_params_count=1 -> Container$i32::transform$i64
+    fn mangle_method_name(
+        &self,
+        key: &InstantiationKey,
+        type_table: &TypeTable,
+        impl_type_params_count: usize,
+    ) -> String {
+        // key.name is like "Container::transform"
+        if let Some(sep_pos) = key.name.find("::") {
+            let struct_name = &key.name[..sep_pos];
+            let method_name = &key.name[sep_pos + 2..];
+
+            // Split type_args into impl args and method args
+            let (impl_args, method_args) = key
+                .type_args
+                .split_at(std::cmp::min(impl_type_params_count, key.type_args.len()));
+
+            // Build mangled struct name: Container$i32 (using impl type args)
+            let mut mangled_struct = struct_name.to_string();
+            for type_arg in impl_args {
+                mangled_struct.push('$');
+                mangled_struct.push_str(&self.type_id_to_name(*type_arg, type_table));
+            }
+
+            // Build mangled method name: transform$i64 (using method type args)
+            let mut mangled_method = method_name.to_string();
+            for type_arg in method_args {
+                mangled_method.push('$');
+                mangled_method.push_str(&self.type_id_to_name(*type_arg, type_table));
+            }
+
+            format!("{}::{}", mangled_struct, mangled_method)
+        } else {
+            // Fallback to regular function mangling
+            self.mangle_function_name(key)
+        }
+    }
+
+    /// Convert a TypeId to its string representation for name mangling
+    fn type_id_to_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
+        match type_table.get(type_id) {
+            ResolvedType::Primitive(p) => format!("{:?}", p).to_lowercase(),
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let mut result = name.clone();
+                result.push('$');
+                result.push_str(
+                    &type_args
+                        .iter()
+                        .map(|&t| self.type_id_to_name(t, type_table))
+                        .collect::<Vec<_>>()
+                        .join("$"),
+                );
+                result
+            }
+            _ => type_id.to_string(),
+        }
     }
 
     /// Instantiate a generic function with concrete type arguments
@@ -964,12 +1234,29 @@ impl Monomorphizer {
         let mangled_name = self.function_instantiated.get(key)?.clone();
 
         // Build substitution map: type param index -> concrete type
-        let substitution: HashMap<u32, TypeId> = generic
+        // Include both method-level type params AND impl block type params
+        let mut substitution: HashMap<u32, TypeId> = HashMap::new();
+
+        // Add impl block type params first (e.g., T from impl Counter<T>)
+        for (param, &arg) in generic.impl_type_params.iter().zip(key.type_args.iter()) {
+            substitution.insert(param.index, arg);
+        }
+
+        // Add method-level type params (offset by impl type params count)
+        // The method's type_params have their own indices (0, 1, ...) but in the type table,
+        // method type params are offset by impl type params count.
+        // e.g., impl<T> { fn foo<U>() } - T has index 0, U has index 1 in type table
+        let offset = generic.impl_type_params.len() as u32;
+        for (i, (param, &arg)) in generic
             .type_params
             .iter()
-            .zip(key.type_args.iter())
-            .map(|(param, &arg)| (param.index, arg))
-            .collect();
+            .zip(key.type_args.iter().skip(offset as usize))
+            .enumerate()
+        {
+            // Use offset + param.index to get the correct index in the type table
+            substitution.insert(offset + param.index, arg);
+            let _ = i; // suppress unused warning
+        }
 
         // Substitute types in parameters
         let params: Vec<TirParam> = generic
@@ -1003,7 +1290,8 @@ impl Monomorphizer {
         Some(TirFunction {
             name: mangled_name,
             is_pub: generic.is_pub,
-            type_params: vec![], // Concrete function has no type params
+            type_params: vec![],      // Concrete function has no type params
+            impl_type_params: vec![], // Already monomorphized, no impl type params
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),
                 type_args: key.type_args.clone(),
@@ -1136,6 +1424,31 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(arg, substitution, type_table);
                 }
             }
+            TirExprKind::StaticCall {
+                func_name, args, ..
+            } => {
+                // Substitute type parameter names in func_name
+                // e.g., "Box$T::new" with T->i32 becomes "Box$i32::new"
+                let mut new_func_name = func_name.clone();
+                for (&param_index, &concrete_type_id) in substitution {
+                    // Find the type param name by looking up types with this index
+                    for tid in 0..type_table.len() as u32 {
+                        if let ResolvedType::TypeParam { name, index } = type_table.get(tid)
+                            && *index == param_index
+                        {
+                            // Replace $T with $concrete_type_name
+                            let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
+                            new_func_name = new_func_name
+                                .replace(&format!("${}", name), &format!("${}", concrete_name));
+                            break;
+                        }
+                    }
+                }
+                *func_name = new_func_name;
+                for arg in args {
+                    self.substitute_types_in_expr(arg, substitution, type_table);
+                }
+            }
             TirExprKind::Binary { left, right, .. } => {
                 self.substitute_types_in_expr(left, substitution, type_table);
                 self.substitute_types_in_expr(right, substitution, type_table);
@@ -1227,7 +1540,184 @@ impl Monomorphizer {
         for func in &mut module.functions {
             if let Some(body) = &mut func.body {
                 self.rewrite_function_calls_in_block(body, &module.type_table);
+                // Sync local_types with Let statement types
+                Self::sync_local_types_from_lets(body, &mut func.local_types);
+                // Update all Local expression types based on local_types
+                Self::update_local_expr_types(body, &func.local_types);
             }
+        }
+    }
+
+    /// Sync local_types array from Let statements that may have been updated
+    fn sync_local_types_from_lets(block: &TirBlock, local_types: &mut [TypeId]) {
+        for stmt in &block.stmts {
+            match &stmt.kind {
+                TirStmtKind::Let {
+                    local_index,
+                    type_id,
+                    ..
+                } => {
+                    if let Some(local_type) = local_types.get_mut(*local_index as usize) {
+                        *local_type = *type_id;
+                    }
+                }
+                TirStmtKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    Self::sync_local_types_from_lets(then_block, local_types);
+                    if let Some(else_blk) = else_block {
+                        Self::sync_local_types_from_lets(else_blk, local_types);
+                    }
+                }
+                TirStmtKind::While { body, .. }
+                | TirStmtKind::Loop { body }
+                | TirStmtKind::For { body, .. }
+                | TirStmtKind::ForOf { body, .. } => {
+                    Self::sync_local_types_from_lets(body, local_types);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Update all Local expression types based on local_types array
+    fn update_local_expr_types(block: &mut TirBlock, local_types: &[TypeId]) {
+        for stmt in &mut block.stmts {
+            Self::update_local_expr_types_in_stmt(stmt, local_types);
+        }
+    }
+
+    fn update_local_expr_types_in_stmt(stmt: &mut TirStmt, local_types: &[TypeId]) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, .. } => {
+                Self::update_local_expr_types_in_expr(value, local_types);
+            }
+            TirStmtKind::Expr(expr) => {
+                Self::update_local_expr_types_in_expr(expr, local_types);
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(expr) = value {
+                    Self::update_local_expr_types_in_expr(expr, local_types);
+                }
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::update_local_expr_types_in_expr(condition, local_types);
+                Self::update_local_expr_types(then_block, local_types);
+                if let Some(else_blk) = else_block {
+                    Self::update_local_expr_types(else_blk, local_types);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::update_local_expr_types_in_expr(condition, local_types);
+                Self::update_local_expr_types(body, local_types);
+            }
+            TirStmtKind::For {
+                condition,
+                body,
+                update,
+            } => {
+                if let Some(expr) = condition {
+                    Self::update_local_expr_types_in_expr(expr, local_types);
+                }
+                Self::update_local_expr_types(body, local_types);
+                if let Some(expr) = update {
+                    Self::update_local_expr_types_in_expr(expr, local_types);
+                }
+            }
+            TirStmtKind::Loop { body } => {
+                Self::update_local_expr_types(body, local_types);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::update_local_expr_types_in_expr(iterable, local_types);
+                Self::update_local_expr_types(body, local_types);
+            }
+            _ => {}
+        }
+    }
+
+    fn update_local_expr_types_in_expr(expr: &mut TirExpr, local_types: &[TypeId]) {
+        match &mut expr.kind {
+            TirExprKind::Local { index, .. } => {
+                if let Some(&local_type) = local_types.get(*index as usize) {
+                    expr.type_id = local_type;
+                }
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    Self::update_local_expr_types_in_expr(arg, local_types);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::update_local_expr_types_in_expr(receiver, local_types);
+                for arg in args {
+                    Self::update_local_expr_types_in_expr(arg, local_types);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::update_local_expr_types_in_expr(left, local_types);
+                Self::update_local_expr_types_in_expr(right, local_types);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
+                Self::update_local_expr_types_in_expr(inner, local_types);
+            }
+            TirExprKind::Block(block) => {
+                Self::update_local_expr_types(block, local_types);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::update_local_expr_types_in_expr(condition, local_types);
+                Self::update_local_expr_types(then_branch, local_types);
+                if let Some(else_blk) = else_branch {
+                    Self::update_local_expr_types(else_blk, local_types);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::update_local_expr_types_in_expr(elem, local_types);
+                }
+            }
+            TirExprKind::Index { expr, index } => {
+                Self::update_local_expr_types_in_expr(expr, local_types);
+                Self::update_local_expr_types_in_expr(index, local_types);
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::update_local_expr_types_in_expr(target, local_types);
+                Self::update_local_expr_types_in_expr(value, local_types);
+            }
+            TirExprKind::Match { expr, arms } => {
+                Self::update_local_expr_types_in_expr(expr, local_types);
+                for arm in arms {
+                    Self::update_local_expr_types_in_expr(&mut arm.body, local_types);
+                }
+            }
+            TirExprKind::Closure { .. } => {
+                // Closures have their own local scope, don't update with parent's local_types
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::update_local_expr_types_in_expr(&mut field.value, local_types);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::update_local_expr_types_in_expr(callee, local_types);
+                for arg in args {
+                    Self::update_local_expr_types_in_expr(arg, local_types);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1239,8 +1729,15 @@ impl Monomorphizer {
 
     fn rewrite_function_calls_in_stmt(&self, stmt: &mut TirStmt, type_table: &TypeTable) {
         match &mut stmt.kind {
-            TirStmtKind::Let { value, .. } => {
+            TirStmtKind::Let { value, type_id, .. } => {
                 self.rewrite_function_calls_in_expr(value, type_table);
+                // Update the Let's type_id if it was a type parameter that got substituted
+                // The value's type_id may have been updated during rewriting
+                if type_table.contains_type_param(*type_id)
+                    && !type_table.contains_type_param(value.type_id)
+                {
+                    *type_id = value.type_id;
+                }
             }
             TirStmtKind::Expr(expr) => {
                 self.rewrite_function_calls_in_expr(expr, type_table);
@@ -1325,7 +1822,7 @@ impl Monomorphizer {
                 {
                     let full_method_name = format!("{}::{}", struct_name, method_name);
                     let key = InstantiationKey {
-                        name: full_method_name,
+                        name: full_method_name.clone(),
                         type_args: type_args.clone(),
                     };
                     if let Some(mangled) = self.function_instantiated.get(&key) {
@@ -1340,13 +1837,67 @@ impl Monomorphizer {
                         }
                         type_args.clear(); // Clear type args - now using concrete method
                     }
+                    // Handle "double generics": method on monomorphized generic struct
+                    // e.g., c.transform::<i64>() where c: Container$i32
+                    else if struct_name.contains('$')
+                        && let Some(dollar_pos) = struct_name.find('$')
+                    {
+                        let base_struct = &struct_name[..dollar_pos];
+                        let impl_type_args_str = &struct_name[dollar_pos + 1..];
+
+                        // Parse impl type args from struct name
+                        let impl_type_args: Vec<TypeId> = impl_type_args_str
+                            .split('$')
+                            .filter_map(|type_name| self.lookup_type_by_name(type_name, type_table))
+                            .collect();
+
+                        // Combine impl type args with method type args
+                        let mut combined_type_args = impl_type_args.clone();
+                        combined_type_args.extend(type_args.iter().copied());
+
+                        // Look up with base struct name and combined type args
+                        let generic_method_name = format!("{}::{}", base_struct, method_name);
+                        let combined_key = InstantiationKey {
+                            name: generic_method_name,
+                            type_args: combined_type_args.clone(),
+                        };
+                        if let Some(mangled) = self.function_instantiated.get(&combined_key) {
+                            if let Some(method_part) = mangled.split("::").nth(1) {
+                                *method_name = method_part.to_string();
+                            }
+                            type_args.clear();
+
+                            // Also update the expression's type_id if it's a type parameter
+                            // Build substitution map: impl args + method args
+                            if let ResolvedType::TypeParam { index, .. } =
+                                type_table.get(expr.type_id)
+                            {
+                                let impl_count = impl_type_args.len() as u32;
+                                if *index < impl_count {
+                                    // It's an impl type param
+                                    if let Some(&concrete) = combined_type_args.get(*index as usize)
+                                    {
+                                        expr.type_id = concrete;
+                                    }
+                                } else {
+                                    // It's a method type param (offset by impl_count)
+                                    let method_index = *index - impl_count;
+                                    if let Some(&concrete) =
+                                        combined_type_args.get((impl_count + method_index) as usize)
+                                    {
+                                        expr.type_id = concrete;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 self.rewrite_function_calls_in_expr(receiver, type_table);
                 for arg in args {
                     self.rewrite_function_calls_in_expr(arg, type_table);
                 }
             }
-            TirExprKind::EffectCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     self.rewrite_function_calls_in_expr(arg, type_table);
                 }
@@ -1555,18 +2106,15 @@ impl StringCollector {
             TirExprKind::Unary { expr: inner, .. } => {
                 self.collect_expr(inner);
             }
-            TirExprKind::Call { args, .. } => {
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     self.collect_expr(arg);
                 }
             }
             TirExprKind::MethodCall { receiver, args, .. } => {
                 self.collect_expr(receiver);
-                for arg in args {
-                    self.collect_expr(arg);
-                }
-            }
-            TirExprKind::EffectCall { args, .. } => {
                 for arg in args {
                     self.collect_expr(arg);
                 }

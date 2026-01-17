@@ -1,0 +1,31 @@
+// Test generic struct with multiple type parameters and static method
+use { println, Stdout } from "core:cli";
+
+struct Pair<T, U> {
+    first: T,
+    second: U,
+}
+
+impl Pair<T, U> {
+    pub fn create(first: T, second: U) -> Pair<T, U> {
+        return Pair { first, second };
+    }
+
+    pub fn get_first(&self) -> T {
+        return self.first;
+    }
+
+    pub fn get_second(&self) -> U {
+        return self.second;
+    }
+}
+
+fn run() with Stdout {
+    // Create Pair<i32, i64> using static method
+    let p = Pair::<i32, i64>::create(10, 20 as i64);
+    println(`first: {p.get_first()}`);
+    println(`second: {p.get_second()}`);
+}
+
+__DATA__
+{"stdout": "first: 10\nsecond: 20\n"}

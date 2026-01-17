@@ -376,6 +376,7 @@ pub enum Expr {
     ComparisonChain(Box<ComparisonChainExpr>),
     Call(Box<CallExpr>),
     MethodCall(Box<MethodCallExpr>),
+    StaticMethodCall(Box<StaticMethodCallExpr>),
     FieldAccess(Box<FieldAccessExpr>),
     Index(Box<IndexExpr>),
     Block(Box<Block>),
@@ -401,6 +402,7 @@ impl Expr {
             Expr::ComparisonChain(e) => e.span,
             Expr::Call(e) => e.span,
             Expr::MethodCall(e) => e.span,
+            Expr::StaticMethodCall(e) => e.span,
             Expr::FieldAccess(e) => e.span,
             Expr::Index(e) => e.span,
             Expr::Block(e) => e.span,
@@ -594,6 +596,18 @@ pub struct MethodCallExpr {
     pub method: String,
     /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
     pub type_args: Vec<Type>,
+    pub args: Vec<Expr>,
+    pub span: Span,
+}
+
+/// Static method call expression: `Array::<i32>::with_capacity(100)` or `Point::origin()`
+#[derive(Debug, Clone)]
+pub struct StaticMethodCallExpr {
+    /// The target type (e.g., `Array<i32>` or `Point`)
+    pub target_type: Type,
+    /// The method name (e.g., `with_capacity` or `origin`)
+    pub method: String,
+    /// Arguments to the method
     pub args: Vec<Expr>,
     pub span: Span,
 }

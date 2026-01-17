@@ -70,6 +70,44 @@ clean:
 	rm -f example/*.wat example/*.wasm
 	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c benchmark/sieve_c
 
+# VS Code extension targets
+.PHONY: install-wado-vscode-dev
+install-wado-vscode-dev:
+	@if [ -e ~/.vscode/extensions/wado-lang.wado-0.0.1 ]; then \
+		echo "wado-vscode is already installed"; \
+	else \
+		cd wado-vscode && npm install && npm run compile; \
+		ln -s "$(CURDIR)/wado-vscode" ~/.vscode/extensions/wado-lang.wado-0.0.1; \
+		echo "wado-vscode installed. Restart VS Code to activate."; \
+	fi
+
+.PHONY: clean-wado-vscode-dev
+clean-wado-vscode-dev:
+	rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1
+	@echo "wado-vscode symlink removed. Restart VS Code to deactivate."
+
+.PHONY: test-wado-vscode
+test-wado-vscode:
+	cd wado-vscode && npm install && npm run test:unit && npm run test
+
+.PHONY: update-wado-vscode-grammar
+update-wado-vscode-grammar: build
+	cargo run --bin wado --quiet -- syntax -o wado-vscode/syntaxes/wado.tmLanguage.json
+	cargo run --bin wado --quiet -- syntax --format language-config -o wado-vscode/language-configuration.json
+	@echo "Updated wado-vscode syntax files"
+
+.PHONY: update-json-schema-files
+update-json-schema-files:
+	@mkdir -p wado-cli/schemas
+	@echo "Downloading TextMate grammar schema..."
+	@curl -sL "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json" \
+		| sed 's|"$$schema": "http://json-schema.org/schema#"|"$$schema": "http://json-schema.org/draft-07/schema#"|g; s|"id":|"$$id":|g' \
+		> wado-cli/schemas/tmlanguage.schema.json
+	@echo "Downloading VS Code language-configuration schema..."
+	@curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json" \
+		> wado-cli/schemas/language-configuration.schema.json
+	@echo "Updated JSON schema files in wado-cli/schemas/"
+
 .PHONY: update-vendor
 update-vendor:
 	git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime vendor/wasm-tools

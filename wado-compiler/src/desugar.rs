@@ -9,8 +9,8 @@ use crate::ast::{
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
     EffectDecl, EnumDecl, Expr, FieldAccessExpr, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
     ImplBlock, IndexExpr, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
-    ReturnStmt, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplateStringExpr,
-    TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
+    ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField,
+    TemplateStringExpr, TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
 };
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
@@ -189,6 +189,12 @@ fn desugar_expr(expr: &Expr) -> Expr {
             type_args: m.type_args.clone(),
             args: m.args.iter().map(desugar_expr).collect(),
             span: m.span,
+        })),
+        Expr::StaticMethodCall(s) => Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+            target_type: s.target_type.clone(),
+            method: s.method.clone(),
+            args: s.args.iter().map(desugar_expr).collect(),
+            span: s.span,
         })),
         Expr::FieldAccess(f) => Expr::FieldAccess(Box::new(FieldAccessExpr {
             expr: desugar_expr(&f.expr),

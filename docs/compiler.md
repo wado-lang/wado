@@ -677,6 +677,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Generic structs as function parameters and return types
 - [x] Generic functions with explicit turbofish syntax (`identity::<i32>(x)`)
 - [x] Generic methods with explicit turbofish syntax (`obj.method::<T, U>(...)`)
+- [x] Double generics with mixed types (`Container<T>.combine::<U, V>()` where T, U, V are different)
 - [ ] Generic function/method type inference
 - [ ] Enum/variant construction
 - [ ] Pattern matching

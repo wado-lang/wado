@@ -8,9 +8,9 @@ use crate::ast::{
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LetStmt,
     Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl,
-    ReturnStmt, SelfKind, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr,
-    TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    WhileStmt, WorldDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    TemplateStringExpr, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -846,6 +846,7 @@ impl<'a> Unparser<'a> {
             Expr::ComparisonChain(chain) => self.unparse_comparison_chain(chain),
             Expr::Call(c) => self.unparse_call(c),
             Expr::MethodCall(m) => self.unparse_method_call(m),
+            Expr::StaticMethodCall(s) => self.unparse_static_method_call(s),
             Expr::FieldAccess(f) => self.unparse_field_access(f),
             Expr::Index(i) => self.unparse_index(i),
             Expr::Block(b) => self.unparse_block_expr(b),
@@ -1007,6 +1008,34 @@ impl<'a> Unparser<'a> {
         }
         self.output.push('(');
         for (i, arg) in m.args.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(arg);
+        }
+        self.output.push(')');
+    }
+
+    fn unparse_static_method_call(&mut self, s: &StaticMethodCallExpr) {
+        // For generic types, use turbofish syntax: Name::<Args>
+        match &s.target_type {
+            Type::Generic(g) => {
+                self.output.push_str(&g.name);
+                self.output.push_str("::<");
+                for (i, arg) in g.args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_type(arg);
+                }
+                self.output.push('>');
+            }
+            _ => self.unparse_type(&s.target_type),
+        }
+        self.output.push_str("::");
+        self.output.push_str(&s.method);
+        self.output.push('(');
+        for (i, arg) in s.args.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
             }
@@ -1902,6 +1931,20 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push('>');
                 }
+                self.output.push('(');
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_expr(arg);
+                }
+                self.output.push(')');
+            }
+            TirExprKind::StaticCall {
+                func_name, args, ..
+            } => {
+                // Output the mangled function name as-is (e.g., "Point::origin" or "Array$i32::with_capacity")
+                self.output.push_str(func_name);
                 self.output.push('(');
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {

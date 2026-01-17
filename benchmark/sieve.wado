@@ -6,18 +6,14 @@
 //   make benchmark-sieve
 //
 // Or manually:
-//   1. Compile to Wasm:
-//      cargo run --bin wado -- compile -o benchmark/sieve.wasm benchmark/sieve.wado
-//
-//   2. Run with wasmtime:
-//      wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/sieve.wasm
+//   cargo run --bin wado -- run benchmark/sieve.wado
 
 use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
 
 fn sieve_count(limit: i32) -> i32 {
-    // Build the sieve array using append
-    let mut is_prime: Array<bool> = [];
+    // Pre-allocate sieve array with capacity
+    let mut is_prime = Array::<bool>::with_capacity(limit + 1);
     let mut i = 0;
     while i <= limit {
         is_prime.append(true);

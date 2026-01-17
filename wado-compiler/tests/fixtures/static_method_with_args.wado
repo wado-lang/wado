@@ -1,0 +1,30 @@
+// Static method with arguments test
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn new(x: i32, y: i32) -> Point {
+        // Static method with arguments
+
+        return Point { x, y };
+    }
+
+    fn scale(p: Point, factor: i32) -> Point {
+        return Point { x: p.x * factor, y: p.y * factor };
+    }
+}
+
+fn run() with Stdout {
+    let p1 = Point::new(3, 4);
+    println(`p1: ({p1.x}, {p1.y})`);
+
+    let p2 = Point::scale(p1, 2);
+    println(`p2 (scaled): ({p2.x}, {p2.y})`);
+}
+
+__DATA__
+{"stdout": "p1: (3, 4)\np2 (scaled): (6, 8)\n"}

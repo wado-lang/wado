@@ -391,6 +391,12 @@ impl Binder {
                 }
             }
 
+            Expr::StaticMethodCall(static_call) => {
+                for arg in &static_call.args {
+                    self.bind_expr(arg);
+                }
+            }
+
             Expr::FieldAccess(field_access) => {
                 self.bind_expr(&field_access.expr);
             }

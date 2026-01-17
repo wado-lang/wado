@@ -34,6 +34,15 @@ pub struct Array<T> {
 }
 
 impl Array<T> {
+    /// Create a new array with the specified capacity
+    /// The array starts empty but has space for `capacity` elements
+    pub fn with_capacity(capacity: i32) -> Array<T> {
+        return Array {
+            repr: builtin::array_new::<T>(capacity),
+            used: 0,
+        };
+    }
+
     /// Get the number of elements in the array
     pub fn len(&self) -> i32 {
         return self.used;

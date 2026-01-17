@@ -1,0 +1,41 @@
+// Test basic generic free functions
+use { println, Stdout } from "core:cli";
+
+// Identity function
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+// Function with multiple type params
+fn first<T, U>(a: T, b: U) -> T {
+    let _ = b;
+    return a;
+}
+
+fn second<T, U>(a: T, b: U) -> U {
+    let _ = a;
+    return b;
+}
+
+fn run() with Stdout {
+    // Single type param
+    let a = identity::<i32>(42);
+    println(`identity i32: {a}`);
+
+    let b = identity::<i64>(100 as i64);
+    println(`identity i64: {b}`);
+
+    // Multiple type params
+    let c = first::<i32, i64>(10, 20 as i64);
+    println(`first: {c}`);
+
+    let d = second::<i32, i64>(10, 20 as i64);
+    println(`second: {d}`);
+
+    // Nested calls
+    let e = identity::<i32>(identity::<i32>(99));
+    println(`nested identity: {e}`);
+}
+
+__DATA__
+{"stdout": "identity i32: 42\nidentity i64: 100\nfirst: 10\nsecond: 20\nnested identity: 99\n"}

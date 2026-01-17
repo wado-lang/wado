@@ -1,4 +1,5 @@
-// Recursive descent parser for Wado
+// The parser implementation of Wado with recursive descent parser.
+// This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::*;
 use crate::token::{Span, Token, TokenKind};
@@ -767,9 +768,7 @@ impl Parser {
                 self.advance(); // consume identifier
 
                 // Check if next token is 'of'
-                if let TokenKind::Ident(kw) = &self.peek().kind
-                    && kw == "of"
-                {
+                if matches!(self.peek().kind, TokenKind::Of) {
                     // This is a for-of loop
                     self.advance(); // consume 'of'
                     let iterable = self.parse_expr()?;
@@ -1489,13 +1488,53 @@ impl Parser {
         match self.peek_kind().clone() {
             TokenKind::Ident(name) => {
                 self.advance();
-                // Check for qualified name (Effect::function) but not turbofish (foo::<T>)
+                let is_type_name = name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+
+                // Check for qualified name (Effect::function) or static method call
                 if self.check(&TokenKind::ColonColon) {
                     // Peek ahead to check if this is turbofish (::< for type args)
                     let checkpoint = self.pos;
                     self.advance(); // consume ::
-                    if self.check(&TokenKind::Lt) {
-                        // This is turbofish, backtrack and let postfix expression handle it
+
+                    if self.check(&TokenKind::Lt) && is_type_name {
+                        // This could be Type::<Args>::method() - static method on generic type
+                        // Parse type arguments
+                        self.advance(); // consume <
+                        let mut type_args = vec![self.parse_type()?];
+                        while self.check(&TokenKind::Comma) {
+                            self.advance();
+                            type_args.push(self.parse_type()?);
+                        }
+                        self.expect_gt()?;
+
+                        // Now expect ::method(args)
+                        if self.check(&TokenKind::ColonColon) {
+                            self.advance(); // consume ::
+                            let method = self.consume_ident()?;
+                            self.expect(&TokenKind::LParen)?;
+                            let args = self.parse_arg_list()?;
+                            let end_span = self.expect(&TokenKind::RParen)?.span;
+
+                            Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+                                target_type: Type::Generic(GenericType {
+                                    name,
+                                    args: type_args,
+                                    span: start_span,
+                                }),
+                                method,
+                                args,
+                                span: start_span.merge(&end_span),
+                            })))
+                        } else {
+                            // Not followed by ::method, backtrack for turbofish
+                            self.pos = checkpoint;
+                            Ok(Expr::Ident(IdentExpr {
+                                name,
+                                span: start_span,
+                            }))
+                        }
+                    } else if self.check(&TokenKind::Lt) {
+                        // Lowercase name with ::<, this is turbofish, backtrack
                         self.pos = checkpoint;
                         Ok(Expr::Ident(IdentExpr {
                             name,
@@ -1510,9 +1549,7 @@ impl Parser {
                             span: start_span,
                         }))
                     }
-                } else if self.check(&TokenKind::LBrace)
-                    && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                {
+                } else if self.check(&TokenKind::LBrace) && is_type_name {
                     // Struct literal: `Point { x: 10, y: 20 }`
                     // Only parse as struct literal if name starts with uppercase
                     // (struct naming convention: UpperCamelCase)

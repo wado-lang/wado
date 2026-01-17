@@ -19,9 +19,9 @@ use crate::ast::{
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction,
-    TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
+    TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -896,6 +896,38 @@ impl<'a> Resolver<'a> {
                         .insert(func.name.clone(), return_type);
                 }
                 Item::Impl(impl_block) => {
+                    // Set up type parameters from impl block before resolving method signatures
+                    let old_type_params = std::mem::take(&mut self.current_type_params);
+
+                    // First, collect explicit type params from impl<T>
+                    for (index, param) in impl_block.type_params.iter().enumerate() {
+                        let type_id = self
+                            .type_table
+                            .make_type_param(param.name.clone(), index as u32);
+                        self.current_type_params
+                            .insert(param.name.clone(), (index as u32, type_id));
+                    }
+
+                    // Also collect type params from generic type: impl Array<T> {...}
+                    // The type args in Array<T> are type parameters
+                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                        let offset = impl_block.type_params.len();
+                        for (i, arg) in generic.args.iter().enumerate() {
+                            if let ast::Type::Named(named) = arg {
+                                // Check if this looks like a type parameter (single uppercase letter or PascalCase)
+                                // In practice, T, U, V etc. are type params
+                                let name = &named.name;
+                                if !self.current_type_params.contains_key(name) {
+                                    let index = (offset + i) as u32;
+                                    let type_id =
+                                        self.type_table.make_type_param(name.clone(), index);
+                                    self.current_type_params
+                                        .insert(name.clone(), (index, type_id));
+                                }
+                            }
+                        }
+                    }
+
                     // Collect method signatures with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
                     for method in &impl_block.methods {
@@ -907,6 +939,9 @@ impl<'a> Resolver<'a> {
                         let mangled_name = format!("{}::{}", struct_name, method.name);
                         self.function_return_types.insert(mangled_name, return_type);
                     }
+
+                    // Restore type parameters
+                    self.current_type_params = old_type_params;
                 }
                 _ => {}
             }
@@ -1030,7 +1065,8 @@ impl<'a> Resolver<'a> {
             name: func.name.clone(),
             is_pub: func.is_pub,
             type_params,
-            monomorph_info: None, // Not from monomorphization
+            impl_type_params: vec![], // Not a method, no impl type params
+            monomorph_info: None,     // Not from monomorphization
             params,
             return_type,
             effects: func.effects.clone(),
@@ -1052,12 +1088,36 @@ impl<'a> Resolver<'a> {
         // Set up type parameters in scope before resolving types
         let old_type_params = std::mem::take(&mut self.current_type_params);
         let mut type_param_list = Vec::new();
+
+        // First, collect type params from impl block's generic type (e.g., impl Box<T>)
+        // Also build impl_type_params for the TirFunction
+        let mut impl_type_params = Vec::new();
+        if let ast::Type::Generic(generic) = impl_type {
+            for (i, arg) in generic.args.iter().enumerate() {
+                if let ast::Type::Named(named) = arg {
+                    let name = &named.name;
+                    if !self.current_type_params.contains_key(name) {
+                        let type_id = self.type_table.make_type_param(name.clone(), i as u32);
+                        self.current_type_params
+                            .insert(name.clone(), (i as u32, type_id));
+                        // Store impl type param info for later monomorphization
+                        impl_type_params.push(crate::tir::TirTypeParam {
+                            name: name.clone(),
+                            bounds: vec![],
+                            index: i as u32,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Then, collect method-level type params
+        let offset = self.current_type_params.len();
         for (index, param) in func.type_params.iter().enumerate() {
-            let type_id = self
-                .type_table
-                .make_type_param(param.name.clone(), index as u32);
+            let idx = (offset + index) as u32;
+            let type_id = self.type_table.make_type_param(param.name.clone(), idx);
             self.current_type_params
-                .insert(param.name.clone(), (index as u32, type_id));
+                .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
         }
 
@@ -1123,6 +1183,7 @@ impl<'a> Resolver<'a> {
             name: func.name.clone(), // Will be mangled by caller
             is_pub: func.is_pub,
             type_params,
+            impl_type_params, // Type params from impl block (e.g., T from impl Counter<T>)
             monomorph_info: None, // Not from monomorphization
             params,
             return_type,
@@ -1732,6 +1793,9 @@ impl<'a> Resolver<'a> {
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx),
             Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
+            Expr::StaticMethodCall(static_call) => {
+                self.resolve_static_method_call(static_call, ctx)
+            }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
@@ -2129,9 +2193,27 @@ impl<'a> Resolver<'a> {
                     let prefix = &ident.name[..pos];
                     let suffix = &ident.name[pos + 2..];
 
-                    // Builtin functions are always allowed
+                    // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
-                        (Vec::new(), ident.name.clone(), true)
+                        (
+                            vec!["core".to_string(), "builtin".to_string()],
+                            suffix.to_string(),
+                            true,
+                        )
+                    }
+                    // Check if this is a static method call (Type::method)
+                    // Static methods are registered with mangled names "Type::method"
+                    else if self.is_static_method(prefix, suffix) {
+                        // Return as a static method call - will be converted to StaticCall below
+                        let mangled_name = format!("{}::{}", prefix, suffix);
+                        return self.resolve_static_method_call_from_qualified(
+                            prefix,
+                            suffix,
+                            &mangled_name,
+                            &args,
+                            call.span,
+                            ctx,
+                        );
                     }
                     // Effect operations and other qualified calls - always allowed
                     // (validated by effect system/codegen)
@@ -2218,9 +2300,13 @@ impl<'a> Resolver<'a> {
 
     /// Look up the return type of a function
     fn lookup_function_return_type(&mut self, module_path: &[String], func_name: &str) -> TypeId {
-        // Handle builtin functions (builtin::name pattern)
+        // Handle builtin functions
+        // Normal resolution: module_path == ["core", "builtin"]
+        if module_path.len() == 2 && module_path[0] == "core" && module_path[1] == "builtin" {
+            return self.get_builtin_return_type(func_name);
+        }
+        // Legacy: builtin::name pattern
         if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            // Skip "builtin::"
             return self.get_builtin_return_type(builtin_name);
         }
 
@@ -2483,7 +2569,7 @@ impl<'a> Resolver<'a> {
             .map(|a| self.resolve_expr(a, ctx))
             .collect();
 
-        // Resolve explicit type arguments
+        // Resolve explicit type arguments (method-level type args)
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
@@ -2493,9 +2579,32 @@ impl<'a> Resolver<'a> {
         // Look up method return type based on receiver type
         let mut return_type = self.lookup_method_return_type(receiver.type_id, &method_call.method);
 
-        // If we have explicit type args, substitute type parameters in the return type
+        // Build unified substitution context for double generics
+        // Type param indices are assigned as follows:
+        // - Impl type params (from struct): 0, 1, 2, ...
+        // - Method type params: offset, offset+1, ... (where offset = impl_type_params.len())
+        let mut subst_ctx = SubstitutionContext::new();
+        let mut impl_offset = 0u32;
+
+        // First, add impl-level type args from receiver's generic type
+        if let ResolvedType::GenericInstance {
+            type_args: receiver_type_args,
+            ..
+        } = self.type_table.get(receiver.type_id).clone()
+            && !receiver_type_args.is_empty()
+        {
+            impl_offset = receiver_type_args.len() as u32;
+            subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
+        }
+
+        // Then add method-level type args with the correct offset
         if !type_args.is_empty() {
-            return_type = self.substitute_type_params(return_type, &type_args);
+            subst_ctx = subst_ctx.with_method_args(&type_args, impl_offset);
+        }
+
+        // Apply unified substitution
+        if !subst_ctx.is_empty() {
+            return_type = subst_ctx.substitute(return_type, &mut self.type_table);
         }
 
         TirExpr::new(
@@ -2508,6 +2617,367 @@ impl<'a> Resolver<'a> {
             return_type,
             method_call.span,
         )
+    }
+
+    /// Resolve a static method call: `Array::<i32>::with_capacity(100)` or `Point::origin()`
+    fn resolve_static_method_call(
+        &mut self,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        // Resolve arguments
+        let args: Vec<TirExpr> = static_call
+            .args
+            .iter()
+            .map(|a| self.resolve_expr(a, ctx))
+            .collect();
+
+        // Resolve the target type to get struct name, module path, and type args (for generics)
+        let target_type_id = self.resolve_type(&static_call.target_type);
+        let (struct_name, module_path, mangled_struct_name, struct_type_args) =
+            match self.type_table.get(target_type_id) {
+                ResolvedType::Struct { name, module_path } => {
+                    (name.clone(), module_path.clone(), name.clone(), vec![])
+                }
+                ResolvedType::GenericInstance {
+                    name,
+                    module_path,
+                    type_args,
+                } => {
+                    // Build mangled name for generic type: Array$i32
+                    let type_arg_names: Vec<String> = type_args
+                        .iter()
+                        .map(|t| self.mangle_type_name(*t))
+                        .collect();
+                    let mangled = format!("{}${}", name, type_arg_names.join("$"));
+                    (
+                        name.clone(),
+                        module_path.clone(),
+                        mangled,
+                        type_args.clone(),
+                    )
+                }
+                // Special case: Array<T> is resolved as ResolvedType::Array for codegen compatibility
+                // but static methods use the struct-based resolution
+                ResolvedType::Array(elem_type) => {
+                    let mangled_elem = self.mangle_type_name(*elem_type);
+                    let mangled = format!("Array${}", mangled_elem);
+                    (
+                        "Array".to_string(),
+                        vec!["core".to_string(), "prelude".to_string()],
+                        mangled,
+                        vec![*elem_type],
+                    )
+                }
+                _ => {
+                    // Unknown type - return error expression
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                }
+            };
+
+        // Build the mangled function name
+        let mangled_func_name = format!("{}::{}", mangled_struct_name, static_call.method);
+
+        // Look up return type
+        let mut return_type = self.lookup_static_method_return_type(
+            &struct_name,
+            &module_path,
+            &static_call.method,
+            &mangled_func_name,
+        );
+
+        // If we have type arguments from a generic type, substitute type parameters in the return type
+        if !struct_type_args.is_empty() {
+            return_type = self.substitute_type_params(return_type, &struct_type_args);
+        }
+
+        TirExpr::new(
+            TirExprKind::StaticCall {
+                func_name: mangled_func_name,
+                module_path,
+                args,
+            },
+            return_type,
+            static_call.span,
+        )
+    }
+
+    /// Look up static method return type based on struct name and method name
+    fn lookup_static_method_return_type(
+        &mut self,
+        struct_name: &str,
+        module_path: &[String],
+        method_name: &str,
+        mangled_func_name: &str,
+    ) -> TypeId {
+        // First check locally registered function_return_types
+        if let Some(&return_type) = self.function_return_types.get(mangled_func_name) {
+            return return_type;
+        }
+
+        // Also try with just StructName::method (for non-generic types)
+        let simple_name = format!("{}::{}", struct_name, method_name);
+        if let Some(&return_type) = self.function_return_types.get(&simple_name) {
+            return return_type;
+        }
+
+        // Try looking up in loaded modules
+        if !module_path.is_empty()
+            && let Some(module) = self.loaded_modules.get(module_path)
+        {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = self.get_type_name(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            // Static methods have no self parameter
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                // Set up type parameters from impl block before resolving
+                                let old_type_params = std::mem::take(&mut self.current_type_params);
+
+                                // Extract type params from impl block type (e.g., impl Array<T>)
+                                if let ast::Type::Generic(generic) = &impl_block.ty {
+                                    for (i, arg) in generic.args.iter().enumerate() {
+                                        if let ast::Type::Named(named) = arg {
+                                            let name = &named.name;
+                                            if !self.current_type_params.contains_key(name) {
+                                                let type_id = self
+                                                    .type_table
+                                                    .make_type_param(name.clone(), i as u32);
+                                                self.current_type_params
+                                                    .insert(name.clone(), (i as u32, type_id));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                let result = method
+                                    .return_type
+                                    .as_ref()
+                                    .map(|t| self.resolve_type(t))
+                                    .unwrap_or(TypeTable::UNIT);
+
+                                // Restore type parameters
+                                self.current_type_params = old_type_params;
+
+                                return result;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search all loaded modules if module_path is empty
+        if module_path.is_empty() {
+            for (_, module) in self.loaded_modules.iter() {
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item {
+                        let impl_struct_name = self.get_type_name(&impl_block.ty);
+                        if impl_struct_name == struct_name {
+                            for method in &impl_block.methods {
+                                let has_self = method
+                                    .params
+                                    .iter()
+                                    .any(|p| p.self_kind != ast::SelfKind::None);
+                                if method.name == method_name && !has_self {
+                                    // Set up type parameters from impl block before resolving
+                                    let old_type_params =
+                                        std::mem::take(&mut self.current_type_params);
+
+                                    // Extract type params from impl block type (e.g., impl Array<T>)
+                                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                                        for (i, arg) in generic.args.iter().enumerate() {
+                                            if let ast::Type::Named(named) = arg {
+                                                let name = &named.name;
+                                                if !self.current_type_params.contains_key(name) {
+                                                    let type_id = self
+                                                        .type_table
+                                                        .make_type_param(name.clone(), i as u32);
+                                                    self.current_type_params
+                                                        .insert(name.clone(), (i as u32, type_id));
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    let result = method
+                                        .return_type
+                                        .as_ref()
+                                        .map(|t| self.resolve_type(t))
+                                        .unwrap_or(TypeTable::UNIT);
+
+                                    // Restore type parameters
+                                    self.current_type_params = old_type_params;
+
+                                    return result;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        TypeTable::UNKNOWN
+    }
+
+    /// Check if a qualified name `struct_name::method_name` is a static method
+    fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
+        // Build the mangled function name
+        let mangled_name = format!("{}::{}", struct_name, method_name);
+
+        // Check if it's registered in function_return_types (static methods are registered there)
+        if self.function_return_types.contains_key(&mangled_name) {
+            return true;
+        }
+
+        // Also check in loaded modules' impl blocks
+        for (_, module) in self.loaded_modules.iter() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = self.get_type_name(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            // Static methods have no self parameter
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check current module's impl blocks
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item {
+                let impl_struct_name = self.get_type_name(&impl_block.ty);
+                if impl_struct_name == struct_name {
+                    for method in &impl_block.methods {
+                        let has_self = method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if method.name == method_name && !has_self {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Resolve a static method call from a qualified name like `Point::origin()`
+    fn resolve_static_method_call_from_qualified(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        mangled_func_name: &str,
+        args: &[TirExpr],
+        span: Span,
+        _ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        // Look up return type
+        let return_type = self.lookup_static_method_return_type(
+            struct_name,
+            &[], // Module path will be looked up during lookup
+            method_name,
+            mangled_func_name,
+        );
+
+        // Determine module path for the struct
+        let module_path = self.find_struct_module_path(struct_name);
+
+        TirExpr::new(
+            TirExprKind::StaticCall {
+                func_name: mangled_func_name.to_string(),
+                module_path,
+                args: args.to_vec(),
+            },
+            return_type,
+            span,
+        )
+    }
+
+    /// Find the module path for a struct by name
+    fn find_struct_module_path(&self, struct_name: &str) -> Vec<String> {
+        // Check current module
+        for item in &self.current_module_items {
+            if let Item::Struct(s) = item
+                && s.name == struct_name
+            {
+                return self.current_module_path.clone();
+            }
+        }
+
+        // Check loaded modules
+        for (path, module) in self.loaded_modules.iter() {
+            for item in &module.items {
+                if let Item::Struct(s) = item
+                    && s.name == struct_name
+                {
+                    return path.clone();
+                }
+            }
+        }
+
+        // Default to current module path
+        self.current_module_path.clone()
+    }
+
+    /// Mangle a type name for use in function names
+    fn mangle_type_name(&self, type_id: TypeId) -> String {
+        match self.type_table.get(type_id) {
+            ResolvedType::Primitive(prim) => match prim {
+                crate::tir::PrimitiveType::I8 => "i8".to_string(),
+                crate::tir::PrimitiveType::I16 => "i16".to_string(),
+                crate::tir::PrimitiveType::I32 => "i32".to_string(),
+                crate::tir::PrimitiveType::I64 => "i64".to_string(),
+                crate::tir::PrimitiveType::I128 => "i128".to_string(),
+                crate::tir::PrimitiveType::U8 => "u8".to_string(),
+                crate::tir::PrimitiveType::U16 => "u16".to_string(),
+                crate::tir::PrimitiveType::U32 => "u32".to_string(),
+                crate::tir::PrimitiveType::U64 => "u64".to_string(),
+                crate::tir::PrimitiveType::U128 => "u128".to_string(),
+                crate::tir::PrimitiveType::F32 => "f32".to_string(),
+                crate::tir::PrimitiveType::F64 => "f64".to_string(),
+                crate::tir::PrimitiveType::Bool => "bool".to_string(),
+                crate::tir::PrimitiveType::Char => "char".to_string(),
+            },
+            ResolvedType::Unit => "unit".to_string(),
+            ResolvedType::String => "String".to_string(),
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name(*t))
+                    .collect();
+                format!("{}${}", name, args.join("$"))
+            }
+            ResolvedType::Array(elem) => format!("Array${}", self.mangle_type_name(*elem)),
+            ResolvedType::Option(inner) => format!("Option${}", self.mangle_type_name(*inner)),
+            ResolvedType::Ref(inner) => format!("ref${}", self.mangle_type_name(*inner)),
+            ResolvedType::MutRef(inner) => format!("mutref${}", self.mangle_type_name(*inner)),
+            ResolvedType::TypeParam { name, .. } => name.clone(),
+            ResolvedType::Tuple(elems) => {
+                let parts: Vec<String> = elems.iter().map(|e| self.mangle_type_name(*e)).collect();
+                format!("Tuple${}", parts.join("$"))
+            }
+            _ => "unknown".to_string(),
+        }
     }
 
     /// Look up method return type based on receiver type and method name
@@ -2545,6 +3015,7 @@ impl<'a> Resolver<'a> {
             // Note: append() is handled inline in codegen using generic builtins
             ResolvedType::Array(_) => match method_name {
                 "len" => return TypeTable::I32,
+                "capacity" => return TypeTable::I32,
                 "append" => return TypeTable::UNIT,
                 _ => return TypeTable::UNKNOWN,
             },

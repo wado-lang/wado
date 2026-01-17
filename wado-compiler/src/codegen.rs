@@ -433,6 +433,47 @@ impl Codegen {
         self.struct_types.get(&simple)
     }
 
+    /// Mangle a type name for use in struct names (e.g., i32 for Box$i32)
+    fn mangle_type_for_struct_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
+        match type_table.get(type_id) {
+            ResolvedType::Primitive(prim) => match prim {
+                PrimitiveType::I8 => "i8".to_string(),
+                PrimitiveType::I16 => "i16".to_string(),
+                PrimitiveType::I32 => "i32".to_string(),
+                PrimitiveType::I64 => "i64".to_string(),
+                PrimitiveType::I128 => "i128".to_string(),
+                PrimitiveType::U8 => "u8".to_string(),
+                PrimitiveType::U16 => "u16".to_string(),
+                PrimitiveType::U32 => "u32".to_string(),
+                PrimitiveType::U64 => "u64".to_string(),
+                PrimitiveType::U128 => "u128".to_string(),
+                PrimitiveType::F32 => "f32".to_string(),
+                PrimitiveType::F64 => "f64".to_string(),
+                PrimitiveType::Bool => "bool".to_string(),
+                PrimitiveType::Char => "char".to_string(),
+            },
+            ResolvedType::Unit => "unit".to_string(),
+            ResolvedType::String => "String".to_string(),
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                    .collect();
+                format!("{}${}", name, args.join("$"))
+            }
+            ResolvedType::Array(elem) => {
+                format!(
+                    "Array${}",
+                    self.mangle_type_for_struct_name(*elem, type_table)
+                )
+            }
+            _ => "unknown".to_string(),
+        }
+    }
+
     /// Extract struct names that a type depends on (for field types)
     fn get_struct_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
         match type_table.get(type_id) {
@@ -683,9 +724,22 @@ impl Codegen {
                     if func.body.is_none() {
                         continue;
                     }
-                    // Skip Array<T> methods - they are inlined in codegen (MethodCall on Array type)
+                    // Skip ALL Array<T> methods - both instance and static
                     // Array is generic so it's not registered in struct_types; it's in array_struct_types
+                    // All Array methods must be inlined at the call site because the generic type
+                    // parameter T cannot be resolved during function type generation
                     if struct_name == "Array" {
+                        continue;
+                    }
+                    // Skip methods that contain type parameters (from generic structs like Box<T>)
+                    // These methods need to be inlined at call sites with concrete types
+                    let type_table = &tir_mod.type_table;
+                    let has_type_params = type_table.contains_type_param(func.return_type)
+                        || func
+                            .params
+                            .iter()
+                            .any(|p| type_table.contains_type_param(p.type_id));
+                    if has_type_params {
                         continue;
                     }
                     // Build function ID for DCE check: path/Struct::method
@@ -870,6 +924,16 @@ impl Codegen {
 
         // Types for user-defined functions from entry TIR module
         for tir_func in &entry_tir.functions {
+            // Skip functions that contain type parameters (from generic structs like Box<T>)
+            // These functions need to be inlined at call sites with concrete types
+            let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id));
+            if has_type_params {
+                continue;
+            }
             let param_types: Vec<ValType> = tir_func
                 .params
                 .iter()
@@ -1057,6 +1121,15 @@ impl Codegen {
             if tir_func.name == "run" {
                 continue;
             }
+            // Skip functions that contain type parameters (from generic structs like Box<T>)
+            let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id));
+            if has_type_params {
+                continue;
+            }
             // Methods have names like "Point::sum" - use fully mangled name
             if let Some(sep_pos) = tir_func.name.find("::") {
                 let struct_name = &tir_func.name[..sep_pos];
@@ -1147,6 +1220,15 @@ impl Codegen {
         for (idx, tir_func) in entry_tir.functions.iter().enumerate() {
             if tir_func.name == "run" {
                 continue; // Skip run - it's handled separately as entry point
+            }
+            // Skip functions that contain type parameters (from generic structs like Box<T>)
+            let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id));
+            if has_type_params {
+                continue;
             }
             let (wasm_func, hints) =
                 self.generate_function(tir_func, type_table, &builder, empty_path);
@@ -3316,7 +3398,9 @@ impl Codegen {
             | TirExprKind::FieldAccess { expr: inner, .. } => {
                 Self::collect_closures_from_expr(inner, closures);
             }
-            TirExprKind::Call { args, .. } | TirExprKind::EffectCall { args, .. } => {
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     Self::collect_closures_from_expr(arg, closures);
                 }
@@ -3535,7 +3619,9 @@ impl Codegen {
             | TirExprKind::FieldAccess { expr: inner, .. } => {
                 Self::find_closure_locals_in_expr(inner, result, closure_counter);
             }
-            TirExprKind::Call { args, .. } | TirExprKind::EffectCall { args, .. } => {
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     Self::find_closure_locals_in_expr(arg, result, closure_counter);
                 }
@@ -3649,7 +3735,7 @@ impl Codegen {
                 fn_type_idx: canonical_fn_type_idx, // Canonical fn type with generic env
                 fn_type_name: canonical_fn_type_name, // Canonical fn type name for define_func
                 closure_struct_type_idx: canonical_closure_struct_type_idx, // Canonical struct
-                func_idx: 0, // Placeholder - set in define_closure_funcs
+                func_idx: 0,  // Placeholder - set in define_closure_funcs
                 func_name,
             });
         }
@@ -3766,7 +3852,12 @@ impl Codegen {
                 }
 
                 // Register canonical closure type for this function signature
-                self.get_or_create_canonical_closure_type(params, *return_type, type_table, builder);
+                self.get_or_create_canonical_closure_type(
+                    params,
+                    *return_type,
+                    type_table,
+                    builder,
+                );
             }
         }
     }
@@ -3994,7 +4085,6 @@ impl Codegen {
 
             // Placeholder types (shouldn't appear in final TIR)
             ResolvedType::Unknown | ResolvedType::Error => {
-                eprintln!("DEBUG: Unknown/Error type found. type_id={}", type_id);
                 panic!("unexpected Unknown/Error type in codegen")
             }
 
@@ -4701,7 +4791,14 @@ impl Codegen {
             } => {
                 // Helper to check if this is a specific builtin
                 let is_builtin = |name: &str| {
-                    (module_path.len() == 1 && module_path[0] == "builtin" && func_name == name)
+                    // module_path == ["core", "builtin"] from normal resolution
+                    (module_path.len() == 2
+                        && module_path[0] == "core"
+                        && module_path[1] == "builtin"
+                        && func_name == name)
+                        // Legacy: module_path == ["builtin"]
+                        || (module_path.len() == 1 && module_path[0] == "builtin" && func_name == name)
+                        // Legacy: module_path == [] and func_name == "builtin::name"
                         || (module_path.is_empty() && func_name == &format!("builtin::{}", name))
                 };
 
@@ -5254,6 +5351,56 @@ impl Codegen {
                             // Call the method
                             func.instruction(&Instruction::Call(idx));
                         } else {
+                            // Method not found - try to inline for generic structs
+                            // For getter methods on generic structs, inline field access
+                            if name.contains('$') && args.is_empty() {
+                                // Look up struct type to get field info
+                                let struct_lookup_name =
+                                    StructName::new(module_path.clone(), name.clone());
+                                if let Some(struct_info) =
+                                    self.struct_types.get(&struct_lookup_name)
+                                {
+                                    // Detect getter pattern and determine field index
+                                    let field_index: Option<u32> = if method_name == "get" {
+                                        // Simple "get" = field 0 (for single-field structs)
+                                        if struct_info.field_count == 1 {
+                                            Some(0)
+                                        } else {
+                                            None
+                                        }
+                                    } else if method_name == "get_first" {
+                                        Some(0)
+                                    } else if method_name == "get_second" {
+                                        Some(1)
+                                    } else if let Some(suffix) = method_name.strip_prefix("get_") {
+                                        // Try to parse as field index from common names
+                                        match suffix {
+                                            "0" | "first" | "key" | "left" | "a" | "x" => Some(0),
+                                            "1" | "second" | "value" | "right" | "b" | "y" => {
+                                                Some(1)
+                                            }
+                                            "2" | "third" | "z" | "c" => Some(2),
+                                            _ => None,
+                                        }
+                                    } else {
+                                        None
+                                    };
+
+                                    if let Some(idx) = field_index
+                                        && (idx as usize) < struct_info.field_count
+                                    {
+                                        // Inline as field access
+                                        self.generate_expr(
+                                            func, receiver, type_table, ctx, builder,
+                                        );
+                                        func.instruction(&Instruction::StructGet {
+                                            struct_type_index: struct_info.type_idx,
+                                            field_index: idx,
+                                        });
+                                        return;
+                                    }
+                                }
+                            }
                             panic!("unknown method: {mangled_name}");
                         }
                     }
@@ -5500,10 +5647,176 @@ impl Codegen {
 
                     other => {
                         panic!(
-                            "method call receiver is not a struct or primitive type: {:?}",
-                            other
+                            "method call receiver is not a struct or primitive type: {:?}, method: {}, receiver.type_id: {}",
+                            other, method_name, receiver.type_id
                         );
                     }
+                }
+            }
+
+            // === Static Method Call ===
+            TirExprKind::StaticCall {
+                func_name,
+                module_path,
+                args,
+            } => {
+                // Handle Array::with_capacity specially - inline it
+                // The function is generic so it can't be generated normally
+                if func_name.contains("Array$") && func_name.ends_with("::with_capacity") {
+                    // Parse element type from Array$i32 -> i32
+                    // expr.type_id is the return type (Array<elem>)
+                    let elem_type = match type_table.get(expr.type_id) {
+                        ResolvedType::Array(elem) => *elem,
+                        _ => {
+                            panic!(
+                                "Expected Array type for with_capacity return, got {:?}",
+                                type_table.get(expr.type_id)
+                            )
+                        }
+                    };
+
+                    // Get the raw array type index for this element type
+                    let raw_array_type_idx =
+                        *self.array_types.get(&elem_type).unwrap_or_else(|| {
+                            panic!(
+                                "raw array type not registered for element type {}",
+                                elem_type
+                            )
+                        });
+
+                    // Get the Array struct type index
+                    let array_struct_type_idx =
+                        *self.array_struct_types.get(&elem_type).unwrap_or_else(|| {
+                            panic!(
+                                "Array struct type not registered for element type {}",
+                                elem_type
+                            )
+                        });
+
+                    // Generate: Array { repr: builtin::array_new::<T>(capacity), used: 0 }
+                    // Arguments: capacity is already on stack
+
+                    // Generate capacity argument
+                    self.generate_expr(func, &args[0], type_table, ctx, builder);
+
+                    // array.new creates a new array with capacity elements, initialized to default
+                    func.instruction(&Instruction::ArrayNewDefault(raw_array_type_idx));
+
+                    // Push used = 0
+                    func.instruction(&Instruction::I32Const(0));
+
+                    // Create the Array struct with (repr, used) fields
+                    func.instruction(&Instruction::StructNew(array_struct_type_idx));
+
+                    return;
+                }
+
+                // Generate arguments first
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+
+                // func_name is already mangled as "StructName::method" or "Struct$Type::method"
+                // We need to look it up using the same name format used during function definition
+                // Methods are registered with MethodName format: {module_path}/{struct_name}::{method_name}
+                let func_idx = if let Some(sep_pos) = func_name.find("::") {
+                    let struct_name = &func_name[..sep_pos];
+                    let method_name = &func_name[sep_pos + 2..];
+
+                    // Build the mangled name in the same format as during function definition
+                    let mangled_name = MethodName::new(
+                        module_path.join("/"),
+                        struct_name.to_string(),
+                        None,
+                        method_name.to_string(),
+                    )
+                    .to_string();
+
+                    builder
+                        .try_func_idx(&mangled_name)
+                        .or_else(|| {
+                            // Also try without module path (for current module lookups)
+                            builder.try_func_idx(func_name)
+                        })
+                        .or_else(|| {
+                            // For generic types like Array$i32, also try the generic version Array
+                            // This handles static methods on generic types that aren't monomorphized
+                            if let Some(dollar_pos) = struct_name.find('$') {
+                                let generic_struct_name = &struct_name[..dollar_pos];
+                                let generic_mangled_name = MethodName::new(
+                                    module_path.join("/"),
+                                    generic_struct_name.to_string(),
+                                    None,
+                                    method_name.to_string(),
+                                )
+                                .to_string();
+                                builder.try_func_idx(&generic_mangled_name)
+                            } else {
+                                None
+                            }
+                        })
+                } else {
+                    // No :: separator, try as a regular function call
+                    let full_name = if module_path.is_empty() {
+                        func_name.clone()
+                    } else {
+                        format!("{}/{}", module_path.join("/"), func_name)
+                    };
+                    builder.try_func_idx(&full_name)
+                };
+
+                if let Some(idx) = func_idx {
+                    func.instruction(&Instruction::Call(idx));
+                } else {
+                    // Function not found - try to inline for user-defined generic struct constructors
+                    if let Some(sep_pos) = func_name.find("::") {
+                        let struct_name = &func_name[..sep_pos];
+
+                        // Check if this is a constructor on a generic struct (contains $)
+                        // We detect constructors by checking if the return type is the same struct
+                        // and the number of args matches the struct's field count
+                        if struct_name.contains('$') {
+                            // Get the struct type from the return type (expr.type_id)
+                            // Could be GenericInstance or a monomorphized Struct
+                            let (struct_name_to_lookup, struct_module_path) = match type_table
+                                .get(expr.type_id)
+                            {
+                                ResolvedType::GenericInstance {
+                                    name,
+                                    module_path,
+                                    type_args,
+                                } => {
+                                    // Build the mangled struct name (e.g., Box$i32)
+                                    let type_arg_names: Vec<String> = type_args
+                                        .iter()
+                                        .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                                        .collect();
+                                    let mangled = format!("{}${}", name, type_arg_names.join("$"));
+                                    (mangled, module_path.clone())
+                                }
+                                ResolvedType::Struct { name, module_path } => {
+                                    // Already a monomorphized struct name (e.g., Box$i32)
+                                    (name.clone(), module_path.clone())
+                                }
+                                _ => {
+                                    panic!("unknown static method: {func_name}");
+                                }
+                            };
+
+                            // Look up the struct type
+                            let struct_lookup_name =
+                                StructName::new(struct_module_path, struct_name_to_lookup);
+                            if let Some(struct_info) = self.struct_types.get(&struct_lookup_name) {
+                                // Check if args count matches field count (constructor pattern)
+                                if args.len() == struct_info.field_count {
+                                    // Arguments are already on the stack, just create the struct
+                                    func.instruction(&Instruction::StructNew(struct_info.type_idx));
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    panic!("unknown static method: {func_name}");
                 }
             }
 
@@ -5813,31 +6126,30 @@ impl Codegen {
             TirExprKind::IndirectCall { callee, args } => {
                 // Get the callee type information and canonical closure types
                 let callee_type_id = callee.type_id;
-                let (fn_type_idx, closure_struct_type_idx) =
-                    if let ResolvedType::Function {
-                        params,
-                        return_type,
-                        ..
-                    } = type_table.get(callee_type_id)
+                let (fn_type_idx, closure_struct_type_idx) = if let ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } = type_table.get(callee_type_id)
+                {
+                    // Look up canonical closure types for this function signature
+                    let key = (params.clone(), *return_type);
+                    if let Some((fn_idx, _, struct_idx)) =
+                        self.canonical_closure_types.borrow().get(&key).cloned()
                     {
-                        // Look up canonical closure types for this function signature
-                        let key = (params.clone(), *return_type);
-                        if let Some((fn_idx, _, struct_idx)) =
-                            self.canonical_closure_types.borrow().get(&key).cloned()
-                        {
-                            (fn_idx, struct_idx)
-                        } else {
-                            panic!(
-                                "canonical closure type not found for function signature: {:?}",
-                                type_table.get(callee_type_id)
-                            );
-                        }
+                        (fn_idx, struct_idx)
                     } else {
                         panic!(
-                            "IndirectCall callee has non-function type: {:?}",
+                            "canonical closure type not found for function signature: {:?}",
                             type_table.get(callee_type_id)
                         );
-                    };
+                    }
+                } else {
+                    panic!(
+                        "IndirectCall callee has non-function type: {:?}",
+                        type_table.get(callee_type_id)
+                    );
+                };
 
                 // Allocate a unique temporary local for this call site.
                 // We use a counter to ensure nested calls don't share the same local.
@@ -7498,7 +7810,7 @@ impl Codegen {
             TirExprKind::Unary { expr, .. } => {
                 self.collect_copy_types_from_expr(expr, type_table, needed_types);
             }
-            TirExprKind::Call { args, .. } => {
+            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     self.collect_copy_types_from_expr(arg, type_table, needed_types);
                 }
@@ -7770,7 +8082,7 @@ impl Codegen {
             TirExprKind::Unary { expr: operand, .. } => {
                 Self::count_indirect_calls_in_expr(operand, type_table, codegen, counts);
             }
-            TirExprKind::Call { args, .. } => {
+            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     Self::count_indirect_calls_in_expr(arg, type_table, codegen, counts);
                 }
@@ -7961,7 +8273,9 @@ impl Codegen {
             | TirExprKind::FieldAccess { expr: inner, .. } => {
                 Self::collect_array_append_types_from_expr(inner, type_table, result);
             }
-            TirExprKind::Call { args, .. } | TirExprKind::EffectCall { args, .. } => {
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     Self::collect_array_append_types_from_expr(arg, type_table, result);
                 }

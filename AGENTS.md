@@ -186,7 +186,7 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 - [Data Section (`__DATA__`)](./docs/adr-2026-01-12-data-section.md)
 - [Literal Type Conversion Rules](./docs/adr-2026-01-12-literal-type-conversion.md)
 - [Resource Lifecycle Management (RAII)](./docs/adr-2026-01-12-resource-lifecycle.md)
-- [Value Semantics and Reference Captures](./docs/adr-2026-01-12-value-semantics-and-captures.md)
+- [Value Semantics and Reference Stores](./docs/adr-2026-01-12-value-semantics-and-stores.md)
 - [Struct and Trait System](./docs/adr-2026-01-13-struct-and-trait.md)
 - [Compiler Pipeline Refactoring](./docs/adr-2026-01-14-compiler-pipeline-refactoring.md)
 - [Tuple and Array Literal Syntax](./docs/adr-2026-01-15-tuple-and-array-literals.md)
