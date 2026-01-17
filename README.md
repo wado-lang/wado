@@ -13,7 +13,7 @@ The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, 
 ## Hello World
 
 ```wado
-#!/usr/bin/env wado
+#!/usr/bin/env wado run
 use { println, Stdout } from "core:cli";
 
 // run() is the entry point of the wasi:cli's Command world
