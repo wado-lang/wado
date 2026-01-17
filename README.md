@@ -104,6 +104,8 @@ fn fetch_all() with Http {
 }
 ```
 
+Note: Wasm Stack Switching is still being standardized and not yet available in runtimes.
+
 ### Reactive Signals
 
 Wado has built-in support for reactive state:
@@ -181,7 +183,7 @@ cargo test
 - [x] `wado dump FILE` - Dump internal compiler state for debugging
 - [x] `wado format FILE` - Format Wado source code
 
-### What's Done
+### Examples That Already Work
 
 There are E2E test fixtures in [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures).
 
