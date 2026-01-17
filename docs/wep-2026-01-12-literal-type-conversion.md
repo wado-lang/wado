@@ -1,8 +1,4 @@
 # WEP: Literal Type Conversion Rules
-
-**Date**: 2026-01-12
-**Status**: Accepted
-
 ## Context
 
 Wado needs clear rules for implicit type conversions involving numeric literals. The question is: when should the compiler allow implicit conversions, and when should it require explicit `as` casts?

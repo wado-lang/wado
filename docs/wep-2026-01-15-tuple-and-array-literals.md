@@ -1,8 +1,4 @@
 # WEP: Tuple and Array Literal Syntax
-
-**Date**: 2026-01-15
-**Status**: Accepted
-
 ## Context
 
 Wado needs to define syntax for tuple and array literals. The original spec used:

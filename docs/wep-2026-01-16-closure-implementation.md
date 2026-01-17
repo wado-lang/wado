@@ -1,8 +1,4 @@
 # WEP: Closure Implementation
-
-**Date**: 2026-01-16
-**Status**: Proposed
-
 ## Context
 
 Wado supports closure syntax (parsed but not codegen yet):

@@ -1,8 +1,4 @@
 # WEP: SourceProvider Abstraction for Compiler I/O
-
-**Status**: Proposed
-**Date**: 2026-01-16
-
 ## Context
 
 The Wado compiler currently has direct filesystem dependencies for loading user modules:

@@ -179,7 +179,7 @@ WEPs combine language specification and implementation strategy in a single docu
 
 ### List of WEPs
 
-- [Target WASI P3 Only](./docs/wep-2025-01-11-wasi-p3-only.md)
+- [Target WASI P3 Only](./docs/wep-2026-01-11-wasi-p3-only.md)
 - [Deterministic Math Library (libm) Integration](./docs/wep-2026-01-10-deterministic-libm.md)
 - [Tagged Template Literals for Compile-Time Execution](./docs/wep-2026-01-10-tagged-template-literals.md)
 - [WebAssembly Module Import Support](./docs/wep-2026-01-10-wasm-import.md)
@@ -201,7 +201,6 @@ WEPs combine language specification and implementation strategy in a single docu
 ### Structure
 
 - Title: Short description of the proposal
-- Status: Draft | Proposed | Accepted | Implemented | Deprecated | Superseded
 - Context: Background and problem statement
 - Decision: What was decided and why
 - Consequences: Impact and trade-offs

@@ -1,8 +1,4 @@
 # WEP: Ambient Logging Functions
-
-**Date**: 2026-01-12
-**Status**: Accepted
-
 ## Context
 
 ### Problem Statement

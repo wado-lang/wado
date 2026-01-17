@@ -1,7 +1,5 @@
 # WEP: Data Section (`__DATA__`)
-
 **Date:** 2026-01-12
-
 **Status:** Proposed
 
 ## Context

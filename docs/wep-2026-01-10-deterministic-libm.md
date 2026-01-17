@@ -1,8 +1,4 @@
 # ARD: Deterministic Math Library (libm) Integration
-
-**Date**: 2026-01-10
-**Status**: Accepted
-
 ## Context
 
 ### Problem Statement

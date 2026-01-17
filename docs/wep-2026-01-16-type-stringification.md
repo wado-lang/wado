@@ -1,8 +1,4 @@
 # WEP: Type Stringification
-
-**Date**: 2026-01-16
-**Status**: Proposed
-
 ## Context
 
 When debugging or logging, developers need to convert arbitrary values to strings. Different languages handle this differently:
