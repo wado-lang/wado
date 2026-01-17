@@ -16,7 +16,7 @@ Template strings in Wado support interpolation with format specifiers: `` `value
 | Octal | `%o` | `:o` | `{:o}` | `{:o}` |
 | Hex (lower) | `%x` | `:x` | `{:x}` | `{:x}` |
 | Hex (upper) | `%X` | `:X` | `{:X}` | `{:X}` |
-| Pointer | `%p` | N/A | `{:p}` | `{:p}` |
+| Pointer | `%p` | N/A | `{:p}` | ❌ None |
 | Debug | `%#v` | `!r` | `{:?}` | `{:?}` |
 
 ### The Problem with General Format (`g`/`G`)
@@ -60,9 +60,10 @@ Where `spec` follows Rust's format specification mini-language.
 | `X` | UpperHex | Uppercase hex | `{x:X}` → `"2A"` |
 | `e` | LowerExp | Lowercase exponential | `{x:e}` → `"4.2e1"` |
 | `E` | UpperExp | Uppercase exponential | `{x:E}` → `"4.2E1"` |
-| `p` | Pointer | Pointer address | `{x:p}` → `"0x7fff5fbff"` |
 
-**Note**: No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `{:e}/{:E}`.
+**Notes**:
+- No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `{:e}/{:E}`.
+- No `p` (Pointer) format specifier. Wado does not have pointer types. Using `:p` will result in a resolver error.
 
 ### Format Parameters
 
@@ -173,11 +174,12 @@ Resolution order for `{expr:spec}`:
 
 ### Positive
 
-1. **Rust familiarity**: Developers familiar with Rust can immediately use Wado's format specifiers
+1. **Rust familiarity**: Developers familiar with Rust can immediately use Wado's format specifiers (except `:p`)
 2. **Predictable output**: No surprise switches to exponential notation
 3. **Explicit intent**: Developers explicitly choose the format they want
 4. **Type safety**: Format specifiers that don't apply to a type cause compile errors
 5. **Future-proof**: Can add more Rust-compatible specifiers (e.g., `{:#?}` for pretty-print) later
+6. **Language coherence**: Excluding `:p` aligns with Wado's lack of pointer types
 
 ### Negative
 
@@ -193,9 +195,8 @@ Resolution order for `{expr:spec}`:
 Following Rust's ecosystem, we can add:
 
 1. **Pretty-print**: `{:#?}` for indented multi-line debug output
-2. **Pointer formatting**: `{:p}` for reference addresses (debugging)
-3. **Custom precision syntax**: Allow runtime precision like `{:.prec$}`
-4. **Named arguments**: `{name:spec}` (already planned)
+2. **Custom precision syntax**: Allow runtime precision like `{:.prec$}`
+3. **Named arguments**: `{name:spec}` (already planned)
 
 ### Migration from Other Languages
 
