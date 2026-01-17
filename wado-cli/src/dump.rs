@@ -339,15 +339,15 @@ pub fn run(opts: DumpOptions) {
         }
     }
 
-    // Optimization hints section (Optimize phase)
+    // Optimized project section (Optimize phase)
     if opts.show_optimize {
-        if let Some(ref hints) = result.opt_hints {
-            println!("=== Optimization Hints (Optimize) ===");
-            println!("{:#?}", hints);
+        if let Some(ref project) = result.optimized_project {
+            println!("=== Optimized Project (Optimize) ===");
+            println!("{:#?}", project);
             println!();
         } else {
-            println!("=== Optimization Hints (Optimize) ===");
-            println!("(Optimization analysis failed or not available)");
+            println!("=== Optimized Project (Optimize) ===");
+            println!("(Optimization failed or not available)");
             println!();
         }
     }
