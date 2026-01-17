@@ -1,4 +1,4 @@
-# ADR: Type Stringification
+# WEP: Type Stringification
 
 **Date**: 2026-01-16
 **Status**: Proposed
@@ -104,7 +104,7 @@ builtin::inspect(Box { value: Point { x: 1, y: 2 } })
 
 ### 4. Display Trait
 
-The `Display` trait (defined in `adr-2026-01-13-struct-and-trait.md`) provides user-customizable string representation:
+The `Display` trait (defined in `wep-2026-01-13-struct-and-trait.md`) provides user-customizable string representation:
 
 ```wado
 trait Display {
@@ -175,7 +175,7 @@ This ensures template strings always produce output without requiring explicit t
 
 ## References
 
-- [ADR: Struct and Trait System](./adr-2026-01-13-struct-and-trait.md)
+- [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md)
 - [Elixir Inspect Protocol](https://hexdocs.pm/elixir/Inspect.html)
 - [Python __repr__ vs __str__](https://realpython.com/python-repr-vs-str/)
 - [Ruby inspect](https://thoughtbot.com/blog/ruby-inspect-tutorial)

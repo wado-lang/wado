@@ -1,4 +1,4 @@
-# ADR: Tuple and Array Literal Syntax
+# WEP: Tuple and Array Literal Syntax
 
 **Date**: 2026-01-15
 **Status**: Accepted

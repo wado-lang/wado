@@ -1,4 +1,4 @@
-# ADR: SourceProvider Abstraction for Compiler I/O
+# WEP: SourceProvider Abstraction for Compiler I/O
 
 **Status**: Proposed
 **Date**: 2026-01-16

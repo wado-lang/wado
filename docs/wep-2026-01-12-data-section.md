@@ -1,4 +1,4 @@
-# ADR: Data Section (`__DATA__`)
+# WEP: Data Section (`__DATA__`)
 
 **Date:** 2026-01-12
 

@@ -1,4 +1,4 @@
-# ADR 2026-01-15: String Type Design
+# WEP: String Type Design
 
 ## Status
 

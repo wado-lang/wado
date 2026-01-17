@@ -1,4 +1,4 @@
-# ADR: Operator Precedence and Associativity
+# WEP: Operator Precedence and Associativity
 
 **Date**: 2026-01-11
 **Status**: Accepted

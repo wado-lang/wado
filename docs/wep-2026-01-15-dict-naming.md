@@ -1,4 +1,4 @@
-# ADR 2026-01-15: Dict Naming
+# WEP: Dict Naming
 
 ## Status
 

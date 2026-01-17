@@ -1,4 +1,4 @@
-# ADR: World Conformance and Export Syntax
+# WEP: World Conformance and Export Syntax
 
 **Status**: Accepted
 
@@ -175,8 +175,8 @@ We evaluated multiple keyword options:
 
 ## Related ADRs
 
-- [Target WASI P3 Only](./adr-2025-01-11-wasi-p3-only.md) - WASI world context
-- [Value Semantics and Reference Captures](./adr-2026-01-12-value-semantics-and-captures.md) - Related to export semantics
+- [Target WASI P3 Only](./wep-2025-01-11-wasi-p3-only.md) - WASI world context
+- [Value Semantics and Reference Captures](./wep-2026-01-12-value-semantics-and-captures.md) - Related to export semantics
 
 ## References
 

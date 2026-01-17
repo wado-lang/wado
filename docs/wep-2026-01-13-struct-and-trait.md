@@ -1,15 +1,15 @@
-# ADR: Struct and Trait System
+# WEP: Struct and Trait System
 
 **Date**: 2026-01-13
 **Status**: Proposed
 
 ## Context
 
-Wado needs a type system for defining custom data types and shared behavior. This ADR defines the syntax and semantics for structs (product types) and traits (behavior abstraction), building on the value semantics established in `adr-2026-01-12-value-semantics-and-captures.md`.
+Wado needs a type system for defining custom data types and shared behavior. This WEP defines the syntax and semantics for structs (product types) and traits (behavior abstraction), building on the value semantics established in `wep-2026-01-12-value-semantics-and-captures.md`.
 
 ### Design Goals
 
-1. **Value semantics by default**: Align with the value semantics ADR
+1. **Value semantics by default**: Align with the value semantics WEP
 2. **Explicit ownership transfer**: Use `move` for explicit moves
 3. **Compiler optimization**: Allow automatic move when safe
 4. **Wasm GC compatibility**: Map naturally to Wasm GC structs
@@ -221,7 +221,7 @@ let boxed: Box<dyn Display> = Box::new(point);
 
 ### 9. Copy and Clone Semantics
 
-Building on the value semantics ADR:
+Building on the value semantics WEP:
 
 #### Rules
 
@@ -648,4 +648,4 @@ impl<T: Display> Display for Stack<T> {
 - [Rust Traits](https://doc.rust-lang.org/book/ch10-02-traits.html)
 - [Rust Clone vs Copy](https://doc.rust-lang.org/std/clone/trait.Clone.html)
 - [Rust Drop](https://doc.rust-lang.org/std/ops/trait.Drop.html)
-- [ADR: Value Semantics and Captures](./adr-2026-01-12-value-semantics-and-captures.md)
+- [WEP: Value Semantics and Captures](./wep-2026-01-12-value-semantics-and-captures.md)

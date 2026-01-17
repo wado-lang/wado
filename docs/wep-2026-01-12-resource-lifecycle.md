@@ -1,4 +1,4 @@
-# ADR: Resource Lifecycle Management (RAII)
+# WEP: Resource Lifecycle Management (RAII)
 
 **Date**: 2026-01-12
 **Status**: Proposed
@@ -275,7 +275,7 @@ For now, resources should be designed to tolerate abrupt termination (e.g., file
 
 ### 6. Interaction with Value Semantics
 
-This design integrates cleanly with the value semantics ADR:
+This design integrates cleanly with the value semantics WEP:
 
 | Struct Type           | Default Semantics | Implicit `unique`? | Destructor?               |
 | --------------------- | ----------------- | ------------------ | ------------------------- |
@@ -563,4 +563,4 @@ fn process() with FileSystem {
 - [Swift Deinitialization](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/deinitialization/)
 - [C# IDisposable](https://learn.microsoft.com/en-us/dotnet/api/system.idisposable)
 - [Java AutoCloseable](https://docs.oracle.com/javase/8/docs/api/java/lang/AutoCloseable.html)
-- ADR: Value Semantics and Reference Captures (2026-01-12)
+- WEP: Value Semantics and Reference Captures (2026-01-12)

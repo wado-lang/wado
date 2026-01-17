@@ -478,7 +478,7 @@ let result = pow(x, 2);  // ✅ Use function instead
 
 **Date**: 2026-01-11
 **Status**: Research Complete
-**Decision**: See `docs/adr-2026-01-11-operator-precedence.md` for the final decision
+**Decision**: See `docs/wep-2026-01-11-operator-precedence.md` for the final decision
 
 **Summary**: ✅ Use Rust's precedence as baseline with the following modifications:
 

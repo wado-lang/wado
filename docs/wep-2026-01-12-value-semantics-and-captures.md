@@ -1,4 +1,4 @@
-# ADR: Value Semantics and Reference Captures
+# WEP: Value Semantics and Reference Captures
 
 **Date**: 2026-01-12
 **Status**: Proposed

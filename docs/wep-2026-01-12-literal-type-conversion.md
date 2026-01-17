@@ -1,4 +1,4 @@
-# ADR: Literal Type Conversion Rules
+# WEP: Literal Type Conversion Rules
 
 **Date**: 2026-01-12
 **Status**: Accepted
