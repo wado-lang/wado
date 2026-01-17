@@ -1,0 +1,397 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Wado",
+  "patterns": [
+    {
+      "include": "#data-section"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#attributes"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#characters"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "attributes": {
+      "patterns": [
+        {
+          "begin": "#!\\[",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.attribute.wado"
+            }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.attribute.wado"
+            }
+          },
+          "name": "meta.attribute.inner.wado",
+          "patterns": [
+            {
+              "match": "\\b(no_prelude)\\b",
+              "name": "entity.name.attribute.wado"
+            },
+            {
+              "include": "#strings"
+            }
+          ]
+        },
+        {
+          "begin": "#\\[",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.attribute.wado"
+            }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.attribute.wado"
+            }
+          },
+          "name": "meta.attribute.outer.wado",
+          "patterns": [
+            {
+              "match": "\\b(hidden)\\b",
+              "name": "entity.name.attribute.wado"
+            },
+            {
+              "include": "#strings"
+            }
+          ]
+        }
+      ]
+    },
+    "characters": {
+      "patterns": [
+        {
+          "match": "'(?:[^'\\\\]|\\\\[nrt\\\\\"'0]|\\\\u[0-9a-fA-F]{4}|\\\\u\\{[0-9a-fA-F]+\\})'",
+          "name": "string.quoted.single.wado"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "match": "//.*$",
+          "name": "comment.line.double-slash.wado"
+        },
+        {
+          "begin": "/\\*",
+          "end": "\\*/",
+          "name": "comment.block.wado",
+          "patterns": [
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "data-section": {
+      "begin": "^__DATA__\\s*$",
+      "beginCaptures": {
+        "0": {
+          "name": "keyword.control.data-section.wado"
+        }
+      },
+      "end": "\\z",
+      "patterns": [
+        {
+          "begin": "^\\s*(?=[\\{\\[])",
+          "comment": "JSON content - triggered when line starts with { or [",
+          "contentName": "meta.embedded.block.json",
+          "end": "\\z",
+          "patterns": [
+            {
+              "include": "source.json"
+            }
+          ]
+        },
+        {
+          "comment": "Plain text as comment",
+          "match": ".+",
+          "name": "comment.block.data-section.wado"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.wado"
+            },
+            "2": {
+              "name": "entity.name.function.wado"
+            }
+          },
+          "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?:<|\\()",
+          "name": "meta.function.definition.wado"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.wado"
+            }
+          },
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?:::<[^>]*>)?\\s*\\(",
+          "name": "meta.function.call.wado"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.wado"
+            }
+          },
+          "match": "\\.\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?:::<[^>]*>)?\\s*\\(",
+          "name": "meta.method.call.wado"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(if|else|while|for|loop|break|continue|return|match)\\b",
+          "name": "keyword.control.wado"
+        },
+        {
+          "match": "\\b(fn|let|struct|enum|impl|type|use|from|pub|import|export)\\b",
+          "name": "keyword.declaration.wado"
+        },
+        {
+          "match": "\\b(as|with|mut|async|move|unique|in|of)\\b",
+          "name": "keyword.other.wado"
+        },
+        {
+          "match": "\\b(assert|effect|handler|reactive|resource|world)\\b",
+          "name": "keyword.other.wado"
+        },
+        {
+          "match": "\\b(true|false|null|self)\\b",
+          "name": "constant.language.wado"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*\\b",
+          "name": "constant.numeric.hex.wado"
+        },
+        {
+          "match": "\\b0b[01][01_]*\\b",
+          "name": "constant.numeric.binary.wado"
+        },
+        {
+          "match": "\\b0o[0-7][0-7_]*\\b",
+          "name": "constant.numeric.octal.wado"
+        },
+        {
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?\\b",
+          "name": "constant.numeric.float.wado"
+        },
+        {
+          "match": "\\b[0-9][0-9_]*\\b",
+          "name": "constant.numeric.integer.wado"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "==|!=|<=|>=|<|>",
+          "name": "keyword.operator.comparison.wado"
+        },
+        {
+          "match": "&&|\\|\\||!",
+          "name": "keyword.operator.logical.wado"
+        },
+        {
+          "match": "\\+|-|\\*|/|%",
+          "name": "keyword.operator.arithmetic.wado"
+        },
+        {
+          "match": "&|\\||\\^|~|<<|>>",
+          "name": "keyword.operator.bitwise.wado"
+        },
+        {
+          "match": "\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=|=",
+          "name": "keyword.operator.assignment.wado"
+        },
+        {
+          "match": "->|=>",
+          "name": "keyword.operator.arrow.wado"
+        },
+        {
+          "match": "&(?=\\s*mut\\b)|&",
+          "name": "keyword.operator.reference.wado"
+        },
+        {
+          "match": "\\*(?=[a-zA-Z_])",
+          "name": "keyword.operator.dereference.wado"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.wado"
+        },
+        {
+          "match": ";",
+          "name": "punctuation.terminator.semicolon.wado"
+        },
+        {
+          "match": ":",
+          "name": "punctuation.separator.colon.wado"
+        },
+        {
+          "match": "\\.",
+          "name": "punctuation.separator.period.wado"
+        },
+        {
+          "match": "\\{",
+          "name": "punctuation.section.braces.begin.wado"
+        },
+        {
+          "match": "\\}",
+          "name": "punctuation.section.braces.end.wado"
+        },
+        {
+          "match": "\\[",
+          "name": "punctuation.section.brackets.begin.wado"
+        },
+        {
+          "match": "\\]",
+          "name": "punctuation.section.brackets.end.wado"
+        },
+        {
+          "match": "\\(",
+          "name": "punctuation.section.parens.begin.wado"
+        },
+        {
+          "match": "\\)",
+          "name": "punctuation.section.parens.end.wado"
+        },
+        {
+          "match": "<",
+          "name": "punctuation.section.angles.begin.wado"
+        },
+        {
+          "match": ">",
+          "name": "punctuation.section.angles.end.wado"
+        },
+        {
+          "match": "\\|",
+          "name": "punctuation.definition.closure.wado"
+        }
+      ]
+    },
+    "string-escapes": {
+      "patterns": [
+        {
+          "match": "\\\\[nrt\\\\\"'0`{}]",
+          "name": "constant.character.escape.wado"
+        },
+        {
+          "match": "\\\\u[0-9a-fA-F]{4}",
+          "name": "constant.character.escape.unicode.wado"
+        },
+        {
+          "match": "\\\\u\\{[0-9a-fA-F]+\\}",
+          "name": "constant.character.escape.unicode.wado"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.wado",
+          "patterns": [
+            {
+              "include": "#string-escapes"
+            }
+          ]
+        },
+        {
+          "begin": "`",
+          "end": "`",
+          "name": "string.interpolated.wado",
+          "patterns": [
+            {
+              "include": "#string-escapes"
+            },
+            {
+              "begin": "\\{",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.definition.interpolation.begin.wado"
+                }
+              },
+              "end": "\\}",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.definition.interpolation.end.wado"
+                }
+              },
+              "name": "meta.interpolation.wado",
+              "patterns": [
+                {
+                  "include": "$self"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\b(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|bool|char)\\b",
+          "name": "storage.type.primitive.wado"
+        },
+        {
+          "match": "\\b(String|Array|Option|Result|Dict|Fn)\\b",
+          "name": "storage.type.builtin.wado"
+        },
+        {
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
+          "name": "entity.name.type.wado"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.wado"
+}

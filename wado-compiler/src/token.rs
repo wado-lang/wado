@@ -20,6 +20,7 @@ pub enum TokenKind {
     Break,
     Continue,
     In,
+    Of,
     Pub,
     Effect,
     Handler,

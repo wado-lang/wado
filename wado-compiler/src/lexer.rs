@@ -1,4 +1,5 @@
 // Lexer for Wado
+// This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::comment::{Comment, CommentKind};
 use crate::token::{Span, Token, TokenKind};
@@ -512,6 +513,7 @@ impl<'a> Lexer<'a> {
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
             "in" => TokenKind::In,
+            "of" => TokenKind::Of,
             "pub" => TokenKind::Pub,
             "effect" => TokenKind::Effect,
             "handler" => TokenKind::Handler,
