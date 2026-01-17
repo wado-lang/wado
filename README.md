@@ -1,6 +1,6 @@
 # Wado
 
-A lightweight programming language targeting WebAssembly — Wasm in plain sight.
+A type-safe, high-level WebAssembly — Wasm in plain sight.
 
 ## Why Wado?
 
