@@ -6,7 +6,8 @@ use crate::ast::Type;
 use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
 use crate::name::{FreeFunctionName, FunctionId, MethodName, StructName, build_core_internal_name};
-use crate::optimize::OptimizationHints;
+use crate::optimize::{CanonBuiltin, WasiEffect};
+use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
@@ -58,8 +59,11 @@ struct BuildMainModuleParams<'a> {
     all_tir_modules: &'a IndexMap<Vec<String>, TirModule>,
     symbols: &'a SymbolTable,
     string_data: &'a [u8],
-    hints: &'a OptimizationHints,
+    project: &'a Project,
     module_name: &'a str,
+    /// WASI functions that are available (lowered at component level)
+    /// These are the local alias names (e.g., "wasi:cli/Stdout::write_via_stream")
+    available_wasi_funcs: &'a HashSet<String>,
 }
 
 /// Code generator that produces Component Model components
@@ -603,17 +607,18 @@ impl Codegen {
             .collect()
     }
 
-    /// Generate Component Model binary Wasm
-    pub fn generate_wasm(
-        &mut self,
-        entry_tir: &TirModule,
-        all_tir_modules: &IndexMap<Vec<String>, TirModule>,
-        symbols: &SymbolTable,
-        implicit_modules: &std::collections::HashSet<Vec<String>>,
-        hints: &OptimizationHints,
-        module_name: &str,
-    ) -> Vec<u8> {
+    /// Generate Component Model binary Wasm from a Project.
+    ///
+    /// The project must have been optimized (usage fields populated) before calling this.
+    pub fn generate_wasm(&mut self, project: &Project) -> Vec<u8> {
+        let entry_tir = project.entry_module();
+        let all_tir_modules = &project.tir_modules;
+        let symbols = &project.symbols;
+        let implicit_modules = &project.implicit_modules;
+        let module_name = &project.module_name;
+
         // Collect pre-computed string literals from all TIR modules
+        // Note: String DCE is performed in the optimizer, so we just collect all strings here
         for tir_module in all_tir_modules.values() {
             for s in &tir_module.string_literals {
                 if !self.string_literals.contains(s) {
@@ -628,7 +633,7 @@ impl Codegen {
             all_tir_modules,
             symbols,
             implicit_modules,
-            hints,
+            project,
             module_name,
         );
 
@@ -646,9 +651,11 @@ impl Codegen {
             all_tir_modules,
             symbols,
             string_data,
-            hints,
+            project,
             module_name,
+            available_wasi_funcs,
         } = params;
+        let strip_names = project.strip_names;
 
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
@@ -688,7 +695,7 @@ impl Codegen {
                 // Supported effects: Stdout, Stderr, MonotonicClock, Environment
                 // Exit is only supported if explicitly used (runtime may not support it)
                 if !tir_func.effects.is_empty() {
-                    let exit_available = hints.is_effect_explicitly_used("Exit");
+                    let exit_available = project.used_effects.contains(&WasiEffect::Exit);
                     let has_unsupported_effects = tir_func.effects.iter().any(|e| {
                         let effect_name = e.as_str();
                         // Exit effect requires explicit usage tracking
@@ -707,7 +714,7 @@ impl Codegen {
                 let func_id =
                     FunctionId::Free(FreeFunctionName::from_path_and_name(path, &tir_func.name));
                 // Skip functions not reachable from entry point (DCE)
-                if !hints.is_reachable(&func_id) {
+                if !project.is_reachable(&func_id) {
                     continue;
                 }
                 let mangled_name = func_id.to_string();
@@ -774,7 +781,7 @@ impl Codegen {
                     // pass after optimization, so the optimizer doesn't know about them.
                     // They are reachable if they were generated.
                     let is_monomorphized = struct_name.contains('$');
-                    if !is_monomorphized && !hints.is_reachable(&method_id) {
+                    if !is_monomorphized && !project.is_reachable(&method_id) {
                         continue;
                     }
                     let method_mangled = method_id.to_string();
@@ -812,8 +819,17 @@ impl Codegen {
         // ========================================
 
         // Builtin function types - derived from core/builtin.wado
+        // DCE: Only define types for builtins that are actually used
         for func in self.builtin_registry.imported_builtins() {
             let canonical_name = func.canonical_name.as_ref().unwrap();
+            // Skip if this builtin is not used
+            if let Some(builtin) = CanonBuiltin::from_str(canonical_name) {
+                if !project.used_builtins.contains(&builtin) {
+                    continue;
+                }
+            } else {
+                continue; // Unknown builtin, skip
+            }
             let params = self.builtin_func_to_core_params(func);
             let results = self.builtin_func_to_core_results(func);
             builder.define_func_type(canonical_name, &params, &results);
@@ -980,7 +996,7 @@ impl Codegen {
         }
 
         // Register box types for primitive references (&i32, &mut f64, etc.)
-        self.register_box_types(&mut builder);
+        self.register_box_types(&mut builder, project);
 
         // Register canonical closure types for function type parameters.
         // This must happen BEFORE user-defined function types are defined,
@@ -994,9 +1010,14 @@ impl Codegen {
         }
 
         // WASI effect function types - derived from wasi/*.wado definitions
+        // DCE: Only define types for WASI functions that are actually available (lowered)
         for interface in self.wasi_registry.interfaces() {
             for func in &interface.functions {
                 let local_name = func.local_alias_name();
+                // Only define type if this function is available (lowered at component level)
+                if !available_wasi_funcs.contains(&local_name) {
+                    continue;
+                }
                 let params = self.wasi_func_to_core_params(func);
                 let results = self.wasi_func_to_core_results(func);
                 builder.define_func_type(&local_name, &params, &results);
@@ -1137,68 +1158,20 @@ impl Codegen {
         // ========================================
         // Import section
         // ========================================
-        // DCE: Only import stream intrinsics if Stdout/Stderr used or stream builtins called
-        if hints.needs_stream_intrinsics {
-            builder.import_func("wasi", "stream-new", "stream-new");
-            builder.import_func("wasi", "stream-write", "stream-write");
-            builder.import_func("wasi", "stream-drop-writable", "stream-drop-writable");
-            builder.import_func("wasi", "stream-drop-readable", "stream-drop-readable");
+        // DCE: Only import builtins that are actually used
+        for builtin in &project.used_builtins {
+            let canonical_name = builtin.canonical_name();
+            if let Some(info) = self.builtin_registry.get_by_canonical(canonical_name) {
+                builder.import_func(&info.namespace, canonical_name);
+            }
         }
 
-        // DCE: Only import Stdout/Stderr write functions if used
-        if hints.is_effect_used("Stdout") {
-            let stdout_import_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-            builder.import_func("wasi", &stdout_import_name, &stdout_import_name);
-        }
-        if hints.is_effect_used("Stderr") {
-            let stderr_import_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-            builder.import_func("wasi", &stderr_import_name, &stderr_import_name);
+        // Import lowered WASI functions
+        // Only import functions that are available (lowered at component level)
+        for local_name in available_wasi_funcs {
+            builder.import_func("wasi", local_name);
         }
 
-        // DCE: Only import async primitives if stream/effects are used
-        if hints.needs_async_primitives {
-            builder.import_func("wasi", "task-return", "task-return");
-            builder.import_func("wasi", "waitable-set-new", "waitable-set-new");
-            builder.import_func("wasi", "waitable-join", "waitable-join");
-            builder.import_func("wasi", "waitable-set-wait", "waitable-set-wait");
-            builder.import_func("wasi", "subtask-drop", "subtask-drop");
-        }
-
-        // DCE: Only import MonotonicClock if used
-        if hints.is_effect_used("MonotonicClock")
-            && self.wasi_registry.has_interface("monotonic-clock")
-        {
-            let monotonic_import_name = build_local_alias_name("clocks", "MonotonicClock", "now");
-            builder.import_func("wasi", &monotonic_import_name, &monotonic_import_name);
-        }
-
-        // DCE: Only import Environment functions if used
-        if hints.is_effect_used("Environment") {
-            let get_args_name = build_local_alias_name("cli", "Environment", "get_arguments");
-            builder.import_func("wasi", &get_args_name, &get_args_name);
-            let get_env_name = build_local_alias_name("cli", "Environment", "get_environment");
-            builder.import_func("wasi", &get_env_name, &get_env_name);
-            let get_cwd_name = build_local_alias_name("cli", "Environment", "get_initial_cwd");
-            builder.import_func("wasi", &get_cwd_name, &get_cwd_name);
-        }
-
-        // DCE: Only import Exit functions if explicitly used
-        // Note: Use is_effect_explicitly_used here because Exit interface may not be
-        // supported by all runtimes, so we only import it when explicitly called.
-        if hints.is_effect_explicitly_used("Exit") {
-            let exit_name = build_local_alias_name("cli", "Exit", "exit");
-            builder.import_func("wasi", &exit_name, &exit_name);
-            let exit_code_name = build_local_alias_name("cli", "Exit", "exit_with_code");
-            builder.import_func("wasi", &exit_code_name, &exit_code_name);
-        }
-
-        builder.import_func("env", "realloc", "realloc");
-        if hints.needs_f64_to_string {
-            builder.import_func("env", "f64_to_buffer", "f64_to_buffer");
-        }
-        if hints.needs_f32_to_string {
-            builder.import_func("env", "f32_to_buffer", "f32_to_buffer");
-        }
         builder.import_memory("env", "memory", 1);
         module.section(builder.imports());
 
@@ -1404,7 +1377,7 @@ impl Codegen {
         }
 
         // Name section (skip in size-optimized builds)
-        if !hints.strip_names {
+        if !strip_names {
             let names = builder.build_name_section(module_name);
             module.section(&names);
         }
@@ -1420,7 +1393,7 @@ impl Codegen {
         all_tir_modules: &IndexMap<Vec<String>, TirModule>,
         symbols: &SymbolTable,
         _implicit_modules: &std::collections::HashSet<Vec<String>>,
-        hints: &OptimizationHints,
+        project: &Project,
         module_name: &str,
     ) -> Vec<u8> {
         let mut builder = ComponentBuilder::default();
@@ -1437,7 +1410,7 @@ impl Codegen {
         // Generate WASI imports dynamically from registry
         // (same as AST path - imports all supported interfaces)
         // ========================================
-        self.generate_wasi_imports(&mut builder, &mut ctx, hints);
+        self.generate_wasi_imports(&mut builder, &mut ctx, project);
 
         // ========================================
         // Type: stream<u8> for stream intrinsics
@@ -1461,7 +1434,7 @@ impl Codegen {
         // ========================================
         // Core memory module
         // ========================================
-        let mem_module = self.build_memory_module(&string_data, hints);
+        let mem_module = self.build_memory_module(&string_data, project.strip_names);
         ctx.register_core_module("mem-mod");
         builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -1492,7 +1465,7 @@ impl Codegen {
         // ========================================
         // Float-to-string conversion module (conditionally included)
         // ========================================
-        if hints.needs_float_to_string() {
+        if project.needs_float_to_string() {
             let fts_module =
                 wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
                     .expect("Failed to process float-to-string module");
@@ -1514,7 +1487,7 @@ impl Codegen {
             );
 
             // Alias float-to-string exports (only the ones needed)
-            if hints.needs_f64_to_string {
+            if project.used_builtins.contains(&CanonBuiltin::F64ToBuffer) {
                 ctx.register_core_func("f64-to-buffer");
                 builder.core_alias_export(
                     Some("f64-to-buffer"),
@@ -1524,7 +1497,7 @@ impl Codegen {
                 );
             }
 
-            if hints.needs_f32_to_string {
+            if project.used_builtins.contains(&CanonBuiltin::F32ToBuffer) {
                 ctx.register_core_func("f32-to-buffer");
                 builder.core_alias_export(
                     Some("f32-to-buffer"),
@@ -1537,24 +1510,39 @@ impl Codegen {
 
         // ========================================
         // Stream canonical intrinsics for stream<u8>
+        // DCE: Only generate canon functions that are actually used
         // ========================================
-        ctx.register_core_func("stream-new");
-        builder.stream_new(stream_u8_type);
+        if project.used_builtins.contains(&CanonBuiltin::StreamNew) {
+            ctx.register_core_func("stream-new");
+            builder.stream_new(stream_u8_type);
+        }
 
-        ctx.register_core_func("stream-write");
-        builder.stream_write(
-            stream_u8_type,
-            [
-                CanonicalOption::Memory(ctx.memory_idx()),
-                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-            ],
-        );
+        if project.used_builtins.contains(&CanonBuiltin::StreamWrite) {
+            ctx.register_core_func("stream-write");
+            builder.stream_write(
+                stream_u8_type,
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
 
-        ctx.register_core_func("stream-drop-writable");
-        builder.stream_drop_writable(stream_u8_type);
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::StreamDropWritable)
+        {
+            ctx.register_core_func("stream-drop-writable");
+            builder.stream_drop_writable(stream_u8_type);
+        }
 
-        ctx.register_core_func("stream-drop-readable");
-        builder.stream_drop_readable(stream_u8_type);
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::StreamDropReadable)
+        {
+            ctx.register_core_func("stream-drop-readable");
+            builder.stream_drop_readable(stream_u8_type);
+        }
 
         // Lower write-via-stream (stdout) - only if stdout interface is available
         let stdout_func_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
@@ -1657,22 +1645,50 @@ impl Codegen {
             );
         }
 
-        // task.return for completing async tasks
-        ctx.register_core_func("task-return");
-        builder.task_return(Some(ComponentValType::Type(result_unit_type)), []);
+        // Async intrinsics - DCE: only generate if used
+        if project.used_builtins.contains(&CanonBuiltin::TaskReturn) {
+            ctx.register_core_func("task-return");
+            builder.task_return(Some(ComponentValType::Type(result_unit_type)), []);
+        }
 
-        // Async intrinsics
-        ctx.register_core_func("waitable-set-new");
-        builder.waitable_set_new();
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::WaitableSetNew)
+        {
+            ctx.register_core_func("waitable-set-new");
+            builder.waitable_set_new();
+        }
 
-        ctx.register_core_func("waitable-join");
-        builder.waitable_join();
+        if project.used_builtins.contains(&CanonBuiltin::WaitableJoin) {
+            ctx.register_core_func("waitable-join");
+            builder.waitable_join();
+        }
 
-        ctx.register_core_func("waitable-set-wait");
-        builder.waitable_set_wait(false, ctx.memory_idx());
+        if project
+            .used_builtins
+            .contains(&CanonBuiltin::WaitableSetWait)
+        {
+            ctx.register_core_func("waitable-set-wait");
+            builder.waitable_set_wait(false, ctx.memory_idx());
+        }
 
-        ctx.register_core_func("subtask-drop");
-        builder.subtask_drop();
+        if project.used_builtins.contains(&CanonBuiltin::SubtaskDrop) {
+            ctx.register_core_func("subtask-drop");
+            builder.subtask_drop();
+        }
+
+        // ========================================
+        // Collect available WASI functions (those that were lowered)
+        // ========================================
+        let mut available_wasi_funcs: HashSet<String> = HashSet::new();
+        for interface in self.wasi_registry.interfaces() {
+            for func in &interface.functions {
+                let local_name = func.local_alias_name();
+                if ctx.has_core_func(&local_name) {
+                    available_wasi_funcs.insert(local_name);
+                }
+            }
+        }
 
         // ========================================
         // Main core module
@@ -1682,8 +1698,9 @@ impl Codegen {
             all_tir_modules,
             symbols,
             string_data: &string_data,
-            hints,
+            project,
             module_name,
+            available_wasi_funcs: &available_wasi_funcs,
         });
         // Validate main module before embedding
         {
@@ -1701,137 +1718,52 @@ impl Codegen {
         ctx.register_core_module("main-mod");
         builder.core_module_raw(Some("main-mod"), &main_module);
 
-        // Create wasi instance with stream intrinsics + lowered WASI functions + async intrinsics
-        let mut wasi_exports: Vec<(&str, ExportKind, u32)> = vec![
-            (
-                "stream-new",
-                ExportKind::Func,
-                ctx.core_func_idx("stream-new"),
-            ),
-            (
-                "stream-write",
-                ExportKind::Func,
-                ctx.core_func_idx("stream-write"),
-            ),
-            (
-                "stream-drop-writable",
-                ExportKind::Func,
-                ctx.core_func_idx("stream-drop-writable"),
-            ),
-            (
-                "stream-drop-readable",
-                ExportKind::Func,
-                ctx.core_func_idx("stream-drop-readable"),
-            ),
-            (
-                "task-return",
-                ExportKind::Func,
-                ctx.core_func_idx("task-return"),
-            ),
-            (
-                "waitable-set-new",
-                ExportKind::Func,
-                ctx.core_func_idx("waitable-set-new"),
-            ),
-            (
-                "waitable-join",
-                ExportKind::Func,
-                ctx.core_func_idx("waitable-join"),
-            ),
-            (
-                "waitable-set-wait",
-                ExportKind::Func,
-                ctx.core_func_idx("waitable-set-wait"),
-            ),
-            (
-                "subtask-drop",
-                ExportKind::Func,
-                ctx.core_func_idx("subtask-drop"),
-            ),
-        ];
-        // Conditionally add stdout/stderr write-via-stream if registered
-        let stdout_func_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        if ctx.has_comp_func(&stdout_func_name) {
+        // Create wasi instance with canon intrinsics + lowered WASI functions
+        // (env intrinsics are handled separately in env-instance)
+        let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
+
+        // Add canonical builtins with namespace "wasi"
+        for builtin in &project.used_builtins {
+            let canonical_name = builtin.canonical_name();
+            if let Some(info) = self.builtin_registry.get_by_canonical(canonical_name)
+                && info.namespace == "wasi"
+            {
+                wasi_exports.push((
+                    canonical_name.to_string(),
+                    ExportKind::Func,
+                    ctx.core_func_idx(canonical_name),
+                ));
+            }
+        }
+
+        // Add lowered WASI functions (Stdout::write_via_stream, etc.)
+        for local_name in &available_wasi_funcs {
             wasi_exports.push((
-                &stdout_func_name,
+                local_name.clone(),
                 ExportKind::Func,
-                ctx.core_func_idx(&stdout_func_name),
+                ctx.core_func_idx(local_name),
             ));
         }
-        let stderr_func_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        if ctx.has_comp_func(&stderr_func_name) {
-            wasi_exports.push((
-                &stderr_func_name,
-                ExportKind::Func,
-                ctx.core_func_idx(&stderr_func_name),
-            ));
-        }
-        // Conditionally add monotonic-clock-now if registered
-        let monotonic_clock_func_name = build_local_alias_name("clocks", "MonotonicClock", "now");
-        if ctx.has_comp_func(&monotonic_clock_func_name) {
-            wasi_exports.push((
-                &monotonic_clock_func_name,
-                ExportKind::Func,
-                ctx.core_func_idx(&monotonic_clock_func_name),
-            ));
-        }
-        // Conditionally add Environment functions if registered
-        let get_args_func_name = build_local_alias_name("cli", "Environment", "get_arguments");
-        if ctx.has_core_func(&get_args_func_name) {
-            wasi_exports.push((
-                &get_args_func_name,
-                ExportKind::Func,
-                ctx.core_func_idx(&get_args_func_name),
-            ));
-        }
-        let get_env_func_name = build_local_alias_name("cli", "Environment", "get_environment");
-        if ctx.has_core_func(&get_env_func_name) {
-            wasi_exports.push((
-                &get_env_func_name,
-                ExportKind::Func,
-                ctx.core_func_idx(&get_env_func_name),
-            ));
-        }
-        let get_cwd_func_name = build_local_alias_name("cli", "Environment", "get_initial_cwd");
-        if ctx.has_core_func(&get_cwd_func_name) {
-            wasi_exports.push((
-                &get_cwd_func_name,
-                ExportKind::Func,
-                ctx.core_func_idx(&get_cwd_func_name),
-            ));
-        }
-        // Conditionally add Exit functions if registered
-        let exit_func_name = build_local_alias_name("cli", "Exit", "exit");
-        if ctx.has_core_func(&exit_func_name) {
-            wasi_exports.push((
-                &exit_func_name,
-                ExportKind::Func,
-                ctx.core_func_idx(&exit_func_name),
-            ));
-        }
-        let exit_with_code_func_name = build_local_alias_name("cli", "Exit", "exit_with_code");
-        if ctx.has_core_func(&exit_with_code_func_name) {
-            wasi_exports.push((
-                &exit_with_code_func_name,
-                ExportKind::Func,
-                ctx.core_func_idx(&exit_with_code_func_name),
-            ));
-        }
-        let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports);
+        let wasi_exports_refs: Vec<_> = wasi_exports
+            .iter()
+            .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
+            .collect();
+        let wasi_instance =
+            builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports_refs);
         ctx.register_core_instance("wasi");
 
         let mut env_exports: Vec<(&str, ExportKind, u32)> = vec![
             ("memory", ExportKind::Memory, ctx.memory_idx()),
             ("realloc", ExportKind::Func, ctx.core_func_idx("realloc")),
         ];
-        if hints.needs_f64_to_string {
+        if project.used_builtins.contains(&CanonBuiltin::F64ToBuffer) {
             env_exports.push((
                 "f64_to_buffer",
                 ExportKind::Func,
                 ctx.core_func_idx("f64-to-buffer"),
             ));
         }
-        if hints.needs_f32_to_string {
+        if project.used_builtins.contains(&CanonBuiltin::F32ToBuffer) {
             env_exports.push((
                 "f32_to_buffer",
                 ExportKind::Func,
@@ -1892,7 +1824,7 @@ impl Codegen {
         );
 
         // Add component-level debug names (skip in size-optimized builds)
-        if !hints.strip_names {
+        if !project.strip_names {
             builder.append_names();
         }
 
@@ -1907,7 +1839,7 @@ impl Codegen {
         &self,
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
-        hints: &OptimizationHints,
+        project: &Project,
     ) {
         // Get the CLI version from the registry
         let cli_version = self
@@ -1974,12 +1906,9 @@ impl Codegen {
             // Get effect name from first function (all functions in an interface share the same effect)
             if let Some(first_func) = interface_info.functions.first() {
                 let effect_name = &first_func.effect_name;
-                // Exit requires explicit usage tracking (runtime may not support it)
-                let effect_is_used = if effect_name == "Exit" {
-                    hints.is_effect_explicitly_used(effect_name)
-                } else {
-                    hints.is_effect_used(effect_name)
-                };
+                // Convert string effect name to WasiEffect
+                let effect_is_used = WasiEffect::from_str(effect_name)
+                    .is_some_and(|e| project.used_effects.contains(&e));
                 if !effect_is_used {
                     continue;
                 }
@@ -2193,13 +2122,13 @@ impl Codegen {
 
         // Import stdout/stderr if needed but not already imported from registry
         // (previously always imported for panic support, now DCE-aware)
-        self.ensure_stdout_stderr_imported(builder, ctx, cli_version, hints);
+        self.ensure_stdout_stderr_imported(builder, ctx, cli_version, project);
 
         // Import environment interface if needed
-        self.ensure_environment_imported(builder, ctx, cli_version, hints);
+        self.ensure_environment_imported(builder, ctx, cli_version, project);
 
         // Import exit interface if needed
-        self.ensure_exit_imported(builder, ctx, cli_version, hints);
+        self.ensure_exit_imported(builder, ctx, cli_version, project);
     }
 
     /// Ensure stdout and stderr are imported if they're used.
@@ -2212,11 +2141,13 @@ impl Codegen {
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
         cli_version: &str,
-        hints: &OptimizationHints,
+        project: &Project,
     ) {
         // Import stdout if used but not already imported
         let stdout_local_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        if hints.is_effect_used("Stdout") && !ctx.has_comp_func(&stdout_local_name) {
+        if project.used_effects.contains(&WasiEffect::Stdout)
+            && !ctx.has_comp_func(&stdout_local_name)
+        {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stdout_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -2271,7 +2202,9 @@ impl Codegen {
 
         // Import stderr if used but not already imported
         let stderr_local_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        if hints.is_effect_used("Stderr") && !ctx.has_comp_func(&stderr_local_name) {
+        if project.used_effects.contains(&WasiEffect::Stderr)
+            && !ctx.has_comp_func(&stderr_local_name)
+        {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stderr_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -2336,14 +2269,14 @@ impl Codegen {
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
         cli_version: &str,
-        hints: &OptimizationHints,
+        project: &Project,
     ) {
         let get_args_local = build_local_alias_name("cli", "Environment", "get_arguments");
         let get_env_local = build_local_alias_name("cli", "Environment", "get_environment");
         let get_cwd_local = build_local_alias_name("cli", "Environment", "get_initial_cwd");
 
         // Check if any Environment function is used
-        let needs_environment = hints.is_effect_used("Environment")
+        let needs_environment = project.used_effects.contains(&WasiEffect::Environment)
             && (!ctx.has_comp_func(&get_args_local)
                 || !ctx.has_comp_func(&get_env_local)
                 || !ctx.has_comp_func(&get_cwd_local));
@@ -2450,15 +2383,15 @@ impl Codegen {
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
         cli_version: &str,
-        hints: &OptimizationHints,
+        project: &Project,
     ) {
         let exit_local = build_local_alias_name("cli", "Exit", "exit");
         let exit_code_local = build_local_alias_name("cli", "Exit", "exit_with_code");
 
         // Check if any Exit function is used
-        // Note: Use is_effect_explicitly_used here because Exit interface may not be
-        // supported by all runtimes, so we only import it when explicitly called.
-        let needs_exit = hints.is_effect_explicitly_used("Exit")
+        // Note: Exit interface may not be supported by all runtimes,
+        // so we only import it when explicitly called.
+        let needs_exit = project.used_effects.contains(&WasiEffect::Exit)
             && (!ctx.has_comp_func(&exit_local) || !ctx.has_comp_func(&exit_code_local));
 
         if !needs_exit {
@@ -2660,15 +2593,32 @@ impl Codegen {
     /// Register box types for primitive references.
     /// Box types are single-field mutable structs that wrap primitive values,
     /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
-    fn register_box_types(&mut self, builder: &mut CoreModuleBuilder) {
+    fn register_box_types(&mut self, builder: &mut CoreModuleBuilder, project: &Project) {
+        use PrimitiveType::*;
+
+        // Check which ValTypes are needed based on used_box_primitives
+        let needs_box_i32 = project
+            .used_box_primitives
+            .iter()
+            .any(|p| matches!(p, I32 | I16 | I8 | U32 | U16 | U8 | Bool | Char));
+        let needs_box_i64 = project
+            .used_box_primitives
+            .iter()
+            .any(|p| matches!(p, I64 | U64));
+        let needs_box_f32 = project.used_box_primitives.contains(&F32);
+        let needs_box_f64 = project.used_box_primitives.contains(&F64);
+
         let primitives = [
-            (ValType::I32, "$box_i32"),
-            (ValType::I64, "$box_i64"),
-            (ValType::F32, "$box_f32"),
-            (ValType::F64, "$box_f64"),
+            (ValType::I32, "$box_i32", needs_box_i32),
+            (ValType::I64, "$box_i64", needs_box_i64),
+            (ValType::F32, "$box_f32", needs_box_f32),
+            (ValType::F64, "$box_f64", needs_box_f64),
         ];
 
-        for (val_type, name) in primitives {
+        for (val_type, name, needed) in primitives {
+            if !needed {
+                continue;
+            }
             let fields = vec![FieldType {
                 element_type: StorageType::Val(val_type),
                 mutable: true,
@@ -4545,14 +4495,22 @@ impl Codegen {
             TirExprKind::StringLiteral(s) => {
                 // String is a struct with one field: repr (builtin::array<u8>)
                 // 1. Create the raw byte array
-                let offset = self.get_string_offset(s);
                 let len = s.len();
-                func.instruction(&Instruction::I32Const(offset as i32));
-                func.instruction(&Instruction::I32Const(len as i32));
-                func.instruction(&Instruction::ArrayNewData {
-                    array_type_index: self.string_array_type_idx,
-                    array_data_index: 0,
-                });
+
+                if len == 0 {
+                    // Empty string - create empty array without data section reference
+                    func.instruction(&Instruction::I32Const(0)); // length
+                    func.instruction(&Instruction::ArrayNewDefault(self.string_array_type_idx));
+                } else {
+                    // Non-empty string - reference data section
+                    let offset = self.get_string_offset(s);
+                    func.instruction(&Instruction::I32Const(offset as i32));
+                    func.instruction(&Instruction::I32Const(len as i32));
+                    func.instruction(&Instruction::ArrayNewData {
+                        array_type_index: self.string_array_type_idx,
+                        array_data_index: 0,
+                    });
+                }
 
                 // 2. Create the String struct
                 let string_struct_info = self
@@ -5301,7 +5259,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -5328,7 +5288,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -5401,7 +5363,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -5428,7 +5392,9 @@ impl Codegen {
                     func.instruction(&Instruction::Call(realloc_idx));
 
                     // Store outptr in a local for later use
-                    let outptr_local = ctx.alloc_local("__cm_outptr", ValType::I32);
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
                     func.instruction(&Instruction::LocalTee(outptr_local));
 
                     // Call the WASI function with outptr
@@ -7150,13 +7116,18 @@ impl Codegen {
             self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
         }
 
-        // Pre-allocate scratch locals for stream handling
-        // These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
-        // and builtin::effect_wait (used by ambient logging functions like log_stdout)
-        // The overhead of unused locals is negligible
-        if tir_func.body.is_some() {
-            let string_array_type = builder.type_idx("string-array");
-            self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+        // Pre-allocate scratch locals for async effect handling (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_async_scratch_locals(body)
+        {
+            Self::preallocate_async_scratch_locals(&mut func_ctx);
+        }
+
+        // Pre-allocate scratch locals for Environment calls (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_environment_scratch_locals(body)
+        {
+            Self::preallocate_environment_scratch_locals(&mut func_ctx);
         }
 
         // Pre-allocate locals for closure calls
@@ -7351,12 +7322,18 @@ impl Codegen {
             self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
         }
 
-        // Pre-allocate scratch locals for stream handling
-        // These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
-        // and builtin::effect_wait (used by ambient logging functions like log_stdout)
-        if tir_func.body.is_some() {
-            let string_array_type = builder.type_idx("string-array");
-            self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+        // Pre-allocate scratch locals for async effect handling (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_async_scratch_locals(body)
+        {
+            Self::preallocate_async_scratch_locals(&mut func_ctx);
+        }
+
+        // Pre-allocate scratch locals for Environment calls (only if needed)
+        if let Some(body) = &tir_func.body
+            && Self::needs_environment_scratch_locals(body)
+        {
+            Self::preallocate_environment_scratch_locals(&mut func_ctx);
         }
 
         // Pre-allocate locals for closure calls
@@ -7542,61 +7519,343 @@ impl Codegen {
         func.instruction(&Instruction::End); // end if
     }
 
-    /// Pre-allocate scratch locals that builtins might need during code generation
+    /// Pre-allocate scratch locals for async effect handling
     ///
-    /// Some builtins allocate temporary locals at runtime.
-    /// These need to be declared in the function's local declarations.
-    fn preallocate_builtin_scratch_locals(
-        &self,
-        ctx: &mut FunctionContext,
-        string_array_type: u32,
-    ) {
-        // Get String struct type for template string locals
-        let string_struct_type = self
-            .lookup_struct_type("String", &string_module_path())
-            .map(|info| info.type_idx)
-            .unwrap_or(string_array_type); // fallback to array type if struct not found
-
-        // Scratch locals for stream handling builtins (uses raw array type)
-        // Use nullable refs so they default to ref.null and don't require initialization
-        ctx.alloc_local(
-            "__arr_ref",
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(string_array_type),
-            }),
-        );
-        ctx.alloc_local("__len", ValType::I32);
-        ctx.alloc_local("__ptr", ValType::I32);
-        ctx.alloc_local("__i", ValType::I32);
-        ctx.alloc_local("__ret64", ValType::I64);
-        ctx.alloc_local("__rx", ValType::I32);
-        ctx.alloc_local("__tx", ValType::I32);
-        ctx.alloc_local("__alloc_size", ValType::I32);
+    /// These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
+    /// and builtin::effect_wait (used by ambient logging functions like log_stdout).
+    /// Only allocate when the function actually uses these builtins.
+    fn preallocate_async_scratch_locals(ctx: &mut FunctionContext) {
         // Scratch locals for write_via_stream async handling
         ctx.alloc_local("__subtask", ValType::I32);
         ctx.alloc_local("__waitable_set", ValType::I32);
-        // Scratch locals for template string accumulation and concatenation
-        // Use nullable refs so they default to ref.null and don't require initialization
-        // These now use String struct type since String is a struct
-        ctx.alloc_local(
-            "__template_result",
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(string_struct_type),
-            }),
-        );
-        ctx.alloc_local(
-            "__concat_new",
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(string_struct_type),
-            }),
-        );
-        ctx.alloc_local("__result_len", ValType::I32);
-        ctx.alloc_local("__part_len", ValType::I32);
-        // Scratch local for CM list to GC array conversion (Environment::get_arguments, etc.)
+    }
+
+    /// Pre-allocate scratch locals for Environment calls
+    ///
+    /// Environment calls (get_arguments, get_environment, get_initial_cwd) need
+    /// a local to hold the outptr for CM ABI conversion.
+    fn preallocate_environment_scratch_locals(ctx: &mut FunctionContext) {
         ctx.alloc_local("__cm_outptr", ValType::I32);
+    }
+
+    /// Check if a function body uses Environment calls that need scratch locals.
+    fn needs_environment_scratch_locals(block: &TirBlock) -> bool {
+        for stmt in &block.stmts {
+            if Self::stmt_needs_environment_scratch_locals(stmt) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn stmt_needs_environment_scratch_locals(stmt: &TirStmt) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::expr_needs_environment_scratch_locals(value)
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::expr_needs_environment_scratch_locals(condition)
+                    || Self::needs_environment_scratch_locals(then_block)
+                    || else_block
+                        .as_ref()
+                        .is_some_and(Self::needs_environment_scratch_locals)
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::expr_needs_environment_scratch_locals(condition)
+                    || Self::needs_environment_scratch_locals(body)
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                condition
+                    .as_ref()
+                    .is_some_and(Self::expr_needs_environment_scratch_locals)
+                    || update
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_environment_scratch_locals)
+                    || Self::needs_environment_scratch_locals(body)
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::expr_needs_environment_scratch_locals(iterable)
+                    || Self::needs_environment_scratch_locals(body)
+            }
+            TirStmtKind::Loop { body } => Self::needs_environment_scratch_locals(body),
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+            }
+            _ => false,
+        }
+    }
+
+    fn expr_needs_environment_scratch_locals(expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Call {
+                module_path,
+                func_name,
+                args,
+                ..
+            } => {
+                // Check for Environment calls that need scratch locals
+                if module_path.len() == 1
+                    && module_path[0] == "Environment"
+                    && matches!(
+                        func_name.as_str(),
+                        "get_arguments" | "get_environment" | "get_initial_cwd"
+                    )
+                {
+                    return true;
+                }
+                args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::expr_needs_environment_scratch_locals(receiver)
+                    || args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::expr_needs_environment_scratch_locals(left)
+                    || Self::expr_needs_environment_scratch_locals(right)
+            }
+            TirExprKind::Unary { expr, .. } => Self::expr_needs_environment_scratch_locals(expr),
+            TirExprKind::Assign { target, value } => {
+                Self::expr_needs_environment_scratch_locals(target)
+                    || Self::expr_needs_environment_scratch_locals(value)
+            }
+            TirExprKind::Cast { expr, .. } => Self::expr_needs_environment_scratch_locals(expr),
+            TirExprKind::EffectCall { args, .. } | TirExprKind::StaticCall { args, .. } => {
+                args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::FieldAccess { expr, .. } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+            }
+            TirExprKind::Index { expr, index } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+                    || Self::expr_needs_environment_scratch_locals(index)
+            }
+            TirExprKind::Block(block) => Self::needs_environment_scratch_locals(block),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::expr_needs_environment_scratch_locals(condition)
+                    || Self::needs_environment_scratch_locals(then_branch)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(Self::needs_environment_scratch_locals)
+            }
+            TirExprKind::StructLiteral { fields, .. } => fields
+                .iter()
+                .any(|f| Self::expr_needs_environment_scratch_locals(&f.value)),
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                elements
+                    .iter()
+                    .any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::Closure { body, .. } => Self::expr_needs_environment_scratch_locals(body),
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::expr_needs_environment_scratch_locals(callee)
+                    || args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::Match { expr, arms } => {
+                Self::expr_needs_environment_scratch_locals(expr)
+                    || arms
+                        .iter()
+                        .any(|arm| Self::expr_needs_environment_scratch_locals(&arm.body))
+            }
+            // Leaf nodes
+            _ => false,
+        }
+    }
+
+    /// Check if a function body uses async builtins that need scratch locals.
+    ///
+    /// Returns true if the body calls:
+    /// - builtin::call_indirect_stdout_write_via_stream
+    /// - builtin::call_indirect_stderr_write_via_stream
+    /// - builtin::effect_wait
+    fn needs_async_scratch_locals(block: &TirBlock) -> bool {
+        for stmt in &block.stmts {
+            if Self::stmt_needs_async_scratch_locals(stmt) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn stmt_needs_async_scratch_locals(stmt: &TirStmt) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::expr_needs_async_scratch_locals(value)
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || Self::needs_async_scratch_locals(then_block)
+                    || else_block
+                        .as_ref()
+                        .is_some_and(Self::needs_async_scratch_locals)
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || Self::needs_async_scratch_locals(body)
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                condition
+                    .as_ref()
+                    .is_some_and(Self::expr_needs_async_scratch_locals)
+                    || update
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_async_scratch_locals)
+                    || Self::needs_async_scratch_locals(body)
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::expr_needs_async_scratch_locals(iterable)
+                    || Self::needs_async_scratch_locals(body)
+            }
+            TirStmtKind::Loop { body } => Self::needs_async_scratch_locals(body),
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::expr_needs_async_scratch_locals(expr)
+            }
+            TirStmtKind::Assert {
+                condition, message, ..
+            } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || message
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_async_scratch_locals)
+            }
+            _ => false,
+        }
+    }
+
+    fn expr_needs_async_scratch_locals(expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Call {
+                module_path,
+                func_name,
+                args,
+                ..
+            } => {
+                // Check if this is a builtin call that needs async scratch locals
+                let is_builtin_func = (module_path.len() == 2
+                    && module_path[0] == "core"
+                    && module_path[1] == "builtin")
+                    || func_name.starts_with("builtin::");
+
+                if is_builtin_func {
+                    let name = func_name.strip_prefix("builtin::").unwrap_or(func_name);
+                    if matches!(
+                        name,
+                        "call_indirect_stdout_write_via_stream"
+                            | "call_indirect_stderr_write_via_stream"
+                            | "effect_wait"
+                    ) {
+                        return true;
+                    }
+                }
+
+                // Check if this is a direct WASI effect call (Stdout/Stderr::write_via_stream)
+                if module_path.len() == 1
+                    && (module_path[0] == "Stdout" || module_path[0] == "Stderr")
+                    && func_name == "write_via_stream"
+                {
+                    return true;
+                }
+
+                // Check args recursively
+                args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::expr_needs_async_scratch_locals(receiver)
+                    || args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::expr_needs_async_scratch_locals(left)
+                    || Self::expr_needs_async_scratch_locals(right)
+            }
+            TirExprKind::Unary { expr, .. } => Self::expr_needs_async_scratch_locals(expr),
+            TirExprKind::Assign { target, value } => {
+                Self::expr_needs_async_scratch_locals(target)
+                    || Self::expr_needs_async_scratch_locals(value)
+            }
+            TirExprKind::Cast { expr, .. } => Self::expr_needs_async_scratch_locals(expr),
+            TirExprKind::EffectCall {
+                effect_name,
+                op_name,
+                args,
+            } => {
+                // Stdout/Stderr write_via_stream effect calls need async scratch locals
+                if (effect_name == "Stdout" || effect_name == "Stderr")
+                    && op_name == "write_via_stream"
+                {
+                    return true;
+                }
+                args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::StaticCall { args, .. } => {
+                args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::FieldAccess { expr, .. } => Self::expr_needs_async_scratch_locals(expr),
+            TirExprKind::Block(block) => Self::needs_async_scratch_locals(block),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::expr_needs_async_scratch_locals(condition)
+                    || Self::needs_async_scratch_locals(then_branch)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(Self::needs_async_scratch_locals)
+            }
+            TirExprKind::StructLiteral { fields, .. } => fields
+                .iter()
+                .any(|f| Self::expr_needs_async_scratch_locals(&f.value)),
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                elements.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::Closure { body, .. } => Self::expr_needs_async_scratch_locals(body),
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::expr_needs_async_scratch_locals(callee)
+                    || args.iter().any(Self::expr_needs_async_scratch_locals)
+            }
+            TirExprKind::Index { expr, index } => {
+                Self::expr_needs_async_scratch_locals(expr)
+                    || Self::expr_needs_async_scratch_locals(index)
+            }
+            TirExprKind::Match { expr, arms } => {
+                Self::expr_needs_async_scratch_locals(expr)
+                    || arms
+                        .iter()
+                        .any(|arm| Self::expr_needs_async_scratch_locals(&arm.body))
+            }
+            // Leaf nodes - no calls
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => false,
+        }
     }
 
     /// Pre-allocate locals for value copy operations (struct, array, tuple).
@@ -8514,7 +8773,7 @@ impl Codegen {
     }
 
     /// Build the memory module (provides shared memory and realloc for all core modules)
-    fn build_memory_module(&self, string_data: &[u8], hints: &OptimizationHints) -> Vec<u8> {
+    fn build_memory_module(&self, string_data: &[u8], strip_names: bool) -> Vec<u8> {
         let mut module = Module::new();
 
         // Type section: realloc type
@@ -8571,7 +8830,7 @@ impl Codegen {
         }
 
         // Name section (skip in size-optimized builds)
-        if !hints.strip_names {
+        if !strip_names {
             let mut names = NameSection::new();
             let mut func_names = NameMap::new();
             func_names.append(0, "realloc");

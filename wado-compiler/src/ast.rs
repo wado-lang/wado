@@ -63,7 +63,8 @@ pub enum Item {
 #[derive(Debug, Clone)]
 pub struct Attribute {
     pub name: String,
-    pub args: Option<String>,
+    /// Arguments passed to the attribute, e.g., #[canonical("wasi", "stream-new")] -> ["wasi", "stream-new"]
+    pub args: Vec<String>,
     pub wasi_import: Option<WasiImport>,
     pub span: Span,
 }

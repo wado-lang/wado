@@ -1057,6 +1057,8 @@ pub struct TirModule {
     pub impls: Vec<TirImpl>,
     pub data_section: Option<String>,
     pub string_literals: Vec<String>,
+    /// Map of function name to string literals it contains (for DCE)
+    pub function_strings: HashMap<String, Vec<String>>,
     /// Generic struct definitions (before monomorphization)
     /// Key: struct name
     pub generic_structs: HashMap<String, TirStruct>,
@@ -1080,6 +1082,7 @@ impl TirModule {
             impls: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
+            function_strings: HashMap::new(),
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiation_requests: std::collections::HashSet::new(),
@@ -1098,6 +1101,7 @@ impl TirModule {
             impls: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
+            function_strings: HashMap::new(),
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiation_requests: std::collections::HashSet::new(),

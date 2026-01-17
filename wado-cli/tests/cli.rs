@@ -270,15 +270,6 @@ fn test_compile_opt_level_os() {
 }
 
 #[test]
-fn test_compile_opt_level_og() {
-    wado()
-        .args(["compile", "-Og", "--wat-to-stdout", "example/hello.wado"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("(component"));
-}
-
-#[test]
 fn test_compile_opt_level_invalid() {
     wado()
         .args(["compile", "-Ox", "example/hello.wado"])

@@ -13,6 +13,7 @@ pub mod module_loader;
 pub mod name;
 pub mod optimize;
 pub mod parser;
+pub mod project;
 pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
@@ -29,10 +30,11 @@ pub use analyze::Analyzer;
 pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
 pub use lexer::{LexError, Lexer};
-pub use lower::{lower, lower_modules_indexed};
-pub use optimize::{OptLevel, OptimizationHints, analyze_all_modules};
+pub use lower::{lower, lower_modules_indexed, lower_project};
+pub use optimize::{CanonBuiltin, OptLevel, WasiEffect, optimize};
 pub use parser::{ParseError, Parser};
-pub use resolver::{Resolver, TypeError};
+pub use project::Project;
+pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
 
 use std::path::Path;
@@ -71,8 +73,8 @@ pub struct DumpResult {
     pub tir_modules: Option<IndexMap<Vec<String>, tir::TirModule>>,
     /// All lowered TIR modules (in topological order)
     pub lowered_tir_modules: Option<IndexMap<Vec<String>, tir::TirModule>>,
-    /// Optimization hints
-    pub opt_hints: Option<OptimizationHints>,
+    /// Optimized project (contains usage analysis results)
+    pub optimized_project: Option<Project>,
     /// Comments for unparsing
     pub comments: comment::CommentMap,
 }
@@ -297,9 +299,24 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
     let lowered_tir_modules = tir_modules.clone().map(lower_modules_indexed);
 
     // === Phase 9: Optimize ===
-    let opt_hints = lowered_tir_modules
-        .as_ref()
-        .map(|modules| analyze_all_modules(modules, &load_result.entry_path));
+    // Build a Project from lowered modules if available
+    let optimized_project = lowered_tir_modules.clone().map(|modules| {
+        let module_name = filename
+            .as_ref()
+            .and_then(|f| std::path::Path::new(f).file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("module")
+            .to_string();
+
+        let project = Project::new(
+            load_result.entry_path.clone(),
+            modules,
+            symbols.clone(),
+            load_result.implicit_modules.clone(),
+            module_name,
+        );
+        optimize(project, OptLevel::default())
+    });
 
     Ok(DumpResult {
         source,
@@ -312,7 +329,7 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
         entry_path: load_result.entry_path,
         tir_modules,
         lowered_tir_modules,
-        opt_hints,
+        optimized_project,
         comments: comment_map,
     })
 }
@@ -393,11 +410,21 @@ fn compile_impl(
 
     let symbols = analyzer.into_symbols();
 
-    // === Phase 6: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(
-        &symbols,
+    // Derive module name from filename
+    let module_name = filename
+        .as_ref()
+        .and_then(|f| std::path::Path::new(f).file_stem())
+        .and_then(|s| s.to_str())
+        .unwrap_or("module")
+        .to_string();
+
+    // === Phase 6: Resolve all modules to Project ===
+    let project = resolve_to_project(
+        symbols,
         &load_result.modules,
-        &load_result.entry_path,
+        load_result.entry_path.clone(),
+        load_result.implicit_modules.clone(),
+        module_name,
         source,
     )
     .map_err(|errors| {
@@ -412,46 +439,16 @@ fn compile_impl(
         }
     })?;
 
-    // === Phase 7: Lower all modules (string collection, etc.) ===
-    // Use lower_modules_indexed for cross-module generic function support
-    let tir_modules = lower_modules_indexed(tir_modules);
+    // === Phase 7: Lower (Project -> Project) ===
+    let project = lower_project(project);
 
-    // Get the entry module TIR
-    let entry_tir = tir_modules
-        .get(&load_result.entry_path)
-        .expect("entry module should exist in TIR modules");
-
-    // === Phase 8: Optimize (analyze modules for DCE and optimization hints) ===
-    // When O0, disable optimizations (no DCE, include all features)
-    let mut hints = if opt_level == OptLevel::None {
-        OptimizationHints::no_optimization()
-    } else {
-        analyze_all_modules(&tir_modules, &load_result.entry_path)
-    };
-    // Strip debug names in size-optimized builds (-Os)
-    if opt_level == OptLevel::Size {
-        hints.strip_names = true;
-    }
+    // === Phase 8: Optimize (Project -> Project) ===
+    let project = optimize(project, opt_level);
 
     // === Phase 9: Codegen ===
-    // Extract module name from filename (file stem without extension)
-    let module_name = filename
-        .as_ref()
-        .and_then(|f| std::path::Path::new(f).file_stem())
-        .and_then(|s| s.to_str())
-        .unwrap_or("module")
-        .to_string();
-
     let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        codegen.generate_wasm(
-            entry_tir,
-            &tir_modules,
-            &symbols,
-            &load_result.implicit_modules,
-            &hints,
-            &module_name,
-        )
+        codegen.generate_wasm(&project)
     }))
     .map_err(|e| {
         let message = if let Some(s) = e.downcast_ref::<&str>() {

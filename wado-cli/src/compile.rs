@@ -11,13 +11,17 @@ use crate::args::{
 /// Optimization level
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
+    /// No optimizations. Used for debugging.
     O0,
-    O1,
+    /// Baseline optimizations including DCE. Intended for development (default).
     #[default]
+    O1,
+    /// All optimizations. Intended for production (server-side).
     O2,
+    /// Same as O2 (reserved for future use).
     O3,
+    /// O2 plus name section stripping. Intended for frontend.
     Os,
-    Og,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -63,7 +67,7 @@ pub fn print_usage() {
     eprintln!(
         "  --wat-to-stdout  Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
     );
-    eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os, -Og");
+    eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --help           Show this help message");
 }
 
@@ -93,12 +97,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
                     .map(|v| v.to_string_lossy())
                     .unwrap_or_default();
                 opt_level = match level_str.as_ref() {
-                    "" | "0" => OptLevel::O0,
+                    "" | "0" | "g" => OptLevel::O0,
                     "1" => OptLevel::O1,
                     "2" => OptLevel::O2,
                     "3" => OptLevel::O3,
                     "s" => OptLevel::Os,
-                    "g" => OptLevel::Og,
                     _ => {
                         eprintln!(
                             "Error: unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
@@ -140,8 +143,7 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
         OptLevel::O0 => wado_compiler::OptLevel::None,
         OptLevel::O1 => wado_compiler::OptLevel::Basic,
         OptLevel::O2 | OptLevel::O3 => wado_compiler::OptLevel::Full,
-        OptLevel::Os => wado_compiler::OptLevel::Size, // Size optimization (strips debug names)
-        OptLevel::Og => wado_compiler::OptLevel::None, // Debug mode = no optimization
+        OptLevel::Os => wado_compiler::OptLevel::Size,
     }
 }
 
