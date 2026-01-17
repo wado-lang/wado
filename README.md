@@ -1,10 +1,52 @@
 # Wado
 
-Wado is a programming language targeting **Wasm/WASI** - Wasm in plain sight.
+A lightweight programming language targeting WebAssembly — Wasm in plain sight.
 
-## Motivation
+## Why Wado?
 
-### Effect System = WASI Capabilities
+Wado was born from a practical need: embedding small Wasm modules in JavaScript projects without the binary size explosion that comes with existing Wasm-targeting languages.
+
+Existing solutions bundle their own runtime and garbage collector into every `.wasm` file, resulting in bloated binaries even for simple tasks. Wado takes a different approach: by leveraging **Wasm GC**, the garbage collector is provided by the Wasm runtime itself (like wasmtime or browser engines), keeping your binaries minimal.
+
+The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
+
+## Design Principles
+
+### What You See Is What You Get
+
+No macros. The code you read is the code that runs.
+
+### Readable Without Context Switching
+
+Explicit over implicit. No implicit type conversions, no function overloading, no hidden dependencies. You shouldn't need to jump to other files to understand what a function does.
+
+### Type-Safe by Design
+
+Strong static typing with no escape hatches like `any`. This prevents the defensive programming patterns (excessive `try-catch`, runtime type checks) that tend to creep into dynamically-typed codebases.
+
+### No Exceptions
+
+No non-local control flow via exceptions. Errors are handled explicitly with `Result<T, E>`. This makes control flow predictable and code easier to reason about.
+
+### Minimal Binary Size
+
+By leveraging Wasm GC instead of bundling a runtime, Wado produces compact `.wasm` files. This is the core motivation behind the language.
+
+## Built with Agentic Coding
+
+Wado is developed entirely through agentic coding — AI agents write the code while the human handles design decisions and project management.
+
+This isn't just a curiosity; it shaped the language itself. After a year of intensive agentic coding experience, certain patterns became clear:
+
+- **Agents excel at volume but struggle with ambiguity.** Implicit behaviors get multiplied across a codebase. Explicit, predictable semantics work better.
+- **Agents tend toward defensive programming.** Without type safety, they pepper code with `hasattr` checks and nested `try-except` blocks. Strong types eliminate this need.
+- **Exceptions break agent reasoning.** Non-local control flow is hard to predict. `Result<T, E>` keeps everything visible.
+
+The result: a language where common agentic coding pitfalls are eliminated by design, not convention.
+
+## Key Features
+
+### Effect System
 
 Effects map directly to WASI capabilities, making side effects explicit and controllable:
 
@@ -33,17 +75,9 @@ fn fetch_all() with Http {
 }
 ```
 
-### Component Model First
+### Reactive Signals
 
-Types are designed around the WebAssembly Component Model (CM):
-
-- `struct` is Wasm GC internally, becomes CM `record` at boundaries
-- `enum` vs `variant` distinction matches CM exactly
-- Native `Stream<T>` and `Future<T>` types for WASI P3
-
-### Built-in Reactive Signals
-
-Wado has built-in support for reactive state (often called "signals" in other frameworks):
+Wado has built-in support for reactive state:
 
 ```wado
 use {observe} from "core:reactive";
@@ -62,9 +96,23 @@ Why built-in instead of a library?
 
 - **Compiler optimization**: Dependencies are analyzed at compile-time, generating precise Wasm update code with no runtime tracking overhead
 - **Ergonomics**: No wrapper functions like `useState()`, `ref()`, or `createSignal()`
-- **Automatic dependency tracking**: `observe()` automatically tracks reactive values accessed within the closure—no manual subscription needed
 - **No virtual DOM**: Updates compile to direct mutations, not diffing
-- **Context-aware**: In CLI, updates are synchronous; in event-looped environments (browser/GUI), updates may be batched for efficiency
+
+## Status
+
+Wado is experimental. The core language — syntax, static typing, generics, closures, modules — is implemented and functional.
+
+However:
+- **WASI P3 is not yet finalized**: The spec is at release candidate stage, and runtime support is limited
+- **Wasm Component Model** is not yet supported in browsers
+- **Wasm stack switching** is not yet available in wasmtime
+
+**That said**, Wado is already usable for its original purpose: embedding lightweight Wasm modules in JS projects where binary size matters.
+
+## Future Directions
+
+- **UI as a first-class use case**: JSX syntax is already supported, with the vision of Wado as a UI description language
+- **Full WASI P3 integration**: As the spec finalizes and runtime support matures, Wado will leverage async streams, futures, and the full capability model
 
 ## Hello World
 
@@ -87,12 +135,8 @@ wado run example/hello.wado
 Compile to WebAssembly:
 
 ```sh
-wado compile example/hello.wado # generates example/hello.wado
-wado compile -o example/hello.wasm example/hello.wado # ditto
-wado compile --format wasm example/hello.wado # ditto
-
-wado compile --format wat example/hello.wado # generates example/hello.wat with WAT format
-wado compile -o example/hello.wat example/hello.wado  # ditto
+wado compile example/hello.wado # generates example/hello.wasm
+wado compile -o example/hello.wat example/hello.wado  # generates WAT format
 ```
 
 ## Documentation
