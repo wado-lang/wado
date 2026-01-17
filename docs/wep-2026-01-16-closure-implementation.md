@@ -1,4 +1,5 @@
 # WEP: Closure Implementation
+
 ## Context
 
 Wado supports closure syntax (parsed but not codegen yet):

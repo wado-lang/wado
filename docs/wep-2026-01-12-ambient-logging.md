@@ -1,4 +1,5 @@
 # WEP: Ambient Logging Functions
+
 ## Context
 
 ### Problem Statement

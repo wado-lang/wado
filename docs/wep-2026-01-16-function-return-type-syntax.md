@@ -1,4 +1,5 @@
 # WEP: Function Return Type Syntax
+
 **Status:** Accepted
 **Date:** 2026-01-16
 

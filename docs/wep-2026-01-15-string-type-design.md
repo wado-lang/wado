@@ -1,5 +1,7 @@
 # WEP: String Type Design
+
 ## Status
+
 Accepted
 
 ## Context

@@ -1,5 +1,7 @@
 # WEP: Target WASI P3 Only
+
 ## Status
+
 Accepted
 
 ## Context

@@ -1,4 +1,5 @@
 # WEP: World Conformance and Export Syntax
+
 ## Context
 
 Wado compiles to WebAssembly Component Model (CM), where a **world** defines the contract between a component and its runtime environment. Currently, Wado has:

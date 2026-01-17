@@ -1,15 +1,16 @@
 # WEP: Type Stringification
+
 ## Context
 
 When debugging or logging, developers need to convert arbitrary values to strings. Different languages handle this differently:
 
-| Language | Default Output | Customization | Escape Hatch |
-|----------|---------------|---------------|--------------|
-| **Rust** | None (trait required) | `Display`/`Debug` traits | `{:?}` for Debug |
-| **Elixir** | All types inspectable | `Inspect` protocol | `structs: false` option |
-| **Python** | `<Foo at 0x...>` (unhelpful) | `__str__`/`__repr__` | `repr()` |
-| **Ruby** | Detailed inspect | `to_s`/`inspect` | `p obj` |
-| **Kotlin** | data class only | `toString()` override | None |
+| Language   | Default Output               | Customization            | Escape Hatch            |
+| ---------- | ---------------------------- | ------------------------ | ----------------------- |
+| **Rust**   | None (trait required)        | `Display`/`Debug` traits | `{:?}` for Debug        |
+| **Elixir** | All types inspectable        | `Inspect` protocol       | `structs: false` option |
+| **Python** | `<Foo at 0x...>` (unhelpful) | `__str__`/`__repr__`     | `repr()`                |
+| **Ruby**   | Detailed inspect             | `to_s`/`inspect`         | `p obj`                 |
+| **Kotlin** | data class only              | `toString()` override    | None                    |
 
 ### Design Goals
 
@@ -36,10 +37,10 @@ The compiler automatically generates inspect logic for all types. This is not a 
 
 Template strings support two interpolation modes:
 
-| Syntax | Behavior | Use Case |
-|--------|----------|----------|
-| `{expr}` | Display if implemented, otherwise inspect | General output |
-| `{expr:?}` | Always inspect (compiler-generated) | Debugging |
+| Syntax     | Behavior                                  | Use Case       |
+| ---------- | ----------------------------------------- | -------------- |
+| `{expr}`   | Display if implemented, otherwise inspect | General output |
+| `{expr:?}` | Always inspect (compiler-generated)       | Debugging      |
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -136,13 +137,13 @@ This ensures template strings always produce output without requiring explicit t
 
 ### 6. Comparison with Rust
 
-| Aspect | Rust | Wado |
-|--------|------|------|
-| `{x}` without trait | Compile error | Falls back to inspect |
-| `{x:?}` without trait | Compile error | Always works (compiler intrinsic) |
-| Debug implementation | `#[derive(Debug)]` macro | Compiler-generated inspect |
-| Display implementation | Manual `impl Display` | Manual `impl Display` |
-| Inspect function | `dbg!` macro (prints file:line) | `builtin::inspect()` (returns String) |
+| Aspect                 | Rust                            | Wado                                  |
+| ---------------------- | ------------------------------- | ------------------------------------- |
+| `{x}` without trait    | Compile error                   | Falls back to inspect                 |
+| `{x:?}` without trait  | Compile error                   | Always works (compiler intrinsic)     |
+| Debug implementation   | `#[derive(Debug)]` macro        | Compiler-generated inspect            |
+| Display implementation | Manual `impl Display`           | Manual `impl Display`                 |
+| Inspect function       | `dbg!` macro (prints file:line) | `builtin::inspect()` (returns String) |
 
 ## Consequences
 
@@ -173,6 +174,6 @@ This ensures template strings always produce output without requiring explicit t
 
 - [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md)
 - [Elixir Inspect Protocol](https://hexdocs.pm/elixir/Inspect.html)
-- [Python __repr__ vs __str__](https://realpython.com/python-repr-vs-str/)
+- [Python **repr** vs **str**](https://realpython.com/python-repr-vs-str/)
 - [Ruby inspect](https://thoughtbot.com/blog/ruby-inspect-tutorial)
 - [Rust Debug and Display](https://doc.rust-lang.org/rust-by-example/hello/print/print_debug.html)
