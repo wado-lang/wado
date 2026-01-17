@@ -131,6 +131,8 @@ Why built-in instead of a library?
 - **No virtual DOM**: Updates compile to direct mutations, not diffing
 - **Context-aware**: In CLI, updates are synchronous; in event-looped environments (browser/GUI), updates may be batched for efficiency
 
+Note: Reactive signals are not yet implemented.
+
 ## Status
 
 Wado is experimental. The core language — syntax, static typing, generics, closures, modules — is implemented and functional.
