@@ -100,15 +100,10 @@ async fn run_wasm(wasm: Vec<u8>) -> Result<()> {
     Ok(())
 }
 
-pub fn run(opts: RunOptions) {
-    let wasm = compile::compile(&opts.input);
+pub async fn run(opts: RunOptions) {
+    let wasm = compile::compile(&opts.input).await;
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("Failed to create tokio runtime");
-
-    if let Err(e) = runtime.block_on(run_wasm(wasm)) {
+    if let Err(e) = run_wasm(wasm).await {
         eprintln!("Runtime error: {e}");
         process::exit(1);
     }

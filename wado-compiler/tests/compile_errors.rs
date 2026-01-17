@@ -3,8 +3,110 @@
 //! This module tests that compilation errors are properly reported with
 //! correct error types, messages, and source locations.
 
-use std::path::Path;
-use wado_compiler::{CompileError, compile, compile_file};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use wado_compiler::{CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
+
+// ============================================================================
+// Test Compiler Hosts
+// ============================================================================
+
+/// In-memory compiler host for source-only tests
+struct InMemoryTestHost;
+
+impl CompilerHost for InMemoryTestHost {
+    fn load_source(
+        &self,
+        path: &str,
+    ) -> impl std::future::Future<Output = Result<String, SourceError>> + Send {
+        let path = path.to_string();
+        async move { Err(SourceError::NotFound { path }) }
+    }
+
+    fn emit_diagnostic(
+        &self,
+        _diagnostic: Diagnostic,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        async {}
+    }
+}
+
+/// Filesystem compiler host for file-based tests
+struct FilesystemTestHost {
+    base_path: PathBuf,
+    diagnostics: Mutex<Vec<Diagnostic>>,
+}
+
+impl FilesystemTestHost {
+    fn new(base_path: PathBuf) -> Self {
+        Self {
+            base_path,
+            diagnostics: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl CompilerHost for FilesystemTestHost {
+    fn load_source(
+        &self,
+        path: &str,
+    ) -> impl std::future::Future<Output = Result<String, SourceError>> + Send {
+        let full_path = self.base_path.join(path);
+        async move {
+            std::fs::read_to_string(&full_path).map_err(|e| SourceError::IoError {
+                path: full_path.to_string_lossy().to_string(),
+                message: e.to_string(),
+            })
+        }
+    }
+
+    fn emit_diagnostic(
+        &self,
+        diagnostic: Diagnostic,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        let diagnostics = &self.diagnostics;
+        async move {
+            diagnostics.lock().unwrap().push(diagnostic);
+        }
+    }
+}
+
+/// Create a tokio runtime for blocking on async code
+fn runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+}
+
+/// Compile source string using in-memory host
+fn compile(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
+    let host = InMemoryTestHost;
+    runtime().block_on(wado_compiler::compile_with_host(
+        source,
+        &host,
+        None,
+        OptLevel::default(),
+    ))
+}
+
+/// Compile a file using filesystem host
+fn compile_file(path: &Path) -> Result<wado_compiler::CompileResult, CompileError> {
+    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
+        path: path.to_string_lossy().to_string(),
+        message: e.to_string(),
+    })?;
+
+    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let host = FilesystemTestHost::new(base_path);
+
+    runtime().block_on(wado_compiler::compile_with_host(
+        &source,
+        &host,
+        Some(&path.to_string_lossy()),
+        OptLevel::default(),
+    ))
+}
 
 // ============================================================================
 // I/O Errors

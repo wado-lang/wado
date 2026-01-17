@@ -138,6 +138,7 @@ Note: Reactive signals are not yet implemented.
 Wado is experimental. The core language — syntax, static typing, generics, closures, modules — is implemented and functional.
 
 However:
+
 - **WASI P3 is not yet finalized**: The spec is at release candidate stage, and runtime support is limited
 - **Wasm Component Model** is not yet supported in browsers
 - **Wasm stack switching** is not yet available in wasmtime

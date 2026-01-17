@@ -8868,9 +8868,12 @@ fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test_generate_binary() {
-        let wasm = crate::compile(
+    use crate::compiler_host::InMemoryCompilerHost;
+
+    #[tokio::test]
+    async fn test_generate_binary() {
+        let host = InMemoryCompilerHost::new();
+        let result = crate::compile_with_host(
             r#"
             fn add(a: i32, b: i32) -> i32 {
                 return a + b;
@@ -8880,10 +8883,15 @@ mod tests {
                 let result = add(1, 2);
             }
         "#,
+            &host,
+            None,
+            crate::OptLevel::default(),
         )
+        .await
         .expect("compilation failed");
 
         // Verify it starts with Wasm magic number
+        let wasm = result.wasm;
         assert!(wasm.len() > 8);
         assert_eq!(&wasm[0..4], b"\0asm");
     }

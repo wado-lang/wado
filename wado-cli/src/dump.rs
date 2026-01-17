@@ -1,9 +1,11 @@
+use std::fs;
 use std::path::Path;
 use std::process;
 
 use lexopt::Arg::{Long, Value};
 
 use crate::args::{next_arg, reject_multiple_inputs, require_input, unexpected_arg};
+use crate::compiler_host::FilesystemCompilerHost;
 
 pub struct DumpOptions {
     pub input: String,
@@ -123,8 +125,24 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     }
 }
 
-pub fn run(opts: DumpOptions) {
-    let result = match wado_compiler::dump_file(Path::new(&opts.input)) {
+pub async fn run(opts: DumpOptions) {
+    let path = Path::new(&opts.input);
+
+    // Read source file
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading '{}': {e}", path.display());
+            process::exit(1);
+        }
+    };
+
+    // Get base path for relative imports
+    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let host = FilesystemCompilerHost::new(base_path);
+
+    // Dump using async API
+    let result = match wado_compiler::dump_with_host(&source, &host, Some(&opts.input)).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("{e}");
@@ -187,7 +205,7 @@ pub fn run(opts: DumpOptions) {
     if opts.show_modules {
         println!("=== Loaded Modules (Load) ===");
         for module_path in &result.loaded_modules {
-            let path_str = module_path.join("::");
+            let path_str: String = module_path.join("::");
             let is_implicit = result.implicit_modules.contains(module_path);
             if is_implicit {
                 println!("  {} (implicit)", path_str);
@@ -199,7 +217,8 @@ pub fn run(opts: DumpOptions) {
 
         println!("=== Implicit Modules ===");
         for module_path in &result.implicit_modules {
-            println!("  {}", module_path.join("::"));
+            let path_str: String = module_path.join("::");
+            println!("  {}", path_str);
         }
         println!();
     }
@@ -295,14 +314,16 @@ pub fn run(opts: DumpOptions) {
             if opts.unparse {
                 println!("=== TIR (Resolve, unparsed) ===");
                 for (path, module) in tir_modules {
-                    println!("// --- Module: {} ---", path.join("::"));
+                    let path_str: String = path.join("::");
+                    println!("// --- Module: {} ---", path_str);
                     let unparsed = wado_compiler::unparse::unparse_tir(module);
                     println!("{}", unparsed);
                 }
             } else {
                 println!("=== TIR (Resolve) ===");
                 for (path, module) in tir_modules {
-                    println!("--- Module: {} ---", path.join("::"));
+                    let path_str: String = path.join("::");
+                    println!("--- Module: {} ---", path_str);
                     println!("{:#?}", module);
                     println!();
                 }
@@ -320,14 +341,16 @@ pub fn run(opts: DumpOptions) {
             if opts.unparse {
                 println!("=== Lowered TIR (Lower, unparsed) ===");
                 for (path, module) in lowered_modules {
-                    println!("// --- Module: {} ---", path.join("::"));
+                    let path_str: String = path.join("::");
+                    println!("// --- Module: {} ---", path_str);
                     let unparsed = wado_compiler::unparse::unparse_tir(module);
                     println!("{}", unparsed);
                 }
             } else {
                 println!("=== Lowered TIR (Lower) ===");
                 for (path, module) in lowered_modules {
-                    println!("--- Module: {} ---", path.join("::"));
+                    let path_str: String = path.join("::");
+                    println!("--- Module: {} ---", path_str);
                     println!("{:#?}", module);
                     println!();
                 }

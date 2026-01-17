@@ -5,6 +5,7 @@ pub mod builtin_registry;
 pub mod bundled;
 pub mod codegen;
 pub mod comment;
+pub mod compiler_host;
 pub mod desugar;
 pub mod lexer;
 pub mod loader;
@@ -29,15 +30,20 @@ pub mod world_registry;
 pub use analyze::Analyzer;
 pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
+pub use compiler_host::{
+    CompilerHost, Diagnostic, DiagnosticSpan, ErrorCode, Severity, SourceError,
+};
+
+#[cfg(test)]
+pub use compiler_host::InMemoryCompilerHost;
 pub use lexer::{LexError, Lexer};
+pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
 pub use optimize::{CanonBuiltin, OptLevel, WasiEffect, optimize};
 pub use parser::{ParseError, Parser};
 pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
-
-use std::path::Path;
 
 use indexmap::IndexMap;
 
@@ -79,267 +85,30 @@ pub struct DumpResult {
     pub comments: comment::CommentMap,
 }
 
-/// Compile Wado source code to Component Model WebAssembly bytes.
+/// Compile Wado source code with a CompilerHost for I/O operations.
 ///
-/// This is a convenience function that runs the full compilation pipeline:
-/// lexer -> parser -> analyzer -> codegen
+/// This is the main compilation entry point. It runs the full compilation pipeline:
+/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> codegen
 ///
-/// # Example
-/// ```
-/// let wasm = wado_compiler::compile(r#"
-/// use {println, Stdout} from "core:cli";
-///
-/// fn run() with Stdout {
-///     println("Hello!");
-/// }
-/// "#).expect("compilation failed");
-///
-/// // Verify it produces valid Component Model wasm
-/// assert!(wasm.len() > 8);
-/// assert_eq!(&wasm[0..4], b"\0asm");
-/// ```
-pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, None, OptLevel::default()).map(|r| r.wasm)
-}
-
-/// Compile Wado source code with a base path for relative imports.
-pub fn compile_with_base_path(source: &str, base_path: &Path) -> Result<Vec<u8>, CompileError> {
-    compile_impl(source, None, Some(base_path), OptLevel::default()).map(|r| r.wasm)
-}
-
-/// Format Wado source code.
-///
-/// Returns the formatted source with canonical formatting.
-/// Preserves comments and the `__DATA__` section.
+/// # Arguments
+/// * `source` - The entry module source code
+/// * `host` - CompilerHost for loading imported modules and emitting diagnostics
+/// * `filename` - Optional filename for error messages
+/// * `opt_level` - Optimization level
 ///
 /// # Example
+/// ```ignore
+/// let host = FilesystemCompilerHost::new(base_path);
+/// let result = compile_with_host(source, &host, Some("main.wado"), OptLevel::Basic).await?;
 /// ```
-/// let source = r#"use {println} from "core:cli";
-/// fn run() with Stdout { println("Hello!"); }
-/// "#;
-/// let formatted = wado_compiler::format(source).unwrap();
-/// assert!(formatted.contains("use { println }"));
-/// ```
-pub fn format(source: &str) -> Result<String, CompileError> {
-    // Lexer (collect comments, shebang, data section)
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: None,
-    })?;
-    let (data_section, comments, shebang) = lexer.into_parts();
-
-    // Build comment map
-    let comment_map = comment::CommentMap::from_comments(comments, source);
-
-    // Parser (with shebang and data section)
-    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser.parse().map_err(|e| CompileError::Parser {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: None,
-    })?;
-
-    // Unparse (no lowering - preserve high-level constructs)
-    let unparser = unparse::Unparser::new(&comment_map);
-    Ok(unparser.unparse(&ast))
-}
-
-/// Format a Wado source file.
-///
-/// Like [`format`], but reads source from a file.
-pub fn format_file(path: &Path) -> Result<String, CompileError> {
-    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
-        path: path.display().to_string(),
-        message: e.to_string(),
-    })?;
-
-    format(&source)
-}
-
-/// Compile a Wado source file to Component Model WebAssembly.
-///
-/// Like [`compile`], but reads source from a file and includes the filename
-/// in error messages. Also supports relative imports from the file's directory.
-/// Returns a [`CompileResult`] containing both the wasm bytes and the parsed module.
-pub fn compile_file(path: &Path) -> Result<CompileResult, CompileError> {
-    compile_file_with_opts(path, OptLevel::default())
-}
-
-/// Compile a Wado source file with optimization level control.
-///
-/// Like [`compile_file`], but allows specifying the optimization level.
-/// Use `OptLevel::None` (O0) to disable optimizations.
-pub fn compile_file_with_opts(
-    path: &Path,
-    opt_level: OptLevel,
-) -> Result<CompileResult, CompileError> {
-    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
-        path: path.display().to_string(),
-        message: e.to_string(),
-    })?;
-
-    // Get the directory containing the file for relative imports
-    let base_path = path.parent().map(|p| p.to_path_buf());
-
-    compile_impl(
-        &source,
-        Some(path.display().to_string()),
-        base_path.as_deref(),
-        opt_level,
-    )
-}
-
-/// Dump compiler internal state for a Wado source file.
-///
-/// This runs the compilation pipeline up through optimization (without code generation)
-/// and returns diagnostic information about the internal state.
-///
-/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> optimize
-pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
-    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
-        path: path.display().to_string(),
-        message: e.to_string(),
-    })?;
-
-    let base_path = path.parent().map(|p| p.to_path_buf());
-    let filename = Some(path.display().to_string());
-
-    // === Phase 1: Lexer ===
-    let mut lexer = Lexer::new(&source);
-    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: filename.clone(),
-    })?;
-    let (data_section, comments, shebang) = lexer.into_parts();
-
-    // Build comment map
-    let comment_map = comment::CommentMap::from_comments(comments, &source);
-
-    // === Phase 2: Parser ===
-    let tokens_for_dump = tokens.clone();
-    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser.parse().map_err(|e| CompileError::Parser {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: filename.clone(),
-    })?;
-
-    // === Phase 3: Bind ===
-    let mut binder = Binder::new();
-    binder.bind_module(&ast).map_err(|errors| {
-        let msg = errors
-            .into_iter()
-            .map(|e| e.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        CompileError::Bind {
-            message: msg,
-            filename: filename.clone(),
-        }
-    })?;
-
-    // === Phase 4: Desugar ===
-    let desugared_ast = desugar::desugar_module(&ast);
-
-    // === Phase 5: Load all modules ===
-    let load_result = {
-        let module_loader = if let Some(base) = base_path.as_deref() {
-            loader::ModuleLoader::with_base_path(base)
-        } else {
-            loader::ModuleLoader::new()
-        };
-        module_loader
-            .load_all(&source)
-            .map_err(|e| CompileError::Analyzer {
-                message: e.to_string(),
-                filename: filename.clone(),
-            })?
-    };
-
-    // === Phase 6: Analyze all modules ===
-    let mut analyzer = Analyzer::new();
-    analyzer
-        .analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_path,
-            load_result.implicit_modules.clone(),
-        )
-        .map_err(|errors| {
-            let msg = errors
-                .into_iter()
-                .map(|e| e.to_string())
-                .collect::<Vec<_>>()
-                .join("; ");
-            CompileError::Analyzer {
-                message: msg,
-                filename: filename.clone(),
-            }
-        })?;
-
-    let symbols = analyzer.into_symbols();
-
-    // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(
-        &symbols,
-        &load_result.modules,
-        &load_result.entry_path,
-        &source,
-    )
-    .ok();
-
-    // === Phase 8: Lower all modules ===
-    // Use lower_modules_indexed for cross-module generic function support
-    let lowered_tir_modules = tir_modules.clone().map(lower_modules_indexed);
-
-    // === Phase 9: Optimize ===
-    // Build a Project from lowered modules if available
-    let optimized_project = lowered_tir_modules.clone().map(|modules| {
-        let module_name = filename
-            .as_ref()
-            .and_then(|f| std::path::Path::new(f).file_stem())
-            .and_then(|s| s.to_str())
-            .unwrap_or("module")
-            .to_string();
-
-        let project = Project::new(
-            load_result.entry_path.clone(),
-            modules,
-            symbols.clone(),
-            load_result.implicit_modules.clone(),
-            module_name,
-        );
-        optimize(project, OptLevel::default())
-    });
-
-    Ok(DumpResult {
-        source,
-        tokens: tokens_for_dump,
-        ast,
-        desugared_ast,
-        symbols,
-        loaded_modules: load_result.modules.keys().cloned().collect(),
-        implicit_modules: load_result.implicit_modules.into_iter().collect(),
-        entry_path: load_result.entry_path,
-        tir_modules,
-        lowered_tir_modules,
-        optimized_project,
-        comments: comment_map,
-    })
-}
-
-fn compile_impl(
+pub async fn compile_with_host<H: CompilerHost>(
     source: &str,
-    filename: Option<String>,
-    base_path: Option<&Path>,
+    host: &H,
+    filename: Option<&str>,
     opt_level: OptLevel,
 ) -> Result<CompileResult, CompileError> {
+    let filename = filename.map(String::from);
+
     // === Phase 1: Lexer (for original AST) ===
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
@@ -375,13 +144,10 @@ fn compile_impl(
 
     // === Phase 4: Load all modules upfront ===
     let load_result = {
-        let module_loader = if let Some(base) = base_path {
-            loader::ModuleLoader::with_base_path(base)
-        } else {
-            loader::ModuleLoader::new()
-        };
+        let module_loader = loader::ModuleLoader::new();
         module_loader
-            .load_all(source)
+            .load_all(source, host)
+            .await
             .map_err(|e| CompileError::Analyzer {
                 message: e.to_string(),
                 filename: filename.clone(),
@@ -466,6 +232,183 @@ fn compile_impl(
 
     // Return the original (non-desugared) AST for tooling
     Ok(CompileResult { wasm, module: ast })
+}
+
+/// Dump compiler internal state (async version).
+///
+/// This runs the compilation pipeline up through optimization (without code generation)
+/// and returns diagnostic information about the internal state.
+///
+/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> optimize
+pub async fn dump_with_host<H: CompilerHost>(
+    source: &str,
+    host: &H,
+    filename: Option<&str>,
+) -> Result<DumpResult, CompileError> {
+    let filename = filename.map(String::from);
+
+    // === Phase 1: Lexer ===
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: filename.clone(),
+    })?;
+    let (data_section, comments, shebang) = lexer.into_parts();
+
+    // Build comment map
+    let comment_map = comment::CommentMap::from_comments(comments, source);
+
+    // === Phase 2: Parser ===
+    let tokens_for_dump = tokens.clone();
+    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+    let ast = parser.parse().map_err(|e| CompileError::Parser {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: filename.clone(),
+    })?;
+
+    // === Phase 3: Bind ===
+    let mut binder = Binder::new();
+    binder.bind_module(&ast).map_err(|errors| {
+        let msg = errors
+            .into_iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        CompileError::Bind {
+            message: msg,
+            filename: filename.clone(),
+        }
+    })?;
+
+    // === Phase 4: Desugar ===
+    let desugared_ast = desugar::desugar_module(&ast);
+
+    // === Phase 5: Load all modules ===
+    let load_result = {
+        let module_loader = loader::ModuleLoader::new();
+        module_loader
+            .load_all(source, host)
+            .await
+            .map_err(|e| CompileError::Analyzer {
+                message: e.to_string(),
+                filename: filename.clone(),
+            })?
+    };
+
+    // === Phase 6: Analyze all modules ===
+    let mut analyzer = Analyzer::new();
+    analyzer
+        .analyze_loaded_modules(
+            &load_result.modules,
+            &load_result.entry_path,
+            load_result.implicit_modules.clone(),
+        )
+        .map_err(|errors| {
+            let msg = errors
+                .into_iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            CompileError::Analyzer {
+                message: msg,
+                filename: filename.clone(),
+            }
+        })?;
+
+    let symbols = analyzer.into_symbols();
+
+    // === Phase 7: Resolve all modules to TIR ===
+    let tir_modules = Resolver::resolve_all_modules(
+        &symbols,
+        &load_result.modules,
+        &load_result.entry_path,
+        source,
+    )
+    .ok();
+
+    // === Phase 8: Lower all modules ===
+    // Use lower_modules_indexed for cross-module generic function support
+    let lowered_tir_modules = tir_modules.clone().map(lower_modules_indexed);
+
+    // === Phase 9: Optimize ===
+    // Build a Project from lowered modules if available
+    let optimized_project = lowered_tir_modules.clone().map(|modules| {
+        let module_name = filename
+            .as_ref()
+            .and_then(|f| std::path::Path::new(f).file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("module")
+            .to_string();
+
+        let project = Project::new(
+            load_result.entry_path.clone(),
+            modules,
+            symbols.clone(),
+            load_result.implicit_modules.clone(),
+            module_name,
+        );
+        optimize(project, OptLevel::default())
+    });
+
+    Ok(DumpResult {
+        source: source.to_string(),
+        tokens: tokens_for_dump,
+        ast,
+        desugared_ast,
+        symbols,
+        loaded_modules: load_result.modules.keys().cloned().collect(),
+        implicit_modules: load_result.implicit_modules.into_iter().collect(),
+        entry_path: load_result.entry_path,
+        tir_modules,
+        lowered_tir_modules,
+        optimized_project,
+        comments: comment_map,
+    })
+}
+
+/// Format Wado source code.
+///
+/// Returns the formatted source with canonical formatting.
+/// Preserves comments and the `__DATA__` section.
+///
+/// # Example
+/// ```
+/// let source = r#"use {println} from "core:cli";
+/// fn run() with Stdout { println("Hello!"); }
+/// "#;
+/// let formatted = wado_compiler::format(source).unwrap();
+/// assert!(formatted.contains("use { println }"));
+/// ```
+pub fn format(source: &str) -> Result<String, CompileError> {
+    // Lexer (collect comments, shebang, data section)
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: None,
+    })?;
+    let (data_section, comments, shebang) = lexer.into_parts();
+
+    // Build comment map
+    let comment_map = comment::CommentMap::from_comments(comments, source);
+
+    // Parser (with shebang and data section)
+    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+    let ast = parser.parse().map_err(|e| CompileError::Parser {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: None,
+    })?;
+
+    // Unparse (no lowering - preserve high-level constructs)
+    let unparser = unparse::Unparser::new(&comment_map);
+    Ok(unparser.unparse(&ast))
 }
 
 /// Compilation error with structured location info

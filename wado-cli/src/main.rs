@@ -1,9 +1,12 @@
 mod args;
 mod compile;
+mod compiler_host;
 mod dump;
 mod format;
 mod run;
 mod syntax;
+
+pub use compiler_host::FilesystemCompilerHost;
 
 use std::process;
 
@@ -42,7 +45,8 @@ fn print_version() {
     println!("wado {}", env!("CARGO_PKG_VERSION"));
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut parser = lexopt::Parser::from_env();
 
     let Some(arg) = parser.next().unwrap_or_else(|e| {
@@ -67,15 +71,15 @@ fn main() {
             match cmd.as_ref() {
                 "compile" => {
                     let opts = compile::parse_args(parser);
-                    compile::run(opts);
+                    compile::run(opts).await;
                 }
                 "run" => {
                     let opts = run::parse_args(parser);
-                    run::run(opts);
+                    run::run(opts).await;
                 }
                 "dump" => {
                     let opts = dump::parse_args(parser);
-                    dump::run(opts);
+                    dump::run(opts).await;
                 }
                 "format" => {
                     let opts = format::parse_args(parser);

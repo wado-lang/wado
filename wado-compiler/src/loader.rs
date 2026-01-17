@@ -4,9 +4,9 @@
 //! This enables converting ALL modules to TIR before codegen.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::Path;
 
 use crate::ast::{Item, Module};
+use crate::compiler_host::{CompilerHost, Diagnostic, ErrorCode, Severity, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
 use crate::name::{normalize_module_path, resolve_module_path};
@@ -47,6 +47,16 @@ impl std::fmt::Display for LoadError {
 
 impl std::error::Error for LoadError {}
 
+impl From<SourceError> for LoadError {
+    fn from(err: SourceError) -> Self {
+        match err {
+            SourceError::NotFound { path } => LoadError::ModuleNotFound { path: vec![path] },
+            SourceError::IoError { path, message } => LoadError::IoError { path, message },
+            SourceError::NetworkError { url, message } => LoadError::IoError { path: url, message },
+        }
+    }
+}
+
 /// Result of loading all modules
 pub struct LoadResult {
     /// All loaded modules (module path -> desugared AST)
@@ -60,9 +70,8 @@ pub struct LoadResult {
 /// Module loader
 ///
 /// Loads all modules upfront before analysis and codegen.
+/// Uses a CompilerHost for I/O operations.
 pub struct ModuleLoader {
-    /// Base path for resolving relative imports
-    base_path: Option<std::path::PathBuf>,
     /// Cache of already parsed modules
     loaded: HashMap<Vec<String>, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
@@ -75,28 +84,25 @@ impl ModuleLoader {
     /// Create a new module loader
     pub fn new() -> Self {
         Self {
-            base_path: None,
             loaded: HashMap::new(),
             loading: HashSet::new(),
             implicit_modules: HashSet::new(),
         }
     }
 
-    /// Create a new module loader with a base path for relative imports
-    pub fn with_base_path(base_path: &Path) -> Self {
-        Self {
-            base_path: Some(base_path.to_path_buf()),
-            loaded: HashMap::new(),
-            loading: HashSet::new(),
-            implicit_modules: HashSet::new(),
-        }
-    }
-
-    /// Load all modules starting from the entry source
+    /// Load all modules starting from the entry source using a CompilerHost
     ///
     /// This loads the entry module and all its transitive dependencies.
     /// It also loads implicit modules (core:prelude, core:internal, core:builtin).
-    pub fn load_all(mut self, entry_source: &str) -> Result<LoadResult, LoadError> {
+    ///
+    /// # Arguments
+    /// * `entry_source` - Source code of the entry module
+    /// * `host` - CompilerHost for loading user modules and emitting diagnostics
+    pub async fn load_all<H: CompilerHost>(
+        mut self,
+        entry_source: &str,
+        host: &H,
+    ) -> Result<LoadResult, LoadError> {
         // Parse entry module
         let entry_module = self.parse_source(entry_source, &[])?;
         let entry_path = vec![];
@@ -125,7 +131,9 @@ impl ModuleLoader {
             self.loading.insert(module_path.clone());
 
             // Load and parse the module
-            let source = self.get_source(&module_path, &from_path)?;
+            let source = self
+                .get_source_with_host(&module_path, &from_path, host)
+                .await?;
             let module = self.parse_source(&source, &module_path)?;
 
             // Collect its imports
@@ -138,7 +146,7 @@ impl ModuleLoader {
         }
 
         // Load implicit modules (for compiler-generated code)
-        self.load_implicit_modules()?;
+        self.load_implicit_modules(host).await?;
 
         Ok(LoadResult {
             modules: self.loaded,
@@ -163,7 +171,10 @@ impl ModuleLoader {
     }
 
     /// Load implicit modules required by the compiler
-    fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
+    async fn load_implicit_modules<H: CompilerHost>(
+        &mut self,
+        host: &H,
+    ) -> Result<(), LoadError> {
         let implicit_paths = [
             vec!["core".to_string(), "prelude".to_string()],
             vec!["core".to_string(), "internal".to_string()],
@@ -176,7 +187,7 @@ impl ModuleLoader {
             }
 
             // Try to load - errors are warnings for implicit modules
-            match self.get_source(&path, &[]) {
+            match self.get_source_with_host(&path, &[], host).await {
                 Ok(source) => {
                     match self.parse_source(&source, &path) {
                         Ok(module) => {
@@ -189,7 +200,8 @@ impl ModuleLoader {
                                 if self.loaded.contains_key(&dep_path) {
                                     continue;
                                 }
-                                if let Ok(dep_source) = self.get_source(&dep_path, &from_path)
+                                if let Ok(dep_source) =
+                                    self.get_source_with_host(&dep_path, &from_path, host).await
                                     && let Ok(dep_module) =
                                         self.parse_source(&dep_source, &dep_path)
                                 {
@@ -204,12 +216,24 @@ impl ModuleLoader {
                             self.implicit_modules.insert(path);
                         }
                         Err(e) => {
-                            eprintln!("Warning: failed to parse implicit module: {e}");
+                            host.emit_diagnostic(Diagnostic {
+                                severity: Severity::Warning,
+                                code: ErrorCode::ModuleParseError,
+                                message: format!("failed to parse implicit module: {e}"),
+                                span: None,
+                            })
+                            .await;
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to load implicit module: {e}");
+                    host.emit_diagnostic(Diagnostic {
+                        severity: Severity::Warning,
+                        code: ErrorCode::ModuleNotFound,
+                        message: format!("failed to load implicit module: {e}"),
+                        span: None,
+                    })
+                    .await;
                 }
             }
         }
@@ -245,17 +269,18 @@ impl ModuleLoader {
         vec![canonical]
     }
 
-    /// Get source code for a module
-    fn get_source(
+    /// Get source code for a module using CompilerHost
+    async fn get_source_with_host<H: CompilerHost>(
         &self,
         module_path: &[String],
         _from_path: &[String],
+        host: &H,
     ) -> Result<String, LoadError> {
-        // Check for local file path
+        // Check for local file path - delegate to host
         if !module_path.is_empty() {
             let first = &module_path[0];
             if first.starts_with("./") || first.starts_with("../") || first.ends_with(".wado") {
-                return self.get_local_file_source(module_path);
+                return host.load_source(first).await.map_err(LoadError::from);
             }
         }
 
@@ -266,31 +291,13 @@ impl ModuleLoader {
             module_path.join(":")
         };
 
-        // Try embedded stdlib
+        // Try embedded stdlib (handled by compiler, not host)
         if let Some(source) = stdlib::get_stdlib_module(&import_path) {
             return Ok(source.to_string());
         }
 
         Err(LoadError::ModuleNotFound {
             path: module_path.to_vec(),
-        })
-    }
-
-    /// Load source from a local .wado file
-    fn get_local_file_source(&self, module_path: &[String]) -> Result<String, LoadError> {
-        let base_path = self
-            .base_path
-            .as_ref()
-            .ok_or_else(|| LoadError::ModuleNotFound {
-                path: module_path.to_vec(),
-            })?;
-
-        let relative_path = &module_path[0];
-        let full_path = base_path.join(relative_path);
-
-        std::fs::read_to_string(&full_path).map_err(|e| LoadError::IoError {
-            path: full_path.display().to_string(),
-            message: e.to_string(),
         })
     }
 
