@@ -162,7 +162,7 @@ impl Symbol {
 ///
 /// Tracks all symbols organized by module and supports scoped lookups
 /// for local variables within function bodies.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
     /// All symbols in the table
     symbols: Vec<Symbol>,

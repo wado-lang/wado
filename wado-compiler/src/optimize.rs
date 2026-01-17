@@ -2,15 +2,148 @@
 //!
 //! This module provides:
 //! - Dead Code Elimination (DCE) at function level
-//! - Optimization hints for conditional feature inclusion
+//! - Usage analysis for conditional feature inclusion
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName};
+use crate::project::Project;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
-    TirStmtKind, TypeId, TypeTable,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
+
+/// WASI effects that can be used in Wado programs
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WasiEffect {
+    Stdout,
+    Stderr,
+    Environment,
+    MonotonicClock,
+    Exit,
+}
+
+impl WasiEffect {
+    /// Parse effect name from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Stdout" => Some(Self::Stdout),
+            "Stderr" => Some(Self::Stderr),
+            "Environment" => Some(Self::Environment),
+            "MonotonicClock" => Some(Self::MonotonicClock),
+            "Exit" => Some(Self::Exit),
+            _ => None,
+        }
+    }
+
+    /// Get the effect name as a string (for WASI interface names)
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Stdout => "Stdout",
+            Self::Stderr => "Stderr",
+            Self::Environment => "Environment",
+            Self::MonotonicClock => "MonotonicClock",
+            Self::Exit => "Exit",
+        }
+    }
+
+    /// Standard effects (all except Exit which requires explicit usage)
+    pub const STANDARD: &'static [WasiEffect] = &[
+        WasiEffect::Stdout,
+        WasiEffect::Stderr,
+        WasiEffect::Environment,
+        WasiEffect::MonotonicClock,
+    ];
+}
+
+/// Canonical builtin functions imported from wasi or env namespace
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CanonBuiltin {
+    // Stream intrinsics (wasi namespace)
+    StreamNew,
+    StreamWrite,
+    StreamDropWritable,
+    StreamDropReadable,
+    // Async/task intrinsics (wasi namespace)
+    TaskReturn,
+    WaitableSetNew,
+    WaitableJoin,
+    WaitableSetWait,
+    SubtaskDrop,
+    // Env intrinsics (env namespace)
+    Realloc,
+    F64ToBuffer,
+    F32ToBuffer,
+}
+
+impl CanonBuiltin {
+    /// Parse canonical name from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "stream-new" => Some(Self::StreamNew),
+            "stream-write" => Some(Self::StreamWrite),
+            "stream-drop-writable" => Some(Self::StreamDropWritable),
+            "stream-drop-readable" => Some(Self::StreamDropReadable),
+            "task-return" => Some(Self::TaskReturn),
+            "waitable-set-new" => Some(Self::WaitableSetNew),
+            "waitable-join" => Some(Self::WaitableJoin),
+            "waitable-set-wait" => Some(Self::WaitableSetWait),
+            "subtask-drop" => Some(Self::SubtaskDrop),
+            "realloc" => Some(Self::Realloc),
+            "f64_to_buffer" => Some(Self::F64ToBuffer),
+            "f32_to_buffer" => Some(Self::F32ToBuffer),
+            _ => None,
+        }
+    }
+
+    /// Get the canonical name (for wasm imports)
+    pub fn canonical_name(&self) -> &'static str {
+        match self {
+            Self::StreamNew => "stream-new",
+            Self::StreamWrite => "stream-write",
+            Self::StreamDropWritable => "stream-drop-writable",
+            Self::StreamDropReadable => "stream-drop-readable",
+            Self::TaskReturn => "task-return",
+            Self::WaitableSetNew => "waitable-set-new",
+            Self::WaitableJoin => "waitable-join",
+            Self::WaitableSetWait => "waitable-set-wait",
+            Self::SubtaskDrop => "subtask-drop",
+            Self::Realloc => "realloc",
+            Self::F64ToBuffer => "f64_to_buffer",
+            Self::F32ToBuffer => "f32_to_buffer",
+        }
+    }
+
+    /// Check if this is a float-to-string conversion builtin
+    pub fn is_float_to_string(&self) -> bool {
+        matches!(self, Self::F64ToBuffer | Self::F32ToBuffer)
+    }
+
+    /// All importable builtins
+    pub const ALL: &'static [CanonBuiltin] = &[
+        CanonBuiltin::StreamNew,
+        CanonBuiltin::StreamWrite,
+        CanonBuiltin::StreamDropWritable,
+        CanonBuiltin::StreamDropReadable,
+        CanonBuiltin::TaskReturn,
+        CanonBuiltin::WaitableSetNew,
+        CanonBuiltin::WaitableJoin,
+        CanonBuiltin::WaitableSetWait,
+        CanonBuiltin::SubtaskDrop,
+        CanonBuiltin::Realloc,
+        CanonBuiltin::F64ToBuffer,
+        CanonBuiltin::F32ToBuffer,
+    ];
+
+    /// Async/task-related builtins
+    pub const ASYNC: &'static [CanonBuiltin] = &[
+        CanonBuiltin::TaskReturn,
+        CanonBuiltin::WaitableSetNew,
+        CanonBuiltin::WaitableJoin,
+        CanonBuiltin::WaitableSetWait,
+        CanonBuiltin::SubtaskDrop,
+    ];
+}
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
@@ -18,82 +151,33 @@ type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
 /// Effect usage: function ID -> set of (effect_name, operation_name) pairs
 type EffectUsageMap = HashMap<FunctionId, HashSet<(String, String)>>;
 
+/// Optimization level for the compiler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
+    /// No optimizations. Used for debugging.
     #[default]
     None,
+    /// Baseline optimizations including DCE. Intended for development.
     Basic,
+    /// All optimizations including inlining, decomposition, etc. (TBD).
+    /// Intended for production (server-side).
     Full,
-    /// Optimize for size (strips debug names)
+    /// Full optimizations plus name section stripping. Intended for frontend.
     Size,
 }
 
-/// Hints collected during optimization that inform code generation
-#[derive(Debug, Clone, Default)]
-pub struct OptimizationHints {
-    /// Set of reachable functions (from DCE analysis)
-    pub reachable_functions: HashSet<FunctionId>,
-    /// Whether float-to-string conversion is needed (derived from reachable functions)
-    pub needs_f32_to_string: bool,
-    pub needs_f64_to_string: bool,
-    /// When true, all functions are considered reachable (DCE disabled)
-    pub all_reachable: bool,
-    /// When true, strip debug name sections for smaller binary size (-Os)
-    pub strip_names: bool,
-    /// Set of used WASI effects (e.g., "Stdout", "Stderr", "MonotonicClock")
-    pub used_effects: HashSet<String>,
-    /// Set of used WASI functions (e.g., "Stdout::write_via_stream")
-    pub used_wasi_functions: HashSet<String>,
-    /// Whether async primitives are needed (waitable-set, subtask-drop, etc.)
-    pub needs_async_primitives: bool,
-    /// Whether bool-to-string conversion is needed (for "truefalse" data)
-    pub needs_bool_to_string: bool,
-    /// Whether stream intrinsics are needed (stream-new, stream-write, etc.)
-    pub needs_stream_intrinsics: bool,
-}
-
-impl OptimizationHints {
-    /// Create hints with all optimizations disabled (for O0)
-    pub fn no_optimization() -> Self {
-        Self {
-            reachable_functions: HashSet::new(),
-            needs_f32_to_string: true,
-            needs_f64_to_string: true,
-            all_reachable: true,
-            strip_names: false,
-            used_effects: HashSet::new(),
-            used_wasi_functions: HashSet::new(),
-            needs_async_primitives: true,
-            needs_bool_to_string: true,
-            needs_stream_intrinsics: true,
-        }
-    }
-
-    pub fn needs_float_to_string(&self) -> bool {
-        self.needs_f32_to_string || self.needs_f64_to_string
-    }
-
-    /// Check if a function is reachable (should be included in the binary)
-    pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
-        self.all_reachable || self.reachable_functions.contains(func_id)
-    }
-
-    /// Check if an effect is used (should be imported)
-    pub fn is_effect_used(&self, effect_name: &str) -> bool {
-        self.all_reachable || self.used_effects.contains(effect_name)
-    }
-
-    /// Check if a specific WASI function is used
-    pub fn is_wasi_function_used(&self, func_name: &str) -> bool {
-        self.all_reachable || self.used_wasi_functions.contains(func_name)
-    }
-
-    /// Check if an effect is explicitly tracked as used (ignores all_reachable)
-    /// Use this for effects that require explicit call tracking
-    pub fn is_effect_explicitly_used(&self, effect_name: &str) -> bool {
-        self.used_effects.contains(effect_name)
-    }
-}
+/// Standard WASI functions for each effect (for O0 mode)
+pub const STANDARD_WASI_FUNCTIONS: &[&str] = &[
+    "Stdout::write_via_stream",
+    "Stderr::write_via_stream",
+    "Environment::get_arguments",
+    "Environment::get_environment",
+    "Environment::get_initial_cwd",
+    "MonotonicClock::now",
+    "MonotonicClock::get_resolution",
+    "MonotonicClock::wait_until",
+    "MonotonicClock::wait_for",
+];
 
 // =============================================================================
 // Dead Code Elimination (DCE)
@@ -106,31 +190,41 @@ struct FunctionAnalysis {
     callees: HashSet<FunctionId>,
     /// Effect calls: (effect_name, op_name)
     effect_calls: HashSet<(String, String)>,
+    /// Primitive types that need box types (for references like &i32, &mut f64)
+    used_box_primitives: HashSet<PrimitiveType>,
 }
 
-/// Analyze all TIR modules and compute optimization hints including DCE
-pub fn analyze_all_modules(
-    modules: &IndexMap<Vec<String>, TirModule>,
-    entry_path: &[String],
-) -> OptimizationHints {
-    // Build call graph and effect usage from all modules
-    let (call_graph, effect_usage) = build_analysis_graph(modules);
+/// Analyze the project and populate its usage fields with DCE analysis results.
+///
+/// This performs dead code elimination analysis starting from the entry point
+/// and populates the project's `reachable_functions`, `used_effects`,
+/// `used_builtins`, etc. fields.
+fn analyze_project(project: &mut Project) {
+    // Build call graph, effect usage, and box primitives from all modules
+    let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
     // Find entry function (run in entry module)
-    let entry_func = FunctionId::Free(FreeFunctionName::from_path_and_name(entry_path, "run"));
+    let entry_func =
+        FunctionId::Free(FreeFunctionName::from_path_and_name(&project.entry_path, "run"));
 
     // Compute reachable functions from entry point
     let mut reachable = compute_reachable(&call_graph, &entry_func);
 
-    // Collect used effects from reachable functions
-    let mut used_effects: HashSet<String> = HashSet::new();
+    // Collect used effects and box primitives from reachable functions
+    let mut used_effects: HashSet<WasiEffect> = HashSet::new();
     let mut used_wasi_functions: HashSet<String> = HashSet::new();
+    let mut used_box_primitives: HashSet<PrimitiveType> = HashSet::new();
     for func_id in &reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
-                used_effects.insert(effect_name.clone());
+                if let Some(effect) = WasiEffect::from_str(effect_name) {
+                    used_effects.insert(effect);
+                }
                 used_wasi_functions.insert(format!("{}::{}", effect_name, op_name));
             }
+        }
+        if let Some(prims) = box_primitives_map.get(func_id) {
+            used_box_primitives.extend(prims.iter().copied());
         }
     }
 
@@ -139,10 +233,10 @@ pub fn analyze_all_modules(
         FunctionId::Free(FreeFunctionName::from_strs(&["core", "internal"], name))
     };
 
-    // Derive feature hints from reachable functions
-    let needs_f32_to_string = reachable.contains(&core_internal("f32_to_string"));
-    let needs_f64_to_string = reachable.contains(&core_internal("f64_to_string"));
-    let needs_bool_to_string = reachable.contains(&core_internal("bool_to_string"));
+    // Derive builtin usage from reachable internal functions
+    // f64_to_string/f32_to_string call the bundled f64_to_buffer/f32_to_buffer
+    let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
+    let needs_f32_to_buffer = reachable.contains(&core_internal("f32_to_string"));
 
     // Add cm_list_string_to_array and helper if Environment effect functions are used
     // This conversion function is called from codegen, not Wado code
@@ -204,47 +298,114 @@ pub fn analyze_all_modules(
         }
     });
 
-    // Also mark effects as used if indirect calls are present
+    // Also mark effects as used if indirect calls are present (for ambient logging)
     if reachable
         .iter()
         .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stdout(f)))
     {
-        used_effects.insert("Stdout".to_string());
+        used_effects.insert(WasiEffect::Stdout);
+        used_wasi_functions.insert("Stdout::write_via_stream".to_string());
     }
     if reachable
         .iter()
         .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stderr(f)))
     {
-        used_effects.insert("Stderr".to_string());
+        used_effects.insert(WasiEffect::Stderr);
+        used_wasi_functions.insert("Stderr::write_via_stream".to_string());
     }
 
-    // Stream intrinsics needed if Stdout/Stderr used OR stream builtins called
-    let needs_stream_intrinsics =
-        used_effects.contains("Stdout") || used_effects.contains("Stderr") || uses_stream_builtins;
+    // Compute precise builtin usage based on reachable builtin function calls
+    let mut used_builtins: HashSet<CanonBuiltin> = HashSet::new();
 
-    // Check if any async primitives are needed
-    // Needed if any effect is used OR if stream builtins are used (for ambient logging)
-    let needs_async_primitives = !used_effects.is_empty() || uses_stream_builtins;
-
-    OptimizationHints {
-        reachable_functions: reachable,
-        needs_f32_to_string,
-        needs_f64_to_string,
-        all_reachable: false,
-        strip_names: false, // Set by caller based on OptLevel
-        used_effects,
-        used_wasi_functions,
-        needs_async_primitives,
-        needs_bool_to_string,
-        needs_stream_intrinsics,
+    // Map builtin function names to canonical CanonBuiltin variants
+    for func_id in &reachable {
+        if let FunctionId::Free(f) = func_id {
+            if is_builtin_func(f) {
+                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+                match name {
+                    "stream_new" => {
+                        used_builtins.insert(CanonBuiltin::StreamNew);
+                    }
+                    "stream_write" => {
+                        used_builtins.insert(CanonBuiltin::StreamWrite);
+                    }
+                    "stream_drop_writable" => {
+                        used_builtins.insert(CanonBuiltin::StreamDropWritable);
+                    }
+                    "stream_drop_readable" => {
+                        used_builtins.insert(CanonBuiltin::StreamDropReadable);
+                    }
+                    // Ambient logging builtins also need stream intrinsics
+                    n if n.starts_with("call_indirect_stdout")
+                        || n.starts_with("call_indirect_stderr") =>
+                    {
+                        used_builtins.insert(CanonBuiltin::StreamNew);
+                        used_builtins.insert(CanonBuiltin::StreamWrite);
+                        used_builtins.insert(CanonBuiltin::StreamDropWritable);
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
+
+    // realloc is always needed for memory management
+    used_builtins.insert(CanonBuiltin::Realloc);
+
+    // Float-to-string builtins if their internal wrappers are used
+    if needs_f64_to_buffer {
+        used_builtins.insert(CanonBuiltin::F64ToBuffer);
+    }
+    if needs_f32_to_buffer {
+        used_builtins.insert(CanonBuiltin::F32ToBuffer);
+    }
+
+    // Effect usage requires async builtins for waiting on subtasks
+    if !used_effects.is_empty() || uses_stream_builtins {
+        for builtin in CanonBuiltin::ASYNC {
+            used_builtins.insert(*builtin);
+        }
+    }
+
+    // Apply results to project
+    project.reachable_functions = reachable;
+    project.all_reachable = false;
+    project.used_effects = used_effects;
+    project.used_wasi_functions = used_wasi_functions;
+    project.used_builtins = used_builtins;
+    project.used_box_primitives = used_box_primitives;
 }
 
+/// Populate project with all features enabled (no DCE, for O0 mode).
+fn populate_all_features(project: &mut Project) {
+    use PrimitiveType::*;
+
+    project.reachable_functions = HashSet::new();
+    project.all_reachable = true;
+    // Standard effects (all except Exit which requires explicit usage)
+    project.used_effects = WasiEffect::STANDARD.iter().copied().collect();
+    // Standard WASI functions for the above effects
+    project.used_wasi_functions = STANDARD_WASI_FUNCTIONS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    // All importable builtins when DCE is disabled
+    project.used_builtins = CanonBuiltin::ALL.iter().copied().collect();
+    // All primitives that map to box types when DCE is disabled
+    project.used_box_primitives = HashSet::from([I32, I64, F32, F64]);
+}
+
+/// Per-function box primitives usage
+type BoxPrimitivesMap = HashMap<FunctionId, HashSet<PrimitiveType>>;
+
 /// Build call graph and effect usage from all TIR modules
-/// Returns (call_graph, effect_usage)
-fn build_analysis_graph(modules: &IndexMap<Vec<String>, TirModule>) -> (CallGraph, EffectUsageMap) {
+/// Returns (call_graph, effect_usage, box_primitives_map)
+fn build_analysis_graph(
+    modules: &IndexMap<Vec<String>, TirModule>,
+) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap) {
     let mut call_graph: CallGraph = HashMap::new();
     let mut effect_usage: EffectUsageMap = HashMap::new();
+    let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
 
     for (path, module) in modules {
         let type_table = &module.type_table;
@@ -269,7 +430,10 @@ fn build_analysis_graph(modules: &IndexMap<Vec<String>, TirModule>) -> (CallGrap
             let analysis = analyze_function(func, path, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
-                effect_usage.insert(func_id, analysis.effect_calls);
+                effect_usage.insert(func_id.clone(), analysis.effect_calls);
+            }
+            if !analysis.used_box_primitives.is_empty() {
+                box_primitives_map.insert(func_id, analysis.used_box_primitives);
             }
         }
 
@@ -291,13 +455,16 @@ fn build_analysis_graph(modules: &IndexMap<Vec<String>, TirModule>) -> (CallGrap
                 let analysis = analyze_function(method, path, type_table);
                 call_graph.insert(method_id.clone(), analysis.callees);
                 if !analysis.effect_calls.is_empty() {
-                    effect_usage.insert(method_id, analysis.effect_calls);
+                    effect_usage.insert(method_id.clone(), analysis.effect_calls);
+                }
+                if !analysis.used_box_primitives.is_empty() {
+                    box_primitives_map.insert(method_id, analysis.used_box_primitives);
                 }
             }
         }
     }
 
-    (call_graph, effect_usage)
+    (call_graph, effect_usage, box_primitives_map)
 }
 
 /// Analyze a TIR function for callees and effect usage
@@ -307,6 +474,18 @@ fn analyze_function(
     type_table: &TypeTable,
 ) -> FunctionAnalysis {
     let mut analysis = FunctionAnalysis::default();
+
+    // Check parameters for references to primitives (e.g., &i32, &mut f64)
+    for param in &func.params {
+        if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+            type_table.get(param.type_id)
+        {
+            if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                analysis.used_box_primitives.insert(*prim);
+            }
+        }
+    }
+
     if let Some(body) = &func.body {
         analyze_block(body, current_module, type_table, &mut analysis);
     }
@@ -321,8 +500,16 @@ fn analyze_block(
 ) {
     for stmt in &block.stmts {
         match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
+            TirStmtKind::Let { value, type_id, .. } => {
                 analyze_expr(value, current_module, type_table, analysis);
+                // Check locals for references to primitives (e.g., let r: &i32 = ...)
+                if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                    type_table.get(*type_id)
+                {
+                    if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                        analysis.used_box_primitives.insert(*prim);
+                    }
+                }
             }
             TirStmtKind::Expr(expr) => {
                 analyze_expr(expr, current_module, type_table, analysis);
@@ -395,6 +582,10 @@ fn analyze_block(
                         &["core", "prelude"],
                         "panic",
                     )));
+                // Assert failure prints to stderr, so we need Stderr effect
+                analysis
+                    .effect_calls
+                    .insert(("Stderr".to_string(), "write_via_stream".to_string()));
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
         }
@@ -495,8 +686,14 @@ fn analyze_expr(
             analyze_expr(left, current_module, type_table, analysis);
             analyze_expr(right, current_module, type_table, analysis);
         }
-        TirExprKind::Unary { expr, .. } => {
+        TirExprKind::Unary { op, expr } => {
             analyze_expr(expr, current_module, type_table, analysis);
+            // Track box types needed for references to primitives
+            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef) {
+                if let ResolvedType::Primitive(prim) = type_table.get(expr.type_id) {
+                    analysis.used_box_primitives.insert(*prim);
+                }
+            }
         }
         TirExprKind::Assign { target, value } => {
             analyze_expr(target, current_module, type_table, analysis);
@@ -654,6 +851,31 @@ fn compute_reachable(
     }
 
     reachable
+}
+
+// =============================================================================
+// Project-level optimization
+// =============================================================================
+
+/// Optimize a Project by analyzing and populating its usage fields.
+///
+/// This is the main entry point for the optimizer. Based on the optimization
+/// level, it either performs DCE analysis or enables all features.
+pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
+    match opt_level {
+        OptLevel::None => {
+            populate_all_features(&mut project);
+        }
+        OptLevel::Basic | OptLevel::Full => {
+            analyze_project(&mut project);
+        }
+        OptLevel::Size => {
+            analyze_project(&mut project);
+            project.strip_names = true;
+        }
+    }
+
+    project
 }
 
 #[cfg(test)]
