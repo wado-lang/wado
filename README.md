@@ -6,9 +6,38 @@ A type-safe, high-level WebAssembly.
 
 Wado was born from a practical need: embedding small Wasm modules in JavaScript projects without the binary size explosion that comes with existing Wasm-targeting languages.
 
-Existing solutions bundle their own runtime and garbage collector into every `.wasm` file, resulting in bloated binaries even for simple tasks. Wado takes a different approach: by leveraging **Wasm GC**, the garbage collector is provided by the Wasm runtime itself (like wasmtime or browser engines), keeping your binaries minimal.
+Existing solutions bundle their own runtime and garbage collector into every `.wasm` file, resulting in bloated binaries even for simple tasks. Wado takes a different approach: by leveraging **Wasm GC**, the garbage collector is provided by the Wasm runtime itself (currently wasmtime; browser support pending Wasm Component Model), keeping your binaries minimal.
 
 The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
+
+## Hello World
+
+```wado
+#!/usr/bin/env wado
+use { println, Stdout } from "core:cli";
+
+// run() is the entry point of the wasi:cli's Command world
+fn run() with Stdout {
+    println("Hello, world!");
+}
+```
+
+Run it:
+
+```sh
+wado run example/hello.wado
+```
+
+Compile to WebAssembly:
+
+```sh
+wado compile example/hello.wado # generates example/hello.wasm
+wado compile -o example/hello.wasm example/hello.wado # ditto
+wado compile --format wasm example/hello.wado # ditto
+
+wado compile --format wat example/hello.wado # generates example/hello.wat with WAT format
+wado compile -o example/hello.wat example/hello.wado  # ditto
+```
 
 ## Design Principles
 
@@ -109,41 +138,12 @@ However:
 - **Wasm Component Model** is not yet supported in browsers
 - **Wasm stack switching** is not yet available in wasmtime
 
-**That said**, Wado is already usable for its original purpose: embedding lightweight Wasm modules in JS projects where binary size matters.
+That said, Wado is already usable for its original purpose: embedding lightweight Wasm modules in JS projects where binary size matters.
 
 ## Future Directions
 
 - **UI as a first-class use case**: JSX syntax is already supported, with the vision of Wado as a UI description language
 - **Full WASI P3 integration**: As the spec finalizes and runtime support matures, Wado will leverage async streams, futures, and the full capability model
-
-## Hello World
-
-```wado
-#!/usr/bin/env wado
-use { println, Stdout } from "core:cli";
-
-// run() is the entry point of the wasi:cli's Command world
-fn run() with Stdout {
-    println("Hello, world!");
-}
-```
-
-Run it:
-
-```sh
-wado run example/hello.wado
-```
-
-Compile to WebAssembly:
-
-```sh
-wado compile example/hello.wado # generates example/hello.wasm
-wado compile -o example/hello.wasm example/hello.wado # ditto
-wado compile --format wasm example/hello.wado # ditto
-
-wado compile --format wat example/hello.wado # generates example/hello.wat with WAT format
-wado compile -o example/hello.wat example/hello.wado  # ditto
-```
 
 ## Documentation
 
