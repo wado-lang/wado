@@ -1,12 +1,4 @@
-<<<<<<<< HEAD:docs/adr-2026-01-12-value-semantics-and-stores.md
-# ADR: Value Semantics and Reference Stores
-
-**Date**: 2026-01-12
-**Status**: Proposed
-
-========
-# WEP: Value Semantics and Reference Captures
->>>>>>>> origin/main:docs/wep-2026-01-12-value-semantics-and-captures.md
+# WEP: Value Semantics and Reference Stores
 ## Context
 
 Wado targets Wasm GC, where structs and arrays are reference types (heap-allocated, garbage-collected). However, the language design needs to decide on the semantics exposed to programmers:

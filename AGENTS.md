@@ -177,25 +177,6 @@ Format: `docs/wep-YYYY-MM-DD-feature-name.md`
 
 WEPs combine language specification and implementation strategy in a single document, covering both user-visible features and compiler architecture decisions.
 
-<<<<<<< HEAD
-- [Target WASI P3 Only](./docs/adr-2025-01-11-wasi-p3-only.md)
-- [Deterministic Math Library (libm) Integration](./docs/adr-2026-01-10-deterministic-libm.md)
-- [Tagged Template Literals for Compile-Time Execution](./docs/adr-2026-01-10-tagged-template-literals.md)
-- [WebAssembly Module Import Support](./docs/adr-2026-01-10-wasm-import.md)
-- [Operator Precedence and Associativity](./docs/adr-2026-01-11-operator-precedence.md)
-- [Ambient Logging Functions](./docs/adr-2026-01-12-ambient-logging.md)
-- [Data Section (`__DATA__`)](./docs/adr-2026-01-12-data-section.md)
-- [Literal Type Conversion Rules](./docs/adr-2026-01-12-literal-type-conversion.md)
-- [Resource Lifecycle Management (RAII)](./docs/adr-2026-01-12-resource-lifecycle.md)
-- [Value Semantics and Reference Stores](./docs/adr-2026-01-12-value-semantics-and-stores.md)
-- [Struct and Trait System](./docs/adr-2026-01-13-struct-and-trait.md)
-- [Compiler Pipeline Refactoring](./docs/adr-2026-01-14-compiler-pipeline-refactoring.md)
-- [Tuple and Array Literal Syntax](./docs/adr-2026-01-15-tuple-and-array-literals.md)
-- [World Conformance and Export Syntax](./docs/adr-2026-01-16-world-conformance-and-export.md)
-- [Closure Implementation](./docs/adr-2026-01-16-closure-implementation.md)
-- [Function Return Type Syntax](./docs/adr-2026-01-16-function-return-type-syntax.md)
-- [SourceProvider Abstraction for Compiler I/O](./docs/adr-2026-01-16-source-provider-abstraction.md)
-=======
 ### List of WEPs
 
 - [Target WASI P3 Only](./docs/wep-2026-01-11-wasi-p3-only.md)
@@ -207,7 +188,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Data Section (`__DATA__`)](./docs/wep-2026-01-12-data-section.md)
 - [Literal Type Conversion Rules](./docs/wep-2026-01-12-literal-type-conversion.md)
 - [Resource Lifecycle Management (RAII)](./docs/wep-2026-01-12-resource-lifecycle.md)
-- [Value Semantics and Reference Captures](./docs/wep-2026-01-12-value-semantics-and-captures.md)
+- [Value Semantics and Reference Stores](./docs/wep-2026-01-12-value-semantics-and-stores.md)
 - [Struct and Trait System](./docs/wep-2026-01-13-struct-and-trait.md)
 - [Compiler Pipeline Refactoring](./docs/wep-2026-01-14-compiler-pipeline-refactoring.md)
 - [Tuple and Array Literal Syntax](./docs/wep-2026-01-15-tuple-and-array-literals.md)
@@ -216,7 +197,6 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Function Return Type Syntax](./docs/wep-2026-01-16-function-return-type-syntax.md)
 - [SourceProvider Abstraction for Compiler I/O](./docs/wep-2026-01-16-source-provider-abstraction.md)
 - [Type Stringification](./docs/wep-2026-01-16-type-stringification.md)
->>>>>>> origin/main
 
 ### Structure
 
