@@ -13,9 +13,82 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
-use std::path::Path;
-use std::sync::OnceLock;
-use wado_compiler::{OptLevel, compile_file_with_opts};
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use wado_compiler::CompilerHost;
+use wado_compiler::{CompileError, OptLevel};
+
+// ============================================================================
+// Test Compiler Host (Filesystem-based)
+// ============================================================================
+
+/// A simple filesystem-based CompilerHost for tests
+struct TestCompilerHost {
+    base_path: PathBuf,
+    diagnostics: Mutex<Vec<wado_compiler::Diagnostic>>,
+}
+
+impl TestCompilerHost {
+    fn new(base_path: PathBuf) -> Self {
+        Self {
+            base_path,
+            diagnostics: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl CompilerHost for TestCompilerHost {
+    fn load_source(
+        &self,
+        path: &str,
+    ) -> impl std::future::Future<Output = Result<String, wado_compiler::SourceError>> + Send {
+        let full_path = self.base_path.join(path);
+        async move {
+            std::fs::read_to_string(&full_path).map_err(|e| wado_compiler::SourceError::IoError {
+                path: full_path.to_string_lossy().to_string(),
+                message: e.to_string(),
+            })
+        }
+    }
+
+    fn emit_diagnostic(
+        &self,
+        diagnostic: wado_compiler::Diagnostic,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        let diagnostics = &self.diagnostics;
+        async move {
+            diagnostics.lock().unwrap().push(diagnostic);
+        }
+    }
+}
+
+/// Compile a file using the test host
+fn compile_file_with_opts(
+    path: &Path,
+    opt_level: OptLevel,
+) -> Result<wado_compiler::CompileResult, CompileError> {
+    // Read source file
+    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
+        path: path.to_string_lossy().to_string(),
+        message: e.to_string(),
+    })?;
+
+    // Get base path for relative imports
+    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let host = TestCompilerHost::new(base_path);
+
+    // Compile using async API (use tokio runtime)
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(wado_compiler::compile_with_host(
+            &source,
+            &host,
+            Some(&path.to_string_lossy()),
+            opt_level,
+        ))
+}
 
 /// Shared wasmtime Engine for all tests (initialized once)
 static ENGINE: OnceLock<Engine> = OnceLock::new();

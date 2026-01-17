@@ -6,18 +6,18 @@ Template strings in Wado support interpolation with format specifiers: `` `value
 
 ### Language Comparison
 
-| Feature | Go | Python | Rust | Wado |
-|---------|-----|--------|------|------|
-| Fixed-point float | `%f`, `%F` | `:f`, `:F` | `{}` (default) | `{}` |
-| Exponential (lower) | `%e` | `:e` | `{:e}` | `{:e}` |
-| Exponential (upper) | `%E` | `:E` | `{:E}` | `{:E}` |
-| General format (adaptive) | `%g`, `%G` | `:g`, `:G` | ❌ None | ❌ None |
-| Binary | `%b` | `:b` | `{:b}` | `{:b}` |
-| Octal | `%o` | `:o` | `{:o}` | `{:o}` |
-| Hex (lower) | `%x` | `:x` | `{:x}` | `{:x}` |
-| Hex (upper) | `%X` | `:X` | `{:X}` | `{:X}` |
-| Pointer | `%p` | N/A | `{:p}` | ❌ None |
-| Debug | `%#v` | `!r` | `{:?}` | `{:?}` |
+| Feature                   | Go         | Python     | Rust           | Wado    |
+| ------------------------- | ---------- | ---------- | -------------- | ------- |
+| Fixed-point float         | `%f`, `%F` | `:f`, `:F` | `{}` (default) | `{}`    |
+| Exponential (lower)       | `%e`       | `:e`       | `{:e}`         | `{:e}`  |
+| Exponential (upper)       | `%E`       | `:E`       | `{:E}`         | `{:E}`  |
+| General format (adaptive) | `%g`, `%G` | `:g`, `:G` | ❌ None        | ❌ None |
+| Binary                    | `%b`       | `:b`       | `{:b}`         | `{:b}`  |
+| Octal                     | `%o`       | `:o`       | `{:o}`         | `{:o}`  |
+| Hex (lower)               | `%x`       | `:x`       | `{:x}`         | `{:x}`  |
+| Hex (upper)               | `%X`       | `:X`       | `{:X}`         | `{:X}`  |
+| Pointer                   | `%p`       | N/A        | `{:p}`         | ❌ None |
+| Debug                     | `%#v`      | `!r`       | `{:?}`         | `{:?}`  |
 
 ### The Problem with General Format (`g`/`G`)
 
@@ -50,18 +50,19 @@ Where `spec` follows Rust's format specification mini-language.
 
 ### Supported Format Types
 
-| Specifier | Trait | Description | Example |
-|-----------|-------|-------------|---------|
-| (none) | Display | Default display | `{x}` → `"42"` |
-| `?` | Debug/Inspect | Debug representation | `{x:?}` → `"42"` |
-| `b` | Binary | Binary integers | `{x:b}` → `"101010"` |
-| `o` | Octal | Octal integers | `{x:o}` → `"52"` |
-| `x` | LowerHex | Lowercase hex | `{x:x}` → `"2a"` |
-| `X` | UpperHex | Uppercase hex | `{x:X}` → `"2A"` |
-| `e` | LowerExp | Lowercase exponential | `{x:e}` → `"4.2e1"` |
-| `E` | UpperExp | Uppercase exponential | `{x:E}` → `"4.2E1"` |
+| Specifier | Trait         | Description           | Example              |
+| --------- | ------------- | --------------------- | -------------------- |
+| (none)    | Display       | Default display       | `{x}` → `"42"`       |
+| `?`       | Debug/Inspect | Debug representation  | `{x:?}` → `"42"`     |
+| `b`       | Binary        | Binary integers       | `{x:b}` → `"101010"` |
+| `o`       | Octal         | Octal integers        | `{x:o}` → `"52"`     |
+| `x`       | LowerHex      | Lowercase hex         | `{x:x}` → `"2a"`     |
+| `X`       | UpperHex      | Uppercase hex         | `{x:X}` → `"2A"`     |
+| `e`       | LowerExp      | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
+| `E`       | UpperExp      | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
 
 **Notes**:
+
 - No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `{:e}/{:E}`.
 - No `p` (Pointer) format specifier. Wado does not have pointer types.
 
@@ -75,13 +76,13 @@ Format specifiers can include additional parameters in this order:
 
 #### Alignment and Width
 
-| Syntax | Description | Example | Output |
-|--------|-------------|---------|--------|
-| `{x:5}` | Width 5, default align | `{42:5}` | `"   42"` |
-| `{x:<5}` | Left align | `{42:<5}` | `"42   "` |
-| `{x:^5}` | Center align | `{42:^5}` | `" 42  "` |
-| `{x:>5}` | Right align | `{42:>5}` | `"   42"` |
-| `{x:05}` | Zero-padding | `{42:05}` | `"00042"` |
+| Syntax    | Description                | Example    | Output    |
+| --------- | -------------------------- | ---------- | --------- |
+| `{x:5}`   | Width 5, default align     | `{42:5}`   | `"   42"` |
+| `{x:<5}`  | Left align                 | `{42:<5}`  | `"42   "` |
+| `{x:^5}`  | Center align               | `{42:^5}`  | `" 42  "` |
+| `{x:>5}`  | Right align                | `{42:>5}`  | `"   42"` |
+| `{x:05}`  | Zero-padding               | `{42:05}`  | `"00042"` |
 | `{x:_>5}` | Fill with `_`, right align | `{42:_>5}` | `"___42"` |
 
 #### Precision
@@ -102,21 +103,21 @@ println(`{12345:.2e}`);     // => "1.23e4"
 
 #### Sign
 
-| Syntax | Description | Example | Output |
-|--------|-------------|---------|--------|
-| `{x:+}` | Always show sign | `{42:+}` | `"+42"` |
-| `{x:+}` | Always show sign (negative) | `{-42:+}` | `"-42"` |
-| (default) | Only negative sign | `{42}` | `"42"` |
+| Syntax    | Description                 | Example   | Output  |
+| --------- | --------------------------- | --------- | ------- |
+| `{x:+}`   | Always show sign            | `{42:+}`  | `"+42"` |
+| `{x:+}`   | Always show sign (negative) | `{-42:+}` | `"-42"` |
+| (default) | Only negative sign          | `{42}`    | `"42"`  |
 
 #### Alternate Form
 
 The `#` flag provides alternate representations:
 
-| Type | Effect | Example | Output |
-|------|--------|---------|--------|
-| `x`, `X` | Add `0x` prefix | `{42:#x}` | `"0x2a"` |
-| `b` | Add `0b` prefix | `{42:#b}` | `"0b101010"` |
-| `o` | Add `0o` prefix | `{42:#o}` | `"0o52"` |
+| Type     | Effect          | Example   | Output       |
+| -------- | --------------- | --------- | ------------ |
+| `x`, `X` | Add `0x` prefix | `{42:#x}` | `"0x2a"`     |
+| `b`      | Add `0b` prefix | `{42:#b}` | `"0b101010"` |
+| `o`      | Add `0o` prefix | `{42:#o}` | `"0o52"`     |
 
 ### Complete Examples
 
@@ -175,12 +176,14 @@ Resolution order for `{expr:spec}`:
 3. Return formatted String
 
 **Key differences from Rust**:
+
 1. **Arbitrary expressions**: Wado allows any expression in `{expr}`, while Rust only allows simple value expressions (no method calls, operators, etc. without parentheses)
 2. **Inspect fallback**: Wado provides inspect as a fallback for `{}` and `{:?}`, while Rust requires explicit trait implementations
 3. **Other format specifiers**: Format specifiers like `{:x}` still require the type to support that trait (or be a primitive)
 4. **No `:p` specifier**: Wado excludes `:p` since it has no pointer types
 
 **Syntax disambiguation**: The parser distinguishes `::` (scope resolution/turbofish) from `:` (format specifier) by lookahead:
+
 - `{foo::bar}` - `::` is part of the expression
 - `{foo::<T>}` - `::<` is turbofish syntax
 - `{foo:x}` - `:` starts format specifier
@@ -213,19 +216,19 @@ Following Rust's ecosystem, we can add:
 2. **Dynamic width and precision**: Allow runtime values using nested `{}` syntax
    - Syntax: `{value:{width}.{precision}}` (Python-style)
    - Rationale: Python's nested `{}` approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
-   - Example: `let w = 8; let p = 2; println(\`{pi:{w}.{p}}\`);` → `"    3.14"`
+   - Example: `let w = 8; let p = 2; println(\`{pi:{w}.{p}}\`);`→`" 3.14"`
 
 ### Migration from Other Languages
 
 For developers coming from other languages:
 
-| From | To Wado | Notes |
-|------|---------|-------|
-| Python `f"{x:.2f}"` | `` `{x:.2}` `` | No `f` suffix needed |
-| Go `fmt.Printf("%d", x)` | `` `{x}` `` | Type inferred |
-| Go `fmt.Printf("%x", x)` | `` `{x:x}` `` | Same specifier |
-| Python `f"{x:g}"` | `` `{x}` `` or `` `{x:e}` `` | Choose explicitly |
-| Rust `format!("{:?}", x)` | `` `{x:?}` `` | Identical |
+| From                      | To Wado                      | Notes                |
+| ------------------------- | ---------------------------- | -------------------- |
+| Python `f"{x:.2f}"`       | `` `{x:.2}` ``               | No `f` suffix needed |
+| Go `fmt.Printf("%d", x)`  | `` `{x}` ``                  | Type inferred        |
+| Go `fmt.Printf("%x", x)`  | `` `{x:x}` ``                | Same specifier       |
+| Python `f"{x:g}"`         | `` `{x}` `` or `` `{x:e}` `` | Choose explicitly    |
+| Rust `format!("{:?}", x)` | `` `{x:?}` ``                | Identical            |
 
 ## References
 

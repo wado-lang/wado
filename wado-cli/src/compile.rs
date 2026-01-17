@@ -7,6 +7,7 @@ use lexopt::Arg::{Long, Short, Value};
 use crate::args::{
     next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
 };
+use crate::compiler_host::FilesystemCompilerHost;
 
 /// Optimization level
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -148,14 +149,33 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
 }
 
 /// Compile a Wado source file and return the Wasm binary
-pub fn compile(filename: &str) -> Vec<u8> {
-    compile_with_opts(filename, OptLevel::default())
+pub async fn compile(filename: &str) -> Vec<u8> {
+    compile_with_opts(filename, OptLevel::default()).await
 }
 
 /// Compile a Wado source file with optimization options
-pub fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
+pub async fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
+    let path = Path::new(filename);
+
+    // Read source file
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading '{}': {e}", path.display());
+            process::exit(1);
+        }
+    };
+
+    // Get base path for relative imports
+    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let host = FilesystemCompilerHost::new(base_path);
+
+    // Compile using async API
     let compiler_opt_level = to_compiler_opt_level(opt_level);
-    match wado_compiler::compile_file_with_opts(Path::new(filename), compiler_opt_level) {
+    let result =
+        wado_compiler::compile_with_host(&source, &host, Some(filename), compiler_opt_level).await;
+
+    match result {
         Ok(result) => result.wasm,
         Err(e) => {
             eprintln!("{e}");
@@ -178,8 +198,8 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
     wat
 }
 
-pub fn run(opts: CompileOptions) {
-    let wasm = compile_with_opts(&opts.input, opts.opt_level);
+pub async fn run(opts: CompileOptions) {
+    let wasm = compile_with_opts(&opts.input, opts.opt_level).await;
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {
