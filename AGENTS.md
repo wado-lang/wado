@@ -194,6 +194,7 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 - [Closure Implementation](./docs/adr-2026-01-16-closure-implementation.md)
 - [Function Return Type Syntax](./docs/adr-2026-01-16-function-return-type-syntax.md)
 - [SourceProvider Abstraction for Compiler I/O](./docs/adr-2026-01-16-source-provider-abstraction.md)
+- [Type Stringification](./docs/adr-2026-01-16-type-stringification.md)
 
 ### Structure
 
