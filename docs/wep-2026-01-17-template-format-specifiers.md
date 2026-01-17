@@ -214,7 +214,6 @@ Following Rust's ecosystem, we can add:
    - Syntax: `{value:{width}.{precision}}` (Python-style)
    - Rationale: Python's nested `{}` approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
    - Example: `let w = 8; let p = 2; println(\`{pi:{w}.{p}}\`);` → `"    3.14"`
-3. **Named arguments**: `{name:spec}` (already planned)
 
 ### Migration from Other Languages
 
