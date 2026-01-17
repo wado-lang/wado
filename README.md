@@ -96,7 +96,9 @@ Why built-in instead of a library?
 
 - **Compiler optimization**: Dependencies are analyzed at compile-time, generating precise Wasm update code with no runtime tracking overhead
 - **Ergonomics**: No wrapper functions like `useState()`, `ref()`, or `createSignal()`
+- **Automatic dependency tracking**: `observe()` automatically tracks reactive values accessed within the closure—no manual subscription needed
 - **No virtual DOM**: Updates compile to direct mutations, not diffing
+- **Context-aware**: In CLI, updates are synchronous; in event-looped environments (browser/GUI), updates may be batched for efficiency
 
 ## Status
 
@@ -136,7 +138,11 @@ Compile to WebAssembly:
 
 ```sh
 wado compile example/hello.wado # generates example/hello.wasm
-wado compile -o example/hello.wat example/hello.wado  # generates WAT format
+wado compile -o example/hello.wasm example/hello.wado # ditto
+wado compile --format wasm example/hello.wado # ditto
+
+wado compile --format wat example/hello.wado # generates example/hello.wat with WAT format
+wado compile -o example/hello.wat example/hello.wado  # ditto
 ```
 
 ## Documentation
