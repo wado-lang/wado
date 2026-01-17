@@ -5,6 +5,8 @@ use crate::token::Span;
 #[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<Item>,
+    /// Shebang line, if present (e.g., "#!/usr/bin/env wado").
+    shebang: Option<String>,
     /// Content of the __DATA__ section, if present in the source file.
     /// This is available after parsing for tooling (test harnesses, IDEs).
     data_section: Option<String>,
@@ -15,16 +17,27 @@ impl Module {
     pub fn new(items: Vec<Item>) -> Self {
         Self {
             items,
+            shebang: None,
             data_section: None,
         }
     }
 
-    /// Creates a new module with the given items and data section.
-    pub fn with_data_section(items: Vec<Item>, data_section: Option<String>) -> Self {
+    /// Creates a new module with the given items, shebang, and data section.
+    pub fn with_metadata(
+        items: Vec<Item>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+    ) -> Self {
         Self {
             items,
+            shebang,
             data_section,
         }
+    }
+
+    /// Returns the shebang line, if present.
+    pub fn shebang(&self) -> Option<&str> {
+        self.shebang.as_deref()
     }
 
     /// Returns the content of the __DATA__ section, if present.

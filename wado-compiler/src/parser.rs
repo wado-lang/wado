@@ -10,6 +10,8 @@ pub struct Parser {
     /// Tracks when we've split a GtGt into two Gt tokens for nested generics.
     /// When true, the next expect_gt call should succeed without consuming a token.
     pending_gt: bool,
+    /// Shebang line, passed from the lexer.
+    shebang: Option<String>,
     /// Content of the __DATA__ section, passed from the lexer.
     data_section: Option<String>,
 }
@@ -41,16 +43,22 @@ impl Parser {
             tokens,
             pos: 0,
             pending_gt: false,
+            shebang: None,
             data_section: None,
         }
     }
 
-    /// Creates a new parser with the given tokens and data section.
-    pub fn with_data_section(tokens: Vec<Token>, data_section: Option<String>) -> Self {
+    /// Creates a new parser with the given tokens, shebang, and data section.
+    pub fn with_metadata(
+        tokens: Vec<Token>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+    ) -> Self {
         Self {
             tokens,
             pos: 0,
             pending_gt: false,
+            shebang,
             data_section,
         }
     }
@@ -62,7 +70,11 @@ impl Parser {
             items.push(self.parse_item()?);
         }
 
-        Ok(Module::with_data_section(items, self.data_section.take()))
+        Ok(Module::with_metadata(
+            items,
+            self.shebang.take(),
+            self.data_section.take(),
+        ))
     }
 
     // Token handling
@@ -2607,8 +2619,8 @@ mod tests {
     fn parse(source: &str) -> ParseResult<Module> {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().expect("lexer error");
-        let data_section = lexer.into_data_section();
-        let mut parser = Parser::with_data_section(tokens, data_section);
+        let (data_section, _comments, shebang) = lexer.into_parts();
+        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
         parser.parse()
     }
 

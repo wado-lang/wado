@@ -119,7 +119,7 @@ pub fn compile_with_base_path(source: &str, base_path: &Path) -> Result<Vec<u8>,
 /// assert!(formatted.contains("use { println }"));
 /// ```
 pub fn format(source: &str) -> Result<String, CompileError> {
-    // Lexer (collect comments)
+    // Lexer (collect comments, shebang, data section)
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
         message: e.message,
@@ -127,14 +127,13 @@ pub fn format(source: &str) -> Result<String, CompileError> {
         column: e.span.column,
         filename: None,
     })?;
-    let data_section = lexer.data_section().map(String::from);
-    let comments = lexer.into_comments();
+    let (data_section, comments, shebang) = lexer.into_parts();
 
     // Build comment map
     let comment_map = comment::CommentMap::from_comments(comments, source);
 
-    // Parser (with data section)
-    let mut parser = Parser::with_data_section(tokens, data_section);
+    // Parser (with shebang and data section)
+    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
         line: e.span.line,
@@ -215,15 +214,14 @@ pub fn dump_file(path: &Path) -> Result<DumpResult, CompileError> {
         column: e.span.column,
         filename: filename.clone(),
     })?;
-    let comments = lexer.comments().to_vec();
-    let data_section = lexer.into_data_section();
+    let (data_section, comments, shebang) = lexer.into_parts();
 
     // Build comment map
     let comment_map = comment::CommentMap::from_comments(comments, &source);
 
     // === Phase 2: Parser ===
     let tokens_for_dump = tokens.clone();
-    let mut parser = Parser::with_data_section(tokens, data_section);
+    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
         line: e.span.line,
@@ -337,10 +335,10 @@ fn compile_impl(
         column: e.span.column,
         filename: filename.clone(),
     })?;
-    let data_section = lexer.into_data_section();
+    let (data_section, _comments, shebang) = lexer.into_parts();
 
     // === Phase 2: Parser (for original AST) ===
-    let mut parser = Parser::with_data_section(tokens, data_section);
+    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
         line: e.span.line,

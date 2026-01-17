@@ -15,8 +15,9 @@ use crate::ast::{
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
 pub fn desugar_module(module: &Module) -> Module {
-    Module::with_data_section(
+    Module::with_metadata(
         module.items.iter().map(desugar_item).collect(),
+        module.shebang().map(String::from),
         module.data_section().map(String::from),
     )
 }

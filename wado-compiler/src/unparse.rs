@@ -49,6 +49,12 @@ impl<'a> Unparser<'a> {
     }
 
     pub fn unparse(mut self, module: &Module) -> String {
+        // Output shebang if present
+        if let Some(shebang) = module.shebang() {
+            self.output.push_str(shebang);
+            self.output.push('\n');
+        }
+
         self.unparse_module(module);
 
         // Append data section if present

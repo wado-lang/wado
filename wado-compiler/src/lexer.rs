@@ -14,6 +14,8 @@ pub struct Lexer<'a> {
     data_section: Option<String>,
     /// Collected comments (not discarded, for formatter use)
     comments: Vec<Comment>,
+    /// Shebang line, if present (e.g., "#!/usr/bin/env wado")
+    shebang: Option<String>,
 }
 
 #[derive(Debug)]
@@ -32,6 +34,7 @@ impl<'a> Lexer<'a> {
             column: 1,
             data_section: None,
             comments: Vec::new(),
+            shebang: None,
         }
     }
 
@@ -54,8 +57,14 @@ impl<'a> Lexer<'a> {
         self.comments
     }
 
-    pub fn into_parts(self) -> (Option<String>, Vec<Comment>) {
-        (self.data_section, self.comments)
+    pub fn into_parts(self) -> (Option<String>, Vec<Comment>, Option<String>) {
+        (self.data_section, self.comments, self.shebang)
+    }
+
+    /// Returns the shebang line, if present.
+    /// This is available after calling `tokenize()`.
+    pub fn shebang(&self) -> Option<&str> {
+        self.shebang.as_deref()
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>, LexError> {
@@ -340,12 +349,21 @@ impl<'a> Lexer<'a> {
             return;
         }
 
-        // Skip the entire shebang line
+        // Find the end of the shebang line
+        let start = self.pos;
         while let Some((_, ch)) = self.peek() {
-            self.advance();
             if ch == '\n' {
                 break;
             }
+            self.advance();
+        }
+
+        // Store the shebang line (without trailing newline)
+        self.shebang = Some(self.input[start..self.pos].to_string());
+
+        // Skip the newline
+        if let Some((_, '\n')) = self.peek() {
+            self.advance();
         }
     }
 
