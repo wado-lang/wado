@@ -1,4 +1,5 @@
-# WEP: Value Semantics and Reference Captures
+# WEP: Value Semantics and Reference Stores
+
 ## Context
 
 Wado targets Wasm GC, where structs and arrays are reference types (heap-allocated, garbage-collected). However, the language design needs to decide on the semantics exposed to programmers:
@@ -82,18 +83,18 @@ let b = move a;  // a is invalidated
 
 When a reference escapes, the referenced value is automatically heap-promoted. The compiler detects escape through these conditions:
 
-| Escape Condition                        | Example                                            |
-| --------------------------------------- | -------------------------------------------------- |
-| Passed to function with `captures[...]` | `store(&local)` where `store` has `captures[data]` |
-| Returned from function                  | `return &local;`                                   |
-| Stored in global variable               | `GLOBAL = Some(&local);`                           |
-| Stored in struct field                  | `Container { data: &local }`                       |
-| Captured by escaping closure            | `return` closure that uses `local`                 |
+| Escape Condition                      | Example                                          |
+| ------------------------------------- | ------------------------------------------------ |
+| Passed to function with `stores[...]` | `store(&local)` where `store` has `stores[data]` |
+| Returned from function                | `return &local;`                                 |
+| Stored in global variable             | `GLOBAL = Some(&local);`                         |
+| Stored in struct field                | `Container { data: &local }`                     |
+| Captured by escaping closure          | `return` closure that uses `local`               |
 
 ```wado
 fn example() {
     let local = Data{};
-    let handle = store(&local);  // local promoted to heap (store has captures[])
+    let handle = store(&local);  // local promoted to heap (store has stores[])
 }
 ```
 
@@ -111,72 +112,78 @@ fn example() {
 
 **Implementation note**: Wasm GC structs are semantically heap-allocated. However, the Wado compiler MAY represent non-escaping structs as Wasm locals (decomposed fields) instead of `struct.new`. This is a compiler optimization, not language semantics.
 
-### 3. The `captures[...]` Keyword for Reference Storage
+### 3. The `stores[...]` Keyword for Reference Storage
 
-Functions and functors that store references must declare this with `captures[...]`:
+Functions and functors that store references must declare this with `stores[...]`:
 
 ```wado
 // Function that stores a reference parameter
-fn store(data: &Data) -> Handle with captures[data] {
+fn store(data: &Data) -> Handle with stores[data] {
     // can store `data`
 }
 
-// Function that does NOT store (no captures declaration)
+// Function that does NOT store (no stores declaration)
 fn process(data: &Data) -> Result {
     // cannot store `data`, only use it
 }
 ```
 
-**Syntax**: `with captures[param1, param2, ...]`
+**Syntax**: `with stores[param1, param2, ...]`
 
 - Uses `[...]` (not `{...}`) to avoid ambiguity with function body
 - Familiar to C++ developers (lambda capture syntax)
-- `captures` is a **keyword**, not an effect interface
-- Only `captures` can use `[...]` syntax; regular effects cannot
+- `stores` is a **keyword**, not an effect interface
+- Only `stores` can use `[...]` syntax; regular effects cannot
 
-### 4. Captures Rules
+**Naming Rationale**: The keyword is `stores` (not `captures`) because:
 
-| Declaration                    | Captures Behavior                              |
-| ------------------------------ | ---------------------------------------------- |
-| Named function with `&T` param | Must declare `captures[param]` if storing      |
-| Closure using outer variable   | Captures inferred from usage                   |
-| Functor type (`Fn(...)`)       | Must declare `captures[0]` etc. if it captures |
-| Functor value itself           | No captures needed (functors are value types)  |
+- "Capture" is used in closure semantics (`let f = || x + 1` captures `x`)
+- `stores` describes what the function _does_ with the reference—it stores it
+- This avoids conflating two different concepts: closures capturing variables vs functions storing references
 
-**Note on functors**: In Wasm, functors are `funcref` values. Storing a functor itself (not its parameters) does not require `captures[...]` because functors have value semantics—they are copied when assigned or passed.
+### 4. Stores Rules
+
+| Declaration                    | Stores Behavior                             |
+| ------------------------------ | ------------------------------------------- |
+| Named function with `&T` param | Must declare `stores[param]` if storing     |
+| Closure using outer variable   | Closure captures inferred from usage        |
+| Functor type (`Fn(...)`)       | Must declare `stores[0]` etc. if it stores  |
+| Functor value itself           | No stores needed (functors are value types) |
+
+**Note on functors**: In Wasm, functors are `funcref` values. Storing a functor itself (not its parameters) does not require `stores[...]` because functors have value semantics—they are copied when assigned or passed.
 
 **Named functions**:
 
 ```wado
-fn store(data: &Data) -> Handle with captures[data] { ... }
-fn process(data: &Data) -> Result { ... }  // no captures = cannot store
+fn store(data: &Data) -> Handle with stores[data] { ... }
+fn process(data: &Data) -> Result { ... }  // no stores = cannot store
 ```
 
 **Closures**:
 
 ```wado
-// Captures inferred from usage
+// Closure captures inferred from usage
 let f = || { return local_var; };
-// Inferred type: Fn() -> i32 with captures[local_var]
+// Inferred type: Fn() -> i32 (captures local_var)
 
-// Explicit captures annotation
-let g = |data| captures[data] { ... };
+// Explicit stores annotation for parameters
+let g = |data| stores[data] { ... };
 ```
 
 **Functor types**:
 
 ```wado
-// Must declare captures in type (positional: 0 = first parameter)
-fn take_storing(f: Fn(&Data) with captures[0]) { ... }
+// Must declare stores in type (positional: 0 = first parameter)
+fn take_storing(f: Fn(&Data) with stores[0]) { ... }
 fn take_pure(f: Fn(&Data) -> Result) { ... }  // cannot store
 ```
 
-### 5. Heap Promotion Based on Captures
+### 5. Heap Promotion Based on Stores
 
-When a reference is passed to something declaring `captures[...]`, the referenced value is automatically heap-promoted:
+When a reference is passed to something declaring `stores[...]`, the referenced value is automatically heap-promoted:
 
 ```wado
-fn store(data: &Data) -> Handle with captures[data] { ... }
+fn store(data: &Data) -> Handle with stores[data] { ... }
 
 fn caller() {
     let local = Data{};
@@ -195,7 +202,7 @@ fn caller() {
 Unlike C++ which distinguishes `[a]` (by value) vs `[&a]` (by reference), Wado closures always capture by reference:
 
 ```wado
-fn make_counter() -> Fn() -> i32 with captures[count] {
+fn make_counter() -> Fn() -> i32 {
     let mut count = 0;
     return || {
         count += 1;  // captures `count` by reference
@@ -203,6 +210,8 @@ fn make_counter() -> Fn() -> i32 with captures[count] {
     };
 }
 ```
+
+Note: Closures that capture variables use "capture" terminology (closures capture). The `stores[...]` keyword is for functions that store _parameters_ passed to them.
 
 **Rationale**:
 
@@ -236,7 +245,7 @@ fn make_data() -> &Data {
 }
 ```
 
-The return type `&Data` from a function that creates the data means "heap-allocated, GC-managed reference." This is different from capturing a parameter—no `captures[...]` declaration is needed because there's no parameter being captured. The compiler detects that `local` escapes via return and promotes it to heap.
+The return type `&Data` from a function that creates the data means "heap-allocated, GC-managed reference." This is different from storing a parameter—no `stores[...]` declaration is needed because there's no parameter being stored. The compiler detects that `local` escapes via return and promotes it to heap.
 
 #### Storing in Globals
 
@@ -245,67 +254,67 @@ Allowed. The referenced value is promoted to heap:
 ```wado
 let mut GLOBAL: Option<&Data> = None;
 
-fn store_global(data: &Data) with captures[data] {
+fn store_global(data: &Data) with stores[data] {
     GLOBAL = Some(data);  // OK: data's source promoted to heap
 }
 ```
 
 #### Storing in Struct Fields
 
-Requires `captures[...]` declaration:
+Requires `stores[...]` declaration:
 
 ```wado
 struct Container {
     data: &Data,
 }
 
-fn make_container(data: &Data) -> Container with captures[data] {
-    return Container { data };  // Must declare captures
+fn make_container(data: &Data) -> Container with stores[data] {
+    return Container { data };  // Must declare stores
 }
 ```
 
 #### Storing Through Method Calls
 
-The method must declare `captures[...]`:
+The method must declare `stores[...]`:
 
 ```wado
 impl Array<&Data> {
-    fn push(&mut self, item: &Data) with captures[item] {
+    fn push(&mut self, item: &Data) with stores[item] {
         // stores item
     }
 }
 
-fn example(list: &mut Array<&Data>, data: &Data) with captures[data] {
-    list.push(data);  // Caller must also declare captures
+fn example(list: &mut Array<&Data>, data: &Data) with stores[data] {
+    list.push(data);  // Caller must also declare stores
 }
 ```
 
 #### Generic Functions
 
-The compiler detects captures through type propagation:
+The compiler detects stores through type propagation:
 
 ```wado
 fn apply<T, R>(f: Fn(T) -> R, x: T) -> R {
-    return f(x);  // apply doesn't capture, just passes through
+    return f(x);  // apply doesn't store, just passes through
 }
 
-// If f's type is Fn(&Data) -> R with captures[0],
-// compiler traces that x may be captured
+// If f's type is Fn(&Data) -> R with stores[0],
+// compiler traces that x may be stored
 ```
 
-If a generic function stores its parameter without declaring `captures[...]`, the compiler detects this and reports an error.
+If a generic function stores its parameter without declaring `stores[...]`, the compiler detects this and reports an error.
 
 #### References to Primitives
 
 References to primitives (`&i32`, `&bool`, etc.) follow the same rules as references to structs:
 
 ```wado
-fn store_int(x: &i32) with captures[x] {
-    SAVED_INT = Some(x);  // OK: captures declared
+fn store_int(x: &i32) with stores[x] {
+    SAVED_INT = Some(x);  // OK: stores declared
 }
 
 fn use_int(x: &i32) -> i32 {
-    return *x + 1;  // OK: no storage, no captures needed
+    return *x + 1;  // OK: no storage, no stores needed
 }
 ```
 
@@ -331,13 +340,13 @@ Both closures capture `x` by reference. The compiler promotes `x` to the heap on
 
 ### 9. Component Model Boundaries
 
-The `captures[...]` mechanism only applies **within a Wado component**. External Wasm modules are protected by Component Model boundaries:
+The `stores[...]` mechanism only applies **within a Wado component**. External Wasm modules are protected by Component Model boundaries:
 
-| Boundary                     | Reference Behavior            | `captures[...]` Needed? |
-| ---------------------------- | ----------------------------- | ----------------------- |
-| Within Wado component        | GC references passed directly | Yes                     |
-| Wado builtins (wasm-bundled) | Controlled by Wado project    | Annotated correctly     |
-| External Wasm module (CM)    | Data copied at boundary       | No                      |
+| Boundary                     | Reference Behavior            | `stores[...]` Needed? |
+| ---------------------------- | ----------------------------- | --------------------- |
+| Within Wado component        | GC references passed directly | Yes                   |
+| Wado builtins (wasm-bundled) | Controlled by Wado project    | Annotated correctly   |
+| External Wasm module (CM)    | Data copied at boundary       | No                    |
 
 **Why CM boundaries are safe**:
 
@@ -359,7 +368,7 @@ fn caller() {
 
 The external component receives a **copy**, not a GC reference. Even if it "stores" the data, it stores its own copy—the original `local` is unaffected.
 
-**Consequence**: `captures[...]` only needs to track escapes within Wado code. Cross-component calls are automatically safe.
+**Consequence**: `stores[...]` only needs to track escapes within Wado code. Cross-component calls are automatically safe.
 
 ## Consequences
 
@@ -367,22 +376,23 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
 
 1. **Predictable value semantics**: No aliasing surprises with structs
 2. **Automatic heap promotion**: Programmer doesn't manage stack vs heap
-3. **Explicit capture tracking**: `captures[...]` makes storage intent clear
+3. **Explicit store tracking**: `stores[...]` makes storage intent clear
 4. **Type-safe escaping**: Can't accidentally escape references without declaration
 5. **Go-like ergonomics**: Escape analysis is familiar pattern
-6. **C++-like syntax**: `captures[...]` familiar to C++ developers
-7. **Simple capture model**: Always by reference, no `[a]` vs `[&a]` confusion
+6. **C++-like syntax**: `stores[...]` familiar to C++ developers (lambda capture syntax)
+7. **Simple closure capture model**: Always by reference, no `[a]` vs `[&a]` confusion
 8. **CM boundaries protect external calls**: No annotation needed for cross-component calls
+9. **Clear terminology**: "stores" for function parameters, "captures" for closures
 
 ### Negative
 
 1. **Copy overhead**: Value semantics may cause unexpected copies for large structs
    - **Mitigation**: Use `move` for large values, profiler will identify hotspots
-2. **Learning curve**: `captures[...]` is a new concept
-   - **Mitigation**: Clear error messages when captures declaration is missing
-3. **Verbose functor types**: `Fn(&Data) with captures[0]` is long
+2. **Learning curve**: `stores[...]` is a new concept
+   - **Mitigation**: Clear error messages when stores declaration is missing
+3. **Verbose functor types**: `Fn(&Data) with stores[0]` is long
    - **Mitigation**: Type inference reduces explicit annotations
-4. **Different from Rust**: No lifetimes, different capture model
+4. **Different from Rust**: No lifetimes, different model
    - **Mitigation**: Simpler model is easier to learn
 
 ### Examples
@@ -397,17 +407,17 @@ let b = a;      // copy
 let c = move a; // move, `a` invalidated
 ```
 
-**Function with captures**:
+**Function with stores**:
 
 ```wado
-// Storing a functor: no captures needed (functors are value types)
+// Storing a functor: no stores needed (functors are value types)
 fn register_callback(cb: Fn(&Event)) -> Id {
     callbacks.push(cb);  // OK: cb is a funcref, copied by value
     return new_id();
 }
 
-// Functor that captures its parameter
-fn register_storing_callback(cb: Fn(&Event) with captures[0]) -> Id {
+// Functor that stores its parameter
+fn register_storing_callback(cb: Fn(&Event) with stores[0]) -> Id {
     // cb may store references passed to it
     callbacks.push(cb);
     return new_id();
@@ -421,15 +431,15 @@ fn process_once(cb: Fn(&Event)) {
 **Closure capture inference**:
 
 ```wado
-fn create_adder(x: i32) -> Fn(i32) -> i32 with captures[x] {
-    return |y| { return x + y; };  // captures x (inferred)
+fn create_adder(x: i32) -> Fn(i32) -> i32 {
+    return |y| { return x + y; };  // closure captures x (inferred)
 }
 ```
 
 **Mixed with effects**:
 
 ```wado
-fn store_and_log(data: &Data) -> Handle with Stdout, captures[data] {
+fn store_and_log(data: &Data) -> Handle with Stdout, stores[data] {
     println("Storing data...");
     return create_handle(data);
 }
@@ -469,21 +479,21 @@ fn format_float(value: f64) -> String {
 
 This keeps the core language clean while providing escape hatch for low-level FFI.
 
-## Theoretical Relationship: Captures and Effects
+## Theoretical Relationship: Stores and Effects
 
-**Is capturing an effect?**
+**Is storing an effect?**
 
-Traditional effect systems (I/O, State, Exception) treat effects as "what the function DOES." Capturing is about "what the function RETAINS."
+Traditional effect systems (I/O, State, Exception) treat effects as "what the function DOES." Storing is about "what the function RETAINS."
 
-However, in capability-based systems, capturing is closely related to effects:
+However, in capability-based systems, storing is closely related to effects:
 
-- Capturing enables future effects (stored reference can be mutated later)
-- Tracking captures is tracking _potential_ effects
+- Storing enables future effects (stored reference can be mutated later)
+- Tracking stores is tracking _potential_ effects
 
-Wado treats `captures` as a **separate mechanism** from effects:
+Wado treats `stores` as a **separate mechanism** from effects:
 
 - Effects (`with Stdout, FileSystem`) = authority to interact with external world
-- Captures (`with captures[data]`) = authority to retain references
+- Stores (`with stores[data]`) = authority to retain references
 
 Both use the `with` keyword for consistency, but they are orthogonal concerns.
 

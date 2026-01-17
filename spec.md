@@ -420,29 +420,29 @@ Wado types are represented using WebAssembly core types (including GC types) int
 
 This separation allows Wado to use optimal internal representations (e.g., Wasm GC structs) while maintaining interoperability through standardized Component Model types at boundaries.
 
-| Wado Type                 | Internal Representation        | CM Type at Boundary                  | Notes                                        |
-| ------------------------- | ------------------------------ | ------------------------------------ | -------------------------------------------- |
-| `bool`                    | `i32`                          | `bool`                               | Boolean value                                |
-| `char`                    | `i32`                          | `char`                               | Unicode scalar value                         |
-| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64`     | `s8`, `s16`, `s32`, `s64`            | Signed integers                              |
-| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64`     | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                            |
-| `i128`, `u128`            | `i64` pair (Wide Arithmetic)   | `tuple<s64, s64>`, `tuple<u64, u64>` | 128-bit integers                             |
-| `f32`, `f64`              | `f32`, `f64`                   | `f32`, `f64`                         | Floating point                               |
-| `f16`                     | -                              | -                                    | TODO: Wasm half-precision proposal (Phase 1) |
-| `String`                  | GC `array i8` (UTF-8)          | `string`                             | UTF-8 string, GC-managed internally          |
-| `Array<T>`                | GC `array T`                   | `list<T>`                            | Dynamic array, GC-managed internally         |
-| `Dict<K, V>`              | GC struct (hash table)         | `list<tuple<K, V>>`                  | Hash map internally, list at boundary        |
-| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`      | `tuple<T1, T2, ...>`                 | Tuple types                                  |
-| `Option<T>`               | GC variant                     | `option<T>`                          | Optional value                               |
-| `Result<T, E>`            | GC variant                     | `result<T, E>`                       | Result type                                  |
-| `Result<(), ()>`          | GC variant                     | `result`                             | Unit result (no payload)                     |
-| `struct { ... }`          | GC `struct`                    | `record { ... }`                     | Wasm GC struct internally, record at CM boundary |
-| `enum { ... }`            | `i32`                          | `enum { ... }`                       | Enumeration without payloads                 |
-| `variant { ... }`         | GC variant                     | `variant { ... }`                    | Variant/sum type with payloads               |
-| `flags { ... }`           | `i32`/`i64`                    | `flags { ... }`                      | Bit flags                                    |
-| `resource`                | `i32` (handle)                 | `resource`                           | Resource handle                              |
-| `Stream<T>`               | CM stream (P3)                 | `stream<T>`                          | Component Model async stream                 |
-| `Future<T>`               | CM future (P3)                 | `future<T>`                          | Component Model async future                 |
+| Wado Type                 | Internal Representation      | CM Type at Boundary                  | Notes                                            |
+| ------------------------- | ---------------------------- | ------------------------------------ | ------------------------------------------------ |
+| `bool`                    | `i32`                        | `bool`                               | Boolean value                                    |
+| `char`                    | `i32`                        | `char`                               | Unicode scalar value                             |
+| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64`   | `s8`, `s16`, `s32`, `s64`            | Signed integers                                  |
+| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64`   | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                |
+| `i128`, `u128`            | `i64` pair (Wide Arithmetic) | `tuple<s64, s64>`, `tuple<u64, u64>` | 128-bit integers                                 |
+| `f32`, `f64`              | `f32`, `f64`                 | `f32`, `f64`                         | Floating point                                   |
+| `f16`                     | -                            | -                                    | TODO: Wasm half-precision proposal (Phase 1)     |
+| `String`                  | GC `array i8` (UTF-8)        | `string`                             | UTF-8 string, GC-managed internally              |
+| `Array<T>`                | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally             |
+| `Dict<K, V>`              | GC struct (hash table)       | `list<tuple<K, V>>`                  | Hash map internally, list at boundary            |
+| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`    | `tuple<T1, T2, ...>`                 | Tuple types                                      |
+| `Option<T>`               | GC variant                   | `option<T>`                          | Optional value                                   |
+| `Result<T, E>`            | GC variant                   | `result<T, E>`                       | Result type                                      |
+| `Result<(), ()>`          | GC variant                   | `result`                             | Unit result (no payload)                         |
+| `struct { ... }`          | GC `struct`                  | `record { ... }`                     | Wasm GC struct internally, record at CM boundary |
+| `enum { ... }`            | `i32`                        | `enum { ... }`                       | Enumeration without payloads                     |
+| `variant { ... }`         | GC variant                   | `variant { ... }`                    | Variant/sum type with payloads                   |
+| `flags { ... }`           | `i32`/`i64`                  | `flags { ... }`                      | Bit flags                                        |
+| `resource`                | `i32` (handle)               | `resource`                           | Resource handle                                  |
+| `Stream<T>`               | CM stream (P3)               | `stream<T>`                          | Component Model async stream                     |
+| `Future<T>`               | CM future (P3)               | `future<T>`                          | Component Model async future                     |
 
 ### The Prelude
 
@@ -1717,6 +1717,46 @@ pub fn api_function() with Http, FileSystem {
     // ...
 }
 ```
+
+### Reference Storage (`stores[...]`)
+
+The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion.
+
+**Syntax**: `with stores[param1, param2, ...]`
+
+```wado
+// Function that stores a reference parameter
+fn register(data: &Data) -> Handle with stores[data] {
+    registry.push(data);  // Stores the reference
+    return new_handle();
+}
+
+// Function that does NOT store (no stores declaration)
+fn process(data: &Data) -> Result {
+    return compute(*data);  // Uses but doesn't store
+}
+
+// Combined with effects
+fn store_and_log(data: &Data) -> Handle with Stdout, stores[data] {
+    println("Storing data...");
+    return register(data);
+}
+```
+
+**Naming Rationale**: The keyword is `stores` (not `captures`) because:
+
+- "Capture" is established terminology for closures (`let f = || x + 1` captures `x`)
+- `stores` describes what the function _does_ with the reference—it stores it for later use
+- This avoids conflating two different concepts: closures capturing variables vs functions storing parameters
+
+**Functor types** can also declare stores (positional: 0 = first parameter):
+
+```wado
+fn take_storing(f: Fn(&Data) with stores[0]) { ... }
+fn take_pure(f: Fn(&Data) -> Result) { ... }  // cannot store
+```
+
+See `docs/adr-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
 
 ### Handlers
 

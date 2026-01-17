@@ -21,12 +21,12 @@ build: wado-compiler/lib/builtins/wado-bundled.wat
 	cargo build
 
 .PHONY: hello
-hello: build
+hello:
 	cargo run -p wado-cli --quiet -- compile -o example/hello.wat example/hello.wado
 	cargo run -p wado-cli --quiet -- compile -o example/hello.wasm example/hello.wado
 
 .PHONY: hello-run
-hello-run: build
+hello-run:
 	cargo run -p wado-cli --quiet -- run example/hello.wado
 
 .PHONY: hello-run-wasmtime
@@ -37,14 +37,26 @@ hello-run-wasmtime: hello
 test:
 	cargo test
 
+.PHONY: test-cov
+test-cov:
+	cargo llvm-cov --all-features --workspace
+
+.PHONY: test-cov-html
+test-cov-html:
+	cargo llvm-cov --all-features --workspace --html
+	@echo "Coverage report generated at target/llvm-cov/html/index.html"
+
 .PHONY: on-task-done
-on-task-done: clippy-fix format update-bundled test
+on-task-done: clippy-fix update-bundled format test
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: format
-format: build
+format:
 	cargo fmt --verbose --all
 	npx prettier --write spec.md AGENTS.md README.md docs/*.md benchmark/*.md
+
+.PHONY: format-wado
+format-wado:
 	cargo run --bin wado --quiet -- format -w $$(grep -L '"compile_error"' wado-compiler/tests/fixtures/*.wado wado-compiler/tests/fixtures/**/*.wado)
 
 .PHONY: clippy
@@ -59,14 +71,52 @@ clippy-fix:
 clean:
 	cargo clean
 	rm -f example/*.wat example/*.wasm
-	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c
+	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c benchmark/sieve_c
+
+# VS Code extension targets
+.PHONY: install-wado-vscode-dev
+install-wado-vscode-dev:
+	@if [ -e ~/.vscode/extensions/wado-lang.wado-0.0.1 ]; then \
+		echo "wado-vscode is already installed"; \
+	else \
+		cd wado-vscode && npm install && npm run compile; \
+		ln -s "$(CURDIR)/wado-vscode" ~/.vscode/extensions/wado-lang.wado-0.0.1; \
+		echo "wado-vscode installed. Restart VS Code to activate."; \
+	fi
+
+.PHONY: clean-wado-vscode-dev
+clean-wado-vscode-dev:
+	rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1
+	@echo "wado-vscode symlink removed. Restart VS Code to deactivate."
+
+.PHONY: test-wado-vscode
+test-wado-vscode:
+	cd wado-vscode && npm install && npm run test:unit && npm run test
+
+.PHONY: update-wado-vscode-grammar
+update-wado-vscode-grammar:
+	cargo run --bin wado --quiet -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
+	cargo run --bin wado --quiet -- syntax --format language-config -o wado-vscode/language-configuration.json
+	@echo "Updated wado-vscode syntax files"
+
+.PHONY: update-json-schema-files
+update-json-schema-files:
+	@mkdir -p wado-cli/schemas
+	@echo "Downloading TextMate grammar schema..."
+	@curl -sL "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json" \
+		| sed 's|"$$schema": "http://json-schema.org/schema#"|"$$schema": "http://json-schema.org/draft-07/schema#"|g; s|"id":|"$$id":|g' \
+		> wado-cli/schemas/tmlanguage.schema.json
+	@echo "Downloading VS Code language-configuration schema..."
+	@curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json" \
+		> wado-cli/schemas/language-configuration.schema.json
+	@echo "Updated JSON schema files in wado-cli/schemas/"
 
 .PHONY: update-vendor
 update-vendor:
 	git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime vendor/wasm-tools
 
 .PHONY: update-stdlib-wasi
-update-stdlib-wasi: build
+update-stdlib-wasi:
 	rm -f wado-compiler/lib/wasi/*.wado
 	cargo run -p wado-from-wit -- \
 		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
@@ -90,7 +140,7 @@ check-bundled:
 	@echo "wado-bundled.wat is up-to-date."
 
 .PHONY: benchmark-count-prime
-benchmark-count-prime: build
+benchmark-count-prime:
 	@echo "=== Compiling Wado benchmark ==="
 	cargo run --bin wado --quiet -- compile -o benchmark/count_prime.wasm benchmark/count_prime.wado
 	@echo ""
@@ -106,11 +156,14 @@ benchmark-count-prime: build
 	@echo "=== Python ==="
 	@python3 benchmark/count_prime.py
 	@echo ""
+	@echo "=== Ruby ==="
+	@ruby benchmark/count_prime.rb
+	@echo ""
 	@echo "=== Wado (wasmtime) ==="
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
 
 .PHONY: benchmark-mandelbrot
-benchmark-mandelbrot: build
+benchmark-mandelbrot:
 	@echo "=== Compiling Wado benchmark ==="
 	cargo run --bin wado --quiet -- compile -o benchmark/mandelbrot.wasm benchmark/mandelbrot.wado
 	@echo ""
@@ -126,5 +179,31 @@ benchmark-mandelbrot: build
 	@echo "=== Python ==="
 	@python3 benchmark/mandelbrot.py
 	@echo ""
+	@echo "=== Ruby ==="
+	@ruby benchmark/mandelbrot.rb
+	@echo ""
 	@echo "=== Wado (wasmtime) ==="
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
+
+.PHONY: benchmark-sieve
+benchmark-sieve:
+	@echo "=== Compiling Wado benchmark ==="
+	cargo run --bin wado --quiet -- compile -o benchmark/sieve.wasm benchmark/sieve.wado
+	@echo ""
+	@echo "=== Compiling C benchmark ==="
+	cc -O3 -o benchmark/sieve_c benchmark/sieve.c
+	@echo ""
+	@echo "=== C (cc -O3) ==="
+	@./benchmark/sieve_c
+	@echo ""
+	@echo "=== JavaScript (Node.js) ==="
+	@node benchmark/sieve.js
+	@echo ""
+	@echo "=== Python ==="
+	@python3 benchmark/sieve.py
+	@echo ""
+	@echo "=== Ruby ==="
+	@ruby benchmark/sieve.rb
+	@echo ""
+	@echo "=== Wado (wasmtime) ==="
+	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/sieve.wasm

@@ -1,4 +1,5 @@
 # ARD: WebAssembly Module Import Support
+
 ## Context
 
 Wado aims to be a "Wasm only" language, maintaining zero abstraction over WebAssembly. To achieve this goal and enable interoperability with the broader Wasm ecosystem, we need a mechanism to import and integrate existing WebAssembly modules directly into Wado programs.

@@ -233,10 +233,23 @@ impl Binder {
 
     /// Bind an if statement
     fn bind_if_stmt(&mut self, if_stmt: &IfStmt) {
+        // Handle optional init binding (scoped to this if statement)
+        if if_stmt.init.is_some() {
+            self.enter_scope();
+        }
+
+        if let Some(init) = &if_stmt.init {
+            self.bind_let(init);
+        }
+
         self.bind_expr(&if_stmt.condition);
         self.bind_block(&if_stmt.then_block);
         if let Some(ref else_block) = if_stmt.else_block {
             self.bind_block(else_block);
+        }
+
+        if if_stmt.init.is_some() {
+            self.exit_scope();
         }
     }
 
@@ -378,6 +391,12 @@ impl Binder {
                 }
             }
 
+            Expr::StaticMethodCall(static_call) => {
+                for arg in &static_call.args {
+                    self.bind_expr(arg);
+                }
+            }
+
             Expr::FieldAccess(field_access) => {
                 self.bind_expr(&field_access.expr);
             }
@@ -441,10 +460,23 @@ impl Binder {
 
     /// Bind an if expression
     fn bind_if_expr(&mut self, if_expr: &IfExpr) {
+        // Handle optional init binding (scoped to this if expression)
+        if if_expr.init.is_some() {
+            self.enter_scope();
+        }
+
+        if let Some(init) = &if_expr.init {
+            self.bind_let(init);
+        }
+
         self.bind_expr(&if_expr.condition);
         self.bind_block(&if_expr.then_block);
         if let Some(ref else_block) = if_expr.else_block {
             self.bind_block(else_block);
+        }
+
+        if if_expr.init.is_some() {
+            self.exit_scope();
         }
     }
 

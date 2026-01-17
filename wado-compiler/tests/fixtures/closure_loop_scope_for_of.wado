@@ -1,0 +1,22 @@
+// Test that for-of loop variables are captured correctly per iteration
+// Each closure captures its own iteration's value of item
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let items: Array<i32> = [10, 20, 30, 40, 50];
+    let mut results: Array<i32> = [];
+
+    for let item of items {
+        // Create closure that captures item
+        let get_item = |_: i32| item;
+
+        // Call it and store result
+        results.append(get_item(0));
+    }
+
+    // Verify each closure captured its iteration's value
+    println(`{results[0]},{results[1]},{results[2]},{results[3]},{results[4]}`);
+}
+
+__DATA__
+{"stdout": "10,20,30,40,50\n"}

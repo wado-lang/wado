@@ -1,0 +1,28 @@
+// Index assignment with complex expression as value
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let mut arr: Array<i32> = [0, 0, 0, 0];
+
+    // Arithmetic expression
+    arr[0] = 10 + 20 * 3;
+
+    // Function call result
+    arr[1] = compute(5);
+
+    // Binary operation with array access
+    let other: Array<i32> = [100];
+    arr[2] = other[0] + 50;
+
+    // Nested arithmetic
+    arr[3] = (arr[0] + arr[1]) / 2;
+
+    println(`{arr[0]} {arr[1]} {arr[2]} {arr[3]}`);
+}
+
+fn compute(x: i32) -> i32 {
+    return x * x;
+}
+
+__DATA__
+{"stdout": "70 25 150 47\n"}

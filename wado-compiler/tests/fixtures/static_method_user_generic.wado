@@ -1,0 +1,25 @@
+// Test user-defined generic struct with static method
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+impl Box<T> {
+    pub fn new(value: T) -> Box<T> {
+        return Box { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+fn run() with Stdout {
+    // Create Box<i32> using static method
+    let b = Box::<i32>::new(42);
+    println(`box value: {b.get()}`);
+}
+
+__DATA__
+{"stdout": "box value: 42\n"}

@@ -1,4 +1,5 @@
 # WEP: Struct and Trait System
+
 ## Context
 
 Wado needs a type system for defining custom data types and shared behavior. This WEP defines the syntax and semantics for structs (product types) and traits (behavior abstraction), building on the value semantics established in `wep-2026-01-12-value-semantics-and-captures.md`.

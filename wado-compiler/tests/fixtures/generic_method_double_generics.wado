@@ -1,0 +1,60 @@
+// Test method-level type params (double generics)
+// The struct has type param T, and methods have their own type params
+use { println, Stdout } from "core:cli";
+
+struct Container<T> {
+    value: T,
+}
+
+impl Container<T> {
+    pub fn new(value: T) -> Container<T> {
+        return Container { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+
+    pub fn transform<U>(&self, f_result: U) -> U {
+        // Method with its own type parameter U (double generic)
+
+        // Note: We can't actually call a function parameter yet,
+        // so we just return the result directly
+        let _ = self.value;
+        return f_result;
+    }
+
+    pub fn combine<U, V>(&self, u: U, v: V) -> U {
+        // Method with two type parameters
+
+        let _v = self.value;
+        let _w = v;
+        return u;
+    }
+}
+
+fn run() with Stdout {
+    let c = Container::<i32>::new(42);
+    println(`value: {c.get()}`);
+
+    // Call method with its own type parameter (same as container's type)
+    let result = c.transform::<i32>(100);
+    println(`transform: {result}`);
+
+    // Call method with two type parameters (same types)
+    let combined_same = c.combine::<i32, i32>(200, 300);
+    println(`combine same: {combined_same}`);
+
+    // Call method with two type parameters (mixed types)
+    // This tests the unified substitution context for double generics
+    let combined_mixed = c.combine::<i32, i64>(400, 500 as i64);
+    println(`combine mixed: {combined_mixed}`);
+
+    // Also test with different receiver type
+    let c2 = Container::<i64>::new(1000 as i64);
+    let result2 = c2.transform::<i32>(99);
+    println(`c2 transform: {result2}`);
+}
+
+__DATA__
+{"stdout": "value: 42\ntransform: 100\ncombine same: 200\ncombine mixed: 400\nc2 transform: 99\n"}

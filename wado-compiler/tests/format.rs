@@ -591,6 +591,68 @@ __DATA__
 }
 
 // ============================================================================
+// Shebang Preservation Tests
+// ============================================================================
+
+#[test]
+fn test_format_preserves_shebang() {
+    let source = r#"#!/usr/bin/env wado
+fn run() {
+    let x = 1;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.starts_with("#!/usr/bin/env wado\n"),
+        "shebang should be preserved at start: {}",
+        formatted
+    );
+}
+
+#[test]
+fn test_format_preserves_shebang_with_args() {
+    let source = r#"#!/usr/bin/wado --some-flag
+fn run() {
+    let x = 1;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.starts_with("#!/usr/bin/wado --some-flag\n"),
+        "shebang with args should be preserved: {}",
+        formatted
+    );
+}
+
+#[test]
+fn test_format_preserves_shebang_with_data_section() {
+    let source = r#"#!/usr/bin/env wado
+fn run() {
+    let x = 1;
+}
+
+__DATA__
+{"stdout": "hello"}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.starts_with("#!/usr/bin/env wado\n"),
+        "shebang should be preserved: {}",
+        formatted
+    );
+    assert!(
+        formatted.contains("__DATA__"),
+        "data section should be preserved: {}",
+        formatted
+    );
+    assert!(
+        formatted.contains(r#"{"stdout": "hello"}"#),
+        "data section content should be preserved: {}",
+        formatted
+    );
+}
+
+// ============================================================================
 // Number Literal Tests
 // ============================================================================
 

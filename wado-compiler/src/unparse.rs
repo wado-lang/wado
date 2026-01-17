@@ -8,9 +8,9 @@ use crate::ast::{
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LetStmt,
     Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl,
-    ReturnStmt, SelfKind, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr,
-    TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    WhileStmt, WorldDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    TemplateStringExpr, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -49,6 +49,12 @@ impl<'a> Unparser<'a> {
     }
 
     pub fn unparse(mut self, module: &Module) -> String {
+        // Output shebang if present
+        if let Some(shebang) = module.shebang() {
+            self.output.push_str(shebang);
+            self.output.push('\n');
+        }
+
         self.unparse_module(module);
 
         // Append data section if present
@@ -678,6 +684,23 @@ impl<'a> Unparser<'a> {
     fn unparse_if_stmt(&mut self, i: &IfStmt) {
         self.write_indent();
         self.output.push_str("if ");
+
+        // Handle optional init binding
+        if let Some(init) = &i.init {
+            self.output.push_str("let ");
+            if init.is_mut {
+                self.output.push_str("mut ");
+            }
+            self.output.push_str(&init.name);
+            if let Some(ty) = &init.ty {
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
+            self.output.push_str(" = ");
+            self.unparse_expr(&init.value);
+            self.output.push_str("; ");
+        }
+
         self.unparse_expr(&i.condition);
         self.output.push_str(" {\n");
 
@@ -829,6 +852,7 @@ impl<'a> Unparser<'a> {
             Expr::ComparisonChain(chain) => self.unparse_comparison_chain(chain),
             Expr::Call(c) => self.unparse_call(c),
             Expr::MethodCall(m) => self.unparse_method_call(m),
+            Expr::StaticMethodCall(s) => self.unparse_static_method_call(s),
             Expr::FieldAccess(f) => self.unparse_field_access(f),
             Expr::Index(i) => self.unparse_index(i),
             Expr::Block(b) => self.unparse_block_expr(b),
@@ -998,6 +1022,34 @@ impl<'a> Unparser<'a> {
         self.output.push(')');
     }
 
+    fn unparse_static_method_call(&mut self, s: &StaticMethodCallExpr) {
+        // For generic types, use turbofish syntax: Name::<Args>
+        match &s.target_type {
+            Type::Generic(g) => {
+                self.output.push_str(&g.name);
+                self.output.push_str("::<");
+                for (i, arg) in g.args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_type(arg);
+                }
+                self.output.push('>');
+            }
+            _ => self.unparse_type(&s.target_type),
+        }
+        self.output.push_str("::");
+        self.output.push_str(&s.method);
+        self.output.push('(');
+        for (i, arg) in s.args.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(arg);
+        }
+        self.output.push(')');
+    }
+
     fn unparse_field_access(&mut self, f: &FieldAccessExpr) {
         self.unparse_expr(&f.expr);
         self.output.push('.');
@@ -1022,6 +1074,23 @@ impl<'a> Unparser<'a> {
 
     fn unparse_if_expr(&mut self, i: &IfExpr) {
         self.output.push_str("if ");
+
+        // Handle optional init binding
+        if let Some(init) = &i.init {
+            self.output.push_str("let ");
+            if init.is_mut {
+                self.output.push_str("mut ");
+            }
+            self.output.push_str(&init.name);
+            if let Some(ty) = &init.ty {
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
+            self.output.push_str(" = ");
+            self.unparse_expr(&init.value);
+            self.output.push_str("; ");
+        }
+
         self.unparse_expr(&i.condition);
         self.output.push_str(" {\n");
 
@@ -1770,6 +1839,11 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push_str(name);
             }
+            TirExprKind::Capture { name, index } => {
+                // Display as captured variable with index for debugging
+                self.output
+                    .push_str(&format!("@capture[{}]:{}", index, name));
+            }
             TirExprKind::Binary { left, op, right } => {
                 self.output.push('(');
                 self.unparse_expr(left);
@@ -1863,6 +1937,20 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push('>');
                 }
+                self.output.push('(');
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_expr(arg);
+                }
+                self.output.push(')');
+            }
+            TirExprKind::StaticCall {
+                func_name, args, ..
+            } => {
+                // Output the mangled function name as-is (e.g., "Point::origin" or "Array$i32::with_capacity")
+                self.output.push_str(func_name);
                 self.output.push('(');
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
@@ -1973,7 +2061,11 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(']');
             }
-            TirExprKind::Closure { params, body, .. } => {
+            TirExprKind::Closure {
+                params,
+                body,
+                captures,
+            } => {
                 self.output.push('|');
                 for (i, (name, type_id)) in params.iter().enumerate() {
                     if i > 0 {
@@ -1983,8 +2075,31 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str(": ");
                     self.output.push_str(&self.type_table.type_name(*type_id));
                 }
-                self.output.push_str("| ");
+                self.output.push('|');
+                // Show captures if any
+                if !captures.is_empty() {
+                    self.output.push_str(" captures[");
+                    for (i, cap) in captures.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.output.push_str(&cap.name);
+                    }
+                    self.output.push(']');
+                }
+                self.output.push(' ');
                 self.unparse_expr(body);
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.unparse_expr(callee);
+                self.output.push('(');
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_expr(arg);
+                }
+                self.output.push(')');
             }
         }
     }

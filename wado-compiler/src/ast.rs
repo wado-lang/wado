@@ -5,6 +5,8 @@ use crate::token::Span;
 #[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<Item>,
+    /// Shebang line, if present (e.g., "#!/usr/bin/env wado").
+    shebang: Option<String>,
     /// Content of the __DATA__ section, if present in the source file.
     /// This is available after parsing for tooling (test harnesses, IDEs).
     data_section: Option<String>,
@@ -15,16 +17,27 @@ impl Module {
     pub fn new(items: Vec<Item>) -> Self {
         Self {
             items,
+            shebang: None,
             data_section: None,
         }
     }
 
-    /// Creates a new module with the given items and data section.
-    pub fn with_data_section(items: Vec<Item>, data_section: Option<String>) -> Self {
+    /// Creates a new module with the given items, shebang, and data section.
+    pub fn with_metadata(
+        items: Vec<Item>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+    ) -> Self {
         Self {
             items,
+            shebang,
             data_section,
         }
+    }
+
+    /// Returns the shebang line, if present.
+    pub fn shebang(&self) -> Option<&str> {
+        self.shebang.as_deref()
     }
 
     /// Returns the content of the __DATA__ section, if present.
@@ -304,6 +317,8 @@ pub struct ReturnStmt {
 
 #[derive(Debug, Clone)]
 pub struct IfStmt {
+    /// Optional init binding: `if let x = expr; condition { ... }`
+    pub init: Option<Box<LetStmt>>,
     pub condition: Expr,
     pub then_block: Block,
     pub else_block: Option<Block>,
@@ -374,6 +389,7 @@ pub enum Expr {
     ComparisonChain(Box<ComparisonChainExpr>),
     Call(Box<CallExpr>),
     MethodCall(Box<MethodCallExpr>),
+    StaticMethodCall(Box<StaticMethodCallExpr>),
     FieldAccess(Box<FieldAccessExpr>),
     Index(Box<IndexExpr>),
     Block(Box<Block>),
@@ -399,6 +415,7 @@ impl Expr {
             Expr::ComparisonChain(e) => e.span,
             Expr::Call(e) => e.span,
             Expr::MethodCall(e) => e.span,
+            Expr::StaticMethodCall(e) => e.span,
             Expr::FieldAccess(e) => e.span,
             Expr::Index(e) => e.span,
             Expr::Block(e) => e.span,
@@ -596,6 +613,18 @@ pub struct MethodCallExpr {
     pub span: Span,
 }
 
+/// Static method call expression: `Array::<i32>::with_capacity(100)` or `Point::origin()`
+#[derive(Debug, Clone)]
+pub struct StaticMethodCallExpr {
+    /// The target type (e.g., `Array<i32>` or `Point`)
+    pub target_type: Type,
+    /// The method name (e.g., `with_capacity` or `origin`)
+    pub method: String,
+    /// Arguments to the method
+    pub args: Vec<Expr>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct FieldAccessExpr {
     pub expr: Expr,
@@ -612,6 +641,8 @@ pub struct IndexExpr {
 
 #[derive(Debug, Clone)]
 pub struct IfExpr {
+    /// Optional init binding: `if let x = expr; condition { ... }`
+    pub init: Option<Box<LetStmt>>,
     pub condition: Expr,
     pub then_block: Block,
     pub else_block: Option<Block>,

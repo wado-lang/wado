@@ -1,4 +1,5 @@
 // Lexer for Wado
+// This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::comment::{Comment, CommentKind};
 use crate::token::{Span, Token, TokenKind};
@@ -13,6 +14,8 @@ pub struct Lexer<'a> {
     data_section: Option<String>,
     /// Collected comments (not discarded, for formatter use)
     comments: Vec<Comment>,
+    /// Shebang line, if present (e.g., "#!/usr/bin/env wado")
+    shebang: Option<String>,
 }
 
 #[derive(Debug)]
@@ -31,6 +34,7 @@ impl<'a> Lexer<'a> {
             column: 1,
             data_section: None,
             comments: Vec::new(),
+            shebang: None,
         }
     }
 
@@ -53,11 +57,20 @@ impl<'a> Lexer<'a> {
         self.comments
     }
 
-    pub fn into_parts(self) -> (Option<String>, Vec<Comment>) {
-        (self.data_section, self.comments)
+    pub fn into_parts(self) -> (Option<String>, Vec<Comment>, Option<String>) {
+        (self.data_section, self.comments, self.shebang)
+    }
+
+    /// Returns the shebang line, if present.
+    /// This is available after calling `tokenize()`.
+    pub fn shebang(&self) -> Option<&str> {
+        self.shebang.as_deref()
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>, LexError> {
+        // Skip shebang if present at the very beginning of the file
+        self.skip_shebang();
+
         let mut tokens = Vec::new();
 
         loop {
@@ -321,6 +334,39 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Skip shebang line if present at the very beginning of the file.
+    /// Shebang is only valid at position 0 and starts with `#!`.
+    /// Note: `#![` is an inner attribute, not a shebang.
+    fn skip_shebang(&mut self) {
+        // Shebang is only valid at the very beginning of the file
+        if self.pos != 0 {
+            return;
+        }
+
+        // Check for #! but not #![ (inner attribute)
+        let remaining = &self.input[self.pos..];
+        if !remaining.starts_with("#!") || remaining.starts_with("#![") {
+            return;
+        }
+
+        // Find the end of the shebang line
+        let start = self.pos;
+        while let Some((_, ch)) = self.peek() {
+            if ch == '\n' {
+                break;
+            }
+            self.advance();
+        }
+
+        // Store the shebang line (without trailing newline)
+        self.shebang = Some(self.input[start..self.pos].to_string());
+
+        // Skip the newline
+        if let Some((_, '\n')) = self.peek() {
+            self.advance();
+        }
+    }
+
     fn skip_whitespace_and_comments(&mut self) {
         loop {
             // Skip whitespace
@@ -512,6 +558,7 @@ impl<'a> Lexer<'a> {
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
             "in" => TokenKind::In,
+            "of" => TokenKind::Of,
             "pub" => TokenKind::Pub,
             "effect" => TokenKind::Effect,
             "handler" => TokenKind::Handler,
@@ -1314,5 +1361,82 @@ test data"#;
 
         let data = lexer.into_data_section();
         assert_eq!(data, Some("owned data".to_string()));
+    }
+
+    #[test]
+    fn test_shebang_basic() {
+        let source = "#!/usr/bin/env wado\nfn main() { }";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Shebang should be completely skipped
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "main"));
+    }
+
+    #[test]
+    fn test_shebang_with_args() {
+        let source = "#!/usr/bin/wado --some-flag\nfn test() { }";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+    }
+
+    #[test]
+    fn test_no_shebang() {
+        // Regular code without shebang
+        let source = "fn main() { }";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+    }
+
+    #[test]
+    fn test_hash_not_shebang() {
+        // Hash on first line but not shebang (no !)
+        let source = "#[attr]\nfn main() { }";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Should parse # as Hash token, not skip as shebang
+        assert!(matches!(tokens[0].kind, TokenKind::Hash));
+    }
+
+    #[test]
+    fn test_inner_attribute_not_shebang() {
+        // #![ is an inner attribute, not a shebang
+        let source = "#![no_prelude]\nfn main() { }";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Should parse #, !, [ as tokens, not skip as shebang
+        assert!(matches!(tokens[0].kind, TokenKind::Hash));
+        assert!(matches!(tokens[1].kind, TokenKind::Not));
+        assert!(matches!(tokens[2].kind, TokenKind::LBracket));
+    }
+
+    #[test]
+    fn test_shebang_not_on_first_line() {
+        // #! on second line should be parsed as Hash + Not, not skipped as shebang
+        let source = "fn main() { }\n#!/usr/bin/wado";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Should find Hash and Not tokens after the function
+        let has_hash = tokens.iter().any(|t| matches!(t.kind, TokenKind::Hash));
+        let has_not = tokens.iter().any(|t| matches!(t.kind, TokenKind::Not));
+        assert!(has_hash);
+        assert!(has_not);
+    }
+
+    #[test]
+    fn test_shebang_with_data_section() {
+        let source = "#!/usr/bin/env wado\nfn main() { }\n__DATA__\ntest data";
+        let mut lexer = Lexer::new(source);
+        lexer.tokenize().unwrap();
+
+        assert_eq!(lexer.data_section(), Some("test data"));
     }
 }

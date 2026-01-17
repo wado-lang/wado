@@ -1,4 +1,5 @@
 # WEP: Function Return Type Syntax
+
 **Status:** Accepted
 **Date:** 2026-01-16
 
@@ -7,6 +8,7 @@
 Wado needed to decide on the syntax for specifying function return types. Two primary options were considered:
 
 1. **Arrow syntax (`->`)** - Used by Rust, Swift, Haskell, Python, and C++ (trailing return type)
+
    ```wado
    fn add(a: i32, b: i32) -> i32 { ... }
    ```
@@ -17,6 +19,7 @@ Wado needed to decide on the syntax for specifying function return types. Two pr
    ```
 
 This decision impacts:
+
 - Developer experience and learning curve
 - Consistency with closures and higher-order functions
 - Alignment with target ecosystems (WebAssembly/systems vs. web development)
@@ -25,6 +28,7 @@ This decision impacts:
 ### Comparative Analysis
 
 **Arrow Syntax (`->`) Advantages:**
+
 - Provides visual separation between parameters and return types, improving readability for higher-order functions
 - Maintains consistency between function type signatures and function definitions
 - Aligns with mathematical notation `f: X → Y`
@@ -32,6 +36,7 @@ This decision impacts:
 - Clear directional semantics: "transforms input into output"
 
 **Colon Syntax (`:`) Advantages:**
+
 - Consistent with all type annotations using the same symbol
 - Familiar to TypeScript/JavaScript developers
 - Simpler syntax for straightforward functions
@@ -39,6 +44,7 @@ This decision impacts:
 ### Key Decision Factor: Higher-Order Functions
 
 Wado's design includes:
+
 - Effect systems (e.g., `fn foo() with Stdout, FileSystem`)
 - Higher-order functions with complex type signatures
 - Generic functions and methods
@@ -74,6 +80,7 @@ fn function_name(param: Type) -> ReturnType { ... }
 ```
 
 This applies to:
+
 - Regular function definitions
 - Public functions
 - Functions with effects

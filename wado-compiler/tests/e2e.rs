@@ -293,24 +293,28 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
     verify_result(&result, &spec, &test_id);
 }
 
-/// Run a single fixture test at all optimization levels: None, Full, Size
-fn run_fixture_test(fixture_path: &Path) {
-    // Test at O0 (no optimization)
-    run_fixture_test_with_opt(fixture_path, OptLevel::None);
-    // Test at O2 (full optimization with DCE)
-    run_fixture_test_with_opt(fixture_path, OptLevel::Full);
-    // Test at Os (size optimization with DCE + name stripping)
-    run_fixture_test_with_opt(fixture_path, OptLevel::Size);
-}
-
-/// Test function for datatest-stable - runs each .wado fixture file
-fn fixture_test(path: &Path) -> datatest_stable::Result<()> {
-    run_fixture_test(path);
+/// Test function for O0 (no optimization)
+fn fixture_test_o0(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    run_fixture_test_with_opt(path, OptLevel::None);
     Ok(())
 }
 
-datatest_stable::harness! {
+/// Test function for O2 (full optimization)
+fn fixture_test_o2(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    run_fixture_test_with_opt(path, OptLevel::Full);
+    Ok(())
+}
+
+/// Test function for Os (size optimization)
+fn fixture_test_os(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    run_fixture_test_with_opt(path, OptLevel::Size);
+    Ok(())
+}
+
+datatest_mini::harness! {
     // Pattern matches .wado files directly in fixtures/ but not in subdirectories
     // (subdirectories contain helper modules that are imported, not run as tests)
-    { test = fixture_test, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o0, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o2, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
 }

@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::process;
 
-use lexopt::prelude::*;
+use lexopt::Arg::{Long, Value};
+
+use crate::args::{next_arg, reject_multiple_inputs, require_input, unexpected_arg};
 
 pub struct DumpOptions {
     pub input: String,
@@ -52,42 +54,21 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_optimize = false;
     let mut unparse = false;
 
-    while let Some(arg) = parser.next().unwrap_or_else(|e| {
-        eprintln!("Error: {e}");
-        process::exit(1);
-    }) {
+    while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
                 process::exit(0);
             }
-            Long("tokens") => {
-                show_tokens = true;
-            }
-            Long("ast") => {
-                show_ast = true;
-            }
-            Long("desugar") => {
-                show_desugar = true;
-            }
-            Long("symbols") => {
-                show_symbols = true;
-            }
-            Long("modules") => {
-                show_modules = true;
-            }
-            Long("tir") => {
-                show_tir = true;
-            }
-            Long("lower") => {
-                show_lower = true;
-            }
-            Long("optimize") => {
-                show_optimize = true;
-            }
-            Long("unparse") => {
-                unparse = true;
-            }
+            Long("tokens") => show_tokens = true,
+            Long("ast") => show_ast = true,
+            Long("desugar") => show_desugar = true,
+            Long("symbols") => show_symbols = true,
+            Long("modules") => show_modules = true,
+            Long("tir") => show_tir = true,
+            Long("lower") => show_lower = true,
+            Long("optimize") => show_optimize = true,
+            Long("unparse") => unparse = true,
             Long("all") => {
                 show_tokens = true;
                 show_ast = true;
@@ -99,28 +80,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                 show_optimize = true;
             }
             Value(val) => {
-                if input.is_some() {
-                    eprintln!("Error: multiple input files not supported");
-                    process::exit(1);
-                }
+                reject_multiple_inputs(&input);
                 input = Some(val.to_string_lossy().into_owned());
             }
-            _ => {
-                eprintln!("Error: {}", arg.unexpected());
-                print_usage();
-                process::exit(1);
-            }
+            _ => unexpected_arg(arg, print_usage),
         }
     }
 
-    let input = match input {
-        Some(f) => f,
-        None => {
-            eprintln!("Error: no input file specified");
-            print_usage();
-            process::exit(1);
-        }
-    };
+    let input = require_input(input, print_usage);
 
     // Default: show all
     if !show_tokens

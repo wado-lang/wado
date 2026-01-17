@@ -1,0 +1,13 @@
+// Test closure capture analysis - verifies captured variables work
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let a = 10;
+    let f = |x: i32| x + a;
+    // f captures: a
+    // For now just verify creation succeeds (calling closures not yet implemented)
+    println("capture analysis passed");
+}
+
+__DATA__
+{"stdout": "capture analysis passed\n"}

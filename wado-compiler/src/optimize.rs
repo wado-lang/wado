@@ -161,27 +161,60 @@ pub fn analyze_all_modules(
 
     // Check if stream intrinsics are needed by looking for:
     // 1. Stdout/Stderr effects being used
-    // 2. Any builtin::stream_* functions being called (for ambient logging)
-    // 3. Any builtin::call_indirect_* functions (ambient effect calls)
+    // 2. Any builtin stream_* functions being called (for ambient logging)
+    // 3. Any builtin call_indirect_* functions (ambient effect calls)
+    let is_builtin_func = |f: &FreeFunctionName| {
+        // New format: module_path == ["core", "builtin"]
+        (f.module_path.len() == 2 && f.module_path[0] == "core" && f.module_path[1] == "builtin")
+            // Legacy format: name starts with "builtin::"
+            || f.name.starts_with("builtin::")
+    };
+    let is_builtin_stream = |f: &FreeFunctionName| {
+        if is_builtin_func(f) {
+            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+            name.starts_with("stream_")
+        } else {
+            false
+        }
+    };
+    let is_builtin_call_indirect_stdout = |f: &FreeFunctionName| {
+        if is_builtin_func(f) {
+            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+            name.starts_with("call_indirect_stdout")
+        } else {
+            false
+        }
+    };
+    let is_builtin_call_indirect_stderr = |f: &FreeFunctionName| {
+        if is_builtin_func(f) {
+            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+            name.starts_with("call_indirect_stderr")
+        } else {
+            false
+        }
+    };
+
     let uses_stream_builtins = reachable.iter().any(|func_id| {
         if let FunctionId::Free(f) = func_id {
-            f.name.starts_with("builtin::stream_")
-                || f.name.starts_with("builtin::call_indirect_stdout")
-                || f.name.starts_with("builtin::call_indirect_stderr")
+            is_builtin_stream(f)
+                || is_builtin_call_indirect_stdout(f)
+                || is_builtin_call_indirect_stderr(f)
         } else {
             false
         }
     });
 
     // Also mark effects as used if indirect calls are present
-    if reachable.iter().any(|func_id| {
-        matches!(func_id, FunctionId::Free(f) if f.name.contains("builtin::call_indirect_stdout"))
-    }) {
+    if reachable
+        .iter()
+        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stdout(f)))
+    {
         used_effects.insert("Stdout".to_string());
     }
-    if reachable.iter().any(|func_id| {
-        matches!(func_id, FunctionId::Free(f) if f.name.contains("builtin::call_indirect_stderr"))
-    }) {
+    if reachable
+        .iter()
+        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stderr(f)))
+    {
         used_effects.insert("Stderr".to_string());
     }
 
@@ -486,6 +519,26 @@ fn analyze_expr(
                 analyze_expr(arg, current_module, type_table, analysis);
             }
         }
+        TirExprKind::StaticCall {
+            func_name,
+            module_path,
+            args,
+        } => {
+            // Static method call - func_name already contains "StructName::method_name"
+            // The function is registered as a free function with mangled name
+            let callee_path = if module_path.is_empty() {
+                current_module
+            } else {
+                module_path.as_slice()
+            };
+            let callee_id =
+                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, func_name));
+            analysis.callees.insert(callee_id);
+
+            for arg in args {
+                analyze_expr(arg, current_module, type_table, analysis);
+            }
+        }
         TirExprKind::FieldAccess { expr, .. } => {
             analyze_expr(expr, current_module, type_table, analysis);
         }
@@ -526,6 +579,12 @@ fn analyze_expr(
         TirExprKind::Closure { body, .. } => {
             analyze_expr(body, current_module, type_table, analysis);
         }
+        TirExprKind::IndirectCall { callee, args } => {
+            analyze_expr(callee, current_module, type_table, analysis);
+            for arg in args {
+                analyze_expr(arg, current_module, type_table, analysis);
+            }
+        }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -535,7 +594,8 @@ fn analyze_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. } => {}
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. } => {}
     }
 }
 

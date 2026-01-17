@@ -14,6 +14,188 @@ use std::collections::HashMap;
 use crate::token::Span;
 
 // ============================================================================
+// Type Parameter Substitution System
+// ============================================================================
+
+/// Identifies the scope where a type parameter is defined
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TypeParamScope {
+    /// Type parameter from struct/impl block (e.g., T in `impl Container<T>`)
+    Impl,
+    /// Type parameter from method signature (e.g., U in `fn transform<U>`)
+    Method,
+    /// Type parameter from free function (e.g., T in `fn identity<T>`)
+    Function,
+}
+
+/// Identifies a type parameter with its scope and index
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeParamId {
+    pub scope: TypeParamScope,
+    pub index: u32,
+}
+
+impl TypeParamId {
+    pub fn impl_param(index: u32) -> Self {
+        Self {
+            scope: TypeParamScope::Impl,
+            index,
+        }
+    }
+
+    pub fn method_param(index: u32) -> Self {
+        Self {
+            scope: TypeParamScope::Method,
+            index,
+        }
+    }
+
+    pub fn function_param(index: u32) -> Self {
+        Self {
+            scope: TypeParamScope::Function,
+            index,
+        }
+    }
+}
+
+/// Unified substitution context for type parameter resolution
+///
+/// This handles the complexity of double generics (methods with both struct-level
+/// and method-level type parameters) by building a combined substitution map.
+///
+/// For a method call like `container.method::<U, V>(args)` where container is `Container<T>`:
+/// - Impl type args (T's concrete type) are added with `with_impl_args`
+/// - Method type args (U, V's concrete types) are added with `with_method_args`
+/// - The substitution correctly handles offset indices used for method type params
+#[derive(Debug, Clone, Default)]
+pub struct SubstitutionContext {
+    /// Maps type param index to concrete type (index is as stored in TypeParam)
+    /// For impl params: indices 0, 1, 2, ...
+    /// For method params: indices offset, offset+1, ... (where offset = impl_params.len())
+    substitutions: HashMap<u32, TypeId>,
+}
+
+impl SubstitutionContext {
+    pub fn new() -> Self {
+        Self {
+            substitutions: HashMap::new(),
+        }
+    }
+
+    /// Add impl-level type args (e.g., T=i32 for Container<i32>)
+    /// These are substituted at indices 0, 1, 2, ...
+    pub fn with_impl_args(mut self, args: &[TypeId]) -> Self {
+        for (i, &type_id) in args.iter().enumerate() {
+            self.substitutions.insert(i as u32, type_id);
+        }
+        self
+    }
+
+    /// Add method-level type args (e.g., U=i64 for transform::<i64>)
+    /// These are substituted at offset indices (offset, offset+1, ...)
+    /// where offset is the number of impl type params
+    pub fn with_method_args(mut self, args: &[TypeId], offset: u32) -> Self {
+        for (i, &type_id) in args.iter().enumerate() {
+            self.substitutions.insert(offset + i as u32, type_id);
+        }
+        self
+    }
+
+    /// Substitute type parameters in a type
+    pub fn substitute(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
+        match type_table.get(type_id).clone() {
+            ResolvedType::TypeParam { index, .. } => {
+                // Direct substitution: TypeParam at index -> concrete type
+                self.substitutions.get(&index).copied().unwrap_or(type_id)
+            }
+            ResolvedType::Array(elem) => {
+                let new_elem = self.substitute(elem, type_table);
+                type_table.make_array(new_elem)
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let new_elem = self.substitute(elem, type_table);
+                type_table.make_builtin_array(new_elem)
+            }
+            ResolvedType::Option(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.make_option(new_inner)
+            }
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.make_ref(new_inner)
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.make_mut_ref(new_inner)
+            }
+            ResolvedType::Tuple(elems) => {
+                let new_elems: Vec<TypeId> = elems
+                    .iter()
+                    .map(|&e| self.substitute(e, type_table))
+                    .collect();
+                type_table.make_tuple(new_elems)
+            }
+            ResolvedType::Result { ok, err } => {
+                let new_ok = self.substitute(ok, type_table);
+                let new_err = self.substitute(err, type_table);
+                type_table.make_result(new_ok, new_err)
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_path,
+                type_args,
+            } => {
+                // Recursively substitute in nested generic instances
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute(arg, type_table))
+                    .collect();
+                type_table.make_generic_instance(name, module_path, new_args)
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                effects,
+            } => {
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&p| self.substitute(p, type_table))
+                    .collect();
+                let new_return = self.substitute(return_type, type_table);
+                type_table.make_function(new_params, new_return, effects)
+            }
+            ResolvedType::Stream(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.intern(ResolvedType::Stream(new_inner))
+            }
+            ResolvedType::Future(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.intern(ResolvedType::Future(new_inner))
+            }
+            ResolvedType::Dict { key, value } => {
+                let new_key = self.substitute(key, type_table);
+                let new_value = self.substitute(value, type_table);
+                type_table.intern(ResolvedType::Dict {
+                    key: new_key,
+                    value: new_value,
+                })
+            }
+            ResolvedType::Reactive(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.intern(ResolvedType::Reactive(new_inner))
+            }
+            // Other types don't contain type parameters
+            _ => type_id,
+        }
+    }
+
+    /// Check if this context has any substitutions
+    pub fn is_empty(&self) -> bool {
+        self.substitutions.is_empty()
+    }
+}
+
+// ============================================================================
 // Type System
 // ============================================================================
 
@@ -292,10 +474,10 @@ impl TypeTable {
         })
     }
 
-    /// Check if a type is or contains type parameters
+    /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {
-            ResolvedType::TypeParam { .. } => true,
+            ResolvedType::TypeParam { .. } | ResolvedType::Unknown | ResolvedType::Error => true,
             ResolvedType::Array(inner)
             | ResolvedType::BuiltinArray(inner)
             | ResolvedType::Option(inner)
@@ -478,6 +660,15 @@ pub enum TirExprKind {
         type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
     },
+    /// Static method call: `Array::<i32>::with_capacity(100)` or `Point::origin()`
+    StaticCall {
+        /// Mangled function name (e.g., "Array$i32::with_capacity" or "Point::origin")
+        func_name: String,
+        /// Module path where the impl block is defined
+        module_path: Vec<String>,
+        /// Arguments to the static method
+        args: Vec<TirExpr>,
+    },
 
     FieldAccess {
         expr: Box<TirExpr>,
@@ -512,10 +703,26 @@ pub enum TirExprKind {
         elements: Vec<TirExpr>,
     },
 
+    /// Access to a captured variable inside a closure body
+    Capture {
+        /// Index into the closure's captures array
+        index: u32,
+        /// Variable name (for debugging)
+        name: String,
+    },
+
     Closure {
         params: Vec<(String, TypeId)>,
         body: Box<TirExpr>,
         captures: Vec<TirCapture>,
+    },
+
+    /// Indirect call through a callable value (closure or funcref)
+    IndirectCall {
+        /// The callee expression (closure struct or funcref)
+        callee: Box<TirExpr>,
+        /// Arguments to pass to the callee
+        args: Vec<TirExpr>,
     },
 }
 
@@ -716,6 +923,9 @@ pub struct TirFunction {
     pub is_pub: bool,
     /// Generic type parameters (empty for non-generic functions)
     pub type_params: Vec<TirTypeParam>,
+    /// Type parameters from the impl block (for methods on generic structs)
+    /// e.g., for a method in `impl Counter<T>`, this contains T's info
+    pub impl_type_params: Vec<TirTypeParam>,
     /// If this function was created by monomorphization, contains the origin info
     pub monomorph_info: Option<MonomorphInfo>,
     pub params: Vec<TirParam>,

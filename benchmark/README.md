@@ -1,6 +1,6 @@
 # Wado Benchmarks
 
-This directory contains performance benchmarks comparing Wado against C, JavaScript, and Python.
+This directory contains performance benchmarks comparing Wado against C, JavaScript, Python, and Ruby.
 
 ## Benchmarks
 
@@ -28,6 +28,18 @@ Counts prime numbers up to 10,000,000 using trial division.
 make benchmark-count-prime
 ```
 
+### Sieve of Eratosthenes (`sieve.*`)
+
+Counts prime numbers up to 10,000,000 using the sieve algorithm.
+
+- **Use case**: Array allocation, indexed access, memory performance
+- **Operations**: Array creation via append, indexed read/write, iteration
+- **Reference**: π(10,000,000) = 664,579 primes (same as count_prime)
+
+```bash
+make benchmark-sieve
+```
+
 ## Prerequisites
 
 To run all benchmarks, ensure you have the following tools installed:
@@ -35,6 +47,7 @@ To run all benchmarks, ensure you have the following tools installed:
 - `cc` (C compiler, e.g., clang or gcc)
 - `node` (Node.js)
 - `python3` (Python 3)
+- `ruby` (Ruby)
 
 ## Running Benchmarks
 
@@ -42,6 +55,7 @@ To run all benchmarks, ensure you have the following tools installed:
 # Run all benchmarks
 make benchmark-mandelbrot
 make benchmark-count-prime
+make benchmark-sieve
 
 # Or run them individually (see comments in each source file)
 ```
@@ -56,6 +70,7 @@ make benchmark-count-prime
 | wasmtime   | 40.0.0 (0807b003e 2025-12-22)        |
 | Node.js    | v24.11.0                             |
 | Python     | 3.14.2 (CPython, no JIT)             |
+| Ruby       | 3.4.7 (CRuby)                        |
 | C compiler | Apple clang 17.0.0                   |
 | Platform   | macOS (Darwin 24.6.0), Apple Silicon |
 
@@ -88,6 +103,7 @@ All implementations produce the same result: 664,579 primes.
 - Wado runs on wasmtime with WASI P3 and Wasm GC enabled
 - JavaScript runs on Node.js
 - Python uses CPython (no JIT)
+- Ruby uses CRuby
 - Times include program initialization overhead
 - Wado benchmarks use `MonotonicClock::now()` from `core:clocks` for timing
 
@@ -95,13 +111,8 @@ All implementations produce the same result: 664,579 primes.
 
 ```
 benchmark/
-├── README.md           # This file
-├── mandelbrot.wado     # Wado implementation
-├── mandelbrot.js       # JavaScript implementation
-├── mandelbrot.c        # C implementation
-├── mandelbrot.py       # Python implementation
-├── count_prime.wado    # Wado implementation
-├── count_prime.js      # JavaScript implementation
-├── count_prime.c       # C implementation
-└── count_prime.py      # Python implementation
+├── README.md
+├── mandelbrot.{wado,c,js,py,rb}
+├── count_prime.{wado,c,js,py,rb}
+└── sieve.{wado,c,js,py,rb}
 ```

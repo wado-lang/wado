@@ -11,6 +11,14 @@ Quick reference for Wado syntax.
 /* Block comment */
 ```
 
+## Shebang
+
+```wado
+#!/usr/bin/env wado
+// Shebang is only valid on the first line and is ignored by the compiler.
+// Note: #![ is an inner attribute, not a shebang.
+```
+
 ## Literals
 
 ```wado
@@ -102,6 +110,13 @@ let a: Array<i32> = [1, 2, 3];           // type annotation
 let b = [1, 2, 3] as Array<i32>;         // explicit cast
 fn takes(arr: Array<i32>) {}
 takes([1, 2, 3]);                        // implicit coercion
+
+// Array methods
+let arr: Array<i32> = [];
+arr.append(1);                           // add element to end
+arr.append(2);
+let n = arr.len();                       // get length (2)
+let first = arr[0];                      // index access
 ```
 
 ## Structs
@@ -161,10 +176,13 @@ pub fn api_function() -> i32 {
 }
 ```
 
+A function must have `return` if it returns a value. This is applied to methods and closures as well.
+
 ## Methods
 
 ```wado
 impl Point {
+    // Instance method (has self parameter)
     fn sum(&self) -> i32 {
         return self.x + self.y;
     }
@@ -173,11 +191,23 @@ impl Point {
         self.x = 0;
         self.y = 0;
     }
+
+    // Static method (no self parameter)
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
 }
 
+// Instance method call
 let mut p = Point { x: 1, y: 2 };
 let s = p.sum();
 p.reset();
+
+// Static method call
+let origin = Point::origin();
+
+// Static method on generic type (turbofish syntax)
+let arr = Array::<i32>::with_capacity(10);
 ```
 
 ## Control Flow
@@ -191,6 +221,14 @@ if x > 0 {
 } else {
     println("zero");
 }
+
+// If with init (Go-style)
+if let x = get_value(); x > 0 {
+    println(`positive: {x}`);
+} else {
+    println(`non-positive: {x}`);
+}
+// x is not in scope here
 
 // While
 while i < 10 {
@@ -297,6 +335,27 @@ fn add(a: i32, b: i32) -> i32 {
 }
 ```
 
+## Reference Storage (`stores`)
+
+```wado
+// Declare that function stores a reference parameter
+fn register(data: &Data) -> Handle with stores[data] {
+    registry.push(data);  // stores the reference
+    return new_handle();
+}
+
+// Combined with effects
+fn store_and_log(data: &Data) with Stdout, stores[data] {
+    println("Storing...");
+    save(data);
+}
+
+// Functor type that stores its parameter
+fn take_storing(f: Fn(&Data) with stores[0]) { ... }
+```
+
+Note: `stores` is for function parameters. Closures use "capture" terminology (`|| x + 1` captures `x`).
+
 ## Entrypoint
 
 ```wado
@@ -345,6 +404,53 @@ let x = identity::<i32>(42);
 let y = container.transform::<i32, i64>(10, 20 as i64);
 ```
 
+## Closures
+
+```wado
+// Pure closure (no captures) - expression body
+let add_one = |x: i32| x + 1;
+let result = add_one(5);  // 6
+
+// Closure with multiple parameters
+let add = |a: i32, b: i32| a + b;
+let sum = add(3, 4);  // 7
+
+// Closure returning different types
+let is_even = |x: i32| x % 2 == 0;
+let check = is_even(4);  // true
+
+// Closure with block body (requires explicit return)
+let compute = |x: i32| {
+    let doubled = x * 2;
+    let tripled = x * 3;
+    return doubled + tripled;
+};
+let result = compute(4);  // 20
+
+// Closure returning struct literal
+let make_point = |x: i32, y: i32| Point { x, y };
+```
+
+Note: Closures that capture outer variables are not yet implemented (pure closures work).
+
+## Attributes
+
+```wado
+// Disable auto-import of core:prelude
+#![no_prelude]
+
+struct Foo {
+    #[hidden]
+    secret: String, // won't be shown in debug stringify
+}
+```
+
+User-facing attributes are not yet supported.
+
+## Macros
+
+Wado intentionally does not support macros.
+
 ## Not Yet Implemented
 
 - `enum` construction (parsed but no codegen)
@@ -354,7 +460,8 @@ let y = container.transform::<i32, i64>(10, 20 as i64);
 - `trait` declarations
 - Effect handlers
 - `reactive` values and `observe()`
-- Closures (parsed but no codegen)
+- Closures that capture outer variables (pure closures work)
+- `stores[...]` syntax for reference storage
 - `Dict<K, V>`
 - postfix `?` operator (error propagation)
 - JSX

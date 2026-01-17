@@ -304,9 +304,9 @@ impl ModuleLoader {
                 e.span.line, e.span.column, e.message
             ),
         })?;
-        let data_section = lexer.into_data_section();
+        let (data_section, _comments, shebang) = lexer.into_parts();
 
-        let mut parser = Parser::with_data_section(tokens, data_section);
+        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
         parser.parse().map_err(|e| LoadError::ParseError {
             path: module_path.to_vec(),
             message: format!(

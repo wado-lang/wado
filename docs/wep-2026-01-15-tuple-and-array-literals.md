@@ -1,4 +1,5 @@
 # WEP: Tuple and Array Literal Syntax
+
 ## Context
 
 Wado needs to define syntax for tuple and array literals. The original spec used:

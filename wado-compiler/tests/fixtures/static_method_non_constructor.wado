@@ -1,0 +1,48 @@
+// Test static methods on non-generic structs that return different types
+use { println, Stdout } from "core:cli";
+
+// Non-generic struct can have any static methods
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    pub fn new(value: i32) -> Counter {
+        // Constructor
+
+        return Counter { value };
+    }
+
+    pub fn zero() -> i32 {
+        // Static method returning different type (not a constructor)
+
+        return 0;
+    }
+
+    pub fn from_pair(a: i32, b: i32) -> Counter {
+        // Static method with different arg count than fields
+
+        return Counter { value: a + b };
+    }
+
+    pub fn get(&self) -> i32 {
+        return self.value;
+    }
+}
+
+fn run() with Stdout {
+    // Call static method that returns i32
+    let z = Counter::zero();
+    println(`zero: {z}`);
+
+    // Call static method with different arg count
+    let c1 = Counter::from_pair(10, 20);
+    println(`from_pair: {c1.get()}`);
+
+    // Normal constructor usage
+    let c2 = Counter::new(42);
+    println(`counter value: {c2.get()}`);
+}
+
+__DATA__
+{"stdout": "zero: 0\nfrom_pair: 30\ncounter value: 42\n"}

@@ -1,4 +1,5 @@
 # WEP: SourceProvider Abstraction for Compiler I/O
+
 ## Context
 
 The Wado compiler currently has direct filesystem dependencies for loading user modules:
@@ -48,14 +49,14 @@ pub trait SourceProvider {
 
 ### Responsibility Distribution
 
-| Responsibility | Owner |
-|----------------|-------|
+| Responsibility                        | Owner                                  |
+| ------------------------------------- | -------------------------------------- |
 | Standard library (`core:*`, `wasi:*`) | Compiler (embedded via `include_str!`) |
-| User code (`./`, `../`) | SourceProvider |
-| Path normalization | Compiler (before `provide()` call) |
-| Circular dependency detection | Compiler |
-| Parsed module caching | Compiler |
-| Source string caching | SourceProvider (optional) |
+| User code (`./`, `../`)               | SourceProvider                         |
+| Path normalization                    | Compiler (before `provide()` call)     |
+| Circular dependency detection         | Compiler                               |
+| Parsed module caching                 | Compiler                               |
+| Source string caching                 | SourceProvider (optional)              |
 
 ### Implementation Structure
 
@@ -79,6 +80,7 @@ wado-browser/               # Future: browser environment
 ### Example Implementations
 
 **FileSystemSourceProvider** (wado-cli):
+
 ```rust
 pub struct FileSystemSourceProvider {
     base_path: PathBuf,
@@ -97,6 +99,7 @@ impl SourceProvider for FileSystemSourceProvider {
 ```
 
 **InMemorySourceProvider** (future use):
+
 ```rust
 pub struct InMemorySourceProvider {
     sources: HashMap<String, String>,
@@ -140,6 +143,7 @@ wado compile main.wado -o output.wasm
 ```
 
 Internal implementation:
+
 ```rust
 // CLI side
 pub fn compile_command(path: &Path, options: CompileOptions) -> Result<()> {
@@ -231,6 +235,7 @@ impl SourceProvider for FileSystemSourceProvider {
 ```
 
 **Rejected**:
+
 - Mixes responsibilities
 - Every provider must know about `core:*` and `wasi:*`
 - Loses compile-time embedding benefits

@@ -19,9 +19,9 @@ use crate::ast::{
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
-    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirUnaryOp, TypeId, TypeTable,
+    ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
+    TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -161,6 +161,12 @@ struct FunctionContext {
     local_types: Vec<TypeId>,
     /// Local indices that have their address taken (&x or &mut x)
     address_taken_locals: HashSet<u32>,
+    /// Outer context locals for closure capture detection (name -> LocalVar snapshot)
+    /// Only set for closure contexts
+    outer_locals: HashMap<String, LocalVar>,
+    /// Captured variables detected during resolution (name -> capture index)
+    /// Only used for closure contexts
+    captured_vars: HashMap<String, u32>,
 }
 
 impl FunctionContext {
@@ -171,6 +177,29 @@ impl FunctionContext {
             return_type,
             local_types: Vec::new(),
             address_taken_locals: HashSet::new(),
+            outer_locals: HashMap::new(),
+            captured_vars: HashMap::new(),
+        }
+    }
+
+    /// Create a closure context with outer scope access for capture detection
+    fn new_closure(return_type: TypeId, outer_ctx: &FunctionContext) -> Self {
+        // Snapshot all locals from outer context
+        let mut outer_locals = HashMap::new();
+        for scope in &outer_ctx.scopes {
+            for (name, local) in scope {
+                outer_locals.insert(name.clone(), local.clone());
+            }
+        }
+
+        Self {
+            scopes: vec![HashMap::new()],
+            next_local: 0,
+            return_type,
+            local_types: Vec::new(),
+            address_taken_locals: HashSet::new(),
+            outer_locals,
+            captured_vars: HashMap::new(),
         }
     }
 
@@ -212,6 +241,64 @@ impl FunctionContext {
         }
         None
     }
+
+    /// Look up a variable, checking outer context for captures if in a closure.
+    /// Returns either a local variable reference or a capture reference.
+    fn lookup_or_capture(&mut self, name: &str) -> Option<VarRef> {
+        // First check local scopes
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(VarRef::Local {
+                    index: local.index,
+                    type_id: local.type_id,
+                });
+            }
+        }
+
+        // Check outer context (for closures)
+        if let Some(outer_local) = self.outer_locals.get(name) {
+            // Check if we already captured this variable
+            if let Some(&capture_index) = self.captured_vars.get(name) {
+                return Some(VarRef::Capture {
+                    index: capture_index,
+                    type_id: outer_local.type_id,
+                });
+            }
+
+            // Record a new capture
+            let capture_index = self.captured_vars.len() as u32;
+            self.captured_vars.insert(name.to_string(), capture_index);
+
+            return Some(VarRef::Capture {
+                index: capture_index,
+                type_id: outer_local.type_id,
+            });
+        }
+
+        None
+    }
+
+    /// Get the list of captures for building TirCapture entries
+    fn get_captures(&self) -> Vec<(String, u32, &LocalVar)> {
+        let mut captures: Vec<_> = self
+            .captured_vars
+            .iter()
+            .filter_map(|(name, &index)| {
+                self.outer_locals
+                    .get(name)
+                    .map(|local| (name.clone(), index, local))
+            })
+            .collect();
+        // Sort by capture index for consistent ordering
+        captures.sort_by_key(|(_, index, _)| *index);
+        captures
+    }
+}
+
+/// Reference to a variable (either local or captured)
+enum VarRef {
+    Local { index: u32, type_id: TypeId },
+    Capture { index: u32, type_id: TypeId },
 }
 
 /// The resolver converts AST to TIR with resolved types
@@ -809,6 +896,38 @@ impl<'a> Resolver<'a> {
                         .insert(func.name.clone(), return_type);
                 }
                 Item::Impl(impl_block) => {
+                    // Set up type parameters from impl block before resolving method signatures
+                    let old_type_params = std::mem::take(&mut self.current_type_params);
+
+                    // First, collect explicit type params from impl<T>
+                    for (index, param) in impl_block.type_params.iter().enumerate() {
+                        let type_id = self
+                            .type_table
+                            .make_type_param(param.name.clone(), index as u32);
+                        self.current_type_params
+                            .insert(param.name.clone(), (index as u32, type_id));
+                    }
+
+                    // Also collect type params from generic type: impl Array<T> {...}
+                    // The type args in Array<T> are type parameters
+                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                        let offset = impl_block.type_params.len();
+                        for (i, arg) in generic.args.iter().enumerate() {
+                            if let ast::Type::Named(named) = arg {
+                                // Check if this looks like a type parameter (single uppercase letter or PascalCase)
+                                // In practice, T, U, V etc. are type params
+                                let name = &named.name;
+                                if !self.current_type_params.contains_key(name) {
+                                    let index = (offset + i) as u32;
+                                    let type_id =
+                                        self.type_table.make_type_param(name.clone(), index);
+                                    self.current_type_params
+                                        .insert(name.clone(), (index, type_id));
+                                }
+                            }
+                        }
+                    }
+
                     // Collect method signatures with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
                     for method in &impl_block.methods {
@@ -820,6 +939,9 @@ impl<'a> Resolver<'a> {
                         let mangled_name = format!("{}::{}", struct_name, method.name);
                         self.function_return_types.insert(mangled_name, return_type);
                     }
+
+                    // Restore type parameters
+                    self.current_type_params = old_type_params;
                 }
                 _ => {}
             }
@@ -943,7 +1065,8 @@ impl<'a> Resolver<'a> {
             name: func.name.clone(),
             is_pub: func.is_pub,
             type_params,
-            monomorph_info: None, // Not from monomorphization
+            impl_type_params: vec![], // Not a method, no impl type params
+            monomorph_info: None,     // Not from monomorphization
             params,
             return_type,
             effects: func.effects.clone(),
@@ -965,12 +1088,36 @@ impl<'a> Resolver<'a> {
         // Set up type parameters in scope before resolving types
         let old_type_params = std::mem::take(&mut self.current_type_params);
         let mut type_param_list = Vec::new();
+
+        // First, collect type params from impl block's generic type (e.g., impl Box<T>)
+        // Also build impl_type_params for the TirFunction
+        let mut impl_type_params = Vec::new();
+        if let ast::Type::Generic(generic) = impl_type {
+            for (i, arg) in generic.args.iter().enumerate() {
+                if let ast::Type::Named(named) = arg {
+                    let name = &named.name;
+                    if !self.current_type_params.contains_key(name) {
+                        let type_id = self.type_table.make_type_param(name.clone(), i as u32);
+                        self.current_type_params
+                            .insert(name.clone(), (i as u32, type_id));
+                        // Store impl type param info for later monomorphization
+                        impl_type_params.push(crate::tir::TirTypeParam {
+                            name: name.clone(),
+                            bounds: vec![],
+                            index: i as u32,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Then, collect method-level type params
+        let offset = self.current_type_params.len();
         for (index, param) in func.type_params.iter().enumerate() {
-            let type_id = self
-                .type_table
-                .make_type_param(param.name.clone(), index as u32);
+            let idx = (offset + index) as u32;
+            let type_id = self.type_table.make_type_param(param.name.clone(), idx);
             self.current_type_params
-                .insert(param.name.clone(), (index as u32, type_id));
+                .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
         }
 
@@ -1036,6 +1183,7 @@ impl<'a> Resolver<'a> {
             name: func.name.clone(), // Will be mangled by caller
             is_pub: func.is_pub,
             type_params,
+            impl_type_params, // Type params from impl block (e.g., T from impl Counter<T>)
             monomorph_info: None, // Not from monomorphization
             params,
             return_type,
@@ -1077,7 +1225,7 @@ impl<'a> Resolver<'a> {
             Stmt::Let(let_stmt) => vec![self.resolve_let(let_stmt, ctx)],
             Stmt::Expr(expr_stmt) => vec![self.resolve_expr_stmt(expr_stmt, ctx)],
             Stmt::Return(ret_stmt) => vec![self.resolve_return(ret_stmt, ctx)],
-            Stmt::If(if_stmt) => vec![self.resolve_if_stmt(if_stmt, ctx)],
+            Stmt::If(if_stmt) => self.resolve_if_stmt(if_stmt, ctx),
             Stmt::While(while_stmt) => vec![self.resolve_while(while_stmt, ctx)],
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
             Stmt::ForOf(for_of_stmt) => vec![self.resolve_for_of(for_of_stmt, ctx)],
@@ -1292,7 +1440,19 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve an if statement
-    fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) -> TirStmt {
+    /// Returns Vec<TirStmt> to handle if-let-init scoping: let binding + if statement
+    fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+        let mut result = Vec::new();
+
+        // Handle optional init binding (scoped to this if statement)
+        if if_stmt.init.is_some() {
+            ctx.enter_scope();
+        }
+
+        if let Some(init) = &if_stmt.init {
+            result.push(self.resolve_let(init, ctx));
+        }
+
         let condition = self.resolve_expr(&if_stmt.condition, ctx);
         let then_block = self.resolve_block(&if_stmt.then_block, ctx);
         let else_block = if_stmt
@@ -1300,14 +1460,20 @@ impl<'a> Resolver<'a> {
             .as_ref()
             .map(|b| self.resolve_block(b, ctx));
 
-        TirStmt::new(
+        result.push(TirStmt::new(
             TirStmtKind::If {
                 condition,
                 then_block,
                 else_block,
             },
             if_stmt.span,
-        )
+        ));
+
+        if if_stmt.init.is_some() {
+            ctx.exit_scope();
+        }
+
+        result
     }
 
     /// Resolve a while statement
@@ -1627,6 +1793,9 @@ impl<'a> Resolver<'a> {
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx),
             Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
+            Expr::StaticMethodCall(static_call) => {
+                self.resolve_static_method_call(static_call, ctx)
+            }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
@@ -1753,17 +1922,31 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve an identifier expression
-    fn resolve_ident(&mut self, ident: &ast::IdentExpr, ctx: &FunctionContext) -> TirExpr {
-        // First check local variables
-        if let Some(local) = ctx.lookup(&ident.name) {
-            return TirExpr::new(
-                TirExprKind::Local {
-                    index: local.index,
-                    name: local.name.clone(),
-                },
-                local.type_id,
-                ident.span,
-            );
+    fn resolve_ident(&mut self, ident: &ast::IdentExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Check local variables, including captures from outer scope
+        if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
+            match var_ref {
+                VarRef::Local { index, type_id } => {
+                    return TirExpr::new(
+                        TirExprKind::Local {
+                            index,
+                            name: ident.name.clone(),
+                        },
+                        type_id,
+                        ident.span,
+                    );
+                }
+                VarRef::Capture { index, type_id } => {
+                    return TirExpr::new(
+                        TirExprKind::Capture {
+                            index,
+                            name: ident.name.clone(),
+                        },
+                        type_id,
+                        ident.span,
+                    );
+                }
+            }
         }
 
         // Otherwise it's a global reference (function, constant, etc.)
@@ -1934,6 +2117,59 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a call expression
     fn resolve_call(&mut self, call: &ast::CallExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Check if this is a closure call (calling a local variable with function type)
+        if let Expr::Ident(ident) = &call.callee {
+            // No :: means it could be a local variable
+            if !ident.name.contains("::")
+                && let Some(local) = ctx.lookup(&ident.name)
+            {
+                // Check if the local has a function type
+                if let ResolvedType::Function {
+                    params: fn_params,
+                    return_type,
+                    ..
+                } = self.type_table.get(local.type_id)
+                {
+                    // This is a closure call!
+                    let local_index = local.index;
+                    let local_type_id = local.type_id;
+                    let fn_return_type = *return_type;
+                    // Clone fn_params to avoid borrow conflict
+                    let fn_params = fn_params.clone();
+
+                    // Resolve arguments with coercion awareness based on closure param types
+                    let args: Vec<TirExpr> = call
+                        .args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, arg)| {
+                            let expected_type = fn_params.get(i).copied();
+                            self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                        })
+                        .collect();
+
+                    // Create closure expression (Local reference)
+                    let closure_expr = TirExpr::new(
+                        TirExprKind::Local {
+                            index: local_index,
+                            name: ident.name.clone(),
+                        },
+                        local_type_id,
+                        ident.span,
+                    );
+
+                    return TirExpr::new(
+                        TirExprKind::IndirectCall {
+                            callee: Box::new(closure_expr),
+                            args,
+                        },
+                        fn_return_type,
+                        call.span,
+                    );
+                }
+            }
+        }
+
         // First, determine expected parameter types to handle coercion
         let param_types = self.lookup_function_param_types(&call.callee);
 
@@ -1957,9 +2193,27 @@ impl<'a> Resolver<'a> {
                     let prefix = &ident.name[..pos];
                     let suffix = &ident.name[pos + 2..];
 
-                    // Builtin functions are always allowed
+                    // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
-                        (Vec::new(), ident.name.clone(), true)
+                        (
+                            vec!["core".to_string(), "builtin".to_string()],
+                            suffix.to_string(),
+                            true,
+                        )
+                    }
+                    // Check if this is a static method call (Type::method)
+                    // Static methods are registered with mangled names "Type::method"
+                    else if self.is_static_method(prefix, suffix) {
+                        // Return as a static method call - will be converted to StaticCall below
+                        let mangled_name = format!("{}::{}", prefix, suffix);
+                        return self.resolve_static_method_call_from_qualified(
+                            prefix,
+                            suffix,
+                            &mangled_name,
+                            &args,
+                            call.span,
+                            ctx,
+                        );
                     }
                     // Effect operations and other qualified calls - always allowed
                     // (validated by effect system/codegen)
@@ -2046,9 +2300,13 @@ impl<'a> Resolver<'a> {
 
     /// Look up the return type of a function
     fn lookup_function_return_type(&mut self, module_path: &[String], func_name: &str) -> TypeId {
-        // Handle builtin functions (builtin::name pattern)
+        // Handle builtin functions
+        // Normal resolution: module_path == ["core", "builtin"]
+        if module_path.len() == 2 && module_path[0] == "core" && module_path[1] == "builtin" {
+            return self.get_builtin_return_type(func_name);
+        }
+        // Legacy: builtin::name pattern
         if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            // Skip "builtin::"
             return self.get_builtin_return_type(builtin_name);
         }
 
@@ -2311,7 +2569,7 @@ impl<'a> Resolver<'a> {
             .map(|a| self.resolve_expr(a, ctx))
             .collect();
 
-        // Resolve explicit type arguments
+        // Resolve explicit type arguments (method-level type args)
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
@@ -2321,9 +2579,32 @@ impl<'a> Resolver<'a> {
         // Look up method return type based on receiver type
         let mut return_type = self.lookup_method_return_type(receiver.type_id, &method_call.method);
 
-        // If we have explicit type args, substitute type parameters in the return type
+        // Build unified substitution context for double generics
+        // Type param indices are assigned as follows:
+        // - Impl type params (from struct): 0, 1, 2, ...
+        // - Method type params: offset, offset+1, ... (where offset = impl_type_params.len())
+        let mut subst_ctx = SubstitutionContext::new();
+        let mut impl_offset = 0u32;
+
+        // First, add impl-level type args from receiver's generic type
+        if let ResolvedType::GenericInstance {
+            type_args: receiver_type_args,
+            ..
+        } = self.type_table.get(receiver.type_id).clone()
+            && !receiver_type_args.is_empty()
+        {
+            impl_offset = receiver_type_args.len() as u32;
+            subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
+        }
+
+        // Then add method-level type args with the correct offset
         if !type_args.is_empty() {
-            return_type = self.substitute_type_params(return_type, &type_args);
+            subst_ctx = subst_ctx.with_method_args(&type_args, impl_offset);
+        }
+
+        // Apply unified substitution
+        if !subst_ctx.is_empty() {
+            return_type = subst_ctx.substitute(return_type, &mut self.type_table);
         }
 
         TirExpr::new(
@@ -2336,6 +2617,367 @@ impl<'a> Resolver<'a> {
             return_type,
             method_call.span,
         )
+    }
+
+    /// Resolve a static method call: `Array::<i32>::with_capacity(100)` or `Point::origin()`
+    fn resolve_static_method_call(
+        &mut self,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        // Resolve arguments
+        let args: Vec<TirExpr> = static_call
+            .args
+            .iter()
+            .map(|a| self.resolve_expr(a, ctx))
+            .collect();
+
+        // Resolve the target type to get struct name, module path, and type args (for generics)
+        let target_type_id = self.resolve_type(&static_call.target_type);
+        let (struct_name, module_path, mangled_struct_name, struct_type_args) =
+            match self.type_table.get(target_type_id) {
+                ResolvedType::Struct { name, module_path } => {
+                    (name.clone(), module_path.clone(), name.clone(), vec![])
+                }
+                ResolvedType::GenericInstance {
+                    name,
+                    module_path,
+                    type_args,
+                } => {
+                    // Build mangled name for generic type: Array$i32
+                    let type_arg_names: Vec<String> = type_args
+                        .iter()
+                        .map(|t| self.mangle_type_name(*t))
+                        .collect();
+                    let mangled = format!("{}${}", name, type_arg_names.join("$"));
+                    (
+                        name.clone(),
+                        module_path.clone(),
+                        mangled,
+                        type_args.clone(),
+                    )
+                }
+                // Special case: Array<T> is resolved as ResolvedType::Array for codegen compatibility
+                // but static methods use the struct-based resolution
+                ResolvedType::Array(elem_type) => {
+                    let mangled_elem = self.mangle_type_name(*elem_type);
+                    let mangled = format!("Array${}", mangled_elem);
+                    (
+                        "Array".to_string(),
+                        vec!["core".to_string(), "prelude".to_string()],
+                        mangled,
+                        vec![*elem_type],
+                    )
+                }
+                _ => {
+                    // Unknown type - return error expression
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                }
+            };
+
+        // Build the mangled function name
+        let mangled_func_name = format!("{}::{}", mangled_struct_name, static_call.method);
+
+        // Look up return type
+        let mut return_type = self.lookup_static_method_return_type(
+            &struct_name,
+            &module_path,
+            &static_call.method,
+            &mangled_func_name,
+        );
+
+        // If we have type arguments from a generic type, substitute type parameters in the return type
+        if !struct_type_args.is_empty() {
+            return_type = self.substitute_type_params(return_type, &struct_type_args);
+        }
+
+        TirExpr::new(
+            TirExprKind::StaticCall {
+                func_name: mangled_func_name,
+                module_path,
+                args,
+            },
+            return_type,
+            static_call.span,
+        )
+    }
+
+    /// Look up static method return type based on struct name and method name
+    fn lookup_static_method_return_type(
+        &mut self,
+        struct_name: &str,
+        module_path: &[String],
+        method_name: &str,
+        mangled_func_name: &str,
+    ) -> TypeId {
+        // First check locally registered function_return_types
+        if let Some(&return_type) = self.function_return_types.get(mangled_func_name) {
+            return return_type;
+        }
+
+        // Also try with just StructName::method (for non-generic types)
+        let simple_name = format!("{}::{}", struct_name, method_name);
+        if let Some(&return_type) = self.function_return_types.get(&simple_name) {
+            return return_type;
+        }
+
+        // Try looking up in loaded modules
+        if !module_path.is_empty()
+            && let Some(module) = self.loaded_modules.get(module_path)
+        {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = self.get_type_name(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            // Static methods have no self parameter
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                // Set up type parameters from impl block before resolving
+                                let old_type_params = std::mem::take(&mut self.current_type_params);
+
+                                // Extract type params from impl block type (e.g., impl Array<T>)
+                                if let ast::Type::Generic(generic) = &impl_block.ty {
+                                    for (i, arg) in generic.args.iter().enumerate() {
+                                        if let ast::Type::Named(named) = arg {
+                                            let name = &named.name;
+                                            if !self.current_type_params.contains_key(name) {
+                                                let type_id = self
+                                                    .type_table
+                                                    .make_type_param(name.clone(), i as u32);
+                                                self.current_type_params
+                                                    .insert(name.clone(), (i as u32, type_id));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                let result = method
+                                    .return_type
+                                    .as_ref()
+                                    .map(|t| self.resolve_type(t))
+                                    .unwrap_or(TypeTable::UNIT);
+
+                                // Restore type parameters
+                                self.current_type_params = old_type_params;
+
+                                return result;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search all loaded modules if module_path is empty
+        if module_path.is_empty() {
+            for (_, module) in self.loaded_modules.iter() {
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item {
+                        let impl_struct_name = self.get_type_name(&impl_block.ty);
+                        if impl_struct_name == struct_name {
+                            for method in &impl_block.methods {
+                                let has_self = method
+                                    .params
+                                    .iter()
+                                    .any(|p| p.self_kind != ast::SelfKind::None);
+                                if method.name == method_name && !has_self {
+                                    // Set up type parameters from impl block before resolving
+                                    let old_type_params =
+                                        std::mem::take(&mut self.current_type_params);
+
+                                    // Extract type params from impl block type (e.g., impl Array<T>)
+                                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                                        for (i, arg) in generic.args.iter().enumerate() {
+                                            if let ast::Type::Named(named) = arg {
+                                                let name = &named.name;
+                                                if !self.current_type_params.contains_key(name) {
+                                                    let type_id = self
+                                                        .type_table
+                                                        .make_type_param(name.clone(), i as u32);
+                                                    self.current_type_params
+                                                        .insert(name.clone(), (i as u32, type_id));
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    let result = method
+                                        .return_type
+                                        .as_ref()
+                                        .map(|t| self.resolve_type(t))
+                                        .unwrap_or(TypeTable::UNIT);
+
+                                    // Restore type parameters
+                                    self.current_type_params = old_type_params;
+
+                                    return result;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        TypeTable::UNKNOWN
+    }
+
+    /// Check if a qualified name `struct_name::method_name` is a static method
+    fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
+        // Build the mangled function name
+        let mangled_name = format!("{}::{}", struct_name, method_name);
+
+        // Check if it's registered in function_return_types (static methods are registered there)
+        if self.function_return_types.contains_key(&mangled_name) {
+            return true;
+        }
+
+        // Also check in loaded modules' impl blocks
+        for (_, module) in self.loaded_modules.iter() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = self.get_type_name(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            // Static methods have no self parameter
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check current module's impl blocks
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item {
+                let impl_struct_name = self.get_type_name(&impl_block.ty);
+                if impl_struct_name == struct_name {
+                    for method in &impl_block.methods {
+                        let has_self = method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if method.name == method_name && !has_self {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Resolve a static method call from a qualified name like `Point::origin()`
+    fn resolve_static_method_call_from_qualified(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        mangled_func_name: &str,
+        args: &[TirExpr],
+        span: Span,
+        _ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        // Look up return type
+        let return_type = self.lookup_static_method_return_type(
+            struct_name,
+            &[], // Module path will be looked up during lookup
+            method_name,
+            mangled_func_name,
+        );
+
+        // Determine module path for the struct
+        let module_path = self.find_struct_module_path(struct_name);
+
+        TirExpr::new(
+            TirExprKind::StaticCall {
+                func_name: mangled_func_name.to_string(),
+                module_path,
+                args: args.to_vec(),
+            },
+            return_type,
+            span,
+        )
+    }
+
+    /// Find the module path for a struct by name
+    fn find_struct_module_path(&self, struct_name: &str) -> Vec<String> {
+        // Check current module
+        for item in &self.current_module_items {
+            if let Item::Struct(s) = item
+                && s.name == struct_name
+            {
+                return self.current_module_path.clone();
+            }
+        }
+
+        // Check loaded modules
+        for (path, module) in self.loaded_modules.iter() {
+            for item in &module.items {
+                if let Item::Struct(s) = item
+                    && s.name == struct_name
+                {
+                    return path.clone();
+                }
+            }
+        }
+
+        // Default to current module path
+        self.current_module_path.clone()
+    }
+
+    /// Mangle a type name for use in function names
+    fn mangle_type_name(&self, type_id: TypeId) -> String {
+        match self.type_table.get(type_id) {
+            ResolvedType::Primitive(prim) => match prim {
+                crate::tir::PrimitiveType::I8 => "i8".to_string(),
+                crate::tir::PrimitiveType::I16 => "i16".to_string(),
+                crate::tir::PrimitiveType::I32 => "i32".to_string(),
+                crate::tir::PrimitiveType::I64 => "i64".to_string(),
+                crate::tir::PrimitiveType::I128 => "i128".to_string(),
+                crate::tir::PrimitiveType::U8 => "u8".to_string(),
+                crate::tir::PrimitiveType::U16 => "u16".to_string(),
+                crate::tir::PrimitiveType::U32 => "u32".to_string(),
+                crate::tir::PrimitiveType::U64 => "u64".to_string(),
+                crate::tir::PrimitiveType::U128 => "u128".to_string(),
+                crate::tir::PrimitiveType::F32 => "f32".to_string(),
+                crate::tir::PrimitiveType::F64 => "f64".to_string(),
+                crate::tir::PrimitiveType::Bool => "bool".to_string(),
+                crate::tir::PrimitiveType::Char => "char".to_string(),
+            },
+            ResolvedType::Unit => "unit".to_string(),
+            ResolvedType::String => "String".to_string(),
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name(*t))
+                    .collect();
+                format!("{}${}", name, args.join("$"))
+            }
+            ResolvedType::Array(elem) => format!("Array${}", self.mangle_type_name(*elem)),
+            ResolvedType::Option(inner) => format!("Option${}", self.mangle_type_name(*inner)),
+            ResolvedType::Ref(inner) => format!("ref${}", self.mangle_type_name(*inner)),
+            ResolvedType::MutRef(inner) => format!("mutref${}", self.mangle_type_name(*inner)),
+            ResolvedType::TypeParam { name, .. } => name.clone(),
+            ResolvedType::Tuple(elems) => {
+                let parts: Vec<String> = elems.iter().map(|e| self.mangle_type_name(*e)).collect();
+                format!("Tuple${}", parts.join("$"))
+            }
+            _ => "unknown".to_string(),
+        }
     }
 
     /// Look up method return type based on receiver type and method name
@@ -2369,13 +3011,14 @@ impl<'a> Resolver<'a> {
                 }
                 return TypeTable::UNKNOWN;
             }
-            // Array types have built-in methods like len()
-            ResolvedType::Array(_) => {
-                if method_name == "len" {
-                    return TypeTable::I32;
-                }
-                return TypeTable::UNKNOWN;
-            }
+            // Array types have built-in methods
+            // Note: append() is handled inline in codegen using generic builtins
+            ResolvedType::Array(_) => match method_name {
+                "len" => return TypeTable::I32,
+                "capacity" => return TypeTable::I32,
+                "append" => return TypeTable::UNIT,
+                _ => return TypeTable::UNKNOWN,
+            },
             // String type (legacy - String is now a struct, but handle for backwards compat)
             ResolvedType::String => {
                 match method_name {
@@ -2639,6 +3282,20 @@ impl<'a> Resolver<'a> {
 
     /// Resolve an if expression
     fn resolve_if_expr(&mut self, if_expr: &IfExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Handle optional init binding (scoped to this if expression)
+        if if_expr.init.is_some() {
+            ctx.enter_scope();
+        }
+
+        // Note: init binding for if expressions would need special handling
+        // in codegen since expressions can't contain statements. For now,
+        // we just resolve it for scoping purposes but codegen doesn't support it.
+        if let Some(init) = &if_expr.init {
+            // The let binding is resolved for name resolution but not emitted as TIR
+            // This is a limitation for now - full support would require block expressions
+            let _init_stmt = self.resolve_let(init, ctx);
+        }
+
         let condition = self.resolve_expr(&if_expr.condition, ctx);
         let then_block = self.resolve_block(&if_expr.then_block, ctx);
         let else_block = if_expr
@@ -2656,7 +3313,7 @@ impl<'a> Resolver<'a> {
             })
             .unwrap_or(TypeTable::UNIT);
 
-        TirExpr::new(
+        let result = TirExpr::new(
             TirExprKind::If {
                 condition: Box::new(condition),
                 then_branch: then_block,
@@ -2664,7 +3321,13 @@ impl<'a> Resolver<'a> {
             },
             type_id,
             if_expr.span,
-        )
+        );
+
+        if if_expr.init.is_some() {
+            ctx.exit_scope();
+        }
+
+        result
     }
 
     /// Resolve a match expression
@@ -2754,10 +3417,10 @@ impl<'a> Resolver<'a> {
     fn resolve_closure(
         &mut self,
         closure: &ast::ClosureExpr,
-        _ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Create a new context for the closure
-        let mut closure_ctx = FunctionContext::new(TypeTable::UNKNOWN);
+        // Create a closure context with access to outer scope for capture detection
+        let mut closure_ctx = FunctionContext::new_closure(TypeTable::UNKNOWN, ctx);
 
         // Add closure parameters
         let params: Vec<(String, TypeId)> = closure
@@ -2773,17 +3436,35 @@ impl<'a> Resolver<'a> {
             })
             .collect();
 
-        // Resolve body
+        // Resolve body - this will detect captured variables
         let body = self.resolve_expr(&closure.body, &mut closure_ctx);
 
-        // TODO: Capture analysis
-        let captures = Vec::new();
+        // Build capture list from detected captures
+        let captures: Vec<TirCapture> = closure_ctx
+            .get_captures()
+            .into_iter()
+            .map(|(name, _index, local)| TirCapture {
+                name,
+                outer_index: local.index,
+                type_id: local.type_id,
+                is_mut: local.is_mut,
+            })
+            .collect();
+
+        // Determine return type:
+        // - For block bodies, check for return statements
+        // - Fall back to the body expression's type
+        let return_type = if let TirExprKind::Block(ref block) = body.kind {
+            Self::find_return_type_in_block(block).unwrap_or(body.type_id)
+        } else {
+            body.type_id
+        };
 
         // Create function type
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self
             .type_table
-            .make_function(param_types, body.type_id, Vec::new());
+            .make_function(param_types, return_type, Vec::new());
 
         TirExpr::new(
             TirExprKind::Closure {
@@ -2924,6 +3605,44 @@ impl<'a> Resolver<'a> {
             target_type,
             cast.span,
         )
+    }
+
+    /// Find the return type from return statements in a block.
+    /// Returns the type of the first return statement found, or None if no returns.
+    fn find_return_type_in_block(block: &TirBlock) -> Option<TypeId> {
+        for stmt in &block.stmts {
+            if let Some(type_id) = Self::find_return_type_in_stmt(stmt) {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
+    fn find_return_type_in_stmt(stmt: &TirStmt) -> Option<TypeId> {
+        match &stmt.kind {
+            TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),
+            TirStmtKind::Return { value: None } => Some(TypeTable::UNIT),
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if let Some(t) = Self::find_return_type_in_block(then_block) {
+                    return Some(t);
+                }
+                if let Some(else_blk) = else_block
+                    && let Some(t) = Self::find_return_type_in_block(else_blk)
+                {
+                    return Some(t);
+                }
+                None
+            }
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::ForOf { body, .. }
+            | TirStmtKind::Loop { body } => Self::find_return_type_in_block(body),
+            _ => None,
+        }
     }
 
     /// Resolve a struct literal

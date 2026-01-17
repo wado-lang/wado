@@ -1,4 +1,5 @@
 # WEP: Resource Lifecycle Management (RAII)
+
 ## Context
 
 Wado targets Wasm GC, which provides automatic memory management through tracing garbage collection. However, many resources require **deterministic cleanup** beyond memory management:

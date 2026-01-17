@@ -9,14 +9,15 @@ use crate::ast::{
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
     EffectDecl, EnumDecl, Expr, FieldAccessExpr, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
     ImplBlock, IndexExpr, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
-    ReturnStmt, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplateStringExpr,
-    TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
+    ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField,
+    TemplateStringExpr, TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
 };
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
 pub fn desugar_module(module: &Module) -> Module {
-    Module::with_data_section(
+    Module::with_metadata(
         module.items.iter().map(desugar_item).collect(),
+        module.shebang().map(String::from),
         module.data_section().map(String::from),
     )
 }
@@ -81,6 +82,17 @@ fn desugar_block(block: &Block) -> Block {
     }
 }
 
+fn desugar_let_stmt(l: &LetStmt) -> LetStmt {
+    LetStmt {
+        name: l.name.clone(),
+        is_mut: l.is_mut,
+        is_reactive: l.is_reactive,
+        ty: l.ty.clone(),
+        value: desugar_expr(&l.value),
+        span: l.span,
+    }
+}
+
 fn desugar_stmt(stmt: &Stmt) -> Stmt {
     match stmt {
         Stmt::Let(l) => Stmt::Let(LetStmt {
@@ -100,6 +112,7 @@ fn desugar_stmt(stmt: &Stmt) -> Stmt {
             span: r.span,
         }),
         Stmt::If(i) => Stmt::If(IfStmt {
+            init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
             condition: desugar_expr(&i.condition),
             then_block: desugar_block(&i.then_block),
             else_block: i.else_block.as_ref().map(desugar_block),
@@ -178,6 +191,12 @@ fn desugar_expr(expr: &Expr) -> Expr {
             args: m.args.iter().map(desugar_expr).collect(),
             span: m.span,
         })),
+        Expr::StaticMethodCall(s) => Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+            target_type: s.target_type.clone(),
+            method: s.method.clone(),
+            args: s.args.iter().map(desugar_expr).collect(),
+            span: s.span,
+        })),
         Expr::FieldAccess(f) => Expr::FieldAccess(Box::new(FieldAccessExpr {
             expr: desugar_expr(&f.expr),
             field: f.field.clone(),
@@ -190,6 +209,7 @@ fn desugar_expr(expr: &Expr) -> Expr {
         })),
         Expr::Block(b) => Expr::Block(Box::new(desugar_block(b))),
         Expr::If(i) => Expr::If(Box::new(IfExpr {
+            init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
             condition: desugar_expr(&i.condition),
             then_block: desugar_block(&i.then_block),
             else_block: i.else_block.as_ref().map(desugar_block),

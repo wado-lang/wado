@@ -2,7 +2,11 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
-use lexopt::prelude::*;
+use lexopt::Arg::{Long, Short, Value};
+
+use crate::args::{
+    next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
+};
 
 /// Optimization level
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -70,10 +74,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut opt_level = OptLevel::default();
     let mut wat_to_stdout = false;
 
-    while let Some(arg) = parser.next().unwrap_or_else(|e| {
-        eprintln!("Error: {e}");
-        process::exit(1);
-    }) {
+    while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
@@ -83,11 +84,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
                 wat_to_stdout = true;
             }
             Short('o') => {
-                let val = parser.value().unwrap_or_else(|e| {
-                    eprintln!("Error: {e}");
-                    process::exit(1);
-                });
-                output = Some(val.to_string_lossy().into_owned());
+                output = Some(require_string(&mut parser));
             }
             Short('O') => {
                 let val = parser.optional_value();
@@ -111,11 +108,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
                 };
             }
             Long("format") => {
-                let val = parser.value().unwrap_or_else(|e| {
-                    eprintln!("Error: {e}");
-                    process::exit(1);
-                });
-                let fmt_str = val.to_string_lossy();
+                let fmt_str = require_string(&mut parser);
                 match OutputFormat::from_str(&fmt_str) {
                     Some(f) => format = Some(f),
                     None => {
@@ -125,31 +118,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
                 }
             }
             Value(val) => {
-                if input.is_some() {
-                    eprintln!("Error: multiple input files not supported");
-                    process::exit(1);
-                }
+                reject_multiple_inputs(&input);
                 input = Some(val.to_string_lossy().into_owned());
             }
-            _ => {
-                eprintln!("Error: {}", arg.unexpected());
-                print_usage();
-                process::exit(1);
-            }
+            _ => unexpected_arg(arg, print_usage),
         }
     }
 
-    let input = match input {
-        Some(f) => f,
-        None => {
-            eprintln!("Error: no input file specified");
-            print_usage();
-            process::exit(1);
-        }
-    };
-
     CompileOptions {
-        input,
+        input: require_input(input, print_usage),
         output,
         format,
         opt_level,

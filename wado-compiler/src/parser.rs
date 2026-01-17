@@ -1,4 +1,5 @@
-// Recursive descent parser for Wado
+// The parser implementation of Wado with recursive descent parser.
+// This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::*;
 use crate::token::{Span, Token, TokenKind};
@@ -9,6 +10,8 @@ pub struct Parser {
     /// Tracks when we've split a GtGt into two Gt tokens for nested generics.
     /// When true, the next expect_gt call should succeed without consuming a token.
     pending_gt: bool,
+    /// Shebang line, passed from the lexer.
+    shebang: Option<String>,
     /// Content of the __DATA__ section, passed from the lexer.
     data_section: Option<String>,
 }
@@ -40,16 +43,22 @@ impl Parser {
             tokens,
             pos: 0,
             pending_gt: false,
+            shebang: None,
             data_section: None,
         }
     }
 
-    /// Creates a new parser with the given tokens and data section.
-    pub fn with_data_section(tokens: Vec<Token>, data_section: Option<String>) -> Self {
+    /// Creates a new parser with the given tokens, shebang, and data section.
+    pub fn with_metadata(
+        tokens: Vec<Token>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+    ) -> Self {
         Self {
             tokens,
             pos: 0,
             pending_gt: false,
+            shebang,
             data_section,
         }
     }
@@ -61,7 +70,11 @@ impl Parser {
             items.push(self.parse_item()?);
         }
 
-        Ok(Module::with_data_section(items, self.data_section.take()))
+        Ok(Module::with_metadata(
+            items,
+            self.shebang.take(),
+            self.data_section.take(),
+        ))
     }
 
     // Token handling
@@ -692,6 +705,18 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::If)?;
 
+        // Check for if-let-init: `if let x = expr; condition { ... }`
+        let init = if self.check(&TokenKind::Let) {
+            let let_stmt = self.parse_let_stmt_inner()?;
+            self.expect(&TokenKind::Semicolon)?;
+            match let_stmt {
+                Stmt::Let(ls) => Some(Box::new(ls)),
+                _ => unreachable!(),
+            }
+        } else {
+            None
+        };
+
         let condition = self.parse_expr()?;
         let then_block = self.parse_block()?;
 
@@ -706,6 +731,7 @@ impl Parser {
         let span = start_span.merge(end_span);
 
         Ok(Stmt::If(IfStmt {
+            init,
             condition,
             then_block,
             else_block,
@@ -754,9 +780,7 @@ impl Parser {
                 self.advance(); // consume identifier
 
                 // Check if next token is 'of'
-                if let TokenKind::Ident(kw) = &self.peek().kind
-                    && kw == "of"
-                {
+                if matches!(self.peek().kind, TokenKind::Of) {
                     // This is a for-of loop
                     self.advance(); // consume 'of'
                     let iterable = self.parse_expr()?;
@@ -1476,13 +1500,53 @@ impl Parser {
         match self.peek_kind().clone() {
             TokenKind::Ident(name) => {
                 self.advance();
-                // Check for qualified name (Effect::function) but not turbofish (foo::<T>)
+                let is_type_name = name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+
+                // Check for qualified name (Effect::function) or static method call
                 if self.check(&TokenKind::ColonColon) {
                     // Peek ahead to check if this is turbofish (::< for type args)
                     let checkpoint = self.pos;
                     self.advance(); // consume ::
-                    if self.check(&TokenKind::Lt) {
-                        // This is turbofish, backtrack and let postfix expression handle it
+
+                    if self.check(&TokenKind::Lt) && is_type_name {
+                        // This could be Type::<Args>::method() - static method on generic type
+                        // Parse type arguments
+                        self.advance(); // consume <
+                        let mut type_args = vec![self.parse_type()?];
+                        while self.check(&TokenKind::Comma) {
+                            self.advance();
+                            type_args.push(self.parse_type()?);
+                        }
+                        self.expect_gt()?;
+
+                        // Now expect ::method(args)
+                        if self.check(&TokenKind::ColonColon) {
+                            self.advance(); // consume ::
+                            let method = self.consume_ident()?;
+                            self.expect(&TokenKind::LParen)?;
+                            let args = self.parse_arg_list()?;
+                            let end_span = self.expect(&TokenKind::RParen)?.span;
+
+                            Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+                                target_type: Type::Generic(GenericType {
+                                    name,
+                                    args: type_args,
+                                    span: start_span,
+                                }),
+                                method,
+                                args,
+                                span: start_span.merge(&end_span),
+                            })))
+                        } else {
+                            // Not followed by ::method, backtrack for turbofish
+                            self.pos = checkpoint;
+                            Ok(Expr::Ident(IdentExpr {
+                                name,
+                                span: start_span,
+                            }))
+                        }
+                    } else if self.check(&TokenKind::Lt) {
+                        // Lowercase name with ::<, this is turbofish, backtrack
                         self.pos = checkpoint;
                         Ok(Expr::Ident(IdentExpr {
                             name,
@@ -1497,9 +1561,7 @@ impl Parser {
                             span: start_span,
                         }))
                     }
-                } else if self.check(&TokenKind::LBrace)
-                    && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                {
+                } else if self.check(&TokenKind::LBrace) && is_type_name {
                     // Struct literal: `Point { x: 10, y: 20 }`
                     // Only parse as struct literal if name starts with uppercase
                     // (struct naming convention: UpperCamelCase)
@@ -1689,7 +1751,13 @@ impl Parser {
 
         self.expect(&TokenKind::Pipe)?;
 
-        let body = self.parse_expr()?;
+        // Check for block body: |params| { ... }
+        let body = if self.check(&TokenKind::LBrace) {
+            let block = self.parse_block()?;
+            Expr::Block(Box::new(block))
+        } else {
+            self.parse_expr()?
+        };
 
         Ok(Expr::Closure(Box::new(ClosureExpr {
             params,
@@ -1719,6 +1787,43 @@ impl Parser {
                 name: "!".to_string(),
                 span: start_span,
             }));
+        }
+
+        // Function type: fn(T1, T2) -> R
+        if self.check(&TokenKind::Fn) {
+            self.advance();
+            self.expect(&TokenKind::LParen)?;
+
+            // Parse parameter types
+            let mut params = Vec::new();
+            if !self.check(&TokenKind::RParen) {
+                params.push(self.parse_type()?);
+                while self.check(&TokenKind::Comma) {
+                    self.advance();
+                    if self.check(&TokenKind::RParen) {
+                        break;
+                    }
+                    params.push(self.parse_type()?);
+                }
+            }
+            self.expect(&TokenKind::RParen)?;
+
+            // Parse return type (optional)
+            let return_type = if self.check(&TokenKind::Arrow) {
+                self.advance();
+                self.parse_type()?
+            } else {
+                Type::Named(NamedType {
+                    name: "()".to_string(),
+                    span: start_span,
+                })
+            };
+
+            return Ok(Type::Function(Box::new(FunctionType {
+                params,
+                return_type,
+                effects: Vec::new(),
+            })));
         }
 
         // Reference type: &T or &mut T
@@ -2514,8 +2619,8 @@ mod tests {
     fn parse(source: &str) -> ParseResult<Module> {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().expect("lexer error");
-        let data_section = lexer.into_data_section();
-        let mut parser = Parser::with_data_section(tokens, data_section);
+        let (data_section, _comments, shebang) = lexer.into_parts();
+        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
         parser.parse()
     }
 

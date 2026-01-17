@@ -69,7 +69,8 @@ Why built-in instead of a library?
 ## Hello World
 
 ```wado
-use {println, Stdout} from "core:cli";
+#!/usr/bin/env wado
+use { println, Stdout } from "core:cli";
 
 // run() is the entry point of the wasi:cli's Command world
 fn run() with Stdout {
@@ -123,15 +124,34 @@ cargo build
 cargo test
 ```
 
+### The Wado CLI
+
+- [x] `wado compile FILE` - Compile Wado source to Wasm/WAT
+- [x] `wado run FILE` - Run Wado source directly using Wasmtime
+- [x] `wado dump FILE` - Dump internal compiler state for debugging
+- [x] `wado format FILE` - Format Wado source code
+
+### What's Done
+
+There are E2E test fixtures in [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures).
+
+### VS Code Extension
+
+The `wado-vscode/` directory contains a VS Code extension for syntax highlighting. It is not published to the marketplace, but you can install it locally for development:
+
+```sh
+make install-wado-vscode-dev    # install extension to ~/.vscode via symlink
+make clean-wado-vscode-dev      # uninstall it from ~/.vscode
+make update-wado-vscode-grammar # regenerate syntax files after changing syntax.rs
+```
+
+See [wado-vscode/README.md](wado-vscode/README.md) for more details.
+
 ### On Your Task Done
 
 ```sh
 make on-task-done # format, clippy-fix, update-bundled, test
 ```
-
-### What's Done
-
-There are E2E test fixtures in [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures).
 
 ## Authors
 

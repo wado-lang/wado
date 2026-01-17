@@ -1,4 +1,5 @@
 # WEP: Operator Precedence and Associativity
+
 ## Context
 
 Wado needs to define operator precedence and associativity rules. The language aims to minimize learning costs while avoiding design mistakes present in older languages. Several key decisions were needed:

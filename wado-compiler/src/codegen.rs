@@ -9,8 +9,8 @@ use crate::name::{FreeFunctionName, FunctionId, MethodName, StructName, build_co
 use crate::optimize::OptimizationHints;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirModule, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
+    TirFunction, TirModule, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasi_registry::{
     WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
@@ -26,10 +26,10 @@ use std::collections::{HashMap, HashSet};
 use wasm_encoder::{
     AbstractHeapType, Alias, BranchHint, BranchHints, CanonicalOption, CodeSection,
     ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr,
-    DataCountSection, DataSection, DataSegment, DataSegmentMode, ExportKind, ExportSection,
-    FieldType, Function, FunctionSection, HeapType, InstanceType, Instruction, MemArg,
-    MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection, PrimitiveValType, RefType,
-    StorageType, TypeBounds, TypeSection, ValType,
+    DataCountSection, DataSection, DataSegment, DataSegmentMode, ElementSection, Elements,
+    ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType, InstanceType,
+    Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
+    PrimitiveValType, RefType, StorageType, TypeBounds, TypeSection, ValType,
 };
 use wasmparser::{Validator, WasmFeatures};
 
@@ -88,6 +88,63 @@ pub struct Codegen {
     /// Registry of box types for primitive references (keyed by ValType, maps to GC struct type index)
     /// Box types are single-field mutable structs that allow references to primitives
     box_types: HashMap<ValType, u32>,
+    /// Counter for generating unique closure IDs
+    closure_counter: RefCell<u32>,
+    /// Registry of closure environment types
+    /// Key: vector of (type_id, is_mut) for each capture
+    /// Value: (env_type_idx, env_type_name)
+    closure_env_types: RefCell<HashMap<Vec<(TypeId, bool)>, (u32, String)>>,
+    /// Registry of closure struct types (env + funcref pair)
+    /// Key: (env_type_idx, fn_type_idx)
+    /// Value: closure_struct_type_idx
+    closure_struct_types: RefCell<HashMap<(u32, u32), u32>>,
+    /// Registry of canonical closure types based on user-visible function signature.
+    /// Used for function type parameters (e.g., `fn(i32) -> i32`).
+    /// Key: (param_type_ids, return_type_id)
+    /// Value: (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx)
+    canonical_closure_types: RefCell<HashMap<(Vec<TypeId>, TypeId), (u32, String, u32)>>,
+    /// Pending closure implementation functions to generate
+    /// (closure_id, captures, params, body, return_type, env_type_idx, closure_type_idx)
+    pending_closures: RefCell<Vec<ClosureInfo>>,
+    /// Counter for tracking which closure we're generating during codegen.
+    /// Reset before codegen starts, incremented each time we encounter a Closure expression.
+    /// Must match the order in which closures were collected by collect_closures_from_module.
+    closure_codegen_counter: RefCell<u32>,
+}
+
+/// Information about a closure to be generated
+#[derive(Clone)]
+struct ClosureInfo {
+    /// Unique closure ID
+    id: u32,
+    /// Captured variables from outer scope
+    captures: Vec<TirCapture>,
+    /// Closure parameters (name, type)
+    params: Vec<(String, TypeId)>,
+    /// Closure body expression
+    body: TirExpr,
+    /// Return type of the closure
+    return_type: TypeId,
+    /// Wasm type index for the environment struct
+    env_type_idx: u32,
+    /// Wasm type index for the closure function type (env + params -> result)
+    fn_type_idx: u32,
+    /// Wasm type name for the closure function type (needed for define_func)
+    fn_type_name: String,
+    /// Wasm type index for the closure struct type (env + funcref)
+    closure_struct_type_idx: u32,
+    /// Wasm function index for the closure implementation function
+    func_idx: u32,
+    /// Function name for the closure implementation
+    func_name: String,
+}
+
+/// Collected closure during TIR scan (before type registration)
+struct CollectedClosure {
+    captures: Vec<TirCapture>,
+    params: Vec<(String, TypeId)>,
+    body: TirExpr,
+    return_type: TypeId,
 }
 
 /// Context for tracking local variables during function code generation
@@ -126,6 +183,16 @@ struct FunctionContext {
     address_taken_locals: std::collections::HashSet<u32>,
     /// Map from local index to its box type index (for address-taken primitive locals)
     local_box_types: HashMap<u32, u32>,
+    /// Closure environment type index (set when generating closure implementation function)
+    closure_env_type_idx: Option<u32>,
+    /// Closure captures (set when generating closure implementation function)
+    closure_captures: Vec<TirCapture>,
+    /// Offset to add to local indices for closure functions (typically 1 to skip env param)
+    local_index_offset: u32,
+    /// Map from local index to closure id (for closures stored in locals)
+    local_closure_ids: HashMap<u32, u32>,
+    /// Counter for generating unique IndirectCall temp locals (to support nested closure calls)
+    indirect_call_counter: u32,
 }
 
 impl FunctionContext {
@@ -144,6 +211,11 @@ impl FunctionContext {
             for_of_counter: 0,
             address_taken_locals: std::collections::HashSet::new(),
             local_box_types: HashMap::new(),
+            closure_env_type_idx: None,
+            closure_captures: Vec::new(),
+            local_index_offset: 0,
+            local_closure_ids: HashMap::new(),
+            indirect_call_counter: 0,
         }
     }
 
@@ -162,7 +234,21 @@ impl FunctionContext {
             for_of_counter: 0,
             address_taken_locals: std::collections::HashSet::new(),
             local_box_types: HashMap::new(),
+            closure_env_type_idx: None,
+            closure_captures: Vec::new(),
+            indirect_call_counter: 0,
+            local_index_offset: 0,
+            local_closure_ids: HashMap::new(),
         }
+    }
+
+    /// Set closure context for generating a closure implementation function.
+    /// This enables TirExprKind::Capture to generate proper struct.get instructions.
+    /// Also sets local_index_offset to 1 to account for the env parameter at index 0.
+    fn set_closure_info(&mut self, env_type_idx: u32, captures: &[TirCapture]) {
+        self.closure_env_type_idx = Some(env_type_idx);
+        self.closure_captures = captures.to_vec();
+        self.local_index_offset = 1; // Skip env param at index 0
     }
 
     /// Reset for-of counter (called between pre-allocation and code generation phases)
@@ -300,6 +386,12 @@ impl Codegen {
             array_types: HashMap::new(),
             array_struct_types: HashMap::new(),
             box_types: HashMap::new(),
+            closure_counter: RefCell::new(0),
+            closure_env_types: RefCell::new(HashMap::new()),
+            closure_struct_types: RefCell::new(HashMap::new()),
+            canonical_closure_types: RefCell::new(HashMap::new()),
+            pending_closures: RefCell::new(Vec::new()),
+            closure_codegen_counter: RefCell::new(0),
         }
     }
 
@@ -339,6 +431,47 @@ impl Codegen {
             name: name.to_string(),
         };
         self.struct_types.get(&simple)
+    }
+
+    /// Mangle a type name for use in struct names (e.g., i32 for Box$i32)
+    fn mangle_type_for_struct_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
+        match type_table.get(type_id) {
+            ResolvedType::Primitive(prim) => match prim {
+                PrimitiveType::I8 => "i8".to_string(),
+                PrimitiveType::I16 => "i16".to_string(),
+                PrimitiveType::I32 => "i32".to_string(),
+                PrimitiveType::I64 => "i64".to_string(),
+                PrimitiveType::I128 => "i128".to_string(),
+                PrimitiveType::U8 => "u8".to_string(),
+                PrimitiveType::U16 => "u16".to_string(),
+                PrimitiveType::U32 => "u32".to_string(),
+                PrimitiveType::U64 => "u64".to_string(),
+                PrimitiveType::U128 => "u128".to_string(),
+                PrimitiveType::F32 => "f32".to_string(),
+                PrimitiveType::F64 => "f64".to_string(),
+                PrimitiveType::Bool => "bool".to_string(),
+                PrimitiveType::Char => "char".to_string(),
+            },
+            ResolvedType::Unit => "unit".to_string(),
+            ResolvedType::String => "String".to_string(),
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                    .collect();
+                format!("{}${}", name, args.join("$"))
+            }
+            ResolvedType::Array(elem) => {
+                format!(
+                    "Array${}",
+                    self.mangle_type_for_struct_name(*elem, type_table)
+                )
+            }
+            _ => "unknown".to_string(),
+        }
     }
 
     /// Extract struct names that a type depends on (for field types)
@@ -591,9 +724,22 @@ impl Codegen {
                     if func.body.is_none() {
                         continue;
                     }
-                    // Skip Array<T> methods - they are inlined in codegen (MethodCall on Array type)
+                    // Skip ALL Array<T> methods - both instance and static
                     // Array is generic so it's not registered in struct_types; it's in array_struct_types
+                    // All Array methods must be inlined at the call site because the generic type
+                    // parameter T cannot be resolved during function type generation
                     if struct_name == "Array" {
+                        continue;
+                    }
+                    // Skip methods that contain type parameters (from generic structs like Box<T>)
+                    // These methods need to be inlined at call sites with concrete types
+                    let type_table = &tir_mod.type_table;
+                    let has_type_params = type_table.contains_type_param(func.return_type)
+                        || func
+                            .params
+                            .iter()
+                            .any(|p| type_table.contains_type_param(p.type_id));
+                    if has_type_params {
                         continue;
                     }
                     // Build function ID for DCE check: path/Struct::method
@@ -755,6 +901,17 @@ impl Codegen {
         // Register box types for primitive references (&i32, &mut f64, etc.)
         self.register_box_types(&mut builder);
 
+        // Register canonical closure types for function type parameters.
+        // This must happen BEFORE user-defined function types are defined,
+        // because function parameters of type fn(T1, T2) -> R need to use
+        // the canonical closure struct type.
+        self.register_canonical_closure_types_from_table(type_table, &mut builder);
+        for (path, tir_mod) in all_tir_modules {
+            if path != &entry_tir.path {
+                self.register_canonical_closure_types_from_table(&tir_mod.type_table, &mut builder);
+            }
+        }
+
         // WASI effect function types - derived from wasi/*.wado definitions
         for interface in self.wasi_registry.interfaces() {
             for func in &interface.functions {
@@ -767,6 +924,16 @@ impl Codegen {
 
         // Types for user-defined functions from entry TIR module
         for tir_func in &entry_tir.functions {
+            // Skip functions that contain type parameters (from generic structs like Box<T>)
+            // These functions need to be inlined at call sites with concrete types
+            let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id));
+            if has_type_params {
+                continue;
+            }
             let param_types: Vec<ValType> = tir_func
                 .params
                 .iter()
@@ -861,6 +1028,13 @@ impl Codegen {
             builder.define_func_type(&run_export.name, &params, &results);
         }
 
+        // Collect and register closure types (types only, not functions yet)
+        // Note: canonical closure types are already registered earlier, so this
+        // will reuse them for closures with matching signatures.
+        let collected_closures = Self::collect_closures_from_module(entry_tir);
+        let mut closure_infos =
+            self.register_closure_types(&collected_closures, type_table, &mut builder);
+
         // Add types section to module
         module.section(builder.types());
 
@@ -933,11 +1107,27 @@ impl Codegen {
         module.section(builder.imports());
 
         // ========================================
+        // Define closure functions (after imports)
+        // ========================================
+        Self::define_closure_funcs(&mut closure_infos, &mut builder);
+        // Store closure infos for code generation
+        *self.pending_closures.borrow_mut() = closure_infos;
+
+        // ========================================
         // Function section
         // ========================================
         // Declare all TIR functions except 'run' (which is handled as entry point)
         for tir_func in &entry_tir.functions {
             if tir_func.name == "run" {
+                continue;
+            }
+            // Skip functions that contain type parameters (from generic structs like Box<T>)
+            let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id));
+            if has_type_params {
                 continue;
             }
             // Methods have names like "Point::sum" - use fully mangled name
@@ -988,6 +1178,23 @@ impl Codegen {
         builder.export_func("run", "run");
         module.section(builder.exports());
 
+        // ========================================
+        // Element section (required for ref.func in closures)
+        // ========================================
+        let pending_closures = self.pending_closures.borrow();
+        if !pending_closures.is_empty() {
+            let mut elements = ElementSection::new();
+            // Collect closure function indices for declarative element segment
+            let closure_func_indices: Vec<u32> =
+                pending_closures.iter().map(|c| c.func_idx).collect();
+            // Create declarative element segment for ref.func usage
+            elements.declared(Elements::Functions(std::borrow::Cow::Borrowed(
+                &closure_func_indices,
+            )));
+            module.section(&elements);
+        }
+        drop(pending_closures);
+
         // Data count section (required for array.new_data with GC)
         let data_count = if string_data.is_empty() { 0 } else { 1 };
         module.section(&DataCountSection { count: data_count });
@@ -995,15 +1202,33 @@ impl Codegen {
         // ========================================
         // Code section
         // ========================================
+        // Reset closure codegen counter - must match the order closures were collected
+        *self.closure_codegen_counter.borrow_mut() = 0;
         let mut code = CodeSection::new();
         let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
         let import_count = builder.import_func_count;
         let empty_path: &[String] = &[];
 
+        // Generate closure implementation function bodies FIRST (they were declared first)
+        let pending_closures = self.pending_closures.borrow().clone();
+        for closure_info in &pending_closures {
+            let wasm_func = self.generate_closure_function(closure_info, type_table, &builder);
+            code.function(&wasm_func);
+        }
+
         // Generate user-defined functions from entry TIR (excluding 'run' which is handled specially)
         for (idx, tir_func) in entry_tir.functions.iter().enumerate() {
             if tir_func.name == "run" {
                 continue; // Skip run - it's handled separately as entry point
+            }
+            // Skip functions that contain type parameters (from generic structs like Box<T>)
+            let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id));
+            if has_type_params {
+                continue;
             }
             let (wasm_func, hints) =
                 self.generate_function(tir_func, type_table, &builder, empty_path);
@@ -2893,6 +3118,640 @@ impl Codegen {
         type_idx
     }
 
+    /// Get the next unique closure ID
+    fn get_next_closure_id(&self) -> u32 {
+        let mut counter = self.closure_counter.borrow_mut();
+        let id = *counter;
+        *counter += 1;
+        id
+    }
+
+    /// Get or create a closure environment type for the given captures.
+    /// Returns (env_type_idx, env_type_name).
+    fn get_or_create_closure_env_type(
+        &self,
+        captures: &[crate::tir::TirCapture],
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) -> (u32, String) {
+        // Build the key from captures
+        let key: Vec<(TypeId, bool)> = captures.iter().map(|c| (c.type_id, c.is_mut)).collect();
+
+        // Check if already registered
+        if let Some(result) = self.closure_env_types.borrow().get(&key) {
+            return result.clone();
+        }
+
+        // Create the environment struct type
+        let closure_id = self.get_next_closure_id();
+        let type_name = format!("ClosureEnv_{}", closure_id);
+
+        let fields: Vec<FieldType> = captures
+            .iter()
+            .map(|cap| {
+                let val_type = self.type_id_to_valtype(type_table, cap.type_id);
+                FieldType {
+                    element_type: StorageType::Val(val_type),
+                    mutable: cap.is_mut,
+                }
+            })
+            .collect();
+
+        let type_idx = builder.define_gc_struct_type(&type_name, &fields);
+
+        self.closure_env_types
+            .borrow_mut()
+            .insert(key, (type_idx, type_name.clone()));
+
+        (type_idx, type_name)
+    }
+
+    /// Get or create a closure struct type (env + funcref pair).
+    /// Returns the closure struct type index.
+    fn get_or_create_closure_struct_type(
+        &self,
+        env_type_idx: u32,
+        fn_type_idx: u32,
+        builder: &mut CoreModuleBuilder,
+    ) -> u32 {
+        let key = (env_type_idx, fn_type_idx);
+
+        // Check if already registered
+        if let Some(&type_idx) = self.closure_struct_types.borrow().get(&key) {
+            return type_idx;
+        }
+
+        // Create the closure struct type with two fields:
+        // - field 0: env (ref to environment struct)
+        // - field 1: func (funcref to implementation function)
+        let closure_id = self.get_next_closure_id();
+        let type_name = format!("Closure_{}", closure_id);
+
+        let fields = vec![
+            FieldType {
+                element_type: StorageType::Val(ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(env_type_idx),
+                })),
+                mutable: false,
+            },
+            FieldType {
+                element_type: StorageType::Val(ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(fn_type_idx),
+                })),
+                mutable: false,
+            },
+        ];
+
+        let type_idx = builder.define_gc_struct_type(&type_name, &fields);
+
+        self.closure_struct_types.borrow_mut().insert(key, type_idx);
+
+        type_idx
+    }
+
+    /// Get or create a canonical closure type for a function signature.
+    /// This is used for function type parameters (e.g., `fn(i32) -> i32`).
+    /// Returns (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx).
+    ///
+    /// The canonical closure uses `(ref struct)` as the environment type,
+    /// allowing any closure with the same user-visible signature to be compatible.
+    fn get_or_create_canonical_closure_type(
+        &self,
+        params: &[TypeId],
+        return_type: TypeId,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) -> (u32, String, u32) {
+        let key = (params.to_vec(), return_type);
+
+        // Check if already registered
+        if let Some((fn_type_idx, fn_type_name, struct_type_idx)) =
+            self.canonical_closure_types.borrow().get(&key).cloned()
+        {
+            return (fn_type_idx, fn_type_name, struct_type_idx);
+        }
+
+        let closure_id = self.get_next_closure_id();
+
+        // Create canonical function type with generic struct ref as first param
+        let mut fn_param_types = vec![ValType::Ref(RefType {
+            nullable: false,
+            heap_type: HeapType::Abstract {
+                shared: false,
+                ty: AbstractHeapType::Struct,
+            },
+        })];
+        for type_id in params {
+            fn_param_types.push(self.type_id_to_valtype(type_table, *type_id));
+        }
+
+        let fn_return_types: Vec<ValType> =
+            if return_type == TypeTable::NEVER || return_type == TypeTable::UNIT {
+                vec![]
+            } else {
+                vec![self.type_id_to_valtype(type_table, return_type)]
+            };
+
+        let fn_type_name = format!("$canonical_closure_fn_{}", closure_id);
+        builder.define_func_type(&fn_type_name, &fn_param_types, &fn_return_types);
+        let fn_type_idx = builder.type_idx(&fn_type_name);
+
+        // Create canonical closure struct type (generic env + funcref)
+        let struct_type_name = format!("CanonicalClosure_{}", closure_id);
+        let fields = vec![
+            FieldType {
+                element_type: StorageType::Val(ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Abstract {
+                        shared: false,
+                        ty: AbstractHeapType::Struct,
+                    },
+                })),
+                mutable: false,
+            },
+            FieldType {
+                element_type: StorageType::Val(ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(fn_type_idx),
+                })),
+                mutable: false,
+            },
+        ];
+
+        let struct_type_idx = builder.define_gc_struct_type(&struct_type_name, &fields);
+
+        self.canonical_closure_types
+            .borrow_mut()
+            .insert(key, (fn_type_idx, fn_type_name.clone(), struct_type_idx));
+
+        (fn_type_idx, fn_type_name, struct_type_idx)
+    }
+
+    /// Collect all closures from a TIR module.
+    /// Returns a list of collected closures that need type registration.
+    fn collect_closures_from_module(module: &TirModule) -> Vec<CollectedClosure> {
+        let mut closures = Vec::new();
+
+        for func in &module.functions {
+            if let Some(body) = &func.body {
+                Self::collect_closures_from_block(body, &mut closures);
+            }
+        }
+
+        closures
+    }
+
+    /// Collect closures from a TIR block
+    fn collect_closures_from_block(block: &TirBlock, closures: &mut Vec<CollectedClosure>) {
+        for stmt in &block.stmts {
+            Self::collect_closures_from_stmt(stmt, closures);
+        }
+    }
+
+    /// Collect closures from a TIR statement
+    fn collect_closures_from_stmt(stmt: &TirStmt, closures: &mut Vec<CollectedClosure>) {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::collect_closures_from_expr(value, closures);
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::collect_closures_from_expr(condition, closures);
+                Self::collect_closures_from_block(body, closures);
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                if let Some(cond) = condition {
+                    Self::collect_closures_from_expr(cond, closures);
+                }
+                if let Some(upd) = update {
+                    Self::collect_closures_from_expr(upd, closures);
+                }
+                Self::collect_closures_from_block(body, closures);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::collect_closures_from_expr(iterable, closures);
+                Self::collect_closures_from_block(body, closures);
+            }
+            TirStmtKind::Loop { body } => {
+                Self::collect_closures_from_block(body, closures);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::collect_closures_from_expr(expr, closures);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::collect_closures_from_expr(condition, closures);
+                Self::collect_closures_from_block(then_block, closures);
+                if let Some(else_blk) = else_block {
+                    Self::collect_closures_from_block(else_blk, closures);
+                }
+            }
+            TirStmtKind::Assert { condition, .. } => {
+                Self::collect_closures_from_expr(condition, closures);
+            }
+            TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
+        }
+    }
+
+    /// Collect closures from a TIR expression
+    fn collect_closures_from_expr(expr: &TirExpr, closures: &mut Vec<CollectedClosure>) {
+        match &expr.kind {
+            TirExprKind::Closure {
+                params,
+                body,
+                captures,
+            } => {
+                // Determine return type:
+                // - For block bodies, check for return statements
+                // - Fall back to the body expression's type
+                let return_type = if let TirExprKind::Block(ref block) = body.kind {
+                    Self::find_return_type_in_closure_block(block).unwrap_or(body.type_id)
+                } else {
+                    body.type_id
+                };
+
+                // Collect this closure
+                closures.push(CollectedClosure {
+                    captures: captures.clone(),
+                    params: params.clone(),
+                    body: (**body).clone(),
+                    return_type,
+                });
+                // Also collect any nested closures in the body
+                Self::collect_closures_from_expr(body, closures);
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::collect_closures_from_expr(left, closures);
+                Self::collect_closures_from_expr(right, closures);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
+                Self::collect_closures_from_expr(inner, closures);
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    Self::collect_closures_from_expr(arg, closures);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::collect_closures_from_expr(receiver, closures);
+                for arg in args {
+                    Self::collect_closures_from_expr(arg, closures);
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::collect_closures_from_block(block, closures);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::collect_closures_from_expr(condition, closures);
+                Self::collect_closures_from_block(then_branch, closures);
+                if let Some(else_blk) = else_branch {
+                    Self::collect_closures_from_block(else_blk, closures);
+                }
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::collect_closures_from_expr(target, closures);
+                Self::collect_closures_from_expr(value, closures);
+            }
+            TirExprKind::Index { expr: array, index } => {
+                Self::collect_closures_from_expr(array, closures);
+                Self::collect_closures_from_expr(index, closures);
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::collect_closures_from_expr(scrutinee, closures);
+                for arm in arms {
+                    Self::collect_closures_from_expr(&arm.body, closures);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::collect_closures_from_expr(&field.value, closures);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::collect_closures_from_expr(elem, closures);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::collect_closures_from_expr(callee, closures);
+                for arg in args {
+                    Self::collect_closures_from_expr(arg, closures);
+                }
+            }
+            // Leaf nodes - no nested expressions
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => {}
+        }
+    }
+
+    /// Find return type in a closure block body by scanning for return statements.
+    /// Similar to Resolver::find_return_type_in_block.
+    fn find_return_type_in_closure_block(block: &TirBlock) -> Option<TypeId> {
+        for stmt in &block.stmts {
+            if let Some(type_id) = Self::find_return_type_in_closure_stmt(stmt) {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
+    /// Find return type in a statement by scanning for return statements.
+    fn find_return_type_in_closure_stmt(stmt: &TirStmt) -> Option<TypeId> {
+        match &stmt.kind {
+            TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),
+            TirStmtKind::Return { value: None } => Some(TypeTable::UNIT),
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                // Check then branch first
+                if let Some(type_id) = Self::find_return_type_in_closure_block(then_block) {
+                    return Some(type_id);
+                }
+                // Check else branch if present
+                if let Some(else_blk) = else_block
+                    && let Some(type_id) = Self::find_return_type_in_closure_block(else_blk)
+                {
+                    return Some(type_id);
+                }
+                None
+            }
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::ForOf { body, .. }
+            | TirStmtKind::Loop { body } => Self::find_return_type_in_closure_block(body),
+            _ => None,
+        }
+    }
+
+    /// Find local variables that store closure values.
+    /// Returns a map from local_index to closure_id.
+    /// This must traverse in the same order as collect_closures_from_* to match closure IDs.
+    fn find_closure_locals(block: &TirBlock) -> HashMap<u32, u32> {
+        let mut result = HashMap::new();
+        let mut closure_counter: u32 = 0;
+        Self::find_closure_locals_in_block(block, &mut result, &mut closure_counter);
+        result
+    }
+
+    fn find_closure_locals_in_block(
+        block: &TirBlock,
+        result: &mut HashMap<u32, u32>,
+        closure_counter: &mut u32,
+    ) {
+        for stmt in &block.stmts {
+            Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
+        }
+    }
+
+    fn find_closure_locals_in_stmt(
+        stmt: &TirStmt,
+        result: &mut HashMap<u32, u32>,
+        closure_counter: &mut u32,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                // Check if value is a closure - if so, record the mapping
+                if matches!(value.kind, TirExprKind::Closure { .. }) {
+                    result.insert(*local_index, *closure_counter);
+                }
+                // Always traverse to count all closures (in same order as collect_closures_from_expr)
+                Self::find_closure_locals_in_expr(value, result, closure_counter);
+            }
+            TirStmtKind::Expr(value) => {
+                Self::find_closure_locals_in_expr(value, result, closure_counter);
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::find_closure_locals_in_expr(condition, result, closure_counter);
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                if let Some(cond) = condition {
+                    Self::find_closure_locals_in_expr(cond, result, closure_counter);
+                }
+                if let Some(upd) = update {
+                    Self::find_closure_locals_in_expr(upd, result, closure_counter);
+                }
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::find_closure_locals_in_expr(iterable, result, closure_counter);
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+            }
+            TirStmtKind::Loop { body } => {
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::find_closure_locals_in_expr(expr, result, closure_counter);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::find_closure_locals_in_expr(condition, result, closure_counter);
+                Self::find_closure_locals_in_block(then_block, result, closure_counter);
+                if let Some(else_blk) = else_block {
+                    Self::find_closure_locals_in_block(else_blk, result, closure_counter);
+                }
+            }
+            TirStmtKind::Assert { condition, .. } => {
+                Self::find_closure_locals_in_expr(condition, result, closure_counter);
+            }
+            TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
+        }
+    }
+
+    fn find_closure_locals_in_expr(
+        expr: &TirExpr,
+        result: &mut HashMap<u32, u32>,
+        closure_counter: &mut u32,
+    ) {
+        match &expr.kind {
+            TirExprKind::Closure { body, .. } => {
+                // Count this closure (but don't record it - that's done in Let handling)
+                *closure_counter += 1;
+                // Also check for nested closures in the body
+                Self::find_closure_locals_in_expr(body, result, closure_counter);
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::find_closure_locals_in_expr(left, result, closure_counter);
+                Self::find_closure_locals_in_expr(right, result, closure_counter);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
+                Self::find_closure_locals_in_expr(inner, result, closure_counter);
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    Self::find_closure_locals_in_expr(arg, result, closure_counter);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::find_closure_locals_in_expr(receiver, result, closure_counter);
+                for arg in args {
+                    Self::find_closure_locals_in_expr(arg, result, closure_counter);
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::find_closure_locals_in_block(block, result, closure_counter);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::find_closure_locals_in_expr(condition, result, closure_counter);
+                Self::find_closure_locals_in_block(then_branch, result, closure_counter);
+                if let Some(else_blk) = else_branch {
+                    Self::find_closure_locals_in_block(else_blk, result, closure_counter);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::find_closure_locals_in_expr(&field.value, result, closure_counter);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements, .. } => {
+                for elem in elements {
+                    Self::find_closure_locals_in_expr(elem, result, closure_counter);
+                }
+            }
+            TirExprKind::Index { expr, index, .. } => {
+                Self::find_closure_locals_in_expr(expr, result, closure_counter);
+                Self::find_closure_locals_in_expr(index, result, closure_counter);
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::find_closure_locals_in_expr(target, result, closure_counter);
+                Self::find_closure_locals_in_expr(value, result, closure_counter);
+            }
+            TirExprKind::Match { expr, arms } => {
+                Self::find_closure_locals_in_expr(expr, result, closure_counter);
+                for arm in arms {
+                    Self::find_closure_locals_in_expr(&arm.body, result, closure_counter);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::find_closure_locals_in_expr(callee, result, closure_counter);
+                for arg in args {
+                    Self::find_closure_locals_in_expr(arg, result, closure_counter);
+                }
+            }
+            // Terminals - no closures inside
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::Capture { .. } => {}
+        }
+    }
+
+    /// Register types for collected closures.
+    /// Called during the type definition phase before code generation.
+    /// Register closure types only (env structs, function types, closure structs).
+    /// Does NOT define the closure functions yet - that happens after imports.
+    /// Returns partial ClosureInfo with func_idx set to 0 (placeholder).
+    fn register_closure_types(
+        &self,
+        closures: &[CollectedClosure],
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) -> Vec<ClosureInfo> {
+        let mut closure_infos = Vec::new();
+
+        for (idx, collected) in closures.iter().enumerate() {
+            let closure_id = idx as u32;
+            let func_name = format!("$closure_{}", closure_id);
+
+            // Create environment type (specific to this closure's captures)
+            let (env_type_idx, _env_type_name) =
+                self.get_or_create_closure_env_type(&collected.captures, type_table, builder);
+
+            // Get or create canonical closure type for this signature.
+            // The function type uses generic (ref struct) for env, allowing all closures
+            // with the same user-visible signature to use the same types.
+            let param_type_ids: Vec<TypeId> =
+                collected.params.iter().map(|(_, tid)| *tid).collect();
+            let (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx) =
+                self.get_or_create_canonical_closure_type(
+                    &param_type_ids,
+                    collected.return_type,
+                    type_table,
+                    builder,
+                );
+
+            // Store info - func_idx will be set later
+            closure_infos.push(ClosureInfo {
+                id: closure_id,
+                captures: collected.captures.clone(),
+                params: collected.params.clone(),
+                body: collected.body.clone(),
+                return_type: collected.return_type,
+                env_type_idx, // Specific env type for this closure (for ref.cast inside)
+                fn_type_idx: canonical_fn_type_idx, // Canonical fn type with generic env
+                fn_type_name: canonical_fn_type_name, // Canonical fn type name for define_func
+                closure_struct_type_idx: canonical_closure_struct_type_idx, // Canonical struct
+                func_idx: 0,  // Placeholder - set in define_closure_funcs
+                func_name,
+            });
+        }
+
+        closure_infos
+    }
+
+    /// Define closure functions (must be called after imports are defined).
+    /// Updates the func_idx in each ClosureInfo.
+    fn define_closure_funcs(closure_infos: &mut [ClosureInfo], builder: &mut CoreModuleBuilder) {
+        for info in closure_infos.iter_mut() {
+            let func_idx = builder.define_func(&info.func_name, &info.fn_type_name);
+            info.func_idx = func_idx;
+        }
+    }
+
     /// Pre-register primitive array types (where element type is a primitive).
     /// These can be registered before struct types since they don't depend on struct definitions.
     fn register_primitive_array_types_from_table(
@@ -2967,6 +3826,38 @@ impl Codegen {
             // Also register Array struct type for Array<T>
             if is_array_struct && !self.array_struct_types.contains_key(&element_type_id) {
                 self.get_or_create_array_struct_type(element_type_id, type_table, builder);
+            }
+        }
+    }
+
+    /// Pre-register canonical closure types for all function types found in the type table.
+    /// This is needed so that function type parameters can be properly typed.
+    fn register_canonical_closure_types_from_table(
+        &self,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        for type_id in 0..type_table.len() as TypeId {
+            if let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = type_table.get(type_id)
+            {
+                // Skip if any param or return type contains type parameters (unmonomorphized)
+                let has_type_params = params.iter().any(|p| type_table.contains_type_param(*p))
+                    || type_table.contains_type_param(*return_type);
+                if has_type_params {
+                    continue;
+                }
+
+                // Register canonical closure type for this function signature
+                self.get_or_create_canonical_closure_type(
+                    params,
+                    *return_type,
+                    type_table,
+                    builder,
+                );
             }
         }
     }
@@ -3122,9 +4013,31 @@ impl Codegen {
                 self.type_id_to_valtype(type_table, *inner)
             }
 
-            // Function type - use i32 as placeholder (function index)
-            // TODO: Create proper function reference type
-            ResolvedType::Function { .. } => ValType::I32,
+            // Function type - look up canonical closure struct type
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                let key = (params.clone(), *return_type);
+                if let Some((_, _, struct_type_idx)) =
+                    self.canonical_closure_types.borrow().get(&key).cloned()
+                {
+                    ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(struct_type_idx),
+                    })
+                } else {
+                    // Type not yet registered - return placeholder struct ref
+                    ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Abstract {
+                            shared: false,
+                            ty: AbstractHeapType::Struct,
+                        },
+                    })
+                }
+            }
 
             // Tuple type
             ResolvedType::Tuple(elements) => {
@@ -3172,7 +4085,6 @@ impl Codegen {
 
             // Placeholder types (shouldn't appear in final TIR)
             ResolvedType::Unknown | ResolvedType::Error => {
-                eprintln!("DEBUG: Unknown/Error type found. type_id={}", type_id);
                 panic!("unexpected Unknown/Error type in codegen")
             }
 
@@ -3509,7 +4421,9 @@ impl Codegen {
 
             // === Variables ===
             TirExprKind::Local { index, .. } => {
-                func.instruction(&Instruction::LocalGet(*index));
+                // Apply offset for closure functions (env param shifts indices by 1)
+                let adjusted_index = *index + ctx.local_index_offset;
+                func.instruction(&Instruction::LocalGet(adjusted_index));
 
                 // For address-taken primitive locals, unbox to get the value
                 if let Some(&box_type_idx) = ctx.local_box_types.get(index) {
@@ -3640,7 +4554,8 @@ impl Codegen {
                     && ctx.local_box_types.contains_key(index)
                 {
                     // Local is address-taken, just get the box reference
-                    func.instruction(&Instruction::LocalGet(*index));
+                    let adjusted_index = *index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalGet(adjusted_index));
                     // Convert nullable ref to non-nullable for function call
                     func.instruction(&Instruction::RefAsNonNull);
                     return;
@@ -3654,17 +4569,19 @@ impl Codegen {
             TirExprKind::Assign { target, value } => {
                 match &target.kind {
                     TirExprKind::Local { index, .. } => {
+                        // Apply offset for closure functions
+                        let adjusted_index = *index + ctx.local_index_offset;
                         // For address-taken primitive locals, update the box
                         if let Some(&box_type_idx) = ctx.local_box_types.get(index) {
                             // Stack order: box_ref, value
-                            func.instruction(&Instruction::LocalGet(*index));
+                            func.instruction(&Instruction::LocalGet(adjusted_index));
                             self.generate_expr(func, value, type_table, ctx, builder);
                             func.instruction(&Instruction::StructSet {
                                 struct_type_index: box_type_idx,
                                 field_index: 0,
                             });
                             // Push the assigned value back for expression result
-                            func.instruction(&Instruction::LocalGet(*index));
+                            func.instruction(&Instruction::LocalGet(adjusted_index));
                             func.instruction(&Instruction::StructGet {
                                 struct_type_index: box_type_idx,
                                 field_index: 0,
@@ -3685,7 +4602,7 @@ impl Codegen {
                                 );
                             }
                             // Use local.tee to both store and keep value on stack
-                            func.instruction(&Instruction::LocalTee(*index));
+                            func.instruction(&Instruction::LocalTee(adjusted_index));
                         }
                     }
                     TirExprKind::FieldAccess {
@@ -3874,7 +4791,14 @@ impl Codegen {
             } => {
                 // Helper to check if this is a specific builtin
                 let is_builtin = |name: &str| {
-                    (module_path.len() == 1 && module_path[0] == "builtin" && func_name == name)
+                    // module_path == ["core", "builtin"] from normal resolution
+                    (module_path.len() == 2
+                        && module_path[0] == "core"
+                        && module_path[1] == "builtin"
+                        && func_name == name)
+                        // Legacy: module_path == ["builtin"]
+                        || (module_path.len() == 1 && module_path[0] == "builtin" && func_name == name)
+                        // Legacy: module_path == [] and func_name == "builtin::name"
                         || (module_path.is_empty() && func_name == &format!("builtin::{}", name))
                 };
 
@@ -4013,6 +4937,81 @@ impl Codegen {
                         .get(&string_type_id)
                         .expect("Array<String> type should be registered");
                     func.instruction(&Instruction::ArrayGet(array_of_string_type));
+                } else if is_builtin("array_new") {
+                    // builtin::array_new<T>(len) -> array.new_default
+                    // Get element type from the call's return type (builtin::array<T>)
+                    if let ResolvedType::BuiltinArray(element_type) = type_table.get(expr.type_id) {
+                        let array_type_idx = *self
+                            .array_types
+                            .get(element_type)
+                            .expect("Array type should be registered for array_new");
+                        for arg in args {
+                            self.generate_expr(func, arg, type_table, ctx, builder);
+                        }
+                        func.instruction(&Instruction::ArrayNewDefault(array_type_idx));
+                    } else {
+                        panic!("array_new return type must be builtin::array<T>");
+                    }
+                } else if is_builtin("array_get") {
+                    // builtin::array_get<T>(arr, idx) -> array.get
+                    // Get element type from the first argument's type (builtin::array<T>)
+                    if let Some(arr_arg) = args.first() {
+                        if let ResolvedType::BuiltinArray(element_type) =
+                            type_table.get(arr_arg.type_id)
+                        {
+                            let array_type_idx = *self
+                                .array_types
+                                .get(element_type)
+                                .expect("Array type should be registered for array_get");
+                            for arg in args {
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                            }
+                            func.instruction(&Instruction::ArrayGet(array_type_idx));
+                        } else {
+                            panic!("array_get first argument must be builtin::array<T>");
+                        }
+                    }
+                } else if is_builtin("array_set") {
+                    // builtin::array_set<T>(arr, idx, value) -> array.set
+                    // Get element type from the first argument's type (builtin::array<T>)
+                    if let Some(arr_arg) = args.first() {
+                        if let ResolvedType::BuiltinArray(element_type) =
+                            type_table.get(arr_arg.type_id)
+                        {
+                            let array_type_idx = *self
+                                .array_types
+                                .get(element_type)
+                                .expect("Array type should be registered for array_set");
+                            for arg in args {
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                            }
+                            func.instruction(&Instruction::ArraySet(array_type_idx));
+                        } else {
+                            panic!("array_set first argument must be builtin::array<T>");
+                        }
+                    }
+                } else if is_builtin("array_copy") {
+                    // builtin::array_copy<T>(dst, dst_offset, src, src_offset, len) -> array.copy
+                    // Get element type from the first argument's type (builtin::array<T>)
+                    if let Some(dst_arg) = args.first() {
+                        if let ResolvedType::BuiltinArray(element_type) =
+                            type_table.get(dst_arg.type_id)
+                        {
+                            let array_type_idx = *self
+                                .array_types
+                                .get(element_type)
+                                .expect("Array type should be registered for array_copy");
+                            for arg in args {
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                            }
+                            func.instruction(&Instruction::ArrayCopy {
+                                array_type_index_dst: array_type_idx,
+                                array_type_index_src: array_type_idx,
+                            });
+                        } else {
+                            panic!("array_copy first argument must be builtin::array<T>");
+                        }
+                    }
                 } else if is_builtin("i32_and") {
                     // builtin::i32_and(a, b) -> i32.and
                     for arg in args {
@@ -4352,6 +5351,56 @@ impl Codegen {
                             // Call the method
                             func.instruction(&Instruction::Call(idx));
                         } else {
+                            // Method not found - try to inline for generic structs
+                            // For getter methods on generic structs, inline field access
+                            if name.contains('$') && args.is_empty() {
+                                // Look up struct type to get field info
+                                let struct_lookup_name =
+                                    StructName::new(module_path.clone(), name.clone());
+                                if let Some(struct_info) =
+                                    self.struct_types.get(&struct_lookup_name)
+                                {
+                                    // Detect getter pattern and determine field index
+                                    let field_index: Option<u32> = if method_name == "get" {
+                                        // Simple "get" = field 0 (for single-field structs)
+                                        if struct_info.field_count == 1 {
+                                            Some(0)
+                                        } else {
+                                            None
+                                        }
+                                    } else if method_name == "get_first" {
+                                        Some(0)
+                                    } else if method_name == "get_second" {
+                                        Some(1)
+                                    } else if let Some(suffix) = method_name.strip_prefix("get_") {
+                                        // Try to parse as field index from common names
+                                        match suffix {
+                                            "0" | "first" | "key" | "left" | "a" | "x" => Some(0),
+                                            "1" | "second" | "value" | "right" | "b" | "y" => {
+                                                Some(1)
+                                            }
+                                            "2" | "third" | "z" | "c" => Some(2),
+                                            _ => None,
+                                        }
+                                    } else {
+                                        None
+                                    };
+
+                                    if let Some(idx) = field_index
+                                        && (idx as usize) < struct_info.field_count
+                                    {
+                                        // Inline as field access
+                                        self.generate_expr(
+                                            func, receiver, type_table, ctx, builder,
+                                        );
+                                        func.instruction(&Instruction::StructGet {
+                                            struct_type_index: struct_info.type_idx,
+                                            field_index: idx,
+                                        });
+                                        return;
+                                    }
+                                }
+                            }
                             panic!("unknown method: {mangled_name}");
                         }
                     }
@@ -4422,6 +5471,133 @@ impl Codegen {
                                 field_index: 0, // repr is field 0
                             });
                             func.instruction(&Instruction::ArrayLen);
+                        } else if method_name == "append" {
+                            // append(value) - add element to end of array, grow if needed
+                            let array_struct_type_idx = *self
+                                .array_struct_types
+                                .get(element_type)
+                                .expect("Array struct type should be registered");
+                            let raw_array_type_idx = *self
+                                .array_types
+                                .get(element_type)
+                                .expect("Array type should be registered");
+                            let element_valtype =
+                                self.type_id_to_valtype(type_table, *element_type);
+
+                            // Allocate locals for append operation
+                            let array_struct_valtype = ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(array_struct_type_idx),
+                            });
+                            let raw_array_valtype = ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(raw_array_type_idx),
+                            });
+                            let array_local =
+                                ctx.alloc_local("__append_array", array_struct_valtype);
+                            let value_local = ctx.alloc_local("__append_value", element_valtype);
+                            let used_local = ctx.alloc_local("__append_used", ValType::I32);
+                            let capacity_local = ctx.alloc_local("__append_capacity", ValType::I32);
+                            let new_repr_local =
+                                ctx.alloc_local("__append_new_repr", raw_array_valtype);
+
+                            // Generate receiver and store in local
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            func.instruction(&Instruction::LocalSet(array_local));
+
+                            // Generate value and store in local
+                            if let Some(arg) = args.first() {
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                            }
+                            func.instruction(&Instruction::LocalSet(value_local));
+
+                            // Get current used count
+                            func.instruction(&Instruction::LocalGet(array_local));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: array_struct_type_idx,
+                                field_index: 1, // used
+                            });
+                            func.instruction(&Instruction::LocalSet(used_local));
+
+                            // Get current capacity (repr.len)
+                            func.instruction(&Instruction::LocalGet(array_local));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: array_struct_type_idx,
+                                field_index: 0, // repr
+                            });
+                            func.instruction(&Instruction::ArrayLen);
+                            func.instruction(&Instruction::LocalSet(capacity_local));
+
+                            // Check if need to grow: if (used >= capacity)
+                            func.instruction(&Instruction::LocalGet(used_local));
+                            func.instruction(&Instruction::LocalGet(capacity_local));
+                            func.instruction(&Instruction::I32GeU);
+                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                            {
+                                // Need to grow - calculate new capacity
+                                // new_capacity = capacity == 0 ? 4 : capacity * 2
+                                func.instruction(&Instruction::LocalGet(capacity_local));
+                                func.instruction(&Instruction::I32Eqz);
+                                func.instruction(&Instruction::If(
+                                    wasm_encoder::BlockType::Result(ValType::I32),
+                                ));
+                                func.instruction(&Instruction::I32Const(4)); // initial capacity
+                                func.instruction(&Instruction::Else);
+                                func.instruction(&Instruction::LocalGet(capacity_local));
+                                func.instruction(&Instruction::I32Const(2));
+                                func.instruction(&Instruction::I32Mul);
+                                func.instruction(&Instruction::End);
+                                // Stack now has new_capacity
+
+                                // Create new array with new capacity
+                                func.instruction(&Instruction::ArrayNewDefault(raw_array_type_idx));
+                                func.instruction(&Instruction::LocalSet(new_repr_local));
+
+                                // Copy old elements to new array using array.copy
+                                // array.copy dst dst_offset src src_offset len
+                                func.instruction(&Instruction::LocalGet(new_repr_local));
+                                func.instruction(&Instruction::I32Const(0)); // dst_offset
+                                func.instruction(&Instruction::LocalGet(array_local));
+                                func.instruction(&Instruction::StructGet {
+                                    struct_type_index: array_struct_type_idx,
+                                    field_index: 0, // old repr
+                                });
+                                func.instruction(&Instruction::I32Const(0)); // src_offset
+                                func.instruction(&Instruction::LocalGet(used_local)); // len
+                                func.instruction(&Instruction::ArrayCopy {
+                                    array_type_index_dst: raw_array_type_idx,
+                                    array_type_index_src: raw_array_type_idx,
+                                });
+
+                                // Update array struct's repr field
+                                func.instruction(&Instruction::LocalGet(array_local));
+                                func.instruction(&Instruction::LocalGet(new_repr_local));
+                                func.instruction(&Instruction::StructSet {
+                                    struct_type_index: array_struct_type_idx,
+                                    field_index: 0, // repr
+                                });
+                            }
+                            func.instruction(&Instruction::End); // end if (grow)
+
+                            // Set element at index 'used' in repr
+                            func.instruction(&Instruction::LocalGet(array_local));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: array_struct_type_idx,
+                                field_index: 0, // repr
+                            });
+                            func.instruction(&Instruction::LocalGet(used_local));
+                            func.instruction(&Instruction::LocalGet(value_local));
+                            func.instruction(&Instruction::ArraySet(raw_array_type_idx));
+
+                            // Increment used: array.used = used + 1
+                            func.instruction(&Instruction::LocalGet(array_local));
+                            func.instruction(&Instruction::LocalGet(used_local));
+                            func.instruction(&Instruction::I32Const(1));
+                            func.instruction(&Instruction::I32Add);
+                            func.instruction(&Instruction::StructSet {
+                                struct_type_index: array_struct_type_idx,
+                                field_index: 1, // used
+                            });
                         } else {
                             panic!("unknown method {} on Array type", method_name);
                         }
@@ -4471,10 +5647,176 @@ impl Codegen {
 
                     other => {
                         panic!(
-                            "method call receiver is not a struct or primitive type: {:?}",
-                            other
+                            "method call receiver is not a struct or primitive type: {:?}, method: {}, receiver.type_id: {}",
+                            other, method_name, receiver.type_id
                         );
                     }
+                }
+            }
+
+            // === Static Method Call ===
+            TirExprKind::StaticCall {
+                func_name,
+                module_path,
+                args,
+            } => {
+                // Handle Array::with_capacity specially - inline it
+                // The function is generic so it can't be generated normally
+                if func_name.contains("Array$") && func_name.ends_with("::with_capacity") {
+                    // Parse element type from Array$i32 -> i32
+                    // expr.type_id is the return type (Array<elem>)
+                    let elem_type = match type_table.get(expr.type_id) {
+                        ResolvedType::Array(elem) => *elem,
+                        _ => {
+                            panic!(
+                                "Expected Array type for with_capacity return, got {:?}",
+                                type_table.get(expr.type_id)
+                            )
+                        }
+                    };
+
+                    // Get the raw array type index for this element type
+                    let raw_array_type_idx =
+                        *self.array_types.get(&elem_type).unwrap_or_else(|| {
+                            panic!(
+                                "raw array type not registered for element type {}",
+                                elem_type
+                            )
+                        });
+
+                    // Get the Array struct type index
+                    let array_struct_type_idx =
+                        *self.array_struct_types.get(&elem_type).unwrap_or_else(|| {
+                            panic!(
+                                "Array struct type not registered for element type {}",
+                                elem_type
+                            )
+                        });
+
+                    // Generate: Array { repr: builtin::array_new::<T>(capacity), used: 0 }
+                    // Arguments: capacity is already on stack
+
+                    // Generate capacity argument
+                    self.generate_expr(func, &args[0], type_table, ctx, builder);
+
+                    // array.new creates a new array with capacity elements, initialized to default
+                    func.instruction(&Instruction::ArrayNewDefault(raw_array_type_idx));
+
+                    // Push used = 0
+                    func.instruction(&Instruction::I32Const(0));
+
+                    // Create the Array struct with (repr, used) fields
+                    func.instruction(&Instruction::StructNew(array_struct_type_idx));
+
+                    return;
+                }
+
+                // Generate arguments first
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+
+                // func_name is already mangled as "StructName::method" or "Struct$Type::method"
+                // We need to look it up using the same name format used during function definition
+                // Methods are registered with MethodName format: {module_path}/{struct_name}::{method_name}
+                let func_idx = if let Some(sep_pos) = func_name.find("::") {
+                    let struct_name = &func_name[..sep_pos];
+                    let method_name = &func_name[sep_pos + 2..];
+
+                    // Build the mangled name in the same format as during function definition
+                    let mangled_name = MethodName::new(
+                        module_path.join("/"),
+                        struct_name.to_string(),
+                        None,
+                        method_name.to_string(),
+                    )
+                    .to_string();
+
+                    builder
+                        .try_func_idx(&mangled_name)
+                        .or_else(|| {
+                            // Also try without module path (for current module lookups)
+                            builder.try_func_idx(func_name)
+                        })
+                        .or_else(|| {
+                            // For generic types like Array$i32, also try the generic version Array
+                            // This handles static methods on generic types that aren't monomorphized
+                            if let Some(dollar_pos) = struct_name.find('$') {
+                                let generic_struct_name = &struct_name[..dollar_pos];
+                                let generic_mangled_name = MethodName::new(
+                                    module_path.join("/"),
+                                    generic_struct_name.to_string(),
+                                    None,
+                                    method_name.to_string(),
+                                )
+                                .to_string();
+                                builder.try_func_idx(&generic_mangled_name)
+                            } else {
+                                None
+                            }
+                        })
+                } else {
+                    // No :: separator, try as a regular function call
+                    let full_name = if module_path.is_empty() {
+                        func_name.clone()
+                    } else {
+                        format!("{}/{}", module_path.join("/"), func_name)
+                    };
+                    builder.try_func_idx(&full_name)
+                };
+
+                if let Some(idx) = func_idx {
+                    func.instruction(&Instruction::Call(idx));
+                } else {
+                    // Function not found - try to inline for user-defined generic struct constructors
+                    if let Some(sep_pos) = func_name.find("::") {
+                        let struct_name = &func_name[..sep_pos];
+
+                        // Check if this is a constructor on a generic struct (contains $)
+                        // We detect constructors by checking if the return type is the same struct
+                        // and the number of args matches the struct's field count
+                        if struct_name.contains('$') {
+                            // Get the struct type from the return type (expr.type_id)
+                            // Could be GenericInstance or a monomorphized Struct
+                            let (struct_name_to_lookup, struct_module_path) = match type_table
+                                .get(expr.type_id)
+                            {
+                                ResolvedType::GenericInstance {
+                                    name,
+                                    module_path,
+                                    type_args,
+                                } => {
+                                    // Build the mangled struct name (e.g., Box$i32)
+                                    let type_arg_names: Vec<String> = type_args
+                                        .iter()
+                                        .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                                        .collect();
+                                    let mangled = format!("{}${}", name, type_arg_names.join("$"));
+                                    (mangled, module_path.clone())
+                                }
+                                ResolvedType::Struct { name, module_path } => {
+                                    // Already a monomorphized struct name (e.g., Box$i32)
+                                    (name.clone(), module_path.clone())
+                                }
+                                _ => {
+                                    panic!("unknown static method: {func_name}");
+                                }
+                            };
+
+                            // Look up the struct type
+                            let struct_lookup_name =
+                                StructName::new(struct_module_path, struct_name_to_lookup);
+                            if let Some(struct_info) = self.struct_types.get(&struct_lookup_name) {
+                                // Check if args count matches field count (constructor pattern)
+                                if args.len() == struct_info.field_count {
+                                    // Arguments are already on the stack, just create the struct
+                                    func.instruction(&Instruction::StructNew(struct_info.type_idx));
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    panic!("unknown static method: {func_name}");
                 }
             }
 
@@ -4506,14 +5848,31 @@ impl Codegen {
                     }
                     other => other,
                 };
-                let (raw_array_type_idx, element_is_ref, need_repr_access) = match base_type {
+                // Track element type info for post-array-get processing
+                let (raw_array_type_idx, element_is_ref, closure_cast_type_idx) = match base_type {
                     ResolvedType::Array(element_type) => {
+                        let element_resolved = type_table.get(*element_type);
                         let is_ref = matches!(
-                            type_table.get(*element_type),
+                            element_resolved,
                             ResolvedType::String
                                 | ResolvedType::Array(_)
                                 | ResolvedType::Struct { .. }
+                                | ResolvedType::Function { .. }
                         );
+                        // For function types, we need to cast structref to canonical closure type
+                        let closure_type_idx = if let ResolvedType::Function {
+                            params,
+                            return_type,
+                            ..
+                        } = element_resolved
+                        {
+                            let canonical = self.canonical_closure_types.borrow();
+                            canonical
+                                .get(&(params.clone(), *return_type))
+                                .map(|(_, _, struct_idx)| *struct_idx)
+                        } else {
+                            None
+                        };
                         let array_struct_type_idx = self
                             .array_struct_types
                             .get(element_type)
@@ -4529,7 +5888,7 @@ impl Codegen {
                                 .copied()
                                 .unwrap_or(self.string_array_type_idx),
                             is_ref,
-                            false, // already accessed
+                            closure_type_idx,
                         )
                     }
                     ResolvedType::String => {
@@ -4543,11 +5902,10 @@ impl Codegen {
                                 field_index: 0, // repr is field 0
                             });
                         }
-                        (self.string_array_type_idx, false, false)
+                        (self.string_array_type_idx, false, None)
                     }
-                    _ => (self.string_array_type_idx, false, false),
+                    _ => (self.string_array_type_idx, false, None),
                 };
-                let _ = need_repr_access; // silence unused warning
 
                 // Now generate index and do array access
                 self.generate_expr(func, index, type_table, ctx, builder);
@@ -4556,6 +5914,12 @@ impl Codegen {
                 // (array elements are stored as nullable refs, but we expect non-null at usage)
                 if element_is_ref {
                     func.instruction(&Instruction::RefAsNonNull);
+                }
+                // For function types, cast structref to the canonical closure type
+                if let Some(closure_struct_idx) = closure_cast_type_idx {
+                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                        closure_struct_idx,
+                    )));
                 }
             }
 
@@ -4689,14 +6053,143 @@ impl Codegen {
                 }
             }
 
+            // === Capture ===
+            TirExprKind::Capture { index, name } => {
+                // Capture access: get the captured value from the environment struct.
+                // The environment is always the first parameter (local 0) in closure functions.
+                // Since the function type uses generic (ref struct), we need to cast to the
+                // specific env type before accessing fields.
+                let env_type_idx = ctx.closure_env_type_idx.unwrap_or_else(|| {
+                    panic!(
+                        "capture access for '{}' (index {}) outside of closure context",
+                        name, index
+                    )
+                });
+
+                // Get env from local 0 (first parameter in closure functions)
+                func.instruction(&Instruction::LocalGet(0));
+                // Cast generic (ref struct) to specific env type
+                func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                    env_type_idx,
+                )));
+                // Get the captured value from the environment struct
+                func.instruction(&Instruction::StructGet {
+                    struct_type_index: env_type_idx,
+                    field_index: *index,
+                });
+            }
+
             // === Closure ===
             TirExprKind::Closure {
                 params: _,
                 body: _,
-                captures: _,
+                captures,
             } => {
-                // TODO: Implement closures
-                panic!("closures not yet implemented in TIR codegen");
+                // Get the closure ID and look up its registered info
+                let closure_id = {
+                    let mut counter = self.closure_codegen_counter.borrow_mut();
+                    let id = *counter;
+                    *counter += 1;
+                    id
+                };
+
+                let pending = self.pending_closures.borrow();
+                let closure_info = pending.get(closure_id as usize).unwrap_or_else(|| {
+                    panic!(
+                        "closure {} not found in pending_closures (have {})",
+                        closure_id,
+                        pending.len()
+                    )
+                });
+
+                let env_type_idx = closure_info.env_type_idx;
+                let closure_struct_type_idx = closure_info.closure_struct_type_idx;
+                let func_idx = closure_info.func_idx;
+
+                // Push captured values onto the stack in order
+                for capture in captures {
+                    // Get the value from the outer function's local
+                    func.instruction(&Instruction::LocalGet(capture.outer_index));
+                }
+
+                // Create the environment struct
+                func.instruction(&Instruction::StructNew(env_type_idx));
+
+                // Create the closure struct (env + funcref)
+                // Stack now has: env_ref
+                // We need to create a struct with (env, funcref)
+                func.instruction(&Instruction::RefFunc(func_idx));
+                func.instruction(&Instruction::StructNew(closure_struct_type_idx));
+            }
+
+            // === Indirect Call (closure or funcref) ===
+            TirExprKind::IndirectCall { callee, args } => {
+                // Get the callee type information and canonical closure types
+                let callee_type_id = callee.type_id;
+                let (fn_type_idx, closure_struct_type_idx) = if let ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } = type_table.get(callee_type_id)
+                {
+                    // Look up canonical closure types for this function signature
+                    let key = (params.clone(), *return_type);
+                    if let Some((fn_idx, _, struct_idx)) =
+                        self.canonical_closure_types.borrow().get(&key).cloned()
+                    {
+                        (fn_idx, struct_idx)
+                    } else {
+                        panic!(
+                            "canonical closure type not found for function signature: {:?}",
+                            type_table.get(callee_type_id)
+                        );
+                    }
+                } else {
+                    panic!(
+                        "IndirectCall callee has non-function type: {:?}",
+                        type_table.get(callee_type_id)
+                    );
+                };
+
+                // Allocate a unique temporary local for this call site.
+                // We use a counter to ensure nested calls don't share the same local.
+                let call_id = ctx.indirect_call_counter;
+                ctx.indirect_call_counter += 1;
+                let local_name = format!("__indirect_call_{}_{}", closure_struct_type_idx, call_id);
+                let closure_local = ctx.alloc_local(
+                    &local_name,
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(closure_struct_type_idx),
+                    }),
+                );
+
+                // Evaluate the callee expression
+                self.generate_expr(func, callee, type_table, ctx, builder);
+
+                // Store closure in temp local
+                func.instruction(&Instruction::LocalTee(closure_local));
+
+                // Extract env (field 0)
+                func.instruction(&Instruction::StructGet {
+                    struct_type_index: closure_struct_type_idx,
+                    field_index: 0,
+                });
+
+                // Generate arguments
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+
+                // Get the closure again and extract funcref (field 1)
+                func.instruction(&Instruction::LocalGet(closure_local));
+                func.instruction(&Instruction::StructGet {
+                    struct_type_index: closure_struct_type_idx,
+                    field_index: 1,
+                });
+
+                // Call via call_ref with the function type
+                func.instruction(&Instruction::CallRef(fn_type_idx));
             }
         }
     }
@@ -5136,8 +6629,9 @@ impl Codegen {
                     func.instruction(&Instruction::StructNew(box_type_idx));
                 }
 
-                // Store to local
-                func.instruction(&Instruction::LocalSet(*local_index));
+                // Store to local (apply offset for closure functions)
+                let adjusted_index = *local_index + ctx.local_index_offset;
+                func.instruction(&Instruction::LocalSet(adjusted_index));
             }
 
             TirStmtKind::Expr(expr) => {
@@ -5373,9 +6867,9 @@ impl Codegen {
                 });
                 func.instruction(&Instruction::LocalGet(counter_local));
                 func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
-                // Store in the binding local (pre-allocated by resolver via tir_func.local_types)
-                // Use the TIR's local index directly, same as TirStmtKind::Let
-                func.instruction(&Instruction::LocalSet(*binding_local));
+                // Store in the binding local (apply offset for closure functions)
+                let adjusted_binding = *binding_local + ctx.local_index_offset;
+                func.instruction(&Instruction::LocalSet(adjusted_binding));
 
                 // Generate body
                 self.generate_block(func, body, type_table, ctx, builder);
@@ -5610,6 +7104,16 @@ impl Codegen {
             func_ctx.add_param(&param.name, param_type);
         }
 
+        // Collect closure locals from the function body (locals that store closure values)
+        let closure_locals: HashMap<u32, u32> = if let Some(body) = &tir_func.body {
+            Self::find_closure_locals(body)
+        } else {
+            HashMap::new()
+        };
+
+        // Store closure_locals in func_ctx for use during IndirectCall codegen
+        func_ctx.local_closure_ids = closure_locals.clone();
+
         // Pre-allocate locals from TIR (skip params which are already added)
         for (i, &local_type_id) in tir_func.local_types.iter().enumerate() {
             let local_idx = i as u32;
@@ -5618,8 +7122,20 @@ impl Codegen {
                 continue;
             }
 
+            // Check if this local stores a closure (use closure struct type)
+            let local_type = if let Some(&closure_id) = closure_locals.get(&local_idx) {
+                // Use the closure struct type for this local
+                let pending = self.pending_closures.borrow();
+                if let Some(closure_info) = pending.get(closure_id as usize) {
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(closure_info.closure_struct_type_idx),
+                    })
+                } else {
+                    self.type_id_to_valtype(type_table, local_type_id)
+                }
             // For address-taken primitive locals, use box type instead
-            let local_type = if func_ctx.address_taken_locals.contains(&local_idx) {
+            } else if func_ctx.address_taken_locals.contains(&local_idx) {
                 if let ResolvedType::Primitive(prim) = type_table.get(local_type_id) {
                     let val_type = primitive_to_valtype(prim);
                     if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
@@ -5665,6 +7181,16 @@ impl Codegen {
             self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
         }
 
+        // Pre-allocate locals for closure calls
+        if let Some(body) = &tir_func.body {
+            self.preallocate_closure_call_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for array append operations
+        if let Some(body) = &tir_func.body {
+            self.preallocate_array_append_locals(body, type_table, &mut func_ctx);
+        }
+
         // Reset for-of counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_for_of_counter();
 
@@ -5686,6 +7212,75 @@ impl Codegen {
         let branch_hints = Vec::new();
 
         (wasm_func, branch_hints)
+    }
+
+    /// Generate a closure implementation function.
+    ///
+    /// The closure function has the environment struct as its first parameter,
+    /// followed by the regular closure parameters.
+    /// The env parameter uses generic (ref struct) to allow canonical typing.
+    /// Captured variables are accessed via ref.cast + struct.get on the environment.
+    fn generate_closure_function(
+        &self,
+        closure_info: &ClosureInfo,
+        type_table: &TypeTable,
+        builder: &CoreModuleBuilder,
+    ) -> Function {
+        // Create function context with env as first param, then regular params
+        let param_count = 1 + closure_info.params.len() as u32; // env + params
+        let mut func_ctx = FunctionContext::new(param_count);
+
+        // Add env parameter (index 0) - uses generic (ref struct) for canonical typing
+        let env_type = ValType::Ref(RefType {
+            nullable: false,
+            heap_type: HeapType::Abstract {
+                shared: false,
+                ty: AbstractHeapType::Struct,
+            },
+        });
+        func_ctx.add_param("$env", env_type);
+
+        // Add regular parameters
+        for (name, type_id) in &closure_info.params {
+            let param_type = self.type_id_to_valtype(type_table, *type_id);
+            func_ctx.add_param(name, param_type);
+        }
+
+        // Set return type
+        if closure_info.return_type != TypeTable::UNIT
+            && closure_info.return_type != TypeTable::NEVER
+        {
+            func_ctx.set_return_type(self.type_id_to_valtype(type_table, closure_info.return_type));
+        }
+
+        // Store closure info in context for capture access
+        func_ctx.set_closure_info(closure_info.env_type_idx, &closure_info.captures);
+
+        // Pre-allocate locals from block body if present
+        if let TirExprKind::Block(ref block) = closure_info.body.kind {
+            self.preallocate_locals_from_block(block, type_table, &mut func_ctx);
+        }
+
+        // Generate the function code
+        let mut wasm_func = Function::new(func_ctx.get_local_decls());
+
+        // Generate closure body
+        self.generate_expr(
+            &mut wasm_func,
+            &closure_info.body,
+            type_table,
+            &mut func_ctx,
+            builder,
+        );
+
+        // Add implicit return handling
+        if closure_info.return_type == TypeTable::UNIT {
+            // Drop the unit value if any
+        }
+
+        wasm_func.instruction(&Instruction::End);
+
+        wasm_func
     }
 
     /// Generate the 'run' function for TIR with task.return wrapper
@@ -5710,6 +7305,16 @@ impl Codegen {
             func_ctx.add_param(&param.name, param_type);
         }
 
+        // Collect closure locals from the function body (locals that store closure values)
+        let closure_locals: HashMap<u32, u32> = if let Some(body) = &tir_func.body {
+            Self::find_closure_locals(body)
+        } else {
+            HashMap::new()
+        };
+
+        // Store closure_locals in func_ctx for use during IndirectCall codegen
+        func_ctx.local_closure_ids = closure_locals.clone();
+
         // Pre-allocate locals from TIR (skip params which are already added)
         for (i, &local_type_id) in tir_func.local_types.iter().enumerate() {
             let local_idx = i as u32;
@@ -5718,8 +7323,20 @@ impl Codegen {
                 continue;
             }
 
+            // Check if this local stores a closure (use closure struct type)
+            let local_type = if let Some(&closure_id) = closure_locals.get(&local_idx) {
+                // Use the closure struct type for this local
+                let pending = self.pending_closures.borrow();
+                if let Some(closure_info) = pending.get(closure_id as usize) {
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(closure_info.closure_struct_type_idx),
+                    })
+                } else {
+                    self.type_id_to_valtype(type_table, local_type_id)
+                }
             // For address-taken primitive locals, use box type instead
-            let local_type = if func_ctx.address_taken_locals.contains(&local_idx) {
+            } else if func_ctx.address_taken_locals.contains(&local_idx) {
                 if let ResolvedType::Primitive(prim) = type_table.get(local_type_id) {
                     let val_type = primitive_to_valtype(prim);
                     if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
@@ -5762,6 +7379,16 @@ impl Codegen {
         if tir_func.body.is_some() {
             let string_array_type = builder.type_idx("string-array");
             self.preallocate_builtin_scratch_locals(&mut func_ctx, string_array_type);
+        }
+
+        // Pre-allocate locals for closure calls
+        if let Some(body) = &tir_func.body {
+            self.preallocate_closure_call_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for array append operations
+        if let Some(body) = &tir_func.body {
+            self.preallocate_array_append_locals(body, type_table, &mut func_ctx);
         }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
@@ -6183,7 +7810,7 @@ impl Codegen {
             TirExprKind::Unary { expr, .. } => {
                 self.collect_copy_types_from_expr(expr, type_table, needed_types);
             }
-            TirExprKind::Call { args, .. } => {
+            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
                     self.collect_copy_types_from_expr(arg, type_table, needed_types);
                 }
@@ -6320,6 +7947,427 @@ impl Codegen {
                 if let Some(else_blk) = else_block {
                     self.preallocate_assert_locals(else_blk, type_table, ctx, string_array_type);
                 }
+            }
+            _ => {}
+        }
+    }
+
+    /// Pre-allocate locals for closure call expressions.
+    /// This must be called before the Function is created.
+    fn preallocate_closure_call_locals(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        // Count IndirectCall expressions and pre-allocate a unique temp local for each.
+        // This supports nested closure calls without temp local collisions.
+        let mut call_counts: HashMap<u32, u32> = HashMap::new();
+        Self::count_indirect_calls_in_block(block, type_table, self, &mut call_counts);
+
+        // Pre-allocate temp locals for each call site
+        for (struct_type_idx, count) in call_counts {
+            for i in 0..count {
+                let name = format!("__indirect_call_{}_{}", struct_type_idx, i);
+                ctx.alloc_local(
+                    &name,
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(struct_type_idx),
+                    }),
+                );
+            }
+        }
+    }
+
+    /// Count IndirectCall expressions in a block, grouped by closure struct type
+    fn count_indirect_calls_in_block(
+        block: &TirBlock,
+        type_table: &TypeTable,
+        codegen: &Codegen,
+        counts: &mut HashMap<u32, u32>,
+    ) {
+        for stmt in &block.stmts {
+            Self::count_indirect_calls_in_stmt(stmt, type_table, codegen, counts);
+        }
+    }
+
+    fn count_indirect_calls_in_stmt(
+        stmt: &TirStmt,
+        type_table: &TypeTable,
+        codegen: &Codegen,
+        counts: &mut HashMap<u32, u32>,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::count_indirect_calls_in_expr(condition, type_table, codegen, counts);
+                Self::count_indirect_calls_in_block(then_block, type_table, codegen, counts);
+                if let Some(else_blk) = else_block {
+                    Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::count_indirect_calls_in_expr(condition, type_table, codegen, counts);
+                Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+                ..
+            } => {
+                if let Some(cond) = condition {
+                    Self::count_indirect_calls_in_expr(cond, type_table, codegen, counts);
+                }
+                if let Some(upd) = update {
+                    Self::count_indirect_calls_in_expr(upd, type_table, codegen, counts);
+                }
+                Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::count_indirect_calls_in_expr(iterable, type_table, codegen, counts);
+                Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
+            }
+            TirStmtKind::Loop { body } => {
+                Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
+            }
+            _ => {}
+        }
+    }
+
+    fn count_indirect_calls_in_expr(
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        codegen: &Codegen,
+        counts: &mut HashMap<u32, u32>,
+    ) {
+        match &expr.kind {
+            TirExprKind::IndirectCall { callee, args } => {
+                // Count this call
+                let callee_type_id = callee.type_id;
+                if let ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } = type_table.get(callee_type_id)
+                {
+                    let key = (params.clone(), *return_type);
+                    if let Some((_, _, struct_type_idx)) =
+                        codegen.canonical_closure_types.borrow().get(&key).cloned()
+                    {
+                        *counts.entry(struct_type_idx).or_insert(0) += 1;
+                    }
+                }
+                // Also count in callee and args
+                Self::count_indirect_calls_in_expr(callee, type_table, codegen, counts);
+                for arg in args {
+                    Self::count_indirect_calls_in_expr(arg, type_table, codegen, counts);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::count_indirect_calls_in_expr(left, type_table, codegen, counts);
+                Self::count_indirect_calls_in_expr(right, type_table, codegen, counts);
+            }
+            TirExprKind::Unary { expr: operand, .. } => {
+                Self::count_indirect_calls_in_expr(operand, type_table, codegen, counts);
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    Self::count_indirect_calls_in_expr(arg, type_table, codegen, counts);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::count_indirect_calls_in_expr(receiver, type_table, codegen, counts);
+                for arg in args {
+                    Self::count_indirect_calls_in_expr(arg, type_table, codegen, counts);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::count_indirect_calls_in_expr(&field.value, type_table, codegen, counts);
+                }
+            }
+            TirExprKind::FieldAccess { expr, .. } => {
+                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
+            }
+            TirExprKind::Index { expr, index, .. } => {
+                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
+                Self::count_indirect_calls_in_expr(index, type_table, codegen, counts);
+            }
+            TirExprKind::Block(block) => {
+                Self::count_indirect_calls_in_block(block, type_table, codegen, counts);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::count_indirect_calls_in_expr(condition, type_table, codegen, counts);
+                Self::count_indirect_calls_in_block(then_branch, type_table, codegen, counts);
+                if let Some(else_blk) = else_branch {
+                    Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::count_indirect_calls_in_expr(elem, type_table, codegen, counts);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                Self::count_indirect_calls_in_expr(body, type_table, codegen, counts);
+            }
+            TirExprKind::Cast { expr: inner, .. } => {
+                Self::count_indirect_calls_in_expr(inner, type_table, codegen, counts);
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::count_indirect_calls_in_expr(target, type_table, codegen, counts);
+                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
+            }
+            _ => {}
+        }
+    }
+
+    /// Pre-allocate locals for Array#append() method calls.
+    /// This scans the TIR for append calls and pre-allocates the 5 locals needed per element type.
+    fn preallocate_array_append_locals(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        // Collect unique array element types that have append calls
+        let mut append_element_types: HashSet<TypeId> = HashSet::new();
+        Self::collect_array_append_types(block, type_table, &mut append_element_types);
+
+        // Pre-allocate locals for each element type
+        for element_type in append_element_types {
+            if let Some(&array_struct_type_idx) = self.array_struct_types.get(&element_type)
+                && let Some(&raw_array_type_idx) = self.array_types.get(&element_type)
+            {
+                let element_valtype = self.type_id_to_valtype(type_table, element_type);
+                let array_struct_valtype = ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(array_struct_type_idx),
+                });
+                let raw_array_valtype = ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(raw_array_type_idx),
+                });
+
+                // Pre-allocate the 5 locals needed for append
+                ctx.alloc_local("__append_array", array_struct_valtype);
+                ctx.alloc_local("__append_value", element_valtype);
+                ctx.alloc_local("__append_used", ValType::I32);
+                ctx.alloc_local("__append_capacity", ValType::I32);
+                ctx.alloc_local("__append_new_repr", raw_array_valtype);
+            }
+        }
+    }
+
+    /// Collect element types of arrays that have append() called on them
+    fn collect_array_append_types(
+        block: &TirBlock,
+        type_table: &TypeTable,
+        result: &mut HashSet<TypeId>,
+    ) {
+        for stmt in &block.stmts {
+            Self::collect_array_append_types_from_stmt(stmt, type_table, result);
+        }
+    }
+
+    fn collect_array_append_types_from_stmt(
+        stmt: &TirStmt,
+        type_table: &TypeTable,
+        result: &mut HashSet<TypeId>,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::collect_array_append_types_from_expr(value, type_table, result);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::collect_array_append_types_from_expr(condition, type_table, result);
+                Self::collect_array_append_types(then_block, type_table, result);
+                if let Some(else_blk) = else_block {
+                    Self::collect_array_append_types(else_blk, type_table, result);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::collect_array_append_types_from_expr(condition, type_table, result);
+                Self::collect_array_append_types(body, type_table, result);
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+            } => {
+                if let Some(cond) = condition {
+                    Self::collect_array_append_types_from_expr(cond, type_table, result);
+                }
+                if let Some(upd) = update {
+                    Self::collect_array_append_types_from_expr(upd, type_table, result);
+                }
+                Self::collect_array_append_types(body, type_table, result);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::collect_array_append_types_from_expr(iterable, type_table, result);
+                Self::collect_array_append_types(body, type_table, result);
+            }
+            TirStmtKind::Loop { body } => {
+                Self::collect_array_append_types(body, type_table, result);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                Self::collect_array_append_types_from_expr(expr, type_table, result);
+            }
+            TirStmtKind::Assert { condition, .. } => {
+                Self::collect_array_append_types_from_expr(condition, type_table, result);
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_array_append_types_from_expr(
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        result: &mut HashSet<TypeId>,
+    ) {
+        match &expr.kind {
+            TirExprKind::MethodCall {
+                receiver,
+                method_name,
+                args,
+                ..
+            } => {
+                // Check if this is an append call on an Array type
+                if method_name == "append"
+                    && let ResolvedType::Array(element_type) = type_table.get(receiver.type_id)
+                {
+                    result.insert(*element_type);
+                }
+                Self::collect_array_append_types_from_expr(receiver, type_table, result);
+                for arg in args {
+                    Self::collect_array_append_types_from_expr(arg, type_table, result);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::collect_array_append_types_from_expr(left, type_table, result);
+                Self::collect_array_append_types_from_expr(right, type_table, result);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
+                Self::collect_array_append_types_from_expr(inner, type_table, result);
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    Self::collect_array_append_types_from_expr(arg, type_table, result);
+                }
+            }
+            TirExprKind::Index { expr, index } => {
+                Self::collect_array_append_types_from_expr(expr, type_table, result);
+                Self::collect_array_append_types_from_expr(index, type_table, result);
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::collect_array_append_types_from_expr(target, type_table, result);
+                Self::collect_array_append_types_from_expr(value, type_table, result);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::collect_array_append_types_from_expr(condition, type_table, result);
+                Self::collect_array_append_types(then_branch, type_table, result);
+                if let Some(else_blk) = else_branch {
+                    Self::collect_array_append_types(else_blk, type_table, result);
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::collect_array_append_types(block, type_table, result);
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::collect_array_append_types_from_expr(elem, type_table, result);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::collect_array_append_types_from_expr(&field.value, type_table, result);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                Self::collect_array_append_types_from_expr(body, type_table, result);
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::collect_array_append_types_from_expr(callee, type_table, result);
+                for arg in args {
+                    Self::collect_array_append_types_from_expr(arg, type_table, result);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Pre-allocate locals from Let statements in a block (used for closure block bodies)
+    fn preallocate_locals_from_block(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        for stmt in &block.stmts {
+            self.preallocate_locals_from_stmt(stmt, type_table, ctx);
+        }
+    }
+
+    fn preallocate_locals_from_stmt(
+        &self,
+        stmt: &TirStmt,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index,
+                type_id,
+                ..
+            } => {
+                let local_type = self.type_id_to_valtype(type_table, *type_id);
+                let local_name = format!("_local_{}", local_index);
+                ctx.alloc_local(&local_name, local_type);
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.preallocate_locals_from_block(then_block, type_table, ctx);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
+                }
+            }
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::ForOf { body, .. }
+            | TirStmtKind::Loop { body } => {
+                self.preallocate_locals_from_block(body, type_table, ctx);
             }
             _ => {}
         }

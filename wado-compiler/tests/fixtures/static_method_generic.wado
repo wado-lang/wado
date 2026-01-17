@@ -1,0 +1,25 @@
+// Test static method on generic type
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // Create array with pre-allocated capacity using generic static method
+    let mut arr = Array::<i32>::with_capacity(10);
+    println(`initial len: {arr.len()}`);
+    println(`initial capacity: {arr.capacity()}`);
+
+    // Append some elements
+    arr.append(1);
+    arr.append(2);
+    arr.append(3);
+
+    println(`after append len: {arr.len()}`);
+    println(`after append capacity: {arr.capacity()}`);
+
+    // Access elements
+    println(`arr[0]: {arr[0]}`);
+    println(`arr[1]: {arr[1]}`);
+    println(`arr[2]: {arr[2]}`);
+}
+
+__DATA__
+{"stdout": "initial len: 0\ninitial capacity: 10\nafter append len: 3\nafter append capacity: 10\narr[0]: 1\narr[1]: 2\narr[2]: 3\n"}

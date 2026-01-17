@@ -1,5 +1,7 @@
 # WEP: Compiler Pipeline Refactoring
+
 ## Status
+
 Proposed
 
 ## Context
