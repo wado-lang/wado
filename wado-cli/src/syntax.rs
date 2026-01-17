@@ -153,6 +153,7 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
         "name": def.name,
         "scopeName": def.scope_name,
         "patterns": [
+            { "include": "#shebang" },
             { "include": "#data-section" },
             { "include": "#comments" },
             { "include": "#attributes" },
@@ -166,6 +167,10 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
             { "include": "#punctuation" }
         ],
         "repository": {
+            "shebang": {
+                "name": "comment.line.shebang.wado",
+                "match": "\\A#!(?!\\[).*$"
+            },
             "data-section": {
                 "begin": "^__DATA__\\s*$",
                 "end": "\\z",

@@ -92,7 +92,7 @@ test-wado-vscode:
 
 .PHONY: update-wado-vscode-grammar
 update-wado-vscode-grammar: build
-	cargo run --bin wado --quiet -- syntax -o wado-vscode/syntaxes/wado.tmLanguage.json
+	cargo run --bin wado --quiet -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
 	cargo run --bin wado --quiet -- syntax --format language-config -o wado-vscode/language-configuration.json
 	@echo "Updated wado-vscode syntax files"
 

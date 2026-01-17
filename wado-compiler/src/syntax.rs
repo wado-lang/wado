@@ -46,6 +46,9 @@ pub struct CommentStyles {
     pub line: &'static str,
     pub block_start: &'static str,
     pub block_end: &'static str,
+    /// Shebang prefix (only valid at start of file, e.g., "#!/usr/bin/env wado")
+    /// Note: `#![` is an inner attribute, not a shebang
+    pub shebang: &'static str,
 }
 
 impl SyntaxDefinition {
@@ -91,6 +94,7 @@ impl SyntaxDefinition {
                 line: "//",
                 block_start: "/*",
                 block_end: "*/",
+                shebang: "#!",
             },
         }
     }

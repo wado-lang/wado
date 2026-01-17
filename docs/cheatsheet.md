@@ -11,6 +11,14 @@ Quick reference for Wado syntax.
 /* Block comment */
 ```
 
+## Shebang
+
+```wado
+#!/usr/bin/env wado
+// Shebang is only valid on the first line and is ignored by the compiler.
+// Note: #![ is an inner attribute, not a shebang.
+```
+
 ## Literals
 
 ```wado
