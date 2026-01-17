@@ -264,7 +264,7 @@ a != b != c     // Error: != chaining not allowed
 3. **No `!=` chaining**: `!=` cannot be chained (the meaning of `a != b != c` is ambiguous)
 4. **No mixing**: Cannot mix equality operators with inequality operators
 
-See `docs/adr-2026-01-11-operator-precedence.md` for detailed rationale.
+See `docs/wep-2026-01-11-operator-precedence.md` for detailed rationale.
 
 ## Control Flow
 
@@ -653,7 +653,7 @@ s += "c";
 s += "d";
 ```
 
-See `docs/adr-2026-01-15-string-type-design.md` for design rationale.
+See `docs/wep-2026-01-15-string-type-design.md` for design rationale.
 
 ### Primitive Literals
 
@@ -873,7 +873,7 @@ use config from "./config.json" with { type: "json" };
 // config::mixed is [i32, String, bool]
 ```
 
-See `docs/adr-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
+See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
 
 ### Tagged Template Literals
 
@@ -969,7 +969,7 @@ Tagged template functions are executed at compile time with the following constr
 
 **Design Rationale:**
 
-Tagged template literals provide a general mechanism for compile-time computation, avoiding the need for built-in syntax for each use case. This aligns with Wado's philosophy of minimal built-ins and explicit dependencies. See `docs/adr-2026-01-10-tagged-template-literals.md` for detailed design decisions.
+Tagged template literals provide a general mechanism for compile-time computation, avoiding the need for built-in syntax for each use case. This aligns with Wado's philosophy of minimal built-ins and explicit dependencies. See `docs/wep-2026-01-10-tagged-template-literals.md` for detailed design decisions.
 
 **Future Extensions:**
 

@@ -1,8 +1,4 @@
-# ADR: Closure Implementation
-
-**Date**: 2026-01-16
-**Status**: Proposed
-
+# WEP: Closure Implementation
 ## Context
 
 Wado supports closure syntax (parsed but not codegen yet):
@@ -15,7 +11,7 @@ let g = || { return count; };  // Captures outer variable 'count'
 The language design requires:
 
 1. First-class functions (closures can be passed as values)
-2. Capture by reference (per [ADR: Value Semantics and Reference Captures](./adr-2026-01-12-value-semantics-and-captures.md))
+2. Capture by reference (per [WEP: Value Semantics and Reference Captures](./wep-2026-01-12-value-semantics-and-captures.md))
 3. Multiple closures can capture the same variable
 4. Closures must work with effect system and `captures[...]` tracking
 5. Efficient representation targeting Wasm GC
@@ -434,7 +430,7 @@ Most languages with GC targeting Wasm use **Option 1** (struct + funcref) becaus
 
 ### Integration with `captures[...]` Tracking
 
-Per the [Value Semantics ADR](./adr-2026-01-12-value-semantics-and-captures.md), closures that capture variables require `captures[...]` annotation in function types:
+Per the [Value Semantics WEP](./wep-2026-01-12-value-semantics-and-captures.md), closures that capture variables require `captures[...]` annotation in function types:
 
 ```wado
 // Closure type with captures
@@ -759,7 +755,7 @@ This requires a resource table mapping handles to closure structs.
 2. **Shared mutable state**: Multiple closures can capture and mutate the same variable correctly
 3. **Type-safe**: Each closure signature has distinct Wasm types
 4. **Matches Rust/Go/Swift semantics**: Familiar to users of these languages
-5. **Compatible with value semantics**: Closures capture by reference, consistent with ADR
+5. **Compatible with value semantics**: Closures capture by reference, consistent with WEP
 6. **Optimization-friendly**: Compiler can optimize non-escaping closures to use locals
 
 ### Negative
@@ -808,7 +804,7 @@ This requires a resource table mapping handles to closure structs.
 
 ## References
 
-- [ADR: Value Semantics and Reference Captures](./adr-2026-01-12-value-semantics-and-captures.md)
+- [WEP: Value Semantics and Reference Captures](./wep-2026-01-12-value-semantics-and-captures.md)
 - [WebAssembly GC Proposal](https://github.com/WebAssembly/gc)
 - [Wasm Component Model](https://github.com/WebAssembly/component-model)
 - [Rust Closure Implementation](https://doc.rust-lang.org/book/ch13-01-closures.html)

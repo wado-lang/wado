@@ -169,14 +169,15 @@ This project relies on the following Wasm features:
 - Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
 - Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`), instead of `~~...~~` (strike-through) and emojis.
 
-## Architecture Decision Records (ADR)
+## Wado Evolution Proposals (WEP)
 
-Significant architectural decisions are documented as ADRs in `docs/adr-{yyyy-mm-dd}-{feature}.md`.
+Significant language features and architectural decisions are documented as WEPs in `docs/wep-{yyyy-mm-dd}-{feature}.md`.
 
-Format: `docs/adr-YYYY-MM-DD-feature-name.md`
+Format: `docs/wep-YYYY-MM-DD-feature-name.md`
 
-### List of ADRs
+WEPs combine language specification and implementation strategy in a single document, covering both user-visible features and compiler architecture decisions.
 
+<<<<<<< HEAD
 - [Target WASI P3 Only](./docs/adr-2025-01-11-wasi-p3-only.md)
 - [Deterministic Math Library (libm) Integration](./docs/adr-2026-01-10-deterministic-libm.md)
 - [Tagged Template Literals for Compile-Time Execution](./docs/adr-2026-01-10-tagged-template-literals.md)
@@ -194,11 +195,32 @@ Format: `docs/adr-YYYY-MM-DD-feature-name.md`
 - [Closure Implementation](./docs/adr-2026-01-16-closure-implementation.md)
 - [Function Return Type Syntax](./docs/adr-2026-01-16-function-return-type-syntax.md)
 - [SourceProvider Abstraction for Compiler I/O](./docs/adr-2026-01-16-source-provider-abstraction.md)
+=======
+### List of WEPs
+
+- [Target WASI P3 Only](./docs/wep-2026-01-11-wasi-p3-only.md)
+- [Deterministic Math Library (libm) Integration](./docs/wep-2026-01-10-deterministic-libm.md)
+- [Tagged Template Literals for Compile-Time Execution](./docs/wep-2026-01-10-tagged-template-literals.md)
+- [WebAssembly Module Import Support](./docs/wep-2026-01-10-wasm-import.md)
+- [Operator Precedence and Associativity](./docs/wep-2026-01-11-operator-precedence.md)
+- [Ambient Logging Functions](./docs/wep-2026-01-12-ambient-logging.md)
+- [Data Section (`__DATA__`)](./docs/wep-2026-01-12-data-section.md)
+- [Literal Type Conversion Rules](./docs/wep-2026-01-12-literal-type-conversion.md)
+- [Resource Lifecycle Management (RAII)](./docs/wep-2026-01-12-resource-lifecycle.md)
+- [Value Semantics and Reference Captures](./docs/wep-2026-01-12-value-semantics-and-captures.md)
+- [Struct and Trait System](./docs/wep-2026-01-13-struct-and-trait.md)
+- [Compiler Pipeline Refactoring](./docs/wep-2026-01-14-compiler-pipeline-refactoring.md)
+- [Tuple and Array Literal Syntax](./docs/wep-2026-01-15-tuple-and-array-literals.md)
+- [World Conformance and Export Syntax](./docs/wep-2026-01-16-world-conformance-and-export.md)
+- [Closure Implementation](./docs/wep-2026-01-16-closure-implementation.md)
+- [Function Return Type Syntax](./docs/wep-2026-01-16-function-return-type-syntax.md)
+- [SourceProvider Abstraction for Compiler I/O](./docs/wep-2026-01-16-source-provider-abstraction.md)
+- [Type Stringification](./docs/wep-2026-01-16-type-stringification.md)
+>>>>>>> origin/main
 
 ### Structure
 
-- Title: Short description of the decision
-- Status: Proposed | Accepted | Deprecated | Superseded
+- Title: Short description of the proposal
 - Context: Background and problem statement
 - Decision: What was decided and why
 - Consequences: Impact and trade-offs
