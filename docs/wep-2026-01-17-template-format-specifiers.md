@@ -63,7 +63,7 @@ Where `spec` follows Rust's format specification mini-language.
 
 **Notes**:
 - No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `{:e}/{:E}`.
-- No `p` (Pointer) format specifier. Wado does not have pointer types. Using `:p` will result in a resolver error.
+- No `p` (Pointer) format specifier. Wado does not have pointer types.
 
 ### Format Parameters
 
@@ -152,6 +152,12 @@ println(`{pi:E}`);       // => "3.14159E0"
 let p = Point { x: 10, y: 20 };
 println(`{p}`);          // => "(10, 20)" (if Display implemented)
 println(`{p:?}`);        // => "Point { x: 10, y: 20 }" (inspect)
+
+// Arbitrary expressions (Wado extension)
+println(`{x + 1}`);      // => "43"
+println(`{x * 2:x}`);    // => "54" (84 in hex)
+println(`{p.x + p.y}`);  // => "30"
+println(`{arr.len()}`);  // => "5"
 ```
 
 ### Interaction with Type Stringification
@@ -168,7 +174,16 @@ Resolution order for `{expr:spec}`:
 2. Apply format parameters (width, precision, alignment)
 3. Return formatted String
 
-**Key difference from Rust**: Rust requires explicit trait implementations. Wado provides inspect as a fallback for `{}` and `{:?}`, but other format specifiers like `{:x}` still require the type to support that trait (or be a primitive).
+**Key differences from Rust**:
+1. **Arbitrary expressions**: Wado allows any expression in `{expr}`, while Rust only allows simple value expressions (no method calls, operators, etc. without parentheses)
+2. **Inspect fallback**: Wado provides inspect as a fallback for `{}` and `{:?}`, while Rust requires explicit trait implementations
+3. **Other format specifiers**: Format specifiers like `{:x}` still require the type to support that trait (or be a primitive)
+4. **No `:p` specifier**: Wado excludes `:p` since it has no pointer types
+
+**Syntax disambiguation**: The parser distinguishes `::` (scope resolution/turbofish) from `:` (format specifier) by lookahead:
+- `{foo::bar}` - `::` is part of the expression
+- `{foo::<T>}` - `::<` is turbofish syntax
+- `{foo:x}` - `:` starts format specifier
 
 ## Consequences
 
