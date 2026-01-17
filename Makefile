@@ -22,8 +22,8 @@ build: wado-compiler/lib/builtins/wado-bundled.wat
 
 .PHONY: hello
 hello:
-	cargo run -p wado-cli --quiet -- compile -o example/hello.wat example/hello.wado
-	cargo run -p wado-cli --quiet -- compile -o example/hello.wasm example/hello.wado
+	cargo run -p wado-cli --quiet -- compile -O2 -o example/hello.wat example/hello.wado
+	cargo run -p wado-cli --quiet -- compile -O2 -o example/hello.wasm example/hello.wado
 
 .PHONY: hello-run
 hello-run:
@@ -72,6 +72,7 @@ clean:
 	cargo clean
 	rm -f example/*.wat example/*.wasm
 	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c benchmark/sieve_c
+	$(MAKE) -C wasm-size clean
 
 # VS Code extension targets
 .PHONY: install-wado-vscode-dev
@@ -184,6 +185,10 @@ benchmark-mandelbrot:
 	@echo ""
 	@echo "=== Wado (wasmtime) ==="
 	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
+
+.PHONY: report-wasm-size
+report-wasm-size:
+	$(MAKE) -C wasm-size report-wasm-size
 
 .PHONY: benchmark-sieve
 benchmark-sieve:
