@@ -1,0 +1,35 @@
+// Index assignment inside loops
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // For loop
+    let mut arr: Array<i32> = [0, 0, 0, 0, 0];
+    for let mut i = 0; i < 5; i += 1 {
+        arr[i] = i * 10;
+    }
+    println(`for: {arr[0]} {arr[1]} {arr[2]} {arr[3]} {arr[4]}`);
+
+    // While loop
+    let mut arr2: Array<i32> = [0, 0, 0];
+    let mut j = 0;
+    while j < 3 {
+        arr2[j] = j + 100;
+        j += 1;
+    }
+    println(`while: {arr2[0]} {arr2[1]} {arr2[2]}`);
+
+    // Loop with break
+    let mut arr3: Array<i32> = [0, 0, 0];
+    let mut k = 0;
+    loop {
+        arr3[k] = k * k;
+        k += 1;
+        if k >= 3 {
+            break;
+        }
+    }
+    println(`loop: {arr3[0]} {arr3[1]} {arr3[2]}`);
+}
+
+__DATA__
+{"stdout": "for: 0 10 20 30 40\nwhile: 100 101 102\nloop: 0 1 4\n"}
