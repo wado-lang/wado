@@ -4,7 +4,7 @@
 //! correct error types, messages, and source locations.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use wado_compiler::{CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
 
 // ============================================================================
@@ -71,18 +71,24 @@ impl CompilerHost for FilesystemTestHost {
     }
 }
 
-/// Create a tokio runtime for blocking on async code
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
+/// Shared tokio runtime for all tests (initialized once)
+static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+/// Get or initialize the shared tokio runtime
+fn get_runtime() -> &'static tokio::runtime::Runtime {
+    TOKIO_RT.get_or_init(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime")
+    })
 }
 
 /// Compile source string using in-memory host
 fn compile(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
     let host = InMemoryTestHost;
-    runtime().block_on(wado_compiler::compile_with_host(
+    let rt = get_runtime();
+    rt.block_on(wado_compiler::compile_with_host(
         source,
         &host,
         None,
@@ -100,7 +106,8 @@ fn compile_file(path: &Path) -> Result<wado_compiler::CompileResult, CompileErro
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let host = FilesystemTestHost::new(base_path);
 
-    runtime().block_on(wado_compiler::compile_with_host(
+    let rt = get_runtime();
+    rt.block_on(wado_compiler::compile_with_host(
         &source,
         &host,
         Some(&path.to_string_lossy()),

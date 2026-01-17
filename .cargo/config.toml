@@ -1,0 +1,21 @@
+# Cargo configuration for faster builds and tests
+
+[build]
+# Use lld linker for faster linking (much faster than default ld)
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# Parallel codegen units for faster compilation
+# Default is 16 for dev builds, but we can tune this
+# Lower values = better optimization but slower compile
+# Higher values = faster compile but less optimization
+# For tests, we want faster compile time
+[profile.dev]
+codegen-units = 256  # Maximum parallelism
+
+[profile.test]
+# Inherit from dev but we can override specific settings
+inherits = "dev"
+codegen-units = 256  # Maximum parallelism for test builds
+
+# Optional: uncomment for incremental compilation (enabled by default for dev/test)
+# incremental = true

@@ -77,17 +77,14 @@ fn compile_file_with_opts(
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let host = TestCompilerHost::new(base_path);
 
-    // Compile using async API (use tokio runtime)
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(wado_compiler::compile_with_host(
-            &source,
-            &host,
-            Some(&path.to_string_lossy()),
-            opt_level,
-        ))
+    // Compile using async API (use shared tokio runtime)
+    let rt = get_runtime();
+    rt.block_on(wado_compiler::compile_with_host(
+        &source,
+        &host,
+        Some(&path.to_string_lossy()),
+        opt_level,
+    ))
 }
 
 /// Shared wasmtime Engine for all tests (initialized once)
