@@ -9,7 +9,9 @@
 //! - All function calls resolved
 //! - No syntactic sugar (desugared before TIR)
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::token::Span;
 
@@ -1048,7 +1050,8 @@ pub struct InstantiationKey {
 #[derive(Debug, Clone)]
 pub struct TirModule {
     pub path: Vec<String>,
-    pub type_table: TypeTable,
+    /// Shared type table across all modules (enables cross-module type references)
+    pub type_table: Rc<RefCell<TypeTable>>,
     pub functions: Vec<TirFunction>,
     pub structs: Vec<TirStruct>,
     pub enums: Vec<TirEnum>,
@@ -1073,7 +1076,7 @@ impl TirModule {
     pub fn new(path: Vec<String>) -> Self {
         Self {
             path,
-            type_table: TypeTable::new(),
+            type_table: Rc::new(RefCell::new(TypeTable::new())),
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
@@ -1089,7 +1092,7 @@ impl TirModule {
         }
     }
 
-    pub fn with_type_table(path: Vec<String>, type_table: TypeTable) -> Self {
+    pub fn with_type_table(path: Vec<String>, type_table: Rc<RefCell<TypeTable>>) -> Self {
         Self {
             path,
             type_table,
