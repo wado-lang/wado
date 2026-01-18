@@ -586,6 +586,11 @@ impl Monomorphizer {
                 name, type_args, ..
             } = type_table.get(id)
             {
+                // Skip empty type_args (invalid generic instances)
+                if type_args.is_empty() {
+                    continue;
+                }
+
                 // Only process if all type args are concrete (no TypeParams)
                 let all_concrete = type_args
                     .iter()
@@ -774,6 +779,53 @@ impl Monomorphizer {
                 module_path,
                 type_args,
             } => {
+                // Handle invalid GenericInstance with empty type_args
+                // This can occur when a generic type is referenced without type arguments in its own methods
+                // e.g., in Container<T>::new(), the return value Container { ... } has type Container<T>
+                // but may be represented as GenericInstance with empty type_args
+                if type_args.is_empty() {
+                    // If we're in a substitution context (substitution map is not empty),
+                    // try to infer the type args from the substitution
+                    if !substitution.is_empty() {
+                        // Build mangled name using ALL values in substitution map
+                        // Sort by param index to get correct order
+                        let mut mangled_name = name.clone();
+                        let mut indexed_args: Vec<(u32, TypeId)> = substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
+                        indexed_args.sort_by_key(|(idx, _)| *idx);
+
+                        for (_, arg_id) in &indexed_args {
+                            mangled_name.push('$');
+                            mangled_name.push_str(&self.type_id_to_name(*arg_id, type_table));
+                        }
+
+                        // Look for monomorphized struct with this name
+                        for tid in 0..type_table.len() as u32 {
+                            if let ResolvedType::Struct {
+                                name: struct_name, ..
+                            } = type_table.get(tid)
+                                && struct_name == &mangled_name
+                            {
+                                return tid;
+                            }
+                        }
+                    }
+
+                    // Fallback: look for plain struct
+                    for tid in 0..type_table.len() as u32 {
+                        if let ResolvedType::Struct {
+                            name: struct_name,
+                            module_path: struct_path,
+                        } = type_table.get(tid)
+                            && struct_name == &name
+                            && struct_path == &module_path
+                        {
+                            return tid;
+                        }
+                    }
+                    // If not found, just return the original type_id
+                    return type_id;
+                }
+
                 // Recursively substitute in nested generic instances
                 let new_args: Vec<TypeId> = type_args
                     .iter()
@@ -1719,12 +1771,28 @@ impl Monomorphizer {
             }
             TirExprKind::StructLiteral {
                 struct_type,
+                struct_name,
                 fields,
-                ..
             } => {
-                *struct_type = self.substitute_type(*struct_type, substitution, type_table);
+                // First substitute field expressions (which will update expr.type_id)
                 for field in fields {
                     self.substitute_types_in_expr(&mut field.value, substitution, type_table);
+                }
+
+                // Then substitute struct_type
+                *struct_type = self.substitute_type(*struct_type, substitution, type_table);
+
+                // Important: expr.type_id has already been substituted (line 1605 above)
+                // Use it to get the correct struct type and name
+                // This handles the case where struct_type is a plain Struct but expr.type_id
+                // has been properly substituted to the monomorphized version
+                if expr.type_id != *struct_type {
+                    *struct_type = expr.type_id;
+                }
+
+                // Update struct_name to match the (possibly monomorphized) struct_type
+                if let ResolvedType::Struct { name, .. } = type_table.get(*struct_type) {
+                    *struct_name = name.clone();
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {

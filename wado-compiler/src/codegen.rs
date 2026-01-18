@@ -871,6 +871,11 @@ impl Codegen {
                 if !tir_struct.type_params.is_empty() {
                     continue;
                 }
+                // Also skip structs that contain type parameters in field types
+                // (these are generic templates that weren't properly monomorphized)
+                if self.struct_contains_type_params(tir_struct, &*tir_mod.type_table.borrow()) {
+                    continue;
+                }
                 // Skip monomorphized structs for now - they need array types registered first
                 if tir_struct.monomorph_info.is_some() {
                     continue;
@@ -897,7 +902,11 @@ impl Codegen {
         let non_mono_structs: Vec<_> = entry_tir
             .structs
             .iter()
-            .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
+            .filter(|s| {
+                s.type_params.is_empty()
+                    && s.monomorph_info.is_none()
+                    && !self.struct_contains_type_params(s, type_table)
+            })
             .cloned()
             .collect();
         let sorted_non_mono = Self::sort_structs_topologically(&non_mono_structs, type_table);
@@ -2582,6 +2591,21 @@ impl Codegen {
             offset += lit.len() as u32;
         }
         panic!("String not found in literals: {s}");
+    }
+
+    /// Check if a struct contains type parameters in any of its field types
+    /// Returns true if any field has an unresolved type parameter
+    fn struct_contains_type_params(
+        &self,
+        tir_struct: &crate::tir::TirStruct,
+        type_table: &TypeTable,
+    ) -> bool {
+        for field in &tir_struct.fields {
+            if type_table.contains_type_param(field.type_id) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Register a struct type from TIR with a StructName key
