@@ -1302,11 +1302,9 @@ impl Parser {
                 UnaryOp::Ref
             };
             let expr = self.parse_unary_expr()?;
-            return Ok(Expr::Unary(Box::new(UnaryExpr {
-                op,
-                expr,
-                span: start_span,
-            })));
+            // Span covers from operator to end of inner expression
+            let span = start_span.merge(&expr.span());
+            return Ok(Expr::Unary(Box::new(UnaryExpr { op, expr, span })));
         }
 
         let op = match self.peek_kind() {
@@ -1321,11 +1319,9 @@ impl Parser {
             let start_span = self.peek().span;
             self.advance();
             let expr = self.parse_unary_expr()?;
-            return Ok(Expr::Unary(Box::new(UnaryExpr {
-                op,
-                expr,
-                span: start_span,
-            })));
+            // Span covers from operator to end of inner expression
+            let span = start_span.merge(&expr.span());
+            return Ok(Expr::Unary(Box::new(UnaryExpr { op, expr, span })));
         }
 
         self.parse_postfix_expr()
@@ -1642,8 +1638,9 @@ impl Parser {
                     }));
                 }
                 let expr = self.parse_expr()?;
-                self.expect(&TokenKind::RParen)?;
-                Ok(expr)
+                let end_span = self.expect(&TokenKind::RParen)?.span;
+                // Update expression span to include the parentheses
+                Ok(expr.with_span(start_span.merge(&end_span)))
             }
             TokenKind::LBracket => {
                 self.advance();

@@ -4767,6 +4767,7 @@ impl Codegen {
                 } else {
                     left.type_id
                 };
+
                 self.generate_binary_op(func, *op, effective_type, type_table);
             }
 
@@ -9253,7 +9254,12 @@ impl Codegen {
                 func.instruction(&Instruction::Call(builder.func_idx(func_name)));
             }
             ResolvedType::String => {
-                // String is already a string - no conversion needed
+                // String is already a string - just need ref.as_non_null for non-null ref
+                func.instruction(&Instruction::RefAsNonNull);
+            }
+            ResolvedType::Struct { name, .. } if name == "String" => {
+                // String struct (same as ResolvedType::String)
+                func.instruction(&Instruction::RefAsNonNull);
             }
             _ => {
                 // For other types (structs, etc.), treat as string (no conversion)

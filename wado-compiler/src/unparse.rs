@@ -1804,15 +1804,15 @@ impl<'a> TirUnparser<'a> {
             } => {
                 self.write_indent();
                 self.output.push_str("assert ");
-                // Use condition_source for readability
-                self.output.push_str(condition_source);
+                // Show actual lowered condition
+                self.unparse_expr(condition);
                 if let Some(msg) = message {
                     self.output.push_str(", ");
                     self.unparse_expr(msg);
                 }
-                // Show actual condition as comment
+                // Show original source as comment for reference
                 self.output.push_str(";  // ");
-                self.unparse_expr(condition);
+                self.output.push_str(condition_source);
                 self.output.push('\n');
             }
         }
@@ -1950,7 +1950,16 @@ impl<'a> TirUnparser<'a> {
                         full_name
                     }
                 };
+                // Wrap unary expressions in parentheses for correct precedence
+                // e.g., (*p_ref).method() not *p_ref.method()
+                let needs_parens = matches!(receiver.kind, TirExprKind::Unary { .. });
+                if needs_parens {
+                    self.output.push('(');
+                }
                 self.unparse_expr(receiver);
+                if needs_parens {
+                    self.output.push(')');
+                }
                 self.output.push('.');
                 self.output.push_str(&Self::quote_if_needed(&method_name));
                 if !type_args.is_empty() {

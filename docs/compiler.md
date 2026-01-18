@@ -688,6 +688,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Array construction, index access, and iteration
 - [x] Reference types (`&T`, `&mut T`) for primitives, structs, tuples, and arrays
 - [x] Dereference operator (`*ref`)
+- [x] Auto-dereference for method calls (`ref.method()` auto-derefs to `(*ref).method()`)
+- [x] String equality (`==`, `!=`) with value semantics (desugared to `string_eq(&a, &b)`)
 - [x] Generic structs with monomorphization (`Box<T>`, `Pair<A, B>`)
 - [x] Generic struct instantiation with type inference
 - [x] Generic struct field access
@@ -769,6 +771,7 @@ fn run() with Stdout {
 6. **No type checking**: The analyzer doesn't perform type checking yet
 7. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
 8. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
+9. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
 
 ---
 
@@ -1083,3 +1086,85 @@ Wado uses value semantics for composite types: assignment creates a copy rather 
 ### Reference Types
 
 Reference types (`&T`, `&mut T`) do **not** have value semantics - they share the underlying value. This is intentional: references provide a way to share data when needed.
+
+## Auto-Dereference for Method Calls
+
+When calling a method on a reference type, the compiler automatically inserts dereference operations to reach the underlying value type.
+
+### How It Works
+
+```wado
+let p = Point { x: 10, y: 20 };
+let p_ref = &p;
+let sum = p_ref.sum();  // Auto-derefs: (*p_ref).sum()
+
+let p_ref2 = &p_ref;
+let sum2 = p_ref2.sum();  // Double auto-deref: (**p_ref2).sum()
+```
+
+The resolver (`resolver.rs`) handles auto-deref in `resolve_method_call()`:
+
+1. Check if receiver type is `Ref(T)` or `MutRef(T)`
+2. If so, insert a `TirUnaryOp::Deref` expression
+3. Repeat until receiver is not a reference type
+4. Proceed with normal method resolution on the dereferenced type
+
+### Supported Cases
+
+| Receiver Type | Auto-Deref | Example                                      |
+| ------------- | ---------- | -------------------------------------------- |
+| `&T`          | ✅         | `(&point).sum()` → `(*&point).sum()`         |
+| `&mut T`      | ✅         | `(&mut point).sum()` → `(*&mut point).sum()` |
+| `&&T`         | ✅         | Double deref applied                         |
+| `&&&T`        | ✅         | Triple deref applied                         |
+| `&Box<T>`     | ✅         | Generic struct methods work                  |
+| `&String`     | ✅         | String methods like `.len()` work            |
+| `&Array<T>`   | ❌         | See Known Limitations                        |
+
+### Known Limitations
+
+- **Array auto-deref not working**: Method calls on `&Array<T>` fail with "unknown function: Array<T>::len". This is due to how Array methods are resolved with monomorphized names. The workaround is to dereference explicitly: `(*arr_ref).len()`.
+
+## String Equality Implementation
+
+String equality (`==` and `!=`) uses value semantics - comparing the actual string contents rather than reference identity.
+
+### Desugaring
+
+The resolver desugars string comparisons to calls to `core::internal::string_eq`:
+
+```wado
+// Source
+a == b
+a != b
+
+// Desugared to
+core::internal::string_eq(&a, &b)
+!core::internal::string_eq(&a, &b)
+```
+
+### Implementation
+
+The `string_eq` function in `lib/core/internal.wado`:
+
+```wado
+pub fn string_eq(a: &String, b: &String) -> bool {
+    let len_a = a.len();
+    let len_b = b.len();
+    if len_a != len_b {
+        return false;
+    }
+    for (let mut i = 0; i < len_a; i += 1) {
+        if a.get(i) != b.get(i) {
+            return false;
+        }
+    }
+    return true;
+}
+```
+
+Key design decisions:
+
+- Takes `&String` parameters to avoid copying strings
+- Uses auto-dereference so `a.len()` and `a.get(i)` work on references
+- Byte-by-byte comparison (UTF-8 safe since equal strings have identical byte sequences)

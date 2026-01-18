@@ -5,6 +5,27 @@
 // implemented in Wado itself rather than as inline Wasm instructions,
 // making the codegen simpler and the compiler more maintainable.
 
+/// Compare two strings for equality (value equality)
+/// Returns true if both strings have the same length and same bytes
+pub fn string_eq(a: &String, b: &String) -> bool {
+    let len_a = a.len();
+    let len_b = b.len();
+
+    // Different lengths means not equal
+    if len_a != len_b {
+        return false;
+    }
+
+    // Compare bytes
+    for (let mut i = 0; i < len_a; i += 1) {
+        if a.get(i) != b.get(i) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 /// Concatenate two strings into a new string
 /// This is the core operation for template string building
 pub fn string_concat(a: String, b: String) -> String {

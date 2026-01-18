@@ -1978,6 +1978,69 @@ impl<'a> Resolver<'a> {
         let left = self.resolve_expr(&binary.left, ctx);
         let right = self.resolve_expr(&binary.right, ctx);
 
+        // Special case: String equality comparison
+        // Desugar `a == b` to `string_eq(&a, &b)` and `a != b` to `!string_eq(&a, &b)`
+        let left_type = self.type_table.borrow().get(left.type_id).clone();
+        let is_string = matches!(left_type, ResolvedType::String)
+            || matches!(left_type, ResolvedType::Struct { ref name, .. } if name == "String");
+        if is_string && matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
+            // Create reference types for the arguments
+            let left_ref_type = self
+                .type_table
+                .borrow_mut()
+                .intern(ResolvedType::Ref(left.type_id));
+            let right_ref_type = self
+                .type_table
+                .borrow_mut()
+                .intern(ResolvedType::Ref(right.type_id));
+
+            // Wrap left and right with Ref expressions
+            let left_ref = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(left),
+                },
+                left_ref_type,
+                binary.span,
+            );
+            let right_ref = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(right),
+                },
+                right_ref_type,
+                binary.span,
+            );
+
+            let call_expr = TirExpr::new(
+                TirExprKind::Call {
+                    func: FunctionRef::External {
+                        module_path: vec!["core".to_string(), "internal".to_string()],
+                        name: "string_eq".to_string(),
+                        monomorph_info: None,
+                    },
+                    type_args: vec![],
+                    args: vec![left_ref, right_ref],
+                },
+                TypeTable::BOOL,
+                binary.span,
+            );
+
+            // For NotEq, negate the result
+            if binary.op == BinaryOp::NotEq {
+                return TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Not,
+                        expr: Box::new(call_expr),
+                    },
+                    TypeTable::BOOL,
+                    binary.span,
+                );
+            }
+
+            return call_expr;
+        }
+
         let op = convert_binary_op(binary.op);
 
         // Determine result type based on operator
@@ -2608,7 +2671,7 @@ impl<'a> Resolver<'a> {
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let receiver = self.resolve_expr(&method_call.receiver, ctx);
+        let mut receiver = self.resolve_expr(&method_call.receiver, ctx);
         let args: Vec<TirExpr> = method_call
             .args
             .iter()
@@ -2621,6 +2684,25 @@ impl<'a> Resolver<'a> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+
+        // Auto-dereference: if receiver is Ref or MutRef, dereference it
+        // This allows method calls like `ref_to_string.len()` to work
+        loop {
+            match self.type_table.borrow().get(receiver.type_id).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    // Insert a deref operation
+                    receiver = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Deref,
+                            expr: Box::new(receiver),
+                        },
+                        inner,
+                        method_call.span,
+                    );
+                }
+                _ => break,
+            }
+        }
 
         // Look up method return type based on receiver type
         let mut return_type = self.lookup_method_return_type(receiver.type_id, &method_call.method);
