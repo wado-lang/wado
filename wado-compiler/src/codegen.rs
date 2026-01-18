@@ -1070,6 +1070,14 @@ impl Codegen {
 
         // Types for loaded module functions (TIR)
         for (_, tir_func, func_type_table, qualified_name) in &loaded_funcs {
+            // Skip generic template functions - they will be registered when monomorphized
+            if !tir_func.type_params.is_empty() || !tir_func.impl_type_params.is_empty() {
+                // Generic template - skip unless it's a monomorphized instance
+                if tir_func.monomorph_info.is_none() {
+                    continue;
+                }
+            }
+
             let param_types: Vec<ValType> = tir_func
                 .params
                 .iter()
@@ -1089,6 +1097,14 @@ impl Codegen {
         for (_module_path, struct_name, tir_method, method_type_table, mangled_name) in
             &loaded_methods
         {
+            // Skip generic template methods - they will be registered when monomorphized
+            if !tir_method.type_params.is_empty() || !tir_method.impl_type_params.is_empty() {
+                // Generic template - skip unless it's a monomorphized instance
+                if tir_method.monomorph_info.is_none() {
+                    continue;
+                }
+            }
+
             let mut param_types: Vec<ValType> = Vec::new();
 
             for param in &tir_method.params {
@@ -1320,6 +1336,12 @@ impl Codegen {
 
         // Generate loaded module functions (TIR path)
         for (module_path, tir_func, func_type_table, _qualified_name) in &loaded_funcs {
+            // Skip generic template functions - only generate monomorphized instances
+            if (!tir_func.type_params.is_empty() || !tir_func.impl_type_params.is_empty())
+                && tir_func.monomorph_info.is_none() {
+                    continue;
+                }
+
             let (wasm_func, _hints) =
                 self.generate_function(tir_func, func_type_table, &builder, module_path);
             code.function(&wasm_func);
@@ -1329,6 +1351,12 @@ impl Codegen {
         for (module_path, _struct_name, tir_method, method_type_table, _mangled_name) in
             &loaded_methods
         {
+            // Skip generic template methods - only generate monomorphized instances
+            if (!tir_method.type_params.is_empty() || !tir_method.impl_type_params.is_empty())
+                && tir_method.monomorph_info.is_none() {
+                    continue;
+                }
+
             let (wasm_func, _hints) =
                 self.generate_function(tir_method, method_type_table, &builder, module_path);
             code.function(&wasm_func);

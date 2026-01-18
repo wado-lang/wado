@@ -1,0 +1,46 @@
+// NOTE: This test currently fails with "Array struct type not registered for element type 21"
+// The lowering phase correctly monomorphizes Container$i32 and Array$i32,
+// but there's still an issue in codegen where generic templates are being processed.
+// TODO: Complete the fix for generic field monomorphization
+
+use {println} from "core:cli";
+
+// Generic struct with a field that uses the type parameter
+struct Container<T> {
+    items: Array<T>,
+}
+
+impl<T> Container<T> {
+    fn new() -> Container<T> {
+        return Container { items: [] as Array<T> };
+    }
+
+    fn add(&mut self, item: T) {
+        self.items.append(item);
+    }
+
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+
+    fn get(&self, index: i32) -> T {
+        return self.items[index];
+    }
+}
+
+fn run() {
+    let mut container = Container::<i32>::new();
+    container.add(10);
+    container.add(20);
+    container.add(30);
+
+    println(`Length: {container.len()}`);
+    println(`First: {container.get(0)}`);
+    println(`Second: {container.get(1)}`);
+    println(`Third: {container.get(2)}`);
+}
+
+__DATA__
+{
+    "compile_error": "Array struct type not registered for element type 21"
+}
