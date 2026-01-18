@@ -11,7 +11,7 @@ takes([1, 2, 3]);                // Implicit coercion
 let b = [1, 2, 3] as Array<i32>; // Explicit cast
 ```
 
-This coercion is currently **hardcoded** in the compiler (`resolver.rs` lines 1252-1278). When the compiler encounters a tuple literal with a target type of `Array<T>`, it performs special conversion logic.
+This coercion is currently **hardcoded** in the compiler. When the compiler encounters a tuple literal with a target type of `Array<T>`, it performs special conversion logic.
 
 ### Current Implementation
 
@@ -407,7 +407,6 @@ This requires `Dict` to implement `FromIterator<[K, V]>`, which is natural.
    - **Mitigation**: Clear error messages guide users
 4. **Breaking change**: If any code relies on current coercion behavior, it may break
    - **Mitigation**: Current behavior is preserved - this is a drop-in replacement
-   - **Mitigation**: Implementation strategy can maintain compatibility during transition
 
 ### Trade-offs
 
@@ -420,118 +419,6 @@ This requires `Dict` to implement `FromIterator<[K, V]>`, which is natural.
 | **Consistency** | ❌ Array is special | ✅ All collections equal |
 | **Error messages** | ⚠️ "Type mismatch" | ✅ "Missing trait impl" |
 | **Maintenance** | ❌ High | ✅ Low |
-
-## Implementation Strategy
-
-### Phase 1: Trait System Foundation (Prerequisite)
-
-This WEP depends on the trait system from WEP: Struct and Trait System. Required features:
-
-- [ ] Trait definitions and implementations
-- [ ] Trait bounds in function signatures
-- [ ] Associated types (`type Item`)
-- [ ] Trait method calls
-- [ ] Generic trait implementations (`impl<T>`)
-
-### Phase 2: Core Iterator Traits
-
-Implement the three core iterator traits in the standard library:
-
-```wado
-// core:iter module
-trait Iterator {
-    type Item;
-
-    fn next(&mut self) -> Option<Self::Item>;
-
-    // Default implementations for common methods
-    fn collect<C: FromIterator<Self::Item>>(self) -> C {
-        return C::from_iter(self);
-    }
-
-    fn map<U, F: Fn(Self::Item) -> U>(self, f: F) -> Map<Self, F> { ... }
-    fn filter<F: Fn(&Self::Item) -> bool>(self, f: F) -> Filter<Self, F> { ... }
-    fn fold<U, F: Fn(U, Self::Item) -> U>(self, init: U, f: F) -> U { ... }
-}
-
-trait IntoIterator {
-    type Item;
-    type Iter: Iterator<Item = Self::Item>;
-
-    fn into_iter(self) -> Self::Iter;
-}
-
-trait FromIterator<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Self;
-}
-```
-
-### Phase 3: Tuple Iterator Implementations
-
-Implement `IntoIterator` for homogeneous tuples:
-
-```wado
-// Compiler-generated implementations for tuples
-impl<T> IntoIterator for [T] { ... }
-impl<T> IntoIterator for [T, T] { ... }
-impl<T> IntoIterator for [T, T, T] { ... }
-// ... up to reasonable tuple size (e.g., 32 elements)
-```
-
-### Phase 4: Array FromIterator Implementation
-
-Implement `FromIterator` for `Array<T>`:
-
-```wado
-// core:prelude
-impl<T> FromIterator<T> for Array<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Array<T> {
-        let mut arr: Array<T> = [];
-        for let item of iter {
-            arr.append(item);
-        }
-        return arr;
-    }
-}
-```
-
-### Phase 5: Compiler Iterator Coercion
-
-Add iterator-based coercion to the resolver:
-
-1. **Detection**: When types don't match, check for `IntoIterator` + `FromIterator`
-2. **Desugaring**: Rewrite expression to `T::from_iter(expr.into_iter())`
-3. **Type checking**: Verify trait bounds and element type compatibility
-4. **Error reporting**: Clear messages for missing trait implementations
-
-### Phase 6: Optimization Pass
-
-Add compiler optimizations to avoid iterator overhead:
-
-1. **Constant folding**: Literal tuples → direct array construction
-   ```wado
-   let a: Array<i32> = [1, 2, 3];
-   // Optimized to: ArrayLiteral { elements: [1, 2, 3], used: 3 }
-   ```
-
-2. **Inline `from_iter`**: Inline `FromIterator::from_iter` calls when possible
-3. **Iterator fusion**: Combine multiple iterator operations into single loop
-
-### Phase 7: Remove Hardcoded Coercion
-
-Once iterator coercion is working:
-
-1. Remove special-case tuple-to-array coercion from `resolver.rs`
-2. Run full test suite to verify compatibility
-3. Update compiler documentation
-
-### Phase 8: Standard Library Extensions
-
-Add `FromIterator` implementations for other collection types:
-
-- `Set<T>`: From any `Iterator<Item = T>`
-- `Dict<K, V>`: From `Iterator<Item = [K, V]>`
-- Any future collection types
 
 ## Examples
 
