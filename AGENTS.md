@@ -101,6 +101,7 @@ wado dump --tir --unparse file.wado  # show TIR as pseudo-Wado source
 wado dump --lower file.wado          # show lowered TIR
 wado dump --lower --unparse file.wado  # show lowered TIR as pseudo-Wado source
 wado dump --optimize file.wado       # show optimization hints
+wado dump --optimize --unparse -O2 file.wado  # show optimized TIR as pseudo-Wado
 ```
 
 Available phases (in compilation order):
@@ -112,7 +113,18 @@ Available phases (in compilation order):
 5. `--symbols` - Symbol table
 6. `--tir` - Typed IR (supports `--unparse`)
 7. `--lower` - Lowered TIR (supports `--unparse`)
-8. `--optimize` - Optimization hints
+8. `--optimize` - Optimized TIR (supports `--unparse`)
+
+Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (DCE), `-O2` (DCE + inlining), `-Os` (O2 + strip names).
+
+### Golden Fixtures (Lowered TIR Tests)
+
+Golden fixtures in `tests/fixtures.golden/*.lowered.wado` capture expected optimized TIR output. The `lowered` test suite (`tests/lowered.rs`) compares current compiler output against these golden files to detect unintended optimizer changes.
+
+```sh
+make update-golden-fixtures  # regenerate golden files after optimizer changes
+cargo test -p wado-compiler --test lowered  # run golden file comparison tests
+```
 
 ## The Formatter
 

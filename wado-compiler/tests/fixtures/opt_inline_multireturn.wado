@@ -1,0 +1,19 @@
+// Test: Inlining functions with multiple return paths
+// Functions with early returns should NOT be inlined (for now)
+
+fn abs(x: i32) -> i32 {
+    if x < 0 {
+        return -x;
+    }
+    return x;
+}
+
+fn run() {
+    let a = abs(5);
+    let b = abs(-5);
+    assert a == 5;
+    assert b == 5;
+}
+
+__DATA__
+{"stdout": ""}

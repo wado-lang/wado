@@ -1,0 +1,17 @@
+// Test: Recursive functions should NOT be inlined
+// This test verifies that recursive functions work correctly and are not infinitely inlined
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+fn run() {
+    let result = factorial(5);
+    assert result == 120;
+}
+
+__DATA__
+{"stdout": ""}

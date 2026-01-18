@@ -244,6 +244,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
+    opt_level: OptLevel,
 ) -> Result<DumpResult, CompileError> {
     let filename = filename.map(String::from);
 
@@ -351,7 +352,7 @@ pub async fn dump_with_host<H: CompilerHost>(
             load_result.implicit_modules.clone(),
             module_name,
         );
-        optimize(project, OptLevel::default())
+        optimize(project, opt_level)
     });
 
     Ok(DumpResult {
