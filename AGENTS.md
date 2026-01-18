@@ -197,6 +197,7 @@ This project relies on the following Wasm features:
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
 - Use string interpolation (`print!("foo: {foo}")`) - only variables are allowed inside the interpolation, though.
+- YAGNI. Do the simplest thing that could possibly work.
 
 ## Rules for Markdown
 
@@ -265,5 +266,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - spec.md if the language specification is updated.
   - docs/compiler.md if the new features are implemented.
   - docs/cheatsheet.md if the syntax/stdlib is updated.
-- Update docs/cheatsheet.md if necessary.
 - `make on-task-done` for format, clippy-fix, update-bundled, test.
