@@ -20,9 +20,17 @@ fn run() with Stdout {
     core::cli::println(core::internal::string_concat("transform_box: ", b3.get().to_string()));
 }
 
+pub fn Box$i64::get(self: Box$i64) -> i64 {
+    return self.value;
+}
+
 fn transform_box$3(b: Box$i64) -> Box$i64 {
     let v: i64 = b.get();
     return Box$i64::new(v);
+}
+
+pub fn Box$i64::new(value: i64) -> Box$i64 {
+    return Box$i64 { value: value };
 }
 
 fn make_box$3(value: i64) -> Box$i64 {
@@ -33,8 +41,16 @@ fn unwrap_box$2(b: Box$i32) -> i32 {
     return b.get();
 }
 
+pub fn Box$i32::get(self: Box$i32) -> i32 {
+    return self.value;
+}
+
 fn make_box$2(value: i32) -> Box$i32 {
     return Box$i32::new(value);
+}
+
+pub fn Box$i32::new(value: i32) -> Box$i32 {
+    return Box$i32 { value: value };
 }
 
 __DATA__

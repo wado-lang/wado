@@ -8,7 +8,9 @@
 //! All type resolution happens in this phase. The output TIR has fully
 //! resolved types on every expression, making code generation mechanical.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::rc::Rc;
 
 use indexmap::IndexMap;
 
@@ -20,9 +22,9 @@ use crate::ast::{
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
-    TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirCapture, TirExpr,
+    TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -304,8 +306,8 @@ enum VarRef {
 
 /// The resolver converts AST to TIR with resolved types
 pub struct Resolver<'a> {
-    /// Type table (shared across all modules)
-    type_table: TypeTable,
+    /// Type table (shared across all modules via Rc<RefCell>)
+    type_table: Rc<RefCell<TypeTable>>,
     /// Symbol table from analyzer
     #[allow(dead_code)]
     symbols: &'a SymbolTable,
@@ -350,7 +352,7 @@ impl<'a> Resolver<'a> {
         source_code: &'a str,
     ) -> Self {
         Self {
-            type_table: TypeTable::new(),
+            type_table: Rc::new(RefCell::new(TypeTable::new())),
             symbols,
             loaded_modules,
             type_aliases: HashMap::new(),
@@ -426,8 +428,8 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Transfer type table
-        tir_module.type_table = std::mem::take(&mut self.type_table);
+        // Share the type table via Rc::clone
+        tir_module.type_table = Rc::clone(&self.type_table);
 
         // Preserve data section
         if let Some(data) = module.data_section() {
@@ -455,8 +457,8 @@ impl<'a> Resolver<'a> {
         let mut result = IndexMap::new();
         let mut all_errors = Vec::new();
 
-        // Create a shared type table
-        let mut type_table = TypeTable::new();
+        // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
+        let type_table = Rc::new(RefCell::new(TypeTable::new()));
         let mut type_aliases = HashMap::new();
         let mut struct_fields = HashMap::new();
 
@@ -479,7 +481,7 @@ impl<'a> Resolver<'a> {
                         for field in &struct_decl.fields {
                             let type_id = Self::resolve_type_static(
                                 &field.ty,
-                                &mut type_table,
+                                &mut type_table.borrow_mut(),
                                 &type_aliases,
                                 &struct_fields,
                             );
@@ -491,7 +493,7 @@ impl<'a> Resolver<'a> {
                     Item::Type(type_alias) => {
                         let type_id = Self::resolve_type_static(
                             &type_alias.ty,
-                            &mut type_table,
+                            &mut type_table.borrow_mut(),
                             &type_aliases,
                             &struct_fields,
                         );
@@ -504,7 +506,8 @@ impl<'a> Resolver<'a> {
 
         // Topologically sort modules based on struct field type dependencies
         // A module depends on another if it has a struct with a field of a type defined there
-        let sorted_paths = Self::topological_sort_modules(modules, &struct_fields, &type_table);
+        let sorted_paths =
+            Self::topological_sort_modules(modules, &struct_fields, &type_table.borrow());
 
         // Second pass: resolve each module with per-module function_return_types and imports
         for path in &sorted_paths {
@@ -517,7 +520,7 @@ impl<'a> Resolver<'a> {
                     let return_type = if let Some(ret_ty) = &func.return_type {
                         Self::resolve_type_static(
                             ret_ty,
-                            &mut type_table,
+                            &mut type_table.borrow_mut(),
                             &type_aliases,
                             &struct_fields,
                         )
@@ -559,7 +562,7 @@ impl<'a> Resolver<'a> {
             let source = if path == entry_path { entry_source } else { "" };
 
             let mut resolver = Resolver {
-                type_table: type_table.clone(),
+                type_table: Rc::clone(&type_table), // Share the same TypeTable via Rc::clone
                 symbols,
                 loaded_modules: modules,
                 type_aliases: type_aliases.clone(),
@@ -578,8 +581,7 @@ impl<'a> Resolver<'a> {
 
             match resolver.resolve_module(module, path.clone()) {
                 Ok(tir_module) => {
-                    // Merge type table updates
-                    type_table = tir_module.type_table.clone();
+                    // TypeTable is already shared via Rc, no need to merge
                     result.insert(path.clone(), tir_module);
                 }
                 Err(errors) => {
@@ -589,11 +591,8 @@ impl<'a> Resolver<'a> {
         }
 
         if all_errors.is_empty() {
-            // Unify type tables: set all modules to use the final merged type table
-            // This ensures TypeIds are valid across all modules for cross-module operations
-            for module in result.values_mut() {
-                module.type_table = type_table.clone();
-            }
+            // TypeTable is already shared across all modules via Rc<RefCell<>>
+            // No need to unify - all modules point to the same TypeTable
             Ok(result)
         } else {
             Err(all_errors)
@@ -849,6 +848,7 @@ impl<'a> Resolver<'a> {
                     for (index, param) in struct_decl.type_params.iter().enumerate() {
                         let type_id = self
                             .type_table
+                            .borrow_mut()
                             .make_type_param(param.name.clone(), index as u32);
                         self.current_type_params
                             .insert(param.name.clone(), (index as u32, type_id));
@@ -897,6 +897,7 @@ impl<'a> Resolver<'a> {
                     for (index, param) in impl_block.type_params.iter().enumerate() {
                         let type_id = self
                             .type_table
+                            .borrow_mut()
                             .make_type_param(param.name.clone(), index as u32);
                         self.current_type_params
                             .insert(param.name.clone(), (index as u32, type_id));
@@ -913,8 +914,10 @@ impl<'a> Resolver<'a> {
                                 let name = &named.name;
                                 if !self.current_type_params.contains_key(name) {
                                     let index = (offset + i) as u32;
-                                    let type_id =
-                                        self.type_table.make_type_param(name.clone(), index);
+                                    let type_id = self
+                                        .type_table
+                                        .borrow_mut()
+                                        .make_type_param(name.clone(), index);
                                     self.current_type_params
                                         .insert(name.clone(), (index, type_id));
                                 }
@@ -949,6 +952,7 @@ impl<'a> Resolver<'a> {
         for (index, param) in struct_decl.type_params.iter().enumerate() {
             let type_id = self
                 .type_table
+                .borrow_mut()
                 .make_type_param(param.name.clone(), index as u32);
             self.current_type_params
                 .insert(param.name.clone(), (index as u32, type_id));
@@ -998,6 +1002,7 @@ impl<'a> Resolver<'a> {
         for (index, param) in func.type_params.iter().enumerate() {
             let type_id = self
                 .type_table
+                .borrow_mut()
                 .make_type_param(param.name.clone(), index as u32);
             self.current_type_params
                 .insert(param.name.clone(), (index as u32, type_id));
@@ -1091,7 +1096,10 @@ impl<'a> Resolver<'a> {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
                     if !self.current_type_params.contains_key(name) {
-                        let type_id = self.type_table.make_type_param(name.clone(), i as u32);
+                        let type_id = self
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(name.clone(), i as u32);
                         self.current_type_params
                             .insert(name.clone(), (i as u32, type_id));
                         // Store impl type param info for later monomorphization
@@ -1109,7 +1117,10 @@ impl<'a> Resolver<'a> {
         let offset = self.current_type_params.len();
         for (index, param) in func.type_params.iter().enumerate() {
             let idx = (offset + index) as u32;
-            let type_id = self.type_table.make_type_param(param.name.clone(), idx);
+            let type_id = self
+                .type_table
+                .borrow_mut()
+                .make_type_param(param.name.clone(), idx);
             self.current_type_params
                 .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
@@ -1239,7 +1250,8 @@ impl<'a> Resolver<'a> {
             // Special case: tuple literal with Array<T> or Tuple type annotation
             if let ast::Expr::TupleLiteral(tuple_lit) = &let_stmt.value {
                 // let a: Array<i32> = [1, 2, 3]
-                if let Some(element_type) = self.type_table.as_array(target_type) {
+                let element_type_opt = self.type_table.borrow().as_array(target_type);
+                if let Some(element_type) = element_type_opt {
                     let elements: Vec<TirExpr> = tuple_lit
                         .elements
                         .iter()
@@ -1249,8 +1261,8 @@ impl<'a> Resolver<'a> {
                                 && resolved.type_id != TypeTable::UNKNOWN
                             {
                                 self.errors.push(TypeError::TypeMismatch {
-                                    expected: self.type_table.type_name(element_type),
-                                    found: self.type_table.type_name(resolved.type_id),
+                                    expected: self.type_table.borrow().type_name(element_type),
+                                    found: self.type_table.borrow().type_name(resolved.type_id),
                                     span: elem.span(),
                                 });
                             }
@@ -1264,59 +1276,64 @@ impl<'a> Resolver<'a> {
                         let_stmt.value.span(),
                     );
                     (value, target_type)
-                } else if let ResolvedType::Tuple(expected_elem_types) =
-                    self.type_table.get(target_type)
-                {
-                    // let t: [i32, String] = [1, "hello"] - check element types
-                    let expected_elem_types = expected_elem_types.clone();
-                    let elements: Vec<TirExpr> = tuple_lit
-                        .elements
-                        .iter()
-                        .enumerate()
-                        .map(|(i, elem)| {
-                            let resolved = self.resolve_expr(elem, ctx);
-                            // Check if element type matches expected
-                            if let Some(&expected_type) = expected_elem_types.get(i)
-                                && resolved.type_id != expected_type
-                                && resolved.type_id != TypeTable::UNKNOWN
-                            {
-                                self.errors.push(TypeError::TypeMismatch {
-                                    expected: self.type_table.type_name(expected_type),
-                                    found: self.type_table.type_name(resolved.type_id),
-                                    span: elem.span(),
-                                });
-                            }
-                            resolved
-                        })
-                        .collect();
-
-                    // Also check length mismatch
-                    if tuple_lit.elements.len() != expected_elem_types.len() {
-                        self.errors.push(TypeError::TypeMismatch {
-                            expected: format!("tuple with {} elements", expected_elem_types.len()),
-                            found: format!("tuple with {} elements", tuple_lit.elements.len()),
-                            span: let_stmt.value.span(),
-                        });
-                    }
-
-                    let value = TirExpr::new(
-                        TirExprKind::TupleLiteral { elements },
-                        target_type,
-                        let_stmt.value.span(),
-                    );
-                    (value, target_type)
                 } else {
-                    let value = self.resolve_expr(&let_stmt.value, ctx);
-                    (value, target_type)
+                    let target_resolved = self.type_table.borrow().get(target_type).clone();
+                    if let ResolvedType::Tuple(expected_elem_types) = target_resolved {
+                        // let t: [i32, String] = [1, "hello"] - check element types
+                        let expected_elem_types = expected_elem_types.clone();
+                        let elements: Vec<TirExpr> = tuple_lit
+                            .elements
+                            .iter()
+                            .enumerate()
+                            .map(|(i, elem)| {
+                                let resolved = self.resolve_expr(elem, ctx);
+                                // Check if element type matches expected
+                                if let Some(&expected_type) = expected_elem_types.get(i)
+                                    && resolved.type_id != expected_type
+                                    && resolved.type_id != TypeTable::UNKNOWN
+                                {
+                                    self.errors.push(TypeError::TypeMismatch {
+                                        expected: self.type_table.borrow().type_name(expected_type),
+                                        found: self.type_table.borrow().type_name(resolved.type_id),
+                                        span: elem.span(),
+                                    });
+                                }
+                                resolved
+                            })
+                            .collect();
+
+                        // Also check length mismatch
+                        if tuple_lit.elements.len() != expected_elem_types.len() {
+                            self.errors.push(TypeError::TypeMismatch {
+                                expected: format!(
+                                    "tuple with {} elements",
+                                    expected_elem_types.len()
+                                ),
+                                found: format!("tuple with {} elements", tuple_lit.elements.len()),
+                                span: let_stmt.value.span(),
+                            });
+                        }
+
+                        let value = TirExpr::new(
+                            TirExprKind::TupleLiteral { elements },
+                            target_type,
+                            let_stmt.value.span(),
+                        );
+                        (value, target_type)
+                    } else {
+                        let value = self.resolve_expr(&let_stmt.value, ctx);
+                        (value, target_type)
+                    }
                 }
             } else if let ast::Expr::StructLiteral(struct_lit) = &let_stmt.value {
                 // Handle implicit struct literal: let p: Point = { x: 1, y: 2 }
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
+                    let target_resolved = self.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Struct {
                         name,
                         module_path: _,
-                    } = self.type_table.get(target_type)
+                    } = target_resolved
                     {
                         let name = name.clone();
                         let struct_type = target_type;
@@ -1348,7 +1365,7 @@ impl<'a> Resolver<'a> {
                     } else {
                         // Target type is not a struct - error
                         self.errors.push(TypeError::TypeMismatch {
-                            expected: self.type_table.type_name(target_type),
+                            expected: self.type_table.borrow().type_name(target_type),
                             found: "implicit struct literal".into(),
                             span: struct_lit.span,
                         });
@@ -1394,8 +1411,9 @@ impl<'a> Resolver<'a> {
     fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) -> TirStmt {
         let value = ret_stmt.value.as_ref().map(|expr| {
             // Check for tuple literal to array coercion based on function return type
+            let element_type_opt = self.type_table.borrow().as_array(ctx.return_type);
             if let ast::Expr::TupleLiteral(tuple_lit) = expr
-                && let Some(element_type) = self.type_table.as_array(ctx.return_type)
+                && let Some(element_type) = element_type_opt
             {
                 let elements: Vec<TirExpr> = tuple_lit
                     .elements
@@ -1406,8 +1424,8 @@ impl<'a> Resolver<'a> {
                             && resolved.type_id != TypeTable::UNKNOWN
                         {
                             self.errors.push(TypeError::TypeMismatch {
-                                expected: self.type_table.type_name(element_type),
-                                found: self.type_table.type_name(resolved.type_id),
+                                expected: self.type_table.borrow().type_name(element_type),
+                                found: self.type_table.borrow().type_name(resolved.type_id),
                                 span: elem.span(),
                             });
                         }
@@ -1521,12 +1539,13 @@ impl<'a> Resolver<'a> {
         let iterable_type = iterable.type_id;
 
         // Get the element type from the array type
-        let element_type = if let Some(elem_type) = self.type_table.as_array(iterable_type) {
+        let element_type = if let Some(elem_type) = self.type_table.borrow().as_array(iterable_type)
+        {
             elem_type
         } else {
             self.errors.push(TypeError::TypeMismatch {
                 expected: "Array<T>".to_string(),
-                found: self.type_table.type_name(iterable_type),
+                found: self.type_table.borrow().type_name(iterable_type),
                 span: for_of_stmt.iterable.span(),
             });
             TypeTable::UNKNOWN
@@ -1720,8 +1739,10 @@ impl<'a> Resolver<'a> {
             );
             TirExpr::new(
                 TirExprKind::Call {
-                    module_path: vec!["core".to_string(), "internal".to_string()],
-                    func_name: "string_concat".to_string(),
+                    func: FunctionRef::External {
+                        module_path: vec!["core".to_string(), "internal".to_string()],
+                        name: "string_concat".to_string(),
+                    },
                     type_args: vec![],
                     args: vec![prefix, user_msg],
                 },
@@ -1741,8 +1762,10 @@ impl<'a> Resolver<'a> {
         // Create panic call: panic(message)
         let panic_call = TirExpr::new(
             TirExprKind::Call {
-                module_path: vec!["core".to_string(), "prelude".to_string()],
-                func_name: "panic".to_string(),
+                func: FunctionRef::External {
+                    module_path: vec!["core".to_string(), "prelude".to_string()],
+                    name: "panic".to_string(),
+                },
                 type_args: vec![],
                 args: vec![message_expr],
             },
@@ -1899,7 +1922,7 @@ impl<'a> Resolver<'a> {
             }
             Literal::Null => {
                 // Null is Option<T> where T is unknown
-                let option_unknown = self.type_table.make_option(TypeTable::UNKNOWN);
+                let option_unknown = self.type_table.borrow_mut().make_option(TypeTable::UNKNOWN);
                 (TirExprKind::Null, option_unknown)
             }
             Literal::Unit => (TirExprKind::Unit, TypeTable::UNIT),
@@ -2005,19 +2028,19 @@ impl<'a> Resolver<'a> {
 
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
-            UnaryOp::Ref => self.type_table.make_ref(expr.type_id),
-            UnaryOp::MutRef => self.type_table.make_mut_ref(expr.type_id),
+            UnaryOp::Ref => self.type_table.borrow_mut().make_ref(expr.type_id),
+            UnaryOp::MutRef => self.type_table.borrow_mut().make_mut_ref(expr.type_id),
             UnaryOp::Deref => {
                 // Dereference returns the inner type
                 if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                    self.type_table.get(expr.type_id)
+                    self.type_table.borrow().get(expr.type_id)
                 {
                     *inner
                 } else {
                     // Cannot dereference non-reference type
                     self.errors.push(TypeError::TypeMismatch {
                         expected: "reference type".to_string(),
-                        found: self.type_table.type_name(expr.type_id),
+                        found: self.type_table.borrow().type_name(expr.type_id),
                         span: unary.span,
                     });
                     TypeTable::ERROR
@@ -2110,16 +2133,17 @@ impl<'a> Resolver<'a> {
                 && let Some(local) = ctx.lookup(&ident.name)
             {
                 // Check if the local has a function type
+                let local_type = self.type_table.borrow().get(local.type_id).clone();
                 if let ResolvedType::Function {
                     params: fn_params,
                     return_type,
                     ..
-                } = self.type_table.get(local.type_id)
+                } = local_type
                 {
                     // This is a closure call!
                     let local_index = local.index;
                     let local_type_id = local.type_id;
-                    let fn_return_type = *return_type;
+                    let fn_return_type = return_type;
                     // Clone fn_params to avoid borrow conflict
                     let fn_params = fn_params.clone();
 
@@ -2274,8 +2298,10 @@ impl<'a> Resolver<'a> {
 
         TirExpr::new(
             TirExprKind::Call {
-                module_path,
-                func_name,
+                func: FunctionRef::External {
+                    module_path,
+                    name: func_name,
+                },
                 type_args,
                 args,
             },
@@ -2339,24 +2365,29 @@ impl<'a> Resolver<'a> {
         let string_type = self.get_string_struct_type();
         match (effect, operation) {
             // Environment effect operations
-            ("Environment", "get_arguments") => Some(self.type_table.make_array(string_type)),
+            ("Environment", "get_arguments") => {
+                Some(self.type_table.borrow_mut().make_array(string_type))
+            }
             ("Environment", "get_environment") => {
                 // Returns Array<[String, String]> - array of key-value tuple pairs
                 let tuple_type = self
                     .type_table
+                    .borrow_mut()
                     .intern(ResolvedType::Tuple(vec![string_type, string_type]));
-                Some(self.type_table.make_array(tuple_type))
+                Some(self.type_table.borrow_mut().make_array(tuple_type))
             }
-            ("Environment", "get_initial_cwd") => {
-                Some(self.type_table.intern(ResolvedType::Option(string_type)))
-            }
+            ("Environment", "get_initial_cwd") => Some(
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Option(string_type)),
+            ),
             _ => None,
         }
     }
 
     /// Get the String struct type (from prelude)
     fn get_string_struct_type(&mut self) -> TypeId {
-        self.type_table.make_struct(
+        self.type_table.borrow_mut().make_struct(
             "String".to_string(),
             vec!["core".to_string(), "prelude".to_string()],
         )
@@ -2369,19 +2400,25 @@ impl<'a> Resolver<'a> {
             // These are called with type arguments: array_new::<T>() -> builtin::array<T>
             "array_new" => {
                 // Returns builtin::array<T> where T is the first type param
-                let type_param = self.type_table.intern(ResolvedType::TypeParam {
-                    index: 0,
-                    name: "T".to_string(),
-                });
+                let type_param = self
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::TypeParam {
+                        index: 0,
+                        name: "T".to_string(),
+                    });
                 self.type_table
+                    .borrow_mut()
                     .intern(ResolvedType::BuiltinArray(type_param))
             }
             "array_get" => {
                 // Returns T where T is the first type param
-                self.type_table.intern(ResolvedType::TypeParam {
-                    index: 0,
-                    name: "T".to_string(),
-                })
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::TypeParam {
+                        index: 0,
+                        name: "T".to_string(),
+                    })
             }
             "array_set" | "array_copy" => TypeTable::UNIT,
 
@@ -2394,6 +2431,7 @@ impl<'a> Resolver<'a> {
                 // Returns builtin::array<String>, not Array<String>
                 let string_type = self.get_string_struct_type();
                 self.type_table
+                    .borrow_mut()
                     .intern(ResolvedType::BuiltinArray(string_type))
             }
             "array_get_string" => self.get_string_struct_type(),
@@ -2493,9 +2531,10 @@ impl<'a> Resolver<'a> {
         expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Handle tuple literal to array coercion
+        let element_type_opt = expected_type.and_then(|t| self.type_table.borrow().as_array(t));
         if let Some(target_type) = expected_type
             && let Expr::TupleLiteral(tuple_lit) = expr
-            && let Some(element_type) = self.type_table.as_array(target_type)
+            && let Some(element_type) = element_type_opt
         {
             let elements: Vec<TirExpr> = tuple_lit
                 .elements
@@ -2504,8 +2543,8 @@ impl<'a> Resolver<'a> {
                     let resolved = self.resolve_expr(elem, ctx);
                     if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
                         self.errors.push(TypeError::TypeMismatch {
-                            expected: self.type_table.type_name(element_type),
-                            found: self.type_table.type_name(resolved.type_id),
+                            expected: self.type_table.borrow().type_name(element_type),
+                            found: self.type_table.borrow().type_name(resolved.type_id),
                             span: elem.span(),
                         });
                     }
@@ -2593,7 +2632,7 @@ impl<'a> Resolver<'a> {
         if let ResolvedType::GenericInstance {
             type_args: receiver_type_args,
             ..
-        } = self.type_table.get(receiver.type_id).clone()
+        } = self.type_table.borrow().get(receiver.type_id).clone()
             && !receiver_type_args.is_empty()
         {
             impl_offset = receiver_type_args.len() as u32;
@@ -2607,13 +2646,20 @@ impl<'a> Resolver<'a> {
 
         // Apply unified substitution
         if !subst_ctx.is_empty() {
-            return_type = subst_ctx.substitute(return_type, &mut self.type_table);
+            return_type = subst_ctx.substitute(return_type, &mut self.type_table.borrow_mut());
         }
+
+        // Get struct name from receiver type for mangled method name
+        let receiver_struct_name = self.mangle_type_name(receiver.type_id);
+        let mangled_method_name = format!("{}::{}", receiver_struct_name, method_call.method);
 
         TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
-                method_name: method_call.method.clone(),
+                func: FunctionRef::External {
+                    module_path: self.current_module_path.clone(),
+                    name: mangled_method_name,
+                },
                 type_args,
                 args,
             },
@@ -2638,7 +2684,7 @@ impl<'a> Resolver<'a> {
         // Resolve the target type to get struct name, module path, and type args (for generics)
         let target_type_id = self.resolve_type(&static_call.target_type);
         let (struct_name, module_path, mangled_struct_name, struct_type_args) =
-            match self.type_table.get(target_type_id) {
+            match self.type_table.borrow().get(target_type_id) {
                 ResolvedType::Struct { name, module_path } => {
                     (name.clone(), module_path.clone(), name.clone(), vec![])
                 }
@@ -2684,8 +2730,10 @@ impl<'a> Resolver<'a> {
 
         TirExpr::new(
             TirExprKind::StaticCall {
-                func_name: mangled_func_name,
-                module_path,
+                func: FunctionRef::External {
+                    module_path,
+                    name: mangled_func_name,
+                },
                 args,
             },
             return_type,
@@ -2738,6 +2786,7 @@ impl<'a> Resolver<'a> {
                                             if !self.current_type_params.contains_key(name) {
                                                 let type_id = self
                                                     .type_table
+                                                    .borrow_mut()
                                                     .make_type_param(name.clone(), i as u32);
                                                 self.current_type_params
                                                     .insert(name.clone(), (i as u32, type_id));
@@ -2788,6 +2837,7 @@ impl<'a> Resolver<'a> {
                                                 if !self.current_type_params.contains_key(name) {
                                                     let type_id = self
                                                         .type_table
+                                                        .borrow_mut()
                                                         .make_type_param(name.clone(), i as u32);
                                                     self.current_type_params
                                                         .insert(name.clone(), (i as u32, type_id));
@@ -2892,8 +2942,10 @@ impl<'a> Resolver<'a> {
 
         TirExpr::new(
             TirExprKind::StaticCall {
-                func_name: mangled_func_name.to_string(),
-                module_path,
+                func: FunctionRef::External {
+                    module_path,
+                    name: mangled_func_name.to_string(),
+                },
                 args: args.to_vec(),
             },
             return_type,
@@ -2929,7 +2981,7 @@ impl<'a> Resolver<'a> {
 
     /// Mangle a type name for use in function names
     fn mangle_type_name(&self, type_id: TypeId) -> String {
-        match self.type_table.get(type_id) {
+        match self.type_table.borrow().get(type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 crate::tir::PrimitiveType::I8 => "i8".to_string(),
                 crate::tir::PrimitiveType::I16 => "i16".to_string(),
@@ -2973,14 +3025,14 @@ impl<'a> Resolver<'a> {
     /// Look up method return type based on receiver type and method name
     fn lookup_method_return_type(&self, receiver_type: TypeId, method_name: &str) -> TypeId {
         // Get the struct name and module path from the receiver type
-        let (struct_name, module_path) = match self.type_table.get(receiver_type) {
+        let (struct_name, module_path) = match self.type_table.borrow().get(receiver_type) {
             ResolvedType::Struct { name, module_path } => (name.clone(), module_path.clone()),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
                 name, module_path, ..
             } => (name.clone(), module_path.clone()),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                match self.type_table.get(*inner) {
+                match self.type_table.borrow().get(*inner) {
                     ResolvedType::Struct { name, module_path } => {
                         (name.clone(), module_path.clone())
                     }
@@ -2996,6 +3048,7 @@ impl<'a> Resolver<'a> {
                     // Return String struct type
                     return self
                         .type_table
+                        .borrow()
                         .find_struct_type("String", &string_module_path())
                         .unwrap_or(TypeTable::UNKNOWN);
                 }
@@ -3097,7 +3150,7 @@ impl<'a> Resolver<'a> {
         _span: Span,
     ) -> (u32, TypeId) {
         // Clone the type to avoid borrow issues
-        let resolved = self.type_table.get(struct_type).clone();
+        let resolved = self.type_table.borrow().get(struct_type).clone();
         match resolved {
             // Struct field access
             ResolvedType::Struct { name, .. } => {
@@ -3145,33 +3198,36 @@ impl<'a> Resolver<'a> {
 
     /// Substitute type parameters in a type with concrete type arguments
     fn substitute_type_params(&mut self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
-        match self.type_table.get(type_id).clone() {
+        let resolved_type = self.type_table.borrow().get(type_id).clone();
+        match resolved_type {
             ResolvedType::TypeParam { index, .. } => {
                 // Direct substitution: T -> type_args[index]
                 type_args.get(index as usize).copied().unwrap_or(type_id)
             }
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute_type_params(elem, type_args);
-                self.type_table.intern(ResolvedType::BuiltinArray(new_elem))
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::BuiltinArray(new_elem))
             }
             ResolvedType::Option(inner) => {
                 let new_inner = self.substitute_type_params(inner, type_args);
-                self.type_table.make_option(new_inner)
+                self.type_table.borrow_mut().make_option(new_inner)
             }
             ResolvedType::Ref(inner) => {
                 let new_inner = self.substitute_type_params(inner, type_args);
-                self.type_table.make_ref(new_inner)
+                self.type_table.borrow_mut().make_ref(new_inner)
             }
             ResolvedType::MutRef(inner) => {
                 let new_inner = self.substitute_type_params(inner, type_args);
-                self.type_table.make_mut_ref(new_inner)
+                self.type_table.borrow_mut().make_mut_ref(new_inner)
             }
             ResolvedType::Tuple(elems) => {
                 let new_elems: Vec<TypeId> = elems
                     .iter()
                     .map(|&e| self.substitute_type_params(e, type_args))
                     .collect();
-                self.type_table.make_tuple(new_elems)
+                self.type_table.borrow_mut().make_tuple(new_elems)
             }
             ResolvedType::GenericInstance {
                 name,
@@ -3184,6 +3240,7 @@ impl<'a> Resolver<'a> {
                     .map(|&arg| self.substitute_type_params(arg, type_args))
                     .collect();
                 self.type_table
+                    .borrow_mut()
                     .make_generic_instance(name, module_path, new_args)
             }
             // Other types don't contain type parameters
@@ -3196,11 +3253,11 @@ impl<'a> Resolver<'a> {
         let expr = self.resolve_expr(&index.expr, ctx);
 
         // Get base type (unwrap reference if needed)
-        let base_type_id = match self.type_table.get(expr.type_id) {
+        let base_type_id = match self.type_table.borrow().get(expr.type_id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => expr.type_id,
         };
-        let base_type = self.type_table.get(base_type_id);
+        let base_type = self.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
         if let ResolvedType::Tuple(elements) = base_type {
@@ -3247,6 +3304,7 @@ impl<'a> Resolver<'a> {
         // Array indexing
         let element_type = self
             .type_table
+            .borrow()
             .as_array(expr.type_id)
             .unwrap_or(TypeTable::UNKNOWN);
         let index_expr = self.resolve_expr(&index.index, ctx);
@@ -3443,9 +3501,10 @@ impl<'a> Resolver<'a> {
 
         // Create function type
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
-        let func_type = self
-            .type_table
-            .make_function(param_types, return_type, Vec::new());
+        let func_type =
+            self.type_table
+                .borrow_mut()
+                .make_function(param_types, return_type, Vec::new());
 
         TirExpr::new(
             TirExprKind::Closure {
@@ -3492,10 +3551,15 @@ impl<'a> Resolver<'a> {
                         resolved
                     } else {
                         // Call to_string method
+                        let receiver_type_name = self.mangle_type_name(resolved.type_id);
+                        let mangled_method_name = format!("{}::to_string", receiver_type_name);
                         TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(resolved.clone()),
-                                method_name: "to_string".to_string(),
+                                func: FunctionRef::External {
+                                    module_path: self.current_module_path.clone(),
+                                    name: mangled_method_name,
+                                },
                                 type_args: vec![],
                                 args: vec![],
                             },
@@ -3528,8 +3592,10 @@ impl<'a> Resolver<'a> {
         for part in parts {
             result = TirExpr::new(
                 TirExprKind::Call {
-                    module_path: vec!["core".to_string(), "internal".to_string()],
-                    func_name: "string_concat".to_string(),
+                    func: FunctionRef::External {
+                        module_path: vec!["core".to_string(), "internal".to_string()],
+                        name: "string_concat".to_string(),
+                    },
                     type_args: vec![],
                     args: vec![result, part],
                 },
@@ -3546,8 +3612,9 @@ impl<'a> Resolver<'a> {
 
         // Special case: tuple literal cast to Array<T>
         // [1, 2, 3] as Array<i32> should become an ArrayLiteral, not a Cast of TupleLiteral
+        let element_type_opt = self.type_table.borrow().as_array(target_type);
         if let ast::Expr::TupleLiteral(tuple_lit) = &cast.expr
-            && let Some(element_type) = self.type_table.as_array(target_type)
+            && let Some(element_type) = element_type_opt
         {
             // Resolve each element and check type compatibility
             let elements: Vec<TirExpr> = tuple_lit
@@ -3558,8 +3625,8 @@ impl<'a> Resolver<'a> {
                     // Type check: each element must match Array element type
                     if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
                         self.errors.push(TypeError::TypeMismatch {
-                            expected: self.type_table.type_name(element_type),
-                            found: self.type_table.type_name(resolved.type_id),
+                            expected: self.type_table.borrow().type_name(element_type),
+                            found: self.type_table.borrow().type_name(resolved.type_id),
                             span: elem.span(),
                         });
                     }
@@ -3686,14 +3753,18 @@ impl<'a> Resolver<'a> {
             // This handles cases like `return Array { repr: ..., used: 0 }` in generic functions
             if type_args.is_empty()
                 && struct_name == "Array"
-                && let Some(elem_type) = self.type_table.as_array(ctx.return_type)
+                && let Some(elem_type) = self.type_table.borrow().as_array(ctx.return_type)
             {
                 type_args = vec![elem_type];
             }
-            self.type_table
-                .make_generic_instance(struct_name.clone(), module_path, type_args)
+            self.type_table.borrow_mut().make_generic_instance(
+                struct_name.clone(),
+                module_path,
+                type_args,
+            )
         } else {
             self.type_table
+                .borrow_mut()
                 .make_struct(struct_name.clone(), module_path)
         };
 
@@ -3726,7 +3797,8 @@ impl<'a> Resolver<'a> {
             let actual_type_id = struct_field.value.type_id;
 
             // Check if expected type is a type parameter
-            if let ResolvedType::TypeParam { .. } = self.type_table.get(*expected_type_id) {
+            if let ResolvedType::TypeParam { .. } = self.type_table.borrow().get(*expected_type_id)
+            {
                 // Map this type param to the actual type
                 type_param_map.insert(*expected_type_id, actual_type_id);
             }
@@ -3736,7 +3808,9 @@ impl<'a> Resolver<'a> {
         let mut type_args: Vec<(u32, TypeId)> = type_param_map
             .iter()
             .filter_map(|(&param_id, &concrete_id)| {
-                if let ResolvedType::TypeParam { index, .. } = self.type_table.get(param_id) {
+                if let ResolvedType::TypeParam { index, .. } =
+                    self.type_table.borrow().get(param_id)
+                {
                     Some((*index, concrete_id))
                 } else {
                     None
@@ -3763,7 +3837,7 @@ impl<'a> Resolver<'a> {
 
         // Collect element types for the tuple type
         let elem_types: Vec<TypeId> = elements.iter().map(|e| e.type_id).collect();
-        let tuple_type = self.type_table.make_tuple(elem_types);
+        let tuple_type = self.type_table.borrow_mut().make_tuple(elem_types);
 
         TirExpr::new(
             TirExprKind::TupleLiteral { elements },
@@ -3784,21 +3858,24 @@ impl<'a> Resolver<'a> {
                     .map(|p| self.resolve_type(p))
                     .collect();
                 let return_type = self.resolve_type(&func_ty.return_type);
-                self.type_table
-                    .make_function(params, return_type, func_ty.effects.clone())
+                self.type_table.borrow_mut().make_function(
+                    params,
+                    return_type,
+                    func_ty.effects.clone(),
+                )
             }
             Type::Tuple(elements) => {
                 let elem_types: Vec<TypeId> =
                     elements.iter().map(|e| self.resolve_type(e)).collect();
-                self.type_table.make_tuple(elem_types)
+                self.type_table.borrow_mut().make_tuple(elem_types)
             }
             Type::Reference(inner) => {
                 let inner_type = self.resolve_type(inner);
-                self.type_table.make_ref(inner_type)
+                self.type_table.borrow_mut().make_ref(inner_type)
             }
             Type::MutReference(inner) => {
                 let inner_type = self.resolve_type(inner);
-                self.type_table.make_mut_ref(inner_type)
+                self.type_table.borrow_mut().make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
         }
@@ -3821,7 +3898,9 @@ impl<'a> Resolver<'a> {
                         return TypeTable::ERROR;
                     }
                     let element_type = self.resolve_type(&namespaced.args[0]);
-                    self.type_table.make_builtin_array(element_type)
+                    self.type_table
+                        .borrow_mut()
+                        .make_builtin_array(element_type)
                 }
                 _ => {
                     self.errors.push(TypeError::UnknownType {
@@ -3874,6 +3953,7 @@ impl<'a> Resolver<'a> {
                 } else if let Some((module_path, _)) = self.struct_fields.get(name) {
                     // It's a struct - use the module path where it was defined
                     self.type_table
+                        .borrow_mut()
                         .make_struct(name.to_string(), module_path.clone())
                 } else {
                     // Unknown type
@@ -3891,7 +3971,7 @@ impl<'a> Resolver<'a> {
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.make_option(inner)
+                self.type_table.borrow_mut().make_option(inner)
             }
             "Result" => {
                 let ok = args
@@ -3902,21 +3982,25 @@ impl<'a> Resolver<'a> {
                     .get(1)
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.make_result(ok, err)
+                self.type_table.borrow_mut().make_result(ok, err)
             }
             "Stream" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.intern(ResolvedType::Stream(elem))
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Stream(elem))
             }
             "Future" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.intern(ResolvedType::Future(elem))
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Future(elem))
             }
             "Dict" => {
                 let key = args
@@ -3927,7 +4011,9 @@ impl<'a> Resolver<'a> {
                     .get(1)
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.intern(ResolvedType::Dict { key, value })
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Dict { key, value })
             }
             _ => {
                 // Check if it's a user-defined generic struct
@@ -3944,8 +4030,11 @@ impl<'a> Resolver<'a> {
                         .unwrap_or_else(|| self.current_module_path.clone());
 
                     // Create a GenericInstance type
-                    self.type_table
-                        .make_generic_instance(name.to_string(), module_path, type_args)
+                    self.type_table.borrow_mut().make_generic_instance(
+                        name.to_string(),
+                        module_path,
+                        type_args,
+                    )
                 } else {
                     TypeTable::UNKNOWN
                 }
@@ -3954,7 +4043,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Get the type table (after resolution)
-    pub fn into_type_table(self) -> TypeTable {
+    pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
         self.type_table
     }
 }

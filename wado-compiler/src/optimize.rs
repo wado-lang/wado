@@ -346,8 +346,9 @@ fn find_recursive_functions(modules: &IndexMap<Vec<String>, TirModule>) -> HashS
     let mut call_graph: HashMap<String, HashSet<String>> = HashMap::new();
 
     for module in modules.values() {
-        for func in &module.functions {
-            let callees = collect_callees_from_function(func);
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            let callees = collect_callees_from_function(&func);
             call_graph.insert(func.name.clone(), callees);
         }
     }
@@ -432,10 +433,8 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
 
 fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
     match &expr.kind {
-        TirExprKind::Call {
-            func_name, args, ..
-        } => {
-            callees.insert(func_name.clone());
+        TirExprKind::Call { func, args, .. } => {
+            callees.insert(func.name());
             for arg in args {
                 collect_callees_from_expr(arg, callees);
             }
@@ -446,10 +445,8 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
                 collect_callees_from_expr(arg, callees);
             }
         }
-        TirExprKind::StaticCall {
-            func_name, args, ..
-        } => {
-            callees.insert(func_name.clone());
+        TirExprKind::StaticCall { func, args } => {
+            callees.insert(func.name());
             for arg in args {
                 collect_callees_from_expr(arg, callees);
             }
@@ -570,8 +567,14 @@ fn inline_functions(project: &mut Project) {
     let mut candidate_strings: HashMap<(Vec<String>, String), Vec<String>> = HashMap::new();
 
     for (module_path, module) in &project.tir_modules {
-        for func in &module.functions {
-            if is_inline_eligible(func, &recursive_functions, module_path, &module.type_table) {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if is_inline_eligible(
+                &func,
+                &recursive_functions,
+                module_path,
+                &module.type_table.borrow(),
+            ) {
                 inline_candidates.insert((module_path.clone(), func.name.clone()), func.clone());
                 // Get the strings used by this function
                 if let Some(strings) = module.function_strings.get(&func.name) {
@@ -589,20 +592,27 @@ fn inline_functions(project: &mut Project) {
     // Inline at call sites in each module
     for module in project.tir_modules.values_mut() {
         let module_path = module.path.clone();
-        for func in &mut module.functions {
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
             let func_name = func.name.clone();
-            if let Some(body) = &mut func.body {
+            if let Some(mut body) = func.body.take() {
                 // Track which functions were inlined into this function
                 let mut inlined_funcs: Vec<(Vec<String>, String)> = Vec::new();
+                // Take ownership of local_count and local_types to avoid borrow conflicts
+                let mut local_count = func.local_count;
+                let mut local_types = std::mem::take(&mut func.local_types);
                 inline_calls_in_block(
-                    body,
+                    &mut body,
                     &inline_candidates,
                     &module_path,
-                    &mut func.local_count,
-                    &mut func.local_types,
-                    &module.type_table,
+                    &mut local_count,
+                    &mut local_types,
+                    &module.type_table.borrow(),
                     &mut inlined_funcs,
                 );
+                func.local_count = local_count;
+                func.local_types = local_types;
+                func.body = Some(body);
 
                 // Update function_strings: add strings from inlined functions to the caller
                 for inlined_key in inlined_funcs {
@@ -994,14 +1004,16 @@ fn try_inline_call_expr(
     _type_table: &TypeTable,
 ) -> Option<(Vec<TirStmt>, TirExpr, (Vec<String>, String))> {
     let TirExprKind::Call {
-        module_path,
-        func_name,
+        func,
         args,
         type_args,
     } = &expr.kind
     else {
         return None;
     };
+
+    let module_path = func.module_path();
+    let func_name = func.name();
 
     // Skip generic calls
     if !type_args.is_empty() {
@@ -1305,13 +1317,11 @@ fn remap_expr(
             target_type: *target_type,
         },
         TirExprKind::Call {
-            module_path,
-            func_name,
+            func,
             type_args,
             args,
         } => TirExprKind::Call {
-            module_path: module_path.clone(),
-            func_name: func_name.clone(),
+            func: func.clone(),
             type_args: type_args.clone(),
             args: args
                 .iter()
@@ -1320,7 +1330,7 @@ fn remap_expr(
         },
         TirExprKind::MethodCall {
             receiver,
-            method_name,
+            func,
             type_args,
             args,
         } => TirExprKind::MethodCall {
@@ -1330,20 +1340,15 @@ fn remap_expr(
                 local_offset,
                 param_count,
             )),
-            method_name: method_name.clone(),
+            func: func.clone(),
             type_args: type_args.clone(),
             args: args
                 .iter()
                 .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
                 .collect(),
         },
-        TirExprKind::StaticCall {
-            func_name,
-            module_path,
-            args,
-        } => TirExprKind::StaticCall {
-            func_name: func_name.clone(),
-            module_path: module_path.clone(),
+        TirExprKind::StaticCall { func, args } => TirExprKind::StaticCall {
+            func: func.clone(),
             args: args
                 .iter()
                 .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
@@ -2016,10 +2021,11 @@ fn build_analysis_graph(
     let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
 
     for (path, module) in modules {
-        let type_table = &module.type_table;
+        let type_table = &*module.type_table.borrow();
 
         // Analyze functions (including methods stored as functions)
-        for func in &module.functions {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
             // Methods have names like "Point::sum", regular functions don't contain "::"
             let func_id = if let Some(sep_pos) = func.name.find("::") {
                 // This is a method - use MethodName
@@ -2035,7 +2041,7 @@ fn build_analysis_graph(
                 // Regular function - use FreeFunctionName
                 FunctionId::Free(FreeFunctionName::from_path_and_name(path, &func.name))
             };
-            let analysis = analyze_function(func, path, type_table);
+            let analysis = analyze_function(&func, path, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
                 effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -2205,12 +2211,10 @@ fn analyze_expr(
     analysis: &mut FunctionAnalysis,
 ) {
     match &expr.kind {
-        TirExprKind::Call {
-            module_path,
-            func_name,
-            args,
-            ..
-        } => {
+        TirExprKind::Call { func, args, .. } => {
+            let module_path = func.module_path();
+            let func_name = func.name();
+
             // Invariant: TirExprKind::Call should never have method names (containing "::")
             // Methods use TirExprKind::MethodCall instead. The only exception is "builtin::*".
             debug_assert!(
@@ -2225,8 +2229,10 @@ fn analyze_expr(
             } else {
                 module_path.as_slice()
             };
-            let callee_id =
-                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, func_name));
+            let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                callee_path,
+                &func_name,
+            ));
             analysis.callees.insert(callee_id);
 
             // Detect effect calls: single-element module_path with PascalCase name
@@ -2238,7 +2244,7 @@ fn analyze_expr(
                 if potential_effect
                     .chars()
                     .next()
-                    .is_some_and(|c| c.is_ascii_uppercase())
+                    .is_some_and(|c: char| c.is_ascii_uppercase())
                     && !potential_effect.contains('/')
                     && !potential_effect.contains('.')
                 {
@@ -2254,10 +2260,20 @@ fn analyze_expr(
         }
         TirExprKind::MethodCall {
             receiver,
-            method_name,
+            func,
             args,
             ..
         } => {
+            // Extract method name from func (format is "StructName::method_name")
+            let method_name = {
+                let full_name = func.name();
+                if let Some(pos) = full_name.rfind("::") {
+                    &full_name[pos + 2..]
+                } else {
+                    &full_name
+                }
+                .to_string()
+            };
             // Get receiver type to determine method target
             let receiver_type = type_table.get(receiver.type_id);
             match receiver_type {
@@ -2353,11 +2369,9 @@ fn analyze_expr(
                 analyze_expr(arg, current_module, type_table, analysis);
             }
         }
-        TirExprKind::StaticCall {
-            func_name,
-            module_path,
-            args,
-        } => {
+        TirExprKind::StaticCall { func, args } => {
+            let module_path = func.module_path();
+            let func_name = func.name();
             // Static method call - func_name already contains "StructName::method_name"
             // The function is registered as a free function with mangled name
             let callee_path = if module_path.is_empty() {
@@ -2365,8 +2379,10 @@ fn analyze_expr(
             } else {
                 module_path.as_slice()
             };
-            let callee_id =
-                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, func_name));
+            let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                callee_path,
+                &func_name,
+            ));
             analysis.callees.insert(callee_id);
 
             for arg in args {
@@ -2564,7 +2580,8 @@ fn remove_unreachable_functions(project: &mut Project) {
 
     for (module_path, module) in &mut project.tir_modules {
         // Retain only reachable functions
-        module.functions.retain(|func| {
+        module.functions.retain(|func_rc| {
+            let func = func_rc.borrow();
             // Check if this is a method (name contains "::")
             if let Some(sep_pos) = func.name.find("::") {
                 // Could be either:
