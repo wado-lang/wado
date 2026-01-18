@@ -53,9 +53,9 @@ Explicit over implicit. No implicit type conversions, no function overloading, n
 
 Strong static typing with no escape hatches like `any`. This prevents the defensive programming patterns (excessive `try-catch`, runtime type checks) that tend to creep into dynamically-typed codebases.
 
-### No Exceptions
+### No Exception Unwinding
 
-No non-local control flow via exceptions. Errors are handled explicitly with `Result<T, E>`. This makes control flow predictable and code easier to reason about.
+Errors are handled explicitly with `Result<T, E>` instead of unwinding exceptions. This makes control flow predictable and easier to reason about.
 
 ### Minimal Binary Size
 
