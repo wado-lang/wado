@@ -1062,7 +1062,25 @@ impl Monomorphizer {
                 );
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue | TirStmtKind::Assert { .. } => {}
+            TirStmtKind::Assert {
+                condition,
+                message,
+                ..
+            } => {
+                self.collect_func_instantiation_sites_in_expr(
+                    condition,
+                    generic_functions,
+                    type_table,
+                );
+                if let Some(msg) = message {
+                    self.collect_func_instantiation_sites_in_expr(
+                        msg,
+                        generic_functions,
+                        type_table,
+                    );
+                }
+            }
+            TirStmtKind::Break | TirStmtKind::Continue => {}
         }
     }
 
