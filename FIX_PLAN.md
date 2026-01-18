@@ -1,8 +1,16 @@
 # Fix Plan: Generic Struct Field Monomorphization
 
-## Current Status
+## Current Status (Updated 2026-01-18)
 
-TypeTable sharing via `Rc<RefCell<>>` is complete and working. However, the test still fails because of issues in the lowering phase.
+✅ **Completed:**
+1. TypeTable sharing via `Rc<RefCell<>>` - DONE
+2. Defense in codegen to skip generic templates - DONE
+3. GenericInstance empty type_args handling - DONE
+4. StructLiteral substitution during monomorphization - DONE
+
+🔶 **Current Error:** `unknown method: /Container$i32::add`
+
+❌ **Remaining Issue:** Methods (add, len, get) not being monomorphized for `Container$i32`
 
 ## Root Cause Analysis
 
@@ -154,3 +162,82 @@ Remove generic templates from the module after lowering, so they never reach cod
 - Loses information that might be useful for debugging
 - Harder to implement (requires filtering structs from modules)
 - Doesn't fix the root cause in StructLiteral rewriting
+
+## Implementation Summary
+
+### What Was Accomplished
+
+#### 1. TypeTable Sharing (Commit e39fb3f)
+- Changed `TirModule.type_table` from `TypeTable` to `Rc<RefCell<TypeTable>>`
+- Changed `Resolver.type_table` similarly
+- Updated all ~200+ call sites across multiple files
+- ✅ Result: All modules now share a single TypeTable, enabling cross-module type references
+
+#### 2. Defense in Codegen (Commit 71a482e)
+- Added `struct_contains_type_params()` helper method
+- Modified struct registration phases to skip structs with TypeParam in fields
+- ✅ Result: Generic template structs (e.g., `Container<T>`) no longer crash codegen
+
+####3. GenericInstance Empty Type Args Fix (Commit 71a482e)
+- Added check in `collect_instantiation_sites()` to skip `GenericInstance` with empty `type_args`
+- Modified `substitute_type()` to handle empty type_args by inferring from substitution context
+- ✅ Result: Invalid monomorphizations with empty type_args no longer created
+
+#### 4. StructLiteral Substitution Fix (Commit 71a482e)
+- Updated `substitute_types_in_expr()` to correctly substitute StructLiteral struct_type
+- Added logic to update struct_name to match monomorphized type
+- ✅ Result: `Container { items: [] }` now correctly becomes `Container$i32 { items: [] }`
+
+### Current Test Status
+
+**Test:** `generic-struct-field-monomorphization.wado`
+
+**Error:** `unknown method: /Container$i32::add`
+
+**What Works:**
+- ✅ `Container$i32` struct is created and registered
+- ✅ `Container$i32::new()` method is monomorphized
+- ✅ StructLiteral correctly uses `Container$i32`
+- ✅ No crashes from generic templates
+
+**What Doesn't Work:**
+- ❌ Methods `Container$i32::add`, `Container$i32::len`, `Container$i32::get` not monomorphized
+- ❌ Only the static method `new()` was monomorphized
+
+### Next Steps
+
+#### Investigation Needed: Why Methods Aren't Monomorphized
+
+The function monomorphization logic creates `Container$i32::new()` but not the other methods. Need to investigate:
+
+1. **Check function instantiation collection:**
+   - Does `collect_function_instantiation_sites()` find method calls?
+   - Are method calls (e.g., `container.add(10)`) being detected?
+
+2. **Check method instantiation keys:**
+   - Are InstantiationKeys created for methods?
+   - Do they have correct type_args from the receiver type?
+
+3. **Check impl block handling:**
+   - Does `impl<T> Container<T>` correctly track type params?
+   - Are impl type params being included in instantiation?
+
+#### Possible Root Cause
+
+Looking at the code, `Container::new()` is a **static method** (no self parameter) while `add`, `len`, `get` are **instance methods** (have self parameter). The monomorphization logic might:
+- Collect static method calls directly from `StaticCall` expressions
+- But miss instance method calls from `MethodCall` expressions
+- Or fail to infer type args from the receiver type in MethodCall
+
+#### Suggested Fix
+
+In `collect_func_instantiation_sites_in_expr()`, when handling `TirExprKind::MethodCall`:
+1. Extract the receiver type
+2. If receiver is a GenericInstance or monomorphized struct, extract its type_args  
+3. Create InstantiationKey for the method with those type_args
+4. Add to pending queue for monomorphization
+
+This is likely already implemented, so the bug might be in:
+- How receiver types are resolved
+- How type_args are extracted from receiver
+- How method names are looked up in generic_functions map
