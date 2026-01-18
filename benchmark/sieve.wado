@@ -12,13 +12,8 @@ use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
 
 fn sieve_count(limit: i32) -> i32 {
-    // Pre-allocate sieve array with capacity
-    let mut is_prime = Array::<bool>::with_capacity(limit + 1);
-    let mut i = 0;
-    while i <= limit {
-        is_prime.append(true);
-        i += 1;
-    }
+    // Pre-allocate sieve array filled with true
+    let mut is_prime = Array::<bool>::filled(limit + 1, true);
 
     // 0 and 1 are not prime
     is_prime[0] = false;

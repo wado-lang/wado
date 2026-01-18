@@ -7864,6 +7864,26 @@ impl Codegen {
                     }
                 }
             }
+            "builtin::array_fill" => {
+                // array.fill $t : [(ref null $t) i32 t i32] -> []
+                // args: (arr, offset, value, len)
+                if let Some(arr_arg) = args.first() {
+                    if let ResolvedType::BuiltinArray(element_type) =
+                        type_table.get(arr_arg.type_id)
+                    {
+                        let array_type_idx = *self
+                            .array_types
+                            .get(element_type)
+                            .expect("Array type should be registered for array_fill");
+                        for arg in args {
+                            self.generate_expr(func, arg, type_table, ctx, builder);
+                        }
+                        func.instruction(&Instruction::ArrayFill(array_type_idx));
+                    } else {
+                        panic!("array_fill first argument must be builtin::array<T>");
+                    }
+                }
+            }
             "builtin::i32_and" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
