@@ -8,14 +8,16 @@
 //! - Closure capture analysis
 //! - JSX element type binding (future)
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use indexmap::IndexMap;
 
 use crate::project::Project;
 use crate::tir::{
-    InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
+    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirField, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
 };
 
 /// Lower a TIR module
@@ -63,11 +65,12 @@ pub fn lower_modules_indexed(
     modules: IndexMap<Vec<String>, TirModule>,
 ) -> IndexMap<Vec<String>, TirModule> {
     // First pass: collect all generic functions from all modules
-    let mut all_generic_functions: HashMap<String, TirFunction> = HashMap::new();
+    let mut all_generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> = HashMap::new();
     for module in modules.values() {
-        for func in &module.functions {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-                all_generic_functions.insert(func.name.clone(), func.clone());
+                all_generic_functions.insert(func.name.clone(), Rc::clone(func_rc));
             }
         }
     }
@@ -87,7 +90,7 @@ pub fn lower_modules_indexed(
 /// Lower a single module with access to cross-module generic functions
 fn lower_with_cross_module_generics(
     mut module: TirModule,
-    all_generic_functions: &HashMap<String, TirFunction>,
+    all_generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
 ) -> TirModule {
     // Perform monomorphization with cross-module generic function support
     let mut monomorph = Monomorphizer::new();
@@ -153,14 +156,17 @@ impl Monomorphizer {
         module.generic_structs = generic_structs.clone();
 
         // Phase 2: Collect all struct instantiation sites from the type table
-        self.collect_instantiation_sites(&*module.type_table.borrow());
+        self.collect_instantiation_sites(&module.type_table.borrow());
 
         // Phase 3: Process struct instantiations and generate concrete structs
         let mut new_structs = Vec::new();
         while let Some(key) = self.pending.pop() {
             if let Some(generic_struct) = generic_structs.get(&key.name)
-                && let Some(concrete) =
-                    self.instantiate_struct(generic_struct, &key, &mut *module.type_table.borrow_mut())
+                && let Some(concrete) = self.instantiate_struct(
+                    generic_struct,
+                    &key,
+                    &mut module.type_table.borrow_mut(),
+                )
             {
                 new_structs.push(concrete);
             }
@@ -184,11 +190,14 @@ impl Monomorphizer {
 
         // Phase 7: Collect all generic function definitions
         // Include both functions with method-level type params AND methods from generic impl blocks
-        let generic_functions: HashMap<String, TirFunction> = module
+        let generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> = module
             .functions
             .iter()
-            .filter(|f| !f.type_params.is_empty() || !f.impl_type_params.is_empty())
-            .map(|f| (f.name.clone(), f.clone()))
+            .filter(|f| {
+                let func = f.borrow();
+                !func.type_params.is_empty() || !func.impl_type_params.is_empty()
+            })
+            .map(|f| (f.borrow().name.clone(), Rc::clone(f)))
             .collect();
 
         // Store in module for later phases
@@ -198,13 +207,40 @@ impl Monomorphizer {
         self.collect_function_instantiation_sites(&module, &generic_functions);
 
         // Phase 9: Process function instantiations and generate concrete functions
-        let mut new_functions = Vec::new();
+        // Use iterative approach: each newly instantiated function may have method calls
+        // that need to be instantiated too (e.g., Container$i32::add calls Array$i32::append)
+        let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         while let Some(key) = self.function_pending.pop() {
-            if let Some(generic_func) = generic_functions.get(&key.name)
-                && let Some(concrete) =
-                    self.instantiate_function(generic_func, &key, &mut *module.type_table.borrow_mut())
-            {
-                new_functions.push(concrete);
+            // First, instantiate the function (needs mutable borrow)
+            let concrete = {
+                let generic_func = generic_functions.get(&key.name);
+                if let Some(gf) = generic_func {
+                    let gf_borrowed = gf.borrow();
+                    self.instantiate_function(
+                        &gf_borrowed,
+                        &key,
+                        &mut module.type_table.borrow_mut(),
+                    )
+                } else {
+                    None
+                }
+            };
+
+            if let Some(concrete) = concrete {
+                // Collect instantiation sites from the newly created function body
+                // This handles transitive monomorphization (e.g., Container method -> Array method)
+                // Only do this for user-defined functions (not Array or other stdlib functions)
+                // to avoid issues with recursive collection
+                if let Some(body) = &concrete.body
+                    && !concrete.name.starts_with("Array")
+                {
+                    self.collect_func_instantiation_sites_in_block(
+                        body,
+                        &generic_functions,
+                        &module.type_table.borrow(),
+                    );
+                }
+                new_functions.push(Rc::new(RefCell::new(concrete)));
             }
         }
 
@@ -215,8 +251,9 @@ impl Monomorphizer {
         // (they stay in generic_functions for reference)
         // Remove functions with type_params OR impl_type_params (unless monomorphized)
         module.functions.retain(|f| {
-            (f.type_params.is_empty() && f.impl_type_params.is_empty())
-                || f.monomorph_info.is_some()
+            let func = f.borrow();
+            (func.type_params.is_empty() && func.impl_type_params.is_empty())
+                || func.monomorph_info.is_some()
         });
 
         // Phase 12: Rewrite function calls to use monomorphized names
@@ -235,7 +272,7 @@ impl Monomorphizer {
     fn monomorphize_with_externals(
         &mut self,
         mut module: TirModule,
-        external_generic_functions: &HashMap<String, TirFunction>,
+        external_generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
     ) -> TirModule {
         // ========================
         // Struct Monomorphization
@@ -253,14 +290,17 @@ impl Monomorphizer {
         module.generic_structs = generic_structs.clone();
 
         // Phase 2: Collect all struct instantiation sites from the type table
-        self.collect_instantiation_sites(&*module.type_table.borrow());
+        self.collect_instantiation_sites(&module.type_table.borrow());
 
         // Phase 3: Process struct instantiations and generate concrete structs
         let mut new_structs = Vec::new();
         while let Some(key) = self.pending.pop() {
             if let Some(generic_struct) = generic_structs.get(&key.name)
-                && let Some(concrete) =
-                    self.instantiate_struct(generic_struct, &key, &mut *module.type_table.borrow_mut())
+                && let Some(concrete) = self.instantiate_struct(
+                    generic_struct,
+                    &key,
+                    &mut module.type_table.borrow_mut(),
+                )
             {
                 new_structs.push(concrete);
             }
@@ -283,13 +323,14 @@ impl Monomorphizer {
 
         // Phase 7: Collect all generic function definitions
         // Include both local functions AND external generic functions from other modules
-        let mut generic_functions: HashMap<String, TirFunction> =
+        let mut generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> =
             external_generic_functions.clone();
 
         // Local generic functions override external ones (allows module-local specialization)
-        for func in &module.functions {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-                generic_functions.insert(func.name.clone(), func.clone());
+                generic_functions.insert(func.name.clone(), Rc::clone(func_rc));
             }
         }
 
@@ -300,13 +341,40 @@ impl Monomorphizer {
         self.collect_function_instantiation_sites(&module, &generic_functions);
 
         // Phase 9: Process function instantiations and generate concrete functions
-        let mut new_functions = Vec::new();
+        // Use iterative approach: each newly instantiated function may have method calls
+        // that need to be instantiated too (e.g., Container$i32::add calls Array$i32::append)
+        let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         while let Some(key) = self.function_pending.pop() {
-            if let Some(generic_func) = generic_functions.get(&key.name)
-                && let Some(concrete) =
-                    self.instantiate_function(generic_func, &key, &mut *module.type_table.borrow_mut())
-            {
-                new_functions.push(concrete);
+            // First, instantiate the function (needs mutable borrow)
+            let concrete = {
+                let generic_func = generic_functions.get(&key.name);
+                if let Some(gf) = generic_func {
+                    let gf_borrowed = gf.borrow();
+                    self.instantiate_function(
+                        &gf_borrowed,
+                        &key,
+                        &mut module.type_table.borrow_mut(),
+                    )
+                } else {
+                    None
+                }
+            };
+
+            if let Some(concrete) = concrete {
+                // Collect instantiation sites from the newly created function body
+                // This handles transitive monomorphization (e.g., Container method -> Array method)
+                // Only do this for user-defined functions (not Array or other stdlib functions)
+                // to avoid issues with recursive collection
+                if let Some(body) = &concrete.body
+                    && !concrete.name.starts_with("Array")
+                {
+                    self.collect_func_instantiation_sites_in_block(
+                        body,
+                        &generic_functions,
+                        &module.type_table.borrow(),
+                    );
+                }
+                new_functions.push(Rc::new(RefCell::new(concrete)));
             }
         }
 
@@ -316,8 +384,9 @@ impl Monomorphizer {
         // Phase 11: Remove generic functions from the functions list
         // Remove functions with type_params OR impl_type_params (unless monomorphized)
         module.functions.retain(|f| {
-            (f.type_params.is_empty() && f.impl_type_params.is_empty())
-                || f.monomorph_info.is_some()
+            let func = f.borrow();
+            (func.type_params.is_empty() && func.impl_type_params.is_empty())
+                || func.monomorph_info.is_some()
         });
 
         // Phase 12: Rewrite function calls to use monomorphized names
@@ -331,25 +400,30 @@ impl Monomorphizer {
         // Rewrite struct field types
         for strct in &mut module.structs {
             for field in &mut strct.fields {
-                field.type_id = self.rewrite_type_id(field.type_id, &mut *module.type_table.borrow_mut());
+                field.type_id =
+                    self.rewrite_type_id(field.type_id, &mut module.type_table.borrow_mut());
             }
         }
 
         // Rewrite function signatures and bodies
-        for func in &mut module.functions {
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
             // Rewrite function parameters
             for param in &mut func.params {
-                param.type_id = self.rewrite_type_id(param.type_id, &mut *module.type_table.borrow_mut());
+                param.type_id =
+                    self.rewrite_type_id(param.type_id, &mut module.type_table.borrow_mut());
             }
             // Rewrite return type
-            func.return_type = self.rewrite_type_id(func.return_type, &mut *module.type_table.borrow_mut());
+            func.return_type =
+                self.rewrite_type_id(func.return_type, &mut module.type_table.borrow_mut());
             // Rewrite local_types
             for local_type in &mut func.local_types {
-                *local_type = self.rewrite_type_id(*local_type, &mut *module.type_table.borrow_mut());
+                *local_type =
+                    self.rewrite_type_id(*local_type, &mut module.type_table.borrow_mut());
             }
             // Rewrite function body
             if let Some(body) = &mut func.body {
-                self.rewrite_types_in_block(body, &mut *module.type_table.borrow_mut());
+                self.rewrite_types_in_block(body, &mut module.type_table.borrow_mut());
             }
         }
     }
@@ -790,7 +864,8 @@ impl Monomorphizer {
                         // Build mangled name using ALL values in substitution map
                         // Sort by param index to get correct order
                         let mut mangled_name = name.clone();
-                        let mut indexed_args: Vec<(u32, TypeId)> = substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
+                        let mut indexed_args: Vec<(u32, TypeId)> =
+                            substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
                         indexed_args.sort_by_key(|(idx, _)| *idx);
 
                         for (_, arg_id) in &indexed_args {
@@ -867,14 +942,15 @@ impl Monomorphizer {
     fn collect_function_instantiation_sites(
         &mut self,
         module: &TirModule,
-        generic_functions: &HashMap<String, TirFunction>,
+        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
     ) {
-        for func in &module.functions {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
             if let Some(body) = &func.body {
                 self.collect_func_instantiation_sites_in_block(
                     body,
                     generic_functions,
-                    &*module.type_table.borrow(),
+                    &module.type_table.borrow(),
                 );
             }
         }
@@ -883,7 +959,7 @@ impl Monomorphizer {
     fn collect_func_instantiation_sites_in_block(
         &mut self,
         block: &TirBlock,
-        generic_functions: &HashMap<String, TirFunction>,
+        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
     ) {
         for stmt in &block.stmts {
@@ -894,7 +970,7 @@ impl Monomorphizer {
     fn collect_func_instantiation_sites_in_stmt(
         &mut self,
         stmt: &TirStmt,
-        generic_functions: &HashMap<String, TirFunction>,
+        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
     ) {
         match &stmt.kind {
@@ -983,18 +1059,18 @@ impl Monomorphizer {
     fn collect_func_instantiation_sites_in_expr(
         &mut self,
         expr: &TirExpr,
-        generic_functions: &HashMap<String, TirFunction>,
+        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
     ) {
         match &expr.kind {
             TirExprKind::Call {
-                func_name,
+                func,
                 type_args,
                 args,
-                ..
             } => {
+                let func_name = func.name();
                 // Check if this is a call to a generic function with explicit type args
-                if !type_args.is_empty() && generic_functions.contains_key(func_name) {
+                if !type_args.is_empty() && generic_functions.contains_key(&func_name) {
                     let key = InstantiationKey {
                         name: func_name.clone(),
                         type_args: type_args.clone(),
@@ -1015,10 +1091,19 @@ impl Monomorphizer {
             }
             TirExprKind::MethodCall {
                 receiver,
-                method_name,
+                func: method_func,
                 type_args,
                 args,
             } => {
+                // Extract method name from func reference
+                let method_name = {
+                    let name = method_func.name();
+                    if let Some(pos) = name.rfind("::") {
+                        name[pos + 2..].to_string()
+                    } else {
+                        name
+                    }
+                };
                 // Check if this is a method call with explicit type args
                 if !type_args.is_empty() {
                     // Get the struct name from the receiver type
@@ -1048,8 +1133,10 @@ impl Monomorphizer {
 
                             // Look for generic method: BaseStruct::method
                             let generic_method_name = format!("{}::{}", base_struct, method_name);
-                            if let Some(generic_func) = generic_functions.get(&generic_method_name)
+                            if let Some(generic_func_rc) =
+                                generic_functions.get(&generic_method_name)
                             {
+                                let generic_func = generic_func_rc.borrow();
                                 // Parse impl type args from struct name
                                 let impl_type_args: Vec<TypeId> = impl_type_args_str
                                     .split('$')
@@ -1091,7 +1178,8 @@ impl Monomorphizer {
                 {
                     // Look for generic method: BaseStruct::method
                     let generic_method_name = format!("{}::{}", base_struct, method_name);
-                    if let Some(generic_func) = generic_functions.get(&generic_method_name) {
+                    if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
+                        let generic_func = generic_func_rc.borrow();
                         // Only queue if we have the right number of type args
                         if impl_type_args.len() == generic_func.impl_type_params.len() {
                             let key = InstantiationKey {
@@ -1106,6 +1194,48 @@ impl Monomorphizer {
                                 );
                                 self.function_instantiated.insert(key.clone(), mangled);
                                 self.function_pending.push(key);
+                            }
+                        }
+                    }
+                }
+
+                // Also handle already-monomorphized structs (Struct with $ in name)
+                // e.g., c.add(10) where c: Container$i32 (already rewritten from Container<i32>)
+                if let ResolvedType::Struct {
+                    name: struct_name, ..
+                } = type_table.get(receiver.type_id)
+                    && struct_name.contains('$')
+                {
+                    // Parse the monomorphized struct name to get base name and type args
+                    if let Some(dollar_pos) = struct_name.find('$') {
+                        let base_struct = &struct_name[..dollar_pos];
+                        let type_args_str = &struct_name[dollar_pos + 1..];
+
+                        // Parse type args from the mangled name (e.g., "i32" or "i32$String")
+                        let impl_type_args: Vec<TypeId> = type_args_str
+                            .split('$')
+                            .filter_map(|type_name| self.lookup_type_by_name(type_name, type_table))
+                            .collect();
+
+                        // Look for generic method: BaseStruct::method
+                        let generic_method_name = format!("{}::{}", base_struct, method_name);
+                        if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
+                            let generic_func = generic_func_rc.borrow();
+                            // Only queue if we have the right number of type args
+                            if impl_type_args.len() == generic_func.impl_type_params.len() {
+                                let key = InstantiationKey {
+                                    name: generic_method_name,
+                                    type_args: impl_type_args,
+                                };
+                                if !self.function_instantiated.contains_key(&key) {
+                                    let mangled = self.mangle_method_name(
+                                        &key,
+                                        type_table,
+                                        generic_func.impl_type_params.len(),
+                                    );
+                                    self.function_instantiated.insert(key.clone(), mangled);
+                                    self.function_pending.push(key);
+                                }
                             }
                         }
                     }
@@ -1134,8 +1264,10 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::StaticCall {
-                func_name, args, ..
+                func: static_func,
+                args,
             } => {
+                let func_name = static_func.name();
                 // Check if this is a call to a method on a monomorphized struct
                 // e.g., func_name = "Counter$i32::zero" or "Counter$i32::default_value"
                 if let Some(sep_pos) = func_name.find("::") {
@@ -1149,7 +1281,8 @@ impl Monomorphizer {
 
                         // Look for generic method: BaseStruct::method
                         let generic_method_name = format!("{}::{}", base_struct, method_name);
-                        if let Some(generic_func) = generic_functions.get(&generic_method_name) {
+                        if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
+                            let generic_func = generic_func_rc.borrow();
                             // Parse type args from mangled name
                             // Type args are type names like "i32" from Counter$i32::zero
                             let type_args: Vec<TypeId> = type_args_str
@@ -1689,11 +1822,14 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::StaticCall {
-                func_name, args, ..
+                func: static_func,
+                args,
             } => {
+                let old_func_name = static_func.name();
+                let module_path = static_func.module_path();
                 // Substitute type parameter names in func_name
                 // e.g., "Box$T::new" with T->i32 becomes "Box$i32::new"
-                let mut new_func_name = func_name.clone();
+                let mut new_func_name = old_func_name.clone();
                 for (&param_index, &concrete_type_id) in substitution {
                     // Find the type param name by looking up types with this index
                     for tid in 0..type_table.len() as u32 {
@@ -1708,7 +1844,13 @@ impl Monomorphizer {
                         }
                     }
                 }
-                *func_name = new_func_name;
+                // Update func if name changed
+                if new_func_name != old_func_name {
+                    *static_func = FunctionRef::External {
+                        module_path,
+                        name: new_func_name,
+                    };
+                }
                 for arg in args {
                     self.substitute_types_in_expr(arg, substitution, type_table);
                 }
@@ -1817,13 +1959,15 @@ impl Monomorphizer {
 
     /// Rewrite function calls in all functions to use monomorphized names
     fn rewrite_function_calls_in_module(&self, module: &mut TirModule) {
-        for func in &mut module.functions {
-            if let Some(body) = &mut func.body {
-                self.rewrite_function_calls_in_block(body, &*module.type_table.borrow());
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(mut body) = func.body.take() {
+                self.rewrite_function_calls_in_block(&mut body, &module.type_table.borrow());
                 // Sync local_types with Let statement types
-                Self::sync_local_types_from_lets(body, &mut func.local_types);
+                Self::sync_local_types_from_lets(&body, &mut func.local_types);
                 // Update all Local expression types based on local_types
-                Self::update_local_expr_types(body, &func.local_types);
+                Self::update_local_expr_types(&mut body, &func.local_types);
+                func.body = Some(body);
             }
         }
     }
@@ -2069,11 +2213,12 @@ impl Monomorphizer {
     fn rewrite_function_calls_in_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
         match &mut expr.kind {
             TirExprKind::Call {
-                func_name,
+                func,
                 type_args,
                 args,
-                ..
             } => {
+                let func_name = func.name();
+                let module_path = func.module_path();
                 // If this is a generic call, rewrite to monomorphized name
                 if !type_args.is_empty() {
                     let key = InstantiationKey {
@@ -2081,7 +2226,10 @@ impl Monomorphizer {
                         type_args: type_args.clone(),
                     };
                     if let Some(mangled) = self.function_instantiated.get(&key) {
-                        *func_name = mangled.clone();
+                        *func = FunctionRef::External {
+                            module_path,
+                            name: mangled.clone(),
+                        };
                         type_args.clear(); // Clear type args - now using concrete function
                     }
                 }
@@ -2091,10 +2239,20 @@ impl Monomorphizer {
             }
             TirExprKind::MethodCall {
                 receiver,
-                method_name,
+                func: method_func,
                 type_args,
                 args,
             } => {
+                // Extract method name from func reference
+                let method_name = {
+                    let name = method_func.name();
+                    if let Some(pos) = name.rfind("::") {
+                        name[pos + 2..].to_string()
+                    } else {
+                        name
+                    }
+                };
+                let module_path = method_func.module_path();
                 // If this is a generic method call, rewrite to monomorphized name
                 if !type_args.is_empty()
                     && let Some(struct_name) =
@@ -2106,15 +2264,11 @@ impl Monomorphizer {
                         type_args: type_args.clone(),
                     };
                     if let Some(mangled) = self.function_instantiated.get(&key) {
-                        // Update method_name to the monomorphized name
-                        // We need to extract just the method part from the mangled name
-                        // e.g., "Point::transform$2" -> we keep the full name for codegen
-                        // Actually, codegen constructs the full name, so we just need to update
-                        // the method_name part. The mangled name is "Struct::method$types",
-                        // so we extract the part after "::"
-                        if let Some(method_part) = mangled.split("::").nth(1) {
-                            *method_name = method_part.to_string();
-                        }
+                        // Update func to the monomorphized method
+                        *method_func = FunctionRef::External {
+                            module_path,
+                            name: mangled.clone(),
+                        };
                         type_args.clear(); // Clear type args - now using concrete method
                     }
                     // Handle "double generics": method on monomorphized generic struct
@@ -2142,9 +2296,10 @@ impl Monomorphizer {
                             type_args: combined_type_args.clone(),
                         };
                         if let Some(mangled) = self.function_instantiated.get(&combined_key) {
-                            if let Some(method_part) = mangled.split("::").nth(1) {
-                                *method_name = method_part.to_string();
-                            }
+                            *method_func = FunctionRef::External {
+                                module_path: module_path.clone(),
+                                name: mangled.clone(),
+                            };
                             type_args.clear();
 
                             // Also update the expression's type_id if it's a type parameter
@@ -2301,7 +2456,8 @@ impl StringCollector {
     }
 
     fn collect_module(&mut self, module: &TirModule) {
-        for func in &module.functions {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
             if let Some(body) = &func.body {
                 self.current_function = Some(func.name.clone());
                 self.collect_block(body);

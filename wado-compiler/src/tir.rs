@@ -611,6 +611,68 @@ impl TirExpr {
     }
 }
 
+// ============================================================================
+// Function References
+// ============================================================================
+
+/// Reference to a function, either resolved to TIR or external
+#[derive(Debug, Clone)]
+pub enum FunctionRef {
+    /// Reference to a resolved TIR function
+    Resolved(Rc<RefCell<TirFunction>>),
+    /// Reference to an external/unresolved function
+    External {
+        module_path: Vec<String>,
+        name: String,
+    },
+}
+
+impl FunctionRef {
+    /// Get the function name
+    pub fn name(&self) -> String {
+        match self {
+            FunctionRef::Resolved(func) => func.borrow().name.clone(),
+            FunctionRef::External { name, .. } => name.clone(),
+        }
+    }
+
+    /// Get the module path (empty for resolved functions)
+    pub fn module_path(&self) -> Vec<String> {
+        match self {
+            FunctionRef::Resolved(_) => vec![],
+            FunctionRef::External { module_path, .. } => module_path.clone(),
+        }
+    }
+
+    /// Check if this is a resolved reference
+    pub fn is_resolved(&self) -> bool {
+        matches!(self, FunctionRef::Resolved(_))
+    }
+
+    /// Get the resolved function if available
+    pub fn as_resolved(&self) -> Option<&Rc<RefCell<TirFunction>>> {
+        match self {
+            FunctionRef::Resolved(func) => Some(func),
+            FunctionRef::External { .. } => None,
+        }
+    }
+
+    /// Get the builtin function name if this is a builtin call.
+    /// Returns the qualified name (e.g., "builtin::array_len").
+    /// Builtin functions have module_path == ["core", "builtin"].
+    pub fn builtin_name(&self) -> Option<String> {
+        match self {
+            FunctionRef::Resolved(_) => None,
+            FunctionRef::External { module_path, name }
+                if module_path.as_slice() == ["core", "builtin"] =>
+            {
+                Some(format!("builtin::{}", name))
+            }
+            FunctionRef::External { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum TirExprKind {
     IntLiteral {
@@ -655,8 +717,8 @@ pub enum TirExprKind {
     },
 
     Call {
-        module_path: Vec<String>,
-        func_name: String,
+        /// Function reference (resolved TIR function or external)
+        func: FunctionRef,
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
@@ -668,17 +730,16 @@ pub enum TirExprKind {
     },
     MethodCall {
         receiver: Box<TirExpr>,
-        method_name: String,
+        /// Method reference (resolved TIR function or external)
+        func: FunctionRef,
         /// Explicit type arguments for generic methods: `obj.method::<i32>()`
         type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
     },
     /// Static method call: `Array::<i32>::with_capacity(100)` or `Point::origin()`
     StaticCall {
-        /// Mangled function name (e.g., "Array$i32::with_capacity" or "Point::origin")
-        func_name: String,
-        /// Module path where the impl block is defined
-        module_path: Vec<String>,
+        /// Function reference (resolved TIR function or external)
+        func: FunctionRef,
         /// Arguments to the static method
         args: Vec<TirExpr>,
     },
@@ -1052,7 +1113,7 @@ pub struct TirModule {
     pub path: Vec<String>,
     /// Shared type table across all modules (enables cross-module type references)
     pub type_table: Rc<RefCell<TypeTable>>,
-    pub functions: Vec<TirFunction>,
+    pub functions: Vec<Rc<RefCell<TirFunction>>>,
     pub structs: Vec<TirStruct>,
     pub enums: Vec<TirEnum>,
     pub type_aliases: Vec<TirTypeAlias>,
@@ -1067,7 +1128,7 @@ pub struct TirModule {
     pub generic_structs: HashMap<String, TirStruct>,
     /// Generic function definitions (before monomorphization)
     /// Key: function name
-    pub generic_functions: HashMap<String, TirFunction>,
+    pub generic_functions: HashMap<String, Rc<RefCell<TirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
     pub instantiation_requests: std::collections::HashSet<InstantiationKey>,
 }
@@ -1120,8 +1181,10 @@ impl TirModule {
         self.data_section.as_deref()
     }
 
-    pub fn add_function(&mut self, func: TirFunction) {
-        self.functions.push(func);
+    pub fn add_function(&mut self, func: TirFunction) -> Rc<RefCell<TirFunction>> {
+        let func_rc = Rc::new(RefCell::new(func));
+        self.functions.push(Rc::clone(&func_rc));
+        func_rc
     }
 
     pub fn add_struct(&mut self, s: TirStruct) {
@@ -1144,8 +1207,11 @@ impl TirModule {
         self.impls.push(impl_block);
     }
 
-    pub fn find_function(&self, name: &str) -> Option<&TirFunction> {
-        self.functions.iter().find(|f| f.name == name)
+    pub fn find_function(&self, name: &str) -> Option<Rc<RefCell<TirFunction>>> {
+        self.functions
+            .iter()
+            .find(|f| f.borrow().name == name)
+            .cloned()
     }
 
     pub fn find_struct(&self, name: &str) -> Option<&TirStruct> {

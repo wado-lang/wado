@@ -1,6 +1,7 @@
-// TypeTable is now shared via Rc<RefCell<>> to enable cross-module type resolution.
-// However, there's still an issue with the lowering creating invalid monomorphized instances.
-// TODO: Fix lowering to avoid creating monomorphized instances with empty type_args
+// Test for generic struct field monomorphization:
+// - Container<T> has a field of type Array<T>
+// - When instantiating Container<i32>, the field becomes Array<i32>
+// - Methods (add, len, get) are also properly monomorphized
 
 use {println} from "core:cli";
 
@@ -41,5 +42,5 @@ fn run() {
 
 __DATA__
 {
-    "compile_error": "Array struct type not registered for element type 21"
+    "stdout": "Length: 3\nFirst: 10\nSecond: 20\nThird: 30\n"
 }

@@ -1514,8 +1514,9 @@ impl<'a> TirUnparser<'a> {
         }
 
         // Functions
-        for f in &module.functions {
-            self.unparse_function(f);
+        for f_rc in &module.functions {
+            let f = f_rc.borrow();
+            self.unparse_function(&f);
             self.output.push('\n');
         }
 
@@ -1877,16 +1878,17 @@ impl<'a> TirUnparser<'a> {
                     .push_str(&self.type_table.type_name(*target_type));
             }
             TirExprKind::Call {
-                func_name,
+                func,
                 type_args,
                 args,
-                module_path,
             } => {
+                let module_path = func.module_path();
+                let func_name = func.name();
                 if !module_path.is_empty() {
                     self.output.push_str(&module_path.join("::"));
                     self.output.push_str("::");
                 }
-                self.output.push_str(func_name);
+                self.output.push_str(&func_name);
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {
@@ -1925,13 +1927,22 @@ impl<'a> TirUnparser<'a> {
             }
             TirExprKind::MethodCall {
                 receiver,
-                method_name,
+                func,
                 type_args,
                 args,
             } => {
+                // Extract method name from func (format is "StructName::method_name")
+                let method_name = {
+                    let full_name = func.name();
+                    if let Some(pos) = full_name.rfind("::") {
+                        full_name[pos + 2..].to_string()
+                    } else {
+                        full_name
+                    }
+                };
                 self.unparse_expr(receiver);
                 self.output.push('.');
-                self.output.push_str(method_name);
+                self.output.push_str(&method_name);
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {
@@ -1951,11 +1962,9 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(')');
             }
-            TirExprKind::StaticCall {
-                func_name, args, ..
-            } => {
+            TirExprKind::StaticCall { func, args } => {
                 // Output the mangled function name as-is (e.g., "Point::origin" or "Array$i32::with_capacity")
-                self.output.push_str(func_name);
+                self.output.push_str(&func.name());
                 self.output.push('(');
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
@@ -2207,7 +2216,7 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 /// Public function to unparse TIR module to pseudo-Wado source
 pub fn unparse_tir(module: &TirModule) -> String {
     let type_table_ref = module.type_table.borrow();
-    let unparser = TirUnparser::new(&*type_table_ref);
+    let unparser = TirUnparser::new(&type_table_ref);
     unparser.unparse(module)
 }
 
