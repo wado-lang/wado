@@ -7,7 +7,7 @@
 use crate::name::{FreeFunctionName, FunctionId, MethodName};
 use crate::project::Project;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
+    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
@@ -173,6 +173,1556 @@ pub enum OptLevel {
     /// Full optimizations plus name section stripping. Intended for frontend.
     Size,
 }
+
+// =============================================================================
+// Function Inlining
+// =============================================================================
+
+/// Maximum statement count for inline-eligible functions
+const INLINE_THRESHOLD: usize = 20;
+
+/// Count statements in a TIR block (recursive)
+fn count_stmts(block: &TirBlock) -> usize {
+    block
+        .stmts
+        .iter()
+        .map(|s| match &s.kind {
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => 1 + count_stmts(then_block) + else_block.as_ref().map_or(0, count_stmts),
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::Loop { body }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::ForOf { body, .. } => 1 + count_stmts(body),
+            _ => 1,
+        })
+        .sum()
+}
+
+/// Check if a function is eligible for inlining
+fn is_inline_eligible(
+    func: &TirFunction,
+    recursive_functions: &HashSet<String>,
+    module_path: &[String],
+    type_table: &TypeTable,
+) -> bool {
+    // Must have a body
+    let Some(body) = &func.body else {
+        return false;
+    };
+
+    // Don't inline core library functions (they may be called by codegen or have
+    // complex type dependencies across modules)
+    if !module_path.is_empty() && module_path[0] == "core" {
+        return false;
+    }
+
+    // No effects (pure functions only)
+    if !func.effects.is_empty() {
+        return false;
+    }
+
+    // Not generic (for now - generic inlining is complex)
+    if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
+        return false;
+    }
+
+    // Not a monomorphized generic function
+    // These have complex type relationships that are difficult to inline correctly
+    if func.monomorph_info.is_some() {
+        return false;
+    }
+
+    // Not recursive
+    if recursive_functions.contains(&func.name) {
+        return false;
+    }
+
+    // Only inline functions with a single return at the end
+    // Functions with early returns (inside if/while) are too complex to inline
+    if has_early_return(body) {
+        return false;
+    }
+
+    // Don't inline functions with reference parameters
+    // Reference handling during inlining is complex (address-taken locals, box structs, etc.)
+    for param in &func.params {
+        match type_table.get(param.type_id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
+            _ => {}
+        }
+    }
+
+    // Don't inline functions that return references
+    match type_table.get(func.return_type) {
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
+        _ => {}
+    }
+
+    // Small enough
+    count_stmts(body) < INLINE_THRESHOLD
+}
+
+/// Check if a block has early returns (returns inside if/while blocks)
+fn has_early_return(block: &TirBlock) -> bool {
+    for (i, stmt) in block.stmts.iter().enumerate() {
+        let is_last = i == block.stmts.len() - 1;
+        match &stmt.kind {
+            TirStmtKind::Return { .. } => {
+                // Return is only OK if it's the last statement
+                if !is_last {
+                    return true;
+                }
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                // Check if there are returns inside if blocks
+                if block_has_return(then_block) {
+                    return true;
+                }
+                if let Some(else_blk) = else_block
+                    && block_has_return(else_blk)
+                {
+                    return true;
+                }
+            }
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::Loop { body }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::ForOf { body, .. } => {
+                if block_has_return(body) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Check if a block contains any return statement
+fn block_has_return(block: &TirBlock) -> bool {
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            TirStmtKind::Return { .. } => return true,
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if block_has_return(then_block) {
+                    return true;
+                }
+                if let Some(else_blk) = else_block
+                    && block_has_return(else_blk)
+                {
+                    return true;
+                }
+            }
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::Loop { body }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::ForOf { body, .. } => {
+                if block_has_return(body) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Detect recursive functions using call graph analysis
+fn find_recursive_functions(modules: &IndexMap<Vec<String>, TirModule>) -> HashSet<String> {
+    let mut recursive = HashSet::new();
+
+    // Build a simple call graph: function name -> called function names
+    let mut call_graph: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for module in modules.values() {
+        for func in &module.functions {
+            let callees = collect_callees_from_function(func);
+            call_graph.insert(func.name.clone(), callees);
+        }
+    }
+
+    // Find functions that can reach themselves
+    for func_name in call_graph.keys() {
+        if can_reach(&call_graph, func_name, func_name, &mut HashSet::new()) {
+            recursive.insert(func_name.clone());
+        }
+    }
+
+    recursive
+}
+
+/// Collect all function names called from a function
+fn collect_callees_from_function(func: &TirFunction) -> HashSet<String> {
+    let mut callees = HashSet::new();
+    if let Some(body) = &func.body {
+        collect_callees_from_block(body, &mut callees);
+    }
+    callees
+}
+
+fn collect_callees_from_block(block: &TirBlock, callees: &mut HashSet<String>) {
+    for stmt in &block.stmts {
+        collect_callees_from_stmt(stmt, callees);
+    }
+}
+
+fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+            collect_callees_from_expr(value, callees);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(expr) = value {
+                collect_callees_from_expr(expr, callees);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            collect_callees_from_expr(condition, callees);
+            collect_callees_from_block(then_block, callees);
+            if let Some(else_blk) = else_block {
+                collect_callees_from_block(else_blk, callees);
+            }
+        }
+        TirStmtKind::While { condition, body } => {
+            collect_callees_from_expr(condition, callees);
+            collect_callees_from_block(body, callees);
+        }
+        TirStmtKind::For {
+            condition,
+            body,
+            update,
+        } => {
+            if let Some(cond) = condition {
+                collect_callees_from_expr(cond, callees);
+            }
+            collect_callees_from_block(body, callees);
+            if let Some(upd) = update {
+                collect_callees_from_expr(upd, callees);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::ForOf { body, .. } => {
+            collect_callees_from_block(body, callees);
+        }
+        TirStmtKind::Assert {
+            condition, message, ..
+        } => {
+            collect_callees_from_expr(condition, callees);
+            if let Some(msg) = message {
+                collect_callees_from_expr(msg, callees);
+            }
+        }
+        TirStmtKind::Break | TirStmtKind::Continue => {}
+    }
+}
+
+fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
+    match &expr.kind {
+        TirExprKind::Call {
+            func_name, args, ..
+        } => {
+            callees.insert(func_name.clone());
+            for arg in args {
+                collect_callees_from_expr(arg, callees);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            collect_callees_from_expr(receiver, callees);
+            for arg in args {
+                collect_callees_from_expr(arg, callees);
+            }
+        }
+        TirExprKind::StaticCall {
+            func_name, args, ..
+        } => {
+            callees.insert(func_name.clone());
+            for arg in args {
+                collect_callees_from_expr(arg, callees);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            collect_callees_from_expr(left, callees);
+            collect_callees_from_expr(right, callees);
+        }
+        TirExprKind::Unary { expr, .. } => {
+            collect_callees_from_expr(expr, callees);
+        }
+        TirExprKind::Assign { target, value } => {
+            collect_callees_from_expr(target, callees);
+            collect_callees_from_expr(value, callees);
+        }
+        TirExprKind::Cast { expr, .. } => {
+            collect_callees_from_expr(expr, callees);
+        }
+        TirExprKind::FieldAccess { expr, .. } => {
+            collect_callees_from_expr(expr, callees);
+        }
+        TirExprKind::Index { expr, index } => {
+            collect_callees_from_expr(expr, callees);
+            collect_callees_from_expr(index, callees);
+        }
+        TirExprKind::Block(block) => {
+            collect_callees_from_block(block, callees);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_callees_from_expr(condition, callees);
+            collect_callees_from_block(then_branch, callees);
+            if let Some(else_blk) = else_branch {
+                collect_callees_from_block(else_blk, callees);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                collect_callees_from_expr(&field.value, callees);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_callees_from_expr(elem, callees);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            collect_callees_from_expr(body, callees);
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            collect_callees_from_expr(callee, callees);
+            for arg in args {
+                collect_callees_from_expr(arg, callees);
+            }
+        }
+        TirExprKind::EffectCall { args, .. } => {
+            for arg in args {
+                collect_callees_from_expr(arg, callees);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            collect_callees_from_expr(expr, callees);
+            for arm in arms {
+                collect_callees_from_expr(&arm.body, callees);
+            }
+        }
+        // Leaf nodes
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. } => {}
+    }
+}
+
+/// Check if `start` can reach `target` in the call graph
+fn can_reach(
+    call_graph: &HashMap<String, HashSet<String>>,
+    start: &str,
+    target: &str,
+    visited: &mut HashSet<String>,
+) -> bool {
+    if !visited.insert(start.to_string()) {
+        return false; // Already visited
+    }
+
+    if let Some(callees) = call_graph.get(start) {
+        for callee in callees {
+            if callee == target {
+                return true;
+            }
+            if can_reach(call_graph, callee, target, visited) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Inline eligible functions in the project (TIR pass)
+fn inline_functions(project: &mut Project) {
+    let recursive_functions = find_recursive_functions(&project.tir_modules);
+
+    // Collect inline candidates from all modules
+    // Key: (module_path, func_name), Value: cloned function
+    let mut inline_candidates: HashMap<(Vec<String>, String), TirFunction> = HashMap::new();
+
+    // Also collect function_strings for each candidate (to update caller's strings after inlining)
+    let mut candidate_strings: HashMap<(Vec<String>, String), Vec<String>> = HashMap::new();
+
+    for (module_path, module) in &project.tir_modules {
+        for func in &module.functions {
+            if is_inline_eligible(func, &recursive_functions, module_path, &module.type_table) {
+                inline_candidates.insert((module_path.clone(), func.name.clone()), func.clone());
+                // Get the strings used by this function
+                if let Some(strings) = module.function_strings.get(&func.name) {
+                    candidate_strings
+                        .insert((module_path.clone(), func.name.clone()), strings.clone());
+                }
+            }
+        }
+    }
+
+    if inline_candidates.is_empty() {
+        return;
+    }
+
+    // Inline at call sites in each module
+    for module in project.tir_modules.values_mut() {
+        let module_path = module.path.clone();
+        for func in &mut module.functions {
+            let func_name = func.name.clone();
+            if let Some(body) = &mut func.body {
+                // Track which functions were inlined into this function
+                let mut inlined_funcs: Vec<(Vec<String>, String)> = Vec::new();
+                inline_calls_in_block(
+                    body,
+                    &inline_candidates,
+                    &module_path,
+                    &mut func.local_count,
+                    &mut func.local_types,
+                    &module.type_table,
+                    &mut inlined_funcs,
+                );
+
+                // Update function_strings: add strings from inlined functions to the caller
+                for inlined_key in inlined_funcs {
+                    if let Some(inlined_strings) = candidate_strings.get(&inlined_key) {
+                        let caller_strings = module
+                            .function_strings
+                            .entry(func_name.clone())
+                            .or_default();
+                        for s in inlined_strings {
+                            if !caller_strings.contains(s) {
+                                caller_strings.push(s.clone());
+                            }
+                            // Also ensure the string is in the module's string_literals
+                            if !module.string_literals.contains(s) {
+                                module.string_literals.push(s.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Inline function calls in a block
+fn inline_calls_in_block(
+    block: &mut TirBlock,
+    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    current_module: &[String],
+    local_count: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    type_table: &TypeTable,
+    inlined_funcs: &mut Vec<(Vec<String>, String)>,
+) {
+    let mut new_stmts = Vec::new();
+
+    for stmt in std::mem::take(&mut block.stmts) {
+        match stmt.kind {
+            TirStmtKind::Let {
+                name,
+                local_index,
+                is_mut,
+                is_reactive,
+                type_id,
+                value,
+            } => {
+                // Try to inline the value expression if it's a call
+                if let Some((inlined_stmts, final_expr, inlined_key)) = try_inline_call_expr(
+                    &value,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                ) {
+                    // Track the inlined function
+                    if !inlined_funcs.contains(&inlined_key) {
+                        inlined_funcs.push(inlined_key);
+                    }
+                    // Add the inlined statements
+                    new_stmts.extend(inlined_stmts);
+                    // Create the let with the final expression
+                    new_stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name,
+                            local_index,
+                            is_mut,
+                            is_reactive,
+                            type_id,
+                            value: final_expr,
+                        },
+                        stmt.span,
+                    ));
+                } else {
+                    // Recursively process nested calls in value
+                    let mut new_value = value;
+                    inline_calls_in_expr(
+                        &mut new_value,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        &mut new_stmts,
+                        inlined_funcs,
+                    );
+                    new_stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name,
+                            local_index,
+                            is_mut,
+                            is_reactive,
+                            type_id,
+                            value: new_value,
+                        },
+                        stmt.span,
+                    ));
+                }
+            }
+            TirStmtKind::Expr(expr) => {
+                // Try to inline the expression if it's a call
+                if let Some((inlined_stmts, final_expr, inlined_key)) = try_inline_call_expr(
+                    &expr,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                ) {
+                    if !inlined_funcs.contains(&inlined_key) {
+                        inlined_funcs.push(inlined_key);
+                    }
+                    new_stmts.extend(inlined_stmts);
+                    new_stmts.push(TirStmt::new(TirStmtKind::Expr(final_expr), stmt.span));
+                } else {
+                    let mut new_expr = expr;
+                    inline_calls_in_expr(
+                        &mut new_expr,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        &mut new_stmts,
+                        inlined_funcs,
+                    );
+                    new_stmts.push(TirStmt::new(TirStmtKind::Expr(new_expr), stmt.span));
+                }
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(expr) = value {
+                    if let Some((inlined_stmts, final_expr, inlined_key)) = try_inline_call_expr(
+                        &expr,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                    ) {
+                        if !inlined_funcs.contains(&inlined_key) {
+                            inlined_funcs.push(inlined_key);
+                        }
+                        new_stmts.extend(inlined_stmts);
+                        new_stmts.push(TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(final_expr),
+                            },
+                            stmt.span,
+                        ));
+                    } else {
+                        let mut new_expr = expr;
+                        inline_calls_in_expr(
+                            &mut new_expr,
+                            candidates,
+                            current_module,
+                            local_count,
+                            local_types,
+                            type_table,
+                            &mut new_stmts,
+                            inlined_funcs,
+                        );
+                        new_stmts.push(TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(new_expr),
+                            },
+                            stmt.span,
+                        ));
+                    }
+                } else {
+                    new_stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, stmt.span));
+                }
+            }
+            TirStmtKind::If {
+                mut condition,
+                mut then_block,
+                else_block,
+            } => {
+                inline_calls_in_expr(
+                    &mut condition,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                );
+                inline_calls_in_block(
+                    &mut then_block,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                );
+                let new_else = else_block.map(|mut eb| {
+                    inline_calls_in_block(
+                        &mut eb,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        inlined_funcs,
+                    );
+                    eb
+                });
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::If {
+                        condition,
+                        then_block,
+                        else_block: new_else,
+                    },
+                    stmt.span,
+                ));
+            }
+            TirStmtKind::While {
+                mut condition,
+                mut body,
+            } => {
+                inline_calls_in_expr(
+                    &mut condition,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                );
+                inline_calls_in_block(
+                    &mut body,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                );
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::While { condition, body },
+                    stmt.span,
+                ));
+            }
+            TirStmtKind::For {
+                condition,
+                mut body,
+                update,
+            } => {
+                let new_condition = condition.map(|mut c| {
+                    inline_calls_in_expr(
+                        &mut c,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        &mut new_stmts,
+                        inlined_funcs,
+                    );
+                    c
+                });
+                inline_calls_in_block(
+                    &mut body,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                );
+                let new_update = update.map(|mut u| {
+                    inline_calls_in_expr(
+                        &mut u,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        &mut new_stmts,
+                        inlined_funcs,
+                    );
+                    u
+                });
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::For {
+                        condition: new_condition,
+                        body,
+                        update: new_update,
+                    },
+                    stmt.span,
+                ));
+            }
+            TirStmtKind::Loop { mut body } => {
+                inline_calls_in_block(
+                    &mut body,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                );
+                new_stmts.push(TirStmt::new(TirStmtKind::Loop { body }, stmt.span));
+            }
+            TirStmtKind::ForOf {
+                binding_local,
+                binding_type,
+                is_mut,
+                mut iterable,
+                iterable_type,
+                mut body,
+            } => {
+                inline_calls_in_expr(
+                    &mut iterable,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                );
+                inline_calls_in_block(
+                    &mut body,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                );
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::ForOf {
+                        binding_local,
+                        binding_type,
+                        is_mut,
+                        iterable,
+                        iterable_type,
+                        body,
+                    },
+                    stmt.span,
+                ));
+            }
+            TirStmtKind::Assert {
+                mut condition,
+                condition_source,
+                message,
+                intermediates,
+            } => {
+                inline_calls_in_expr(
+                    &mut condition,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                );
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::Assert {
+                        condition,
+                        condition_source,
+                        message,
+                        intermediates,
+                    },
+                    stmt.span,
+                ));
+            }
+            TirStmtKind::Break | TirStmtKind::Continue => {
+                new_stmts.push(stmt);
+            }
+        }
+    }
+
+    block.stmts = new_stmts;
+}
+
+/// Try to inline a call expression, returning the inlined statements, final expression,
+/// and the key of the inlined function (for tracking string literals)
+fn try_inline_call_expr(
+    expr: &TirExpr,
+    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    current_module: &[String],
+    local_count: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    _type_table: &TypeTable,
+) -> Option<(Vec<TirStmt>, TirExpr, (Vec<String>, String))> {
+    let TirExprKind::Call {
+        module_path,
+        func_name,
+        args,
+        type_args,
+    } = &expr.kind
+    else {
+        return None;
+    };
+
+    // Skip generic calls
+    if !type_args.is_empty() {
+        return None;
+    }
+
+    // Resolve the target module
+    let target_module = if module_path.is_empty() {
+        current_module.to_vec()
+    } else {
+        module_path.clone()
+    };
+
+    // Only inline functions from the same module
+    // Cross-module inlining requires TypeId translation which is complex
+    if target_module != current_module {
+        return None;
+    }
+
+    // Look up the candidate
+    let candidate = candidates.get(&(target_module.clone(), func_name.clone()))?;
+
+    // Get the function body
+    let body = candidate.body.as_ref()?;
+
+    // Calculate local index offset for remapping
+    let local_offset = *local_count;
+
+    // Add space for the callee's locals (excluding parameters)
+    let callee_param_count = candidate.params.len() as u32;
+    let callee_local_count = candidate.local_count;
+    let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
+
+    // Extend local_types for the new locals
+    for i in callee_param_count..callee_local_count {
+        if let Some(&type_id) = candidate.local_types.get(i as usize) {
+            local_types.push(type_id);
+        }
+    }
+    *local_count += new_locals_needed;
+
+    // Create argument bindings as let statements
+    let mut inlined_stmts = Vec::new();
+    let mut param_to_local: HashMap<u32, u32> = HashMap::new();
+
+    for (i, (param, arg)) in candidate.params.iter().zip(args.iter()).enumerate() {
+        let new_local_index = local_offset + i as u32;
+        param_to_local.insert(param.local_index, new_local_index);
+
+        // Extend local_types for parameter
+        local_types.push(param.type_id);
+        *local_count += 1;
+
+        inlined_stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: format!("_inline_{}", param.name),
+                local_index: new_local_index,
+                is_mut: false, // Parameters are immutable
+                is_reactive: false,
+                type_id: param.type_id,
+                value: arg.clone(),
+            },
+            expr.span,
+        ));
+    }
+
+    // Remap and inline the body statements
+    let param_offset = local_offset + candidate.params.len() as u32;
+    let (remapped_stmts, final_value) =
+        remap_and_extract_return(body, &param_to_local, param_offset, callee_param_count);
+
+    inlined_stmts.extend(remapped_stmts);
+
+    // The final expression is either the return value or unit
+    let final_expr =
+        final_value.unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span));
+
+    // Return the inlined function key for string literal tracking
+    let inlined_key = (target_module, func_name.clone());
+    Some((inlined_stmts, final_expr, inlined_key))
+}
+
+/// Remap local indices and extract the return value from a block
+fn remap_and_extract_return(
+    block: &TirBlock,
+    param_to_local: &HashMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+) -> (Vec<TirStmt>, Option<TirExpr>) {
+    let mut stmts = Vec::new();
+    let mut return_value = None;
+
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            TirStmtKind::Return { value } => {
+                // The return value becomes the final expression
+                return_value = value
+                    .as_ref()
+                    .map(|v| remap_expr(v, param_to_local, local_offset, param_count));
+                // Don't add the return statement to the inlined code
+            }
+            _ => {
+                stmts.push(remap_stmt(stmt, param_to_local, local_offset, param_count));
+            }
+        }
+    }
+
+    (stmts, return_value)
+}
+
+/// Remap local indices in a statement
+fn remap_stmt(
+    stmt: &TirStmt,
+    param_to_local: &HashMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+) -> TirStmt {
+    let kind = match &stmt.kind {
+        TirStmtKind::Let {
+            name,
+            local_index,
+            is_mut,
+            is_reactive,
+            type_id,
+            value,
+        } => {
+            let new_index =
+                remap_local_index(*local_index, param_to_local, local_offset, param_count);
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index: new_index,
+                is_mut: *is_mut,
+                is_reactive: *is_reactive,
+                type_id: *type_id,
+                value: remap_expr(value, param_to_local, local_offset, param_count),
+            }
+        }
+        TirStmtKind::Expr(expr) => {
+            TirStmtKind::Expr(remap_expr(expr, param_to_local, local_offset, param_count))
+        }
+        TirStmtKind::Return { value } => TirStmtKind::Return {
+            value: value
+                .as_ref()
+                .map(|v| remap_expr(v, param_to_local, local_offset, param_count)),
+        },
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => TirStmtKind::If {
+            condition: remap_expr(condition, param_to_local, local_offset, param_count),
+            then_block: remap_block(then_block, param_to_local, local_offset, param_count),
+            else_block: else_block
+                .as_ref()
+                .map(|b| remap_block(b, param_to_local, local_offset, param_count)),
+        },
+        TirStmtKind::While { condition, body } => TirStmtKind::While {
+            condition: remap_expr(condition, param_to_local, local_offset, param_count),
+            body: remap_block(body, param_to_local, local_offset, param_count),
+        },
+        TirStmtKind::For {
+            condition,
+            body,
+            update,
+        } => TirStmtKind::For {
+            condition: condition
+                .as_ref()
+                .map(|c| remap_expr(c, param_to_local, local_offset, param_count)),
+            body: remap_block(body, param_to_local, local_offset, param_count),
+            update: update
+                .as_ref()
+                .map(|u| remap_expr(u, param_to_local, local_offset, param_count)),
+        },
+        TirStmtKind::Loop { body } => TirStmtKind::Loop {
+            body: remap_block(body, param_to_local, local_offset, param_count),
+        },
+        TirStmtKind::ForOf {
+            binding_local,
+            binding_type,
+            is_mut,
+            iterable,
+            iterable_type,
+            body,
+        } => TirStmtKind::ForOf {
+            binding_local: remap_local_index(
+                *binding_local,
+                param_to_local,
+                local_offset,
+                param_count,
+            ),
+            binding_type: *binding_type,
+            is_mut: *is_mut,
+            iterable: remap_expr(iterable, param_to_local, local_offset, param_count),
+            iterable_type: *iterable_type,
+            body: remap_block(body, param_to_local, local_offset, param_count),
+        },
+        TirStmtKind::Assert {
+            condition,
+            condition_source,
+            message,
+            intermediates,
+        } => TirStmtKind::Assert {
+            condition: remap_expr(condition, param_to_local, local_offset, param_count),
+            condition_source: condition_source.clone(),
+            message: message
+                .as_ref()
+                .map(|m| remap_expr(m, param_to_local, local_offset, param_count)),
+            intermediates: intermediates
+                .iter()
+                .map(|(name, expr, type_id)| {
+                    (
+                        name.clone(),
+                        remap_expr(expr, param_to_local, local_offset, param_count),
+                        *type_id,
+                    )
+                })
+                .collect(),
+        },
+        TirStmtKind::Break => TirStmtKind::Break,
+        TirStmtKind::Continue => TirStmtKind::Continue,
+    };
+
+    TirStmt::new(kind, stmt.span)
+}
+
+/// Remap local indices in a block
+fn remap_block(
+    block: &TirBlock,
+    param_to_local: &HashMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+) -> TirBlock {
+    TirBlock::new(
+        block
+            .stmts
+            .iter()
+            .map(|s| remap_stmt(s, param_to_local, local_offset, param_count))
+            .collect(),
+        block.span,
+    )
+}
+
+/// Remap a local index
+fn remap_local_index(
+    index: u32,
+    param_to_local: &HashMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+) -> u32 {
+    // If it's a parameter, use the param_to_local mapping
+    if let Some(&new_index) = param_to_local.get(&index) {
+        return new_index;
+    }
+    // Otherwise, offset the non-parameter locals
+    if index >= param_count {
+        local_offset + (index - param_count)
+    } else {
+        // This shouldn't happen if param_to_local is complete
+        index
+    }
+}
+
+/// Remap local indices in an expression
+fn remap_expr(
+    expr: &TirExpr,
+    param_to_local: &HashMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+) -> TirExpr {
+    let kind = match &expr.kind {
+        TirExprKind::Local { index, name } => {
+            let new_index = remap_local_index(*index, param_to_local, local_offset, param_count);
+            TirExprKind::Local {
+                index: new_index,
+                name: name.clone(),
+            }
+        }
+        TirExprKind::Binary { left, op, right } => TirExprKind::Binary {
+            left: Box::new(remap_expr(left, param_to_local, local_offset, param_count)),
+            op: *op,
+            right: Box::new(remap_expr(right, param_to_local, local_offset, param_count)),
+        },
+        TirExprKind::Unary { op, expr: inner } => TirExprKind::Unary {
+            op: *op,
+            expr: Box::new(remap_expr(inner, param_to_local, local_offset, param_count)),
+        },
+        TirExprKind::Assign { target, value } => TirExprKind::Assign {
+            target: Box::new(remap_expr(
+                target,
+                param_to_local,
+                local_offset,
+                param_count,
+            )),
+            value: Box::new(remap_expr(value, param_to_local, local_offset, param_count)),
+        },
+        TirExprKind::Cast {
+            expr: inner,
+            target_type,
+        } => TirExprKind::Cast {
+            expr: Box::new(remap_expr(inner, param_to_local, local_offset, param_count)),
+            target_type: *target_type,
+        },
+        TirExprKind::Call {
+            module_path,
+            func_name,
+            type_args,
+            args,
+        } => TirExprKind::Call {
+            module_path: module_path.clone(),
+            func_name: func_name.clone(),
+            type_args: type_args.clone(),
+            args: args
+                .iter()
+                .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+        TirExprKind::MethodCall {
+            receiver,
+            method_name,
+            type_args,
+            args,
+        } => TirExprKind::MethodCall {
+            receiver: Box::new(remap_expr(
+                receiver,
+                param_to_local,
+                local_offset,
+                param_count,
+            )),
+            method_name: method_name.clone(),
+            type_args: type_args.clone(),
+            args: args
+                .iter()
+                .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+        TirExprKind::StaticCall {
+            func_name,
+            module_path,
+            args,
+        } => TirExprKind::StaticCall {
+            func_name: func_name.clone(),
+            module_path: module_path.clone(),
+            args: args
+                .iter()
+                .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+        TirExprKind::EffectCall {
+            effect_name,
+            op_name,
+            args,
+        } => TirExprKind::EffectCall {
+            effect_name: effect_name.clone(),
+            op_name: op_name.clone(),
+            args: args
+                .iter()
+                .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+        TirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            field_name,
+        } => TirExprKind::FieldAccess {
+            expr: Box::new(remap_expr(inner, param_to_local, local_offset, param_count)),
+            field_index: *field_index,
+            field_name: field_name.clone(),
+        },
+        TirExprKind::Index { expr: inner, index } => TirExprKind::Index {
+            expr: Box::new(remap_expr(inner, param_to_local, local_offset, param_count)),
+            index: Box::new(remap_expr(index, param_to_local, local_offset, param_count)),
+        },
+        TirExprKind::Block(block) => TirExprKind::Block(remap_block(
+            block,
+            param_to_local,
+            local_offset,
+            param_count,
+        )),
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => TirExprKind::If {
+            condition: Box::new(remap_expr(
+                condition,
+                param_to_local,
+                local_offset,
+                param_count,
+            )),
+            then_branch: remap_block(then_branch, param_to_local, local_offset, param_count),
+            else_branch: else_branch
+                .as_ref()
+                .map(|b| remap_block(b, param_to_local, local_offset, param_count)),
+        },
+        TirExprKind::Match { expr: inner, arms } => TirExprKind::Match {
+            expr: Box::new(remap_expr(inner, param_to_local, local_offset, param_count)),
+            arms: arms
+                .iter()
+                .map(|arm| crate::tir::TirMatchArm {
+                    pattern: arm.pattern.clone(), // Patterns don't contain locals in the same sense
+                    body: remap_expr(&arm.body, param_to_local, local_offset, param_count),
+                    span: arm.span,
+                })
+                .collect(),
+        },
+        TirExprKind::StructLiteral {
+            struct_type,
+            struct_name,
+            fields,
+        } => TirExprKind::StructLiteral {
+            struct_type: *struct_type,
+            struct_name: struct_name.clone(),
+            fields: fields
+                .iter()
+                .map(|f| crate::tir::TirStructField {
+                    name: f.name.clone(),
+                    value: remap_expr(&f.value, param_to_local, local_offset, param_count),
+                    field_index: f.field_index,
+                })
+                .collect(),
+        },
+        TirExprKind::ArrayLiteral { elements } => TirExprKind::ArrayLiteral {
+            elements: elements
+                .iter()
+                .map(|e| remap_expr(e, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+        TirExprKind::TupleLiteral { elements } => TirExprKind::TupleLiteral {
+            elements: elements
+                .iter()
+                .map(|e| remap_expr(e, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+        TirExprKind::Closure {
+            params,
+            body,
+            captures,
+        } => TirExprKind::Closure {
+            params: params.clone(),
+            body: Box::new(remap_expr(body, param_to_local, local_offset, param_count)),
+            captures: captures.clone(), // Captures reference outer scope, not remapped
+        },
+        TirExprKind::IndirectCall { callee, args } => TirExprKind::IndirectCall {
+            callee: Box::new(remap_expr(
+                callee,
+                param_to_local,
+                local_offset,
+                param_count,
+            )),
+            args: args
+                .iter()
+                .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+        // Leaf nodes - no remapping needed
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. } => expr.kind.clone(),
+    };
+
+    TirExpr::new(kind, expr.type_id, expr.span)
+}
+
+/// Recursively inline calls within an expression
+fn inline_calls_in_expr(
+    expr: &mut TirExpr,
+    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    current_module: &[String],
+    local_count: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    type_table: &TypeTable,
+    pre_stmts: &mut Vec<TirStmt>,
+    inlined_funcs: &mut Vec<(Vec<String>, String)>,
+) {
+    match &mut expr.kind {
+        TirExprKind::Binary { left, right, .. } => {
+            inline_calls_in_expr(
+                left,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+            inline_calls_in_expr(
+                right,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            inline_calls_in_expr(
+                inner,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+        }
+        TirExprKind::Assign { target, value } => {
+            inline_calls_in_expr(
+                target,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+            inline_calls_in_expr(
+                value,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            inline_calls_in_expr(
+                inner,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                inline_calls_in_expr(
+                    arg,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            inline_calls_in_expr(
+                receiver,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+            for arg in args {
+                inline_calls_in_expr(
+                    arg,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        TirExprKind::StaticCall { args, .. } => {
+            for arg in args {
+                inline_calls_in_expr(
+                    arg,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        TirExprKind::EffectCall { args, .. } => {
+            for arg in args {
+                inline_calls_in_expr(
+                    arg,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            inline_calls_in_expr(
+                inner,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            inline_calls_in_expr(
+                inner,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+            inline_calls_in_expr(
+                index,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                inline_calls_in_expr(
+                    &mut field.value,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                inline_calls_in_expr(
+                    elem,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            inline_calls_in_expr(
+                callee,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+            for arg in args {
+                inline_calls_in_expr(
+                    arg,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        // For block/if/match expressions, we don't inline recursively here
+        // as they would need proper block handling
+        _ => {}
+    }
+}
+
+// =============================================================================
+// Strength Reduction (placeholder for future enhancement)
+// =============================================================================
+
+// Strength reduction optimization transforms patterns like:
+//   for i in 0..n { let val = base + i * step; }
+// to:
+//   let mut acc = base; for i in 0..n { let val = acc; acc += step; }
+//
+// This eliminates the multiplication inside the loop.
+// Currently not implemented - requires complex loop analysis.
+// Potential patterns to target:
+// - `base + counter * step` where counter increments by 1
+// - Nested loops with induction variables
 
 /// Standard WASI functions for each effect (for O0 mode)
 pub const STANDARD_WASI_FUNCTIONS: &[&str] = &[
@@ -730,6 +2280,37 @@ fn analyze_expr(
                     }
                     // Other primitive methods are inline (no function call)
                 }
+                ResolvedType::GenericInstance {
+                    name,
+                    type_args,
+                    module_path,
+                } => {
+                    // Generic instance method call (e.g., Box<i32>.get())
+                    // Track as a free function with monomorphized name: Box$i32::get
+                    let elem_name = if let Some(type_id) = type_args.first() {
+                        mangle_type_for_name(*type_id, type_table)
+                    } else {
+                        String::new()
+                    };
+                    let mangled_func_name = format!("{}${}::{}", name, elem_name, method_name);
+                    let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                        module_path,
+                        &mangled_func_name,
+                    ));
+                    analysis.callees.insert(callee_id);
+                }
+                ResolvedType::BuiltinArray(elem_type) => {
+                    // Array<T> method call (e.g., arr.len(), arr.append())
+                    // Track as a free function with monomorphized name: Array$i32::len
+                    let elem_name = mangle_type_for_name(*elem_type, type_table);
+                    let mangled_func_name = format!("Array${}::{}", elem_name, method_name);
+                    // Array methods are in core/prelude
+                    let callee_id = FunctionId::Free(FreeFunctionName::from_strs(
+                        &["core", "prelude"],
+                        &mangled_func_name,
+                    ));
+                    analysis.callees.insert(callee_id);
+                }
                 _ => {}
             }
 
@@ -882,6 +2463,64 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     }
 }
 
+/// Mangle a type ID into a string suitable for struct/function names.
+/// Used for creating monomorphized function names like Array$i32::len.
+fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
+    match type_table.get(type_id) {
+        ResolvedType::Primitive(prim) => match prim {
+            PrimitiveType::I8 => "i8".to_string(),
+            PrimitiveType::I16 => "i16".to_string(),
+            PrimitiveType::I32 => "i32".to_string(),
+            PrimitiveType::I64 => "i64".to_string(),
+            PrimitiveType::I128 => "i128".to_string(),
+            PrimitiveType::U8 => "u8".to_string(),
+            PrimitiveType::U16 => "u16".to_string(),
+            PrimitiveType::U32 => "u32".to_string(),
+            PrimitiveType::U64 => "u64".to_string(),
+            PrimitiveType::U128 => "u128".to_string(),
+            PrimitiveType::F32 => "f32".to_string(),
+            PrimitiveType::F64 => "f64".to_string(),
+            PrimitiveType::Bool => "bool".to_string(),
+            PrimitiveType::Char => "char".to_string(),
+        },
+        ResolvedType::Unit => "unit".to_string(),
+        ResolvedType::String => "String".to_string(),
+        ResolvedType::Struct { name, .. } => name.clone(),
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } => {
+            let args: Vec<String> = type_args
+                .iter()
+                .map(|t| mangle_type_for_name(*t, type_table))
+                .collect();
+            format!("{}${}", name, args.join("$"))
+        }
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            let ret_name = mangle_type_for_name(*return_type, type_table);
+            format!("Fn${}${}", params.len(), ret_name)
+        }
+        ResolvedType::Tuple(elems) => {
+            let elem_names: Vec<String> = elems
+                .iter()
+                .map(|t| mangle_type_for_name(*t, type_table))
+                .collect();
+            format!("Tuple${}", elem_names.join("$"))
+        }
+        ResolvedType::Option(inner) => {
+            let inner_name = mangle_type_for_name(*inner, type_table);
+            format!("Option${}", inner_name)
+        }
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            mangle_type_for_name(*inner, type_table)
+        }
+        _ => "unknown".to_string(),
+    }
+}
+
 /// Compute the set of reachable functions from an entry point
 fn compute_reachable(
     call_graph: &HashMap<FunctionId, HashSet<FunctionId>>,
@@ -913,6 +2552,115 @@ fn compute_reachable(
 // Project-level optimization
 // =============================================================================
 
+/// Remove unreachable functions from the project's TIR modules.
+///
+/// This physically removes functions that are not in `reachable_functions`
+/// from the TIR, so codegen doesn't need to filter them.
+fn remove_unreachable_functions(project: &mut Project) {
+    // Skip if all functions are reachable (no DCE)
+    if project.all_reachable {
+        return;
+    }
+
+    for (module_path, module) in &mut project.tir_modules {
+        // Retain only reachable functions
+        module.functions.retain(|func| {
+            // Check if this is a method (name contains "::")
+            if let Some(sep_pos) = func.name.find("::") {
+                // Could be either:
+                // - Instance method tracked as FunctionId::Method
+                // - Static method tracked as FunctionId::Free with mangled name
+                let struct_name = &func.name[..sep_pos];
+                let method_name = &func.name[sep_pos + 2..];
+
+                // Try as instance method (FunctionId::Method)
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_path.join("/"),
+                    struct_name.to_string(),
+                    None,
+                    method_name.to_string(),
+                ));
+                if project.reachable_functions.contains(&method_id) {
+                    return true;
+                }
+
+                // Try as static method (FunctionId::Free with mangled name)
+                let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                    module_path,
+                    &func.name,
+                ));
+                if project.reachable_functions.contains(&free_id) {
+                    return true;
+                }
+
+                // For generic methods/static methods, check if any monomorphized version is reachable
+                // Generic functions are named "Array::with_capacity" but calls use "Array$i32::with_capacity"
+                // Check if any function ID in reachable_functions matches this base name
+                is_generic_func_reachable(&project.reachable_functions, module_path, &func.name)
+            } else {
+                // Regular function
+                let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                    module_path,
+                    &func.name,
+                ));
+                project.reachable_functions.contains(&func_id)
+            }
+        });
+    }
+}
+
+/// Check if a generic function has any monomorphized version that is reachable.
+/// For example, "Array::with_capacity" should be kept if "Array$i32::with_capacity" is reachable.
+fn is_generic_func_reachable(
+    reachable: &HashSet<FunctionId>,
+    module_path: &[String],
+    func_name: &str,
+) -> bool {
+    // func_name is like "Array::with_capacity"
+    // We need to find any "Array$..::with_capacity" in reachable set
+    let Some(sep_pos) = func_name.find("::") else {
+        return false;
+    };
+    let base_struct = &func_name[..sep_pos];
+    let method_name = &func_name[sep_pos + 2..];
+
+    for id in reachable {
+        if let FunctionId::Free(free_name) = id {
+            // For monomorphized functions, the actual function may be in a different module
+            // (e.g., entry module []) than the original definition (e.g., ["core", "prelude"]).
+            // So we relax the module path check for monomorphized names (containing $).
+            let module_matches = free_name.module_path.as_slice() == module_path
+                || (free_name.name.contains('$') && module_path.is_empty());
+
+            if !module_matches {
+                continue;
+            }
+            // Check if name matches pattern "BaseStruct$..::method_name"
+            if let Some(call_sep_pos) = free_name.name.find("::") {
+                let call_struct = &free_name.name[..call_sep_pos];
+                let call_method = &free_name.name[call_sep_pos + 2..];
+
+                // Check if method name matches
+                if call_method != method_name {
+                    continue;
+                }
+
+                // Check if struct name matches (with or without generic params)
+                // "Array$i32" should match "Array"
+                if call_struct == base_struct {
+                    return true;
+                }
+                if let Some(dollar_pos) = call_struct.find('$')
+                    && &call_struct[..dollar_pos] == base_struct
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Optimize a Project by analyzing and populating its usage fields.
 ///
 /// This is the main entry point for the optimizer. Based on the optimization
@@ -922,11 +2670,19 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
         OptLevel::None => {
             populate_all_features(&mut project);
         }
-        OptLevel::Basic | OptLevel::Full => {
+        OptLevel::Basic => {
             analyze_project(&mut project);
+            remove_unreachable_functions(&mut project);
+        }
+        OptLevel::Full => {
+            inline_functions(&mut project);
+            analyze_project(&mut project);
+            remove_unreachable_functions(&mut project);
         }
         OptLevel::Size => {
+            inline_functions(&mut project);
             analyze_project(&mut project);
+            remove_unreachable_functions(&mut project);
             project.strip_names = true;
         }
     }

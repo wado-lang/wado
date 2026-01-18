@@ -2,7 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
-use lexopt::Arg::{Long, Value};
+use lexopt::Arg::{Long, Short, Value};
+use wado_compiler::OptLevel;
 
 use crate::args::{next_arg, reject_multiple_inputs, require_input, unexpected_arg};
 use crate::compiler_host::FilesystemCompilerHost;
@@ -18,6 +19,7 @@ pub struct DumpOptions {
     pub show_lower: bool,
     pub show_optimize: bool,
     pub unparse: bool,
+    pub opt_level: OptLevel,
 }
 
 pub fn print_usage() {
@@ -37,8 +39,14 @@ pub fn print_usage() {
     eprintln!("  --all        Show all phases (default if no phase specified)");
     eprintln!();
     eprintln!("Display Options:");
-    eprintln!("  --unparse    Unparse to Wado source code (for ast/desugar/tir/lower)");
+    eprintln!("  --unparse    Unparse to Wado source code (for ast/desugar/tir/lower/optimize)");
     eprintln!("               Default: Debug/tree format");
+    eprintln!();
+    eprintln!("Optimization Level (for --optimize phase):");
+    eprintln!("  -O0          No optimizations (default)");
+    eprintln!("  -O1          Baseline optimizations (DCE)");
+    eprintln!("  -O2          Full optimizations (DCE + inlining)");
+    eprintln!("  -Os          Size optimizations (O2 + strip names)");
     eprintln!();
     eprintln!("Other:");
     eprintln!("  --help       Show this help message");
@@ -55,6 +63,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_lower = false;
     let mut show_optimize = false;
     let mut unparse = false;
+    let mut opt_level = OptLevel::None;
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -80,6 +89,24 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                 show_tir = true;
                 show_lower = true;
                 show_optimize = true;
+            }
+            Short('O') => {
+                let level = parser.value().unwrap_or_else(|_| {
+                    eprintln!("Error: -O requires a level (0, 1, 2, or s)");
+                    process::exit(1);
+                });
+                let level_str = level.to_string_lossy();
+                opt_level = match level_str.as_ref() {
+                    "0" => OptLevel::None,
+                    "1" => OptLevel::Basic,
+                    "2" => OptLevel::Full,
+                    "s" => OptLevel::Size,
+                    _ => {
+                        eprintln!("Error: Unknown optimization level: -O{}", level_str);
+                        eprintln!("Valid levels: -O0, -O1, -O2, -Os");
+                        process::exit(1);
+                    }
+                };
             }
             Value(val) => {
                 reject_multiple_inputs(&input);
@@ -122,6 +149,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_lower,
         show_optimize,
         unparse,
+        opt_level,
     }
 }
 
@@ -142,7 +170,14 @@ pub async fn run(opts: DumpOptions) {
     let host = FilesystemCompilerHost::new(base_path);
 
     // Dump using async API
-    let result = match wado_compiler::dump_with_host(&source, &host, Some(&opts.input)).await {
+    let result = match wado_compiler::dump_with_host(
+        &source,
+        &host,
+        Some(&opts.input),
+        opts.opt_level,
+    )
+    .await
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("{e}");
@@ -365,8 +400,18 @@ pub async fn run(opts: DumpOptions) {
     // Optimized project section (Optimize phase)
     if opts.show_optimize {
         if let Some(ref project) = result.optimized_project {
-            println!("=== Optimized Project (Optimize) ===");
-            println!("{:#?}", project);
+            if opts.unparse {
+                println!("=== Optimized TIR (Optimize, unparsed) ===");
+                for (path, module) in &project.tir_modules {
+                    let path_str: String = path.join("::");
+                    println!("// --- Module: {} ---", path_str);
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    println!("{}", unparsed);
+                }
+            } else {
+                println!("=== Optimized Project (Optimize) ===");
+                println!("{:#?}", project);
+            }
             println!();
         } else {
             println!("=== Optimized Project (Optimize) ===");

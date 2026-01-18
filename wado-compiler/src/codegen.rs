@@ -6139,6 +6139,237 @@ impl Codegen {
         }
     }
 
+    /// Generate code for an expression used as a statement (value is discarded).
+    /// This optimizes assignment expressions to avoid the drop-tee pattern.
+    fn generate_expr_as_stmt(
+        &self,
+        func: &mut Function,
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Check if this is an assignment expression - if so, we can optimize
+        if let TirExprKind::Assign { target, value } = &expr.kind {
+            self.generate_assignment_as_stmt(func, target, value, type_table, ctx, builder);
+            return;
+        }
+
+        // For non-assignment expressions, generate normally and drop if needed
+        self.generate_expr(func, expr, type_table, ctx, builder);
+        if expr.type_id != TypeTable::UNIT && expr.type_id != TypeTable::NEVER {
+            func.instruction(&Instruction::Drop);
+        }
+    }
+
+    /// Generate assignment code without returning the assigned value.
+    /// This avoids the drop-tee pattern where we use local.tee then immediately drop.
+    fn generate_assignment_as_stmt(
+        &self,
+        func: &mut Function,
+        target: &TirExpr,
+        value: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        match &target.kind {
+            TirExprKind::Local { index, .. } => {
+                let adjusted_index = *index + ctx.local_index_offset;
+                if let Some(&box_type_idx) = ctx.local_box_types.get(index) {
+                    // For address-taken primitive locals, update the box
+                    func.instruction(&Instruction::LocalGet(adjusted_index));
+                    self.generate_expr(func, value, type_table, ctx, builder);
+                    func.instruction(&Instruction::StructSet {
+                        struct_type_index: box_type_idx,
+                        field_index: 0,
+                    });
+                    // No need to push the value back - it's a statement
+                } else {
+                    self.generate_expr(func, value, type_table, ctx, builder);
+                    if self.needs_value_copy(value.type_id, type_table)
+                        && !self.is_fresh_value_expr(value)
+                    {
+                        self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
+                    }
+                    // Use local.set instead of local.tee - value is not needed on stack
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
+            }
+            TirExprKind::FieldAccess {
+                expr, field_index, ..
+            } => {
+                let type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                self.generate_expr(func, expr, type_table, ctx, builder);
+                self.generate_expr(func, value, type_table, ctx, builder);
+                func.instruction(&Instruction::StructSet {
+                    struct_type_index: type_idx,
+                    field_index: *field_index,
+                });
+                // No need to regenerate field access - it's a statement
+            }
+            TirExprKind::Index {
+                expr: array_expr,
+                index: index_expr,
+            } => {
+                let base_type_id = match type_table.get(array_expr.type_id) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                    _ => array_expr.type_id,
+                };
+                let base_type = type_table.get(base_type_id);
+                enum ArrayKind {
+                    Array { struct_type_idx: u32 },
+                    String,
+                }
+                let (raw_array_type_idx, array_kind) =
+                    if let Some(element_type) = type_table.as_array(base_type_id) {
+                        let raw_type_idx = self
+                            .array_types
+                            .get(&element_type)
+                            .copied()
+                            .unwrap_or(self.string_array_type_idx);
+                        let struct_type_idx = *self
+                            .array_struct_types
+                            .get(&element_type)
+                            .expect("Array struct type should be registered");
+                        (raw_type_idx, ArrayKind::Array { struct_type_idx })
+                    } else if let ResolvedType::String = base_type {
+                        (self.string_array_type_idx, ArrayKind::String)
+                    } else {
+                        panic!("index assignment on non-array type: {:?}", base_type);
+                    };
+
+                self.generate_expr(func, array_expr, type_table, ctx, builder);
+                match &array_kind {
+                    ArrayKind::Array { struct_type_idx } => {
+                        func.instruction(&Instruction::StructGet {
+                            struct_type_index: *struct_type_idx,
+                            field_index: 0,
+                        });
+                    }
+                    ArrayKind::String => {
+                        if let Some(struct_info) =
+                            self.lookup_struct_type("String", &string_module_path())
+                        {
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: struct_info.type_idx,
+                                field_index: 0,
+                            });
+                        }
+                    }
+                }
+                self.generate_expr(func, index_expr, type_table, ctx, builder);
+                self.generate_expr(func, value, type_table, ctx, builder);
+                func.instruction(&Instruction::ArraySet(raw_array_type_idx));
+                // No need to regenerate index access - it's a statement
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: ref_expr,
+            } => {
+                let ref_type = type_table.get(ref_expr.type_id);
+                if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = ref_type {
+                    if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                        let val_type = primitive_to_valtype(prim);
+                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                            self.generate_expr(func, ref_expr, type_table, ctx, builder);
+                            self.generate_expr(func, value, type_table, ctx, builder);
+                            func.instruction(&Instruction::StructSet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                            // No need to push the value back - it's a statement
+                        } else {
+                            panic!("no box type for primitive in deref assignment: {:?}", prim);
+                        }
+                    } else {
+                        panic!("deref assignment for non-primitive types not yet supported");
+                    }
+                } else {
+                    panic!("deref assignment target is not a reference type");
+                }
+            }
+            _ => panic!("invalid assignment target in TIR"),
+        }
+    }
+
+    /// Try to generate an inverted condition for br_if optimization.
+    /// Returns true if the condition was inverted and generated, false otherwise.
+    /// This eliminates the pattern: condition + i32.eqz + br_if
+    /// by directly generating: inverted_condition + br_if
+    fn try_generate_inverted_condition(
+        &self,
+        func: &mut Function,
+        condition: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) -> bool {
+        // Check if condition is a simple binary comparison that can be inverted
+        if let TirExprKind::Binary { left, op, right } = &condition.kind {
+            let inverted_op = match op {
+                TirBinaryOp::Lt => Some(TirBinaryOp::GtEq),
+                TirBinaryOp::LtEq => Some(TirBinaryOp::Gt),
+                TirBinaryOp::Gt => Some(TirBinaryOp::LtEq),
+                TirBinaryOp::GtEq => Some(TirBinaryOp::Lt),
+                TirBinaryOp::Eq => Some(TirBinaryOp::NotEq),
+                TirBinaryOp::NotEq => Some(TirBinaryOp::Eq),
+                _ => None,
+            };
+
+            if let Some(inv_op) = inverted_op {
+                // Generate left operand
+                self.generate_expr(func, left, type_table, ctx, builder);
+                // Generate right operand
+                self.generate_expr(func, right, type_table, ctx, builder);
+                // Determine the effective type for the comparison
+                // (same logic as in generate_binary_op for comparison signedness)
+                let is_left_unsigned = matches!(
+                    type_table.get(left.type_id),
+                    ResolvedType::Primitive(
+                        PrimitiveType::U8
+                            | PrimitiveType::U16
+                            | PrimitiveType::U32
+                            | PrimitiveType::U64
+                    )
+                );
+                let is_right_unsigned = matches!(
+                    type_table.get(right.type_id),
+                    ResolvedType::Primitive(
+                        PrimitiveType::U8
+                            | PrimitiveType::U16
+                            | PrimitiveType::U32
+                            | PrimitiveType::U64
+                    )
+                );
+                let effective_type = if is_left_unsigned || is_right_unsigned {
+                    let is_i64 = matches!(
+                        type_table.get(left.type_id),
+                        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
+                    );
+                    if is_i64 { TypeTable::U64 } else { left.type_id }
+                } else {
+                    left.type_id
+                };
+                // Generate the inverted comparison
+                self.generate_binary_op(func, inv_op, effective_type, type_table);
+                return true;
+            }
+        }
+
+        // Check if condition is a negation (!expr) - we can just use the inner expr
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Not,
+            expr: inner,
+        } = &condition.kind
+        {
+            self.generate_expr(func, inner, type_table, ctx, builder);
+            return true;
+        }
+
+        false
+    }
+
     /// Generate code for a TIR binary operation
     fn generate_binary_op(
         &self,
@@ -6580,11 +6811,8 @@ impl Codegen {
             }
 
             TirStmtKind::Expr(expr) => {
-                self.generate_expr(func, expr, type_table, ctx, builder);
-                // Drop the result if the expression has a non-unit type
-                if expr.type_id != TypeTable::UNIT && expr.type_id != TypeTable::NEVER {
-                    func.instruction(&Instruction::Drop);
-                }
+                // Use optimized statement generation to avoid drop-tee pattern
+                self.generate_expr_as_stmt(func, expr, type_table, ctx, builder);
             }
 
             TirStmtKind::Return { value } => {
@@ -6625,9 +6853,14 @@ impl Codegen {
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
 
                 // Check condition, break if false
-                self.generate_expr(func, condition, type_table, ctx, builder);
-                func.instruction(&Instruction::I32Eqz);
+                // Try to generate inverted condition directly to avoid i32.eqz
                 let (extra, break_offset) = *ctx.loop_info.last().unwrap();
+                if !self.try_generate_inverted_condition(func, condition, type_table, ctx, builder)
+                {
+                    // Fallback: generate condition and negate
+                    self.generate_expr(func, condition, type_table, ctx, builder);
+                    func.instruction(&Instruction::I32Eqz);
+                }
                 func.instruction(&Instruction::BrIf(break_offset + extra));
 
                 // Execute body
@@ -6692,8 +6925,12 @@ impl Codegen {
 
                 // Check condition if present
                 if let Some(cond) = condition {
-                    self.generate_expr(func, cond, type_table, ctx, builder);
-                    func.instruction(&Instruction::I32Eqz);
+                    // Try to generate inverted condition directly to avoid i32.eqz
+                    if !self.try_generate_inverted_condition(func, cond, type_table, ctx, builder) {
+                        // Fallback: generate condition and negate
+                        self.generate_expr(func, cond, type_table, ctx, builder);
+                        func.instruction(&Instruction::I32Eqz);
+                    }
                     // At this point we're not inside the body block yet, so br 1 exits to $exit
                     func.instruction(&Instruction::BrIf(1));
                 }
@@ -6707,8 +6944,8 @@ impl Codegen {
 
                 // Update expression if present
                 if let Some(upd) = update {
-                    self.generate_expr(func, upd, type_table, ctx, builder);
-                    func.instruction(&Instruction::Drop); // Discard result of update expression
+                    // Use optimized statement generation to avoid drop-tee pattern
+                    self.generate_expr_as_stmt(func, upd, type_table, ctx, builder);
                 }
 
                 // Continue to loop header (br 0 from here)
