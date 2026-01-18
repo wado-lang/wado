@@ -232,6 +232,8 @@ WEPs combine language specification and implementation strategy in a single docu
 - [CompilerHost Abstraction for Compiler I/O](./docs/wep-2026-01-16-source-provider-abstraction.md)
 - [Type Stringification](./docs/wep-2026-01-16-type-stringification.md)
 - [Template Format Specifiers](./docs/wep-2026-01-17-template-format-specifiers.md)
+- [JSON Literal Compatibility](./docs/wep-2026-01-18-json-literal-compatibility.md)
+- [JSON Module Import](./docs/wep-2026-01-18-json-module-import.md)
 
 ### Structure
 
