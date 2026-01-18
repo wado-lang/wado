@@ -1,0 +1,44 @@
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Create a new dict
+    let mut d = Dict::<String, i32>::new();
+
+    // Check empty dict
+    assert d.len() == 0;
+    assert !d.has("key1");
+
+    // Set some values
+    d.set("key1", 10);
+    d.set("key2", 20);
+    d.set("key3", 30);
+
+    // Check length
+    assert d.len() == 3;
+
+    // Check has
+    assert d.has("key1");
+    assert d.has("key2");
+    assert d.has("key3");
+    assert !d.has("key4");
+
+    // Check get
+    assert d.get("key1") == 10;
+    assert d.get("key2") == 20;
+    assert d.get("key3") == 30;
+
+    // Update existing key
+    d.set("key2", 200);
+    assert d.len() == 3;
+    assert d.get("key2") == 200;
+
+    // Print values to verify
+    println(`key1: {d.get("key1")}`);
+    println(`key2: {d.get("key2")}`);
+    println(`key3: {d.get("key3")}`);
+
+    println("All tests passed!");
+}
+
+__DATA__
+{"stdout": "key1: 10\nkey2: 200\nkey3: 30\nAll tests passed!\n"}

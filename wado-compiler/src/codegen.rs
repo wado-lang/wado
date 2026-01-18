@@ -517,11 +517,7 @@ impl Codegen {
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Reactive(inner) => Self::get_struct_dependencies(type_table, *inner),
-            ResolvedType::Result { ok, err }
-            | ResolvedType::Dict {
-                key: ok,
-                value: err,
-            } => {
+            ResolvedType::Result { ok, err } => {
                 let mut deps = Self::get_struct_dependencies(type_table, *ok);
                 deps.extend(Self::get_struct_dependencies(type_table, *err));
                 deps
@@ -4171,9 +4167,6 @@ impl Codegen {
             }
             ResolvedType::Variant { .. } => {
                 panic!("Variant type codegen not yet implemented")
-            }
-            ResolvedType::Dict { .. } => {
-                panic!("Dict type codegen not yet implemented")
             }
 
             // Placeholder types (shouldn't appear in final TIR)

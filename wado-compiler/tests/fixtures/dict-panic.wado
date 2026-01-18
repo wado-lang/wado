@@ -1,0 +1,13 @@
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let mut d = Dict::<String, i32>::new();
+    d.set("key1", 10);
+
+    // This should panic because "key2" doesn't exist
+    let value = d.get("key2");
+    println(`Value: {value}`);
+}
+
+__DATA__
+{"trapped": true, "stderr_contains": ["Dict: key not found"]}

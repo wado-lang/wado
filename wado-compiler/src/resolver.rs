@@ -3918,17 +3918,6 @@ impl<'a> Resolver<'a> {
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.type_table.intern(ResolvedType::Future(elem))
             }
-            "Dict" => {
-                let key = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                let value = args
-                    .get(1)
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.intern(ResolvedType::Dict { key, value })
-            }
             _ => {
                 // Check if it's a user-defined generic struct
                 if self.generic_struct_names.contains(name) {

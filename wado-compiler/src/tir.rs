@@ -168,14 +168,6 @@ impl SubstitutionContext {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.intern(ResolvedType::Future(new_inner))
             }
-            ResolvedType::Dict { key, value } => {
-                let new_key = self.substitute(key, type_table);
-                let new_value = self.substitute(value, type_table);
-                type_table.intern(ResolvedType::Dict {
-                    key: new_key,
-                    value: new_value,
-                })
-            }
             ResolvedType::Reactive(inner) => {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.intern(ResolvedType::Reactive(new_inner))
@@ -248,10 +240,6 @@ pub enum ResolvedType {
         effects: Vec<String>,
     },
     Tuple(Vec<TypeId>),
-    Dict {
-        key: TypeId,
-        value: TypeId,
-    },
     Reactive(TypeId),
     /// Type parameter (e.g., `T` in `struct Box<T>`)
     /// Used before monomorphization; should be substituted with concrete types
@@ -498,11 +486,9 @@ impl TypeTable {
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
-            ResolvedType::Result { ok, err }
-            | ResolvedType::Dict {
-                key: ok,
-                value: err,
-            } => self.contains_type_param(*ok) || self.contains_type_param(*err),
+            ResolvedType::Result { ok, err } => {
+                self.contains_type_param(*ok) || self.contains_type_param(*err)
+            }
             ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(*e)),
             ResolvedType::Function {
                 params,
@@ -573,9 +559,6 @@ impl TypeTable {
             ResolvedType::Variant { name, .. } => name.clone(),
             ResolvedType::Stream(inner) => format!("Stream<{}>", self.type_name(*inner)),
             ResolvedType::Future(inner) => format!("Future<{}>", self.type_name(*inner)),
-            ResolvedType::Dict { key, value } => {
-                format!("Dict<{}, {}>", self.type_name(*key), self.type_name(*value))
-            }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
             ResolvedType::GenericInstance {

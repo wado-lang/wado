@@ -79,6 +79,106 @@ impl Array<T> {
     }
 }
 
+/// Dictionary type with insertion-order preservation
+/// Uses linear search - suitable for small dictionaries
+pub struct Dict<K, V> {
+    keys_repr: builtin::array<K>,
+    keys_used: i32,
+    values_repr: builtin::array<V>,
+    values_used: i32,
+}
+
+impl Dict<K, V> {
+    /// Create a new empty dictionary
+    pub fn new() -> Dict<K, V> {
+        return Dict {
+            keys_repr: builtin::array_new::<K>(4),
+            keys_used: 0,
+            values_repr: builtin::array_new::<V>(4),
+            values_used: 0,
+        };
+    }
+
+    /// Get the number of key-value pairs in the dictionary
+    pub fn len(&self) -> i32 {
+        return self.keys_used;
+    }
+
+    /// Check if a key exists in the dictionary
+    pub fn has(&self, key: K) -> bool {
+        let len = self.keys_used;
+        let mut i = 0;
+        while i < len {
+            let entry_key = builtin::array_get::<K>(self.keys_repr, i);
+            if entry_key == key {
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
+
+    /// Get the value associated with a key
+    /// Panics if the key is not found
+    pub fn get(&self, key: K) -> V {
+        let len = self.keys_used;
+        let mut i = 0;
+        while i < len {
+            let entry_key = builtin::array_get::<K>(self.keys_repr, i);
+            if entry_key == key {
+                return builtin::array_get::<V>(self.values_repr, i);
+            }
+            i += 1;
+        }
+        panic("Dict: key not found");
+    }
+
+    /// Set the value for a key
+    /// If the key already exists, updates the value
+    /// If the key doesn't exist, appends a new entry
+    pub fn set(&mut self, key: K, value: V) {
+        let len = self.keys_used;
+        let mut i = 0;
+        while i < len {
+            let entry_key = builtin::array_get::<K>(self.keys_repr, i);
+            if entry_key == key {
+                // Update existing value
+                builtin::array_set::<V>(self.values_repr, i, value);
+                return;
+            }
+            i += 1;
+        }
+
+        // Key not found, append new entry
+        let used = self.keys_used;
+        let capacity = builtin::array_len(self.keys_repr);
+
+        // Grow if needed
+        if builtin::unlikely(used >= capacity) {
+            // Calculate new capacity: 4 if empty, otherwise double
+            let mut new_capacity = capacity * 2;
+            if capacity == 0 {
+                new_capacity = 4;
+            }
+
+            // Create new arrays and copy elements
+            let new_keys = builtin::array_new::<K>(new_capacity);
+            let new_values = builtin::array_new::<V>(new_capacity);
+            builtin::array_copy::<K>(new_keys, 0, self.keys_repr, 0, used);
+            builtin::array_copy::<V>(new_values, 0, self.values_repr, 0, used);
+            self.keys_repr = new_keys;
+            self.values_repr = new_values;
+        }
+
+        // Append the new entry
+        builtin::array_set::<K>(self.keys_repr, used, key);
+        builtin::array_set::<V>(self.values_repr, used, value);
+        self.keys_used = used + 1;
+        self.values_used = used + 1;
+    }
+
+}
+
 /// Traps with a message
 /// Logs the message to stderr (ambient, no effect required) and traps.
 pub fn panic(message: String) -> ! {
