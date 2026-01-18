@@ -2028,18 +2028,35 @@ fn build_analysis_graph(
             let func = func_rc.borrow();
             // Methods have names like "Point::sum", regular functions don't contain "::"
             let func_id = if let Some(sep_pos) = func.name.find("::") {
-                // This is a method - use MethodName
+                // This is a method - use MethodName or FreeFunctionName with monomorph info
                 let struct_name = &func.name[..sep_pos];
                 let method_name = &func.name[sep_pos + 2..];
-                FunctionId::Method(MethodName::new(
-                    path.join("/"),
-                    struct_name.to_string(),
-                    None,
-                    method_name.to_string(),
-                ))
+                if let Some(monomorph_info) = &func.monomorph_info {
+                    // Monomorphized method - use FreeFunctionName with metadata
+                    FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                        path.to_vec(),
+                        func.name.clone(),
+                        monomorph_info.generic_name.clone(),
+                    ))
+                } else {
+                    FunctionId::Method(MethodName::new(
+                        path.join("/"),
+                        struct_name.to_string(),
+                        None,
+                        method_name.to_string(),
+                    ))
+                }
             } else {
                 // Regular function - use FreeFunctionName
-                FunctionId::Free(FreeFunctionName::from_path_and_name(path, &func.name))
+                if let Some(monomorph_info) = &func.monomorph_info {
+                    FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                        path.to_vec(),
+                        func.name.clone(),
+                        monomorph_info.generic_name.clone(),
+                    ))
+                } else {
+                    FunctionId::Free(FreeFunctionName::from_path_and_name(path, &func.name))
+                }
             };
             let analysis = analyze_function(&func, path, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
@@ -2264,70 +2281,95 @@ fn analyze_expr(
             args,
             ..
         } => {
-            // Extract method name from func (format is "StructName::method_name")
-            let method_name = {
-                let full_name = func.name();
-                if let Some(pos) = full_name.rfind("::") {
-                    &full_name[pos + 2..]
-                } else {
-                    &full_name
-                }
-                .to_string()
-            };
-            // Get receiver type to determine method target
-            let receiver_type = type_table.get(receiver.type_id);
-            match receiver_type {
-                ResolvedType::Struct {
-                    name, module_path, ..
-                } => {
-                    // Struct method call - use FunctionId::Method
-                    let method_id = FunctionId::Method(MethodName::new(
-                        module_path.join("/"),
-                        name.clone(),
-                        None,
-                        method_name.to_string(),
-                    ));
-                    analysis.callees.insert(method_id);
-                }
-                ResolvedType::Primitive(_) => {
-                    // Primitive method call (e.g., i32.to_string())
-                    if method_name == "to_string" {
-                        add_to_string_callee(receiver.type_id, type_table, analysis);
-                    }
-                    // Other primitive methods are inline (no function call)
-                }
-                ResolvedType::GenericInstance {
-                    name,
-                    type_args,
+            // Use the func reference directly - it already has the correct mangled name
+            // and monomorph_info from lowering phase
+            let func_name = func.name();
+            let module_path = func.module_path();
+
+            // Check if this is a monomorphized method using FunctionRef metadata
+            if func.is_monomorphized() {
+                // Monomorphized method (e.g., Array<i32>::len, Box<i32>::get)
+                // Use the func reference's information directly
+                let base_name = func
+                    .base_struct_name()
+                    .map(|base| {
+                        // Extract method name from "Array<i32>::len" -> "len"
+                        func_name
+                            .find("::")
+                            .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
+                            .unwrap_or_else(|| base)
+                    })
+                    .unwrap_or_else(|| func_name.clone());
+
+                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     module_path,
-                } => {
-                    // Generic instance method call (e.g., Box<i32>.get())
-                    // Track as a free function with monomorphized name: Box<i32>::get
-                    let type_arg_names: Vec<String> = type_args
-                        .iter()
-                        .map(|t| mangle_type_for_name(*t, type_table))
-                        .collect();
-                    let mangled_func_name =
-                        format!("{}<{}>::{}", name, type_arg_names.join(","), method_name);
-                    let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                        module_path,
-                        &mangled_func_name,
-                    ));
-                    analysis.callees.insert(callee_id);
+                    func_name.clone(),
+                    base_name,
+                ));
+                analysis.callees.insert(callee_id);
+            } else {
+                // Non-monomorphized method - determine target from receiver type
+                let receiver_type = type_table.get(receiver.type_id);
+                let method_name = func_name
+                    .rfind("::")
+                    .map(|pos| &func_name[pos + 2..])
+                    .unwrap_or(&func_name)
+                    .to_string();
+
+                match receiver_type {
+                    ResolvedType::Struct {
+                        name, module_path, ..
+                    } => {
+                        // Struct method call - use FunctionId::Method
+                        let method_id = FunctionId::Method(MethodName::new(
+                            module_path.join("/"),
+                            name.clone(),
+                            None,
+                            method_name,
+                        ));
+                        analysis.callees.insert(method_id);
+                    }
+                    ResolvedType::Primitive(_) => {
+                        // Primitive method call (e.g., i32.to_string())
+                        if method_name == "to_string" {
+                            add_to_string_callee(receiver.type_id, type_table, analysis);
+                        }
+                        // Other primitive methods are inline (no function call)
+                    }
+                    ResolvedType::GenericInstance {
+                        name,
+                        type_args,
+                        module_path: _,
+                    } => {
+                        // Generic instance method call (e.g., Box<i32>.get())
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| mangle_type_for_name(*t, type_table))
+                            .collect();
+                        let mangled_func_name =
+                            format!("{}<{}>::{}", name, type_arg_names.join(","), method_name);
+                        let base_name = format!("{}::{}", name, method_name);
+                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                            vec![],
+                            mangled_func_name,
+                            base_name,
+                        ));
+                        analysis.callees.insert(callee_id);
+                    }
+                    ResolvedType::BuiltinArray(elem_type) => {
+                        // Array<T> method call (e.g., arr.len(), arr.append())
+                        let elem_name = mangle_type_for_name(*elem_type, type_table);
+                        let mangled_func_name = format!("Array<{}>::{}", elem_name, method_name);
+                        let base_name = format!("Array::{}", method_name);
+                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                            vec![],
+                            mangled_func_name,
+                            base_name,
+                        ));
+                        analysis.callees.insert(callee_id);
+                    }
+                    _ => {}
                 }
-                ResolvedType::BuiltinArray(elem_type) => {
-                    // Array<T> method call (e.g., arr.len(), arr.append())
-                    // Track as a free function with monomorphized name: Array<i32>::len
-                    let elem_name = mangle_type_for_name(*elem_type, type_table);
-                    let mangled_func_name = format!("Array<{}>::{}", elem_name, method_name);
-                    // Array methods are in core/prelude
-                    let callee_id = FunctionId::Free(FreeFunctionName::from_strs(
-                        &["core", "prelude"],
-                        &mangled_func_name,
-                    ));
-                    analysis.callees.insert(callee_id);
-                }
-                _ => {}
             }
 
             analyze_expr(receiver, current_module, type_table, analysis);
@@ -2370,19 +2412,36 @@ fn analyze_expr(
             }
         }
         TirExprKind::StaticCall { func, args } => {
-            let module_path = func.module_path();
             let func_name = func.name();
             // Static method call - func_name already contains "StructName::method_name"
             // The function is registered as a free function with mangled name
-            let callee_path = if module_path.is_empty() {
-                current_module
+            let callee_id = if func.is_monomorphized() {
+                // Monomorphized functions are generated in the entry module (empty path)
+                // Get base name from the function's monomorph_info
+                let base_name = func
+                    .base_struct_name()
+                    .map(|base| {
+                        // Extract method name from "Box<i32>::get" -> "get"
+                        func_name
+                            .find("::")
+                            .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
+                            .unwrap_or_else(|| base)
+                    })
+                    .unwrap_or_else(|| func_name.clone());
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    vec![],
+                    func_name.clone(),
+                    base_name,
+                ))
             } else {
-                module_path.as_slice()
+                let module_path = func.module_path();
+                let callee_path = if module_path.is_empty() {
+                    current_module
+                } else {
+                    module_path.as_slice()
+                };
+                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, &func_name))
             };
-            let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                callee_path,
-                &func_name,
-            ));
             analysis.callees.insert(callee_id);
 
             for arg in args {
@@ -2645,16 +2704,16 @@ fn is_generic_func_reachable(
         if let FunctionId::Free(free_name) = id {
             // For monomorphized functions, the actual function may be in a different module
             // (e.g., entry module []) than the original definition (e.g., ["core", "prelude"]).
-            // So we relax the module path check for monomorphized names (containing <).
+            // So we relax the module path check for monomorphized names using metadata.
             let module_matches = free_name.module_path.as_slice() == module_path
-                || (free_name.name.contains('<') && module_path.is_empty());
+                || (free_name.is_monomorphized && module_path.is_empty());
 
             if !module_matches {
                 continue;
             }
+
             // Check if name matches pattern "BaseStruct<..>::method_name"
             if let Some(call_sep_pos) = free_name.name.find("::") {
-                let call_struct = &free_name.name[..call_sep_pos];
                 let call_method = &free_name.name[call_sep_pos + 2..];
 
                 // Check if method name matches
@@ -2662,15 +2721,25 @@ fn is_generic_func_reachable(
                     continue;
                 }
 
-                // Check if struct name matches (with or without generic params)
-                // "Array<i32>" should match "Array"
-                if call_struct == base_struct {
-                    return true;
-                }
-                if let Some(bracket_pos) = call_struct.find('<')
-                    && &call_struct[..bracket_pos] == base_struct
-                {
-                    return true;
+                // Check if struct name matches using base_name metadata
+                // For monomorphized: "Array<i32>::len" has base_name "Array::len" -> extract "Array"
+                if free_name.is_monomorphized {
+                    if let Some(ref base_name) = free_name.base_name {
+                        // base_name is the generic name like "Array::len" - extract struct part
+                        let base_struct_from_meta = base_name
+                            .find("::")
+                            .map(|pos| &base_name[..pos])
+                            .unwrap_or(base_name);
+                        if base_struct_from_meta == base_struct {
+                            return true;
+                        }
+                    }
+                } else {
+                    // Non-monomorphized: direct struct name match
+                    let call_struct = &free_name.name[..call_sep_pos];
+                    if call_struct == base_struct {
+                        return true;
+                    }
                 }
             }
         }

@@ -22,9 +22,10 @@ use crate::ast::{
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirCapture, TirExpr,
-    TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock,
+    TirCapture, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -1742,6 +1743,7 @@ impl<'a> Resolver<'a> {
                     func: FunctionRef::External {
                         module_path: vec!["core".to_string(), "internal".to_string()],
                         name: "string_concat".to_string(),
+                        monomorph_info: None,
                     },
                     type_args: vec![],
                     args: vec![prefix, user_msg],
@@ -1765,6 +1767,7 @@ impl<'a> Resolver<'a> {
                 func: FunctionRef::External {
                     module_path: vec!["core".to_string(), "prelude".to_string()],
                     name: "panic".to_string(),
+                    monomorph_info: None,
                 },
                 type_args: vec![],
                 args: vec![message_expr],
@@ -2301,6 +2304,7 @@ impl<'a> Resolver<'a> {
                 func: FunctionRef::External {
                     module_path,
                     name: func_name,
+                    monomorph_info: None,
                 },
                 type_args,
                 args,
@@ -2649,9 +2653,38 @@ impl<'a> Resolver<'a> {
             return_type = subst_ctx.substitute(return_type, &mut self.type_table.borrow_mut());
         }
 
-        // Get struct name from receiver type for mangled method name
-        let receiver_struct_name = self.mangle_type_name(receiver.type_id);
+        // Get struct name and monomorph info from receiver type for mangled method name
+        let (receiver_struct_name, base_struct_name, receiver_type_args) =
+            match self.type_table.borrow().get(receiver.type_id).clone() {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } => {
+                    let type_arg_names: Vec<String> =
+                        type_args.iter().map(|t| self.mangle_type_name(*t)).collect();
+                    let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                    (mangled, Some(name.clone()), Some(type_args.clone()))
+                }
+                ResolvedType::BuiltinArray(elem) => {
+                    let elem_name = self.mangle_type_name(elem);
+                    let mangled = format!("Array<{}>", elem_name);
+                    (mangled, Some("Array".to_string()), Some(vec![elem]))
+                }
+                _ => (self.mangle_type_name(receiver.type_id), None, None),
+            };
         let mangled_method_name = format!("{}::{}", receiver_struct_name, method_call.method);
+
+        // Build monomorph_info for method calls on generic types
+        let monomorph_info = if let (Some(base), Some(type_args)) =
+            (base_struct_name, receiver_type_args)
+        {
+            let generic_name = format!("{}::{}", base, method_call.method);
+            Some(MonomorphInfo {
+                generic_name,
+                type_args,
+            })
+        } else {
+            None
+        };
 
         TirExpr::new(
             TirExprKind::MethodCall {
@@ -2659,6 +2692,7 @@ impl<'a> Resolver<'a> {
                 func: FunctionRef::External {
                     module_path: self.current_module_path.clone(),
                     name: mangled_method_name,
+                    monomorph_info,
                 },
                 type_args,
                 args,
@@ -2728,11 +2762,24 @@ impl<'a> Resolver<'a> {
             return_type = self.substitute_type_params(return_type, &struct_type_args);
         }
 
+        // Build monomorph_info for generic instantiations
+        let monomorph_info = if !struct_type_args.is_empty() {
+            // Generic static method: track the original generic name
+            let generic_name = format!("{}::{}", struct_name, static_call.method);
+            Some(MonomorphInfo {
+                generic_name,
+                type_args: struct_type_args,
+            })
+        } else {
+            None
+        };
+
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
                     module_path,
                     name: mangled_func_name,
+                    monomorph_info,
                 },
                 args,
             },
@@ -2945,6 +2992,7 @@ impl<'a> Resolver<'a> {
                 func: FunctionRef::External {
                     module_path,
                     name: mangled_func_name.to_string(),
+                    monomorph_info: None,
                 },
                 args: args.to_vec(),
             },
@@ -3017,6 +3065,17 @@ impl<'a> Resolver<'a> {
             ResolvedType::Tuple(elems) => {
                 let parts: Vec<String> = elems.iter().map(|e| self.mangle_type_name(*e)).collect();
                 format!("Tuple<{}>", parts.join(","))
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                let ret_name = self.mangle_type_name(*return_type);
+                format!("Fn<{},{}>", params.len(), ret_name)
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                format!("Array<{}>", self.mangle_type_name(*elem))
             }
             _ => "unknown".to_string(),
         }
@@ -3559,6 +3618,7 @@ impl<'a> Resolver<'a> {
                                 func: FunctionRef::External {
                                     module_path: self.current_module_path.clone(),
                                     name: mangled_method_name,
+                                    monomorph_info: None,
                                 },
                                 type_args: vec![],
                                 args: vec![],
@@ -3595,6 +3655,7 @@ impl<'a> Resolver<'a> {
                     func: FunctionRef::External {
                         module_path: vec!["core".to_string(), "internal".to_string()],
                         name: "string_concat".to_string(),
+                        monomorph_info: None,
                     },
                     type_args: vec![],
                     args: vec![result, part],

@@ -1086,7 +1086,7 @@ impl Monomorphizer {
                         type_args: type_args.clone(),
                     };
                     if !self.function_instantiated.contains_key(&key) {
-                        let mangled = self.mangle_function_name(&key);
+                        let mangled = self.mangle_function_name(&key, type_table);
                         self.function_instantiated.insert(key.clone(), mangled.clone());
                         self.mangled_func_to_key.insert(mangled, key.clone());
                         self.function_pending.push(key);
@@ -1129,7 +1129,7 @@ impl Monomorphizer {
                                 type_args: type_args.clone(),
                             };
                             if !self.function_instantiated.contains_key(&key) {
-                                let mangled = self.mangle_function_name(&key);
+                                let mangled = self.mangle_function_name(&key, type_table);
                                 self.function_instantiated.insert(key.clone(), mangled.clone());
                                 self.mangled_func_to_key.insert(mangled, key.clone());
                                 self.function_pending.push(key);
@@ -1474,49 +1474,8 @@ impl Monomorphizer {
         }
     }
 
-    /// Look up a TypeId by type name (e.g., "i32" -> TypeId for i32)
-    fn lookup_type_by_name(&self, name: &str, type_table: &TypeTable) -> Option<TypeId> {
-        // First check primitive types
-        match name {
-            "i8" => return Some(TypeTable::I8),
-            "i16" => return Some(TypeTable::I16),
-            "i32" => return Some(TypeTable::I32),
-            "i64" => return Some(TypeTable::I64),
-            "i128" => return Some(TypeTable::I128),
-            "u8" => return Some(TypeTable::U8),
-            "u16" => return Some(TypeTable::U16),
-            "u32" => return Some(TypeTable::U32),
-            "u64" => return Some(TypeTable::U64),
-            "u128" => return Some(TypeTable::U128),
-            "f32" => return Some(TypeTable::F32),
-            "f64" => return Some(TypeTable::F64),
-            "bool" => return Some(TypeTable::BOOL),
-            "char" => return Some(TypeTable::CHAR),
-            _ => {}
-        }
-
-        // Search for struct/generic instance by name
-        for type_id in 0..type_table.len() as u32 {
-            match type_table.get(type_id) {
-                ResolvedType::Struct {
-                    name: struct_name, ..
-                } if struct_name == name => {
-                    return Some(type_id);
-                }
-                ResolvedType::GenericInstance {
-                    name: inst_name, ..
-                } if inst_name == name => {
-                    return Some(type_id);
-                }
-                _ => {}
-            }
-        }
-
-        None
-    }
-
     /// Generate mangled name for function instantiation: identity<i32> -> identity<i32>
-    fn mangle_function_name(&self, key: &InstantiationKey) -> String {
+    fn mangle_function_name(&self, key: &InstantiationKey, type_table: &TypeTable) -> String {
         if key.type_args.is_empty() {
             return key.name.clone();
         }
@@ -1525,7 +1484,7 @@ impl Monomorphizer {
             key.name,
             key.type_args
                 .iter()
-                .map(|t| t.to_string())
+                .map(|t| self.type_id_to_name(*t, type_table))
                 .collect::<Vec<_>>()
                 .join(",")
         )
@@ -1575,7 +1534,7 @@ impl Monomorphizer {
             format!("{}::{}", mangled_struct, mangled_method)
         } else {
             // Fallback to regular function mangling
-            self.mangle_function_name(key)
+            self.mangle_function_name(key, type_table)
         }
     }
 
@@ -1800,9 +1759,9 @@ impl Monomorphizer {
             }
             TirExprKind::MethodCall {
                 receiver,
+                func: method_func,
                 type_args,
                 args,
-                ..
             } => {
                 self.substitute_types_in_expr(receiver, substitution, type_table);
                 for type_arg in type_args.iter_mut() {
@@ -1810,6 +1769,39 @@ impl Monomorphizer {
                 }
                 for arg in args {
                     self.substitute_types_in_expr(arg, substitution, type_table);
+                }
+
+                // Also update the method func name if receiver type contains type params
+                // e.g., Array<T>::len -> Array<i32>::len when T->i32
+                let old_func_name = method_func.name();
+                let module_path = method_func.module_path();
+                let mut new_func_name = old_func_name.clone();
+                for (&param_index, &concrete_type_id) in substitution {
+                    for tid in 0..type_table.len() as u32 {
+                        if let ResolvedType::TypeParam { name, index } = type_table.get(tid)
+                            && *index == param_index
+                        {
+                            let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
+                            // Replace type param in angle bracket syntax: <T> -> <i32>
+                            new_func_name = new_func_name
+                                .replace(&format!("<{}>", name), &format!("<{}>", concrete_name))
+                                .replace(&format!("<{},", name), &format!("<{},", concrete_name))
+                                .replace(&format!(",{}>", name), &format!(",{}>", concrete_name))
+                                .replace(&format!(",{},", name), &format!(",{},", concrete_name));
+                            break;
+                        }
+                    }
+                }
+                if new_func_name != old_func_name {
+                    let monomorph_info = Some(MonomorphInfo {
+                        generic_name: old_func_name,
+                        type_args: substitution.values().copied().collect(),
+                    });
+                    *method_func = FunctionRef::External {
+                        module_path,
+                        name: new_func_name,
+                        monomorph_info,
+                    };
                 }
             }
             TirExprKind::EffectCall { args, .. } => {
@@ -1824,27 +1816,34 @@ impl Monomorphizer {
                 let old_func_name = static_func.name();
                 let module_path = static_func.module_path();
                 // Substitute type parameter names in func_name
-                // e.g., "Box$T::new" with T->i32 becomes "Box$i32::new"
+                // e.g., "Box<T>::new" with T->i32 becomes "Box<i32>::new"
                 let mut new_func_name = old_func_name.clone();
                 for (&param_index, &concrete_type_id) in substitution {
-                    // Find the type param name by looking up types with this index
                     for tid in 0..type_table.len() as u32 {
                         if let ResolvedType::TypeParam { name, index } = type_table.get(tid)
                             && *index == param_index
                         {
-                            // Replace $T with $concrete_type_name
                             let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
+                            // Replace type param in angle bracket syntax: <T> -> <i32>
                             new_func_name = new_func_name
-                                .replace(&format!("${}", name), &format!("${}", concrete_name));
+                                .replace(&format!("<{}>", name), &format!("<{}>", concrete_name))
+                                .replace(&format!("<{},", name), &format!("<{},", concrete_name))
+                                .replace(&format!(",{}>", name), &format!(",{}>", concrete_name))
+                                .replace(&format!(",{},", name), &format!(",{},", concrete_name));
                             break;
                         }
                     }
                 }
                 // Update func if name changed
                 if new_func_name != old_func_name {
+                    let monomorph_info = Some(MonomorphInfo {
+                        generic_name: old_func_name,
+                        type_args: substitution.values().copied().collect(),
+                    });
                     *static_func = FunctionRef::External {
                         module_path,
                         name: new_func_name,
+                        monomorph_info,
                     };
                 }
                 for arg in args {
@@ -2238,6 +2237,10 @@ impl Monomorphizer {
                         *func = FunctionRef::External {
                             module_path,
                             name: mangled.clone(),
+                            monomorph_info: Some(MonomorphInfo {
+                                generic_name: func_name,
+                                type_args: key.type_args.clone(),
+                            }),
                         };
                         type_args.clear(); // Clear type args - now using concrete function
                     }
@@ -2277,6 +2280,10 @@ impl Monomorphizer {
                         *method_func = FunctionRef::External {
                             module_path,
                             name: mangled.clone(),
+                            monomorph_info: Some(MonomorphInfo {
+                                generic_name: full_method_name.clone(),
+                                type_args: key.type_args.clone(),
+                            }),
                         };
                         type_args.clear(); // Clear type args - now using concrete method
                     }
@@ -2293,13 +2300,17 @@ impl Monomorphizer {
                         // Look up with base struct name and combined type args
                         let generic_method_name = format!("{}::{}", base_struct, method_name);
                         let combined_key = InstantiationKey {
-                            name: generic_method_name,
+                            name: generic_method_name.clone(),
                             type_args: combined_type_args.clone(),
                         };
                         if let Some(mangled) = self.function_instantiated.get(&combined_key) {
                             *method_func = FunctionRef::External {
                                 module_path: module_path.clone(),
                                 name: mangled.clone(),
+                                monomorph_info: Some(MonomorphInfo {
+                                    generic_name: generic_method_name,
+                                    type_args: combined_key.type_args.clone(),
+                                }),
                             };
                             type_args.clear();
 

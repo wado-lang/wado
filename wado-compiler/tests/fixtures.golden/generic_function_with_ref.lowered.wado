@@ -5,16 +5,16 @@
 fn run() with Stdout {
     let x: i32 = 42;
     let y: i64 = 100 as i64;
-    let a: i32 = "get_value<2>"(&x);
-    let b: i64 = "get_value<3>"(&y);
+    let a: i32 = "get_value<i32>"(&x);
+    let b: i64 = "get_value<i64>"(&y);
     core::cli::println(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("a: ", a.to_string()), ", b: "), b.to_string()));
 }
 
-fn "get_value<3>"(r: &i64) -> i64 {
+fn "get_value<i64>"(r: &i64) -> i64 {
     return *r;
 }
 
-fn "get_value<2>"(r: &i32) -> i32 {
+fn "get_value<i32>"(r: &i32) -> i32 {
     return *r;
 }
 

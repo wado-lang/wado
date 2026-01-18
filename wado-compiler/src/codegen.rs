@@ -53,6 +53,11 @@ fn string_module_path() -> Vec<String> {
 struct StructTypeInfo {
     type_idx: u32,
     field_count: usize,
+    /// Whether this struct is a monomorphized generic (e.g., Box<i32>)
+    is_monomorphized: bool,
+    /// Base generic struct name for monomorphized structs (e.g., "Box" for "Box<i32>")
+    /// None for non-monomorphized structs
+    base_name: Option<String>,
 }
 
 /// Parameters for building the main core module
@@ -2678,11 +2683,18 @@ impl Codegen {
         let type_idx = builder.define_gc_struct_type(&struct_name.name, &fields);
 
         let field_count = tir_struct.fields.len();
+        let is_monomorphized = tir_struct.monomorph_info.is_some();
+        let base_name = tir_struct
+            .monomorph_info
+            .as_ref()
+            .map(|info| info.generic_name.clone());
         self.struct_types.insert(
             struct_name,
             StructTypeInfo {
                 type_idx,
                 field_count,
+                is_monomorphized,
+                base_name,
             },
         );
 
@@ -5248,13 +5260,21 @@ impl Codegen {
 
                         // Look up the method function index
                         // For monomorphized generics (e.g., Box<i32>), also try base struct name (Box)
+                        let struct_lookup_name =
+                            StructName::new(module_path.clone(), name.clone());
+                        let struct_info = self.struct_types.get(&struct_lookup_name);
+                        let is_monomorphized = struct_info
+                            .map(|info| info.is_monomorphized)
+                            .unwrap_or(false);
                         let func_idx = builder.try_func_idx(&mangled_name).or_else(|| {
-                            // If struct name contains '<', try the base name
-                            if let Some(bracket_pos) = name.find('<') {
-                                let base_name = &name[..bracket_pos];
+                            // If struct is monomorphized, try the base name from metadata
+                            if let Some(info) = struct_info
+                                && info.is_monomorphized
+                                && let Some(base_name) = &info.base_name
+                            {
                                 let base_mangled = MethodName::new(
                                     module_path.join("/"),
-                                    base_name.to_string(),
+                                    base_name.clone(),
                                     None,
                                     method_name.clone(),
                                 )
@@ -5278,11 +5298,9 @@ impl Codegen {
                             func.instruction(&Instruction::Call(idx));
                         } else {
                             // Method not found - try to inline for generic structs
-                            // For getter methods on generic structs, inline field access
-                            if name.contains('<') && args.is_empty() {
+                            // For getter methods on monomorphized generic structs, inline field access
+                            if is_monomorphized && args.is_empty() {
                                 // Look up struct type to get field info
-                                let struct_lookup_name =
-                                    StructName::new(module_path.clone(), name.clone());
                                 if let Some(struct_info) =
                                     self.struct_types.get(&struct_lookup_name)
                                 {
@@ -5501,7 +5519,10 @@ impl Codegen {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
 
-                // func_name is already mangled as "StructName::method" or "Struct$Type::method"
+                // Check if this is a monomorphized function using metadata
+                let base_struct_name = static_func.base_struct_name();
+
+                // func_name is already mangled as "StructName::method" or "Struct<Type>::method"
                 // We need to look it up using the same name format used during function definition
                 // Methods are registered with MethodName format: {module_path}/{struct_name}::{method_name}
                 let func_idx = if let Some(sep_pos) = func_name.find("::") {
@@ -5517,6 +5538,11 @@ impl Codegen {
                     )
                     .to_string();
 
+                    // Check struct metadata for fallback
+                    let struct_lookup_name =
+                        StructName::new(module_path.clone(), struct_name.to_string());
+                    let struct_info = self.struct_types.get(&struct_lookup_name);
+
                     builder
                         .try_func_idx(&mangled_name)
                         .or_else(|| {
@@ -5524,13 +5550,17 @@ impl Codegen {
                             builder.try_func_idx(&func_name)
                         })
                         .or_else(|| {
-                            // For generic types like Array<i32>, also try the generic version Array
+                            // For monomorphized generic types like Array<i32>, also try the generic version Array
                             // This handles static methods on generic types that aren't monomorphized
-                            if let Some(bracket_pos) = struct_name.find('<') {
-                                let generic_struct_name = &struct_name[..bracket_pos];
+                            // Use metadata: either from function or struct, not string parsing
+                            let generic_name = base_struct_name
+                                .as_ref()
+                                .or_else(|| struct_info.and_then(|s| s.base_name.as_ref()));
+
+                            if let Some(generic_struct_name) = generic_name {
                                 let generic_mangled_name = MethodName::new(
                                     module_path.join("/"),
-                                    generic_struct_name.to_string(),
+                                    generic_struct_name.clone(),
                                     None,
                                     method_name.to_string(),
                                 )
@@ -5554,53 +5584,50 @@ impl Codegen {
                     func.instruction(&Instruction::Call(idx));
                 } else {
                     // Function not found - try to inline for user-defined generic struct constructors
-                    if let Some(sep_pos) = func_name.find("::") {
-                        let struct_name = &func_name[..sep_pos];
+                    // Use return type metadata to determine if this is a generic struct constructor
+                    let return_type_info = match type_table.get(expr.type_id) {
+                        ResolvedType::GenericInstance {
+                            name,
+                            module_path: type_module_path,
+                            type_args,
+                        } => {
+                            // Build the mangled struct name (e.g., Box<i32>)
+                            let type_arg_names: Vec<String> = type_args
+                                .iter()
+                                .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                                .collect();
+                            let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                            Some((mangled, type_module_path.clone()))
+                        }
+                        ResolvedType::Struct {
+                            name,
+                            module_path: type_module_path,
+                        } => {
+                            // Check if this struct is monomorphized using metadata
+                            let struct_lookup = StructName::new(type_module_path.clone(), name.clone());
+                            if self.struct_types.get(&struct_lookup).map(|s| s.is_monomorphized).unwrap_or(false) {
+                                Some((name.clone(), type_module_path.clone()))
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
 
-                        // Check if this is a constructor on a generic struct (contains <)
-                        // We detect constructors by checking if the return type is the same struct
-                        // and the number of args matches the struct's field count
-                        if struct_name.contains('<') {
-                            // Get the struct type from the return type (expr.type_id)
-                            // Could be GenericInstance or a monomorphized Struct
-                            let (struct_name_to_lookup, struct_module_path) = match type_table
-                                .get(expr.type_id)
-                            {
-                                ResolvedType::GenericInstance {
-                                    name,
-                                    module_path,
-                                    type_args,
-                                } => {
-                                    // Build the mangled struct name (e.g., Box<i32>)
-                                    let type_arg_names: Vec<String> = type_args
-                                        .iter()
-                                        .map(|t| self.mangle_type_for_struct_name(*t, type_table))
-                                        .collect();
-                                    let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                                    (mangled, module_path.clone())
-                                }
-                                ResolvedType::Struct { name, module_path } => {
-                                    // Already a monomorphized struct name (e.g., Box<i32>)
-                                    (name.clone(), module_path.clone())
-                                }
-                                _ => {
-                                    panic!("unknown static method: {func_name}");
-                                }
-                            };
-
-                            // Look up the struct type
-                            let struct_lookup_name =
-                                StructName::new(struct_module_path, struct_name_to_lookup);
-                            if let Some(struct_info) = self.struct_types.get(&struct_lookup_name) {
-                                // Check if args count matches field count (constructor pattern)
-                                if args.len() == struct_info.field_count {
-                                    // Arguments are already on the stack, just create the struct
-                                    func.instruction(&Instruction::StructNew(struct_info.type_idx));
-                                    return;
-                                }
+                    if let Some((struct_name_to_lookup, struct_module_path)) = return_type_info {
+                        // Look up the struct type
+                        let struct_lookup_name =
+                            StructName::new(struct_module_path, struct_name_to_lookup);
+                        if let Some(struct_info) = self.struct_types.get(&struct_lookup_name) {
+                            // Check if args count matches field count (constructor pattern)
+                            if args.len() == struct_info.field_count {
+                                // Arguments are already on the stack, just create the struct
+                                func.instruction(&Instruction::StructNew(struct_info.type_idx));
+                                return;
                             }
                         }
                     }
+
                     panic!("unknown static method: {func_name}");
                 }
             }

@@ -32,6 +32,7 @@
 
 use fluent_uri::UriRef;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 // =============================================================================
 // Function Identifier Types
@@ -44,23 +45,50 @@ use std::fmt;
 /// Examples:
 /// - `./geometry.wado/helper`
 /// - `core/internal/log_stdout`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct FreeFunctionName {
     /// The module path segments (e.g., `[".", "geometry.wado"]`)
     pub module_path: Vec<String>,
     /// The function name (e.g., `helper`)
     pub name: String,
+    /// Whether this function is monomorphized (instantiated from a generic)
+    pub is_monomorphized: bool,
+    /// Base generic name if monomorphized (e.g., "Array" for "Array<i32>::len")
+    pub base_name: Option<String>,
 }
+
+// Manually implement Hash/Eq to only use module_path and name (not metadata)
+impl Hash for FreeFunctionName {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.module_path.hash(state);
+        self.name.hash(state);
+    }
+}
+
+impl PartialEq for FreeFunctionName {
+    fn eq(&self, other: &Self) -> bool {
+        self.module_path == other.module_path && self.name == other.name
+    }
+}
+
+impl Eq for FreeFunctionName {}
 
 impl FreeFunctionName {
     pub fn new(module_path: Vec<String>, name: String) -> Self {
-        Self { module_path, name }
+        Self {
+            module_path,
+            name,
+            is_monomorphized: false,
+            base_name: None,
+        }
     }
 
     pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
         Self {
             module_path: module_path.to_vec(),
             name: name.to_string(),
+            is_monomorphized: false,
+            base_name: None,
         }
     }
 
@@ -70,6 +98,22 @@ impl FreeFunctionName {
         Self {
             module_path: module_path.iter().map(|s| (*s).to_string()).collect(),
             name: name.to_string(),
+            is_monomorphized: false,
+            base_name: None,
+        }
+    }
+
+    /// Create a FreeFunctionName with monomorphization metadata.
+    pub fn with_monomorph_info(
+        module_path: Vec<String>,
+        name: String,
+        base_name: String,
+    ) -> Self {
+        Self {
+            module_path,
+            name,
+            is_monomorphized: true,
+            base_name: Some(base_name),
         }
     }
 }
@@ -494,6 +538,67 @@ fn remove_dot_segments(path: &str) -> String {
     } else {
         result
     }
+}
+
+// =============================================================================
+// Name Mangling Utilities
+// =============================================================================
+
+/// Build a monomorphized type name from base name and type arguments.
+///
+/// Examples:
+/// - `mangle_generic_name("Box", &["i32"])` → `"Box<i32>"`
+/// - `mangle_generic_name("Map", &["String", "i32"])` → `"Map<String,i32>"`
+pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
+    if type_args.is_empty() {
+        base_name.to_string()
+    } else {
+        format!("{}<{}>", base_name, type_args.join(","))
+    }
+}
+
+/// Build a monomorphized method name from struct name, type args, and method name.
+///
+/// Examples:
+/// - `mangle_method_generic("Box", &["i32"], "get")` → `"Box<i32>::get"`
+/// - `mangle_method_generic("Array", &["String"], "len")` → `"Array<String>::len"`
+pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_name: &str) -> String {
+    let mangled_struct = mangle_generic_name(struct_name, type_args);
+    format!("{}::{}", mangled_struct, method_name)
+}
+
+/// Build a function type name from parameter count and return type name.
+///
+/// Examples:
+/// - `mangle_fn_type(2, "i32")` → `"Fn<2,i32>"`
+/// - `mangle_fn_type(0, "String")` → `"Fn<0,String>"`
+pub fn mangle_fn_type(param_count: usize, ret_type: &str) -> String {
+    format!("Fn<{},{}>", param_count, ret_type)
+}
+
+/// Build a tuple type name from element type names.
+///
+/// Examples:
+/// - `mangle_tuple_type(&["i32", "String"])` → `"Tuple<i32,String>"`
+/// - `mangle_tuple_type(&["i32"])` → `"Tuple<i32>"`
+pub fn mangle_tuple_type(elem_types: &[String]) -> String {
+    format!("Tuple<{}>", elem_types.join(","))
+}
+
+/// Build an Option type name from inner type name.
+///
+/// Examples:
+/// - `mangle_option_type("i32")` → `"Option<i32>"`
+pub fn mangle_option_type(inner_type: &str) -> String {
+    format!("Option<{}>", inner_type)
+}
+
+/// Build an Array type name from element type name.
+///
+/// Examples:
+/// - `mangle_array_type("i32")` → `"Array<i32>"`
+pub fn mangle_array_type(elem_type: &str) -> String {
+    format!("Array<{}>", elem_type)
 }
 
 #[cfg(test)]

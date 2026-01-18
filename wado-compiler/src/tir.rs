@@ -624,6 +624,8 @@ pub enum FunctionRef {
     External {
         module_path: Vec<String>,
         name: String,
+        /// Monomorphization info for external monomorphized functions
+        monomorph_info: Option<MonomorphInfo>,
     },
 }
 
@@ -663,12 +665,39 @@ impl FunctionRef {
     pub fn builtin_name(&self) -> Option<String> {
         match self {
             FunctionRef::Resolved(_) => None,
-            FunctionRef::External { module_path, name }
-                if module_path.as_slice() == ["core", "builtin"] =>
-            {
+            FunctionRef::External {
+                module_path, name, ..
+            } if module_path.as_slice() == ["core", "builtin"] => {
                 Some(format!("builtin::{}", name))
             }
             FunctionRef::External { .. } => None,
+        }
+    }
+
+    /// Check if this function is monomorphized (instantiated from a generic)
+    pub fn is_monomorphized(&self) -> bool {
+        match self {
+            FunctionRef::Resolved(func) => func.borrow().monomorph_info.is_some(),
+            FunctionRef::External { monomorph_info, .. } => monomorph_info.is_some(),
+        }
+    }
+
+    /// Get the base generic name if this is a monomorphized function.
+    /// For "Box<i32>::get", returns "Box".
+    /// For "Container<i32>::transform<i64>", returns "Container".
+    pub fn base_struct_name(&self) -> Option<String> {
+        match self {
+            FunctionRef::Resolved(func) => {
+                let func = func.borrow();
+                func.monomorph_info
+                    .as_ref()
+                    .and_then(|info| info.generic_name.split("::").next())
+                    .map(|s| s.to_string())
+            }
+            FunctionRef::External { monomorph_info, .. } => monomorph_info
+                .as_ref()
+                .and_then(|info| info.generic_name.split("::").next())
+                .map(|s| s.to_string()),
         }
     }
 }

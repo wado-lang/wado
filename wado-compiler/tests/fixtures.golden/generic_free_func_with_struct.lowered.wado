@@ -11,12 +11,12 @@ struct "Box<i32>" {
 }
 
 fn run() with Stdout {
-    let b1: Box<i32> = "make_box<2>"(42);
+    let b1: Box<i32> = "make_box<i32>"(42);
     core::cli::println(core::internal::string_concat("make_box: ", b1.get().to_string()));
-    let v: i32 = "unwrap_box<2>"(b1);
+    let v: i32 = "unwrap_box<i32>"(b1);
     core::cli::println(core::internal::string_concat("unwrap_box: ", v.to_string()));
-    let b2: Box<i64> = "make_box<3>"(100 as i64);
-    let b3: Box<i64> = "transform_box<3>"(b2);
+    let b2: Box<i64> = "make_box<i64>"(100 as i64);
+    let b3: Box<i64> = "transform_box<i64>"(b2);
     core::cli::println(core::internal::string_concat("transform_box: ", b3.get().to_string()));
 }
 
@@ -24,16 +24,20 @@ pub fn "Box<i64>::get"(self: Box<i64>) -> i64 {
     return self.value;
 }
 
-fn "transform_box<3>"(b: Box<i64>) -> Box<i64> {
+fn "transform_box<i64>"(b: Box<i64>) -> Box<i64> {
     let v: i64 = b.get();
-    return "Box<T>::new"(v);
+    return "Box<i64>::new"(v);
 }
 
-fn "make_box<3>"(value: i64) -> Box<i64> {
-    return "Box<T>::new"(value);
+pub fn "Box<i64>::new"(value: i64) -> Box<i64> {
+    return Box<i64> { value: value };
 }
 
-fn "unwrap_box<2>"(b: Box<i32>) -> i32 {
+fn "make_box<i64>"(value: i64) -> Box<i64> {
+    return "Box<i64>::new"(value);
+}
+
+fn "unwrap_box<i32>"(b: Box<i32>) -> i32 {
     return b.get();
 }
 
@@ -41,8 +45,12 @@ pub fn "Box<i32>::get"(self: Box<i32>) -> i32 {
     return self.value;
 }
 
-fn "make_box<2>"(value: i32) -> Box<i32> {
-    return "Box<T>::new"(value);
+fn "make_box<i32>"(value: i32) -> Box<i32> {
+    return "Box<i32>::new"(value);
+}
+
+pub fn "Box<i32>::new"(value: i32) -> Box<i32> {
+    return Box<i32> { value: value };
 }
 
 __DATA__
