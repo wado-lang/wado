@@ -5004,12 +5004,16 @@ impl Codegen {
 
                 // Handle builtin functions (intrinsics and canonical mappings)
                 if let Some(builtin) = call_func.builtin_name() {
-                    self.generate_builtin_call(&builtin, args, expr, func, type_table, ctx, builder);
+                    self.generate_builtin_call(
+                        &builtin, args, expr, func, type_table, ctx, builder,
+                    );
                 } else if module_path.is_empty()
-                    && self.generate_variant_constructor(&func_name, args, func, type_table, ctx, builder)
+                    && self.generate_variant_constructor(
+                        &func_name, args, func, type_table, ctx, builder,
+                    )
                 {
                     // Variant constructor was handled
-                } else if (module_path == &["Stdout"] || module_path == &["Stderr"])
+                } else if (module_path == ["Stdout"] || module_path == ["Stderr"])
                     && func_name == "write_via_stream"
                 {
                     // Direct effect operation call: Stdout::write_via_stream(rx) or Stderr::write_via_stream(rx)
@@ -5036,7 +5040,7 @@ impl Codegen {
                         "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
                     );
                     func.instruction(&Instruction::LocalSet(subtask_local));
-                } else if module_path == &["Environment"]
+                } else if module_path == ["Environment"]
                     && matches!(func_name.as_str(), "get_arguments" | "get_environment")
                 {
                     // Environment operations that return list<string> or list<tuple<string, string>>
@@ -5066,7 +5070,8 @@ impl Codegen {
                     func.instruction(&Instruction::LocalGet(outptr_local));
                     let conv_idx = builder.func_idx("core/internal/cm_list_string_to_array");
                     func.instruction(&Instruction::Call(conv_idx));
-                } else if module_path == &["Environment"] && func_name.as_str() == "get_initial_cwd" {
+                } else if module_path == ["Environment"] && func_name.as_str() == "get_initial_cwd"
+                {
                     // get_initial_cwd returns Option<String>
                     // CM ABI: function takes outptr, writes option<string> to it
                     // Layout: discriminant (1 byte at offset 0, padded) + str_ptr (4 bytes) + str_len (4 bytes)
@@ -7428,13 +7433,12 @@ impl Codegen {
         }
 
         // Strategy 2: Check if it's a builtin function (module_path == ["core", "builtin"])
-        if module_path == ["core", "builtin"] {
-            if let Some(builtin_info) = self.builtin_registry.get(func_name)
-                && let Some(canonical_name) = &builtin_info.canonical_name
-                && let Some(idx) = builder.try_func_idx(canonical_name)
-            {
-                return idx;
-            }
+        if module_path == ["core", "builtin"]
+            && let Some(builtin_info) = self.builtin_registry.get(func_name)
+            && let Some(canonical_name) = &builtin_info.canonical_name
+            && let Some(idx) = builder.try_func_idx(canonical_name)
+        {
+            return idx;
         }
 
         // Invariant: TirExprKind::Call should never have method names (containing "::")
@@ -7789,9 +7793,9 @@ impl Codegen {
                 let stdout_func = build_local_alias_name("cli", "Stdout", "write_via_stream");
                 let func_idx = builder.func_idx(&stdout_func);
                 func.instruction(&Instruction::Call(func_idx));
-                let subtask_local = ctx
-                    .get_local("__subtask")
-                    .expect("__subtask should be pre-allocated for functions with Stdout/Stderr effects");
+                let subtask_local = ctx.get_local("__subtask").expect(
+                    "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
+                );
                 func.instruction(&Instruction::LocalSet(subtask_local));
             }
             "builtin::call_indirect_stderr_write_via_stream" => {
@@ -7802,9 +7806,9 @@ impl Codegen {
                 let stderr_func = build_local_alias_name("cli", "Stderr", "write_via_stream");
                 let func_idx = builder.func_idx(&stderr_func);
                 func.instruction(&Instruction::Call(func_idx));
-                let subtask_local = ctx
-                    .get_local("__subtask")
-                    .expect("__subtask should be pre-allocated for functions with Stdout/Stderr effects");
+                let subtask_local = ctx.get_local("__subtask").expect(
+                    "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
+                );
                 func.instruction(&Instruction::LocalSet(subtask_local));
             }
             // Builtins with canonical function mappings - generate regular function calls
@@ -7826,12 +7830,14 @@ impl Codegen {
                 }
                 // Look up the canonical name from the builtin registry
                 let func_name = builtin_name.strip_prefix("builtin::").unwrap();
-                let builtin_info = self.builtin_registry.get(func_name).unwrap_or_else(|| {
-                    panic!("builtin not found in registry: {func_name}")
-                });
-                let canonical_name = builtin_info.canonical_name.as_ref().unwrap_or_else(|| {
-                    panic!("builtin {func_name} has no canonical name")
-                });
+                let builtin_info = self
+                    .builtin_registry
+                    .get(func_name)
+                    .unwrap_or_else(|| panic!("builtin not found in registry: {func_name}"));
+                let canonical_name = builtin_info
+                    .canonical_name
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("builtin {func_name} has no canonical name"));
                 let func_idx = builder.func_idx(canonical_name);
                 func.instruction(&Instruction::Call(func_idx));
             }
@@ -7854,8 +7860,8 @@ impl Codegen {
     ) -> bool {
         match func_name {
             "Ok" => {
-                let is_unit_payload =
-                    args.is_empty() || (args.len() == 1 && matches!(&args[0].kind, TirExprKind::Unit));
+                let is_unit_payload = args.is_empty()
+                    || (args.len() == 1 && matches!(&args[0].kind, TirExprKind::Unit));
                 if is_unit_payload {
                     func.instruction(&Instruction::I32Const(0));
                 } else {
@@ -7866,8 +7872,8 @@ impl Codegen {
                 true
             }
             "Err" => {
-                let is_unit_payload =
-                    args.is_empty() || (args.len() == 1 && matches!(&args[0].kind, TirExprKind::Unit));
+                let is_unit_payload = args.is_empty()
+                    || (args.len() == 1 && matches!(&args[0].kind, TirExprKind::Unit));
                 if is_unit_payload {
                     func.instruction(&Instruction::I32Const(1));
                 } else {
@@ -8119,15 +8125,15 @@ impl Codegen {
         match &expr.kind {
             TirExprKind::Call { func, args, .. } => {
                 // Check if this is a builtin call that needs async scratch locals
-                if let Some(builtin) = func.builtin_name() {
-                    if matches!(
+                if let Some(builtin) = func.builtin_name()
+                    && matches!(
                         builtin.as_str(),
                         "builtin::call_indirect_stdout_write_via_stream"
                             | "builtin::call_indirect_stderr_write_via_stream"
                             | "builtin::effect_wait"
-                    ) {
-                        return true;
-                    }
+                    )
+                {
+                    return true;
                 }
 
                 // Check if this is a direct WASI effect call (Stdout/Stderr::write_via_stream)

@@ -2229,8 +2229,10 @@ fn analyze_expr(
             } else {
                 module_path.as_slice()
             };
-            let callee_id =
-                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, &func_name));
+            let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                callee_path,
+                &func_name,
+            ));
             analysis.callees.insert(callee_id);
 
             // Detect effect calls: single-element module_path with PascalCase name
@@ -2377,8 +2379,10 @@ fn analyze_expr(
             } else {
                 module_path.as_slice()
             };
-            let callee_id =
-                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, &func_name));
+            let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                callee_path,
+                &func_name,
+            ));
             analysis.callees.insert(callee_id);
 
             for arg in args {
