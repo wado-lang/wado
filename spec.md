@@ -527,14 +527,14 @@ read_value(&mut x);   // OK: &mut i32 coerces to &i32
 
 **Key Differences from Rust (GC-Based Memory Model):**
 
-| Aspect                     | Rust                         | Wado                          |
-| -------------------------- | ---------------------------- | ----------------------------- |
-| Memory management          | Ownership + borrow checker   | Garbage collection            |
-| Multiple mutable refs      | Not allowed                  | **Allowed**                   |
-| Returning local refs       | Not allowed (dangling)       | **Allowed** (GC keeps alive)  |
-| Reference to reference     | `&&T` (rare)                 | `&&T` (fully supported)       |
-| Lifetime annotations       | Required                     | **Not needed**                |
-| Borrow checking            | Compile-time                 | **None** (runtime GC instead) |
+| Aspect                 | Rust                       | Wado                          |
+| ---------------------- | -------------------------- | ----------------------------- |
+| Memory management      | Ownership + borrow checker | Garbage collection            |
+| Multiple mutable refs  | Not allowed                | **Allowed**                   |
+| Returning local refs   | Not allowed (dangling)     | **Allowed** (GC keeps alive)  |
+| Reference to reference | `&&T` (rare)               | `&&T` (fully supported)       |
+| Lifetime annotations   | Required                   | **Not needed**                |
+| Borrow checking        | Compile-time               | **None** (runtime GC instead) |
 
 **Returning References to Local Variables:**
 
