@@ -138,6 +138,12 @@ def __add__(self, other):
 4. **Ergonomics**: Good experience for math-heavy code (SIMD)
 5. **Wasm GC compatibility**: Map to efficient Wasm code
 
+## Implementation Status
+
+**IMPORTANT**: The trait system itself is not yet implemented in Wado. This WEP documents the design for operator overloading that will be implemented once the trait system is in place.
+
+The trait syntax and semantics will follow Rust's design closely (as documented in `wep-2026-01-13-struct-and-trait.md`). This WEP extends that design to specify which traits correspond to which operators.
+
 ## Decision
 
 ### 1. Use Trait-Based Operator Overloading (Rust Style)
@@ -266,6 +272,86 @@ trait Shr {
 
 **Use case**: Custom bit flags, SIMD masks, etc.
 
+#### Compound Assignment Operators (Essential for Efficiency)
+
+Compound assignment operators enable in-place mutation, avoiding temporary object creation. This is especially important for `String`, `Array`, and other types where cloning is expensive.
+
+```wado
+trait AddAssign<Rhs = Self> {
+    fn add_assign(&mut self, rhs: Rhs);
+}
+
+trait SubAssign<Rhs = Self> {
+    fn sub_assign(&mut self, rhs: Rhs);
+}
+
+trait MulAssign<Rhs = Self> {
+    fn mul_assign(&mut self, rhs: Rhs);
+}
+
+trait DivAssign<Rhs = Self> {
+    fn div_assign(&mut self, rhs: Rhs);
+}
+
+trait RemAssign<Rhs = Self> {
+    fn rem_assign(&mut self, rhs: Rhs);
+}
+
+trait BitAndAssign<Rhs = Self> {
+    fn bitand_assign(&mut self, rhs: Rhs);
+}
+
+trait BitOrAssign<Rhs = Self> {
+    fn bitor_assign(&mut self, rhs: Rhs);
+}
+
+trait BitXorAssign<Rhs = Self> {
+    fn bitxor_assign(&mut self, rhs: Rhs);
+}
+
+trait ShlAssign<Rhs = u32> {
+    fn shl_assign(&mut self, rhs: Rhs);
+}
+
+trait ShrAssign<Rhs = u32> {
+    fn shr_assign(&mut self, rhs: Rhs);
+}
+```
+
+**Usage**:
+```wado
+impl AddAssign for Vec3 {
+    fn add_assign(&mut self, other: Vec3) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+    }
+}
+
+let mut v1 = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+let v2 = Vec3 { x: 4.0, y: 5.0, z: 6.0 };
+v1 += v2;  // Desugars to: v1.add_assign(v2)
+// v1 is now Vec3 { x: 5.0, y: 7.0, z: 9.0 }
+```
+
+**Design notes**:
+- Takes `&mut self` for in-place mutation
+- RHS is taken by value (more flexible than by reference)
+- No return value (`Output` type) - always mutates in place
+- Useful for `String` concatenation, `Array` extension, numeric types
+
+**Example with String**:
+```wado
+impl AddAssign for String {
+    fn add_assign(&mut self, other: String) {
+        self.push_str(&other);  // Efficient in-place append
+    }
+}
+
+let mut s = "Hello";
+s += ", World!";  // No temporary String created
+```
+
 #### Index Access (Essential for Containers)
 
 ```wado
@@ -363,31 +449,11 @@ let result = a && b;  // ❌ Cannot overload
                        // Always short-circuits: if a is false, b is never evaluated
 ```
 
-#### Assignment Operators: `=`, `+=`, `-=`, etc.
+#### Assignment Operator: `=`
 
-**Reason**: Assignment has special semantics in Wado (value semantics, clone/move). Overloading would conflict with these semantics.
+**Reason**: The basic assignment operator `=` has special semantics in Wado (value semantics, clone/move). It cannot be overloaded.
 
-```wado
-let mut a = Point { x: 1, y: 2 };
-a += Point { x: 3, y: 4 };  // ❌ Cannot overload +=
-                             // Use: a = a + Point { x: 3, y: 4 }
-```
-
-**Note**: Languages like C++ allow `operator+=` for efficiency (avoiding temporary). In Wado, the compiler can optimize `a = a + b` to in-place operation when safe (similar to move optimization).
-
-**Alternative**: If in-place mutation is needed, provide explicit methods:
-
-```wado
-impl Point {
-    pub fn add_assign(&mut self, other: Point) {
-        self.x += other.x;
-        self.y += other.y;
-    }
-}
-
-let mut p = Point { x: 1, y: 2 };
-p.add_assign(Point { x: 3, y: 4 });  // Explicit
-```
+**Note**: Compound assignment operators (`+=`, `-=`, etc.) ARE overloadable via traits like `AddAssign` (see section above).
 
 #### Range Operators: `..`, `..=`
 
@@ -427,6 +493,16 @@ Following Rust's convention:
 | `<=`     | `PartialOrd`| `le`        | `a <= b`    | `a.le(&b)`        |
 | `>`      | `PartialOrd`| `gt`        | `a > b`     | `a.gt(&b)`        |
 | `>=`     | `PartialOrd`| `ge`        | `a >= b`    | `a.ge(&b)`        |
+| `+=`     | `AddAssign` | `add_assign`| `a += b`    | `a.add_assign(b)` |
+| `-=`     | `SubAssign` | `sub_assign`| `a -= b`    | `a.sub_assign(b)` |
+| `*=`     | `MulAssign` | `mul_assign`| `a *= b`    | `a.mul_assign(b)` |
+| `/=`     | `DivAssign` | `div_assign`| `a /= b`    | `a.div_assign(b)` |
+| `%=`     | `RemAssign` | `rem_assign`| `a %= b`    | `a.rem_assign(b)` |
+| `&=`     | `BitAndAssign` | `bitand_assign` | `a &= b` | `a.bitand_assign(b)` |
+| `\|=`    | `BitOrAssign` | `bitor_assign` | `a \|= b` | `a.bitor_assign(b)` |
+| `^=`     | `BitXorAssign` | `bitxor_assign` | `a ^= b` | `a.bitxor_assign(b)` |
+| `<<=`    | `ShlAssign` | `shl_assign`| `a <<= b`   | `a.shl_assign(b)` |
+| `>>=`    | `ShrAssign` | `shr_assign`| `a >>= b`   | `a.shr_assign(b)` |
 
 **Note**: Method names use lowercase (e.g., `bitand`, not `bit_and`) for consistency with Rust.
 
@@ -799,24 +875,6 @@ Operator trait calls compile to:
 
 ## Future Considerations
 
-### Compound Assignment Operators
-
-Future WEP may add traits for `+=`, `-=`, etc. if there's strong demand:
-
-```wado
-// Potential future design
-trait AddAssign {
-    fn add_assign(&mut self, rhs: Self);
-}
-
-// Would allow:
-a += b;  // Desugars to: a.add_assign(b)
-```
-
-**Current stance**: Not included in initial design. Users can:
-1. Use `a = a + b` (compiler may optimize)
-2. Define explicit methods like `add_assign()` when needed
-
 ### Callable Objects (`Fn` traits)
 
 Future WEP will define `Fn`, `FnMut`, and `FnOnce` traits for callable objects (similar to Rust). This is separate from this WEP.
@@ -831,6 +889,8 @@ Rust's `Deref` trait enables smart pointers and automatic coercion. This may be 
 
 - [Rust std::ops - Operator Overloading Traits](https://doc.rust-lang.org/std/ops/index.html)
 - [Rust By Example - Operator Overloading](https://doc.rust-lang.org/rust-by-example/trait/ops.html)
+- [Rust RFC 0953 - op-assign (Compound Assignment Operators)](https://rust-lang.github.io/rfcs/0953-op-assign.html)
+- [Rust std::ops::AddAssign](https://doc.rust-lang.org/std/ops/trait.AddAssign.html)
 - [C++ operator overloading](https://en.cppreference.com/w/cpp/language/operators.html)
 - [Kotlin Operator Overloading](https://kotlinlang.org/docs/operator-overloading.html)
 - [Swift Operator Overloading](https://www.dhiwise.com/post/swift-operator-overloading-enhancing-code-expression)
@@ -848,6 +908,8 @@ Rust's `Deref` trait enables smart pointers and automatic coercion. This may be 
 
 - [Rust std::ops documentation](https://doc.rust-lang.org/std/ops/index.html)
 - [Rust By Example - Operators and Overloading](https://doc.rust-lang.org/rust-by-example/trait/ops.html)
+- [Rust RFC 0953 - Compound assignment operators](https://rust-lang.github.io/rfcs/0953-op-assign.html)
+- [Rust AddAssign trait](https://doc.rust-lang.org/std/ops/trait.AddAssign.html)
 - [C++ operator overloading reference](https://en.cppreference.com/w/cpp/language/operators.html)
 - [Learn C++ - Overloading arithmetic operators using friend functions](https://www.learncpp.com/cpp-tutorial/overloading-the-arithmetic-operators-using-friend-functions/)
 - [Kotlin operator overloading documentation](https://kotlinlang.org/docs/operator-overloading.html)
