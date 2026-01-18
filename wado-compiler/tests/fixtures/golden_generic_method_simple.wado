@@ -1,0 +1,21 @@
+// Golden test: Simple generic method on non-generic struct
+struct Container {
+    value: i32,
+}
+
+impl Container {
+    fn transform<T>(&self, x: T) -> T {
+        return x;
+    }
+}
+
+fn run() {
+    let c = Container { value: 42 };
+    let a = c.transform::<i32>(10);
+    let b = c.transform::<i64>(20 as i64);
+    assert a == 10;
+    assert b == 20 as i64;
+}
+
+__DATA__
+{"stdout": ""}

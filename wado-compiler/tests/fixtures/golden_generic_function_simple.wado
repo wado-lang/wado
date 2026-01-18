@@ -1,0 +1,14 @@
+// Golden test: Simple generic function with monomorphization
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn run() {
+    let a = identity::<i32>(42);
+    let b = identity::<i64>(100 as i64);
+    assert a == 42;
+    assert b == 100 as i64;
+}
+
+__DATA__
+{"stdout": ""}

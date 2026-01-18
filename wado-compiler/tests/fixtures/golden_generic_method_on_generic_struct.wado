@@ -1,0 +1,21 @@
+// Golden test: Generic method on generic struct
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+impl<T> Pair<T> {
+    fn swap<U>(&self, other: U) -> [U, T] {
+        return [other, self.first];
+    }
+}
+
+fn run() {
+    let p = Pair { first: 42, second: 43 };
+    let result = p.swap::<i64>(100 as i64);
+    assert result.0 == 100 as i64;
+    assert result.1 == 42;
+}
+
+__DATA__
+{"stdout": ""}

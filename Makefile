@@ -63,7 +63,7 @@ format-wado:
 update-golden-fixtures:
 	@echo "Updating golden fixtures..."
 	@mkdir -p wado-compiler/tests/fixtures.golden
-	@for src in wado-compiler/tests/fixtures/opt_inline_*.wado; do \
+	@for src in wado-compiler/tests/fixtures/opt_inline_*.wado wado-compiler/tests/fixtures/golden_*.wado; do \
 		name=$$(basename "$$src" .wado); \
 		golden="wado-compiler/tests/fixtures.golden/$$name.lowered.wado"; \
 		echo "  Generating $$golden"; \
