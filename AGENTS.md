@@ -233,6 +233,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [JSON Literal Compatibility](./docs/wep-2026-01-18-json-literal-compatibility.md)
 - [JSON Module Import](./docs/wep-2026-01-18-json-module-import.md)
 - [Operator Overloading](./docs/wep-2026-01-18-operator-overloading.md)
+- [Iterator-Based Literal Coercion](./docs/wep-2026-01-18-iterator-based-literal-coercion.md)
 
 ### Structure
 

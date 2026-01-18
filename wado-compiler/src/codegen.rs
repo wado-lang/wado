@@ -5263,9 +5263,6 @@ impl Codegen {
                         // For monomorphized generics (e.g., Box<i32>), also try base struct name (Box)
                         let struct_lookup_name = StructName::new(module_path.clone(), name.clone());
                         let struct_info = self.struct_types.get(&struct_lookup_name);
-                        let is_monomorphized = struct_info
-                            .map(|info| info.is_monomorphized)
-                            .unwrap_or(false);
                         let func_idx = builder.try_func_idx(&mangled_name).or_else(|| {
                             // If struct is monomorphized, try the base name from metadata
                             if let Some(info) = struct_info
@@ -5297,55 +5294,25 @@ impl Codegen {
                             // Call the method
                             func.instruction(&Instruction::Call(idx));
                         } else {
-                            // Method not found - try to inline for generic structs
-                            // For getter methods on monomorphized generic structs, inline field access
-                            if is_monomorphized && args.is_empty() {
-                                // Look up struct type to get field info
-                                if let Some(struct_info) =
-                                    self.struct_types.get(&struct_lookup_name)
-                                {
-                                    // Detect getter pattern and determine field index
-                                    let field_index: Option<u32> = if method_name == "get" {
-                                        // Simple "get" = field 0 (for single-field structs)
-                                        if struct_info.field_count == 1 {
-                                            Some(0)
-                                        } else {
-                                            None
-                                        }
-                                    } else if method_name == "get_first" {
-                                        Some(0)
-                                    } else if method_name == "get_second" {
-                                        Some(1)
-                                    } else if let Some(suffix) = method_name.strip_prefix("get_") {
-                                        // Try to parse as field index from common names
-                                        match suffix {
-                                            "0" | "first" | "key" | "left" | "a" | "x" => Some(0),
-                                            "1" | "second" | "value" | "right" | "b" | "y" => {
-                                                Some(1)
-                                            }
-                                            "2" | "third" | "z" | "c" => Some(2),
-                                            _ => None,
-                                        }
-                                    } else {
-                                        None
-                                    };
-
-                                    if let Some(idx) = field_index
-                                        && (idx as usize) < struct_info.field_count
-                                    {
-                                        // Inline as field access
-                                        self.generate_expr(
-                                            func, receiver, type_table, ctx, builder,
-                                        );
-                                        func.instruction(&Instruction::StructGet {
-                                            struct_type_index: struct_info.type_idx,
-                                            field_index: idx,
-                                        });
-                                        return;
-                                    }
+                            // Method not found - also try the simple alias name
+                            // Monomorphized methods are registered with an alias using just
+                            // the struct name and method (e.g., "Pair<i32,i64>::get_first")
+                            let simple_name = format!("{}::{}", name, method_name);
+                            if let Some(idx) = builder.try_func_idx(&simple_name) {
+                                // Generate code for the receiver (self parameter)
+                                self.generate_expr(func, receiver, type_table, ctx, builder);
+                                // Generate code for other arguments
+                                for arg in args {
+                                    self.generate_expr(func, arg, type_table, ctx, builder);
                                 }
+                                // Call the method
+                                func.instruction(&Instruction::Call(idx));
+                            } else {
+                                panic!(
+                                    "unknown method: {} (also tried alias: {})",
+                                    mangled_name, simple_name
+                                );
                             }
-                            panic!("unknown method: {mangled_name}");
                         }
                     }
 
