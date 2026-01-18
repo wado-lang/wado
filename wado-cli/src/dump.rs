@@ -5,11 +5,11 @@ use std::process;
 use lexopt::Arg::{Long, Short, Value};
 use wado_compiler::OptLevel;
 
-use crate::args::{next_arg, reject_multiple_inputs, require_input, unexpected_arg};
+use crate::args::{next_arg, require_inputs, unexpected_arg};
 use crate::compiler_host::FilesystemCompilerHost;
 
 pub struct DumpOptions {
-    pub input: String,
+    pub inputs: Vec<String>,
     pub show_tokens: bool,
     pub show_ast: bool,
     pub show_desugar: bool,
@@ -23,9 +23,10 @@ pub struct DumpOptions {
 }
 
 pub fn print_usage() {
-    eprintln!("Usage: wado dump [options] <file.wado>");
+    eprintln!("Usage: wado dump [options] <file.wado> [file2.wado ...]");
     eprintln!();
     eprintln!("Dump compiler internal state for debugging.");
+    eprintln!("Supports multiple input files for batch processing.");
     eprintln!();
     eprintln!("Compilation Phases:");
     eprintln!("  --tokens     (Phase 1: Lexer) Show tokens");
@@ -53,7 +54,7 @@ pub fn print_usage() {
 }
 
 pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
-    let mut input: Option<String> = None;
+    let mut inputs: Vec<String> = Vec::new();
     let mut show_tokens = false;
     let mut show_ast = false;
     let mut show_desugar = false;
@@ -109,14 +110,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                 };
             }
             Value(val) => {
-                reject_multiple_inputs(&input);
-                input = Some(val.to_string_lossy().into_owned());
+                inputs.push(val.to_string_lossy().into_owned());
             }
             _ => unexpected_arg(arg, print_usage),
         }
     }
 
-    let input = require_input(input, print_usage);
+    let inputs = require_inputs(inputs, print_usage);
 
     // Default: show all
     if !show_tokens
@@ -139,7 +139,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     }
 
     DumpOptions {
-        input,
+        inputs,
         show_tokens,
         show_ast,
         show_desugar,
@@ -154,7 +154,19 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
 }
 
 pub async fn run(opts: DumpOptions) {
-    let path = Path::new(&opts.input);
+    let multiple_files = opts.inputs.len() > 1;
+
+    for input in &opts.inputs {
+        if multiple_files {
+            println!("// ========== {} ==========", input);
+        }
+
+        run_single(&opts, input).await;
+    }
+}
+
+async fn run_single(opts: &DumpOptions, input: &str) {
+    let path = Path::new(input);
 
     // Read source file
     let source = match fs::read_to_string(path) {
@@ -170,20 +182,14 @@ pub async fn run(opts: DumpOptions) {
     let host = FilesystemCompilerHost::new(base_path);
 
     // Dump using async API
-    let result = match wado_compiler::dump_with_host(
-        &source,
-        &host,
-        Some(&opts.input),
-        opts.opt_level,
-    )
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("{e}");
-            process::exit(1);
-        }
-    };
+    let result =
+        match wado_compiler::dump_with_host(&source, &host, Some(input), opts.opt_level).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("{e}");
+                process::exit(1);
+            }
+        };
 
     // Tokens section (Lexer phase)
     if opts.show_tokens {
