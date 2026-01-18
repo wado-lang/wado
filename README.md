@@ -1,4 +1,4 @@
-# Wado
+# The Wado Programming Language
 
 A type-safe, high-level WebAssembly.
 
