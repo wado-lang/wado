@@ -311,6 +311,25 @@ read(&mut y);         // OK: &mut i32 coerced to &i32
 // - No borrow checker: multiple mutable references allowed
 // - Can return references to local variables (GC keeps them alive)
 // - No lifetime annotations needed
+```
+
+## Value Semantics
+
+```wado
+// Value types copy on assignment
+let s1 = "hello";
+let s2 = s1;          // s1 is copied, both are usable
+
+let arr1: Array<i32> = [1, 2, 3];
+let arr2 = arr1;      // arr1 is copied (deep copy)
+
+// Reference types share the value (no copy)
+let x = 42;
+let r1 = &x;
+let r2 = r1;          // r2 shares the same reference, no copy
+```
+
+Value types (primitives, String, Array, Tuple, Struct) have **value semantics**: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Assert
 
