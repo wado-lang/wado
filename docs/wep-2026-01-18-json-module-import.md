@@ -110,7 +110,7 @@ As Wado evolves, users may be able to define custom module loaders for other for
 ### Benefits
 
 **1. Zero-Cost Abstraction for Data**
-- No runtime JSON parser needed → smaller binary size
+- No runtime JSON parser invocation → avoids including parser code in binary if unused
 - No parsing overhead → faster startup time
 - Data is Wasm constants → optimal memory layout
 - Compile-time type checking → zero runtime type errors
@@ -162,7 +162,7 @@ As Wado evolves, users may be able to define custom module loaders for other for
 ## Alternatives Considered
 
 **1. Runtime JSON Parsing (Rejected)**
-- **Cons**: Requires bundling a JSON parser (increases binary size)
+- **Cons**: Runtime JSON parser is bundled in stdlib, but using it includes that code in the binary
 - **Cons**: Runtime parsing overhead (slower startup)
 - **Cons**: Requires `wasi:filesystem` or `wasi:http` (not always available)
 - **Cons**: Weak type safety (errors discovered at runtime)
