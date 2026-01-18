@@ -39,40 +39,6 @@ wado compile --format wat example/hello.wado # generates example/hello.wat with 
 wado compile -o example/hello.wat example/hello.wado  # ditto
 ```
 
-## Design Principles
-
-### What You See Is What You Get
-
-No macros. The code you read is the code that runs — Wasm in plain sight.
-
-### Readable Without Context Switching
-
-Explicit over implicit. No implicit type conversions, no function overloading, no hidden dependencies. You shouldn't need to jump to other files to understand what a function does.
-
-### Type-Safe by Design
-
-Strong static typing with no escape hatches like `any`. This prevents the defensive programming patterns (excessive `try-catch`, runtime type checks) that tend to creep into dynamically-typed codebases.
-
-### No Exception Unwinding
-
-Errors are handled explicitly with `Result<T, E>` instead of unwinding exceptions. This makes control flow predictable and easier to reason about.
-
-### Minimal Binary Size
-
-By leveraging Wasm GC instead of bundling a runtime, Wado produces compact `.wasm` files. This is the core motivation behind the language.
-
-## Informed by Agentic Coding
-
-Wado is developed entirely through agentic coding — AI agents write the code while the human handles design decisions and project management.
-
-This isn't just a curiosity; it shaped the language itself. After a year of intensive agentic coding experience, certain patterns became clear:
-
-- **Agents excel at volume but struggle with ambiguity.** Implicit behaviors get multiplied across a codebase. Explicit, predictable semantics work better.
-- **Agents tend toward defensive programming.** Without type safety, they pepper code with `hasattr` checks and nested `try-except` blocks. Strong types eliminate this need.
-- **Exceptions break agent reasoning.** Non-local control flow is hard to predict. `Result<T, E>` keeps everything visible.
-
-The result: a language where common agentic coding pitfalls are eliminated by design, not convention.
-
 ## Key Features
 
 ### Language Basics
@@ -98,9 +64,45 @@ The `with` clause tells you exactly what a function can do. This enables:
 - **Testability**: Swap real effects with mocks via handlers
 - **Clarity**: No hidden side effects
 
+## Design Principles
+
+### What You See Is What You Get
+
+No macros. The code you read is the code that runs — Wasm in plain sight.
+
+### Readable Without Context Switching
+
+Explicit over implicit. No implicit type conversions, no function overloading, no hidden dependencies. You shouldn't need to jump to other files to understand what a function does.
+
+### Type-Safe by Design
+
+Strong static typing with no escape hatches like `any`. This prevents the defensive programming patterns (excessive `try-catch`, runtime type checks) that tend to creep into dynamically-typed codebases.
+
+### No Exception Unwinding
+
+Errors are handled explicitly with `Result<T, E>` instead of unwinding exceptions. This makes control flow predictable and easier to reason about.
+
+### Minimal Binary Size
+
+By leveraging Wasm GC instead of bundling a runtime, Wado produces compact `.wasm` files. This is the core motivation behind the language.
+
+## Status
+
+Wado is experimental. The core language — syntax, static typing, generics, closures, modules — is implemented and functional.
+
+However:
+
+- **WASI P3 is not yet finalized**: The spec is at release candidate stage, and runtime support is limited
+- **Wasm Component Model** is not yet supported in browsers
+- **Wasm stack switching** is not yet available in wasmtime
+
+That said, Wado is already usable for its original purpose: embedding lightweight Wasm modules in JS projects where binary size matters.
+
+## Future Directions
+
 ### Colorless Async
 
-No async/await infection. Thanks to Wasm Stack Switching, all functions are "colorless":
+Thanks to Wasm Stack Switching (not yet available in runtimes), all functions will be "colorless" — no async/await infection:
 
 ```wado
 fn fetch_all() with Http {
@@ -110,11 +112,9 @@ fn fetch_all() with Http {
 }
 ```
 
-Note: Wasm Stack Switching is still being standardized and not yet available in runtimes.
-
 ### Reactive Signals
 
-Wado has built-in support for reactive state:
+Built-in reactive state for UI and event-driven applications:
 
 ```wado
 use {observe} from "core:reactive";
@@ -137,24 +137,38 @@ Why built-in instead of a library?
 - **No virtual DOM**: Updates compile to direct mutations, not diffing
 - **Context-aware**: In CLI, updates are synchronous; in event-looped environments (browser/GUI), updates may be batched for efficiency
 
-Note: Reactive signals are not yet implemented.
+### JSX for UI
 
-## Status
+JSX syntax will enable declarative UI descriptions:
 
-Wado is experimental. The core language — syntax, static typing, generics, closures, modules — is implemented and functional.
+```wado
+fn App() -> Node {
+    let reactive mut count = 0;
 
-However:
+    return <div>
+        <h1>Count: {count}</h1>
+        <button onclick={|| count += 1}>Increment</button>
+    </div>;
+}
+```
 
-- **WASI P3 is not yet finalized**: The spec is at release candidate stage, and runtime support is limited
-- **Wasm Component Model** is not yet supported in browsers
-- **Wasm stack switching** is not yet available in wasmtime
+Combined with reactive signals, this will provide a compile-time optimized UI framework without virtual DOM overhead.
 
-That said, Wado is already usable for its original purpose: embedding lightweight Wasm modules in JS projects where binary size matters.
+### Full WASI P3 Integration
 
-## Future Directions
+As the spec finalizes and runtime support matures, Wado will leverage async streams, futures, and the full capability model.
 
-- **UI as a first-class use case**: JSX syntax is already supported, with the vision of Wado as a UI description language
-- **Full WASI P3 integration**: As the spec finalizes and runtime support matures, Wado will leverage async streams, futures, and the full capability model
+## Informed by Agentic Coding
+
+Wado is developed entirely through agentic coding — AI agents write the code while the human handles design decisions and project management.
+
+This isn't just a curiosity; it shaped the language itself. After a year of intensive agentic coding experience, certain patterns became clear:
+
+- **Agents excel at volume but struggle with ambiguity.** Implicit behaviors get multiplied across a codebase. Explicit, predictable semantics work better.
+- **Agents tend toward defensive programming.** Without type safety, they pepper code with `hasattr` checks and nested `try-except` blocks. Strong types eliminate this need.
+- **Exceptions break agent reasoning.** Non-local control flow is hard to predict. `Result<T, E>` keeps everything visible.
+
+The result: a language where common agentic coding pitfalls are eliminated by design, not convention.
 
 ## Documentation
 
