@@ -14,7 +14,7 @@ This capability is essential for:
 
 Wado currently supports imports only from:
 
-- `.wado` modules (local files, compiled as core Wasm and linked with shared memory)
+- `.wado` modules (local files, integrated at IR level during compilation)
 - `core:*` namespace (core library, written in Wado)
 - `wasi:*` namespace (WASI interfaces, mapped to WIT)
 - `https:` URLs (remote modules)
@@ -43,9 +43,8 @@ use {utils} from "./precompiled.wasm";  // If compiled by Wado compiler
 ```
 
 **Implementation**:
-- Detect Wado origin via custom section marker: `@custom "wado-compiler"`
-- Compile as core Wasm modules (not components)
-- Link with shared memory (current `wado-bundled.wat` approach)
+- **`.wado` source**: Integrate at IR (TIR) level during compilation (no Wasm intermediate)
+- **`.wasm` (Wado-origin)**: Detect via custom section marker `@custom "wado-compiler"`, link as core module with shared memory
 - Enable cross-module optimizations (inlining, DCE, LTO)
 - **Zero Component Model overhead**
 
