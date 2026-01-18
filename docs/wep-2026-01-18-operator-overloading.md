@@ -28,12 +28,14 @@ impl Add for Point {
 ```
 
 **Pros**:
+
 - Explicit and discoverable
 - Type-safe with associated types
 - Integrates with trait system
 - Generic code can bound on operator traits
 
 **Cons**:
+
 - Verbose for simple cases
 - Need to import traits to use operators
 
@@ -48,10 +50,12 @@ Point operator+(const Point& other) const {
 ```
 
 **Pros**:
+
 - Compact syntax
 - Flexible (member vs. friend functions)
 
 **Cons**:
+
 - Complex lookup rules
 - Can be member or non-member (confusing)
 - No trait-like abstraction
@@ -67,10 +71,12 @@ operator fun plus(other: Point): Point {
 ```
 
 **Pros**:
+
 - Clear opt-in with `operator` keyword
 - Fixed function names prevent abuse
 
 **Cons**:
+
 - No trait abstraction for generic code
 - Less discoverable than explicit traits
 
@@ -87,10 +93,12 @@ extension Point: Equatable {
 ```
 
 **Pros**:
+
 - Protocol-oriented
 - Type-safe
 
 **Cons**:
+
 - Must be static functions (not methods)
 - Syntax can be awkward
 
@@ -104,10 +112,12 @@ const sum = vec_add(a, b);  // Not: a + b
 ```
 
 **Pros**:
+
 - No surprises, all control flow explicit
 - Simple implementation
 
 **Cons**:
+
 - Verbose for math-heavy code
 - Poor ergonomics for SIMD/vector math
 - Community repeatedly requests this feature
@@ -122,10 +132,12 @@ def __add__(self, other):
 ```
 
 **Pros**:
+
 - Simple and clear
 - Well-established convention
 
 **Cons**:
+
 - No compile-time checking
 - Not type-safe
 - Verbose naming
@@ -151,6 +163,7 @@ The trait syntax and semantics will follow Rust's design closely (as documented 
 Wado adopts Rust's trait-based approach for operator overloading. Each operator maps to a trait with a specific method name.
 
 **Rationale**:
+
 - Consistent with Wado's existing trait system (see `wep-2026-01-13-struct-and-trait.md`)
 - Explicit and type-safe
 - Enables generic programming with operator bounds
@@ -191,6 +204,7 @@ trait Rem {
 ```
 
 **Usage**:
+
 ```wado
 impl Add for Vec3 {
     type Output = Vec3;
@@ -220,6 +234,7 @@ trait Neg {
 ```
 
 **Usage**:
+
 ```wado
 impl Neg for Vec3 {
     type Output = Vec3;
@@ -319,6 +334,7 @@ trait ShrAssign<Rhs = u32> {
 ```
 
 **Usage**:
+
 ```wado
 impl AddAssign for Vec3 {
     fn add_assign(&mut self, other: Vec3) {
@@ -335,12 +351,14 @@ v1 += v2;  // Desugars to: v1.add_assign(v2)
 ```
 
 **Design notes**:
+
 - Takes `&mut self` for in-place mutation
 - RHS is taken by value (more flexible than by reference)
 - No return value (`Output` type) - always mutates in place
 - Useful for `String` concatenation, `Array` extension, numeric types
 
 **Example with String**:
+
 ```wado
 impl AddAssign for String {
     fn add_assign(&mut self, other: String) {
@@ -367,6 +385,7 @@ trait IndexMut<Idx> {
 ```
 
 **Usage**:
+
 ```wado
 struct Matrix {
     data: Array<f64>,
@@ -433,6 +452,7 @@ trait Debug {
 ```
 
 **Usage**:
+
 - `Display` is for user-facing output, used in template strings: `{value}`
 - `Debug` is for developer-facing output, used in debug printing
 
@@ -471,38 +491,38 @@ let result = a && b;  // ❌ Cannot overload
 
 Following Rust's convention:
 
-| Operator | Trait       | Method      | Expression  | Desugars to       |
-| -------- | ----------- | ----------- | ----------- | ----------------- |
-| `+`      | `Add`       | `add`       | `a + b`     | `a.add(b)`        |
-| `-`      | `Sub`       | `sub`       | `a - b`     | `a.sub(b)`        |
-| `*`      | `Mul`       | `mul`       | `a * b`     | `a.mul(b)`        |
-| `/`      | `Div`       | `div`       | `a / b`     | `a.div(b)`        |
-| `%`      | `Rem`       | `rem`       | `a % b`     | `a.rem(b)`        |
-| `-` (un) | `Neg`       | `neg`       | `-a`        | `a.neg()`         |
-| `&`      | `BitAnd`    | `bitand`    | `a & b`     | `a.bitand(b)`     |
-| `\|`     | `BitOr`     | `bitor`     | `a \| b`    | `a.bitor(b)`      |
-| `^`      | `BitXor`    | `bitxor`    | `a ^ b`     | `a.bitxor(b)`     |
-| `~`      | `BitNot`    | `bitnot`    | `~a`        | `a.bitnot()`      |
-| `<<`     | `Shl`       | `shl`       | `a << b`    | `a.shl(b)`        |
-| `>>`     | `Shr`       | `shr`       | `a >> b`    | `a.shr(b)`        |
-| `[]`     | `Index`     | `index`     | `a[b]`      | `*a.index(b)`     |
-| `[]` (m) | `IndexMut`  | `index_mut` | `a[b] = c`  | `*a.index_mut(b)` |
-| `==`     | `PartialEq` | `eq`        | `a == b`    | `a.eq(&b)`        |
-| `!=`     | `PartialEq` | `ne`        | `a != b`    | `a.ne(&b)`        |
-| `<`      | `PartialOrd`| `lt`        | `a < b`     | `a.lt(&b)`        |
-| `<=`     | `PartialOrd`| `le`        | `a <= b`    | `a.le(&b)`        |
-| `>`      | `PartialOrd`| `gt`        | `a > b`     | `a.gt(&b)`        |
-| `>=`     | `PartialOrd`| `ge`        | `a >= b`    | `a.ge(&b)`        |
-| `+=`     | `AddAssign` | `add_assign`| `a += b`    | `a.add_assign(b)` |
-| `-=`     | `SubAssign` | `sub_assign`| `a -= b`    | `a.sub_assign(b)` |
-| `*=`     | `MulAssign` | `mul_assign`| `a *= b`    | `a.mul_assign(b)` |
-| `/=`     | `DivAssign` | `div_assign`| `a /= b`    | `a.div_assign(b)` |
-| `%=`     | `RemAssign` | `rem_assign`| `a %= b`    | `a.rem_assign(b)` |
-| `&=`     | `BitAndAssign` | `bitand_assign` | `a &= b` | `a.bitand_assign(b)` |
-| `\|=`    | `BitOrAssign` | `bitor_assign` | `a \|= b` | `a.bitor_assign(b)` |
-| `^=`     | `BitXorAssign` | `bitxor_assign` | `a ^= b` | `a.bitxor_assign(b)` |
-| `<<=`    | `ShlAssign` | `shl_assign`| `a <<= b`   | `a.shl_assign(b)` |
-| `>>=`    | `ShrAssign` | `shr_assign`| `a >>= b`   | `a.shr_assign(b)` |
+| Operator | Trait          | Method          | Expression | Desugars to          |
+| -------- | -------------- | --------------- | ---------- | -------------------- |
+| `+`      | `Add`          | `add`           | `a + b`    | `a.add(b)`           |
+| `-`      | `Sub`          | `sub`           | `a - b`    | `a.sub(b)`           |
+| `*`      | `Mul`          | `mul`           | `a * b`    | `a.mul(b)`           |
+| `/`      | `Div`          | `div`           | `a / b`    | `a.div(b)`           |
+| `%`      | `Rem`          | `rem`           | `a % b`    | `a.rem(b)`           |
+| `-` (un) | `Neg`          | `neg`           | `-a`       | `a.neg()`            |
+| `&`      | `BitAnd`       | `bitand`        | `a & b`    | `a.bitand(b)`        |
+| `\|`     | `BitOr`        | `bitor`         | `a \| b`   | `a.bitor(b)`         |
+| `^`      | `BitXor`       | `bitxor`        | `a ^ b`    | `a.bitxor(b)`        |
+| `~`      | `BitNot`       | `bitnot`        | `~a`       | `a.bitnot()`         |
+| `<<`     | `Shl`          | `shl`           | `a << b`   | `a.shl(b)`           |
+| `>>`     | `Shr`          | `shr`           | `a >> b`   | `a.shr(b)`           |
+| `[]`     | `Index`        | `index`         | `a[b]`     | `*a.index(b)`        |
+| `[]` (m) | `IndexMut`     | `index_mut`     | `a[b] = c` | `*a.index_mut(b)`    |
+| `==`     | `PartialEq`    | `eq`            | `a == b`   | `a.eq(&b)`           |
+| `!=`     | `PartialEq`    | `ne`            | `a != b`   | `a.ne(&b)`           |
+| `<`      | `PartialOrd`   | `lt`            | `a < b`    | `a.lt(&b)`           |
+| `<=`     | `PartialOrd`   | `le`            | `a <= b`   | `a.le(&b)`           |
+| `>`      | `PartialOrd`   | `gt`            | `a > b`    | `a.gt(&b)`           |
+| `>=`     | `PartialOrd`   | `ge`            | `a >= b`   | `a.ge(&b)`           |
+| `+=`     | `AddAssign`    | `add_assign`    | `a += b`   | `a.add_assign(b)`    |
+| `-=`     | `SubAssign`    | `sub_assign`    | `a -= b`   | `a.sub_assign(b)`    |
+| `*=`     | `MulAssign`    | `mul_assign`    | `a *= b`   | `a.mul_assign(b)`    |
+| `/=`     | `DivAssign`    | `div_assign`    | `a /= b`   | `a.div_assign(b)`    |
+| `%=`     | `RemAssign`    | `rem_assign`    | `a %= b`   | `a.rem_assign(b)`    |
+| `&=`     | `BitAndAssign` | `bitand_assign` | `a &= b`   | `a.bitand_assign(b)` |
+| `\|=`    | `BitOrAssign`  | `bitor_assign`  | `a \|= b`  | `a.bitor_assign(b)`  |
+| `^=`     | `BitXorAssign` | `bitxor_assign` | `a ^= b`   | `a.bitxor_assign(b)` |
+| `<<=`    | `ShlAssign`    | `shl_assign`    | `a <<= b`  | `a.shl_assign(b)`    |
+| `>>=`    | `ShrAssign`    | `shr_assign`    | `a >>= b`  | `a.shr_assign(b)`    |
 
 **Note**: Method names use lowercase (e.g., `bitand`, not `bit_and`) for consistency with Rust.
 
@@ -594,6 +614,7 @@ impl User {
 ```
 
 **Guidelines**:
+
 1. **Arithmetic operators** (`+`, `-`, `*`, `/`, `%`): Should behave like mathematical operations
 2. **Comparison operators** (`<`, `>`, etc.): Should define a meaningful ordering
 3. **Index operator** (`[]`): Should access elements, not perform unrelated operations
@@ -655,14 +676,14 @@ let scaled = v * 2.0;  // Vec3
 
 ### Trade-offs
 
-| Aspect              | Rust/Wado (Traits)          | C++/Kotlin (operator keyword) | Zig (No overloading) |
-| ------------------- | --------------------------- | ----------------------------- | -------------------- |
-| Discoverability     | ✅ High (via traits)         | ⚠️ Medium (special syntax)    | ✅ N/A               |
-| Type safety         | ✅ High (associated types)   | ⚠️ Medium                     | ✅ N/A               |
-| Generic programming | ✅ Yes (trait bounds)        | ⚠️ Limited (templates)        | ❌ No                |
-| Verbosity           | ⚠️ Verbose                   | ✅ Concise                    | ✅ Explicit calls    |
-| Consistency         | ✅ Part of trait system      | ⚠️ Special case               | ✅ No special cases  |
-| Ergonomics (math)   | ✅ Good                      | ✅ Good                       | ❌ Poor              |
+| Aspect              | Rust/Wado (Traits)         | C++/Kotlin (operator keyword) | Zig (No overloading) |
+| ------------------- | -------------------------- | ----------------------------- | -------------------- |
+| Discoverability     | ✅ High (via traits)       | ⚠️ Medium (special syntax)    | ✅ N/A               |
+| Type safety         | ✅ High (associated types) | ⚠️ Medium                     | ✅ N/A               |
+| Generic programming | ✅ Yes (trait bounds)      | ⚠️ Limited (templates)        | ❌ No                |
+| Verbosity           | ⚠️ Verbose                 | ✅ Concise                    | ✅ Explicit calls    |
+| Consistency         | ✅ Part of trait system    | ⚠️ Special case               | ✅ No special cases  |
+| Ergonomics (math)   | ✅ Good                    | ✅ Good                       | ❌ Poor              |
 
 ## Examples
 
@@ -862,6 +883,7 @@ let value = *matrix.index([row, col]);
 ### Type Checking
 
 The type checker verifies that:
+
 1. The trait is implemented for the operand type(s)
 2. The associated `Output` type matches the expected type
 3. Generic bounds are satisfied
@@ -869,6 +891,7 @@ The type checker verifies that:
 ### Wasm Code Generation
 
 Operator trait calls compile to:
+
 1. **Monomorphization** for generic types (static dispatch, no overhead)
 2. **Direct calls** for concrete types (inlined when possible)
 3. **Vtable dispatch** for trait objects (`&dyn Add`)

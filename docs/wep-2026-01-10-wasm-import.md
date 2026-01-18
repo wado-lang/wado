@@ -44,6 +44,7 @@ use {utils} from "./precompiled.wasm" with { type: "wasm" };
 ```
 
 **Implementation**:
+
 - **`.wado` source**: Integrate at IR (TIR) level during compilation (no Wasm intermediate)
 - **`.wasm` (Wado-origin)**: Detect via custom section marker `@custom "wado-compiler"`, link as core module with shared memory
 - Enable cross-module optimizations (inlining, DCE, LTO)
@@ -60,6 +61,7 @@ use {compress} from "./zlib.wasm" with { type: "wasm" };
 ```
 
 **Implementation**:
+
 - Component Model format (with embedded WIT)
 - Type information extracted from component binary
 - Canonical ABI for lowering/lifting
@@ -86,6 +88,7 @@ use config from "./config.json" with { type: "json" };
 ```
 
 **Type annotation requirement (for security)**:
+
 - **`.wado` source**: No annotation needed (Wado source)
 - **All `.wasm` files**: `with { type: "wasm" }` **required**
 - **`.json` files**: `with { type: "json" }` **required**
@@ -102,6 +105,7 @@ use config from "./config.json" with { type: "json" };
 | `https:` URLs                 | **Required**     | Must specify type | Depends on type      |
 
 **Detection logic for `.wasm` imports** (after `type: "wasm"` validation):
+
 1. Check for `@custom "wado-compiler"` marker in component binary:
    - Has marker → Wado-origin (Core Wasm linking, zero overhead)
    - No marker → External (Component Model boundary, type-safe)
@@ -218,11 +222,13 @@ wasm-tools (CLI)            # Component composition (`wasm-tools compose`)
 **Problem**: Canonical ABI (lowering/lifting) has runtime cost
 
 **Mitigation**:
+
 - **Two-tier strategy**: Wado-to-Wado uses core linking (zero overhead)
 - **Strategic bundling**: Keep performance-critical code in Wado
 - **Future optimization**: Component Model may add inline hints
 
 **Benchmark expectations**:
+
 - Wado-origin function call: ~0 overhead (same as internal call, LTO enabled)
 - Component boundary call: ~10-50ns overhead (ABI translation)
 - For most use cases (crypto, parsing, I/O), ABI overhead is negligible
@@ -234,11 +240,13 @@ wasm-tools (CLI)            # Component composition (`wasm-tools compose`)
 **Trade-off**: Ties Wado to Component Model evolution
 
 **Rationale**:
+
 - Component Model is the **only** standard for type-safe Wasm interop
 - Core Wasm MVP lacks type information (`i32` ambiguity)
 - Alternative (Core Wasm + manual bindings) is unsafe and unmaintainable
 
 **Mitigation**:
+
 - Component Model is stable (1.0 released)
 - Wado can evolve independently within Component Model constraints
 
@@ -254,6 +262,7 @@ Current `wado-bundled.wat` is **Core Wasm** (MVP format) for zero overhead:
 ```
 
 **Migration plan**:
+
 1. **Keep core linking internally**: `wado-bundled` stays as core module
 2. **Add WIT documentation**: Define types for external projects
 3. **Optional component wrapper**: For external use only

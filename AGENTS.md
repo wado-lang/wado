@@ -16,7 +16,7 @@ The compiler is implemented in `wado-compiler/` with a hand-written recursive de
 
 Standard libraries are implemented in `wado-compiler/lib`, with `wasi/` for WASI and `core/` for the core library.
 
-See also `docs/compiler.md` for the implementation details and the feature checklist.
+See `docs/compiler.md` in order to develop the compiler.
 
 There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
 

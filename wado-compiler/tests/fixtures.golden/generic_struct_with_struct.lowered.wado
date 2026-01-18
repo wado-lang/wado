@@ -7,23 +7,23 @@ struct Point {
     y: i32,
 }
 
-struct Box$Pair$i32$String {
-    value: Pair$i32$String,
+struct "Box<Pair<i32,String>>" {
+    value: Pair<i32,String>,
 }
 
-struct Pair$i32$String {
+struct "Pair<i32,String>" {
     first: i32,
     second: String,
 }
 
-struct Box$Point {
+struct "Box<Point>" {
     value: Point,
 }
 
 fn run() with Stdout {
-    let point_box: Box$Point = Box$Point { value: Point { x: 10, y: 20 } };
+    let point_box: Box<Point> = Box<Point> { value: Point { x: 10, y: 20 } };
     core::cli::println(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("point: (", point_box.value.x.to_string()), ", "), point_box.value.y.to_string()), ")"));
-    let pair_box: Box$Pair$i32$String = Box$Pair$i32$String { value: Pair$i32$String { first: 1, second: "one" } };
+    let pair_box: Box<Pair<i32,String>> = Box<Pair<i32,String>> { value: Pair<i32,String> { first: 1, second: "one" } };
     core::cli::println(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("pair: (", pair_box.value.first.to_string()), ", "), pair_box.value.second), ")"));
 }
 
