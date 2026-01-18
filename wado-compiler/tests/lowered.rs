@@ -72,108 +72,83 @@ fn extract_entry_module(project: &wado_compiler::Project) -> String {
 }
 
 /// Run a golden file test
-async fn run_golden_test(golden_path: &Path) {
-    // Read the golden file
-    let golden_content = std::fs::read_to_string(golden_path)
-        .unwrap_or_else(|e| panic!("Failed to read golden file {:?}: {}", golden_path, e));
+fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    // Create tokio runtime for async operations
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
 
-    // Extract the source filename from the header
-    // Format: "// Source: tests/fixtures/opt_inline_simple.wado"
-    let source_line = golden_content
-        .lines()
-        .find(|line| line.starts_with("// Source:"))
-        .expect("Golden file must have a '// Source:' header line");
-    let source_relative = source_line.strip_prefix("// Source:").unwrap().trim();
+    rt.block_on(async {
+        // Read the golden file
+        let golden_content = std::fs::read_to_string(golden_path)
+            .unwrap_or_else(|e| panic!("Failed to read golden file {:?}: {}", golden_path, e));
 
-    // Construct full source path
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let source_path = PathBuf::from(manifest_dir).join(source_relative);
+        // Extract the source filename from the header
+        // Format: "// Source: tests/fixtures/opt_inline_simple.wado"
+        let source_line = golden_content
+            .lines()
+            .find(|line| line.starts_with("// Source:"))
+            .expect("Golden file must have a '// Source:' header line");
+        let source_relative = source_line.strip_prefix("// Source:").unwrap().trim();
 
-    // Read the source file
-    let source = std::fs::read_to_string(&source_path)
-        .unwrap_or_else(|e| panic!("Failed to read source file {:?}: {}", source_path, e));
+        // Construct full source path
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let source_path = PathBuf::from(manifest_dir).join(source_relative);
 
-    // Create compiler host
-    let base_path = source_path.parent().unwrap().to_path_buf();
-    let host = TestCompilerHost::new(base_path);
+        // Read the source file
+        let source = std::fs::read_to_string(&source_path)
+            .unwrap_or_else(|e| panic!("Failed to read source file {:?}: {}", source_path, e));
 
-    // Run dump_with_host with O2 optimization
-    let result = wado_compiler::dump_with_host(
-        &source,
-        &host,
-        Some(source_path.to_str().unwrap()),
-        OptLevel::Full,
-    )
-    .await
-    .unwrap_or_else(|e| panic!("Compilation failed for {:?}: {}", source_path, e));
+        // Create compiler host
+        let base_path = source_path.parent().unwrap().to_path_buf();
+        let host = TestCompilerHost::new(base_path);
 
-    // Extract entry module from optimized project
-    let project = result
-        .optimized_project
-        .expect("Optimized project should be available");
-    let actual_module = extract_entry_module(&project);
+        // Run dump_with_host with O2 optimization
+        let result = wado_compiler::dump_with_host(
+            &source,
+            &host,
+            Some(source_path.to_str().unwrap()),
+            OptLevel::Full,
+        )
+        .await
+        .unwrap_or_else(|e| panic!("Compilation failed for {:?}: {}", source_path, e));
 
-    // Extract expected content (skip header lines)
-    let expected_lines: Vec<&str> = golden_content
-        .lines()
-        .skip_while(|line| line.starts_with("//") || line.is_empty())
-        .collect();
-    let expected = expected_lines.join("\n");
+        // Extract entry module from optimized project
+        let project = result
+            .optimized_project
+            .expect("Optimized project should be available");
+        let actual_module = extract_entry_module(&project);
 
-    // Compare
-    if actual_module.trim() != expected.trim() {
-        // Print a diff-like output for debugging
-        eprintln!("=== EXPECTED (from golden file) ===");
-        eprintln!("{}", expected);
-        eprintln!("=== ACTUAL (from compiler) ===");
-        eprintln!("{}", actual_module);
-        eprintln!("=== END ===");
-        panic!(
-            "Golden file mismatch for {:?}\nRun `make update-golden-fixtures` if the change is intentional.",
-            golden_path
-        );
-    }
-}
+        // Extract expected content (skip header lines)
+        let expected_lines: Vec<&str> = golden_content
+            .lines()
+            .skip_while(|line| line.starts_with("//") || line.is_empty())
+            .collect();
+        let expected = expected_lines.join("\n");
 
-// ============================================================================
-// Test Discovery
-// ============================================================================
+        // Compare
+        if actual_module.trim() != expected.trim() {
+            // Print a diff-like output for debugging
+            eprintln!("=== EXPECTED (from golden file) ===");
+            eprintln!("{}", expected);
+            eprintln!("=== ACTUAL (from compiler) ===");
+            eprintln!("{}", actual_module);
+            eprintln!("=== END ===");
+            panic!(
+                "Golden file mismatch for {:?}\nRun `make update-golden-fixtures` if the change is intentional.",
+                golden_path
+            );
+        }
 
-/// Find all golden files in the fixtures.golden directory
-fn find_golden_files() -> Vec<PathBuf> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let golden_dir = PathBuf::from(manifest_dir).join("tests/fixtures.golden");
-
-    if !golden_dir.exists() {
-        return Vec::new();
-    }
-
-    std::fs::read_dir(&golden_dir)
-        .unwrap_or_else(|e| panic!("Failed to read golden directory {:?}: {}", golden_dir, e))
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().map(|ext| ext == "wado").unwrap_or(false))
-        .collect()
+        Ok(())
+    })
 }
 
 // ============================================================================
 // Tests
 // ============================================================================
 
-#[tokio::test]
-async fn golden_file_tests() {
-    let golden_files = find_golden_files();
-
-    if golden_files.is_empty() {
-        eprintln!(
-            "Warning: No golden files found. Run `make update-golden-fixtures` to generate them."
-        );
-        return;
-    }
-
-    for golden_path in golden_files {
-        let test_name = golden_path.file_stem().unwrap().to_string_lossy();
-        eprintln!("Running golden test: {}", test_name);
-        run_golden_test(&golden_path).await;
-    }
+datatest_mini::harness! {
+    // Run golden file tests for all .lowered.wado files in tests/fixtures.golden/
+    { test = run_golden_test, root = "tests/fixtures.golden", pattern = r"\.lowered\.wado$" },
 }
