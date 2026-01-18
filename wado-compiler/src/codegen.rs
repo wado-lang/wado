@@ -2,6 +2,9 @@
 // Generates Component Model WebAssembly using wasm-encoder
 // Targets WASI P3 (0.3.0-rc-2025-09-16) with native stream<T> types
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::ast::Type;
 use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
@@ -22,7 +25,6 @@ use crate::wasm_postprocess;
 use crate::world_registry::{WorldExportInfo, WorldRegistry};
 use heck::ToKebabCase;
 use indexmap::IndexMap;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::{
     AbstractHeapType, Alias, BranchHint, BranchHints, CanonicalOption, CodeSection,
@@ -659,12 +661,13 @@ impl Codegen {
 
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
-        let type_table = &entry_tir.type_table;
+        let type_table = &*entry_tir.type_table.borrow();
 
         // Collect ALL functions from loaded TIR modules (core:*, etc.)
         // We need to include all functions because they may have transitive dependencies
         // Format: (module_path, tir_func, type_table, qualified_name)
-        let mut loaded_funcs: Vec<(Vec<String>, &TirFunction, &TypeTable, String)> = Vec::new();
+        // Note: We store Rc<RefCell<TypeTable>> to avoid lifetime issues with temporary borrows
+        let mut loaded_funcs: Vec<(Vec<String>, &TirFunction, Rc<RefCell<TypeTable>>, String)> = Vec::new();
         for (path, tir_mod) in all_tir_modules {
             // Skip entry module (handled separately)
             if path == &entry_tir.path {
@@ -718,7 +721,7 @@ impl Codegen {
                     continue;
                 }
                 let mangled_name = func_id.to_string();
-                loaded_funcs.push((path.clone(), tir_func, &tir_mod.type_table, mangled_name));
+                loaded_funcs.push((path.clone(), tir_func, Rc::clone(&tir_mod.type_table), mangled_name));
             }
         }
 
@@ -731,7 +734,7 @@ impl Codegen {
         // (with mangled names like "Point::sum") in tir_mod.functions, not in impls.
         // This loop is kept for future when impls may be populated.
         // Format: (module_path, struct_lookup_name, tir_func, type_table, mangled_name)
-        let mut loaded_methods: Vec<(Vec<String>, StructName, &TirFunction, &TypeTable, String)> =
+        let mut loaded_methods: Vec<(Vec<String>, StructName, &TirFunction, Rc<RefCell<TypeTable>>, String)> =
             Vec::new();
         for (path, tir_mod) in all_tir_modules {
             // Skip entry module (handled separately)
@@ -760,7 +763,7 @@ impl Codegen {
                     }
                     // Skip methods that contain type parameters (from generic structs like Box<T>)
                     // These methods need to be inlined at call sites with concrete types
-                    let type_table = &tir_mod.type_table;
+                    let type_table = &*tir_mod.type_table.borrow();
                     let has_type_params = type_table.contains_type_param(func.return_type)
                         || func
                             .params
@@ -799,7 +802,7 @@ impl Codegen {
                         path.clone(),
                         struct_lookup_name,
                         func,
-                        &tir_mod.type_table,
+                        Rc::clone(&tir_mod.type_table),
                         method_mangled,
                     ));
                 }
@@ -846,7 +849,7 @@ impl Codegen {
         self.register_primitive_array_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
             if path != &entry_tir.path {
-                self.register_primitive_array_types_from_table(&tir_mod.type_table, &mut builder);
+                self.register_primitive_array_types_from_table(&*tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -882,7 +885,7 @@ impl Codegen {
                 self.register_struct_type(
                     struct_name,
                     tir_struct,
-                    &tir_mod.type_table,
+                    &*tir_mod.type_table.borrow(),
                     &mut builder,
                 );
             }
@@ -927,7 +930,7 @@ impl Codegen {
         self.register_tuple_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
             if path != &entry_tir.path {
-                self.register_tuple_types_from_table(&tir_mod.type_table, &mut builder);
+                self.register_tuple_types_from_table(&*tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -958,7 +961,7 @@ impl Codegen {
                 self.register_struct_type(
                     struct_name,
                     tir_struct,
-                    &tir_mod.type_table,
+                    &*tir_mod.type_table.borrow(),
                     &mut builder,
                 );
             }
@@ -991,7 +994,7 @@ impl Codegen {
         self.register_array_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
             if path != &entry_tir.path {
-                self.register_array_types_from_table(&tir_mod.type_table, &mut builder);
+                self.register_array_types_from_table(&*tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -1005,7 +1008,7 @@ impl Codegen {
         self.register_canonical_closure_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
             if path != &entry_tir.path {
-                self.register_canonical_closure_types_from_table(&tir_mod.type_table, &mut builder);
+                self.register_canonical_closure_types_from_table(&*tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -1069,7 +1072,8 @@ impl Codegen {
         }
 
         // Types for loaded module functions (TIR)
-        for (_, tir_func, func_type_table, qualified_name) in &loaded_funcs {
+        for (_, tir_func, func_type_table_rc, qualified_name) in &loaded_funcs {
+            let func_type_table = &*func_type_table_rc.borrow();
             // Skip generic template functions - they will be registered when monomorphized
             if !tir_func.type_params.is_empty() || !tir_func.impl_type_params.is_empty() {
                 // Generic template - skip unless it's a monomorphized instance
@@ -1094,9 +1098,10 @@ impl Codegen {
         }
 
         // Types for impl methods from loaded modules (TIR)
-        for (_module_path, struct_name, tir_method, method_type_table, mangled_name) in
+        for (_module_path, struct_name, tir_method, method_type_table_rc, mangled_name) in
             &loaded_methods
         {
+            let method_type_table = &*method_type_table_rc.borrow();
             // Skip generic template methods - they will be registered when monomorphized
             if !tir_method.type_params.is_empty() || !tir_method.impl_type_params.is_empty() {
                 // Generic template - skip unless it's a monomorphized instance
@@ -1335,7 +1340,8 @@ impl Codegen {
         }
 
         // Generate loaded module functions (TIR path)
-        for (module_path, tir_func, func_type_table, _qualified_name) in &loaded_funcs {
+        for (module_path, tir_func, func_type_table_rc, _qualified_name) in &loaded_funcs {
+            let func_type_table = &*func_type_table_rc.borrow();
             // Skip generic template functions - only generate monomorphized instances
             if (!tir_func.type_params.is_empty() || !tir_func.impl_type_params.is_empty())
                 && tir_func.monomorph_info.is_none() {
@@ -1348,9 +1354,10 @@ impl Codegen {
         }
 
         // Generate impl methods from loaded modules (TIR path)
-        for (module_path, _struct_name, tir_method, method_type_table, _mangled_name) in
+        for (module_path, _struct_name, tir_method, method_type_table_rc, _mangled_name) in
             &loaded_methods
         {
+            let method_type_table = &*method_type_table_rc.borrow();
             // Skip generic template methods - only generate monomorphized instances
             if (!tir_method.type_params.is_empty() || !tir_method.impl_type_params.is_empty())
                 && tir_method.monomorph_info.is_none() {

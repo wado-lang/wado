@@ -571,7 +571,7 @@ fn inline_functions(project: &mut Project) {
 
     for (module_path, module) in &project.tir_modules {
         for func in &module.functions {
-            if is_inline_eligible(func, &recursive_functions, module_path, &module.type_table) {
+            if is_inline_eligible(func, &recursive_functions, module_path, &*module.type_table.borrow()) {
                 inline_candidates.insert((module_path.clone(), func.name.clone()), func.clone());
                 // Get the strings used by this function
                 if let Some(strings) = module.function_strings.get(&func.name) {
@@ -600,7 +600,7 @@ fn inline_functions(project: &mut Project) {
                     &module_path,
                     &mut func.local_count,
                     &mut func.local_types,
-                    &module.type_table,
+                    &*module.type_table.borrow(),
                     &mut inlined_funcs,
                 );
 
@@ -2016,7 +2016,7 @@ fn build_analysis_graph(
     let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
 
     for (path, module) in modules {
-        let type_table = &module.type_table;
+        let type_table = &*module.type_table.borrow();
 
         // Analyze functions (including methods stored as functions)
         for func in &module.functions {

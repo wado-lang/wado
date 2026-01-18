@@ -153,14 +153,14 @@ impl Monomorphizer {
         module.generic_structs = generic_structs.clone();
 
         // Phase 2: Collect all struct instantiation sites from the type table
-        self.collect_instantiation_sites(&module.type_table);
+        self.collect_instantiation_sites(&*module.type_table.borrow());
 
         // Phase 3: Process struct instantiations and generate concrete structs
         let mut new_structs = Vec::new();
         while let Some(key) = self.pending.pop() {
             if let Some(generic_struct) = generic_structs.get(&key.name)
                 && let Some(concrete) =
-                    self.instantiate_struct(generic_struct, &key, &mut module.type_table)
+                    self.instantiate_struct(generic_struct, &key, &mut *module.type_table.borrow_mut())
             {
                 new_structs.push(concrete);
             }
@@ -202,7 +202,7 @@ impl Monomorphizer {
         while let Some(key) = self.function_pending.pop() {
             if let Some(generic_func) = generic_functions.get(&key.name)
                 && let Some(concrete) =
-                    self.instantiate_function(generic_func, &key, &mut module.type_table)
+                    self.instantiate_function(generic_func, &key, &mut *module.type_table.borrow_mut())
             {
                 new_functions.push(concrete);
             }
@@ -253,14 +253,14 @@ impl Monomorphizer {
         module.generic_structs = generic_structs.clone();
 
         // Phase 2: Collect all struct instantiation sites from the type table
-        self.collect_instantiation_sites(&module.type_table);
+        self.collect_instantiation_sites(&*module.type_table.borrow());
 
         // Phase 3: Process struct instantiations and generate concrete structs
         let mut new_structs = Vec::new();
         while let Some(key) = self.pending.pop() {
             if let Some(generic_struct) = generic_structs.get(&key.name)
                 && let Some(concrete) =
-                    self.instantiate_struct(generic_struct, &key, &mut module.type_table)
+                    self.instantiate_struct(generic_struct, &key, &mut *module.type_table.borrow_mut())
             {
                 new_structs.push(concrete);
             }
@@ -304,7 +304,7 @@ impl Monomorphizer {
         while let Some(key) = self.function_pending.pop() {
             if let Some(generic_func) = generic_functions.get(&key.name)
                 && let Some(concrete) =
-                    self.instantiate_function(generic_func, &key, &mut module.type_table)
+                    self.instantiate_function(generic_func, &key, &mut *module.type_table.borrow_mut())
             {
                 new_functions.push(concrete);
             }
@@ -331,7 +331,7 @@ impl Monomorphizer {
         // Rewrite struct field types
         for strct in &mut module.structs {
             for field in &mut strct.fields {
-                field.type_id = self.rewrite_type_id(field.type_id, &mut module.type_table);
+                field.type_id = self.rewrite_type_id(field.type_id, &mut *module.type_table.borrow_mut());
             }
         }
 
@@ -339,17 +339,17 @@ impl Monomorphizer {
         for func in &mut module.functions {
             // Rewrite function parameters
             for param in &mut func.params {
-                param.type_id = self.rewrite_type_id(param.type_id, &mut module.type_table);
+                param.type_id = self.rewrite_type_id(param.type_id, &mut *module.type_table.borrow_mut());
             }
             // Rewrite return type
-            func.return_type = self.rewrite_type_id(func.return_type, &mut module.type_table);
+            func.return_type = self.rewrite_type_id(func.return_type, &mut *module.type_table.borrow_mut());
             // Rewrite local_types
             for local_type in &mut func.local_types {
-                *local_type = self.rewrite_type_id(*local_type, &mut module.type_table);
+                *local_type = self.rewrite_type_id(*local_type, &mut *module.type_table.borrow_mut());
             }
             // Rewrite function body
             if let Some(body) = &mut func.body {
-                self.rewrite_types_in_block(body, &mut module.type_table);
+                self.rewrite_types_in_block(body, &mut *module.type_table.borrow_mut());
             }
         }
     }
@@ -822,7 +822,7 @@ impl Monomorphizer {
                 self.collect_func_instantiation_sites_in_block(
                     body,
                     generic_functions,
-                    &module.type_table,
+                    &*module.type_table.borrow(),
                 );
             }
         }
@@ -1751,7 +1751,7 @@ impl Monomorphizer {
     fn rewrite_function_calls_in_module(&self, module: &mut TirModule) {
         for func in &mut module.functions {
             if let Some(body) = &mut func.body {
-                self.rewrite_function_calls_in_block(body, &module.type_table);
+                self.rewrite_function_calls_in_block(body, &*module.type_table.borrow());
                 // Sync local_types with Let statement types
                 Self::sync_local_types_from_lets(body, &mut func.local_types);
                 // Update all Local expression types based on local_types

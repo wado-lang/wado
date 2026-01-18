@@ -1,7 +1,6 @@
-// NOTE: This test currently fails with "Array struct type not registered for element type 21"
-// The lowering phase correctly monomorphizes Container$i32 and Array$i32,
-// but there's still an issue in codegen where generic templates are being processed.
-// TODO: Complete the fix for generic field monomorphization
+// TypeTable is now shared via Rc<RefCell<>> to enable cross-module type resolution.
+// However, there's still an issue with the lowering creating invalid monomorphized instances.
+// TODO: Fix lowering to avoid creating monomorphized instances with empty type_args
 
 use {println} from "core:cli";
 

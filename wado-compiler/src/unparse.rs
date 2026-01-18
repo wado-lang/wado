@@ -2206,7 +2206,8 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 
 /// Public function to unparse TIR module to pseudo-Wado source
 pub fn unparse_tir(module: &TirModule) -> String {
-    let unparser = TirUnparser::new(&module.type_table);
+    let type_table_ref = module.type_table.borrow();
+    let unparser = TirUnparser::new(&*type_table_ref);
     unparser.unparse(module)
 }
 
