@@ -77,10 +77,10 @@ The result: a language where common agentic coding pitfalls are eliminated by de
 
 ### Language Basics
 
-- **Static typing with generics**: Strong type system with generic types, functions, and methods. No `any` escape hatch
-- **Rust-like semantics without lifetimes**: Value semantics, references (`&T`, `&mut T`), and structs with `impl` blocks — but memory is managed by Wasm GC, so no lifetime annotations needed
-- **No macros**: The code you read is the code that runs. This keeps the language predictable and tooling simple
-- **Familiar syntax**: Borrows from Rust (structs, `impl`, `let`/`let mut`) and JavaScript/TypeScript (template strings with backticks, ES module-style `use {...} from "..."` imports)
+- Static typing with generics — strong type system with generic types, functions, and methods. No `any` escape hatch
+- Rust-like semantics without lifetimes — value semantics, references (`&T`, `&mut T`), and structs with `impl` blocks, but memory is managed by Wasm GC, so no lifetime annotations needed
+- No macros — the code you read is the code that runs. This keeps the language predictable and tooling simple
+- Familiar syntax — borrows from Rust (structs, `impl`, `let`/`let mut`) and JavaScript/TypeScript (template strings with backticks, ES module-style `use {...} from "..."` imports)
 
 ### Effect System
 
