@@ -112,6 +112,10 @@ fn get_engine() -> &'static Engine {
         config.wasm_gc(true);
         config.wasm_function_references(true);
 
+        // Use minimal optimization for faster compilation in tests
+        // This reduces Wasm compilation time while maintaining compatibility with all features
+        config.cranelift_opt_level(wasmtime::OptLevel::None);
+
         Engine::new(&config).expect("Failed to create wasmtime Engine")
     })
 }
