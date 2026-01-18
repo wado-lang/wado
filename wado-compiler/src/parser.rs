@@ -1898,7 +1898,8 @@ impl Parser {
             if self.check(&TokenKind::Lt) {
                 self.advance();
                 let mut args = vec![self.parse_type()?];
-                while self.check(&TokenKind::Comma) {
+                // Continue parsing args only if we see a comma AND we don't have a pending >
+                while !self.pending_gt && self.check(&TokenKind::Comma) {
                     self.advance();
                     args.push(self.parse_type()?);
                 }
@@ -1924,7 +1925,9 @@ impl Parser {
         if self.check(&TokenKind::Lt) {
             self.advance();
             let mut args = vec![self.parse_type()?];
-            while self.check(&TokenKind::Comma) {
+            // Continue parsing args only if we see a comma AND we don't have a pending >
+            // (pending_gt means we split >> and the outer > closes this type arg list)
+            while !self.pending_gt && self.check(&TokenKind::Comma) {
                 self.advance();
                 args.push(self.parse_type()?);
             }
