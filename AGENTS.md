@@ -153,9 +153,6 @@ See also `wado-vscode/README.md` for more details.
 `wado-bundled/` is a Rust crate that provides bundled Wasm modules for Wado, providing:
 
 - [x] float-to-string conversion (fts)
-- [ ] math functions (libm)
-- [ ] sort
-- [ ] hash map
 
 ## Wasm and WASI
 
@@ -256,6 +253,14 @@ make test
 
 make hello     # generates example/hello.wat and example/hello.wasm
 make hello-run # simple smoke test
+
+# for benchmarks
+make benchmark-count-prime # use integer arithmetic
+make benchmark-mandelbrot  # use float arithmetic
+make benchmark-sieve       # use arrays
+
+# for wasm-size reports
+make report-wasm-size
 ```
 
 ## On Your Task Done
