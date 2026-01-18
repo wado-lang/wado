@@ -116,7 +116,8 @@ let arr: Array<i32> = [];
 arr.append(1);                           // add element to end
 arr.append(2);
 let n = arr.len();                       // get length (2)
-let first = arr[0];                      // index access
+let first = arr[0];                      // index access (read)
+arr[0] = 100;                            // index assignment (write, requires mut)
 ```
 
 ## Structs
@@ -260,9 +261,15 @@ loop {
 // Arithmetic
 + - * / %
 
-// Comparison (can be chained)
+// Comparison (can be chained with restrictions)
 == != < <= > >=
 a < b < c       // same as: a < b && b < c
+a == b == c     // same as: a == b && b == c
+
+// Chaining restrictions:
+// - `!=` CANNOT be chained: `a != b != c` is an error
+// - Cannot mix `==` with inequalities: `a == b < c` is an error
+// - Same-direction only: `a < b < c` OK, `a < b > c` is an error
 
 // Logical
 && || !
@@ -291,7 +298,38 @@ let v = *r;           // dereference
 let mut y = 0;
 let mr = &mut y;      // mutable reference
 *mr = 10;             // assign through reference
+
+// Reference to reference (GC-managed)
+let rr = &r;          // &&i32
+let val = **rr;       // double dereference
+
+// &mut to & coercion (automatic)
+fn read(r: &i32) { ... }
+read(&mut y);         // OK: &mut i32 coerced to &i32
+
+// Key differences from Rust (GC-based memory model):
+// - No borrow checker: multiple mutable references allowed
+// - Can return references to local variables (GC keeps them alive)
+// - No lifetime annotations needed
 ```
+
+## Value Semantics
+
+```wado
+// Value types copy on assignment
+let s1 = "hello";
+let s2 = s1;          // s1 is copied, both are usable
+
+let arr1: Array<i32> = [1, 2, 3];
+let arr2 = arr1;      // arr1 is copied (deep copy)
+
+// Reference types share the value (no copy)
+let x = 42;
+let r1 = &x;
+let r2 = r1;          // r2 shares the same reference, no copy
+```
+
+Value types (primitives, String, Array, Tuple, Struct) have **value semantics**: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Assert
 
