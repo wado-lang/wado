@@ -39,7 +39,8 @@ The compiler determines linking strategy based on component origin, not file ext
 use {helper} from "./lib.wado";
 
 // Wado-compiled component (detected via metadata)
-use {utils} from "./precompiled.wasm";  // If compiled by Wado compiler
+use {utils} from "./precompiled.wasm" with { type: "wasm" };
+// Has @custom "wado-compiler" marker → Zero overhead
 ```
 
 **Implementation**:
@@ -54,7 +55,8 @@ use {utils} from "./precompiled.wasm";  // If compiled by Wado compiler
 
 ```wado
 // External component (from Rust, C, AssemblyScript, etc.)
-use {compress} from "./zlib.wasm";  // No wado-compiler marker
+use {compress} from "./zlib.wasm" with { type: "wasm" };
+// No wado-compiler marker → Component Model boundary
 ```
 
 **Implementation**:
@@ -71,40 +73,38 @@ use {compress} from "./zlib.wasm";  // No wado-compiler marker
 // Wado source file (IR-level integration)
 use {helper} from "./lib.wado";
 
-// Wado-compiled component (auto-detected via metadata, core linking)
-use {utils} from "./precompiled.wasm";
-// Has @custom "wado-compiler" → Zero overhead, no annotation needed
+// Wado-compiled component (core linking via marker detection)
+use {utils} from "./precompiled.wasm" with { type: "wasm" };
+// Has @custom "wado-compiler" → Zero overhead
 
-// External Wasm component (Component Model boundary, annotation REQUIRED)
+// External Wasm component (Component Model boundary)
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
 // No "wado-compiler" marker → Type-safe interop
 
-// JSON import (for comparison)
+// JSON import
 use config from "./config.json" with { type: "json" };
 ```
 
-**Type annotation requirement**:
-- **Wado-compiled `.wasm`**: No annotation needed (detected via `@custom "wado-compiler"`)
-- **External `.wasm`**: `with { type: "wasm" }` **required**
+**Type annotation requirement (for security)**:
 - **`.wado` source**: No annotation needed (Wado source)
+- **All `.wasm` files**: `with { type: "wasm" }` **required**
+- **`.json` files**: `with { type: "json" }` **required**
+- **Rationale**: Explicit type declaration prevents accidental execution of untrusted code
 
 ### Type Annotation Rules
 
-| Import Source                 | `type` Attribute        | Format                  | Linking Strategy     |
-| ----------------------------- | ----------------------- | ----------------------- | -------------------- |
-| `.wado` files                 | Not applicable          | Wado source             | IR-level integration |
-| `.wasm` (Wado-compiled)       | Not required (optional) | Component + metadata    | Core Wasm linking    |
-| `.wasm` (External)            | **Required**            | `type: "wasm"`          | Component boundary   |
-| `.json` files                 | **Required**            | `type: "json"`          | Compile-time embed   |
-| `core:*`, `wasi:*` namespaces | Not applicable          | Special namespace       | IR-level integration |
-| `https:` URLs                 | **Required**            | Must specify content    | Depends on type      |
-| Future: `.wit` files          | **Required**            | `type: "wit"`           | Interface-only (TBD) |
+| Import Source                 | `type` Attribute | Format            | Linking Strategy     |
+| ----------------------------- | ---------------- | ----------------- | -------------------- |
+| `.wado` files                 | Not applicable   | Wado source       | IR-level integration |
+| `.wasm` files (any origin)    | **Required**     | `type: "wasm"`    | See detection logic  |
+| `.json` files                 | **Required**     | `type: "json"`    | Compile-time embed   |
+| `core:*`, `wasi:*` namespaces | Not applicable   | Special namespace | IR-level integration |
+| `https:` URLs                 | **Required**     | Must specify type | Depends on type      |
 
-**Detection logic**:
-1. If `with { type: "wasm" }` is present → External component (Component Model boundary)
-2. If no type annotation → Check for `@custom "wado-compiler"` marker:
-   - Has marker → Wado-compiled (Core Wasm linking)
-   - No marker → Error: External `.wasm` requires `with { type: "wasm" }`
+**Detection logic for `.wasm` imports** (after `type: "wasm"` validation):
+1. Check for `@custom "wado-compiler"` marker in component binary:
+   - Has marker → Wado-origin (Core Wasm linking, zero overhead)
+   - No marker → External (Component Model boundary, type-safe)
 
 ### WIT Requirements
 
@@ -117,11 +117,11 @@ use config from "./config.json" with { type: "json" };
 
 ### Implementation Requirements
 
-1. **Component Origin Detection**
-   - If `with { type: "wasm" }` is present → External component (skip marker check)
-   - If no type annotation → Check for `@custom "wado-compiler"` in component binary:
+1. **Import Validation and Origin Detection**
+   - Validate `.wasm` imports have `with { type: "wasm" }` (security requirement)
+   - Parse component binary and check for `@custom "wado-compiler"` marker:
      - If present: Wado-origin → Use core linking strategy
-     - If absent: Error - external `.wasm` requires `with { type: "wasm" }`
+     - If absent: External → Use Component Model boundary
    - Custom section format: `(custom "wado-compiler" "version=X.Y.Z")`
 
 2. **Component Model Binary Parsing**
@@ -148,34 +148,33 @@ use config from "./config.json" with { type: "json" };
 5. **Dual Linking Strategy**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Wado Compiler                                               │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Import resolution                                        │
-│    .wado → Parse as Wado source (IR integration)            │
-│    .wasm → Check type annotation:                           │
-│            ├─ with { type: "wasm" }? → External component   │
-│            └─ No annotation?                                │
-│                ├─ Has "wado-compiler" marker? → Wado-origin │
-│                └─ No marker? → Error (annotation required)  │
-│                                                             │
-│ 2. Type checking                                            │
-│    .wado / Wado-origin .wasm → Wado type system (internal)  │
-│    External .wasm → WIT type extraction + mapping           │
-│                                                             │
-│ 3. Code generation                                          │
-│    .wado → IR-level integration (no Wasm intermediate)      │
-│    Wado-origin .wasm → Core Wasm linking (shared memory)    │
-│    External .wasm → Component boundary (canonical ABI)      │
-│                                                             │
-│ 4. Linking                                                  │
-│    .wado / Wado-origin → Core Wasm linking (zero overhead)  │
-│    External .wasm → Component composition (type-safe)       │
-│                                                             │
-│ 5. Optimization (future)                                    │
-│    .wado / Wado-origin → wasm-opt inline, DCE, LTO          │
-│    External → Limited (ABI boundary)                        │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ Wado Compiler                                                │
+├──────────────────────────────────────────────────────────────┤
+│ 1. Import resolution                                         │
+│    .wado → Parse as Wado source (IR integration)             │
+│    .wasm → Validate `with { type: "wasm" }` (required)       │
+│            Check "wado-compiler" marker:                     │
+│            ├─ Has marker? → Wado-origin                      │
+│            └─ No marker? → External component                │
+│                                                              │
+│ 2. Type checking                                             │
+│    .wado / Wado-origin .wasm → Wado type system (internal)   │
+│    External .wasm → WIT type extraction + mapping            │
+│                                                              │
+│ 3. Code generation                                           │
+│    .wado → IR-level integration (no Wasm intermediate)       │
+│    Wado-origin .wasm → Core Wasm linking (shared memory)     │
+│    External .wasm → Component boundary (canonical ABI)       │
+│                                                              │
+│ 4. Linking                                                   │
+│    .wado / Wado-origin → Core Wasm linking (zero overhead)   │
+│    External .wasm → Component composition (type-safe)        │
+│                                                              │
+│ 5. Optimization (future)                                     │
+│    .wado / Wado-origin → wasm-opt inline, DCE, LTO           │
+│    External → Limited (ABI boundary)                         │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Tooling Dependencies
@@ -202,7 +201,7 @@ wasm-tools (CLI)            # Component composition (`wasm-tools compose`)
 ✅ **Automatic optimization**: Compiler auto-detects origin and chooses best strategy
 ✅ **Future-proof**: Supports emerging Wasm ecosystem standards
 ✅ **Type safety**: Component Model enforces type correctness at external boundaries
-✅ **Simplicity**: No manual type annotations needed (auto-detected via metadata)
+✅ **Security**: Explicit type annotations prevent accidental execution of untrusted code
 
 ### Negative
 
@@ -264,67 +263,11 @@ Current `wado-bundled.wat` is **Core Wasm** (MVP format) for zero overhead:
 
 ## Implementation Plan
 
-### Phase 0: Wado-origin Detection
-
-- [ ] Add custom section generator: `@custom "wado-compiler" "version=X.Y.Z"`
-- [ ] Emit custom section in all Wado-compiled components
-- [ ] Implement detection logic in component parser
-- [ ] Test: Verify Wado-compiled `.wasm` uses core linking
-
-### Phase 1: Component Model Parsing
-
-- [ ] Parse `use {...} from "*.wasm"` syntax
-- [ ] Parse `with { type: "wasm" }` annotation
-- [ ] Integrate `wasmparser` for Component Model binary parsing
-- [ ] Implement detection logic:
-  - If `type: "wasm"` → External (skip marker check)
-  - If no annotation → Check `wado-compiler` marker
-- [ ] Extract type information from component binary sections (external only)
-- [ ] Error handling for:
-  - Missing/invalid `.wasm` files
-  - `.wasm` without annotation and without `wado-compiler` marker
-  - Non-component binaries (must be Component Model format)
-  - Unsupported WIT types
-
-### Phase 2: WIT Type Mapping (External components)
-
-- [ ] Map WIT primitives to Wado types (bool, integers, floats)
-- [ ] Map WIT `string` to Wado `String`
-- [ ] Map WIT `list<T>` to Wado `Array<T>`
-- [ ] Map WIT `option<T>` to Wado `Option<T>`
-- [ ] Map WIT `record` to Wado `struct`
-- [ ] Generate Wado type definitions for imported interfaces
-- [ ] Type check imported functions against usage
-
-### Phase 3: Component Boundary Codegen (External components)
-
-- [ ] Generate Canonical ABI adapters for imported functions
-- [ ] Handle lowering: Wado types → WIT types
-- [ ] Handle lifting: WIT types → Wado types
-- [ ] Integrate with existing codegen pipeline
-
-### Phase 4: Dual Linking Implementation
-
-- [ ] **Wado-origin path**: Extract core module and link directly (zero overhead)
-- [ ] **External path**: Use `wasm-tools compose` to combine components
-- [ ] Handle import/export resolution for both strategies
-- [ ] Generate appropriate output (core module or component)
-- [ ] Ensure Wado-origin core linking maintains LTO capability
-
-### Phase 5: Optimization and Tooling
-
-- [ ] Tree-shaking unused imports (both strategies)
-- [ ] Cache parsed component metadata
-- [ ] **Wado-origin LTO**: Cross-module inlining and DCE
-- [ ] wasm-opt integration for core modules
-- [ ] Benchmark: Verify zero overhead for Wado-origin imports
-
-### Future: wado-bundled Component Wrapper (Optional)
-
-- [ ] Add WIT definitions for `wado-bundled` functions
-- [ ] Create Component Model wrapper (for external projects)
-- [ ] Keep core linking internally (Wado compiler)
-- [ ] Document usage for non-Wado projects
+1. **Wado-origin Detection**: Add `@custom "wado-compiler"` marker to all Wado-compiled components
+2. **Component Model Parsing**: Parse `.wasm` imports with `type: "wasm"` validation and marker detection
+3. **WIT Type Mapping**: Map WIT types to Wado types for external components
+4. **Dual Linking**: Implement core linking for Wado-origin, Component Model boundary for external
+5. **Optimization**: Enable LTO for Wado-origin modules
 
 ## References
 
