@@ -4082,10 +4082,13 @@ impl Codegen {
                         heap_type: HeapType::Concrete(type_idx),
                     })
                 } else {
-                    // Fallback: this shouldn't happen if types are registered properly
+                    // Debug: print type_table info to understand the issue
+                    let element_resolved = type_table.get(element_type);
                     panic!(
-                        "Array struct type not registered for element type {}",
-                        element_type
+                        "Array struct type not registered for element type {} (resolved: {:?})\nAvailable array types: {:?}",
+                        element_type,
+                        element_resolved,
+                        self.array_struct_types.keys().collect::<Vec<_>>()
                     );
                 }
             }
