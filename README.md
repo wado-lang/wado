@@ -61,7 +61,7 @@ No non-local control flow via exceptions. Errors are handled explicitly with `Re
 
 By leveraging Wasm GC instead of bundling a runtime, Wado produces compact `.wasm` files. This is the core motivation behind the language.
 
-## Built with Agentic Coding
+## Informed by Agentic Coding
 
 Wado is developed entirely through agentic coding — AI agents write the code while the human handles design decisions and project management.
 
@@ -159,6 +159,28 @@ That said, Wado is already usable for its original purpose: embedding lightweigh
 - [Other Documentation](docs) - ADR, research notes, TODOs, etc.
 
 ## Development
+
+Wado is developed entirely through agentic coding — AI agents write all the code while the human handles language design and project management.
+
+### Development Process
+
+This approach requires active management:
+
+- **Refactoring guidance**: Left unchecked, agents generate case-specific code that only works for immediate tests. Regular intervention steers toward generalizable solutions.
+- **Code minimization**: Agents tend to over-generate logic. Compilers need minimal, general-purpose code — the opposite of what agents naturally produce.
+- **Periodic refactoring phases**: Without intervention, cruft accumulates. We've done one ground-up compiler architecture redesign so far.
+
+### AI-Guided Optimization
+
+AI-guided optimization is a technique where you show generated code to a coding agent and have it identify optimization opportunities. The agent's output is non-deterministic, but the insights can be turned into deterministic compiler rules.
+
+Wado's optimizer is developed using this approach:
+
+```
+Agent finds pattern → Human reviews → Deterministic optimization rule added
+```
+
+Show the generated WAT to an agent and ask it to spot inefficiencies. Review the suggestions, then implement them as permanent optimization passes.
 
 ### Install `cargo`
 
