@@ -43,6 +43,16 @@ pub fn require_input(input: Option<String>, print_usage: fn()) -> String {
     }
 }
 
+/// Require that at least one input file was specified
+pub fn require_inputs(inputs: Vec<String>, print_usage: fn()) -> Vec<String> {
+    if inputs.is_empty() {
+        eprintln!("Error: no input file specified");
+        print_usage();
+        process::exit(1);
+    }
+    inputs
+}
+
 /// Check for multiple input files and error
 pub fn reject_multiple_inputs(input: &Option<String>) {
     if input.is_some() {
