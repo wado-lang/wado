@@ -985,7 +985,7 @@ pub struct TirTypeParam {
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {
-    /// Original generic name (e.g., "Box" for "Box$i32")
+    /// Original generic name (e.g., "Box" for "Box<i32>")
     pub generic_name: String,
     /// Concrete type arguments used for this instantiation
     pub type_args: Vec<TypeId>,

@@ -1479,7 +1479,7 @@ use crate::tir::{
 
 /// Unparses TIR back to pseudo-Wado source code.
 /// The output shows the code after monomorphization and lowering.
-/// Note: The output may not be valid Wado (e.g., `Box$i32` isn't valid syntax).
+/// Note: Monomorphized names like `Box<i32>` are quoted to make the output parseable.
 pub struct TirUnparser<'a> {
     type_table: &'a TypeTable,
     output: String,
@@ -1492,6 +1492,16 @@ impl<'a> TirUnparser<'a> {
             type_table,
             output: String::new(),
             indent_level: 0,
+        }
+    }
+
+    /// Quote an identifier if it contains characters that make it invalid Wado syntax.
+    /// Monomorphized names like `Box<i32>` contain `<`, `>`, `,` which aren't valid in identifiers.
+    fn quote_if_needed(name: &str) -> String {
+        if name.contains('<') || name.contains('>') || name.contains(',') {
+            format!("\"{}\"", name)
+        } else {
+            name.to_string()
         }
     }
 
@@ -1533,7 +1543,7 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str("pub ");
         }
         self.output.push_str("struct ");
-        self.output.push_str(&s.name);
+        self.output.push_str(&Self::quote_if_needed(&s.name));
 
         // Show generic params if present (for unmonomorphized structs)
         if !s.type_params.is_empty() {
@@ -1601,7 +1611,7 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str("pub ");
         }
         self.output.push_str("fn ");
-        self.output.push_str(&f.name);
+        self.output.push_str(&Self::quote_if_needed(&f.name));
 
         // Generic params (for unmonomorphized functions)
         if !f.type_params.is_empty() {
@@ -1888,7 +1898,7 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str(&module_path.join("::"));
                     self.output.push_str("::");
                 }
-                self.output.push_str(&func_name);
+                self.output.push_str(&Self::quote_if_needed(&func_name));
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {
@@ -1942,7 +1952,7 @@ impl<'a> TirUnparser<'a> {
                 };
                 self.unparse_expr(receiver);
                 self.output.push('.');
-                self.output.push_str(&method_name);
+                self.output.push_str(&Self::quote_if_needed(&method_name));
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {
@@ -1963,8 +1973,8 @@ impl<'a> TirUnparser<'a> {
                 self.output.push(')');
             }
             TirExprKind::StaticCall { func, args } => {
-                // Output the mangled function name as-is (e.g., "Point::origin" or "Array$i32::with_capacity")
-                self.output.push_str(&func.name());
+                // Output the mangled function name (e.g., "Point::origin" or "Array<i32>::with_capacity")
+                self.output.push_str(&Self::quote_if_needed(&func.name()));
                 self.output.push('(');
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {

@@ -2693,12 +2693,12 @@ impl<'a> Resolver<'a> {
                     module_path,
                     type_args,
                 } => {
-                    // Build mangled name for generic type: Array$i32
+                    // Build mangled name for generic type: Array<i32>
                     let type_arg_names: Vec<String> = type_args
                         .iter()
                         .map(|t| self.mangle_type_name(*t))
                         .collect();
-                    let mangled = format!("{}${}", name, type_arg_names.join("$"));
+                    let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                     (
                         name.clone(),
                         module_path.clone(),
@@ -3008,15 +3008,15 @@ impl<'a> Resolver<'a> {
                     .iter()
                     .map(|t| self.mangle_type_name(*t))
                     .collect();
-                format!("{}${}", name, args.join("$"))
+                format!("{}<{}>", name, args.join(","))
             }
-            ResolvedType::Option(inner) => format!("Option${}", self.mangle_type_name(*inner)),
-            ResolvedType::Ref(inner) => format!("ref${}", self.mangle_type_name(*inner)),
-            ResolvedType::MutRef(inner) => format!("mutref${}", self.mangle_type_name(*inner)),
+            ResolvedType::Option(inner) => format!("Option<{}>", self.mangle_type_name(*inner)),
+            ResolvedType::Ref(inner) => format!("ref<{}>", self.mangle_type_name(*inner)),
+            ResolvedType::MutRef(inner) => format!("mutref<{}>", self.mangle_type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
             ResolvedType::Tuple(elems) => {
                 let parts: Vec<String> = elems.iter().map(|e| self.mangle_type_name(*e)).collect();
-                format!("Tuple${}", parts.join("$"))
+                format!("Tuple<{}>", parts.join(","))
             }
             _ => "unknown".to_string(),
         }

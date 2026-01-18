@@ -2302,13 +2302,13 @@ fn analyze_expr(
                     module_path,
                 } => {
                     // Generic instance method call (e.g., Box<i32>.get())
-                    // Track as a free function with monomorphized name: Box$i32::get
-                    let elem_name = if let Some(type_id) = type_args.first() {
-                        mangle_type_for_name(*type_id, type_table)
-                    } else {
-                        String::new()
-                    };
-                    let mangled_func_name = format!("{}${}::{}", name, elem_name, method_name);
+                    // Track as a free function with monomorphized name: Box<i32>::get
+                    let type_arg_names: Vec<String> = type_args
+                        .iter()
+                        .map(|t| mangle_type_for_name(*t, type_table))
+                        .collect();
+                    let mangled_func_name =
+                        format!("{}<{}>::{}", name, type_arg_names.join(","), method_name);
                     let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
                         module_path,
                         &mangled_func_name,
@@ -2317,9 +2317,9 @@ fn analyze_expr(
                 }
                 ResolvedType::BuiltinArray(elem_type) => {
                     // Array<T> method call (e.g., arr.len(), arr.append())
-                    // Track as a free function with monomorphized name: Array$i32::len
+                    // Track as a free function with monomorphized name: Array<i32>::len
                     let elem_name = mangle_type_for_name(*elem_type, type_table);
-                    let mangled_func_name = format!("Array${}::{}", elem_name, method_name);
+                    let mangled_func_name = format!("Array<{}>::{}", elem_name, method_name);
                     // Array methods are in core/prelude
                     let callee_id = FunctionId::Free(FreeFunctionName::from_strs(
                         &["core", "prelude"],
@@ -2480,7 +2480,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
 }
 
 /// Mangle a type ID into a string suitable for struct/function names.
-/// Used for creating monomorphized function names like Array$i32::len.
+/// Used for creating monomorphized function names like Array<i32>::len.
 fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => match prim {
@@ -2509,7 +2509,7 @@ fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
                 .iter()
                 .map(|t| mangle_type_for_name(*t, type_table))
                 .collect();
-            format!("{}${}", name, args.join("$"))
+            format!("{}<{}>", name, args.join(","))
         }
         ResolvedType::Function {
             params,
@@ -2517,18 +2517,18 @@ fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
             ..
         } => {
             let ret_name = mangle_type_for_name(*return_type, type_table);
-            format!("Fn${}${}", params.len(), ret_name)
+            format!("Fn<{},{}>", params.len(), ret_name)
         }
         ResolvedType::Tuple(elems) => {
             let elem_names: Vec<String> = elems
                 .iter()
                 .map(|t| mangle_type_for_name(*t, type_table))
                 .collect();
-            format!("Tuple${}", elem_names.join("$"))
+            format!("Tuple<{}>", elem_names.join(","))
         }
         ResolvedType::Option(inner) => {
             let inner_name = mangle_type_for_name(*inner, type_table);
-            format!("Option${}", inner_name)
+            format!("Option<{}>", inner_name)
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             mangle_type_for_name(*inner, type_table)
@@ -2611,7 +2611,7 @@ fn remove_unreachable_functions(project: &mut Project) {
                 }
 
                 // For generic methods/static methods, check if any monomorphized version is reachable
-                // Generic functions are named "Array::with_capacity" but calls use "Array$i32::with_capacity"
+                // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
                 // Check if any function ID in reachable_functions matches this base name
                 is_generic_func_reachable(&project.reachable_functions, module_path, &func.name)
             } else {
@@ -2627,14 +2627,14 @@ fn remove_unreachable_functions(project: &mut Project) {
 }
 
 /// Check if a generic function has any monomorphized version that is reachable.
-/// For example, "Array::with_capacity" should be kept if "Array$i32::with_capacity" is reachable.
+/// For example, "Array::with_capacity" should be kept if "Array<i32>::with_capacity" is reachable.
 fn is_generic_func_reachable(
     reachable: &HashSet<FunctionId>,
     module_path: &[String],
     func_name: &str,
 ) -> bool {
     // func_name is like "Array::with_capacity"
-    // We need to find any "Array$..::with_capacity" in reachable set
+    // We need to find any "Array<..>::with_capacity" in reachable set
     let Some(sep_pos) = func_name.find("::") else {
         return false;
     };
@@ -2645,14 +2645,14 @@ fn is_generic_func_reachable(
         if let FunctionId::Free(free_name) = id {
             // For monomorphized functions, the actual function may be in a different module
             // (e.g., entry module []) than the original definition (e.g., ["core", "prelude"]).
-            // So we relax the module path check for monomorphized names (containing $).
+            // So we relax the module path check for monomorphized names (containing <).
             let module_matches = free_name.module_path.as_slice() == module_path
-                || (free_name.name.contains('$') && module_path.is_empty());
+                || (free_name.name.contains('<') && module_path.is_empty());
 
             if !module_matches {
                 continue;
             }
-            // Check if name matches pattern "BaseStruct$..::method_name"
+            // Check if name matches pattern "BaseStruct<..>::method_name"
             if let Some(call_sep_pos) = free_name.name.find("::") {
                 let call_struct = &free_name.name[..call_sep_pos];
                 let call_method = &free_name.name[call_sep_pos + 2..];
@@ -2663,12 +2663,12 @@ fn is_generic_func_reachable(
                 }
 
                 // Check if struct name matches (with or without generic params)
-                // "Array$i32" should match "Array"
+                // "Array<i32>" should match "Array"
                 if call_struct == base_struct {
                     return true;
                 }
-                if let Some(dollar_pos) = call_struct.find('$')
-                    && &call_struct[..dollar_pos] == base_struct
+                if let Some(bracket_pos) = call_struct.find('<')
+                    && &call_struct[..bracket_pos] == base_struct
                 {
                     return true;
                 }
