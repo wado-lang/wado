@@ -234,6 +234,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Template Format Specifiers](./docs/wep-2026-01-17-template-format-specifiers.md)
 - [JSON Literal Compatibility](./docs/wep-2026-01-18-json-literal-compatibility.md)
 - [JSON Module Import](./docs/wep-2026-01-18-json-module-import.md)
+- [Operator Overloading](./docs/wep-2026-01-18-operator-overloading.md)
 
 ### Structure
 
