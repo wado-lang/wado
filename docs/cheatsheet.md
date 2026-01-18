@@ -111,8 +111,12 @@ let b = [1, 2, 3] as Array<i32>;         // explicit cast
 fn takes(arr: Array<i32>) {}
 takes([1, 2, 3]);                        // implicit coercion
 
+// Array constructors
+let arr = Array::<i32>::with_capacity(10);  // empty array with pre-allocated capacity
+let bools = Array::<bool>::filled(100, true);  // array of 100 elements, all true
+
 // Array methods
-let arr: Array<i32> = [];
+let mut arr: Array<i32> = [];
 arr.append(1);                           // add element to end
 arr.append(2);
 let n = arr.len();                       // get length (2)

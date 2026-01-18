@@ -43,6 +43,16 @@ impl Array<T> {
         };
     }
 
+    /// Create a new array with `n` elements, all initialized to `element`
+    pub fn filled(n: i32, element: T) -> Array<T> {
+        let repr = builtin::array_new::<T>(n);
+        builtin::array_fill::<T>(repr, 0, element, n);
+        return Array {
+            repr,
+            used: n,
+        };
+    }
+
     /// Get the number of elements in the array
     pub fn len(&self) -> i32 {
         return self.used;
