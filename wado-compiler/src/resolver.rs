@@ -2659,8 +2659,10 @@ impl<'a> Resolver<'a> {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
                 } => {
-                    let type_arg_names: Vec<String> =
-                        type_args.iter().map(|t| self.mangle_type_name(*t)).collect();
+                    let type_arg_names: Vec<String> = type_args
+                        .iter()
+                        .map(|t| self.mangle_type_name(*t))
+                        .collect();
                     let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                     (mangled, Some(name.clone()), Some(type_args.clone()))
                 }
@@ -2674,17 +2676,16 @@ impl<'a> Resolver<'a> {
         let mangled_method_name = format!("{}::{}", receiver_struct_name, method_call.method);
 
         // Build monomorph_info for method calls on generic types
-        let monomorph_info = if let (Some(base), Some(type_args)) =
-            (base_struct_name, receiver_type_args)
-        {
-            let generic_name = format!("{}::{}", base, method_call.method);
-            Some(MonomorphInfo {
-                generic_name,
-                type_args,
-            })
-        } else {
-            None
-        };
+        let monomorph_info =
+            if let (Some(base), Some(type_args)) = (base_struct_name, receiver_type_args) {
+                let generic_name = format!("{}::{}", base, method_call.method);
+                Some(MonomorphInfo {
+                    generic_name,
+                    type_args,
+                })
+            } else {
+                None
+            };
 
         TirExpr::new(
             TirExprKind::MethodCall {

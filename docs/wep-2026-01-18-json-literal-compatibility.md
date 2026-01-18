@@ -68,37 +68,44 @@ let names = ["Alice", "Bob"] as Array<String>;
 ### Benefits
 
 **1. Zero Learning Curve for Data Literals**
+
 - Web developers already know JSON syntax
 - Copy-paste JSON from APIs, documentation, or web consoles directly into Wado code
 - No need to learn a new data description language
 
 **2. Eliminates Need for Macros**
+
 - Complex data structures remain concise without macro magic
 - Language stays simpler and more predictable
 - Tooling (IDE, formatter, linter) remains straightforward
 
 **3. Ecosystem Integration**
+
 - JSON files can be directly imported as modules (see WEP: JSON Module Import)
 - Standard JSON tools (validators, formatters like prettier) work with Wado literals
 - Interoperability with JavaScript/TypeScript ecosystems
 
 **4. Type Inference Works Naturally**
+
 - JSON-like literals combine with Wado's type inference
 - Concise data definition with type safety
 
 ### Trade-offs
 
 **1. Tuple Syntax Diverges from Rust**
+
 - `[a, b]` instead of Rust's `(a, b)`
 - May cause minor confusion for Rust developers
 - Rationale: JSON compatibility is more valuable for Wado's target use cases
 
 **2. Syntax Constraints from JSON**
+
 - Some syntax choices are constrained by JSON compatibility
 - Cannot use `()` for tuples (conflicts with unit type and function calls)
 - Must accept JSON's quirks (e.g., no trailing commas in standard JSON, though JSONC allows them)
 
 **3. Distinction Between `.wado` and `.json` Files**
+
 - `.wado` files support all extensions (unquoted keys, trailing commas, comments)
 - `.json` files use strict JSON parsing (no extensions allowed)
 - This distinction is intentional for ecosystem compatibility (see WEP: JSON Module Import)

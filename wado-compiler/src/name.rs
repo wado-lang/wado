@@ -104,11 +104,7 @@ impl FreeFunctionName {
     }
 
     /// Create a FreeFunctionName with monomorphization metadata.
-    pub fn with_monomorph_info(
-        module_path: Vec<String>,
-        name: String,
-        base_name: String,
-    ) -> Self {
+    pub fn with_monomorph_info(module_path: Vec<String>, name: String, base_name: String) -> Self {
         Self {
             module_path,
             name,

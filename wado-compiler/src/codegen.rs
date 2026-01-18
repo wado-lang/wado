@@ -5260,8 +5260,7 @@ impl Codegen {
 
                         // Look up the method function index
                         // For monomorphized generics (e.g., Box<i32>), also try base struct name (Box)
-                        let struct_lookup_name =
-                            StructName::new(module_path.clone(), name.clone());
+                        let struct_lookup_name = StructName::new(module_path.clone(), name.clone());
                         let struct_info = self.struct_types.get(&struct_lookup_name);
                         let is_monomorphized = struct_info
                             .map(|info| info.is_monomorphized)
@@ -5461,8 +5460,7 @@ impl Codegen {
                             .iter()
                             .map(|t| self.mangle_type_for_struct_name(*t, type_table))
                             .collect();
-                        let mangled_struct_name =
-                            format!("{}<{}>", name, type_arg_names.join(","));
+                        let mangled_struct_name = format!("{}<{}>", name, type_arg_names.join(","));
                         let mangled_method_name =
                             format!("{}::{}", mangled_struct_name, method_name);
 
@@ -5604,8 +5602,14 @@ impl Codegen {
                             module_path: type_module_path,
                         } => {
                             // Check if this struct is monomorphized using metadata
-                            let struct_lookup = StructName::new(type_module_path.clone(), name.clone());
-                            if self.struct_types.get(&struct_lookup).map(|s| s.is_monomorphized).unwrap_or(false) {
+                            let struct_lookup =
+                                StructName::new(type_module_path.clone(), name.clone());
+                            if self
+                                .struct_types
+                                .get(&struct_lookup)
+                                .map(|s| s.is_monomorphized)
+                                .unwrap_or(false)
+                            {
                                 Some((name.clone(), type_module_path.clone()))
                             } else {
                                 None

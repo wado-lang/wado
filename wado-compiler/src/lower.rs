@@ -1087,7 +1087,8 @@ impl Monomorphizer {
                     };
                     if !self.function_instantiated.contains_key(&key) {
                         let mangled = self.mangle_function_name(&key, type_table);
-                        self.function_instantiated.insert(key.clone(), mangled.clone());
+                        self.function_instantiated
+                            .insert(key.clone(), mangled.clone());
                         self.mangled_func_to_key.insert(mangled, key.clone());
                         self.function_pending.push(key);
                     }
@@ -1130,14 +1131,16 @@ impl Monomorphizer {
                             };
                             if !self.function_instantiated.contains_key(&key) {
                                 let mangled = self.mangle_function_name(&key, type_table);
-                                self.function_instantiated.insert(key.clone(), mangled.clone());
+                                self.function_instantiated
+                                    .insert(key.clone(), mangled.clone());
                                 self.mangled_func_to_key.insert(mangled, key.clone());
                                 self.function_pending.push(key);
                             }
                         }
                         // Handle "double generics": method call with type_args on a monomorphized generic struct
                         // e.g., c.transform::<i64>(100) where c: Container<i32> and transform<U>
-                        else if let Some(struct_key) = self.mangled_struct_to_key.get(&struct_name)
+                        else if let Some(struct_key) =
+                            self.mangled_struct_to_key.get(&struct_name)
                         {
                             let base_struct = &struct_key.name;
                             let impl_type_args = struct_key.type_args.clone();
@@ -1164,7 +1167,8 @@ impl Monomorphizer {
                                             type_table,
                                             generic_func.impl_type_params.len(),
                                         );
-                                        self.function_instantiated.insert(key.clone(), mangled.clone());
+                                        self.function_instantiated
+                                            .insert(key.clone(), mangled.clone());
                                         self.mangled_func_to_key.insert(mangled, key.clone());
                                         self.function_pending.push(key);
                                     }
@@ -1196,7 +1200,8 @@ impl Monomorphizer {
                                     type_table,
                                     generic_func.impl_type_params.len(),
                                 );
-                                self.function_instantiated.insert(key.clone(), mangled.clone());
+                                self.function_instantiated
+                                    .insert(key.clone(), mangled.clone());
                                 self.mangled_func_to_key.insert(mangled, key.clone());
                                 self.function_pending.push(key);
                             }
@@ -1230,7 +1235,8 @@ impl Monomorphizer {
                                     type_table,
                                     generic_func.impl_type_params.len(),
                                 );
-                                self.function_instantiated.insert(key.clone(), mangled.clone());
+                                self.function_instantiated
+                                    .insert(key.clone(), mangled.clone());
                                 self.mangled_func_to_key.insert(mangled, key.clone());
                                 self.function_pending.push(key);
                             }
@@ -1292,7 +1298,8 @@ impl Monomorphizer {
                                         type_table,
                                         generic_func.impl_type_params.len(),
                                     );
-                                    self.function_instantiated.insert(key.clone(), mangled.clone());
+                                    self.function_instantiated
+                                        .insert(key.clone(), mangled.clone());
                                     self.mangled_func_to_key.insert(mangled, key.clone());
                                     self.function_pending.push(key);
                                 }

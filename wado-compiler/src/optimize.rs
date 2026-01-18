@@ -2440,7 +2440,10 @@ fn analyze_expr(
                 } else {
                     module_path.as_slice()
                 };
-                FunctionId::Free(FreeFunctionName::from_path_and_name(callee_path, &func_name))
+                FunctionId::Free(FreeFunctionName::from_path_and_name(
+                    callee_path,
+                    &func_name,
+                ))
             };
             analysis.callees.insert(callee_id);
 
