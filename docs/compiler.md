@@ -331,17 +331,18 @@ fn i32_and(a: i32, b: i32) -> i32;
 
 **Instruction Builtins:**
 
-| Function         | Wasm Instruction    |
-| ---------------- | ------------------- |
-| `i32_and`        | `i32.and`           |
-| `i32_eqz`        | `i32.eqz`           |
-| `array_len`      | `array.len`         |
-| `array_get_u8`   | `array.get_u $type` |
-| `array_set_u8`   | `array.set $type`   |
-| `string_new`     | `array.new_default` |
-| `memory_store8`  | `i32.store8`        |
-| `memory_load8_u` | `i32.load8_u`       |
-| `unreachable`    | `unreachable`       |
+| Function         | Wasm Instruction         | Category |
+| ---------------- | ------------------------ | -------- |
+| `i32_and`        | `i32.and`                | i32 ops  |
+| `i32_eqz`        | `i32.eqz`                | i32 ops  |
+| `array_len`      | `array.len`              | Array    |
+| `array_get_u8`   | `array.get_u $type`      | Array    |
+| `array_set_u8`   | `array.set $type`        | Array    |
+| `string_new`     | `array.new_default`      | String   |
+| `memory_store8`  | `i32.store8`             | Memory   |
+| `memory_load8_u` | `i32.load8_u`            | Memory   |
+| `effect_wait`    | (effect synchronization) | Effects  |
+| `unreachable`    | `unreachable`            | Control  |
 
 ### World Registry
 
@@ -469,6 +470,9 @@ builtin::waitable_set_new() -> i32
 builtin::waitable_join(set: i32, subtask: i32)
 builtin::waitable_set_wait(set: i32, outptr: i32) -> i32
 builtin::subtask_drop(subtask: i32)
+
+// Effect synchronization
+builtin::effect_wait()                // Wait for all pending effects to complete
 
 // Branch hinting (Wasm branch hinting proposal)
 builtin::likely(cond: bool) -> bool    // Hint: branch is usually taken

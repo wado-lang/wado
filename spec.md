@@ -485,6 +485,93 @@ bool
 char
 ```
 
+### Reference Types
+
+References in Wado provide indirect access to values. Unlike Rust, Wado uses a GC-based memory model with no borrow checker, enabling simpler semantics at the cost of runtime overhead.
+
+**Basic Reference Syntax:**
+
+```wado
+let x = 42;
+let r = &x;           // Immutable reference
+let v = *r;           // Dereference
+
+let mut y = 0;
+let mr = &mut y;      // Mutable reference
+*mr = 10;             // Assign through reference
+```
+
+**Reference to Reference:**
+
+References can be nested arbitrarily:
+
+```wado
+let x = 42;
+let r = &x;           // &i32
+let rr = &r;          // &&i32
+let val = **rr;       // 42 (double dereference)
+```
+
+**Automatic Coercion (`&mut` to `&`):**
+
+Mutable references automatically coerce to immutable references when needed:
+
+```wado
+fn read_value(r: &i32) -> i32 {
+    return *r;
+}
+
+let mut x = 10;
+read_value(&mut x);   // OK: &mut i32 coerces to &i32
+```
+
+**Key Differences from Rust (GC-Based Memory Model):**
+
+| Aspect                     | Rust                         | Wado                          |
+| -------------------------- | ---------------------------- | ----------------------------- |
+| Memory management          | Ownership + borrow checker   | Garbage collection            |
+| Multiple mutable refs      | Not allowed                  | **Allowed**                   |
+| Returning local refs       | Not allowed (dangling)       | **Allowed** (GC keeps alive)  |
+| Reference to reference     | `&&T` (rare)                 | `&&T` (fully supported)       |
+| Lifetime annotations       | Required                     | **Not needed**                |
+| Borrow checking            | Compile-time                 | **None** (runtime GC instead) |
+
+**Returning References to Local Variables:**
+
+Because Wado uses garbage collection, references to local variables remain valid after the function returns:
+
+```wado
+fn make_ref() -> &i32 {
+    let x = 42;
+    return &x;  // OK in Wado (x is GC-managed and stays alive)
+}
+
+let r = make_ref();
+println(`{*r}`);  // Works: prints "42"
+```
+
+This would be a dangling pointer error in Rust, but is safe in Wado due to garbage collection.
+
+**Multiple Mutable References:**
+
+Wado allows multiple mutable references to the same value:
+
+```wado
+let mut x = 10;
+let r1 = &mut x;
+let r2 = &mut x;  // OK in Wado (no borrow checker)
+
+*r1 = 20;
+*r2 = 30;
+```
+
+**Design Trade-offs:**
+
+- **Simplicity**: No lifetime annotations or borrow checker errors
+- **Flexibility**: Can freely share and modify references
+- **Cost**: Runtime overhead from garbage collection
+- **Safety**: Memory safety guaranteed by GC, not compile-time checks
+
 ### String Type
 
 `String` is a built-in type representing UTF-8 encoded text with value semantics and GC management.
@@ -874,6 +961,87 @@ use config from "./config.json" with { type: "json" };
 ```
 
 See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
+
+**Array Operations:**
+
+Arrays support index-based access and assignment:
+
+```wado
+let mut arr: Array<i32> = [1, 2, 3];
+
+// Index access (read)
+let first = arr[0];  // 1
+
+// Index assignment (write)
+arr[0] = 100;        // Requires mutable array
+arr[1] = 200;
+
+// Array methods
+arr.append(4);       // Add element to end
+let len = arr.len(); // Get length
+```
+
+**Index Assignment Rules:**
+
+- Requires the array variable to be declared with `let mut`
+- Index must be within bounds (runtime check, traps if out of bounds)
+- Works with arrays of any element type
+
+### Closures
+
+Closures are anonymous function expressions with `|params| body` syntax.
+
+**Expression Body (no braces):**
+
+```wado
+// Single expression, implicit return
+let add_one = |x: i32| x + 1;
+let result = add_one(5);  // 6
+
+// Multiple parameters
+let add = |a: i32, b: i32| a + b;
+let sum = add(3, 4);  // 7
+
+// Returning different types
+let is_even = |x: i32| x % 2 == 0;
+let check = is_even(4);  // true
+
+// Struct literal as expression body
+let make_point = |x: i32, y: i32| Point { x, y };
+let p = make_point(10, 20);
+```
+
+**Block Body (with braces):**
+
+Block body closures require explicit `return` statements:
+
+```wado
+let compute = |x: i32| {
+    let doubled = x * 2;
+    let tripled = x * 3;
+    return doubled + tripled;
+};
+let result = compute(4);  // 20
+```
+
+**Current Limitations:**
+
+- **Pure closures only**: Closures cannot currently capture variables from outer scopes
+- **Type annotations required**: Parameter types must be explicitly specified
+- **No inference**: Unlike some languages, closure parameter types are not inferred
+
+```wado
+// Works: pure closure (no captures)
+let pure = |x: i32| x * 2;
+
+// Not yet implemented: capturing outer variables
+let outer = 10;
+let capture = |x: i32| x + outer;  // Error: closures cannot capture variables
+```
+
+**Future Work:**
+
+Closure captures will be implemented with value semantics (capturing by copy). For capturing by reference, see the `stores[...]` syntax in the Effect System section.
 
 ### Tagged Template Literals
 
