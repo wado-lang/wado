@@ -33,7 +33,10 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Setup mise
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run integrity checks
         run: make clippy-fix update-bundled update-golden-fixtures format
