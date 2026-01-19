@@ -8,6 +8,10 @@ use std::rc::Rc;
 use crate::ast::Type;
 use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
+use crate::component_model::{
+    WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
+    return_type_requires_outptr, wasi_type_to_valtype,
+};
 use crate::name::{FreeFunctionName, FunctionId, MethodName, StructName, build_core_internal_name};
 use crate::optimize::{CanonBuiltin, WasiEffect};
 use crate::project::Project;
@@ -15,10 +19,6 @@ use crate::symbol::SymbolTable;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
     TirFunction, TirModule, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
-};
-use crate::component_model::{
-    WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
-    return_type_requires_outptr, wasi_type_to_valtype,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder};
 use crate::wasm_postprocess;
