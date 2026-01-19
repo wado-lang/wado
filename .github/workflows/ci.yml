@@ -32,14 +32,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Setup mold linker
-        uses: rui314/setup-mold@v1
-
       - name: Setup mise
         uses: jdx/mise-action@v2
-
-      - name: Add wasm32 target
-        run: rustup target add wasm32-unknown-unknown
 
       - name: Run integrity checks
         run: make clippy-fix update-bundled update-golden-fixtures format
