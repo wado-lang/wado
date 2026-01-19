@@ -3544,9 +3544,6 @@ impl Codegen {
                     Self::collect_closures_from_block(else_blk, closures);
                 }
             }
-            TirStmtKind::Assert { condition, .. } => {
-                Self::collect_closures_from_expr(condition, closures);
-            }
             TirStmtKind::LabeledBlock { block, .. } => {
                 Self::collect_closures_from_block(block, closures);
             }
@@ -3782,9 +3779,6 @@ impl Codegen {
                 if let Some(else_blk) = else_block {
                     Self::find_closure_locals_in_block(else_blk, result, closure_counter);
                 }
-            }
-            TirStmtKind::Assert { condition, .. } => {
-                Self::find_closure_locals_in_expr(condition, result, closure_counter);
             }
             TirStmtKind::LabeledBlock { block, .. } => {
                 Self::find_closure_locals_in_block(block, result, closure_counter);
@@ -6974,168 +6968,6 @@ impl Codegen {
                 // For now, just generate the block contents in sequence
                 self.generate_block(func, block, type_table, ctx, builder);
             }
-
-            TirStmtKind::Assert {
-                condition,
-                condition_source,
-                message,
-                intermediates,
-            } => {
-                // Power-assert: Cache intermediate values, then check condition
-                // If false, build detailed error message and panic
-
-                // Get String struct type for message locals
-                let string_struct_info = self
-                    .lookup_struct_type("String", &string_module_path())
-                    .expect("String struct not found");
-                let string_struct_type = string_struct_info.type_idx;
-
-                // 1. Allocate locals for intermediates (don't add to cache yet)
-                // Store TypeId (not ValType) so we can call the correct to_string function
-                let mut cached_locals: Vec<(String, u32, TypeId)> = Vec::new();
-                for (name, _, type_id) in intermediates {
-                    let val_type = self.type_id_to_valtype(type_table, *type_id);
-                    let local_idx =
-                        ctx.alloc_local(&format!("__assert_{}", name.replace(' ', "_")), val_type);
-                    cached_locals.push((name.clone(), local_idx, *type_id));
-                }
-
-                // 2. Evaluate intermediates and build cache incrementally
-                // Important: Add to cache AFTER evaluating, so sub-expressions can be cached
-                let mut span_cache: std::collections::HashMap<(usize, usize), u32> =
-                    std::collections::HashMap::new();
-                for (i, (_, expr, _)) in intermediates.iter().enumerate() {
-                    // Evaluate using current cache (may have earlier expressions cached)
-                    self.generate_expr_with_cache(
-                        func,
-                        expr,
-                        type_table,
-                        ctx,
-                        builder,
-                        &span_cache,
-                    );
-                    let local_idx = cached_locals[i].1;
-                    func.instruction(&Instruction::LocalSet(local_idx));
-                    // Now add this expression to cache so later expressions can use it
-                    span_cache.insert((expr.span.start, expr.span.end), local_idx);
-                }
-
-                // 3. Evaluate condition using cached values
-                let cond_local = ctx.alloc_local("__assert_cond", ValType::I32);
-                self.generate_expr_with_cache(
-                    func,
-                    condition,
-                    type_table,
-                    ctx,
-                    builder,
-                    &span_cache,
-                );
-                func.instruction(&Instruction::LocalSet(cond_local));
-
-                // 3. Check condition: if (!condition) { ... }
-                func.instruction(&Instruction::LocalGet(cond_local));
-                func.instruction(&Instruction::I32Eqz);
-
-                // Set branch hint: failure is unlikely
-                ctx.set_branch_hint(false);
-                let if_offset = func.byte_len() as u32;
-                ctx.consume_branch_hint(if_offset);
-
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-                // 4. Build power-assert message
-                // Allocate result local for message accumulation (uses String struct type)
-                let result_local = ctx.alloc_local(
-                    "__assert_msg",
-                    ValType::Ref(RefType {
-                        nullable: false,
-                        heap_type: HeapType::Concrete(string_struct_type),
-                    }),
-                );
-
-                // Start with header
-                if let Some(msg_expr) = message {
-                    // "Assertion failed: "
-                    self.generate_string_from_data(func, "Assertion failed: ", builder);
-                    func.instruction(&Instruction::LocalSet(result_local));
-
-                    // Append user's message
-                    func.instruction(&Instruction::LocalGet(result_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-                    self.generate_expr(func, msg_expr, type_table, ctx, builder);
-                    func.instruction(&Instruction::Call(
-                        builder.func_idx("core/internal/string_concat"),
-                    ));
-                    func.instruction(&Instruction::LocalSet(result_local));
-
-                    // Append newline
-                    func.instruction(&Instruction::LocalGet(result_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-                    self.generate_string_from_data(func, "\n", builder);
-                    func.instruction(&Instruction::Call(
-                        builder.func_idx("core/internal/string_concat"),
-                    ));
-                    func.instruction(&Instruction::LocalSet(result_local));
-                } else {
-                    // "Assertion failed:\n"
-                    self.generate_string_from_data(func, "Assertion failed:\n", builder);
-                    func.instruction(&Instruction::LocalSet(result_local));
-                }
-
-                // Append condition source: "condition: <source>\n"
-                func.instruction(&Instruction::LocalGet(result_local));
-                func.instruction(&Instruction::RefAsNonNull);
-                let condition_line = format!("condition: {}\n", condition_source);
-                self.generate_string_from_data(func, &condition_line, builder);
-                func.instruction(&Instruction::Call(
-                    builder.func_idx("core/internal/string_concat"),
-                ));
-                func.instruction(&Instruction::LocalSet(result_local));
-
-                // For each cached value, append "<name>: <value>\n"
-                for (name, local_idx, type_id) in &cached_locals {
-                    // Append "<name>: "
-                    func.instruction(&Instruction::LocalGet(result_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-                    let name_prefix = format!("{}: ", name);
-                    self.generate_string_from_data(func, &name_prefix, builder);
-                    func.instruction(&Instruction::Call(
-                        builder.func_idx("core/internal/string_concat"),
-                    ));
-                    func.instruction(&Instruction::LocalSet(result_local));
-
-                    // Append value (convert to string based on type)
-                    func.instruction(&Instruction::LocalGet(result_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-                    func.instruction(&Instruction::LocalGet(*local_idx));
-                    self.generate_value_to_string_from_type_id(func, *type_id, type_table, builder);
-                    func.instruction(&Instruction::Call(
-                        builder.func_idx("core/internal/string_concat"),
-                    ));
-                    func.instruction(&Instruction::LocalSet(result_local));
-
-                    // Append newline
-                    func.instruction(&Instruction::LocalGet(result_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-                    self.generate_string_from_data(func, "\n", builder);
-                    func.instruction(&Instruction::Call(
-                        builder.func_idx("core/internal/string_concat"),
-                    ));
-                    func.instruction(&Instruction::LocalSet(result_local));
-                }
-
-                // 5. Final result on stack
-                func.instruction(&Instruction::LocalGet(result_local));
-                func.instruction(&Instruction::RefAsNonNull);
-
-                // 6. Call panic
-                func.instruction(&Instruction::Call(builder.func_idx("panic")));
-
-                // 7. Unreachable (panic never returns)
-                func.instruction(&Instruction::Unreachable);
-
-                func.instruction(&Instruction::End);
-            }
         }
     }
 
@@ -8200,14 +8032,6 @@ impl Codegen {
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::expr_needs_async_scratch_locals(expr)
             }
-            TirStmtKind::Assert {
-                condition, message, ..
-            } => {
-                Self::expr_needs_async_scratch_locals(condition)
-                    || message
-                        .as_ref()
-                        .is_some_and(Self::expr_needs_async_scratch_locals)
-            }
             _ => false,
         }
     }
@@ -8479,9 +8303,6 @@ impl Codegen {
             TirStmtKind::Return { value: Some(expr) } => {
                 self.collect_copy_types_from_expr(expr, type_table, needed_types);
             }
-            TirStmtKind::Assert { condition, .. } => {
-                self.collect_copy_types_from_expr(condition, type_table, needed_types);
-            }
             _ => {}
         }
     }
@@ -8593,30 +8414,6 @@ impl Codegen {
         string_array_type: u32,
     ) {
         match &stmt.kind {
-            TirStmtKind::Assert { intermediates, .. } => {
-                // Pre-allocate locals for intermediate values
-                for (name, _, type_id) in intermediates {
-                    let val_type = self.type_id_to_valtype(type_table, *type_id);
-                    ctx.alloc_local(&format!("__assert_{}", name.replace(' ', "_")), val_type);
-                }
-
-                // Pre-allocate condition local
-                ctx.alloc_local("__assert_cond", ValType::I32);
-
-                // Pre-allocate message accumulator local (nullable ref)
-                // Use String struct type since String is now a struct
-                let string_struct_type = self
-                    .lookup_struct_type("String", &string_module_path())
-                    .map(|info| info.type_idx)
-                    .unwrap_or(string_array_type);
-                ctx.alloc_local(
-                    "__assert_msg",
-                    ValType::Ref(RefType {
-                        nullable: true,
-                        heap_type: HeapType::Concrete(string_struct_type),
-                    }),
-                );
-            }
             TirStmtKind::While { body, .. } => {
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
@@ -8934,9 +8731,6 @@ impl Codegen {
             }
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::collect_array_append_types_from_expr(expr, type_table, result);
-            }
-            TirStmtKind::Assert { condition, .. } => {
-                Self::collect_array_append_types_from_expr(condition, type_table, result);
             }
             _ => {}
         }

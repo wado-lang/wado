@@ -15,9 +15,9 @@ use std::rc::Rc;
 use indexmap::IndexMap;
 
 use crate::ast::{
-    self, AssertStmt, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt,
-    Function, IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern,
-    ReturnStmt, Stmt, Type, UnaryOp, WhileStmt,
+    self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
+    IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt,
+    Type, UnaryOp, WhileStmt,
 };
 use crate::project::Project;
 use crate::symbol::SymbolTable;
@@ -1238,7 +1238,10 @@ impl<'a> Resolver<'a> {
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
-            Stmt::Assert(assert_stmt) => self.resolve_assert(assert_stmt, ctx),
+            Stmt::Assert(_) => {
+                // Assert statements are desugared in the desugar phase before resolution
+                panic!("Assert should be desugared before resolving");
+            }
             Stmt::LabeledBlock(labeled_block) => {
                 vec![self.resolve_labeled_block(labeled_block, ctx)]
             }
@@ -1616,204 +1619,6 @@ impl<'a> Resolver<'a> {
     /// Resolve a continue statement
     fn resolve_continue(&mut self, continue_stmt: &ContinueStmt) -> TirStmt {
         TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
-    }
-
-    /// Resolve an assert statement - creates TirStmtKind::Assert for power-assert
-    fn resolve_assert(
-        &mut self,
-        assert_stmt: &AssertStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
-        // Resolve the condition expression
-        let condition = self.resolve_expr(&assert_stmt.condition, ctx);
-
-        // Get condition source text
-        let condition_source = self.get_source_text(&assert_stmt.condition.span());
-
-        // Resolve optional message
-        let message = assert_stmt
-            .message
-            .as_ref()
-            .map(|m| self.resolve_expr(m, ctx));
-
-        // Extract intermediate values for power-assert display
-        let mut intermediates = Vec::new();
-        self.collect_intermediate_values(&assert_stmt.condition, &mut intermediates, ctx, true);
-
-        // Create Assert statement
-        let assert_tir = TirStmt::new(
-            TirStmtKind::Assert {
-                condition,
-                condition_source,
-                message,
-                intermediates,
-            },
-            assert_stmt.span,
-        );
-
-        vec![assert_tir]
-    }
-
-    /// Collect intermediate values from an expression for power-assert display
-    fn collect_intermediate_values(
-        &mut self,
-        expr: &Expr,
-        values: &mut Vec<(String, TirExpr, TypeId)>,
-        ctx: &mut FunctionContext,
-        is_root: bool,
-    ) {
-        match expr {
-            Expr::Binary(bin) => {
-                // Recursively collect from operands
-                self.collect_intermediate_values(&bin.left, values, ctx, false);
-                self.collect_intermediate_values(&bin.right, values, ctx, false);
-
-                // Add the binary expression itself if it's NOT the root comparison
-                // (the root is shown as "condition: ..." so we don't need to show it again)
-                if !is_root {
-                    let source = self.get_source_text(&bin.span);
-                    let tir = self.resolve_expr(expr, ctx);
-                    let type_id = tir.type_id;
-                    values.push((source, tir, type_id));
-                }
-            }
-            Expr::Ident(ident) => {
-                // Always show identifiers - they're the most useful values
-                let tir = self.resolve_expr(expr, ctx);
-                let type_id = tir.type_id;
-                values.push((ident.name.clone(), tir, type_id));
-            }
-            Expr::Call(call) => {
-                // Show function call results
-                let source = self.get_source_text(&call.span);
-                let tir = self.resolve_expr(expr, ctx);
-                let type_id = tir.type_id;
-                values.push((source, tir, type_id));
-            }
-            Expr::MethodCall(call) => {
-                // Show method call results
-                let source = self.get_source_text(&call.span);
-                let tir = self.resolve_expr(expr, ctx);
-                let type_id = tir.type_id;
-                values.push((source, tir, type_id));
-            }
-            Expr::FieldAccess(access) => {
-                // Show field access results
-                let source = self.get_source_text(&access.span);
-                let tir = self.resolve_expr(expr, ctx);
-                let type_id = tir.type_id;
-                values.push((source, tir, type_id));
-            }
-            Expr::Index(idx) => {
-                // Show index access results
-                let source = self.get_source_text(&idx.span);
-                let tir = self.resolve_expr(expr, ctx);
-                let type_id = tir.type_id;
-                values.push((source, tir, type_id));
-            }
-            Expr::Unary(unary) => {
-                // Recurse into the operand
-                self.collect_intermediate_values(&unary.expr, values, ctx, false);
-                // Also show the unary expression itself
-                let source = self.get_source_text(&unary.span);
-                let tir = self.resolve_expr(expr, ctx);
-                let type_id = tir.type_id;
-                values.push((source, tir, type_id));
-            }
-            Expr::Cast(cast) => {
-                // Recurse into the expression being cast
-                self.collect_intermediate_values(&cast.expr, values, ctx, false);
-            }
-            _ => {
-                // Literals and other expressions - don't collect
-            }
-        }
-    }
-
-    /// [Deprecated] Old resolve_assert desugaring - kept for reference
-    #[allow(dead_code)]
-    fn resolve_assert_old(
-        &mut self,
-        assert_stmt: &AssertStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
-        let condition = self.resolve_expr(&assert_stmt.condition, ctx);
-
-        // Build the negated condition: !condition
-        let negated_condition = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(condition),
-            },
-            TypeTable::BOOL,
-            assert_stmt.span,
-        );
-
-        // Build panic call with message
-        let message_expr = if let Some(msg) = &assert_stmt.message {
-            // User provided message: "Assertion failed: {message}"
-            let string_type = self.get_string_struct_type();
-            let user_msg = self.resolve_expr(msg, ctx);
-            let prefix = TirExpr::new(
-                TirExprKind::StringLiteral("Assertion failed: ".to_string()),
-                string_type,
-                assert_stmt.span,
-            );
-            TirExpr::new(
-                TirExprKind::Call {
-                    func: FunctionRef::External {
-                        module_path: vec!["core".to_string(), "internal".to_string()],
-                        name: "string_concat".to_string(),
-                        monomorph_info: None,
-                    },
-                    type_args: vec![],
-                    args: vec![prefix, user_msg],
-                },
-                string_type,
-                assert_stmt.span,
-            )
-        } else {
-            // No message: "Assertion failed:"
-            let string_type = self.get_string_struct_type();
-            TirExpr::new(
-                TirExprKind::StringLiteral("Assertion failed:".to_string()),
-                string_type,
-                assert_stmt.span,
-            )
-        };
-
-        // Create panic call: panic(message)
-        let panic_call = TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef::External {
-                    module_path: vec!["core".to_string(), "prelude".to_string()],
-                    name: "panic".to_string(),
-                    monomorph_info: None,
-                },
-                type_args: vec![],
-                args: vec![message_expr],
-            },
-            TypeTable::NEVER,
-            assert_stmt.span,
-        );
-
-        // Create if statement: if !cond { panic(msg) }
-        let if_stmt = TirStmt::new(
-            TirStmtKind::If {
-                condition: negated_condition,
-                then_block: TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Expr(panic_call),
-                        assert_stmt.span,
-                    )],
-                    assert_stmt.span,
-                ),
-                else_block: None,
-            },
-            assert_stmt.span,
-        );
-
-        vec![if_stmt]
     }
 
     /// Resolve an expression

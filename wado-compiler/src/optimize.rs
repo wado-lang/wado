@@ -419,14 +419,6 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
         TirStmtKind::Loop { body } | TirStmtKind::ForOf { body, .. } => {
             collect_callees_from_block(body, callees);
         }
-        TirStmtKind::Assert {
-            condition, message, ..
-        } => {
-            collect_callees_from_expr(condition, callees);
-            if let Some(msg) = message {
-                collect_callees_from_expr(msg, callees);
-            }
-        }
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(block, callees);
         }
@@ -961,32 +953,6 @@ fn inline_calls_in_block(
                     stmt.span,
                 ));
             }
-            TirStmtKind::Assert {
-                mut condition,
-                condition_source,
-                message,
-                intermediates,
-            } => {
-                inline_calls_in_expr(
-                    &mut condition,
-                    candidates,
-                    current_module,
-                    local_count,
-                    local_types,
-                    type_table,
-                    &mut new_stmts,
-                    inlined_funcs,
-                );
-                new_stmts.push(TirStmt::new(
-                    TirStmtKind::Assert {
-                        condition,
-                        condition_source,
-                        message,
-                        intermediates,
-                    },
-                    stmt.span,
-                ));
-            }
             TirStmtKind::LabeledBlock { label, mut block } => {
                 inline_calls_in_block(
                     &mut block,
@@ -1227,28 +1193,6 @@ fn remap_stmt(
             iterable: remap_expr(iterable, param_to_local, local_offset, param_count),
             iterable_type: *iterable_type,
             body: remap_block(body, param_to_local, local_offset, param_count),
-        },
-        TirStmtKind::Assert {
-            condition,
-            condition_source,
-            message,
-            intermediates,
-        } => TirStmtKind::Assert {
-            condition: remap_expr(condition, param_to_local, local_offset, param_count),
-            condition_source: condition_source.clone(),
-            message: message
-                .as_ref()
-                .map(|m| remap_expr(m, param_to_local, local_offset, param_count)),
-            intermediates: intermediates
-                .iter()
-                .map(|(name, expr, type_id)| {
-                    (
-                        name.clone(),
-                        remap_expr(expr, param_to_local, local_offset, param_count),
-                        *type_id,
-                    )
-                })
-                .collect(),
         },
         TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
             label: label.clone(),
@@ -2204,39 +2148,6 @@ fn analyze_block(
             TirStmtKind::ForOf { iterable, body, .. } => {
                 analyze_expr(iterable, current_module, type_table, analysis);
                 analyze_block(body, current_module, type_table, analysis);
-            }
-            TirStmtKind::Assert {
-                condition,
-                message,
-                intermediates,
-                ..
-            } => {
-                analyze_expr(condition, current_module, type_table, analysis);
-                if let Some(msg) = message {
-                    analyze_expr(msg, current_module, type_table, analysis);
-                }
-                for (_, expr, type_id) in intermediates {
-                    analyze_expr(expr, current_module, type_table, analysis);
-                    // Assert formatting calls to_string on intermediate values
-                    add_to_string_callee(*type_id, type_table, analysis);
-                }
-                // Assert codegen uses string_concat and panic directly
-                analysis
-                    .callees
-                    .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                        &["core", "internal"],
-                        "string_concat",
-                    )));
-                analysis
-                    .callees
-                    .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                        &["core", "prelude"],
-                        "panic",
-                    )));
-                // Assert failure prints to stderr, so we need Stderr effect
-                analysis
-                    .effect_calls
-                    .insert(("Stderr".to_string(), "write_via_stream".to_string()));
             }
             TirStmtKind::LabeledBlock { block, .. } => {
                 analyze_block(block, current_module, type_table, analysis);

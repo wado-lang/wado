@@ -493,20 +493,6 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
             }
-            TirStmtKind::Assert {
-                condition,
-                message,
-                intermediates,
-                ..
-            } => {
-                self.rewrite_types_in_expr(condition, type_table);
-                if let Some(msg) = message {
-                    self.rewrite_types_in_expr(msg, type_table);
-                }
-                for (_, expr, _) in intermediates {
-                    self.rewrite_types_in_expr(expr, type_table);
-                }
-            }
         }
     }
 
@@ -1068,24 +1054,6 @@ impl Monomorphizer {
             TirStmtKind::Break | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_func_instantiation_sites_in_block(block, generic_functions, type_table);
-            }
-            TirStmtKind::Assert {
-                condition,
-                message,
-                intermediates,
-                ..
-            } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    condition,
-                    generic_functions,
-                    type_table,
-                );
-                if let Some(msg) = message {
-                    self.collect_func_instantiation_sites_in_expr(msg, generic_functions, type_table);
-                }
-                for (_, expr, _) in intermediates {
-                    self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
-                }
             }
         }
     }
@@ -1766,21 +1734,6 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
-            TirStmtKind::Assert {
-                condition,
-                message,
-                intermediates,
-                ..
-            } => {
-                self.substitute_types_in_expr(condition, substitution, type_table);
-                if let Some(msg) = message {
-                    self.substitute_types_in_expr(msg, substitution, type_table);
-                }
-                for (_, expr, type_id) in intermediates {
-                    self.substitute_types_in_expr(expr, substitution, type_table);
-                    *type_id = self.substitute_type(*type_id, substitution, type_table);
-                }
-            }
         }
     }
 
@@ -2267,20 +2220,6 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }
-            TirStmtKind::Assert {
-                condition,
-                message,
-                intermediates,
-                ..
-            } => {
-                self.rewrite_function_calls_in_expr(condition, type_table);
-                if let Some(msg) = message {
-                    self.rewrite_function_calls_in_expr(msg, type_table);
-                }
-                for (_, expr, _) in intermediates {
-                    self.rewrite_function_calls_in_expr(expr, type_table);
-                }
-            }
         }
     }
 
@@ -2601,28 +2540,6 @@ impl StringCollector {
             TirStmtKind::Break | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);
-            }
-            TirStmtKind::Assert {
-                condition,
-                condition_source,
-                message,
-                intermediates,
-            } => {
-                self.collect_expr(condition);
-                if let Some(msg) = message {
-                    self.collect_expr(msg);
-                }
-                for (_, expr, _) in intermediates {
-                    self.collect_expr(expr);
-                }
-                // Collect static strings used in assert messages
-                self.add_string("Assertion failed:\n".to_string());
-                self.add_string("Assertion failed: ".to_string());
-                self.add_string(format!("condition: {}\n", condition_source));
-                self.add_string("\n".to_string());
-                for (name, _, _) in intermediates {
-                    self.add_string(format!("{}: ", name));
-                }
             }
         }
     }

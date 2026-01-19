@@ -1484,6 +1484,115 @@ fn escape_char(c: char) -> String {
 }
 
 // ============================================================================
+// Simple AST Expression Unparser (for desugaring)
+// ============================================================================
+
+/// Unparse an AST expression to a string without comments.
+/// Used by the desugar phase for generating error messages.
+pub fn unparse_expr_simple(expr: &Expr) -> String {
+    let mut output = String::new();
+    unparse_expr_into(expr, &mut output, false);
+    output
+}
+
+/// Unparse an expression into a string.
+/// For error messages, we don't add parentheses to keep output readable.
+fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool) {
+    match expr {
+        Expr::Ident(i) => output.push_str(&i.name),
+        Expr::Literal(l) => unparse_literal_into(&l.value, output),
+        Expr::Binary(b) => {
+            // Don't add parentheses - keep output readable for error messages
+            unparse_expr_into(&b.left, output, false);
+            output.push(' ');
+            output.push_str(binary_op_str(b.op));
+            output.push(' ');
+            unparse_expr_into(&b.right, output, false);
+        }
+        Expr::Unary(u) => {
+            output.push_str(unary_op_str(u.op));
+            unparse_expr_into(&u.expr, output, true);
+        }
+        Expr::Call(c) => {
+            unparse_expr_into(&c.callee, output, true);
+            output.push('(');
+            for (i, arg) in c.args.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_expr_into(arg, output, false);
+            }
+            output.push(')');
+        }
+        Expr::MethodCall(m) => {
+            unparse_expr_into(&m.receiver, output, true);
+            output.push('.');
+            output.push_str(&m.method);
+            output.push('(');
+            for (i, arg) in m.args.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_expr_into(arg, output, false);
+            }
+            output.push(')');
+        }
+        Expr::FieldAccess(f) => {
+            unparse_expr_into(&f.expr, output, true);
+            output.push('.');
+            output.push_str(&f.field);
+        }
+        Expr::Index(i) => {
+            unparse_expr_into(&i.expr, output, true);
+            output.push('[');
+            unparse_expr_into(&i.index, output, false);
+            output.push(']');
+        }
+        Expr::Cast(c) => {
+            unparse_expr_into(&c.expr, output, true);
+            output.push_str(" as ");
+            // Simplified type output
+            output.push_str(&format!("{:?}", c.target_type));
+        }
+        Expr::StaticMethodCall(s) => {
+            output.push_str(&format!("{:?}", s.target_type));
+            output.push_str("::");
+            output.push_str(&s.method);
+            output.push('(');
+            for (i, arg) in s.args.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_expr_into(arg, output, false);
+            }
+            output.push(')');
+        }
+        // For complex expressions, use a placeholder
+        _ => output.push_str("<expr>"),
+    }
+}
+
+fn unparse_literal_into(lit: &Literal, output: &mut String) {
+    match lit {
+        Literal::Int(int_lit) => output.push_str(&int_lit.repr),
+        Literal::Float(float_lit) => output.push_str(&float_lit.repr),
+        Literal::String(s) => {
+            output.push('"');
+            output.push_str(&escape_string(s));
+            output.push('"');
+        }
+        Literal::Char(c) => {
+            output.push('\'');
+            output.push_str(&escape_char(*c));
+            output.push('\'');
+        }
+        Literal::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
+        Literal::Null => output.push_str("null"),
+        Literal::Unit => output.push_str("()"),
+    }
+}
+
+// ============================================================================
 // TIR Unparser
 // ============================================================================
 
@@ -1820,25 +1929,6 @@ impl<'a> TirUnparser<'a> {
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push_str("}\n");
-            }
-            TirStmtKind::Assert {
-                condition,
-                condition_source,
-                message,
-                ..
-            } => {
-                self.write_indent();
-                self.output.push_str("assert ");
-                // Show actual lowered condition
-                self.unparse_expr(condition);
-                if let Some(msg) = message {
-                    self.output.push_str(", ");
-                    self.unparse_expr(msg);
-                }
-                // Show original source as comment for reference
-                self.output.push_str(";  // ");
-                self.output.push_str(condition_source);
-                self.output.push('\n');
             }
         }
     }

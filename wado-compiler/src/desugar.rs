@@ -3,29 +3,39 @@
 // Transforms high-level AST constructs to simpler forms for codegen:
 // - CompoundAssignExpr (x += y) → AssignExpr (x = x + y)
 // - ComparisonChainExpr (a < b < c) → BinaryExpr chain ((a < b) && (b < c))
+// - Assert (assert cond, msg) → LabeledBlock with intermediates, if, and panic
 
 use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
-    EffectDecl, EnumDecl, Expr, FieldAccessExpr, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
-    ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr,
-    StructLiteralField, TemplateStringExpr, TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
+    EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function, IfExpr,
+    IfStmt, IdentExpr, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt, MatchArm,
+    MatchExpr, MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl,
+    StructLiteralExpr, StructLiteralField, TemplatePart, TemplateStringExpr, TupleLiteralExpr,
+    TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
 };
+use crate::unparse::unparse_expr_simple;
+
+/// Context for desugaring, holding state that needs to be tracked across the process.
+struct DesugarContext {
+    /// Counter for generating unique assert block labels
+    assert_counter: u32,
+}
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
 pub fn desugar_module(module: &Module) -> Module {
+    let mut ctx = DesugarContext { assert_counter: 0 };
     Module::with_metadata(
-        module.items.iter().map(desugar_item).collect(),
+        module.items.iter().map(|item| desugar_item(item, &mut ctx)).collect(),
         module.shebang().map(String::from),
         module.data_section().map(String::from),
     )
 }
 
-fn desugar_item(item: &Item) -> Item {
+fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
     match item {
-        Item::Function(f) => Item::Function(desugar_function(f)),
-        Item::Impl(i) => Item::Impl(desugar_impl(i)),
+        Item::Function(f) => Item::Function(desugar_function(f, ctx)),
+        Item::Impl(i) => Item::Impl(desugar_impl(i, ctx)),
         Item::Struct(s) => Item::Struct(desugar_struct(s)),
         Item::Enum(e) => Item::Enum(desugar_enum(e)),
         Item::Type(t) => Item::Type(desugar_type_alias(t)),
@@ -36,7 +46,7 @@ fn desugar_item(item: &Item) -> Item {
     }
 }
 
-fn desugar_function(func: &Function) -> Function {
+fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
     Function {
         name: func.name.clone(),
         is_pub: func.is_pub,
@@ -45,16 +55,16 @@ fn desugar_function(func: &Function) -> Function {
         params: func.params.clone(),
         return_type: func.return_type.clone(),
         effects: func.effects.clone(),
-        body: func.body.as_ref().map(desugar_block),
+        body: func.body.as_ref().map(|b| desugar_block(b, ctx)),
         span: func.span,
     }
 }
 
-fn desugar_impl(impl_block: &ImplBlock) -> ImplBlock {
+fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
     ImplBlock {
         type_params: impl_block.type_params.clone(),
         ty: impl_block.ty.clone(),
-        methods: impl_block.methods.iter().map(desugar_function).collect(),
+        methods: impl_block.methods.iter().map(|m| desugar_function(m, ctx)).collect(),
         span: impl_block.span,
     }
 }
@@ -75,9 +85,9 @@ fn desugar_effect(e: &EffectDecl) -> EffectDecl {
     e.clone()
 }
 
-fn desugar_block(block: &Block) -> Block {
+fn desugar_block(block: &Block, ctx: &mut DesugarContext) -> Block {
     Block {
-        stmts: block.stmts.iter().map(desugar_stmt).collect(),
+        stmts: block.stmts.iter().map(|s| desugar_stmt(s, ctx)).collect(),
         span: block.span,
     }
 }
@@ -93,7 +103,7 @@ fn desugar_let_stmt(l: &LetStmt) -> LetStmt {
     }
 }
 
-fn desugar_stmt(stmt: &Stmt) -> Stmt {
+fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
     match stmt {
         Stmt::Let(l) => Stmt::Let(LetStmt {
             name: l.name.clone(),
@@ -114,49 +124,51 @@ fn desugar_stmt(stmt: &Stmt) -> Stmt {
         Stmt::If(i) => Stmt::If(IfStmt {
             init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
             condition: desugar_expr(&i.condition),
-            then_block: desugar_block(&i.then_block),
-            else_block: i.else_block.as_ref().map(desugar_block),
+            then_block: desugar_block(&i.then_block, ctx),
+            else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
             span: i.span,
         }),
         Stmt::While(w) => Stmt::While(WhileStmt {
             condition: desugar_expr(&w.condition),
-            body: desugar_block(&w.body),
+            body: desugar_block(&w.body, ctx),
             span: w.span,
         }),
         Stmt::For(f) => Stmt::For(ForStmt {
-            init: f.init.as_ref().map(|s| Box::new(desugar_stmt(s))),
+            init: f.init.as_ref().map(|s| Box::new(desugar_stmt(s, ctx))),
             condition: f.condition.as_ref().map(desugar_expr),
             update: f.update.as_ref().map(desugar_expr),
-            body: desugar_block(&f.body),
+            body: desugar_block(&f.body, ctx),
             span: f.span,
         }),
         Stmt::ForOf(f) => Stmt::ForOf(ForOfStmt {
             binding: f.binding.clone(),
             is_mut: f.is_mut,
             iterable: desugar_expr(&f.iterable),
-            body: desugar_block(&f.body),
+            body: desugar_block(&f.body, ctx),
             span: f.span,
         }),
-        Stmt::Assert(a) => Stmt::Assert(AssertStmt {
-            condition: desugar_expr(&a.condition),
-            message: a.message.as_ref().map(desugar_expr),
-            span: a.span,
-        }),
+        Stmt::Assert(a) => desugar_assert(a, ctx),
         Stmt::Loop(l) => Stmt::Loop(LoopStmt {
-            body: desugar_block(&l.body),
+            body: desugar_block(&l.body, ctx),
             span: l.span,
         }),
         Stmt::Break(b) => Stmt::Break(BreakStmt { span: b.span }),
         Stmt::Continue(c) => Stmt::Continue(ContinueStmt { span: c.span }),
         Stmt::LabeledBlock(lb) => Stmt::LabeledBlock(LabeledBlockStmt {
             label: lb.label.clone(),
-            block: desugar_block(&lb.block),
+            block: desugar_block(&lb.block, ctx),
             span: lb.span,
         }),
     }
 }
 
 fn desugar_expr(expr: &Expr) -> Expr {
+    // Desugar expressions. Block/If expressions that can contain statements
+    // use a temporary context since they need unique assert IDs within their scope.
+    desugar_expr_impl(expr, None)
+}
+
+fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
     match expr {
         // Desugar compound assignment: x += y → x = x + y
         Expr::CompoundAssign(ca) => desugar_compound_assign(ca),
@@ -212,14 +224,36 @@ fn desugar_expr(expr: &Expr) -> Expr {
             index: desugar_expr(&i.index),
             span: i.span,
         })),
-        Expr::Block(b) => Expr::Block(Box::new(desugar_block(b))),
-        Expr::If(i) => Expr::If(Box::new(IfExpr {
-            init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
-            condition: desugar_expr(&i.condition),
-            then_block: desugar_block(&i.then_block),
-            else_block: i.else_block.as_ref().map(desugar_block),
-            span: i.span,
-        })),
+        Expr::Block(b) => {
+            // Block expressions can contain statements including asserts
+            if let Some(ctx) = ctx {
+                Expr::Block(Box::new(desugar_block(b, ctx)))
+            } else {
+                // No context - create a temporary one (rare case)
+                let mut temp_ctx = DesugarContext { assert_counter: 0 };
+                Expr::Block(Box::new(desugar_block(b, &mut temp_ctx)))
+            }
+        }
+        Expr::If(i) => {
+            if let Some(ctx) = ctx {
+                Expr::If(Box::new(IfExpr {
+                    init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
+                    condition: desugar_expr(&i.condition),
+                    then_block: desugar_block(&i.then_block, ctx),
+                    else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
+                    span: i.span,
+                }))
+            } else {
+                let mut temp_ctx = DesugarContext { assert_counter: 0 };
+                Expr::If(Box::new(IfExpr {
+                    init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
+                    condition: desugar_expr(&i.condition),
+                    then_block: desugar_block(&i.then_block, &mut temp_ctx),
+                    else_block: i.else_block.as_ref().map(|b| desugar_block(b, &mut temp_ctx)),
+                    span: i.span,
+                }))
+            }
+        }
         Expr::Match(m) => Expr::Match(Box::new(MatchExpr {
             expr: desugar_expr(&m.expr),
             arms: m
@@ -341,8 +375,6 @@ fn desugar_comparison_chain(chain: &ComparisonChainExpr) -> Expr {
 }
 
 fn desugar_template_string(t: &TemplateStringExpr) -> TemplateStringExpr {
-    use crate::ast::TemplatePart;
-
     TemplateStringExpr {
         parts: t
             .parts
@@ -356,6 +388,230 @@ fn desugar_template_string(t: &TemplateStringExpr) -> TemplateStringExpr {
             })
             .collect(),
         span: t.span,
+    }
+}
+
+/// Desugar an assert statement into a labeled block with intermediate value caching.
+///
+/// `assert condition, message;` becomes:
+/// ```text
+/// __assert_N: {
+///     let __v0 = <intermediate0>;
+///     let __v1 = <intermediate1>;
+///     ...
+///     let __cond = <reconstructed_condition>;
+///     if !__cond {
+///         panic(`Assertion failed:
+/// condition: <source>
+/// <intermediate0_source>: {__v0}
+/// ...`);
+///     }
+/// }
+/// ```
+fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
+    let assert_id = ctx.assert_counter;
+    ctx.assert_counter += 1;
+    let span = assert_stmt.span;
+
+    // Collect intermediate expressions and generate substitution
+    let mut intermediates: Vec<(String, String, Expr)> = Vec::new(); // (var_name, source, expr)
+    let mut var_counter = 0;
+
+    // Desugar the condition first (handles CompoundAssign, ComparisonChain, etc.)
+    let desugared_condition = desugar_expr(&assert_stmt.condition);
+
+    // Collect intermediates from the desugared condition
+    collect_intermediates(&desugared_condition, &mut intermediates, &mut var_counter, true);
+
+    // Build the list of let statements for intermediates
+    let mut stmts: Vec<Stmt> = Vec::new();
+
+    for (var_name, _source, expr) in &intermediates {
+        stmts.push(Stmt::Let(LetStmt {
+            name: var_name.clone(),
+            is_mut: false,
+            is_reactive: false,
+            ty: None,
+            value: expr.clone(),
+            span,
+        }));
+    }
+
+    // Build the condition expression using the intermediate variables
+    let reconstructed_condition = reconstruct_with_intermediates(&desugared_condition, &intermediates);
+
+    // Store condition in a variable (scoped to this labeled block)
+    let cond_var = "__cond".to_string();
+    stmts.push(Stmt::Let(LetStmt {
+        name: cond_var.clone(),
+        is_mut: false,
+        is_reactive: false,
+        ty: None,
+        value: reconstructed_condition,
+        span,
+    }));
+
+    // Build the error message template string
+    let condition_source = unparse_expr_simple(&assert_stmt.condition);
+    let mut template_parts: Vec<TemplatePart> = Vec::new();
+
+    // If there's a custom message, put it right after "Assertion failed:"
+    if let Some(msg) = &assert_stmt.message {
+        template_parts.push(TemplatePart::String("Assertion failed: ".to_string()));
+        template_parts.push(TemplatePart::Interpolation {
+            expr: Box::new(desugar_expr(msg)),
+            format: None,
+        });
+        template_parts.push(TemplatePart::String(format!("\ncondition: {}\n", condition_source)));
+    } else {
+        template_parts.push(TemplatePart::String(format!(
+            "Assertion failed:\ncondition: {}\n",
+            condition_source
+        )));
+    }
+
+    // Add each intermediate value
+    for (var_name, source, _) in &intermediates {
+        template_parts.push(TemplatePart::String(format!("{}: ", source)));
+        template_parts.push(TemplatePart::Interpolation {
+            expr: Box::new(Expr::Ident(IdentExpr {
+                name: var_name.clone(),
+                span,
+            })),
+            format: None,
+        });
+        template_parts.push(TemplatePart::String("\n".to_string()));
+    }
+
+    let error_message = Expr::TemplateString(Box::new(TemplateStringExpr {
+        parts: template_parts,
+        span,
+    }));
+
+    // Build: panic(error_message)
+    let panic_call = Expr::Call(Box::new(CallExpr {
+        callee: Expr::Ident(IdentExpr {
+            name: "panic".to_string(),
+            span,
+        }),
+        type_args: vec![],
+        args: vec![error_message],
+        span,
+    }));
+
+    // Build: if !__cond { panic(...); }
+    let if_stmt = Stmt::If(IfStmt {
+        init: None,
+        condition: Expr::Unary(Box::new(UnaryExpr {
+            op: UnaryOp::Not,
+            expr: Expr::Ident(IdentExpr {
+                name: cond_var,
+                span,
+            }),
+            span,
+        })),
+        then_block: Block {
+            stmts: vec![Stmt::Expr(ExprStmt {
+                expr: panic_call,
+                span,
+            })],
+            span,
+        },
+        else_block: None,
+        span,
+    });
+    stmts.push(if_stmt);
+
+    // Wrap everything in a labeled block
+    Stmt::LabeledBlock(LabeledBlockStmt {
+        label: format!("__assert_{}", assert_id),
+        block: Block { stmts, span },
+        span,
+    })
+}
+
+/// Collect intermediate expressions that should be cached for power-assert display.
+/// Returns (var_name, source_text, original_expr) for each intermediate.
+fn collect_intermediates(
+    expr: &Expr,
+    intermediates: &mut Vec<(String, String, Expr)>,
+    counter: &mut u32,
+    is_root: bool,
+) {
+    match expr {
+        Expr::Binary(bin) => {
+            // Recursively collect from operands
+            collect_intermediates(&bin.left, intermediates, counter, false);
+            collect_intermediates(&bin.right, intermediates, counter, false);
+
+            // Don't collect the root comparison itself (it's shown as "condition: ...")
+            if !is_root {
+                let var_name = format!("__v{}", *counter);
+                *counter += 1;
+                let source = unparse_expr_simple(expr);
+                intermediates.push((var_name, source, expr.clone()));
+            }
+        }
+        Expr::Ident(ident) => {
+            // Always collect identifiers - they're the most useful values
+            let var_name = format!("__v{}", *counter);
+            *counter += 1;
+            intermediates.push((var_name, ident.name.clone(), expr.clone()));
+        }
+        Expr::Call(_) | Expr::MethodCall(_) | Expr::FieldAccess(_) | Expr::Index(_) => {
+            // Collect these expression types
+            let var_name = format!("__v{}", *counter);
+            *counter += 1;
+            let source = unparse_expr_simple(expr);
+            intermediates.push((var_name, source, expr.clone()));
+        }
+        Expr::Unary(unary) => {
+            // Recurse into operand
+            collect_intermediates(&unary.expr, intermediates, counter, false);
+            // Also collect the unary expression itself if not root
+            if !is_root {
+                let var_name = format!("__v{}", *counter);
+                *counter += 1;
+                let source = unparse_expr_simple(expr);
+                intermediates.push((var_name, source, expr.clone()));
+            }
+        }
+        // Literals and other expressions don't need to be cached
+        _ => {}
+    }
+}
+
+/// Reconstruct the condition expression using intermediate variable references.
+fn reconstruct_with_intermediates(
+    expr: &Expr,
+    intermediates: &[(String, String, Expr)],
+) -> Expr {
+    // Find if this expression matches an intermediate
+    let source = unparse_expr_simple(expr);
+    for (var_name, int_source, _) in intermediates {
+        if &source == int_source {
+            return Expr::Ident(IdentExpr {
+                name: var_name.clone(),
+                span: expr.span(),
+            });
+        }
+    }
+
+    // Otherwise, recursively reconstruct
+    match expr {
+        Expr::Binary(bin) => Expr::Binary(Box::new(BinaryExpr {
+            left: reconstruct_with_intermediates(&bin.left, intermediates),
+            op: bin.op,
+            right: reconstruct_with_intermediates(&bin.right, intermediates),
+            span: bin.span,
+        })),
+        Expr::Unary(unary) => Expr::Unary(Box::new(UnaryExpr {
+            op: unary.op,
+            expr: reconstruct_with_intermediates(&unary.expr, intermediates),
+            span: unary.span,
+        })),
+        // For other expressions, return as-is (they might be intermediates or literals)
+        _ => expr.clone(),
     }
 }
 

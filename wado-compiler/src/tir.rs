@@ -996,12 +996,6 @@ pub enum TirStmtKind {
         label: String,
         block: TirBlock,
     },
-    Assert {
-        condition: TirExpr,
-        condition_source: String,
-        message: Option<TirExpr>,
-        intermediates: Vec<(String, TirExpr, TypeId)>,
-    },
 }
 
 // ============================================================================
