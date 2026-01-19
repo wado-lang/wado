@@ -45,12 +45,11 @@ jobs:
       - name: Check for uncommitted changes
         id: diff
         run: |
-          if git diff --quiet && git diff --cached --quiet; then
+          if git diff --exit-code; then
             echo "clean=true" >> $GITHUB_OUTPUT
           else
             echo "clean=false" >> $GITHUB_OUTPUT
             echo "::error::Uncommitted changes detected. Run 'make on-task-done' locally and commit the changes."
-            git diff --stat
             exit 1
           fi
 
@@ -59,8 +58,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          MARKER="<!-- integrity-check-comment -->"
           DIFF_STAT=$(git diff --stat)
-          gh pr comment ${{ github.event.pull_request.number }} --body "## Uncommitted changes detected
+          BODY="${MARKER}
+          ## Uncommitted changes detected
 
           Integrity checks produced the following changes:
 
@@ -69,6 +70,16 @@ jobs:
           \`\`\`
 
           Please run \`make on-task-done\` locally and commit the changes."
+
+          # Find existing comment with marker
+          COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api repos/${{ github.repository }}/issues/comments/${COMMENT_ID} -X PATCH -f body="$BODY"
+          else
+            gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
+          fi
 
   test:
     name: Test
