@@ -577,7 +577,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `world` declarations (with imports/exports)
 - [x] Attributes (`#[...]`)
 - [ ] `#[data]` attribute for data section injection
-- [x] `variant` declarations (with payloads, parsing only)
+- [x] `variant` declarations (with payloads, construction, Option `if let` pattern matching)
 - [ ] `flags` declarations (bit flags)
 - [ ] Inner attributes (`#![...]`)
 - [x] Generic parameters on structs (monomorphization)
@@ -646,7 +646,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Tuple patterns
 - [ ] Literal patterns
 - [ ] Struct patterns
-- [ ] Enum/variant patterns
+- [x] Option variant patterns (`if let Some(x) = ...`, `if let None = ...`)
 
 ### Semantic Analysis
 
@@ -700,8 +700,9 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Generic methods with explicit turbofish syntax (`obj.method::<T, U>(...)`)
 - [x] Double generics with mixed types (`Container<T>.combine::<U, V>()` where T, U, V are different)
 - [ ] Generic function/method type inference
-- [ ] Enum/variant construction
-- [ ] Pattern matching
+- [x] Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
+- [x] Option pattern matching (`if let Some(x) = ...`)
+- [ ] Match expressions
 - [x] Closures - pure (no captures)
 - [ ] Closures - with captures (see ADR)
 - [ ] Effect handlers

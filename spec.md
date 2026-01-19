@@ -1245,17 +1245,25 @@ variant Maybe<T> {
     Nothing,
 }
 
-// Used as (not yet implemented):
+// Construction
 let s = Shape::Circle(5.0);
+let p = Shape::Point;
 
-match s {
-    Shape::Circle(r) => calculate_circle_area(r),
-    Shape::Rectangle(w, h) => w * h,
-    Shape::Point => 0.0,
+// Option construction and pattern matching
+let opt: Option<i32> = Option::<i32>::Some(42);
+if let Some(x) = opt {
+    println(`Got: {x}`);
 }
+
+// match is not yet implemented
+// match s {
+//     Shape::Circle(r) => calculate_circle_area(r),
+//     Shape::Rectangle(w, h) => w * h,
+//     Shape::Point => 0.0,
+// }
 ```
 
-**Implementation Status**: Variant declarations are parsed and added to the symbol table. `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude` and work with their existing special codegen. Custom variant construction and pattern matching are not yet implemented.
+**Implementation Status**: Variant declarations, construction, and basic `if let` pattern matching for `Option<T>` are implemented. `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`. Custom variant pattern matching with `if let` and `match` statements are not yet implemented.
 
 **Flags** (bit flags - Component Model `flags`):
 
