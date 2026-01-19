@@ -11,8 +11,8 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  ci:
-    name: CI
+  integrity:
+    name: Integrity
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -67,7 +67,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           DIFF_STAT=$(git diff --stat)
-          gh pr comment ${{ github.event.pull_request.number }} --body "## ⚠️ Uncommitted changes detected
+          gh pr comment ${{ github.event.pull_request.number }} --body "## Uncommitted changes detected
 
           Running \`make on-task-done\` produced the following changes:
 
@@ -76,3 +76,27 @@ jobs:
           \`\`\`
 
           Please run \`make on-task-done\` locally and commit the changes."
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Setup mold linker
+        uses: rui314/setup-mold@v1
+
+      - name: Run tests
+        run: cargo test --locked --all
