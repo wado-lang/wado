@@ -220,21 +220,7 @@ If you already have mise installed:
 mise install  # install all project tools
 ```
 
-#### Manual Installation
-
-If you prefer manual installation:
-
-```sh
-# Install Rust toolchain
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Install Wasm tools
-cargo install wasm-tools
-cargo install wasmtime-cli
-
-# Install Node.js (for VS Code extension and prettier)
-# Use your preferred method (nvm, system package manager, etc.)
-```
+See [.mise.toml](.mise.toml) for the list of managed tools.
 
 ### Build and Test
 
