@@ -4,7 +4,13 @@
 
 fn run() with Stdout, Stderr {
     let x: i32 = 5;
-    assert x > 10;  // (x > 10)
+    __assert_0: {
+        let __v0: i32 = x;
+        let __cond: bool = (__v0 > 10);
+        if !__cond {
+            core::prelude::panic(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("Assertion failed:\ncondition: x > 10\n", "x: "), __v0.to_string()), "\n"));
+        }
+    }
 }
 
 __DATA__

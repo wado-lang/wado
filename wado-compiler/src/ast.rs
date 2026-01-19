@@ -282,6 +282,16 @@ pub enum Stmt {
     Break(BreakStmt),
     Continue(ContinueStmt),
     Assert(AssertStmt),
+    LabeledBlock(LabeledBlockStmt),
+}
+
+/// Labeled block statement: `LABEL: { ... }`
+/// Creates a new scope with local bindings. The label is required to reduce syntactic ambiguity.
+#[derive(Debug, Clone)]
+pub struct LabeledBlockStmt {
+    pub label: String,
+    pub block: Block,
+    pub span: Span,
 }
 
 /// Assert statement: `assert expr;` or `assert expr, "message";`
@@ -427,6 +437,93 @@ impl Expr {
             Expr::Cast(e) => e.span,
             Expr::StructLiteral(e) => e.span,
             Expr::TupleLiteral(e) => e.span,
+        }
+    }
+
+    /// Create a copy of this expression with an updated span.
+    /// Used for parenthesized expressions to include the parens in the span.
+    pub fn with_span(self, new_span: Span) -> Expr {
+        match self {
+            Expr::Ident(mut e) => {
+                e.span = new_span;
+                Expr::Ident(e)
+            }
+            Expr::Literal(mut e) => {
+                e.span = new_span;
+                Expr::Literal(e)
+            }
+            Expr::Binary(mut e) => {
+                e.span = new_span;
+                Expr::Binary(e)
+            }
+            Expr::Unary(mut e) => {
+                e.span = new_span;
+                Expr::Unary(e)
+            }
+            Expr::Assign(mut e) => {
+                e.span = new_span;
+                Expr::Assign(e)
+            }
+            Expr::CompoundAssign(mut e) => {
+                e.span = new_span;
+                Expr::CompoundAssign(e)
+            }
+            Expr::ComparisonChain(mut e) => {
+                e.span = new_span;
+                Expr::ComparisonChain(e)
+            }
+            Expr::Call(mut e) => {
+                e.span = new_span;
+                Expr::Call(e)
+            }
+            Expr::MethodCall(mut e) => {
+                e.span = new_span;
+                Expr::MethodCall(e)
+            }
+            Expr::StaticMethodCall(mut e) => {
+                e.span = new_span;
+                Expr::StaticMethodCall(e)
+            }
+            Expr::FieldAccess(mut e) => {
+                e.span = new_span;
+                Expr::FieldAccess(e)
+            }
+            Expr::Index(mut e) => {
+                e.span = new_span;
+                Expr::Index(e)
+            }
+            Expr::Block(mut e) => {
+                e.span = new_span;
+                Expr::Block(e)
+            }
+            Expr::If(mut e) => {
+                e.span = new_span;
+                Expr::If(e)
+            }
+            Expr::Match(mut e) => {
+                e.span = new_span;
+                Expr::Match(e)
+            }
+            Expr::Closure(mut e) => {
+                e.span = new_span;
+                Expr::Closure(e)
+            }
+            Expr::TemplateString(mut e) => {
+                e.span = new_span;
+                Expr::TemplateString(e)
+            }
+            Expr::Cast(mut e) => {
+                e.span = new_span;
+                Expr::Cast(e)
+            }
+            Expr::StructLiteral(mut e) => {
+                e.span = new_span;
+                Expr::StructLiteral(e)
+            }
+            Expr::TupleLiteral(mut e) => {
+                e.span = new_span;
+                Expr::TupleLiteral(e)
+            }
         }
     }
 }

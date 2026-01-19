@@ -18,6 +18,7 @@ This coercion is currently **hardcoded** in the compiler. When the compiler enco
 The resolver has three specific coercion points:
 
 1. **Variable initialization with type annotation**
+
    ```rust
    // In resolver.rs
    if let ResolvedType::Array { element_type } = target_type {
@@ -27,6 +28,7 @@ The resolver has three specific coercion points:
    ```
 
 2. **Function argument passing**
+
    ```rust
    // Check if parameter type is Array and argument is tuple
    if is_array_type(param_type) && is_tuple_literal(arg) {
@@ -118,6 +120,7 @@ Wado's approach is more elegant with implicit coercion based on type context.
 When the compiler encounters an expression `expr` that doesn't match the target type `T`, it applies the following coercion rule:
 
 **Automatic Iterator Coercion**:
+
 - If `expr`'s type `E` implements `IntoIterator`
 - And target type `T` implements `FromIterator<E::Item>`
 - Then desugar to: `T::from_iter(expr.into_iter())`
@@ -250,6 +253,7 @@ let a: Array<i32> = mixed;  // ❌ Heterogeneous tuple doesn't implement IntoIte
 ```
 
 This is a compile-time error with a clear message:
+
 ```
 error: cannot coerce heterogeneous tuple to Array
   --> example.wado:2:21
@@ -342,6 +346,7 @@ let result: Set<String> = [1, 2, 2, 3]
 The compiler's special-case logic for tuple-to-array coercion (in `resolver.rs`) is **removed** and replaced with the general iterator coercion mechanism.
 
 **Before** (hardcoded):
+
 ```rust
 // resolver.rs - REMOVED
 if let ResolvedType::Array { element_type } = target_type {
@@ -353,6 +358,7 @@ if let ResolvedType::Array { element_type } = target_type {
 ```
 
 **After** (general):
+
 ```rust
 // resolver.rs - NEW
 if let Some(coercion) = try_iterator_coercion(expr_type, target_type) {
@@ -410,15 +416,15 @@ This requires `Dict` to implement `FromIterator<[K, V]>`, which is natural.
 
 ### Trade-offs
 
-| Aspect | Hardcoded Coercion | Iterator-Based Coercion |
-|--------|-------------------|------------------------|
-| **Compiler complexity** | High (special cases) | Low (general rule) |
-| **Extensibility** | ❌ Compiler changes needed | ✅ Trait implementation only |
-| **User-defined types** | ❌ Not supported | ✅ Fully supported |
-| **Performance** | ✅ Direct codegen | ⚠️ Requires optimization |
-| **Consistency** | ❌ Array is special | ✅ All collections equal |
-| **Error messages** | ⚠️ "Type mismatch" | ✅ "Missing trait impl" |
-| **Maintenance** | ❌ High | ✅ Low |
+| Aspect                  | Hardcoded Coercion         | Iterator-Based Coercion      |
+| ----------------------- | -------------------------- | ---------------------------- |
+| **Compiler complexity** | High (special cases)       | Low (general rule)           |
+| **Extensibility**       | ❌ Compiler changes needed | ✅ Trait implementation only |
+| **User-defined types**  | ❌ Not supported           | ✅ Fully supported           |
+| **Performance**         | ✅ Direct codegen          | ⚠️ Requires optimization     |
+| **Consistency**         | ❌ Array is special        | ✅ All collections equal     |
+| **Error messages**      | ⚠️ "Type mismatch"         | ✅ "Missing trait impl"      |
+| **Maintenance**         | ❌ High                    | ✅ Low                       |
 
 ## Examples
 
@@ -586,13 +592,13 @@ fn run() {
 
 ## Comparison with Other Languages
 
-| Language | Literal Syntax | Default Type | Coercion Mechanism |
-|----------|----------------|--------------|-------------------|
-| **Wado** | `[1, 2, 3]` | Tuple `[i32, i32, i32]` | `IntoIterator` + `FromIterator` |
-| Rust | `vec![1, 2, 3]` | `Vec<i32>` (macro) | Explicit `.collect()` |
-| TypeScript | `[1, 2, 3]` | `number[]` | Type annotation for tuples |
-| Python | `[1, 2, 3]` | `list` | Constructor: `set([1, 2, 3])` |
-| Swift | `[1, 2, 3]` | `[Int]` | No coercion to Set/Dict |
+| Language   | Literal Syntax  | Default Type            | Coercion Mechanism              |
+| ---------- | --------------- | ----------------------- | ------------------------------- |
+| **Wado**   | `[1, 2, 3]`     | Tuple `[i32, i32, i32]` | `IntoIterator` + `FromIterator` |
+| Rust       | `vec![1, 2, 3]` | `Vec<i32>` (macro)      | Explicit `.collect()`           |
+| TypeScript | `[1, 2, 3]`     | `number[]`              | Type annotation for tuples      |
+| Python     | `[1, 2, 3]`     | `list`                  | Constructor: `set([1, 2, 3])`   |
+| Swift      | `[1, 2, 3]`     | `[Int]`                 | No coercion to Set/Dict         |
 
 Wado's approach is unique in providing **implicit coercion via traits** while maintaining **type safety** and **extensibility**.
 

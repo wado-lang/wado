@@ -5,7 +5,15 @@
 fn run() with Stdout, Stderr {
     let x: i32 = 3;
     let y: i32 = 4;
-    assert x + y > 10;  // ((x + y) > 10)
+    __assert_0: {
+        let __v0: i32 = x;
+        let __v1: i32 = y;
+        let __v2: i32 = (x + y);
+        let __cond: bool = (__v2 > 10);
+        if !__cond {
+            core::prelude::panic(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("Assertion failed:\ncondition: x + y > 10\n", "x: "), __v0.to_string()), "\n"), "y: "), __v1.to_string()), "\n"), "x + y: "), __v2.to_string()), "\n"));
+        }
+    }
 }
 
 __DATA__

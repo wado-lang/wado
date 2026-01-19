@@ -991,11 +991,10 @@ pub enum TirStmtKind {
     },
     Break,
     Continue,
-    Assert {
-        condition: TirExpr,
-        condition_source: String,
-        message: Option<TirExpr>,
-        intermediates: Vec<(String, TirExpr, TypeId)>,
+    /// Labeled block: `LABEL: { ... }` - creates a new scope with local bindings
+    LabeledBlock {
+        label: String,
+        block: TirBlock,
     },
 }
 

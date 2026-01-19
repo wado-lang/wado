@@ -8,7 +8,13 @@ fn get_value() -> i32 with Stdout {
 }
 
 fn run() with Stdout, Stderr {
-    assert get_value() > 10;  // (get_value() > 10)
+    __assert_0: {
+        let __v0: i32 = get_value();
+        let __cond: bool = (__v0 > 10);
+        if !__cond {
+            core::prelude::panic(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("Assertion failed:\ncondition: get_value() > 10\n", "get_value(): "), __v0.to_string()), "\n"));
+        }
+    }
 }
 
 __DATA__

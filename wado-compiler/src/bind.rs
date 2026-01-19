@@ -202,6 +202,7 @@ impl Binder {
             Stmt::Break(_) => {}    // No bindings for break
             Stmt::Continue(_) => {} // No bindings for continue
             Stmt::Assert(assert_stmt) => self.bind_assert(assert_stmt),
+            Stmt::LabeledBlock(labeled_block) => self.bind_block(&labeled_block.block),
         }
     }
 

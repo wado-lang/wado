@@ -490,19 +490,8 @@ impl Monomorphizer {
                 self.rewrite_types_in_block(body, type_table);
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
-            TirStmtKind::Assert {
-                condition,
-                message,
-                intermediates,
-                ..
-            } => {
-                self.rewrite_types_in_expr(condition, type_table);
-                if let Some(msg) = message {
-                    self.rewrite_types_in_expr(msg, type_table);
-                }
-                for (_, expr, _) in intermediates {
-                    self.rewrite_types_in_expr(expr, type_table);
-                }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.rewrite_types_in_block(block, type_table);
             }
         }
     }
@@ -1062,7 +1051,14 @@ impl Monomorphizer {
                 );
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue | TirStmtKind::Assert { .. } => {}
+            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.collect_func_instantiation_sites_in_block(
+                    block,
+                    generic_functions,
+                    type_table,
+                );
+            }
         }
     }
 
@@ -1738,7 +1734,10 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(iterable, substitution, type_table);
                 self.substitute_types_in_block(body, substitution, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue | TirStmtKind::Assert { .. } => {}
+            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.substitute_types_in_block(block, substitution, type_table);
+            }
         }
     }
 
@@ -2221,7 +2220,10 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(iterable, type_table);
                 self.rewrite_function_calls_in_block(body, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue | TirStmtKind::Assert { .. } => {}
+            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.rewrite_function_calls_in_block(block, type_table);
+            }
         }
     }
 
@@ -2540,27 +2542,8 @@ impl StringCollector {
                 self.collect_block(body);
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
-            TirStmtKind::Assert {
-                condition,
-                condition_source,
-                message,
-                intermediates,
-            } => {
-                self.collect_expr(condition);
-                if let Some(msg) = message {
-                    self.collect_expr(msg);
-                }
-                for (_, expr, _) in intermediates {
-                    self.collect_expr(expr);
-                }
-                // Collect static strings used in assert messages
-                self.add_string("Assertion failed:\n".to_string());
-                self.add_string("Assertion failed: ".to_string());
-                self.add_string(format!("condition: {}\n", condition_source));
-                self.add_string("\n".to_string());
-                for (name, _, _) in intermediates {
-                    self.add_string(format!("{}: ", name));
-                }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.collect_block(block);
             }
         }
     }
