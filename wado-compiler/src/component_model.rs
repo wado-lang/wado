@@ -1,7 +1,8 @@
-//! WASI import registry for dynamic Component Model generation
+//! Component Model support for code generation
 //!
-//! This module collects WASI imports from effect definitions in lib/wasi/*.wado
-//! and provides resolution and iteration for code generation.
+//! This module provides:
+//! - WASI import registry: collects WASI imports from effect definitions in lib/wasi/*.wado
+//! - Component Model ABI: type conversion and support checking for CM codegen
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
