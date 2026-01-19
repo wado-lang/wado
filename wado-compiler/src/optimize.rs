@@ -3219,20 +3219,20 @@ fn find_hoist_candidates_in_expr(
             field_index,
             field_name,
         } => {
-            if let TirExprKind::Local { index, .. } = &inner.kind {
-                if !modified_vars.contains(index) {
-                    let key = (*index, *field_index);
-                    if !seen.contains(&key) {
-                        seen.insert(key);
-                        candidates.push(HoistCandidate {
-                            local_index: *index,
-                            field_index: *field_index,
-                            field_name: field_name.clone(),
-                            type_id: expr.type_id,
-                            new_local_index: *next_local,
-                        });
-                        *next_local += 1;
-                    }
+            if let TirExprKind::Local { index, .. } = &inner.kind
+                && !modified_vars.contains(index)
+            {
+                let key = (*index, *field_index);
+                if !seen.contains(&key) {
+                    seen.insert(key);
+                    candidates.push(HoistCandidate {
+                        local_index: *index,
+                        field_index: *field_index,
+                        field_name: field_name.clone(),
+                        type_id: expr.type_id,
+                        new_local_index: *next_local,
+                    });
+                    *next_local += 1;
                 }
             }
             // Still recurse into inner expression
@@ -3428,17 +3428,16 @@ fn replace_hoisted_in_expr(expr: &mut TirExpr, candidates: &[HoistCandidate]) {
         field_index,
         ..
     } = &expr.kind
+        && let TirExprKind::Local { index, .. } = &inner.kind
     {
-        if let TirExprKind::Local { index, .. } = &inner.kind {
-            for candidate in candidates {
-                if candidate.local_index == *index && candidate.field_index == *field_index {
-                    // Replace with a reference to the hoisted local
-                    expr.kind = TirExprKind::Local {
-                        index: candidate.new_local_index,
-                        name: format!("_licm_{}", candidate.field_name),
-                    };
-                    return;
-                }
+        for candidate in candidates {
+            if candidate.local_index == *index && candidate.field_index == *field_index {
+                // Replace with a reference to the hoisted local
+                expr.kind = TirExprKind::Local {
+                    index: candidate.new_local_index,
+                    name: format!("_licm_{}", candidate.field_name),
+                };
+                return;
             }
         }
     }

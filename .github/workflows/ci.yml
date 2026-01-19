@@ -14,8 +14,12 @@ jobs:
   integrity:
     name: Integrity
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/cache@v5
         with:
           path: |
@@ -28,20 +32,65 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Check formatting
-        run: cargo fmt --all --check
+      - uses: jdx/mise-action@v3
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MISE_VERBOSE: ${{ runner.debug }}
 
-      - name: Run clippy
-        run: cargo clippy --locked --all-targets --all-features
+      - run: make clippy-fix
+      - run: make update-bundled
+      - run: make update-golden-fixtures
+      - run: make format
 
-      - name: Build wado-compiler for wasm32
-        run: cargo build -p wado-compiler --target wasm32-unknown-unknown --locked
+      - name: Check for uncommitted changes
+        id: diff
+        run: |
+          if git diff --exit-code; then
+            echo "clean=true" >> $GITHUB_OUTPUT
+          else
+            echo "clean=false" >> $GITHUB_OUTPUT
+            echo "::error::Uncommitted changes detected. Run 'make on-task-done' locally and commit the changes."
+            exit 1
+          fi
+
+      - name: Comment on PR with diff
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MARKER="<!-- integrity-check-comment -->"
+          DIFF_STAT=$(git diff --stat)
+          BODY="${MARKER}
+          ## Uncommitted changes detected
+
+          Integrity checks produced the following changes:
+
+          \`\`\`
+          ${DIFF_STAT}
+          \`\`\`
+
+          Please run \`make on-task-done\` locally and commit the changes."
+
+          # Find existing comment with marker
+          COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api repos/${{ github.repository }}/issues/comments/${COMMENT_ID} -X PATCH -f body="$BODY"
+          else
+            gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
+          fi
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/cache@v5
         with:
           path: |
@@ -54,8 +103,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Setup mold linker
-        uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@v1
 
-      - name: Run tests
-        run: cargo test --locked --all
+      - run: cargo test --locked --all
