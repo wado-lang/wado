@@ -278,10 +278,6 @@ Run the following to set up your development environment:
 make on-task-started  # install mise and project tools
 ```
 
-This command will:
-- Install mise if not already installed
-- Install all required development tools (wasm-tools, wasmtime, Node.js, etc.)
-
 ### When Completing a Task
 
 When you have completed a task, make sure everything is up-to-date and tested:

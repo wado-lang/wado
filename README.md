@@ -212,8 +212,6 @@ Use the provided Makefile task to set up everything automatically:
 make on-task-started  # installs mise and all project tools
 ```
 
-This will install [mise](https://mise.jdx.dev/) and all required development tools (wasm-tools, wasmtime, Node.js).
-
 #### Using mise Directly
 
 If you already have mise installed:
