@@ -204,20 +204,10 @@ Show the generated WAT to an agent and ask it to spot inefficiencies. Review the
 
 ### Install Development Tools
 
-#### Quick Start (Recommended)
-
 Use the provided Makefile task to set up everything automatically:
 
 ```sh
 make on-task-started  # installs mise and all project tools
-```
-
-#### Using mise Directly
-
-If you already have mise installed:
-
-```sh
-mise install  # install all project tools
 ```
 
 See [.mise.toml](.mise.toml) for the list of managed tools.
