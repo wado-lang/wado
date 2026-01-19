@@ -248,15 +248,7 @@ WEPs combine language specification and implementation strategy in a single docu
 
 This project uses [mise](https://mise.jdx.dev/) for development tool version management.
 
-```sh
-mise install  # install all required tools (wasm-tools, wasmtime, node, etc.)
-```
-
-Alternatively, use the Makefile:
-
-```sh
-make install-deps  # manual installation of dependency tools
-```
+Run `make on-task-started` to install mise and all required development tools automatically.
 
 ### Building and Testing
 

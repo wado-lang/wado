@@ -18,24 +18,6 @@ on-task-started:
 		echo "Development environment ready."; \
 	fi
 
-.PHONY: install-deps
-install-deps:
-	@echo "Prerequisites (install manually if not present):"
-	@echo "  - rustup (Rust toolchain manager)"
-	@echo "  - cargo (Rust package manager)"
-	@echo "  - npx (Node.js package runner, for 'make format')"
-	@echo ""
-	@echo "Installing Rust wasm32-unknown-unknown target..."
-	rustup target add wasm32-unknown-unknown
-	@echo ""
-	@echo "Installing wasm-tools..."
-	cargo install wasm-tools
-	@echo ""
-	@echo "Installing wasmtime..."
-	cargo install wasmtime-cli
-	@echo ""
-	@echo "All dependencies installed successfully."
-
 .PHONY: build
 build: wado-compiler/lib/builtins/wado-bundled.wat
 	cargo build
