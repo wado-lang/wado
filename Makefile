@@ -1,20 +1,22 @@
-.PHONY: install-deps
-install-deps:
-	@echo "Prerequisites (install manually if not present):"
-	@echo "  - rustup (Rust toolchain manager)"
-	@echo "  - cargo (Rust package manager)"
-	@echo "  - npx (Node.js package runner, for 'make format')"
-	@echo ""
-	@echo "Installing Rust wasm32-unknown-unknown target..."
-	rustup target add wasm32-unknown-unknown
-	@echo ""
-	@echo "Installing wasm-tools..."
-	cargo install wasm-tools
-	@echo ""
-	@echo "Installing wasmtime..."
-	cargo install wasmtime-cli
-	@echo ""
-	@echo "All dependencies installed successfully."
+.PHONY: on-task-started
+on-task-started:
+	@echo "Setting up development environment..."
+	@if ! command -v mise >/dev/null 2>&1; then \
+		echo "Installing mise..."; \
+		curl -fsSL https://mise.run | sh; \
+		echo ""; \
+		echo "mise installed. Please restart your shell or run:"; \
+		echo "  echo 'eval \"\$$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc  # for bash"; \
+		echo "  echo 'eval \"\$$(~/.local/bin/mise activate zsh)\"' >> ~/.zshrc   # for zsh"; \
+		echo ""; \
+		echo "Then run 'make on-task-started' again to install project tools."; \
+	else \
+		echo "mise is already installed."; \
+		echo "Installing project tools..."; \
+		mise install; \
+		echo ""; \
+		echo "Development environment ready."; \
+	fi
 
 .PHONY: build
 build: wado-compiler/lib/builtins/wado-bundled.wat

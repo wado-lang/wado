@@ -202,17 +202,15 @@ Agent finds pattern → Human reviews → Deterministic optimization rule added
 
 Show the generated WAT to an agent and ask it to spot inefficiencies. Review the suggestions, then implement them as permanent optimization passes.
 
-### Install `cargo`
+### Install Development Tools
+
+Use the provided Makefile task to set up everything automatically:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+make on-task-started  # installs mise and all project tools
 ```
 
-### Install `wasmtime`
-
-```sh
-cargo install wasmtime
-```
+See [.mise.toml](.mise.toml) for the list of managed tools.
 
 ### Build and Test
 

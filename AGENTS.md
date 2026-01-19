@@ -244,11 +244,15 @@ WEPs combine language specification and implementation strategy in a single docu
 
 ## Project Development
 
-You can use `cargo` to manage the project, and also `Makefile` is provided for convenience:
+### Tool Management
+
+This project uses [mise](https://mise.jdx.dev/) for development tool version management.
+
+Run `make on-task-started` to install mise and all required development tools automatically.
+
+### Building and Testing
 
 ```sh
-make install-deps  # install all dependency tools (wasm-tools, wasmtime, etc.)
-
 make build
 make test
 
@@ -264,7 +268,23 @@ make benchmark-sieve       # use arrays
 make report-wasm-size
 ```
 
-## On Your Task Done
+## Development Workflow
+
+### When Starting a Task
+
+Run the following to set up your development environment:
+
+```sh
+make on-task-started  # install mise and project tools
+```
+
+If this is your first time running mise in this repository, you may need to trust the configuration file:
+
+```sh
+mise trust  # trust .mise.toml (first time only)
+```
+
+### When Completing a Task
 
 When you have completed a task, make sure everything is up-to-date and tested:
 
@@ -272,4 +292,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - spec.md if the language specification is updated.
   - docs/compiler.md if the new features are implemented.
   - docs/cheatsheet.md if the syntax/stdlib is updated.
-- `make on-task-done` for format, clippy-fix, update-bundled, test.
+- Run `make on-task-done` to format, clippy-fix, update-bundled, and test.

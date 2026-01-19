@@ -34,9 +34,6 @@ jobs:
       - name: Run clippy
         run: cargo clippy --locked --all-targets --all-features
 
-      - name: Install wasm32 target
-        run: rustup target add wasm32-unknown-unknown
-
       - name: Build wado-compiler for wasm32
         run: cargo build -p wado-compiler --target wasm32-unknown-unknown --locked
 
@@ -59,10 +56,6 @@ jobs:
 
       - name: Setup mold linker
         uses: rui314/setup-mold@v1
-
-      # `make build` depends on wasm32-unknown-unknown target, but it's done in local development
-      # - name: Install wasm32 target
-      #   run: rustup target add wasm32-unknown-unknown
 
       - name: Run tests
         run: cargo test --locked --all
