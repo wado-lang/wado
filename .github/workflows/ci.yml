@@ -41,8 +41,8 @@ jobs:
       - name: Add wasm32 target
         run: rustup target add wasm32-unknown-unknown
 
-      - name: Run on-task-done
-        run: make on-task-done
+      - name: Run integrity checks
+        run: make clippy-fix update-bundled update-golden-fixtures format
 
       - name: Check for uncommitted changes
         id: diff
@@ -51,7 +51,7 @@ jobs:
             echo "clean=true" >> $GITHUB_OUTPUT
           else
             echo "clean=false" >> $GITHUB_OUTPUT
-            echo "::error::Uncommitted changes detected after 'make on-task-done'. Run 'make on-task-done' locally and commit the changes."
+            echo "::error::Uncommitted changes detected. Run 'make on-task-done' locally and commit the changes."
             git diff --stat
             exit 1
           fi
@@ -64,7 +64,7 @@ jobs:
           DIFF_STAT=$(git diff --stat)
           gh pr comment ${{ github.event.pull_request.number }} --body "## Uncommitted changes detected
 
-          Running \`make on-task-done\` produced the following changes:
+          Integrity checks produced the following changes:
 
           \`\`\`
           ${DIFF_STAT}
