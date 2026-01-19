@@ -163,6 +163,50 @@ enum Color {
 let c = Color::Red;  // not yet implemented
 ```
 
+## Variants
+
+Variants are sum types with payloads (unlike enums which have no payloads):
+
+```wado
+// Custom variant with unit and payload cases
+variant Shape {
+    Circle(f64),           // radius
+    Rectangle(f64, f64),   // width, height
+    Point,                 // no payload
+}
+
+// Generic variant
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+// Construction
+let c = Shape::Circle(5.0);
+let p = Shape::Point;
+
+// Option and Result are defined as variants in core:prelude
+// pub variant Option<T> { Some(T), None }
+// pub variant Result<T, E> { Ok(T), Err(E) }
+
+// Option construction
+let some_val: Option<i32> = Option::<i32>::Some(42);
+let none_val: Option<i32> = null;  // null is equivalent to Option::None
+
+// Pattern matching with if let
+if let Some(x) = some_val {
+    println(`Got value: {x}`);
+} else {
+    println("No value");
+}
+
+if let None = none_val {
+    println("It's none");
+}
+```
+
+Note: Generic variants (custom `Maybe<T>`) and `Result<T, E>` pattern matching are not yet implemented.
+
 ## Functions
 
 ```wado
@@ -234,6 +278,14 @@ if let x = get_value(); x > 0 {
     println(`non-positive: {x}`);
 }
 // x is not in scope here
+
+// If let pattern matching (Rust-style)
+let opt: Option<i32> = Option::<i32>::Some(42);
+if let Some(x) = opt {
+    println(`Got: {x}`);
+} else {
+    println("None");
+}
 
 // While
 while i < 10 {
@@ -497,7 +549,6 @@ Wado intentionally does not support macros.
 
 - `enum` construction (parsed but no codegen)
 - `match` statements/expressions
-- `variant` (sum types with payloads)
 - `flags` (bit flags)
 - `trait` declarations
 - Effect handlers
@@ -508,6 +559,8 @@ Wado intentionally does not support macros.
 - postfix `?` operator (error propagation)
 - JSX
 - Generic function/method type inference
+- Generic variant pattern matching (custom `Maybe<T>`)
+- `Result<T, E>` pattern matching
 
 ## See Also
 

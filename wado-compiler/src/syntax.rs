@@ -65,8 +65,8 @@ impl SyntaxDefinition {
                 ],
                 // Declarations
                 declaration: vec![
-                    "fn", "let", "struct", "enum", "impl", "type", "use", "from", "pub", "import",
-                    "export",
+                    "fn", "let", "struct", "enum", "variant", "impl", "type", "use", "from", "pub",
+                    "import", "export",
                 ],
                 // Modifiers
                 modifier: vec!["as", "with", "mut", "async", "move", "unique", "in", "of"],
@@ -147,8 +147,8 @@ mod tests {
         let lexer_keywords = [
             "use", "from", "as", "fn", "with", "let", "mut", "return", "if", "else", "match",
             "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect", "handler",
-            "reactive", "move", "unique", "struct", "enum", "type", "impl", "resource", "world",
-            "async", "import", "export", "assert",
+            "reactive", "move", "unique", "struct", "enum", "variant", "type", "impl", "resource",
+            "world", "async", "import", "export", "assert",
         ];
 
         // Verify SyntaxDefinition covers all lexer keywords

@@ -1,0 +1,17 @@
+// Invalid syntax: None = opt without 'let' is not a valid pattern match
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let opt: Option<String> = null;
+
+    // This is invalid - must use `if let None = opt` instead
+    if None = opt {
+        println("matched none");
+    } else {
+        println("has value");
+    }
+}
+
+__DATA__
+{"compile_error": "cannot assign"}

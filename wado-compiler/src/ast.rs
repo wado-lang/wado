@@ -53,6 +53,7 @@ pub enum Item {
     Effect(EffectDecl),
     Struct(StructDecl),
     Enum(EnumDecl),
+    Variant(VariantDecl),
     Type(TypeAlias),
     Impl(ImplBlock),
     Resource(ResourceDecl),
@@ -326,11 +327,24 @@ pub struct ReturnStmt {
     pub span: Span,
 }
 
+/// Condition in an if statement: either a regular expression or a pattern match
+#[derive(Debug, Clone)]
+pub enum IfCondition {
+    /// Regular boolean expression: `if x > 0 { ... }`
+    Expr(Expr),
+    /// Rust-style pattern match: `if let Some(x) = expr { ... }`
+    Pattern {
+        pattern: Pattern,
+        expr: Expr,
+        span: Span,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub struct IfStmt {
     /// Optional init binding: `if let x = expr; condition { ... }`
     pub init: Option<Box<LetStmt>>,
-    pub condition: Expr,
+    pub condition: IfCondition,
     pub then_block: Block,
     pub else_block: Option<Block>,
     pub span: Span,
@@ -741,7 +755,7 @@ pub struct IndexExpr {
 pub struct IfExpr {
     /// Optional init binding: `if let x = expr; condition { ... }`
     pub init: Option<Box<LetStmt>>,
-    pub condition: Expr,
+    pub condition: IfCondition,
     pub then_block: Block,
     pub else_block: Option<Block>,
     pub span: Span,
@@ -767,6 +781,12 @@ pub enum Pattern {
     Literal(Literal),
     Wildcard,
     Tuple(Vec<Pattern>),
+    /// Variant pattern: `Some(x)` or `None`
+    Variant {
+        variant_name: String,
+        bindings: Vec<Pattern>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -911,6 +931,32 @@ pub struct EnumDecl {
 #[derive(Debug, Clone)]
 pub struct EnumVariant {
     pub name: String,
+    pub fields: Option<Vec<Type>>,
+    pub span: Span,
+}
+
+/// Variant declaration (tagged union with payloads)
+/// ```wado
+/// variant Option<T> {
+///     Some(T),
+///     None,
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct VariantDecl {
+    pub name: String,
+    pub is_pub: bool,
+    /// Generic type parameters: `variant Option<T> { Some(T), None }`
+    pub type_params: Vec<GenericParam>,
+    pub cases: Vec<VariantCase>,
+    pub span: Span,
+}
+
+/// A case in a variant declaration: `Some(T)` or `None`
+#[derive(Debug, Clone)]
+pub struct VariantCase {
+    pub name: String,
+    /// Fields for this case. None for unit variants like `None`.
     pub fields: Option<Vec<Type>>,
     pub span: Span,
 }

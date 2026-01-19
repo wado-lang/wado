@@ -193,6 +193,7 @@ impl Parser {
             TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub).map(Item::Enum),
+            TokenKind::Variant => self.parse_variant_decl(is_pub).map(Item::Variant),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
@@ -741,19 +742,39 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::If)?;
 
-        // Check for if-let-init: `if let x = expr; condition { ... }`
-        let init = if self.check(&TokenKind::Let) {
-            let let_stmt = self.parse_let_stmt_inner()?;
-            self.expect(&TokenKind::Semicolon)?;
-            match let_stmt {
-                Stmt::Let(ls) => Some(Box::new(ls)),
-                _ => unreachable!(),
+        let mut init = None;
+        let condition;
+
+        // Check for if-let: either Rust-style pattern matching or Go-style init
+        if self.check(&TokenKind::Let) {
+            self.advance(); // consume 'let'
+
+            // Check if this is Rust-style pattern matching (uppercase identifier = pattern start)
+            if self.is_pattern_start() {
+                // Rust-style: `if let Some(x) = expr { ... }` or `if let None = expr { ... }`
+                let pattern_span = self.peek().span;
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::Eq)?;
+                let expr = self.parse_expr()?;
+                let span = pattern_span.merge(&expr.span());
+                condition = IfCondition::Pattern {
+                    pattern,
+                    expr,
+                    span,
+                };
+            } else {
+                // Go-style: `if let x = expr; condition { ... }`
+                // We already consumed 'let', need to parse variable declaration
+                let let_stmt = self.parse_let_stmt_after_let()?;
+                self.expect(&TokenKind::Semicolon)?;
+                init = Some(Box::new(let_stmt));
+                condition = IfCondition::Expr(self.parse_expr()?);
             }
         } else {
-            None
-        };
+            // No 'let', just a regular condition expression
+            condition = IfCondition::Expr(self.parse_expr()?);
+        }
 
-        let condition = self.parse_expr()?;
         let then_block = self.parse_block()?;
 
         let else_block = if self.check(&TokenKind::Else) {
@@ -773,6 +794,49 @@ impl Parser {
             else_block,
             span,
         }))
+    }
+
+    /// Check if the next tokens look like a pattern start (uppercase identifier)
+    fn is_pattern_start(&self) -> bool {
+        if let TokenKind::Ident(name) = self.peek_kind() {
+            // Uppercase identifier indicates a variant pattern like Some, None, Ok, Err
+            name.chars().next().is_some_and(|c| c.is_uppercase())
+        } else {
+            false
+        }
+    }
+
+    /// Parse the rest of a let statement after the 'let' keyword has been consumed
+    fn parse_let_stmt_after_let(&mut self) -> ParseResult<LetStmt> {
+        let start_span = self.peek().span;
+
+        let is_mut = if self.check(&TokenKind::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
+        let name = self.consume_ident()?;
+
+        let ty = if self.check(&TokenKind::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        self.expect(&TokenKind::Eq)?;
+        let value = self.parse_expr()?;
+
+        Ok(LetStmt {
+            name,
+            is_mut,
+            is_reactive: false,
+            ty,
+            value,
+            span: start_span,
+        })
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
@@ -943,9 +1007,41 @@ impl Parser {
             self.expect(&TokenKind::RParen)?;
             Ok(Pattern::Tuple(patterns))
         } else if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            let start_span = self.peek().span;
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
+            } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
+                // Uppercase identifier - could be variant pattern like Some(x) or None
+                if self.check(&TokenKind::LParen) {
+                    // Variant with bindings: Some(x)
+                    self.advance(); // consume (
+                    let mut bindings = Vec::new();
+                    if !self.check(&TokenKind::RParen) {
+                        bindings.push(self.parse_pattern()?);
+                        while self.check(&TokenKind::Comma) {
+                            self.advance();
+                            if self.check(&TokenKind::RParen) {
+                                break;
+                            }
+                            bindings.push(self.parse_pattern()?);
+                        }
+                    }
+                    let end_span = self.peek().span;
+                    self.expect(&TokenKind::RParen)?;
+                    Ok(Pattern::Variant {
+                        variant_name: name,
+                        bindings,
+                        span: start_span.merge(&end_span),
+                    })
+                } else {
+                    // Variant without bindings: None
+                    Ok(Pattern::Variant {
+                        variant_name: name,
+                        bindings: vec![],
+                        span: start_span,
+                    })
+                }
             } else {
                 Ok(Pattern::Ident(name))
             }
@@ -2205,6 +2301,66 @@ impl Parser {
         };
 
         Ok(EnumVariant {
+            name,
+            fields,
+            span: start_span,
+        })
+    }
+
+    /// Parse a variant declaration (tagged union with payloads)
+    /// ```wado
+    /// variant Option<T> {
+    ///     Some(T),
+    ///     None,
+    /// }
+    /// ```
+    fn parse_variant_decl(&mut self, is_pub: bool) -> ParseResult<VariantDecl> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Variant)?;
+        let name = self.consume_ident()?;
+
+        // Parse generic parameters like <T>
+        let type_params = self.parse_generic_params()?;
+
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut cases = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            cases.push(self.parse_variant_case()?);
+            if !self.check(&TokenKind::RBrace) {
+                self.expect(&TokenKind::Comma)?;
+            }
+        }
+
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
+
+        Ok(VariantDecl {
+            name,
+            is_pub,
+            type_params,
+            cases,
+            span: start_span.merge(&end_span),
+        })
+    }
+
+    fn parse_variant_case(&mut self) -> ParseResult<VariantCase> {
+        let start_span = self.peek().span;
+        let name = self.consume_ident()?;
+
+        let fields = if self.check(&TokenKind::LParen) {
+            self.advance();
+            let mut types = vec![self.parse_type()?];
+            while self.check(&TokenKind::Comma) {
+                self.advance();
+                types.push(self.parse_type()?);
+            }
+            self.expect(&TokenKind::RParen)?;
+            Some(types)
+        } else {
+            None
+        };
+
+        Ok(VariantCase {
             name,
             fields,
             span: start_span,

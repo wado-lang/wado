@@ -22,6 +22,8 @@ pub enum SymbolKind {
     Struct(StructSymbol),
     /// An enum definition
     Enum(EnumSymbol),
+    /// A variant definition (tagged union with payloads)
+    Variant(VariantSymbol),
     /// A type alias
     TypeAlias(TypeAliasSymbol),
     /// A local variable
@@ -68,6 +70,13 @@ pub struct StructSymbol {
 pub struct EnumSymbol {
     /// Variant names
     pub variants: Vec<String>,
+}
+
+/// Variant symbol data (tagged union with payloads)
+#[derive(Debug, Clone)]
+pub struct VariantSymbol {
+    /// Case names (e.g., "Some", "None" for Option)
+    pub cases: Vec<String>,
 }
 
 /// Type alias symbol data
