@@ -358,9 +358,19 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
                      Please remove 'TODO: true' from the __DATA__ section."
                 );
             }
-            Err(_) => {
+            Err(err) => {
                 // Test failed as expected for a TODO test
+                // Extract panic message for better diagnostics
+                let panic_msg = if let Some(s) = err.downcast_ref::<String>() {
+                    s.clone()
+                } else if let Some(s) = err.downcast_ref::<&str>() {
+                    s.to_string()
+                } else {
+                    format!("{:?}", err)
+                };
+
                 eprintln!("[{test_id}] TODO test failed as expected (feature not yet implemented)");
+                eprintln!("[{test_id}] Error: {}", panic_msg);
                 return;
             }
         }
