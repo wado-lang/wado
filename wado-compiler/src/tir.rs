@@ -848,6 +848,14 @@ pub enum TirExprKind {
         /// Field values (empty for unit variants)
         fields: Vec<TirExpr>,
     },
+
+    /// Move semantics: the inner value is moved without copying.
+    /// Inserted by the optimizer for expressions that produce fresh values
+    /// (e.g., function call results, literals).
+    /// Future: When user-facing, `move x` invalidates `x` after the expression.
+    Move {
+        value: Box<TirExpr>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

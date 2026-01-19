@@ -382,7 +382,7 @@ Both `break` and `continue` work with `while`, `for`, and `loop`.
 - **Lifetime inference**: No explicit lifetime annotations required
 - **Explicit move**: Ownership transfer only when explicitly stated
 
-### Move Syntax
+### Move Syntax (not yet implemented)
 
 ```wado
 // Default: copy or reference (depending on type)
@@ -397,7 +397,7 @@ println(a);         // Compile error: a has been moved
 consume(move data);
 ```
 
-### Unique Ownership
+### Unique Ownership (not yet implemented)
 
 ```wado
 // Enforce unique ownership

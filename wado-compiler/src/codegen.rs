@@ -2968,43 +2968,6 @@ impl Codegen {
         }
     }
 
-    /// Check if an expression produces a fresh value that doesn't need copying.
-    /// Fresh values include:
-    /// - Literals (string, struct, array, tuple, null)
-    /// - Builtin calls like `string_new` and `array_new_string`
-    /// - OptionSome with a fresh inner value
-    fn is_fresh_value_expr(&self, expr: &TirExpr) -> bool {
-        match &expr.kind {
-            // Literals always create fresh values (null is a constant ref to nothing)
-            TirExprKind::StringLiteral(_)
-            | TirExprKind::StructLiteral { .. }
-            | TirExprKind::ArrayLiteral { .. }
-            | TirExprKind::TupleLiteral { .. }
-            | TirExprKind::Null => true,
-
-            // OptionSome is fresh if its inner value is fresh
-            TirExprKind::OptionSome { value } => self.is_fresh_value_expr(value),
-
-            // Builtin functions that create fresh values
-            TirExprKind::Call { func, .. } => {
-                let module_path = func.module_path();
-                let func_name = func.name();
-                // In TIR, builtin calls have empty module_path and func_name like "builtin::string_new"
-                if module_path.is_empty()
-                    && let Some(builtin_name) = func_name.strip_prefix("builtin::")
-                {
-                    return matches!(
-                        builtin_name,
-                        "string_new" | "array_new_string" | "array_new"
-                    );
-                }
-                false
-            }
-
-            _ => false,
-        }
-    }
-
     /// Generate code to copy a value for value semantics.
     /// Assumes the source value is on the stack. Leaves the copied value on the stack.
     fn generate_value_copy(
@@ -3840,6 +3803,9 @@ impl Codegen {
                     Self::collect_closures_from_expr(field, closures);
                 }
             }
+            TirExprKind::Move { value } => {
+                Self::collect_closures_from_expr(value, closures);
+            }
             // Leaf nodes - no nested expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -4077,6 +4043,9 @@ impl Codegen {
                 for field in fields {
                     Self::find_closure_locals_in_expr(field, result, closure_counter);
                 }
+            }
+            TirExprKind::Move { value } => {
+                Self::find_closure_locals_in_expr(value, result, closure_counter);
             }
             // Terminals - no closures inside
             TirExprKind::IntLiteral { .. }
@@ -4974,6 +4943,12 @@ impl Codegen {
                 func.instruction(&Instruction::StructNew(struct_type_idx));
             }
 
+            TirExprKind::Move { value } => {
+                // Move semantics: generate the inner value without copying
+                // The value is moved directly, no value copy is generated
+                self.generate_expr(func, value, type_table, ctx, builder);
+            }
+
             TirExprKind::Unit => {
                 func.instruction(&Instruction::I32Const(0));
             }
@@ -5149,9 +5124,9 @@ impl Codegen {
                         } else {
                             self.generate_expr(func, value, type_table, ctx, builder);
                             // Apply value copy for struct/array/tuple types, but skip for
-                            // fresh values (e.g., builtin::string_new creates a new value)
+                            // Move expressions (optimizer marks fresh values with Move)
                             if self.needs_value_copy(value.type_id, type_table)
-                                && !self.is_fresh_value_expr(value)
+                                && !matches!(value.kind, TirExprKind::Move { .. })
                             {
                                 self.generate_value_copy(
                                     func,
@@ -6389,8 +6364,9 @@ impl Codegen {
                     // No need to push the value back - it's a statement
                 } else {
                     self.generate_expr(func, value, type_table, ctx, builder);
+                    // Skip copy for Move expressions (optimizer marks fresh values)
                     if self.needs_value_copy(value.type_id, type_table)
-                        && !self.is_fresh_value_expr(value)
+                        && !matches!(value.kind, TirExprKind::Move { .. })
                     {
                         self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
                     }
@@ -6995,9 +6971,9 @@ impl Codegen {
                 }
 
                 // Apply value copy for struct/array/tuple types (value semantics)
-                // Skip for fresh values (e.g., builtin::string_new creates a new value)
+                // Skip for Move expressions (optimizer marks fresh values with Move)
                 if self.needs_value_copy(value.type_id, type_table)
-                    && !self.is_fresh_value_expr(value)
+                    && !matches!(value.kind, TirExprKind::Move { .. })
                 {
                     self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
                 }
@@ -8597,6 +8573,7 @@ impl Codegen {
             TirExprKind::VariantConstruct { fields, .. } => {
                 fields.iter().any(Self::expr_needs_async_scratch_locals)
             }
+            TirExprKind::Move { value } => Self::expr_needs_async_scratch_locals(value),
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -8856,6 +8833,9 @@ impl Codegen {
             }
             TirExprKind::Cast { expr, .. } => {
                 self.collect_copy_types_from_expr(expr, type_table, needed_types);
+            }
+            TirExprKind::Move { value } => {
+                self.collect_copy_types_from_expr(value, type_table, needed_types);
             }
             _ => {}
         }
@@ -9167,6 +9147,9 @@ impl Codegen {
             }
             TirExprKind::Assign { target, value } => {
                 Self::count_indirect_calls_in_expr(target, type_table, codegen, counts);
+                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
+            }
+            TirExprKind::Move { value } => {
                 Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
             }
             _ => {}

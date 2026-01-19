@@ -250,10 +250,9 @@ This project uses [mise](https://mise.jdx.dev/) for development tool version man
 
 Run `make on-task-started` to install mise and all required development tools automatically.
 
-### Building and Testing
+### Development Tasks
 
 ```sh
-make build
 make test
 
 make hello     # generates example/hello.wat and example/hello.wasm
