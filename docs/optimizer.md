@@ -16,6 +16,7 @@ WebAssembly 3.0 (released September 17, 2025) provides a rich set of native inst
 - **SIMD (future):** Use `v128` vector instructions for parallel operations
 
 This approach:
+
 - Reduces compiler complexity
 - Leverages runtime optimizations (JIT compilers optimize Wasm instructions)
 - Produces smaller compiled output
@@ -27,12 +28,12 @@ See [WebAssembly-Native Instruction Opportunities](#webassembly-native-instructi
 
 The Wado compiler supports four optimization levels:
 
-| Level | Flag | Optimizations | Target Use Case |
-|-------|------|---------------|-----------------|
-| **None** | `-O0` (default) | No optimizations, all features enabled | Debugging |
-| **Basic** | `-O1` | DCE + unreachable function removal | Development builds |
-| **Full** | `-O2` | Function inlining + DCE + unreachable removal | Server-side production |
-| **Size** | `-Os` | Full optimizations + name section stripping | Client-side/frontend |
+| Level     | Flag            | Optimizations                                 | Target Use Case        |
+| --------- | --------------- | --------------------------------------------- | ---------------------- |
+| **None**  | `-O0` (default) | No optimizations, all features enabled        | Debugging              |
+| **Basic** | `-O1`           | DCE + unreachable function removal            | Development builds     |
+| **Full**  | `-O2`           | Function inlining + DCE + unreachable removal | Server-side production |
+| **Size**  | `-Os`           | Full optimizations + name section stripping   | Client-side/frontend   |
 
 ## Implemented Optimizations
 
@@ -43,6 +44,7 @@ The Wado compiler supports four optimization levels:
 **Description:** Removes unreachable functions from the compiled output based on reachability analysis from the entry point (`run()` function).
 
 **Algorithm:**
+
 1. Build call graph from all functions in all modules
 2. Perform depth-first search (DFS) reachability analysis from entry point
 3. Mark functions as reachable if called transitively from entry point
@@ -51,12 +53,14 @@ The Wado compiler supports four optimization levels:
 **Implementation:** `wado-compiler/src/optimize.rs`
 
 **Handles:**
+
 - Free functions
 - Methods (instance and static)
 - Generic methods with monomorphization tracking
 - Transitive call chains
 
 **Limitations:**
+
 - Only function-level DCE (no statement/expression-level dead code removal)
 - Cannot eliminate dead branches within reachable functions
 - Entry point fixed to `run()` function
@@ -68,6 +72,7 @@ The Wado compiler supports four optimization levels:
 **Description:** Eliminates function call overhead by replacing small pure function calls with their body statements.
 
 **Algorithm:**
+
 1. Identify inline-eligible functions (< 20 statements, pure, non-recursive)
 2. Perform inline at call sites with local variable remapping
 3. Track string literals from inlined functions
@@ -78,6 +83,7 @@ The Wado compiler supports four optimization levels:
 **Implementation:** `wado-compiler/src/optimize.rs:553-978`
 
 **Eligibility Criteria:**
+
 - ✅ Must have a function body
 - ✅ NOT from core library (`module_path[0] != "core"`)
 - ✅ NO effects (pure functions only)
@@ -90,6 +96,7 @@ The Wado compiler supports four optimization levels:
 - ✅ Statement count < 20
 
 **Limitations:**
+
 - Single-module only (cross-module inlining not supported due to TypeId translation complexity)
 - Pure functions only (cannot inline functions with effects)
 - No early returns (complex control flow not supported)
@@ -104,6 +111,7 @@ The Wado compiler supports four optimization levels:
 **Description:** Includes only WASI functions, effects, and builtins that are actually used by reachable code.
 
 **Tracks:**
+
 - **Effect Usage:** Which WASI effects are called (Stdout, Stderr, Environment, MonotonicClock, Exit)
 - **WASI Function Usage:** Specific operations on effects (e.g., `Stdout::write_via_stream`)
 - **Builtin Usage:** Canonical builtins (stream operations, float-to-string, memory management)
@@ -112,10 +120,12 @@ The Wado compiler supports four optimization levels:
 **Implementation:** `wado-compiler/src/optimize.rs:1168-1460`
 
 **Standard Effects:**
+
 - `Stdout`, `Stderr`, `Environment`, `MonotonicClock` (always available)
 - `Exit` (requires explicit usage)
 
 **Canonical Builtins:**
+
 - Stream intrinsics: `stream-new`, `stream-write`, `stream-drop-writable`, `stream-drop-readable`
 - Async/task: `task-return`, `waitable-set-new`, `waitable-join`, `waitable-set-wait`, `subtask-drop`
 - Memory: `realloc` (always included)
@@ -136,6 +146,7 @@ The Wado compiler supports four optimization levels:
 **Description:** Identifies recursive functions using call graph cycle detection to exclude them from inlining.
 
 **Algorithm:**
+
 1. Build call graph (function name → called function names)
 2. For each function, check if it can reach itself via call chains
 3. Mark as recursive if found in any cycle
@@ -163,6 +174,7 @@ Analysis of `benchmark/sieve.wado` compiled with `-O2` reveals these critical op
 **Description:** Transform expensive loop operations into cheaper equivalent operations.
 
 **Problem Identified in Sieve:**
+
 ```wasm
 ;; Current WAT output (lines 619-620, 631-632):
 local.get 8    ;; p
@@ -174,6 +186,7 @@ The sieve benchmark computes `p*p` twice per outer loop iteration - once for the
 
 **Proposed Solution:**
 Replace multiplication with addition for induction variables:
+
 ```wado
 // Before (current)
 while p * p <= limit {
@@ -191,6 +204,7 @@ while p_squared <= limit {
 ```
 
 **Patterns to Detect:**
+
 - `base + counter * step` where counter increments by 1 → replace with accumulator
 - `counter * constant` in loops → replace with addition
 - `x * x` (squaring) in loops → maintain squared value separately
@@ -198,6 +212,7 @@ while p_squared <= limit {
 **Implementation Location:** `wado-compiler/src/optimize.rs:1462-1500` (currently placeholder)
 
 **References:**
+
 - [CSC D70: Compiler Optimization LICM](http://www.cs.toronto.edu/~pekhimenko/courses/cscd70-w18/docs/Lecture%205%20%5BLICM%20and%20Strength%20Reduction%5D%2002.08.2018.pdf)
 - [Cornell CS 6120: Strength Reduction](https://www.cs.cornell.edu/courses/cs6120/2019fa/blog/strength-reduction-pass-in-llvm/)
 
@@ -210,6 +225,7 @@ while p_squared <= limit {
 **Description:** Move computations that produce the same value in every iteration to immediately before the loop entry.
 
 **Problem Identified:**
+
 ```wado
 // Current code has redundant p*p computation
 while p * p <= limit {
@@ -222,6 +238,7 @@ while p * p <= limit {
 ```
 
 **Proposed Solution:**
+
 ```wado
 // After LICM
 let p_squared = p * p;
@@ -236,17 +253,20 @@ while p_squared <= limit {
 ```
 
 **Algorithm:**
+
 1. Identify loop boundaries and preheader blocks
 2. Find computations that reference only loop-invariant values
 3. Check for side effects and dependencies
 4. Move eligible computations to preheader block
 
 **Benefits:**
+
 - Eliminates redundant calculations in every iteration
 - Works synergistically with strength reduction
 - Improves performance for tight loops
 
 **References:**
+
 - [Loop-Invariant Code Motion](https://grokipedia.com/page/Loop-invariant_code_motion)
 - [Loop Optimizations Guide](https://johnnysswlab.com/loop-optimizations-interpreting-the-compiler-optimization-report/)
 
@@ -259,6 +279,7 @@ while p_squared <= limit {
 **Description:** Remove redundant array bounds checks when the compiler can prove indices are within bounds.
 
 **Problem Identified:**
+
 ```wado
 // Sieve has many array accesses in tight loops
 while n <= limit {
@@ -271,21 +292,25 @@ while n <= limit {
 
 **Proposed Solution:**
 Use value range propagation to prove `n` is always within `[0, limit]`:
+
 - Loop condition ensures `n <= limit`
 - Array size is `limit + 1`
 - Therefore bounds check is redundant
 
 **Algorithm:**
+
 1. Track value ranges for loop variables
 2. Compare against array bounds
 3. Eliminate checks when range is provably safe
 
 **Benefits:**
+
 - Reduces overhead in array-heavy loops
 - Particularly important for safe languages like Wado
 - Can provide 10-30% speedup for array-intensive code
 
 **References:**
+
 - [Array Bounds Check Elimination in CLR](https://learn.microsoft.com/en-us/archive/blogs/clrcodegeneration/array-bounds-check-elimination-in-the-clr)
 - [Java HotSpot Bounds Check Elimination](https://www.researchgate.net/publication/221302947_Array_bounds_check_elimination_for_the_Java_HotSpot_client_compiler)
 
@@ -300,6 +325,7 @@ Use value range propagation to prove `n` is always within `[0, limit]`:
 **Description:** Evaluate constant expressions at compile time rather than runtime.
 
 **Examples:**
+
 ```wado
 let x = 2 + 3;           // → let x = 5;
 let y = 10000000 + 1;    // → let y = 10000001;
@@ -307,16 +333,19 @@ let z = true && false;   // → let z = false;
 ```
 
 **Algorithm:**
+
 1. Identify expressions with all constant operands
 2. Evaluate at compile time
 3. Replace expression with constant result
 
 **Implementation Notes:**
+
 - Should be applied after each optimization pass
 - Works synergistically with constant propagation
 - LLVM implicitly folds away constants as instructions are created
 
 **References:**
+
 - [Constant Folding - Wikipedia](https://en.wikipedia.org/wiki/Constant_folding)
 - [LLVM Passes Documentation](https://llvm.org/docs/Passes.html)
 
@@ -329,6 +358,7 @@ let z = true && false;   // → let z = false;
 **Description:** Replace variable uses with their constant values when known.
 
 **Examples:**
+
 ```wado
 let limit = 10000000;
 let size = limit + 1;    // Can propagate limit = 10000000
@@ -336,20 +366,24 @@ let size = limit + 1;    // Can propagate limit = 10000000
 ```
 
 **Algorithm:**
+
 1. Track assignments of constants to variables
 2. For each use of the variable, check if all reaching definitions assign the same constant
 3. Replace variable use with constant value
 
 **Variants:**
+
 - **Sparse Conditional Constant Propagation (SCCP):** More powerful variant that handles branches
 - **Interprocedural Constant Propagation:** Across function boundaries
 
 **Benefits:**
+
 - Enables constant folding
 - Enables dead code elimination (for conditions)
 - Reduces runtime variable lookups
 
 **References:**
+
 - [LLVM Constant Propagation](https://releases.llvm.org/2.6/docs/Passes.html)
 - [Unlocking Performance with LLVM](https://saliktariq.medium.com/unlocking-performance-potential-exploring-advanced-compiler-optimization-in-llvm-for-c-578b3a3f091a)
 
@@ -362,6 +396,7 @@ let size = limit + 1;    // Can propagate limit = 10000000
 **Description:** Identify identical subexpressions and replace with a single computation.
 
 **Example:**
+
 ```wado
 let a = x + y * z;
 let b = x + y * z;  // Same expression
@@ -372,19 +407,23 @@ let b = temp;
 ```
 
 **Algorithm:**
+
 1. Build expression tree for each statement
 2. Hash expressions to find duplicates
 3. Replace duplicates with temporary variable
 
 **Scope:**
+
 - **Local CSE:** Within a basic block
 - **Global CSE:** Across basic blocks using dominance analysis
 
 **Benefits:**
+
 - Reduces computation
 - Works well with LICM (common expressions in loops)
 
 **References:**
+
 - [CMU Lecture on CSE](https://www.cs.cmu.edu/~janh/courses/411/23/lec/18-peepsub.pdf)
 - [Stanford CS143 Optimization](https://web.stanford.edu/class/cs143/lectures/lecture14.pdf)
 
@@ -397,6 +436,7 @@ let b = temp;
 **Description:** Replace uses of a variable that is a copy of another variable with the original.
 
 **Example:**
+
 ```wado
 let x = a;
 let y = x + b;  // x is a copy of a
@@ -406,11 +446,13 @@ let y = a + b;  // Use original a
 ```
 
 **Algorithm:**
+
 1. Identify copy assignments (`x = y`)
 2. Track reaching definitions
 3. Replace uses of copy with original when safe
 
 **Benefits:**
+
 - Reduces register pressure
 - Enables dead store elimination
 - Simplifies dataflow
@@ -424,6 +466,7 @@ let y = a + b;  // Use original a
 **Description:** Perform pattern matching on small instruction sequences and replace with more efficient equivalents.
 
 **Examples:**
+
 ```wado
 x = x + 0;      // → (delete)
 x = x * 1;      // → (delete)
@@ -433,12 +476,14 @@ x = not not x;  // → (delete)
 ```
 
 **Algorithm:**
+
 1. Define pattern rules (pattern → replacement)
 2. Scan code with sliding window (3-4 instructions)
 3. Match patterns and apply transformations
 4. Apply algebraic simplifications
 
 **References:**
+
 - [Peephole Optimization - GeeksforGeeks](https://www.geeksforgeeks.org/compiler-design/peephole-optimization-in-compiler-design/)
 - [Peephole Optimization - Wikipedia](https://en.wikipedia.org/wiki/Peephole_optimization)
 
@@ -455,6 +500,7 @@ Note: LLVM implements over 1000 peephole optimizations.
 **Description:** Break up struct allocations into individual scalar variables when possible.
 
 **Example:**
+
 ```wado
 struct Point { x: i32, y: i32 }
 let p = Point { x: 1, y: 2 };
@@ -467,11 +513,13 @@ let sum = p_x + p_y;
 ```
 
 **Benefits:**
+
 - Enables scalar optimizations (CSE, constant propagation)
 - Reduces memory allocation
 - Better register allocation
 
 **References:**
+
 - [LLVM SROA](https://llvm.org/docs/Passes.html)
 - [GCC Scalar Replacement](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
 
@@ -484,6 +532,7 @@ let sum = p_x + p_y;
 **Description:** Remove assignments to variables that are never subsequently read.
 
 **Example:**
+
 ```wado
 let mut x = 1;
 x = 2;          // Dead store (overwritten)
@@ -492,6 +541,7 @@ return x;
 ```
 
 **Algorithm:**
+
 1. Perform liveness analysis (which variables are live at each point)
 2. Remove stores to variables that are not live after the store
 
@@ -506,6 +556,7 @@ return x;
 **WebAssembly Support:** Part of Wasm 3.0 standard (September 17, 2025). The `return_call`, `return_call_ref`, and `return_call_indirect` instructions are tail-call variants that first return from the current function before performing the call, with a guarantee that no sequence of nested calls can cause stack overflow.
 
 **Example:**
+
 ```wado
 fn factorial(n: i32, acc: i32) -> i32 {
     if n == 0 {
@@ -516,6 +567,7 @@ fn factorial(n: i32, acc: i32) -> i32 {
 ```
 
 Compiles to:
+
 ```wat
 (func $factorial (param $n i32) (param $acc i32) (result i32)
   (if (i32.eqz (local.get $n))
@@ -529,11 +581,13 @@ Compiles to:
 ```
 
 **Implementation Strategy:**
+
 1. Detect tail-call pattern: `return` statement with function call as direct child
 2. Emit `return_call` instruction instead of `call` + `return`
 3. Works for both direct calls (`return_call`) and indirect calls (`return_call_indirect`)
 
 **Benefits:**
+
 - Eliminates stack overflow for deep recursion
 - Reduces function call overhead
 - **Simple implementation** - just emit different Wasm instruction
@@ -541,6 +595,7 @@ Compiles to:
 - No complex loop transformation needed
 
 **References:**
+
 - [WebAssembly Tail Call Proposal](https://github.com/WebAssembly/tail-call/blob/main/proposals/tail-call/Overview.md)
 - [V8 WebAssembly Tail Calls](https://v8.dev/blog/wasm-tail-call)
 - [Wasm 3.0 Release](https://webassembly.org/news/2025-09-17-wasm-3.0/)
@@ -554,6 +609,7 @@ Compiles to:
 **Description:** Replicate loop body multiple times to reduce loop overhead.
 
 **Why Not Recommended for WebAssembly:**
+
 - **Increases instruction count** - More bytes to download, parse, and JIT-compile
 - **Wasm runtimes already optimize loops** - V8, SpiderMonkey, and other JIT compilers perform their own loop optimizations
 - **Code size matters** - WebAssembly is often used in browsers where download size affects startup time
@@ -572,6 +628,7 @@ builtin::array_fill(arr.repr, 0, 0, 100);  // Fill 100 elements with 0
 ```
 
 **Tradeoffs:**
+
 - ❌ Increases code size significantly
 - ❌ May hurt instruction cache performance
 - ❌ Benefit highly dependent on target hardware
@@ -587,6 +644,7 @@ builtin::array_fill(arr.repr, 0, 0, 100);  // Fill 100 elements with 0
 **Description:** Apply algebraic laws to simplify expressions.
 
 **Examples:**
+
 ```wado
 x + 0       → x
 x * 1       → x
@@ -608,6 +666,7 @@ x ^ x       → 0
 **Description:** Remove branches that always take the same path.
 
 **Example:**
+
 ```wado
 if true {
     println("always");
@@ -642,6 +701,7 @@ These optimizations could be applied at the WAT/Wasm level or delegated to Binar
 **Description:** Infer constant values and exact types in a whole-program manner.
 
 **Benefits:**
+
 - Particularly helpful for WasmGC
 - Infers exact types for better optimization
 
@@ -665,6 +725,7 @@ This section details WebAssembly 3.0 instructions that Wado should expose and us
 ### Already Implemented ✅
 
 **GC Array Operations:**
+
 - `array.new` - Create new array with default value
 - `array.new_fixed` - Create array with specific values
 - `array.get` - Read array element
@@ -674,6 +735,7 @@ This section details WebAssembly 3.0 instructions that Wado should expose and us
 - `array.copy` - Copy between arrays (✅ **exposed as `builtin::array_copy`**)
 
 **GC Struct Operations:**
+
 - `struct.new` - Create new struct instance
 - `struct.get` - Read struct field
 - `struct.set` - Write struct field
@@ -687,6 +749,7 @@ This section details WebAssembly 3.0 instructions that Wado should expose and us
 **Status:** ❌ Not exposed
 
 **Instructions:**
+
 - `return_call` - Direct tail call
 - `return_call_indirect` - Indirect tail call
 - `return_call_ref` - Reference-based tail call
@@ -694,6 +757,7 @@ This section details WebAssembly 3.0 instructions that Wado should expose and us
 **Implementation:** Detect `return func(...)` pattern in TIR, emit `return_call` instead of `call` + `return`
 
 **Benefits:**
+
 - Eliminates recursion stack overflow
 - Zero-cost recursion
 - Simpler than loop transformation
@@ -707,6 +771,7 @@ This section details WebAssembly 3.0 instructions that Wado should expose and us
 **Instruction:** `select` - Choose between two values based on condition without branching
 
 **Example:**
+
 ```wado
 // Current: generates branch
 let max = if a > b { a } else { b };
@@ -718,6 +783,7 @@ let max = if a > b { a } else { b };
 **Implementation:** Detect ternary-like if expressions, emit `select` for simple value choices
 
 **Benefits:**
+
 - Eliminates branch misprediction penalty
 - More compact code
 - Better for simple conditionals
@@ -729,16 +795,19 @@ let max = if a > b { a } else { b };
 **Status:** ❌ Not exposed
 
 **Instructions:**
+
 - `i32.clz` / `i64.clz` - Count leading zeros
 - `i32.ctz` / `i64.ctz` - Count trailing zeros
 - `i32.popcnt` / `i64.popcnt` - Count set bits (population count)
 
 **Example Use Cases:**
+
 - `clz` - Find highest set bit, compute log2
 - `ctz` - Find lowest set bit, isolate rightmost bit
 - `popcnt` - Hamming weight, bit counting algorithms
 
 **Implementation:** Add to `core/builtin.wado`:
+
 ```wado
 fn i32_clz(x: i32) -> i32;   // Count leading zeros
 fn i32_ctz(x: i32) -> i32;   // Count trailing zeros
@@ -749,6 +818,7 @@ fn i64_popcnt(x: i64) -> i32;
 ```
 
 **Benefits:**
+
 - Single instruction vs. loop-based implementations
 - Essential for bit manipulation algorithms
 - Standard in most ISAs (x86 `bsr`/`bsf`/`popcnt`, ARM `clz`)
@@ -760,10 +830,12 @@ fn i64_popcnt(x: i64) -> i32;
 **Status:** ❌ Not exposed (memory operations)
 
 **Instructions:**
+
 - `memory.fill` - Fill memory region with byte value
 - `memory.copy` - Copy memory region (handles overlapping)
 
 **Example:**
+
 ```wado
 // Zero-initialize buffer
 builtin::memory_fill(ptr, 0, size);
@@ -773,12 +845,14 @@ builtin::memory_copy(dst, src, size);
 ```
 
 **Implementation:** Add to `core/builtin.wado`:
+
 ```wado
 fn memory_fill(dst: i32, value: i32, size: i32);
 fn memory_copy(dst: i32, src: i32, size: i32);
 ```
 
 **Benefits:**
+
 - Optimized by runtime (often maps to platform memcpy/memset)
 - Handles overlapping regions correctly
 - Much faster than byte-by-byte loops
@@ -792,6 +866,7 @@ fn memory_copy(dst: i32, src: i32, size: i32);
 **Status:** ❌ Not exposed
 
 **Instructions:**
+
 - `i32.min_s` / `i32.min_u` - Signed/unsigned minimum
 - `i32.max_s` / `i32.max_u` - Signed/unsigned maximum
 - Similar for `i64`
@@ -803,6 +878,7 @@ fn memory_copy(dst: i32, src: i32, size: i32);
 **Status:** Likely already used by codegen
 
 **Instructions:**
+
 - `i32.extend8_s`, `i32.extend16_s` - Sign-extend 8/16 bits to 32
 - `i64.extend8_s`, `i64.extend16_s`, `i64.extend32_s` - Sign-extend to 64
 
@@ -813,15 +889,18 @@ fn memory_copy(dst: i32, src: i32, size: i32);
 **Instructions:** `v128` vector operations for parallel integer/float arithmetic
 
 **Use Cases:**
+
 - Array operations (map, filter, reduce)
 - Numerical computations
 - Image/audio processing
 
 **Benefits:**
+
 - Process 4× i32 or 2× i64 in parallel
 - Essential for high-performance numerical code
 
 **Considerations:**
+
 - Adds complexity to type system
 - Requires auto-vectorization analysis or explicit SIMD operations
 - Best for specific performance-critical code paths
@@ -830,18 +909,18 @@ fn memory_copy(dst: i32, src: i32, size: i32);
 
 ### Summary: Prefer Wasm Instructions Over Compiler Transforms
 
-| Optimization Goal | ❌ Don't Do This | ✅ Do This Instead |
-|-------------------|------------------|-------------------|
-| Tail recursion | Convert to loop | Emit `return_call` |
-| Array initialization | Emit loop | Use `array.fill` |
-| Array copy | Emit loop | Use `array.copy` |
-| Memory copy | Byte-by-byte loop | Use `memory.copy` |
-| Memory zero | Byte-by-byte loop | Use `memory.fill` |
-| Conditional value | Branch + PHI | Use `select` |
-| Count bits | Loop with shifts | Use `popcnt` |
-| Find first bit | Loop with shifts | Use `clz` / `ctz` |
-| Min/max | Branch comparison | Use `min` / `max` |
-| Loop unrolling | Replicate code 4× | ❌ Don't - increases size |
+| Optimization Goal    | ❌ Don't Do This  | ✅ Do This Instead        |
+| -------------------- | ----------------- | ------------------------- |
+| Tail recursion       | Convert to loop   | Emit `return_call`        |
+| Array initialization | Emit loop         | Use `array.fill`          |
+| Array copy           | Emit loop         | Use `array.copy`          |
+| Memory copy          | Byte-by-byte loop | Use `memory.copy`         |
+| Memory zero          | Byte-by-byte loop | Use `memory.fill`         |
+| Conditional value    | Branch + PHI      | Use `select`              |
+| Count bits           | Loop with shifts  | Use `popcnt`              |
+| Find first bit       | Loop with shifts  | Use `clz` / `ctz`         |
+| Min/max              | Branch comparison | Use `min` / `max`         |
+| Loop unrolling       | Replicate code 4× | ❌ Don't - increases size |
 
 This approach reduces compiler complexity while producing better code that leverages runtime optimizations.
 
@@ -857,6 +936,7 @@ This approach reduces compiler complexity while producing better code that lever
 4. **Select Instruction** - Optimize simple `if` expressions to `select`
 
 **Expected Impact:**
+
 - Enables zero-cost recursion
 - Provides essential bit operations
 - Faster memory operations
@@ -904,28 +984,33 @@ This approach reduces compiler complexity while producing better code that lever
 ## References
 
 ### Loop Optimizations
+
 - [CSC D70: Compiler Optimization LICM](http://www.cs.toronto.edu/~pekhimenko/courses/cscd70-w18/docs/Lecture%205%20%5BLICM%20and%20Strength%20Reduction%5D%2002.08.2018.pdf)
 - [Loop-Invariant Code Motion](https://grokipedia.com/page/Loop-invariant_code_motion)
 - [Loop Optimizations Guide](https://johnnysswlab.com/loop-optimizations-interpreting-the-compiler-optimization-report/)
 - [Cornell CS 6120: Loop Reduction](https://www.cs.cornell.edu/courses/cs6120/2019fa/blog/loop-reduction/)
 
 ### LLVM Optimizations
+
 - [LLVM's Analysis and Transform Passes](https://llvm.org/docs/Passes.html)
 - [LLVM Constant Propagation](https://releases.llvm.org/2.6/docs/Passes.html)
 - [Unlocking Performance with LLVM](https://saliktariq.medium.com/unlocking-performance-potential-exploring-advanced-compiler-optimization-in-llvm-for-c-578b3a3f091a)
 - [How LLVM Optimizes](https://blog.regehr.org/archives/1603)
 
 ### Bounds Check Elimination
+
 - [Array Bounds Check Elimination in CLR](https://learn.microsoft.com/en-us/archive/blogs/clrcodegeneration/array-bounds-check-elimination-in-the-clr)
 - [Java HotSpot Bounds Check Elimination](https://www.researchgate.net/publication/221302947_Array_bounds_check_elimination_for_the_Java_HotSpot_client_compiler)
 - [Scalar Replacement of Aggregates](https://www.researchgate.net/publication/261615418_Inter-iteration_Scalar_Replacement_Using_Array_SSA_Form)
 
 ### Peephole and Local Optimizations
+
 - [CMU Lecture on Peephole and CSE](https://www.cs.cmu.edu/~janh/courses/411/23/lec/18-peepsub.pdf)
 - [Peephole Optimization - GeeksforGeeks](https://www.geeksforgeeks.org/compiler-design/peephole-optimization-in-compiler-design/)
 - [Peephole Optimization - Wikipedia](https://en.wikipedia.org/wiki/Peephole_optimization)
 
 ### WebAssembly Instructions and Features
+
 - [Wasm 3.0 Release (September 17, 2025)](https://webassembly.org/news/2025-09-17-wasm-3.0/)
 - [WebAssembly 3.0 Instructions Specification](https://webassembly.github.io/spec/core/syntax/instructions.html)
 - [WebAssembly Tail Call Proposal](https://github.com/WebAssembly/tail-call/blob/main/proposals/tail-call/Overview.md)
@@ -937,12 +1022,14 @@ This approach reduces compiler complexity while producing better code that lever
 - [V8 WebAssembly SIMD](https://v8.dev/features/simd)
 
 ### WebAssembly Optimizations and Tools
+
 - [Binaryen Optimizer Cookbook](https://github.com/WebAssembly/binaryen/wiki/Optimizer-Cookbook)
 - [Mastering WebAssembly Optimization](https://compile7.org/decompile/webassembly-optimization-strategies)
 - [V8 Speculative WebAssembly Optimizations](https://v8.dev/blog/wasm-speculative-optimizations)
 - [Compiling to Wasm with Binaryen](https://web.dev/articles/binaryen)
 
 ### General Compiler Optimization
+
 - [Optimizing Compiler - Wikipedia](https://en.wikipedia.org/wiki/Optimizing_compiler)
 - [GCC Optimization Options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
 - [Can You Trust a Compiler to Optimize?](https://matklad.github.io/2023/04/09/can-you-trust-a-compiler-to-optimize-your-code.html)
