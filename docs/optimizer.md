@@ -2,6 +2,27 @@
 
 This document describes the optimization features implemented in the Wado compiler and planned optimizations for future development.
 
+## Philosophy: Leverage WebAssembly Native Instructions
+
+**Key Principle:** When WebAssembly provides native instructions for a feature, use them directly rather than implementing complex compiler transformations.
+
+WebAssembly 3.0 (released September 17, 2025) provides a rich set of native instructions that should be preferred over compiler-based transformations:
+
+- **Tail Calls:** Use `return_call`/`return_call_indirect` instead of converting to loops
+- **Bulk Operations:** Use `array.copy`, `array.fill`, `memory.copy`, `memory.fill`
+- **Bit Operations:** Use `i32.clz`, `i32.ctz`, `i32.popcnt` for efficient bit manipulation
+- **Branchless Code:** Use `select` instruction for conditional values without branches
+- **GC Operations:** Already using `array.new`, `struct.new`, `array.get`, `array.set`
+- **SIMD (future):** Use `v128` vector instructions for parallel operations
+
+This approach:
+- Reduces compiler complexity
+- Leverages runtime optimizations (JIT compilers optimize Wasm instructions)
+- Produces smaller compiled output
+- Maintains better portability across Wasm runtimes
+
+See [WebAssembly-Native Instruction Opportunities](#webassembly-native-instruction-opportunities) section below for details.
+
 ## Optimization Levels
 
 The Wado compiler supports four optimization levels:
@@ -474,13 +495,15 @@ return x;
 1. Perform liveness analysis (which variables are live at each point)
 2. Remove stores to variables that are not live after the store
 
-### 11. Tail Call Optimization ⭐
+### 11. Tail Call Optimization via `return_call` ⭐⭐
 
-**Status:** ❌ Not Implemented
+**Status:** ❌ Not Implemented (but straightforward - use Wasm instruction directly)
 
-**Priority:** LOW - Useful for recursive algorithms
+**Priority:** MEDIUM - Useful for recursive algorithms, leverages native Wasm feature
 
-**Description:** Convert tail-recursive calls into loops to avoid stack overflow.
+**Description:** Emit WebAssembly's `return_call` and `return_call_indirect` instructions for tail-recursive function calls instead of converting to loops.
+
+**WebAssembly Support:** Part of Wasm 3.0 standard (September 17, 2025). The `return_call`, `return_call_ref`, and `return_call_indirect` instructions are tail-call variants that first return from the current function before performing the call, with a guarantee that no sequence of nested calls can cause stack overflow.
 
 **Example:**
 ```wado
@@ -490,59 +513,70 @@ fn factorial(n: i32, acc: i32) -> i32 {
     }
     return factorial(n - 1, n * acc);  // Tail call
 }
-
-// After TCO:
-fn factorial(n: i32, acc: i32) -> i32 {
-    loop {
-        if n == 0 {
-            return acc;
-        }
-        let new_n = n - 1;
-        let new_acc = n * acc;
-        n = new_n;
-        acc = new_acc;
-    }
-}
 ```
+
+Compiles to:
+```wat
+(func $factorial (param $n i32) (param $acc i32) (result i32)
+  (if (i32.eqz (local.get $n))
+    (then (return (local.get $acc)))
+  )
+  (return_call $factorial  ;; Use return_call instead of call + return
+    (i32.sub (local.get $n) (i32.const 1))
+    (i32.mul (local.get $n) (local.get $acc))
+  )
+)
+```
+
+**Implementation Strategy:**
+1. Detect tail-call pattern: `return` statement with function call as direct child
+2. Emit `return_call` instruction instead of `call` + `return`
+3. Works for both direct calls (`return_call`) and indirect calls (`return_call_indirect`)
 
 **Benefits:**
 - Eliminates stack overflow for deep recursion
 - Reduces function call overhead
-- Enables recursive algorithms to run in constant space
+- **Simple implementation** - just emit different Wasm instruction
+- Leverages runtime optimizations
+- No complex loop transformation needed
 
-### 12. Loop Unrolling ⭐
+**References:**
+- [WebAssembly Tail Call Proposal](https://github.com/WebAssembly/tail-call/blob/main/proposals/tail-call/Overview.md)
+- [V8 WebAssembly Tail Calls](https://v8.dev/blog/wasm-tail-call)
+- [Wasm 3.0 Release](https://webassembly.org/news/2025-09-17-wasm-3.0/)
+
+### 12. Loop Unrolling ⚠️ (Not Recommended for Wasm)
 
 **Status:** ❌ Not Implemented
 
-**Priority:** LOW - Hardware-dependent benefit
+**Priority:** VERY LOW / NOT RECOMMENDED - Increases code size without clear benefit
 
-**Description:** Replicate loop body multiple times to reduce loop overhead and enable vectorization.
+**Description:** Replicate loop body multiple times to reduce loop overhead.
 
-**Example:**
+**Why Not Recommended for WebAssembly:**
+- **Increases instruction count** - More bytes to download, parse, and JIT-compile
+- **Wasm runtimes already optimize loops** - V8, SpiderMonkey, and other JIT compilers perform their own loop optimizations
+- **Code size matters** - WebAssembly is often used in browsers where download size affects startup time
+- **Vectorization should use SIMD** - If parallel operations are needed, use Wasm SIMD (`v128`) instead
+
+**Better Alternative:**
+Use `array.fill` for bulk initialization or SIMD instructions for parallel operations:
+
 ```wado
-// Before
-for let mut i = 0; i < 100; i += 1 {
-    arr[i] = 0;
-}
+// Instead of loop unrolling, use array.fill
+let arr: Array<i32> = [];
+builtin::array_fill(arr.repr, 0, 0, 100);  // Fill 100 elements with 0
 
-// After (unroll factor 4)
-for let mut i = 0; i < 100; i += 4 {
-    arr[i] = 0;
-    arr[i+1] = 0;
-    arr[i+2] = 0;
-    arr[i+3] = 0;
-}
+// Or for operations that can be vectorized, use SIMD (future)
+// v128.add, v128.mul, etc.
 ```
 
-**Benefits:**
-- Reduces loop overhead (fewer iterations)
-- Enables instruction-level parallelism
-- Can enable vectorization
-
 **Tradeoffs:**
-- Increases code size
-- May hurt instruction cache performance
-- Benefit highly dependent on target hardware
+- ❌ Increases code size significantly
+- ❌ May hurt instruction cache performance
+- ❌ Benefit highly dependent on target hardware
+- ❌ Wasm runtimes already perform loop optimizations
+- ❌ Use SIMD or bulk operations instead
 
 ### 13. Algebraic Simplification ⭐
 
@@ -624,7 +658,209 @@ These optimizations could be applied at the WAT/Wasm level or delegated to Binar
 
 **Tool:** Binaryen's `wasm-opt --monomorphize`
 
+## WebAssembly-Native Instruction Opportunities
+
+This section details WebAssembly 3.0 instructions that Wado should expose and use directly, rather than implementing complex compiler transformations.
+
+### Already Implemented ✅
+
+**GC Array Operations:**
+- `array.new` - Create new array with default value
+- `array.new_fixed` - Create array with specific values
+- `array.get` - Read array element
+- `array.set` - Write array element
+- `array.len` - Get array length
+- `array.fill` - Fill array slice with value (✅ **exposed as `builtin::array_fill`**)
+- `array.copy` - Copy between arrays (✅ **exposed as `builtin::array_copy`**)
+
+**GC Struct Operations:**
+- `struct.new` - Create new struct instance
+- `struct.get` - Read struct field
+- `struct.set` - Write struct field
+
+**Optimization Benefit:** Immutable arrays enable CSE and LICM optimizations - `array.get` on immutable arrays is idempotent and can be deduplicated.
+
+### High Priority - Should Implement 🎯
+
+#### 1. Tail Call Instructions
+
+**Status:** ❌ Not exposed
+
+**Instructions:**
+- `return_call` - Direct tail call
+- `return_call_indirect` - Indirect tail call
+- `return_call_ref` - Reference-based tail call
+
+**Implementation:** Detect `return func(...)` pattern in TIR, emit `return_call` instead of `call` + `return`
+
+**Benefits:**
+- Eliminates recursion stack overflow
+- Zero-cost recursion
+- Simpler than loop transformation
+
+**Reference:** [WebAssembly Tail Call Proposal](https://github.com/WebAssembly/tail-call/blob/main/proposals/tail-call/Overview.md)
+
+#### 2. Branchless Conditional - `select`
+
+**Status:** ❌ Not exposed
+
+**Instruction:** `select` - Choose between two values based on condition without branching
+
+**Example:**
+```wado
+// Current: generates branch
+let max = if a > b { a } else { b };
+
+// With select instruction:
+// (select (local.get $a) (local.get $b) (i32.gt_s (local.get $a) (local.get $b)))
+```
+
+**Implementation:** Detect ternary-like if expressions, emit `select` for simple value choices
+
+**Benefits:**
+- Eliminates branch misprediction penalty
+- More compact code
+- Better for simple conditionals
+
+**Expose as:** Could be implicit optimization for `if` expressions, or explicit `builtin::select<T>(cond: bool, if_true: T, if_false: T) -> T`
+
+#### 3. Bit Manipulation Instructions
+
+**Status:** ❌ Not exposed
+
+**Instructions:**
+- `i32.clz` / `i64.clz` - Count leading zeros
+- `i32.ctz` / `i64.ctz` - Count trailing zeros
+- `i32.popcnt` / `i64.popcnt` - Count set bits (population count)
+
+**Example Use Cases:**
+- `clz` - Find highest set bit, compute log2
+- `ctz` - Find lowest set bit, isolate rightmost bit
+- `popcnt` - Hamming weight, bit counting algorithms
+
+**Implementation:** Add to `core/builtin.wado`:
+```wado
+fn i32_clz(x: i32) -> i32;   // Count leading zeros
+fn i32_ctz(x: i32) -> i32;   // Count trailing zeros
+fn i32_popcnt(x: i32) -> i32;  // Population count
+fn i64_clz(x: i64) -> i32;
+fn i64_ctz(x: i64) -> i32;
+fn i64_popcnt(x: i64) -> i32;
+```
+
+**Benefits:**
+- Single instruction vs. loop-based implementations
+- Essential for bit manipulation algorithms
+- Standard in most ISAs (x86 `bsr`/`bsf`/`popcnt`, ARM `clz`)
+
+**Reference:** [WebAssembly 3.0 Instructions](https://webassembly.github.io/spec/core/syntax/instructions.html)
+
+#### 4. Bulk Memory Operations
+
+**Status:** ❌ Not exposed (memory operations)
+
+**Instructions:**
+- `memory.fill` - Fill memory region with byte value
+- `memory.copy` - Copy memory region (handles overlapping)
+
+**Example:**
+```wado
+// Zero-initialize buffer
+builtin::memory_fill(ptr, 0, size);
+
+// Copy buffer (like memcpy but handles overlap)
+builtin::memory_copy(dst, src, size);
+```
+
+**Implementation:** Add to `core/builtin.wado`:
+```wado
+fn memory_fill(dst: i32, value: i32, size: i32);
+fn memory_copy(dst: i32, src: i32, size: i32);
+```
+
+**Benefits:**
+- Optimized by runtime (often maps to platform memcpy/memset)
+- Handles overlapping regions correctly
+- Much faster than byte-by-byte loops
+
+**Reference:** [WebAssembly Bulk Memory Operations](https://github.com/WebAssembly/bulk-memory-operations/blob/master/proposals/bulk-memory-operations/Overview.md)
+
+### Medium Priority
+
+#### 5. Integer Min/Max Instructions
+
+**Status:** ❌ Not exposed
+
+**Instructions:**
+- `i32.min_s` / `i32.min_u` - Signed/unsigned minimum
+- `i32.max_s` / `i32.max_u` - Signed/unsigned maximum
+- Similar for `i64`
+
+**Note:** Part of extended proposals, check Wasm 3.0 support
+
+#### 6. Sign Extension Instructions
+
+**Status:** Likely already used by codegen
+
+**Instructions:**
+- `i32.extend8_s`, `i32.extend16_s` - Sign-extend 8/16 bits to 32
+- `i64.extend8_s`, `i64.extend16_s`, `i64.extend32_s` - Sign-extend to 64
+
+### Future: SIMD (v128)
+
+**Status:** ❌ Not planned yet
+
+**Instructions:** `v128` vector operations for parallel integer/float arithmetic
+
+**Use Cases:**
+- Array operations (map, filter, reduce)
+- Numerical computations
+- Image/audio processing
+
+**Benefits:**
+- Process 4× i32 or 2× i64 in parallel
+- Essential for high-performance numerical code
+
+**Considerations:**
+- Adds complexity to type system
+- Requires auto-vectorization analysis or explicit SIMD operations
+- Best for specific performance-critical code paths
+
+**Reference:** [WebAssembly SIMD](https://github.com/WebAssembly/simd/blob/main/proposals/simd/SIMD.md)
+
+### Summary: Prefer Wasm Instructions Over Compiler Transforms
+
+| Optimization Goal | ❌ Don't Do This | ✅ Do This Instead |
+|-------------------|------------------|-------------------|
+| Tail recursion | Convert to loop | Emit `return_call` |
+| Array initialization | Emit loop | Use `array.fill` |
+| Array copy | Emit loop | Use `array.copy` |
+| Memory copy | Byte-by-byte loop | Use `memory.copy` |
+| Memory zero | Byte-by-byte loop | Use `memory.fill` |
+| Conditional value | Branch + PHI | Use `select` |
+| Count bits | Loop with shifts | Use `popcnt` |
+| Find first bit | Loop with shifts | Use `clz` / `ctz` |
+| Min/max | Branch comparison | Use `min` / `max` |
+| Loop unrolling | Replicate code 4× | ❌ Don't - increases size |
+
+This approach reduces compiler complexity while producing better code that leverages runtime optimizations.
+
 ## Implementation Roadmap
+
+### Phase 0: WebAssembly Native Instructions (Quick Wins)
+
+**Priority:** IMMEDIATE - Simple to implement, immediate benefits
+
+1. **Tail Calls (`return_call`)** - Detect `return func(...)` pattern, emit `return_call`
+2. **Bit Manipulation** - Expose `i32.clz`, `i32.ctz`, `i32.popcnt` in `core/builtin.wado`
+3. **Bulk Memory** - Expose `memory.fill`, `memory.copy` in `core/builtin.wado`
+4. **Select Instruction** - Optimize simple `if` expressions to `select`
+
+**Expected Impact:**
+- Enables zero-cost recursion
+- Provides essential bit operations
+- Faster memory operations
+- **Implementation effort: LOW** (mostly exposing existing Wasm instructions)
 
 ### Phase 1: Critical Loop Optimizations (High-Priority for Sieve)
 
@@ -653,10 +889,10 @@ These optimizations could be applied at the WAT/Wasm level or delegated to Binar
 ### Phase 4: Specialized Optimizations
 
 10. **Scalar Replacement of Aggregates** - Break up structs
-11. **Tail Call Optimization** - Convert tail recursion to loops
-12. **Loop Unrolling** - Reduce loop overhead
+11. **Dead Store Elimination** - Remove unused assignments
+12. **Algebraic Simplification** - Apply algebraic laws
 
-**Expected Impact:** Workload-dependent, 0-20% improvement
+**Expected Impact:** Workload-dependent, 5-15% improvement on struct-heavy code
 
 ## Testing Strategy
 
@@ -689,7 +925,18 @@ These optimizations could be applied at the WAT/Wasm level or delegated to Binar
 - [Peephole Optimization - GeeksforGeeks](https://www.geeksforgeeks.org/compiler-design/peephole-optimization-in-compiler-design/)
 - [Peephole Optimization - Wikipedia](https://en.wikipedia.org/wiki/Peephole_optimization)
 
-### WebAssembly Optimizations
+### WebAssembly Instructions and Features
+- [Wasm 3.0 Release (September 17, 2025)](https://webassembly.org/news/2025-09-17-wasm-3.0/)
+- [WebAssembly 3.0 Instructions Specification](https://webassembly.github.io/spec/core/syntax/instructions.html)
+- [WebAssembly Tail Call Proposal](https://github.com/WebAssembly/tail-call/blob/main/proposals/tail-call/Overview.md)
+- [V8 WebAssembly Tail Calls](https://v8.dev/blog/wasm-tail-call)
+- [WebAssembly Bulk Memory Operations](https://github.com/WebAssembly/bulk-memory-operations/blob/master/proposals/bulk-memory-operations/Overview.md)
+- [WebAssembly GC Proposal](https://github.com/WebAssembly/gc/blob/main/proposals/gc/Overview.md)
+- [A new way to bring GC languages to WebAssembly - V8](https://v8.dev/blog/wasm-gc-porting)
+- [WebAssembly SIMD](https://github.com/WebAssembly/simd/blob/main/proposals/simd/SIMD.md)
+- [V8 WebAssembly SIMD](https://v8.dev/features/simd)
+
+### WebAssembly Optimizations and Tools
 - [Binaryen Optimizer Cookbook](https://github.com/WebAssembly/binaryen/wiki/Optimizer-Cookbook)
 - [Mastering WebAssembly Optimization](https://compile7.org/decompile/webassembly-optimization-strategies)
 - [V8 Speculative WebAssembly Optimizations](https://v8.dev/blog/wasm-speculative-optimizations)
