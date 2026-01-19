@@ -1097,20 +1097,13 @@ fn try_inline_call_expr(
     // Calculate local index offset for remapping
     let local_offset = *local_count;
 
-    // Add space for the callee's locals (excluding parameters)
     let callee_param_count = candidate.params.len() as u32;
     let callee_local_count = candidate.local_count;
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    // Extend local_types for the new locals
-    for i in callee_param_count..callee_local_count {
-        if let Some(&type_id) = candidate.local_types.get(i as usize) {
-            local_types.push(type_id);
-        }
-    }
-    *local_count += new_locals_needed;
-
     // Create argument bindings as let statements
+    // IMPORTANT: Push param types first to match index assignment order
+    // (params get indices local_offset+0, local_offset+1, ..., then non-params follow)
     let mut inlined_stmts = Vec::new();
     let mut param_to_local: HashMap<u32, u32> = HashMap::new();
 
@@ -1135,8 +1128,16 @@ fn try_inline_call_expr(
         ));
     }
 
-    // Remap and inline the body statements
+    // param_offset marks where non-param locals start (after all params)
     let param_offset = local_offset + candidate.params.len() as u32;
+
+    // Now extend local_types for the non-parameter locals
+    for i in callee_param_count..callee_local_count {
+        if let Some(&type_id) = candidate.local_types.get(i as usize) {
+            local_types.push(type_id);
+        }
+    }
+    *local_count += new_locals_needed;
     let (remapped_stmts, final_value) =
         remap_and_extract_return(body, &param_to_local, param_offset, callee_param_count);
 

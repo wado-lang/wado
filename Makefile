@@ -173,7 +173,7 @@ check-bundled:
 .PHONY: benchmark-count-prime
 benchmark-count-prime:
 	@echo "=== Compiling Wado benchmark ==="
-	cargo run --bin wado --quiet -- compile -o benchmark/count_prime.wasm benchmark/count_prime.wado
+	cargo run --bin wado --quiet -- compile -O2 -o benchmark/count_prime.wasm benchmark/count_prime.wado
 	@echo ""
 	@echo "=== Compiling C benchmark ==="
 	cc -O3 -o benchmark/count_prime_c benchmark/count_prime.c
@@ -196,7 +196,7 @@ benchmark-count-prime:
 .PHONY: benchmark-mandelbrot
 benchmark-mandelbrot:
 	@echo "=== Compiling Wado benchmark ==="
-	cargo run --bin wado --quiet -- compile -o benchmark/mandelbrot.wasm benchmark/mandelbrot.wado
+	cargo run --bin wado --quiet -- compile -O2 -o benchmark/mandelbrot.wasm benchmark/mandelbrot.wado
 	@echo ""
 	@echo "=== Compiling C benchmark ==="
 	cc -O3 -ffp-contract=off -o benchmark/mandelbrot_c benchmark/mandelbrot.c
@@ -223,7 +223,7 @@ report-wasm-size:
 .PHONY: benchmark-sieve
 benchmark-sieve:
 	@echo "=== Compiling Wado benchmark ==="
-	cargo run --bin wado --quiet -- compile -o benchmark/sieve.wasm benchmark/sieve.wado
+	cargo run --bin wado --quiet -- compile -O2 -o benchmark/sieve.wasm benchmark/sieve.wado
 	@echo ""
 	@echo "=== Compiling C benchmark ==="
 	cc -O3 -o benchmark/sieve_c benchmark/sieve.c
