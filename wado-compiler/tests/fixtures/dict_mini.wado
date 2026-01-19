@@ -4,86 +4,72 @@
 
 use { println, Stdout } from "core:cli";
 
-// MiniDict uses two parallel arrays for keys and values
-struct MiniDict {
-    keys: Array<String>,
-    values: Array<String>,
+// MiniDict uses an array of [K, V] tuples for entries
+struct MiniDict<K, V> {
+    entries: Array<[K, V]>,
 }
 
-impl MiniDict {
-    fn new() -> MiniDict {
+impl<K, V> MiniDict<K, V> {
+    fn new() -> MiniDict<K, V> {
         return MiniDict {
-            keys: [],
-            values: [],
+            entries: [],
         };
     }
 
-    fn set(&mut self, key: String, value: String) {
-        // Linear search for existing key
-        let mut i = 0;
-        while i < self.keys.len() {
-            if self.keys[i] == key {
+    fn set(&mut self, key: K, value: V) {
+        // Linear search for existing key using C-style for
+        for let mut i = 0; i < self.entries.len(); i += 1 {
+            if self.entries[i].0 == key {
                 // Update existing value
-                self.values[i] = value;
+                self.entries[i] = [key, value];
                 return;
             }
-            i += 1;
         }
         // Key not found, append new entry
-        self.keys.append(key);
-        self.values.append(value);
+        self.entries.append([key, value]);
     }
 
-    fn get(&self, key: String) -> Option<String> {
-        // Linear search for key
-        let mut i = 0;
-        while i < self.keys.len() {
-            if self.keys[i] == key {
-                return Option::<String>::Some(self.values[i]);
+    fn get(&self, key: K) -> Option<V> {
+        // Linear search for key using C-style for
+        for let mut i = 0; i < self.entries.len(); i += 1 {
+            if self.entries[i].0 == key {
+                return Option::<V>::Some(self.entries[i].1);
             }
-            i += 1;
         }
         return null;
     }
 
-    fn has(&self, key: String) -> bool {
-        let mut i = 0;
-        while i < self.keys.len() {
-            if self.keys[i] == key {
+    fn has(&self, key: K) -> bool {
+        for let mut i = 0; i < self.entries.len(); i += 1 {
+            if self.entries[i].0 == key {
                 return true;
             }
-            i += 1;
         }
         return false;
     }
 
-    fn remove(&mut self, key: String) -> bool {
-        let mut i = 0;
-        while i < self.keys.len() {
-            if self.keys[i] == key {
+    fn remove(&mut self, key: K) -> bool {
+        for let mut i = 0; i < self.entries.len(); i += 1 {
+            if self.entries[i].0 == key {
                 // Found the key - remove by shifting elements
-                let mut j = i;
-                while j < self.keys.len() - 1 {
-                    self.keys[j] = self.keys[j + 1];
-                    self.values[j] = self.values[j + 1];
-                    j += 1;
+                for let mut j = i; j < self.entries.len() - 1; j += 1 {
+                    self.entries[j] = self.entries[j + 1];
                 }
                 // Remove last element (now duplicated)
                 // Note: Array doesn't have pop() yet, so this is incomplete
                 return true;
             }
-            i += 1;
         }
         return false;
     }
 
     fn size(&self) -> i32 {
-        return self.keys.len();
+        return self.entries.len();
     }
 }
 
 fn run() with Stdout {
-    let mut dict = MiniDict::new();
+    let mut dict = MiniDict::<String, String>::new();
 
     // Test basic set and get
     dict.set("name", "Wado");
