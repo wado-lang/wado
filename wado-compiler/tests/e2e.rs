@@ -360,17 +360,15 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
             }
             Err(err) => {
                 // Test failed as expected for a TODO test
-                // Extract panic message for better diagnostics
-                let panic_msg = if let Some(s) = err.downcast_ref::<String>() {
-                    s.clone()
-                } else if let Some(s) = err.downcast_ref::<&str>() {
-                    s.to_string()
-                } else {
-                    format!("{:?}", err)
-                };
+                // Extract panic message - Box<dyn Any> needs downcast to get the actual message
+                let msg = err
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| err.downcast_ref::<&str>().copied())
+                    .unwrap_or("(unknown panic)");
 
                 eprintln!("[{test_id}] TODO test failed as expected (feature not yet implemented)");
-                eprintln!("[{test_id}] Error: {}", panic_msg);
+                eprintln!("[{test_id}] Error: {msg}");
                 return;
             }
         }
