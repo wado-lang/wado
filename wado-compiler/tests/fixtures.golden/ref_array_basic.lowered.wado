@@ -7,12 +7,12 @@ fn modify_array(arr: &mut Array<i32>) {
 }
 
 fn run() with Stdout {
-    let mut nums: Array<i32> = [1, 2, 3];
+    let mut nums: Array<i32> = move [1, 2, 3];
     let before: i32 = nums[0];
-    core::cli::println(core::internal::string_concat("before: ", before.to_string()));
+    core::cli::println(move core::internal::string_concat(move "before: ", move before.to_string()));
     modify_array(&mut nums);
     let after: i32 = nums[0];
-    core::cli::println(core::internal::string_concat("after: ", after.to_string()));
+    core::cli::println(move core::internal::string_concat(move "after: ", move after.to_string()));
 }
 
 __DATA__

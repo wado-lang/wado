@@ -30,12 +30,12 @@ fn Point::distance_squared(a: Point, b: Point) -> i32 {
 }
 
 fn run() with Stdout {
-    let p1: Point = Point::scale(Point::origin(), 5);
-    core::cli::println(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("scaled origin: (", p1.x.to_string()), ", "), p1.y.to_string()), ")"));
-    let p2: Point = Point::add(Point::new(1, 2), Point::new(3, 4));
-    core::cli::println(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("sum of points: (", p2.x.to_string()), ", "), p2.y.to_string()), ")"));
+    let p1: Point = move Point::scale(Point::origin(), 5);
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "scaled origin: (", move p1.x.to_string()), move ", "), move p1.y.to_string()), move ")"));
+    let p2: Point = move Point::add(Point::new(1, 2), Point::new(3, 4));
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "sum of points: (", move p2.x.to_string()), move ", "), move p2.y.to_string()), move ")"));
     let dist: i32 = Point::distance_squared(Point::origin(), Point::new(3, 4));
-    core::cli::println(core::internal::string_concat("distance squared: ", dist.to_string()));
+    core::cli::println(move core::internal::string_concat(move "distance squared: ", move dist.to_string()));
 }
 
 __DATA__

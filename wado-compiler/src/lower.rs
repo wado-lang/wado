@@ -640,6 +640,9 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(field, type_table);
                 }
             }
+            TirExprKind::Move { value } => {
+                self.rewrite_types_in_expr(value, type_table);
+            }
             TirExprKind::IndirectCall { callee, args } => {
                 self.rewrite_types_in_expr(callee, type_table);
                 for arg in args {
@@ -1497,6 +1500,9 @@ impl Monomorphizer {
                     );
                 }
             }
+            TirExprKind::Move { value } => {
+                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2088,6 +2094,9 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(field, substitution, type_table);
                 }
             }
+            TirExprKind::Move { value } => {
+                self.substitute_types_in_expr(value, substitution, type_table);
+            }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2572,6 +2581,9 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_expr(field, type_table);
                 }
             }
+            TirExprKind::Move { value } => {
+                self.rewrite_function_calls_in_expr(value, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2799,6 +2811,9 @@ impl StringCollector {
                 for field in fields {
                     self.collect_expr(field);
                 }
+            }
+            TirExprKind::Move { value } => {
+                self.collect_expr(value);
             }
             // Literals and simple expressions don't contain strings
             TirExprKind::IntLiteral { .. }

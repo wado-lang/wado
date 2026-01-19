@@ -23,16 +23,16 @@ struct "Box<i32>" {
 }
 
 fn run() with Stdout {
-    let int_box: Box<i32> = Box<i32> { value: 42 };
-    let float_box: Box<f64> = Box<f64> { value: 3.14 };
-    let str_box: Box<String> = Box<String> { value: "hello" };
-    let bool_box: Box<bool> = Box<bool> { value: true };
-    let char_box: Box<char> = Box<char> { value: 'A' };
-    core::cli::println(core::internal::string_concat("i32: ", int_box.value.to_string()));
-    core::cli::println(core::internal::string_concat("f64: ", float_box.value.to_string()));
-    core::cli::println(core::internal::string_concat("str: ", str_box.value));
-    core::cli::println(core::internal::string_concat("bool: ", bool_box.value.to_string()));
-    core::cli::println(core::internal::string_concat("char: ", char_box.value.to_string()));
+    let int_box: Box<i32> = move Box<i32> { value: 42 };
+    let float_box: Box<f64> = move Box<f64> { value: 3.14 };
+    let str_box: Box<String> = move Box<String> { value: "hello" };
+    let bool_box: Box<bool> = move Box<bool> { value: true };
+    let char_box: Box<char> = move Box<char> { value: 'A' };
+    core::cli::println(move core::internal::string_concat(move "i32: ", move int_box.value.to_string()));
+    core::cli::println(move core::internal::string_concat(move "f64: ", move float_box.value.to_string()));
+    core::cli::println(move core::internal::string_concat(move "str: ", str_box.value));
+    core::cli::println(move core::internal::string_concat(move "bool: ", move bool_box.value.to_string()));
+    core::cli::println(move core::internal::string_concat(move "char: ", move char_box.value.to_string()));
 }
 
 __DATA__

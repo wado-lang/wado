@@ -532,6 +532,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
                 collect_callees_from_expr(field, callees);
             }
         }
+        TirExprKind::Move { value } => {
+            collect_callees_from_expr(value, callees);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1560,6 +1563,9 @@ fn remap_expr(
                 .map(|f| remap_expr(f, param_to_local, local_offset, param_count))
                 .collect(),
         },
+        TirExprKind::Move { value } => TirExprKind::Move {
+            value: Box::new(remap_expr(value, param_to_local, local_offset, param_count)),
+        },
         // Leaf nodes - no remapping needed
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1806,6 +1812,44 @@ fn inline_calls_in_expr(
                     inlined_funcs,
                 );
             }
+        }
+        TirExprKind::OptionSome { value } => {
+            inline_calls_in_expr(
+                value,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
+        }
+        TirExprKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                inline_calls_in_expr(
+                    field,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                );
+            }
+        }
+        TirExprKind::Move { value } => {
+            inline_calls_in_expr(
+                value,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+            );
         }
         // For block/if/match expressions, we don't inline recursively here
         // as they would need proper block handling
@@ -2574,6 +2618,9 @@ fn analyze_expr(
                 analyze_expr(field, current_module, type_table, analysis);
             }
         }
+        TirExprKind::Move { value } => {
+            analyze_expr(value, current_module, type_table, analysis);
+        }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -2827,6 +2874,285 @@ fn is_generic_func_reachable(
     false
 }
 
+// =============================================================================
+// Move Insertion Optimization
+// =============================================================================
+
+/// Check if an expression produces a fresh value that can be moved.
+/// Fresh values are those that don't need copying because they're newly created.
+fn is_fresh_value(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        // Literals always produce fresh values
+        TirExprKind::StringLiteral(_)
+        | TirExprKind::StructLiteral { .. }
+        | TirExprKind::ArrayLiteral { .. }
+        | TirExprKind::TupleLiteral { .. }
+        | TirExprKind::Null => true,
+
+        // All call variants return fresh values (callee constructs/copies the return value)
+        TirExprKind::Call { .. }
+        | TirExprKind::StaticCall { .. }
+        | TirExprKind::MethodCall { .. }
+        | TirExprKind::EffectCall { .. }
+        | TirExprKind::IndirectCall { .. } => true,
+
+        // OptionSome is fresh if its inner value is fresh
+        TirExprKind::OptionSome { value } => is_fresh_value(value),
+
+        // VariantConstruct is fresh (it's a literal-like construction)
+        TirExprKind::VariantConstruct { .. } => true,
+
+        // Move is already marked as fresh
+        TirExprKind::Move { .. } => true,
+
+        // Everything else is not fresh
+        _ => false,
+    }
+}
+
+/// Check if a type requires value copying (composite types with value semantics).
+fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
+    match type_table.get(type_id) {
+        ResolvedType::Struct { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::String => true,
+        ResolvedType::Tuple(elements) => !elements.is_empty(),
+        ResolvedType::Option(inner) => needs_value_copy(*inner, type_table),
+        // References, primitives, etc. don't need copying
+        _ => false,
+    }
+}
+
+/// Wrap an expression in Move if it's a fresh value that would otherwise be copied.
+fn wrap_in_move_if_eligible(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
+    if needs_value_copy(expr.type_id, type_table) && is_fresh_value(&expr) {
+        let type_id = expr.type_id;
+        let span = expr.span;
+        TirExpr::new(
+            TirExprKind::Move {
+                value: Box::new(expr),
+            },
+            type_id,
+            span,
+        )
+    } else {
+        expr
+    }
+}
+
+/// Insert move semantics for fresh values in a block.
+fn insert_moves_in_block(block: &mut TirBlock, type_table: &TypeTable) {
+    for stmt in &mut block.stmts {
+        insert_moves_in_stmt(stmt, type_table);
+    }
+}
+
+/// Insert move semantics for fresh values in a statement.
+fn insert_moves_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. } => {
+            // Wrap the value in Move if eligible
+            let old_value = std::mem::replace(
+                value,
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, stmt.span),
+            );
+            *value = wrap_in_move_if_eligible(old_value, type_table);
+        }
+        TirStmtKind::Expr(expr) => {
+            insert_moves_in_expr(expr, type_table);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                insert_moves_in_expr(v, type_table);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            insert_moves_in_expr(condition, type_table);
+            insert_moves_in_block(then_block, type_table);
+            if let Some(eb) = else_block {
+                insert_moves_in_block(eb, type_table);
+            }
+        }
+        TirStmtKind::While { condition, body } => {
+            insert_moves_in_expr(condition, type_table);
+            insert_moves_in_block(body, type_table);
+        }
+        TirStmtKind::For {
+            condition,
+            update,
+            body,
+        } => {
+            if let Some(c) = condition {
+                insert_moves_in_expr(c, type_table);
+            }
+            if let Some(u) = update {
+                insert_moves_in_expr(u, type_table);
+            }
+            insert_moves_in_block(body, type_table);
+        }
+        TirStmtKind::ForOf { iterable, body, .. } => {
+            insert_moves_in_expr(iterable, type_table);
+            insert_moves_in_block(body, type_table);
+        }
+        TirStmtKind::Loop { body } => {
+            insert_moves_in_block(body, type_table);
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            insert_moves_in_block(block, type_table);
+        }
+        TirStmtKind::Break | TirStmtKind::Continue => {}
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            insert_moves_in_expr(scrutinee, type_table);
+            insert_moves_in_block(then_block, type_table);
+            if let Some(eb) = else_block {
+                insert_moves_in_block(eb, type_table);
+            }
+        }
+    }
+}
+
+/// Insert move semantics in nested expressions (for consistency).
+fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
+    match &mut expr.kind {
+        TirExprKind::Binary { left, right, .. } => {
+            insert_moves_in_expr(left, type_table);
+            insert_moves_in_expr(right, type_table);
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            insert_moves_in_expr(inner, type_table);
+        }
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::EffectCall { args, .. } => {
+            // Wrap arguments in Move if they are fresh values (argument passing is assignment)
+            for arg in args.iter_mut() {
+                insert_moves_in_expr(arg, type_table);
+            }
+            for i in 0..args.len() {
+                let arg = std::mem::replace(
+                    &mut args[i],
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+                );
+                args[i] = wrap_in_move_if_eligible(arg, type_table);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            insert_moves_in_expr(receiver, type_table);
+            // Wrap arguments in Move if they are fresh values
+            for arg in args.iter_mut() {
+                insert_moves_in_expr(arg, type_table);
+            }
+            for i in 0..args.len() {
+                let arg = std::mem::replace(
+                    &mut args[i],
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+                );
+                args[i] = wrap_in_move_if_eligible(arg, type_table);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            insert_moves_in_expr(callee, type_table);
+            // Wrap arguments in Move if they are fresh values
+            for arg in args.iter_mut() {
+                insert_moves_in_expr(arg, type_table);
+            }
+            for i in 0..args.len() {
+                let arg = std::mem::replace(
+                    &mut args[i],
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+                );
+                args[i] = wrap_in_move_if_eligible(arg, type_table);
+            }
+        }
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            insert_moves_in_expr(inner, type_table);
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            insert_moves_in_expr(inner, type_table);
+            insert_moves_in_expr(index, type_table);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            insert_moves_in_expr(inner, type_table);
+        }
+        TirExprKind::Assign { target, value } => {
+            insert_moves_in_expr(target, type_table);
+            insert_moves_in_expr(value, type_table);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                insert_moves_in_expr(&mut field.value, type_table);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                insert_moves_in_expr(elem, type_table);
+            }
+        }
+        TirExprKind::OptionSome { value } => {
+            insert_moves_in_expr(value, type_table);
+        }
+        TirExprKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                insert_moves_in_expr(field, type_table);
+            }
+        }
+        TirExprKind::Move { value } => {
+            insert_moves_in_expr(value, type_table);
+        }
+        TirExprKind::Block(block) => {
+            insert_moves_in_block(block, type_table);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            insert_moves_in_expr(condition, type_table);
+            insert_moves_in_block(then_branch, type_table);
+            if let Some(eb) = else_branch {
+                insert_moves_in_block(eb, type_table);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            insert_moves_in_expr(body, type_table);
+        }
+        // Leaf nodes - no nested expressions
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::Match { .. } => {}
+    }
+}
+
+/// Insert move optimization for all functions in the project.
+fn insert_moves(project: &mut Project) {
+    for module in project.tir_modules.values_mut() {
+        let type_table = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(ref mut body) = func.body {
+                insert_moves_in_block(body, &type_table);
+            }
+        }
+    }
+}
+
 /// Optimize a Project by analyzing and populating its usage fields.
 ///
 /// This is the main entry point for the optimizer. Based on the optimization
@@ -2852,6 +3178,10 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             project.strip_names = true;
         }
     }
+
+    // Insert move optimization for all optimization levels (after inlining)
+    // This eliminates unnecessary copies for fresh values
+    insert_moves(&mut project);
 
     project
 }
