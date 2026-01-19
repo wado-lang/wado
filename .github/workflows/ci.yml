@@ -35,13 +35,8 @@ jobs:
       - name: Setup mold linker
         uses: rui314/setup-mold@v1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install wasm-tools
-        run: cargo install wasm-tools --locked
+      - name: Setup mise
+        uses: jdx/mise-action@v2
 
       - name: Add wasm32 target
         run: rustup target add wasm32-unknown-unknown
