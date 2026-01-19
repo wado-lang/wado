@@ -32,23 +32,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Setup mise
-        uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v3
         with:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run clippy-fix
-        run: make clippy-fix
-
-      - name: Update bundled
-        run: make update-bundled
-
-      - name: Update golden fixtures
-        run: make update-golden-fixtures
-
-      - name: Format
-        run: make format
+      - run: make clippy-fix
+      - run: make update-bundled
+      - run: make update-golden-fixtures
+      - run: make format
 
       - name: Check for uncommitted changes
         id: diff
@@ -98,8 +90,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Setup mold linker
-        uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@v1
 
-      - name: Run tests
-        run: cargo test --locked --all
+      - run: cargo test --locked --all
