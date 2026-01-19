@@ -193,6 +193,7 @@ impl Parser {
             TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub).map(Item::Enum),
+            TokenKind::Variant => self.parse_variant_decl(is_pub).map(Item::Variant),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
@@ -753,7 +754,23 @@ impl Parser {
             None
         };
 
-        let condition = self.parse_expr()?;
+        // Check for pattern condition: `if Some(x) = expr { ... }` or `if None = expr { ... }`
+        // This is detected by seeing an uppercase identifier that looks like a variant
+        let condition = if self.is_pattern_condition() {
+            let pattern_span = self.peek().span;
+            let pattern = self.parse_pattern()?;
+            self.expect(&TokenKind::Eq)?;
+            let expr = self.parse_expr()?;
+            let span = pattern_span.merge(&expr.span());
+            IfCondition::Pattern {
+                pattern,
+                expr,
+                span,
+            }
+        } else {
+            IfCondition::Expr(self.parse_expr()?)
+        };
+
         let then_block = self.parse_block()?;
 
         let else_block = if self.check(&TokenKind::Else) {
@@ -773,6 +790,50 @@ impl Parser {
             else_block,
             span,
         }))
+    }
+
+    /// Check if the upcoming tokens look like a pattern condition: `Some(x) =` or `None =`
+    fn is_pattern_condition(&self) -> bool {
+        // Look for uppercase identifier (variant name)
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && name.chars().next().is_some_and(|c| c.is_uppercase())
+        {
+            // Check for `VariantName(` or `VariantName =`
+            let pos = self.pos;
+            if pos + 1 < self.tokens.len() {
+                let next = &self.tokens[pos + 1].kind;
+                if matches!(next, TokenKind::Eq) {
+                    // None =
+                    return true;
+                }
+                if matches!(next, TokenKind::LParen) {
+                    // Some( - need to find matching ) and check for =
+                    // Use a simple scan to find the matching paren
+                    let mut depth = 0;
+                    let mut i = pos + 1;
+                    while i < self.tokens.len() {
+                        match &self.tokens[i].kind {
+                            TokenKind::LParen => depth += 1,
+                            TokenKind::RParen => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    // Check if next token is =
+                                    if i + 1 < self.tokens.len()
+                                        && matches!(self.tokens[i + 1].kind, TokenKind::Eq)
+                                    {
+                                        return true;
+                                    }
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                        i += 1;
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
@@ -943,9 +1004,41 @@ impl Parser {
             self.expect(&TokenKind::RParen)?;
             Ok(Pattern::Tuple(patterns))
         } else if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            let start_span = self.peek().span;
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
+            } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
+                // Uppercase identifier - could be variant pattern like Some(x) or None
+                if self.check(&TokenKind::LParen) {
+                    // Variant with bindings: Some(x)
+                    self.advance(); // consume (
+                    let mut bindings = Vec::new();
+                    if !self.check(&TokenKind::RParen) {
+                        bindings.push(self.parse_pattern()?);
+                        while self.check(&TokenKind::Comma) {
+                            self.advance();
+                            if self.check(&TokenKind::RParen) {
+                                break;
+                            }
+                            bindings.push(self.parse_pattern()?);
+                        }
+                    }
+                    let end_span = self.peek().span;
+                    self.expect(&TokenKind::RParen)?;
+                    Ok(Pattern::Variant {
+                        variant_name: name,
+                        bindings,
+                        span: start_span.merge(&end_span),
+                    })
+                } else {
+                    // Variant without bindings: None
+                    Ok(Pattern::Variant {
+                        variant_name: name,
+                        bindings: vec![],
+                        span: start_span,
+                    })
+                }
             } else {
                 Ok(Pattern::Ident(name))
             }
@@ -2205,6 +2298,66 @@ impl Parser {
         };
 
         Ok(EnumVariant {
+            name,
+            fields,
+            span: start_span,
+        })
+    }
+
+    /// Parse a variant declaration (tagged union with payloads)
+    /// ```wado
+    /// variant Option<T> {
+    ///     Some(T),
+    ///     None,
+    /// }
+    /// ```
+    fn parse_variant_decl(&mut self, is_pub: bool) -> ParseResult<VariantDecl> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Variant)?;
+        let name = self.consume_ident()?;
+
+        // Parse generic parameters like <T>
+        let type_params = self.parse_generic_params()?;
+
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut cases = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            cases.push(self.parse_variant_case()?);
+            if !self.check(&TokenKind::RBrace) {
+                self.expect(&TokenKind::Comma)?;
+            }
+        }
+
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
+
+        Ok(VariantDecl {
+            name,
+            is_pub,
+            type_params,
+            cases,
+            span: start_span.merge(&end_span),
+        })
+    }
+
+    fn parse_variant_case(&mut self) -> ParseResult<VariantCase> {
+        let start_span = self.peek().span;
+        let name = self.consume_ident()?;
+
+        let fields = if self.check(&TokenKind::LParen) {
+            self.advance();
+            let mut types = vec![self.parse_type()?];
+            while self.check(&TokenKind::Comma) {
+                self.advance();
+                types.push(self.parse_type()?);
+            }
+            self.expect(&TokenKind::RParen)?;
+            Some(types)
+        } else {
+            None
+        };
+
+        Ok(VariantCase {
             name,
             fields,
             span: start_span,

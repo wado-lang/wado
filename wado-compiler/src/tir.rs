@@ -827,6 +827,11 @@ pub enum TirExprKind {
         /// Arguments to pass to the callee
         args: Vec<TirExpr>,
     },
+
+    /// Option::Some(value) construction
+    OptionSome {
+        value: Box<TirExpr>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -995,6 +1000,17 @@ pub enum TirStmtKind {
     LabeledBlock {
         label: String,
         block: TirBlock,
+    },
+    /// Pattern match in if condition: `if Some(x) = expr { ... } else { ... }`
+    IfPattern {
+        /// The expression being matched against
+        scrutinee: TirExpr,
+        /// The pattern to match
+        pattern: TirPattern,
+        /// Block executed when pattern matches
+        then_block: TirBlock,
+        /// Optional else block when pattern doesn't match
+        else_block: Option<TirBlock>,
     },
 }
 

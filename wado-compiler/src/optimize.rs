@@ -7,8 +7,8 @@
 use crate::name::{FreeFunctionName, FunctionId, MethodName};
 use crate::project::Project;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
@@ -422,6 +422,18 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(block, callees);
         }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_callees_from_expr(scrutinee, callees);
+            collect_callees_from_block(then_block, callees);
+            if let Some(else_blk) = else_block {
+                collect_callees_from_block(else_blk, callees);
+            }
+        }
         TirStmtKind::Break | TirStmtKind::Continue => {}
     }
 }
@@ -510,6 +522,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
             for arm in arms {
                 collect_callees_from_expr(&arm.body, callees);
             }
+        }
+        TirExprKind::OptionSome { value } => {
+            collect_callees_from_expr(value, callees);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -968,6 +983,53 @@ fn inline_calls_in_block(
                     stmt.span,
                 ));
             }
+            TirStmtKind::IfPattern {
+                mut scrutinee,
+                pattern,
+                mut then_block,
+                else_block,
+            } => {
+                inline_calls_in_expr(
+                    &mut scrutinee,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                );
+                inline_calls_in_block(
+                    &mut then_block,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                );
+                let new_else = else_block.map(|mut eb| {
+                    inline_calls_in_block(
+                        &mut eb,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        inlined_funcs,
+                    );
+                    eb
+                });
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::IfPattern {
+                        scrutinee,
+                        pattern,
+                        then_block,
+                        else_block: new_else,
+                    },
+                    stmt.span,
+                ));
+            }
             TirStmtKind::Break | TirStmtKind::Continue => {
                 new_stmts.push(stmt);
             }
@@ -1198,11 +1260,59 @@ fn remap_stmt(
             label: label.clone(),
             block: remap_block(block, param_to_local, local_offset, param_count),
         },
+        TirStmtKind::IfPattern {
+            scrutinee,
+            pattern,
+            then_block,
+            else_block,
+        } => TirStmtKind::IfPattern {
+            scrutinee: remap_expr(scrutinee, param_to_local, local_offset, param_count),
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            then_block: remap_block(then_block, param_to_local, local_offset, param_count),
+            else_block: else_block
+                .as_ref()
+                .map(|b| remap_block(b, param_to_local, local_offset, param_count)),
+        },
         TirStmtKind::Break => TirStmtKind::Break,
         TirStmtKind::Continue => TirStmtKind::Continue,
     };
 
     TirStmt::new(kind, stmt.span)
+}
+
+/// Remap local indices in a pattern
+fn remap_pattern(
+    pattern: &TirPattern,
+    param_to_local: &HashMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+) -> TirPattern {
+    match pattern {
+        TirPattern::Wildcard => TirPattern::Wildcard,
+        TirPattern::Binding { name, local_index } => TirPattern::Binding {
+            name: name.clone(),
+            local_index: remap_local_index(*local_index, param_to_local, local_offset, param_count),
+        },
+        TirPattern::Literal(lit) => TirPattern::Literal(lit.clone()),
+        TirPattern::Tuple(patterns) => TirPattern::Tuple(
+            patterns
+                .iter()
+                .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
+                .collect(),
+        ),
+        TirPattern::Variant {
+            enum_type,
+            variant_name,
+            bindings,
+        } => TirPattern::Variant {
+            enum_type: *enum_type,
+            variant_name: variant_name.clone(),
+            bindings: bindings
+                .iter()
+                .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
+                .collect(),
+        },
+    }
 }
 
 /// Remap local indices in a block
@@ -1426,6 +1536,9 @@ fn remap_expr(
                 .iter()
                 .map(|a| remap_expr(a, param_to_local, local_offset, param_count))
                 .collect(),
+        },
+        TirExprKind::OptionSome { value } => TirExprKind::OptionSome {
+            value: Box::new(remap_expr(value, param_to_local, local_offset, param_count)),
         },
         // Leaf nodes - no remapping needed
         TirExprKind::IntLiteral { .. }
@@ -2152,6 +2265,18 @@ fn analyze_block(
             TirStmtKind::LabeledBlock { block, .. } => {
                 analyze_block(block, current_module, type_table, analysis);
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                analyze_expr(scrutinee, current_module, type_table, analysis);
+                analyze_block(then_block, current_module, type_table, analysis);
+                if let Some(else_blk) = else_block {
+                    analyze_block(else_blk, current_module, type_table, analysis);
+                }
+            }
             TirStmtKind::Break | TirStmtKind::Continue => {}
         }
     }
@@ -2432,6 +2557,9 @@ fn analyze_expr(
             for arg in args {
                 analyze_expr(arg, current_module, type_table, analysis);
             }
+        }
+        TirExprKind::OptionSome { value } => {
+            analyze_expr(value, current_module, type_table, analysis);
         }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }

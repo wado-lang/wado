@@ -8,17 +8,17 @@ use std::rc::Rc;
 use crate::ast::Type;
 use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
+use crate::component_model::{
+    WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
+    return_type_requires_outptr, wasi_type_to_valtype,
+};
 use crate::name::{FreeFunctionName, FunctionId, MethodName, StructName, build_core_internal_name};
 use crate::optimize::{CanonBuiltin, WasiEffect};
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
-    TirFunction, TirModule, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
-};
-use crate::component_model::{
-    WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
-    return_type_requires_outptr, wasi_type_to_valtype,
+    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder};
 use crate::wasm_postprocess;
@@ -2813,23 +2813,40 @@ impl Codegen {
     }
 
     /// Check if an expression produces a fresh value that doesn't need copying.
-    /// Builtin calls like `string_new` and `array_new_string` create new values.
+    /// Fresh values include:
+    /// - Literals (string, struct, array, tuple, null)
+    /// - Builtin calls like `string_new` and `array_new_string`
+    /// - OptionSome with a fresh inner value
     fn is_fresh_value_expr(&self, expr: &TirExpr) -> bool {
-        if let TirExprKind::Call { func, .. } = &expr.kind {
-            let module_path = func.module_path();
-            let func_name = func.name();
+        match &expr.kind {
+            // Literals always create fresh values (null is a constant ref to nothing)
+            TirExprKind::StringLiteral(_)
+            | TirExprKind::StructLiteral { .. }
+            | TirExprKind::ArrayLiteral { .. }
+            | TirExprKind::TupleLiteral { .. }
+            | TirExprKind::Null => true,
+
+            // OptionSome is fresh if its inner value is fresh
+            TirExprKind::OptionSome { value } => self.is_fresh_value_expr(value),
+
             // Builtin functions that create fresh values
-            // In TIR, builtin calls have empty module_path and func_name like "builtin::string_new"
-            if module_path.is_empty()
-                && let Some(builtin_name) = func_name.strip_prefix("builtin::")
-            {
-                return matches!(
-                    builtin_name,
-                    "string_new" | "array_new_string" | "array_new"
-                );
+            TirExprKind::Call { func, .. } => {
+                let module_path = func.module_path();
+                let func_name = func.name();
+                // In TIR, builtin calls have empty module_path and func_name like "builtin::string_new"
+                if module_path.is_empty()
+                    && let Some(builtin_name) = func_name.strip_prefix("builtin::")
+                {
+                    return matches!(
+                        builtin_name,
+                        "string_new" | "array_new_string" | "array_new"
+                    );
+                }
+                false
             }
+
+            _ => false,
         }
-        false
     }
 
     /// Generate code to copy a value for value semantics.
@@ -3547,6 +3564,18 @@ impl Codegen {
             TirStmtKind::LabeledBlock { block, .. } => {
                 Self::collect_closures_from_block(block, closures);
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::collect_closures_from_expr(scrutinee, closures);
+                Self::collect_closures_from_block(then_block, closures);
+                if let Some(else_blk) = else_block {
+                    Self::collect_closures_from_block(else_blk, closures);
+                }
+            }
             TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
         }
     }
@@ -3646,6 +3675,9 @@ impl Codegen {
                 for arg in args {
                     Self::collect_closures_from_expr(arg, closures);
                 }
+            }
+            TirExprKind::OptionSome { value } => {
+                Self::collect_closures_from_expr(value, closures);
             }
             // Leaf nodes - no nested expressions
             TirExprKind::IntLiteral { .. }
@@ -3783,6 +3815,18 @@ impl Codegen {
             TirStmtKind::LabeledBlock { block, .. } => {
                 Self::find_closure_locals_in_block(block, result, closure_counter);
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
+                Self::find_closure_locals_in_block(then_block, result, closure_counter);
+                if let Some(else_blk) = else_block {
+                    Self::find_closure_locals_in_block(else_blk, result, closure_counter);
+                }
+            }
             TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
         }
     }
@@ -3864,6 +3908,9 @@ impl Codegen {
                 for arg in args {
                     Self::find_closure_locals_in_expr(arg, result, closure_counter);
                 }
+            }
+            TirExprKind::OptionSome { value } => {
+                Self::find_closure_locals_in_expr(value, result, closure_counter);
             }
             // Terminals - no closures inside
             TirExprKind::IntLiteral { .. }
@@ -4638,6 +4685,54 @@ impl Codegen {
                     shared: false,
                     ty: AbstractHeapType::None,
                 }));
+            }
+
+            TirExprKind::OptionSome { value } => {
+                // Option::Some(value) - wrap value in Option type
+                // For reference types (String, structs, arrays): the value is already a reference
+                // For primitive types: need to box the value first
+                let inner_type_resolved = type_table.get(value.type_id).clone();
+
+                match &inner_type_resolved {
+                    ResolvedType::Primitive(prim) => {
+                        // Primitive type: box it in a wrapper struct
+                        // First, generate the value
+                        self.generate_expr(func, value, type_table, ctx, builder);
+                        // Get the corresponding ValType for the primitive
+                        let val_type = match prim {
+                            PrimitiveType::I8
+                            | PrimitiveType::I16
+                            | PrimitiveType::I32
+                            | PrimitiveType::U8
+                            | PrimitiveType::U16
+                            | PrimitiveType::U32
+                            | PrimitiveType::Bool
+                            | PrimitiveType::Char => ValType::I32,
+                            PrimitiveType::I64 | PrimitiveType::U64 => ValType::I64,
+                            PrimitiveType::I128 | PrimitiveType::U128 => {
+                                // i128/u128 not yet supported in Option
+                                panic!("Option<i128/u128> not yet supported");
+                            }
+                            PrimitiveType::F32 => ValType::F32,
+                            PrimitiveType::F64 => ValType::F64,
+                        };
+                        // Get the box type and wrap
+                        if let Some(box_idx) = self.get_box_type_idx(val_type) {
+                            func.instruction(&Instruction::StructNew(box_idx));
+                        } else {
+                            panic!(
+                                "Box type not registered for {:?}. Make sure to use &{:?} somewhere.",
+                                prim, prim
+                            );
+                        }
+                    }
+                    _ => {
+                        // Reference type: generate the value directly (it's already a reference)
+                        // For Option<T> with reference types, the value IS the Some variant
+                        // (null would be None). No wrapper needed.
+                        self.generate_expr(func, value, type_table, ctx, builder);
+                    }
+                }
             }
 
             TirExprKind::Unit => {
@@ -6968,6 +7063,127 @@ impl Codegen {
                 // For now, just generate the block contents in sequence
                 self.generate_block(func, block, type_table, ctx, builder);
             }
+
+            TirStmtKind::IfPattern {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => {
+                self.generate_if_pattern(
+                    func, scrutinee, pattern, then_block, else_block, type_table, ctx, builder,
+                );
+            }
+        }
+    }
+
+    /// Generate code for if-pattern statement: `if Some(x) = expr { ... }`
+    fn generate_if_pattern(
+        &self,
+        func: &mut Function,
+        scrutinee: &TirExpr,
+        pattern: &TirPattern,
+        then_block: &TirBlock,
+        else_block: &Option<TirBlock>,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Generate the scrutinee expression
+        self.generate_expr(func, scrutinee, type_table, ctx, builder);
+
+        // Get the scrutinee type to determine how to match
+        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+
+        match (&scrutinee_type, pattern) {
+            // Option<T> with Some(x) pattern - check for non-null and bind
+            (
+                ResolvedType::Option(inner_type),
+                TirPattern::Variant {
+                    variant_name,
+                    bindings,
+                    ..
+                },
+            ) if variant_name == "Some" => {
+                // Stack: [option_value]
+                // Store scrutinee in a temp local
+                let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                let scrutinee_local = ctx.alloc_local("__if_pattern_scrutinee", option_valtype);
+                func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+                // Generate: if (ref.is_null scrutinee) { else_block } else { then_block }
+                // But wasm if expects condition to be true for then branch, so we flip
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                func.instruction(&Instruction::I32Eqz); // NOT: true if NOT null (Some)
+
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                // Then block: pattern matches (value is Some)
+                // Bind the inner value to the pattern binding
+                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
+                    // Get the inner value (the non-null reference)
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefAsNonNull);
+
+                    // Store in the binding local with proper offset
+                    let adjusted_index = *local_index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
+
+                // Generate then block body
+                self.generate_block(func, then_block, type_table, ctx, builder);
+
+                // Else block (if any)
+                if let Some(else_blk) = else_block {
+                    func.instruction(&Instruction::Else);
+                    self.generate_block(func, else_blk, type_table, ctx, builder);
+                }
+
+                func.instruction(&Instruction::End);
+                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            }
+
+            // Option<T> with None pattern - check for null
+            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
+                if variant_name == "None" =>
+            {
+                // Stack: [option_value]
+                // Check if null (None)
+                func.instruction(&Instruction::RefIsNull); // true if null (None)
+
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                // Then block: pattern matches (value is None)
+                self.generate_block(func, then_block, type_table, ctx, builder);
+
+                // Else block (if any)
+                if let Some(else_blk) = else_block {
+                    func.instruction(&Instruction::Else);
+                    self.generate_block(func, else_blk, type_table, ctx, builder);
+                }
+
+                func.instruction(&Instruction::End);
+                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            }
+
+            // Unsupported pattern
+            _ => {
+                panic!(
+                    "Unsupported if-pattern: {:?} on type {:?}",
+                    pattern, scrutinee_type
+                );
+            }
         }
     }
 
@@ -7087,6 +7303,11 @@ impl Codegen {
         // Pre-allocate locals for array append operations
         if let Some(body) = &tir_func.body {
             self.preallocate_array_append_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for IfPattern statements
+        if let Some(body) = &tir_func.body {
+            self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
         }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
@@ -7293,6 +7514,11 @@ impl Codegen {
         // Pre-allocate locals for array append operations
         if let Some(body) = &tir_func.body {
             self.preallocate_array_append_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for IfPattern statements
+        if let Some(body) = &tir_func.body {
+            self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
         }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
@@ -8128,6 +8354,7 @@ impl Codegen {
                         .iter()
                         .any(|arm| Self::expr_needs_async_scratch_locals(&arm.body))
             }
+            TirExprKind::OptionSome { value } => Self::expr_needs_async_scratch_locals(value),
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -8445,6 +8672,74 @@ impl Codegen {
                 if let Some(else_blk) = else_block {
                     self.preallocate_assert_locals(else_blk, type_table, ctx, string_array_type);
                 }
+            }
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.preallocate_assert_locals(then_block, type_table, ctx, string_array_type);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_assert_locals(else_blk, type_table, ctx, string_array_type);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Pre-allocate locals for IfPattern statements in a block
+    fn preallocate_if_pattern_locals(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        for stmt in &block.stmts {
+            self.preallocate_if_pattern_locals_from_stmt(stmt, type_table, ctx);
+        }
+    }
+
+    fn preallocate_if_pattern_locals_from_stmt(
+        &self,
+        stmt: &TirStmt,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                // Pre-allocate temp local for the scrutinee
+                let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+                if let ResolvedType::Option(_) = scrutinee_type {
+                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                    ctx.alloc_local("__if_pattern_scrutinee", option_valtype);
+                }
+                // Recursively handle nested blocks
+                self.preallocate_if_pattern_locals(then_block, type_table, ctx);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
+                }
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.preallocate_if_pattern_locals(then_block, type_table, ctx);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
+                }
+            }
+            TirStmtKind::While { body, .. }
+            | TirStmtKind::For { body, .. }
+            | TirStmtKind::Loop { body }
+            | TirStmtKind::ForOf { body, .. }
+            | TirStmtKind::LabeledBlock { block: body, .. } => {
+                self.preallocate_if_pattern_locals(body, type_table, ctx);
             }
             _ => {}
         }

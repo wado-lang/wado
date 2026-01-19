@@ -29,6 +29,7 @@ pub enum TokenKind {
     Unique,
     Struct,
     Enum,
+    Variant,
     Type,
     Impl,
     Resource,

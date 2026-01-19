@@ -17,7 +17,8 @@ use indexmap::IndexMap;
 use crate::project::Project;
 use crate::tir::{
     FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirField, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
+    TirField, TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
+    TypeId, TypeTable,
 };
 
 /// Lower a TIR module
@@ -493,6 +494,40 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => {
+                self.rewrite_types_in_expr(scrutinee, type_table);
+                self.rewrite_types_in_pattern(pattern, type_table);
+                self.rewrite_types_in_block(then_block, type_table);
+                if let Some(else_blk) = else_block {
+                    self.rewrite_types_in_block(else_blk, type_table);
+                }
+            }
+        }
+    }
+
+    fn rewrite_types_in_pattern(&self, pattern: &mut TirPattern, type_table: &mut TypeTable) {
+        match pattern {
+            TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}
+            TirPattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.rewrite_types_in_pattern(p, type_table);
+                }
+            }
+            TirPattern::Variant {
+                enum_type,
+                bindings,
+                ..
+            } => {
+                *enum_type = self.rewrite_type_id(*enum_type, type_table);
+                for binding in bindings {
+                    self.rewrite_types_in_pattern(binding, type_table);
+                }
+            }
         }
     }
 
@@ -597,6 +632,9 @@ impl Monomorphizer {
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
             | TirExprKind::Capture { .. } => {}
+            TirExprKind::OptionSome { value } => {
+                self.rewrite_types_in_expr(value, type_table);
+            }
             TirExprKind::IndirectCall { callee, args } => {
                 self.rewrite_types_in_expr(callee, type_table);
                 for arg in args {
@@ -1059,6 +1097,30 @@ impl Monomorphizer {
                     type_table,
                 );
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.collect_func_instantiation_sites_in_expr(
+                    scrutinee,
+                    generic_functions,
+                    type_table,
+                );
+                self.collect_func_instantiation_sites_in_block(
+                    then_block,
+                    generic_functions,
+                    type_table,
+                );
+                if let Some(else_blk) = else_block {
+                    self.collect_func_instantiation_sites_in_block(
+                        else_blk,
+                        generic_functions,
+                        type_table,
+                    );
+                }
+            }
         }
     }
 
@@ -1418,6 +1480,9 @@ impl Monomorphizer {
                     );
                 }
             }
+            TirExprKind::OptionSome { value } => {
+                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1738,6 +1803,45 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => {
+                self.substitute_types_in_expr(scrutinee, substitution, type_table);
+                self.substitute_types_in_pattern(pattern, substitution, type_table);
+                self.substitute_types_in_block(then_block, substitution, type_table);
+                if let Some(else_blk) = else_block {
+                    self.substitute_types_in_block(else_blk, substitution, type_table);
+                }
+            }
+        }
+    }
+
+    fn substitute_types_in_pattern(
+        &self,
+        pattern: &mut TirPattern,
+        substitution: &HashMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+    ) {
+        match pattern {
+            TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}
+            TirPattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.substitute_types_in_pattern(p, substitution, type_table);
+                }
+            }
+            TirPattern::Variant {
+                enum_type,
+                bindings,
+                ..
+            } => {
+                *enum_type = self.substitute_type(*enum_type, substitution, type_table);
+                for binding in bindings {
+                    self.substitute_types_in_pattern(binding, substitution, type_table);
+                }
+            }
         }
     }
 
@@ -1956,6 +2060,9 @@ impl Monomorphizer {
                 for arg in args {
                     self.substitute_types_in_expr(arg, substitution, type_table);
                 }
+            }
+            TirExprKind::OptionSome { value } => {
+                self.substitute_types_in_expr(value, substitution, type_table);
             }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
@@ -2224,6 +2331,18 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.rewrite_function_calls_in_expr(scrutinee, type_table);
+                self.rewrite_function_calls_in_block(then_block, type_table);
+                if let Some(else_blk) = else_block {
+                    self.rewrite_function_calls_in_block(else_blk, type_table);
+                }
+            }
         }
     }
 
@@ -2421,6 +2540,9 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_expr(arg, type_table);
                 }
             }
+            TirExprKind::OptionSome { value } => {
+                self.rewrite_function_calls_in_expr(value, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2545,6 +2667,18 @@ impl StringCollector {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.collect_expr(scrutinee);
+                self.collect_block(then_block);
+                if let Some(else_blk) = else_block {
+                    self.collect_block(else_blk);
+                }
+            }
         }
     }
 
@@ -2628,6 +2762,9 @@ impl StringCollector {
                 for arg in args {
                     self.collect_expr(arg);
                 }
+            }
+            TirExprKind::OptionSome { value } => {
+                self.collect_expr(value);
             }
             // Literals and simple expressions don't contain strings
             TirExprKind::IntLiteral { .. }

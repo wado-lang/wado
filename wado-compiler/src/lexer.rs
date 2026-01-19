@@ -567,6 +567,7 @@ impl<'a> Lexer<'a> {
             "unique" => TokenKind::Unique,
             "struct" => TokenKind::Struct,
             "enum" => TokenKind::Enum,
+            "variant" => TokenKind::Variant,
             "type" => TokenKind::Type,
             "impl" => TokenKind::Impl,
             "resource" => TokenKind::Resource,

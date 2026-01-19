@@ -577,7 +577,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `world` declarations (with imports/exports)
 - [x] Attributes (`#[...]`)
 - [ ] `#[data]` attribute for data section injection
-- [ ] `variant` declarations (with payloads)
+- [x] `variant` declarations (with payloads, parsing only)
 - [ ] `flags` declarations (bit flags)
 - [ ] Inner attributes (`#![...]`)
 - [x] Generic parameters on structs (monomorphization)
@@ -755,10 +755,9 @@ fn run() with Stdout {
 ## Known Limitations
 
 1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
-2. **No `variant` keyword**: Parser doesn't recognize `variant` declarations (sum types with payloads)
-3. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
-4. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
-5. **Template strings - mostly implemented**:
+2. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
+3. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
+4. **Template strings - mostly implemented**:
    - [x] Syntax parsing with interpolation `{expr}` works
    - [x] Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished
    - [x] Nested template strings supported
@@ -768,10 +767,10 @@ fn run() with Stdout {
    - [x] Char interpolation (char → UTF-8 string)
    - [x] String concatenation with GC array copy
    - [ ] Format specifiers (`.2f`, etc.) not implemented in codegen
-6. **No type checking**: The analyzer doesn't perform type checking yet
-7. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
-8. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
-9. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
+5. **No type checking**: The analyzer doesn't perform type checking yet
+6. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
+7. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
+8. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
 
 ---
 

@@ -1,0 +1,17 @@
+// Test Option pattern matching with else branch
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let opt: Option<String> = Option::<String>::Some("value");
+
+    // Try to match None, should go to else
+    if None = opt {
+        println("matched none");
+    } else {
+        println("not none");
+    }
+}
+
+__DATA__
+{"stdout": "not none\n"}

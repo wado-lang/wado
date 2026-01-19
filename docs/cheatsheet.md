@@ -163,6 +163,31 @@ enum Color {
 let c = Color::Red;  // not yet implemented
 ```
 
+## Variants (parsing only, codegen not yet implemented)
+
+Variants are sum types with payloads (unlike enums which have no payloads):
+
+```wado
+// Custom variant with unit and payload cases
+variant Shape {
+    Circle(f64),           // radius
+    Rectangle(f64, f64),   // width, height
+    Point,                 // no payload
+}
+
+// Generic variant
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+// Option and Result are defined as variants in core:prelude
+// pub variant Option<T> { Some(T), None }
+// pub variant Result<T, E> { Ok(T), Err(E) }
+```
+
+Note: Variant declarations are parsed but construction and pattern matching are not yet implemented.
+
 ## Functions
 
 ```wado
@@ -496,8 +521,8 @@ Wado intentionally does not support macros.
 ## Not Yet Implemented
 
 - `enum` construction (parsed but no codegen)
+- `variant` construction (parsed but no codegen)
 - `match` statements/expressions
-- `variant` (sum types with payloads)
 - `flags` (bit flags)
 - `trait` declarations
 - Effect handlers

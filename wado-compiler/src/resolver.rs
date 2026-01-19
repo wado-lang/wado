@@ -20,7 +20,7 @@ use crate::ast::{
     Type, UnaryOp, WhileStmt,
 };
 use crate::project::Project;
-use crate::symbol::SymbolTable;
+use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock,
     TirCapture, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule,
@@ -78,6 +78,9 @@ pub enum TypeError {
 
     /// Invalid numeric literal
     InvalidLiteral { message: String, span: Span },
+
+    /// Feature not yet implemented
+    NotYetImplemented { feature: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -135,6 +138,13 @@ impl std::fmt::Display for TypeError {
             }
             TypeError::InvalidLiteral { message, span } => {
                 write!(f, "{}:{}: {}", span.line, span.column, message)
+            }
+            TypeError::NotYetImplemented { feature, span } => {
+                write!(
+                    f,
+                    "{}:{}: {} is not yet implemented",
+                    span.line, span.column, feature
+                )
             }
         }
     }
@@ -1483,27 +1493,149 @@ impl<'a> Resolver<'a> {
             result.push(self.resolve_let(init, ctx));
         }
 
-        let condition = self.resolve_expr(&if_stmt.condition, ctx);
-        let then_block = self.resolve_block(&if_stmt.then_block, ctx);
-        let else_block = if_stmt
-            .else_block
-            .as_ref()
-            .map(|b| self.resolve_block(b, ctx));
+        match &if_stmt.condition {
+            ast::IfCondition::Expr(expr) => {
+                // Regular expression condition
+                let condition = self.resolve_expr(expr, ctx);
+                let then_block = self.resolve_block(&if_stmt.then_block, ctx);
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.resolve_block(b, ctx));
 
-        result.push(TirStmt::new(
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            },
-            if_stmt.span,
-        ));
+                result.push(TirStmt::new(
+                    TirStmtKind::If {
+                        condition,
+                        then_block,
+                        else_block,
+                    },
+                    if_stmt.span,
+                ));
+            }
+            ast::IfCondition::Pattern { pattern, expr, .. } => {
+                // Pattern match condition: if Some(x) = expr { ... }
+                let scrutinee = self.resolve_expr(expr, ctx);
+                let scrutinee_type = scrutinee.type_id;
+
+                // Enter scope for pattern bindings (they're only visible in then_block)
+                ctx.enter_scope();
+
+                // Resolve the pattern with type information from scrutinee
+                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx);
+
+                let then_block = self.resolve_block(&if_stmt.then_block, ctx);
+
+                // Exit pattern binding scope before resolving else block
+                ctx.exit_scope();
+
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.resolve_block(b, ctx));
+
+                result.push(TirStmt::new(
+                    TirStmtKind::IfPattern {
+                        scrutinee,
+                        pattern: tir_pattern,
+                        then_block,
+                        else_block,
+                    },
+                    if_stmt.span,
+                ));
+            }
+        }
 
         if if_stmt.init.is_some() {
             ctx.exit_scope();
         }
 
         result
+    }
+
+    /// Resolve a pattern in an if-pattern context with type information from the scrutinee
+    fn resolve_if_pattern(
+        &mut self,
+        pattern: &Pattern,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        match pattern {
+            Pattern::Wildcard => TirPattern::Wildcard,
+            Pattern::Ident(name) => {
+                // The binding gets the scrutinee type (or inner type for Option patterns)
+                let index = ctx.add_local(name.clone(), scrutinee_type, false);
+                TirPattern::Binding {
+                    name: name.clone(),
+                    local_index: index,
+                }
+            }
+            Pattern::Literal(lit) => {
+                let tir_lit = match lit {
+                    Literal::Int(i) => match Self::parse_int_literal(&i.repr) {
+                        Ok(value) => TirLiteralPattern::Int(value),
+                        Err(_) => TirLiteralPattern::Int(0),
+                    },
+                    Literal::Bool(b) => TirLiteralPattern::Bool(*b),
+                    Literal::Char(c) => TirLiteralPattern::Char(*c),
+                    Literal::String(s) => TirLiteralPattern::String(s.clone()),
+                    Literal::Null => TirLiteralPattern::Null,
+                    _ => TirLiteralPattern::Null,
+                };
+                TirPattern::Literal(tir_lit)
+            }
+            Pattern::Tuple(patterns) => {
+                // For tuple patterns, extract element types
+                let element_types = if let ResolvedType::Tuple(types) =
+                    self.type_table.borrow().get(scrutinee_type).clone()
+                {
+                    types
+                } else {
+                    vec![TypeTable::UNKNOWN; patterns.len()]
+                };
+
+                let resolved: Vec<TirPattern> = patterns
+                    .iter()
+                    .zip(
+                        element_types
+                            .iter()
+                            .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
+                    )
+                    .map(|(p, &ty)| self.resolve_if_pattern(p, ty, ctx))
+                    .collect();
+                TirPattern::Tuple(resolved)
+            }
+            Pattern::Variant {
+                variant_name,
+                bindings,
+                span,
+            } => {
+                // For Option patterns: Some(x) or None
+                let inner_type = if let ResolvedType::Option(inner) =
+                    self.type_table.borrow().get(scrutinee_type).clone()
+                {
+                    inner
+                } else {
+                    self.errors.push(TypeError::TypeMismatch {
+                        expected: "Option type".to_string(),
+                        found: format!("{:?}", self.type_table.borrow().get(scrutinee_type)),
+                        span: *span,
+                    });
+                    TypeTable::UNKNOWN
+                };
+
+                // Resolve inner bindings with the inner type
+                let resolved_bindings: Vec<TirPattern> = bindings
+                    .iter()
+                    .map(|p| self.resolve_if_pattern(p, inner_type, ctx))
+                    .collect();
+
+                TirPattern::Variant {
+                    enum_type: scrutinee_type,
+                    variant_name: variant_name.clone(),
+                    bindings: resolved_bindings,
+                }
+            }
+        }
     }
 
     /// Resolve a while statement
@@ -2626,6 +2758,51 @@ impl<'a> Resolver<'a> {
 
         // Resolve the target type to get struct name, module path, and type args (for generics)
         let target_type_id = self.resolve_type(&static_call.target_type);
+
+        // Special handling for Option::Some and Option::None
+        if let ResolvedType::Option(inner_type) =
+            self.type_table.borrow().get(target_type_id).clone()
+        {
+            match static_call.method.as_str() {
+                "Some" => {
+                    // Option::Some(value) - wrap in OptionSome
+                    if args.len() != 1 {
+                        self.errors.push(TypeError::ArgumentCountMismatch {
+                            expected: 1,
+                            found: args.len(),
+                            span: static_call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                    }
+                    let value = args.into_iter().next().unwrap();
+                    // Return type is Option<T> where T is the inner type
+                    return TirExpr::new(
+                        TirExprKind::OptionSome {
+                            value: Box::new(value),
+                        },
+                        target_type_id,
+                        static_call.span,
+                    );
+                }
+                "None" => {
+                    // Option::None - return null with Option<T> type
+                    if !args.is_empty() {
+                        self.errors.push(TypeError::ArgumentCountMismatch {
+                            expected: 0,
+                            found: args.len(),
+                            span: static_call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                    }
+                    // Inner type comes from the Option type annotation
+                    let _ = inner_type; // Used to verify type is known
+                    return TirExpr::new(TirExprKind::Null, target_type_id, static_call.span);
+                }
+                _ => {
+                    // Other Option methods are not yet supported
+                }
+            }
+        }
         let (struct_name, module_path, mangled_struct_name, struct_type_args) =
             match self.type_table.borrow().get(target_type_id) {
                 ResolvedType::Struct { name, module_path } => {
@@ -3303,7 +3480,19 @@ impl<'a> Resolver<'a> {
             let _init_stmt = self.resolve_let(init, ctx);
         }
 
-        let condition = self.resolve_expr(&if_expr.condition, ctx);
+        // Resolve the condition - pattern conditions are not supported in if expressions
+        let condition = match &if_expr.condition {
+            ast::IfCondition::Expr(expr) => self.resolve_expr(expr, ctx),
+            ast::IfCondition::Pattern { span, .. } => {
+                self.errors.push(TypeError::NotYetImplemented {
+                    feature: "pattern matching in if expressions (use if statement instead)"
+                        .to_string(),
+                    span: *span,
+                });
+                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, *span)
+            }
+        };
+
         let then_block = self.resolve_block(&if_expr.then_block, ctx);
         let else_block = if_expr
             .else_block
@@ -3416,6 +3605,21 @@ impl<'a> Resolver<'a> {
                     .map(|p| self.resolve_pattern(p, ctx))
                     .collect();
                 TirPattern::Tuple(resolved)
+            }
+            Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } => {
+                let resolved_bindings: Vec<TirPattern> = bindings
+                    .iter()
+                    .map(|p| self.resolve_pattern(p, ctx))
+                    .collect();
+                TirPattern::Variant {
+                    enum_type: TypeTable::UNKNOWN, // Will be inferred during type checking
+                    variant_name: variant_name.clone(),
+                    bindings: resolved_bindings,
+                }
             }
         }
     }
@@ -3820,7 +4024,9 @@ impl<'a> Resolver<'a> {
     fn resolve_type(&mut self, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => self.resolve_named_type(&named.name, named.span),
-            Type::Generic(generic) => self.resolve_generic_type(&generic.name, &generic.args),
+            Type::Generic(generic) => {
+                self.resolve_generic_type(&generic.name, &generic.args, generic.span)
+            }
             Type::Function(func_ty) => {
                 let params: Vec<TypeId> = func_ty
                     .params
@@ -3934,9 +4140,27 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a generic type
-    fn resolve_generic_type(&mut self, name: &str, args: &[Type]) -> TypeId {
+    fn resolve_generic_type(&mut self, name: &str, args: &[Type], span: Span) -> TypeId {
+        // Prelude module path for looking up Option/Result
+        let prelude_path = vec!["core".to_string(), "prelude".to_string()];
+
         match name {
             "Option" => {
+                // Verify Option variant exists in symbol table (declared in prelude)
+                // First check local imports, then fall back to prelude module
+                let found_as_variant = self
+                    .symbols
+                    .lookup("Option")
+                    .or_else(|| self.symbols.lookup_in_module(&prelude_path, "Option"))
+                    .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
+
+                if !found_as_variant {
+                    // Option not found as a variant - likely #![no_prelude] without explicit import
+                    self.errors.push(TypeError::UnknownType {
+                        name: "Option".to_string(),
+                        span,
+                    });
+                }
                 let inner = args
                     .first()
                     .map(|t| self.resolve_type(t))
@@ -3944,6 +4168,21 @@ impl<'a> Resolver<'a> {
                 self.type_table.borrow_mut().make_option(inner)
             }
             "Result" => {
+                // Verify Result variant exists in symbol table (declared in prelude)
+                // First check local imports, then fall back to prelude module
+                let found_as_variant = self
+                    .symbols
+                    .lookup("Result")
+                    .or_else(|| self.symbols.lookup_in_module(&prelude_path, "Result"))
+                    .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
+
+                if !found_as_variant {
+                    // Result not found as a variant - likely #![no_prelude] without explicit import
+                    self.errors.push(TypeError::UnknownType {
+                        name: "Result".to_string(),
+                        span,
+                    });
+                }
                 let ok = args
                     .first()
                     .map(|t| self.resolve_type(t))

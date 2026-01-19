@@ -9,10 +9,10 @@ use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
     EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt, MatchArm,
-    MatchExpr, MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl,
-    StructLiteralExpr, StructLiteralField, TemplatePart, TemplateStringExpr, TupleLiteralExpr,
-    TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
+    IfCondition, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt,
+    MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt,
+    StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart, TemplateStringExpr,
+    TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -42,6 +42,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Impl(i) => Item::Impl(desugar_impl(i, ctx)),
         Item::Struct(s) => Item::Struct(desugar_struct(s)),
         Item::Enum(e) => Item::Enum(desugar_enum(e)),
+        Item::Variant(v) => Item::Variant(v.clone()),
         Item::Type(t) => Item::Type(desugar_type_alias(t)),
         Item::Effect(e) => Item::Effect(desugar_effect(e)),
         Item::Use(u) => Item::Use(u.clone()),
@@ -131,7 +132,7 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
         }),
         Stmt::If(i) => Stmt::If(IfStmt {
             init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
-            condition: desugar_expr(&i.condition),
+            condition: desugar_if_condition(&i.condition),
             then_block: desugar_block(&i.then_block, ctx),
             else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
             span: i.span,
@@ -174,6 +175,21 @@ fn desugar_expr(expr: &Expr) -> Expr {
     // Desugar expressions. Block/If expressions that can contain statements
     // use a temporary context since they need unique assert IDs within their scope.
     desugar_expr_impl(expr, None)
+}
+
+fn desugar_if_condition(cond: &IfCondition) -> IfCondition {
+    match cond {
+        IfCondition::Expr(expr) => IfCondition::Expr(desugar_expr(expr)),
+        IfCondition::Pattern {
+            pattern,
+            expr,
+            span,
+        } => IfCondition::Pattern {
+            pattern: pattern.clone(),
+            expr: desugar_expr(expr),
+            span: *span,
+        },
+    }
 }
 
 fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
@@ -246,7 +262,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             if let Some(ctx) = ctx {
                 Expr::If(Box::new(IfExpr {
                     init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
-                    condition: desugar_expr(&i.condition),
+                    condition: desugar_if_condition(&i.condition),
                     then_block: desugar_block(&i.then_block, ctx),
                     else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
                     span: i.span,
@@ -255,7 +271,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 let mut temp_ctx = DesugarContext { assert_counter: 0 };
                 Expr::If(Box::new(IfExpr {
                     init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
-                    condition: desugar_expr(&i.condition),
+                    condition: desugar_if_condition(&i.condition),
                     then_block: desugar_block(&i.then_block, &mut temp_ctx),
                     else_block: i
                         .else_block
@@ -522,14 +538,14 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     // Build: if !__cond { panic(...); }
     let if_stmt = Stmt::If(IfStmt {
         init: None,
-        condition: Expr::Unary(Box::new(UnaryExpr {
+        condition: IfCondition::Expr(Expr::Unary(Box::new(UnaryExpr {
             op: UnaryOp::Not,
             expr: Expr::Ident(IdentExpr {
                 name: cond_var,
                 span,
             }),
             span,
-        })),
+        }))),
         then_block: Block {
             stmts: vec![Stmt::Expr(ExprStmt {
                 expr: panic_call,

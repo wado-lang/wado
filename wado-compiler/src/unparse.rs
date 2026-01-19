@@ -6,11 +6,12 @@ use crate::ast::{
     AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, EffectDecl,
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item,
-    LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
-    Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
-    StructField, StructLiteralExpr, TemplateStringExpr, TupleLiteralExpr, Type, TypeAlias,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, WhileStmt, WorldDecl,
+    Function, FunctionType, IfCondition, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
+    Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
+    Module, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
+    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TupleLiteralExpr, Type,
+    TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
+    WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -91,6 +92,7 @@ impl<'a> Unparser<'a> {
             Item::Function(f) => self.unparse_function(f),
             Item::Struct(s) => self.unparse_struct(s),
             Item::Enum(e) => self.unparse_enum(e),
+            Item::Variant(v) => self.unparse_variant(v),
             Item::Type(t) => self.unparse_type_alias(t),
             Item::Impl(i) => self.unparse_impl(i),
             Item::Effect(e) => self.unparse_effect(e),
@@ -360,6 +362,44 @@ impl<'a> Unparser<'a> {
         self.write_indent();
         self.output.push_str(&variant.name);
         if let Some(fields) = &variant.fields {
+            self.output.push('(');
+            for (i, ty) in fields.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.unparse_type(ty);
+            }
+            self.output.push(')');
+        }
+        self.output.push_str(",\n");
+    }
+
+    fn unparse_variant(&mut self, v: &VariantDecl) {
+        self.write_indent();
+
+        if v.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("variant ");
+        self.output.push_str(&v.name);
+        self.unparse_generic_params(&v.type_params);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        for case in &v.cases {
+            self.unparse_variant_case(case);
+        }
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_variant_case(&mut self, case: &VariantCase) {
+        self.write_indent();
+        self.output.push_str(&case.name);
+        if let Some(fields) = &case.fields {
             self.output.push('(');
             for (i, ty) in fields.iter().enumerate() {
                 if i > 0 {
@@ -720,7 +760,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("; ");
         }
 
-        self.unparse_expr(&i.condition);
+        self.unparse_if_condition(&i.condition);
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -740,6 +780,19 @@ impl<'a> Unparser<'a> {
         }
 
         self.output.push('\n');
+    }
+
+    fn unparse_if_condition(&mut self, cond: &IfCondition) {
+        match cond {
+            IfCondition::Expr(expr) => {
+                self.unparse_expr(expr);
+            }
+            IfCondition::Pattern { pattern, expr, .. } => {
+                self.unparse_pattern(pattern);
+                self.output.push_str(" = ");
+                self.unparse_expr(expr);
+            }
+        }
     }
 
     fn unparse_while(&mut self, w: &WhileStmt) {
@@ -1110,7 +1163,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("; ");
         }
 
-        self.unparse_expr(&i.condition);
+        self.unparse_if_condition(&i.condition);
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -1167,6 +1220,23 @@ impl<'a> Unparser<'a> {
                     self.unparse_pattern(p);
                 }
                 self.output.push(')');
+            }
+            Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } => {
+                self.output.push_str(variant_name);
+                if !bindings.is_empty() {
+                    self.output.push('(');
+                    for (i, p) in bindings.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.unparse_pattern(p);
+                    }
+                    self.output.push(')');
+                }
             }
         }
     }
@@ -1344,6 +1414,7 @@ fn get_item_span(item: &Item) -> Span {
         Item::Function(f) => f.span,
         Item::Struct(s) => s.span,
         Item::Enum(e) => e.span,
+        Item::Variant(v) => v.span,
         Item::Type(t) => t.span,
         Item::Impl(i) => i.span,
         Item::Effect(e) => e.span,
@@ -1597,8 +1668,8 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
 // ============================================================================
 
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFunction, TirModule, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeTable,
+    TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
+    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeTable,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -1930,6 +2001,92 @@ impl<'a> TirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => {
+                self.write_indent();
+                self.output.push_str("if ");
+                self.unparse_tir_pattern(pattern);
+                self.output.push_str(" = ");
+                self.unparse_expr(scrutinee);
+                self.output.push_str(" {\n");
+                self.indent_level += 1;
+                self.unparse_block(then_block);
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
+                if let Some(else_blk) = else_block {
+                    self.output.push_str(" else {\n");
+                    self.indent_level += 1;
+                    self.unparse_block(else_blk);
+                    self.indent_level -= 1;
+                    self.write_indent();
+                    self.output.push('}');
+                }
+                self.output.push('\n');
+            }
+        }
+    }
+
+    fn unparse_tir_pattern(&mut self, pattern: &TirPattern) {
+        match pattern {
+            TirPattern::Wildcard => {
+                self.output.push('_');
+            }
+            TirPattern::Binding { name, .. } => {
+                self.output.push_str(name);
+            }
+            TirPattern::Literal(lit) => match lit {
+                TirLiteralPattern::Int(i) => {
+                    self.output.push_str(&i.to_string());
+                }
+                TirLiteralPattern::Bool(b) => {
+                    self.output.push_str(if *b { "true" } else { "false" });
+                }
+                TirLiteralPattern::Char(c) => {
+                    self.output.push('\'');
+                    self.output.push(*c);
+                    self.output.push('\'');
+                }
+                TirLiteralPattern::String(s) => {
+                    self.output.push('"');
+                    self.output.push_str(s);
+                    self.output.push('"');
+                }
+                TirLiteralPattern::Null => {
+                    self.output.push_str("null");
+                }
+            },
+            TirPattern::Tuple(patterns) => {
+                self.output.push('[');
+                for (i, p) in patterns.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_tir_pattern(p);
+                }
+                self.output.push(']');
+            }
+            TirPattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } => {
+                self.output.push_str(variant_name);
+                if !bindings.is_empty() {
+                    self.output.push('(');
+                    for (i, p) in bindings.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.unparse_tir_pattern(p);
+                    }
+                    self.output.push(')');
+                }
+            }
         }
     }
 
@@ -1956,6 +2113,11 @@ impl<'a> TirUnparser<'a> {
             }
             TirExprKind::Null => {
                 self.output.push_str("null");
+            }
+            TirExprKind::OptionSome { value } => {
+                self.output.push_str("Option::Some(");
+                self.unparse_expr(value);
+                self.output.push(')');
             }
             TirExprKind::Unit => {
                 self.output.push_str("()");

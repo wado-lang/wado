@@ -14,8 +14,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
-    Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
+    AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForOfStmt, ForStmt, Function, IfCondition,
+    IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
 };
 use crate::token::Span;
 
@@ -243,7 +243,7 @@ impl Binder {
             self.bind_let(init);
         }
 
-        self.bind_expr(&if_stmt.condition);
+        self.bind_if_condition(&if_stmt.condition);
         self.bind_block(&if_stmt.then_block);
         if let Some(ref else_block) = if_stmt.else_block {
             self.bind_block(else_block);
@@ -470,7 +470,7 @@ impl Binder {
             self.bind_let(init);
         }
 
-        self.bind_expr(&if_expr.condition);
+        self.bind_if_condition(&if_expr.condition);
         self.bind_block(&if_expr.then_block);
         if let Some(ref else_block) = if_expr.else_block {
             self.bind_block(else_block);
@@ -478,6 +478,23 @@ impl Binder {
 
         if if_expr.init.is_some() {
             self.exit_scope();
+        }
+    }
+
+    /// Bind an if condition (expression or pattern match)
+    fn bind_if_condition(&mut self, condition: &IfCondition) {
+        match condition {
+            IfCondition::Expr(expr) => {
+                self.bind_expr(expr);
+            }
+            IfCondition::Pattern { pattern, expr, .. } => {
+                // First bind the expression being matched
+                self.bind_expr(expr);
+                // Then bind the pattern (introduces variables)
+                // Note: pattern variables are scoped to the then-block
+                // This is handled by the caller entering/exiting scope
+                self.bind_pattern(pattern, expr.span());
+            }
         }
     }
 
@@ -504,6 +521,16 @@ impl Binder {
             crate::ast::Pattern::Tuple(patterns) => {
                 for p in patterns {
                     self.bind_pattern(p, span);
+                }
+            }
+            crate::ast::Pattern::Variant {
+                bindings,
+                span: variant_span,
+                ..
+            } => {
+                // Bind nested patterns in variant
+                for p in bindings {
+                    self.bind_pattern(p, *variant_span);
                 }
             }
             crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Wildcard => {

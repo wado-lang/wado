@@ -1239,7 +1239,13 @@ variant Shape {
     Point,                 // no payload
 }
 
-// Used as:
+// Generic variant
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+// Used as (not yet implemented):
 let s = Shape::Circle(5.0);
 
 match s {
@@ -1248,6 +1254,8 @@ match s {
     Shape::Point => 0.0,
 }
 ```
+
+**Implementation Status**: Variant declarations are parsed and added to the symbol table. `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude` and work with their existing special codegen. Custom variant construction and pattern matching are not yet implemented.
 
 **Flags** (bit flags - Component Model `flags`):
 
