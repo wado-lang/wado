@@ -204,16 +204,22 @@ Show the generated WAT to an agent and ask it to spot inefficiencies. Review the
 
 ### Install Development Tools
 
-#### Using mise (Recommended)
+#### Quick Start (Recommended)
 
-[mise](https://mise.jdx.dev/) manages all required development tools automatically:
+Use the provided Makefile task to set up everything automatically:
 
 ```sh
-# Install mise
-curl https://mise.run | sh
+make on-task-started  # installs mise and all project tools
+```
 
-# Install all project tools
-mise install
+This will install [mise](https://mise.jdx.dev/) and all required development tools (wasm-tools, wasmtime, Node.js).
+
+#### Using mise Directly
+
+If you already have mise installed:
+
+```sh
+mise install  # install all project tools
 ```
 
 #### Manual Installation
@@ -227,6 +233,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Install Wasm tools
 cargo install wasm-tools
 cargo install wasmtime-cli
+
+# Install Node.js (for VS Code extension and prettier)
+# Use your preferred method (nvm, system package manager, etc.)
 ```
 
 ### Build and Test

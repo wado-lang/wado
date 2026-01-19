@@ -276,7 +276,21 @@ make benchmark-sieve       # use arrays
 make report-wasm-size
 ```
 
-## On Your Task Done
+## Development Workflow
+
+### When Starting a Task
+
+Run the following to set up your development environment:
+
+```sh
+make on-task-started  # install mise and project tools
+```
+
+This command will:
+- Install mise if not already installed
+- Install all required development tools (wasm-tools, wasmtime, Node.js, etc.)
+
+### When Completing a Task
 
 When you have completed a task, make sure everything is up-to-date and tested:
 
@@ -284,4 +298,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - spec.md if the language specification is updated.
   - docs/compiler.md if the new features are implemented.
   - docs/cheatsheet.md if the syntax/stdlib is updated.
-- `make on-task-done` for format, clippy-fix, update-bundled, test.
+- Run `make on-task-done` to format, clippy-fix, update-bundled, and test.

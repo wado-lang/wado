@@ -1,3 +1,23 @@
+.PHONY: on-task-started
+on-task-started:
+	@echo "Setting up development environment..."
+	@if ! command -v mise >/dev/null 2>&1; then \
+		echo "Installing mise..."; \
+		curl -fsSL https://mise.run | sh; \
+		echo ""; \
+		echo "mise installed. Please restart your shell or run:"; \
+		echo "  echo 'eval \"\$$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc  # for bash"; \
+		echo "  echo 'eval \"\$$(~/.local/bin/mise activate zsh)\"' >> ~/.zshrc   # for zsh"; \
+		echo ""; \
+		echo "Then run 'make on-task-started' again to install project tools."; \
+	else \
+		echo "mise is already installed."; \
+		echo "Installing project tools..."; \
+		mise install; \
+		echo ""; \
+		echo "Development environment ready."; \
+	fi
+
 .PHONY: install-deps
 install-deps:
 	@echo "Prerequisites (install manually if not present):"
