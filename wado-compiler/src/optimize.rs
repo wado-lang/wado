@@ -3219,8 +3219,8 @@ fn find_hoist_candidates_in_expr(
             field_index,
             field_name,
         } => {
-            if let TirExprKind::Local { index, .. } = &inner.kind {
-                if !modified_vars.contains(index) {
+            if let TirExprKind::Local { index, .. } = &inner.kind
+                && !modified_vars.contains(index) {
                     let key = (*index, *field_index);
                     if !seen.contains(&key) {
                         seen.insert(key);
@@ -3234,7 +3234,6 @@ fn find_hoist_candidates_in_expr(
                         *next_local += 1;
                     }
                 }
-            }
             // Still recurse into inner expression
             find_hoist_candidates_in_expr(inner, modified_vars, candidates, seen, next_local);
         }
@@ -3428,8 +3427,7 @@ fn replace_hoisted_in_expr(expr: &mut TirExpr, candidates: &[HoistCandidate]) {
         field_index,
         ..
     } = &expr.kind
-    {
-        if let TirExprKind::Local { index, .. } = &inner.kind {
+        && let TirExprKind::Local { index, .. } = &inner.kind {
             for candidate in candidates {
                 if candidate.local_index == *index && candidate.field_index == *field_index {
                     // Replace with a reference to the hoisted local
@@ -3441,7 +3439,6 @@ fn replace_hoisted_in_expr(expr: &mut TirExpr, candidates: &[HoistCandidate]) {
                 }
             }
         }
-    }
 
     // Recurse into sub-expressions
     match &mut expr.kind {
