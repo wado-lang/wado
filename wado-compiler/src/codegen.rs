@@ -2971,7 +2971,7 @@ impl Codegen {
     /// Check if an expression produces a fresh value that doesn't need copying.
     /// Fresh values include:
     /// - Literals (string, struct, array, tuple, null)
-    /// - Builtin calls like `string_new` and `array_new_string`
+    /// - All call variants (callee constructs/copies return values)
     /// - OptionSome with a fresh inner value
     fn is_fresh_value_expr(&self, expr: &TirExpr) -> bool {
         match &expr.kind {
@@ -2985,21 +2985,14 @@ impl Codegen {
             // OptionSome is fresh if its inner value is fresh
             TirExprKind::OptionSome { value } => self.is_fresh_value_expr(value),
 
-            // Builtin functions that create fresh values
-            TirExprKind::Call { func, .. } => {
-                let module_path = func.module_path();
-                let func_name = func.name();
-                // In TIR, builtin calls have empty module_path and func_name like "builtin::string_new"
-                if module_path.is_empty()
-                    && let Some(builtin_name) = func_name.strip_prefix("builtin::")
-                {
-                    return matches!(
-                        builtin_name,
-                        "string_new" | "array_new_string" | "array_new"
-                    );
-                }
-                false
-            }
+            // All call variants return fresh values:
+            // - Value types: callee constructs/copies the return value
+            // - Reference types: don't need copying anyway
+            TirExprKind::Call { .. }
+            | TirExprKind::StaticCall { .. }
+            | TirExprKind::MethodCall { .. }
+            | TirExprKind::EffectCall { .. }
+            | TirExprKind::IndirectCall { .. } => true,
 
             _ => false,
         }
