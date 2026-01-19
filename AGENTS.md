@@ -40,7 +40,7 @@ Each test fixture group has the same prefix in their filenames.
 | `stderr_contains` | `string[]` | Strings that must appear in stderr                   |
 | `trapped`         | `bool`     | Whether the program should trap                      |
 | `compile_error`   | `string`   | Expected compile error (substring match)             |
-| `skip`            | `bool`     | Skip this test (override with `WADO_FORCE_RUN_SKIPPED=1`) |
+| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented |
 
 #### Examples
 
@@ -65,8 +65,9 @@ __DATA__
 ```
 
 ```wado
-// Skipped test - for unimplemented features
-// Use WADO_FORCE_RUN_SKIPPED=1 to force run
+// TODO test - for unimplemented features
+// Test runs but MUST fail (compile/runtime error or wrong output)
+// If it passes, the test fails to remind you to remove TODO
 fn run() {
     let dict = MiniDict::new();  // Not yet implemented
     dict.set("key", "value");
@@ -74,7 +75,7 @@ fn run() {
 }
 
 __DATA__
-{"skip": true, "stdout": "value\n"}
+{"TODO": true, "stdout": "value\n"}
 ```
 
 ### The `wasi:*` Modules
