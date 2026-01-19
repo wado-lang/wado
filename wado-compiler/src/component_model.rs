@@ -409,6 +409,16 @@ impl WasiRegistry {
         self.effect_to_func.get("Stderr::write_via_stream")
     }
 
+    /// Get all registered WASI function names
+    ///
+    /// Returns an iterator over function names in `Effect::method` format
+    /// (e.g., "Stdout::write_via_stream", "MonotonicClock::now").
+    ///
+    /// Used by the optimizer to populate used_wasi_functions in O0 mode.
+    pub fn all_function_names(&self) -> impl Iterator<Item = &str> {
+        self.effect_to_func.keys().map(|s| s.as_str())
+    }
+
     // ============================================================================
     // Type Conversion (AST types to Wasm types)
     // ============================================================================
