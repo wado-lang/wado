@@ -86,6 +86,9 @@ pub enum TypeError {
 
     /// Feature not yet implemented
     NotYetImplemented { feature: String, span: Span },
+
+    /// Invalid assignment target (not a valid l-value)
+    CannotAssign { message: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -149,6 +152,13 @@ impl std::fmt::Display for TypeError {
                     f,
                     "{}:{}: {} is not yet implemented",
                     span.line, span.column, feature
+                )
+            }
+            TypeError::CannotAssign { message, span } => {
+                write!(
+                    f,
+                    "{}:{}: cannot assign: {}",
+                    span.line, span.column, message
                 )
             }
         }
@@ -496,8 +506,11 @@ impl<'a> Resolver<'a> {
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
-                        let type_params: Vec<String> =
-                            variant_decl.type_params.iter().map(|p| p.name.clone()).collect();
+                        let type_params: Vec<String> = variant_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect();
                         variant_cases.insert(
                             variant_decl.name.clone(),
                             (path.clone(), type_params, Vec::new()),
@@ -537,8 +550,11 @@ impl<'a> Resolver<'a> {
                     }
                     Item::Variant(variant_decl) => {
                         // Resolve variant case field types
-                        let type_params: Vec<String> =
-                            variant_decl.type_params.iter().map(|p| p.name.clone()).collect();
+                        let type_params: Vec<String> = variant_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect();
                         let mut cases = Vec::new();
                         for case in &variant_decl.cases {
                             let field_types = if let Some(fields) = &case.fields {
@@ -558,8 +574,10 @@ impl<'a> Resolver<'a> {
                             };
                             cases.push((case.name.clone(), field_types));
                         }
-                        variant_cases
-                            .insert(variant_decl.name.clone(), (path.clone(), type_params, cases));
+                        variant_cases.insert(
+                            variant_decl.name.clone(),
+                            (path.clone(), type_params, cases),
+                        );
                     }
                     _ => {}
                 }
@@ -947,8 +965,11 @@ impl<'a> Resolver<'a> {
                     }
 
                     // Collect type parameters
-                    let type_params: Vec<String> =
-                        variant_decl.type_params.iter().map(|p| p.name.clone()).collect();
+                    let type_params: Vec<String> = variant_decl
+                        .type_params
+                        .iter()
+                        .map(|p| p.name.clone())
+                        .collect();
 
                     // Collect variant cases with resolved field types
                     let mut cases = Vec::new();
@@ -1653,7 +1674,7 @@ impl<'a> Resolver<'a> {
                 ));
             }
             ast::IfCondition::Pattern { pattern, expr, .. } => {
-                // Pattern match condition: if Some(x) = expr { ... }
+                // Pattern match condition: if let Some(x) = expr { ... }
                 let scrutinee = self.resolve_expr(expr, ctx);
                 let scrutinee_type = scrutinee.type_id;
 
@@ -2066,10 +2087,8 @@ impl<'a> Resolver<'a> {
 
             if let Some((module_path, _, cases)) = self.variant_cases.get(prefix) {
                 // Find the case by name
-                if let Some((case_index, (case_name, field_types))) = cases
-                    .iter()
-                    .enumerate()
-                    .find(|(_, (n, _))| n == suffix)
+                if let Some((case_index, (case_name, field_types))) =
+                    cases.iter().enumerate().find(|(_, (n, _))| n == suffix)
                 {
                     // Unit variant - must have no fields
                     if !field_types.is_empty() {
@@ -2082,10 +2101,10 @@ impl<'a> Resolver<'a> {
                     }
 
                     // Create variant type
-                    let variant_type = self.type_table.borrow_mut().make_variant(
-                        prefix.to_string(),
-                        module_path.clone(),
-                    );
+                    let variant_type = self
+                        .type_table
+                        .borrow_mut()
+                        .make_variant(prefix.to_string(), module_path.clone());
 
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
@@ -2270,6 +2289,28 @@ impl<'a> Resolver<'a> {
         let target = self.resolve_expr(&assign.target, ctx);
         let value = self.resolve_expr(&assign.value, ctx);
 
+        // Validate that the target is a valid l-value
+        let is_valid_lvalue = match &target.kind {
+            TirExprKind::Local { .. } => true,
+            TirExprKind::FieldAccess { .. } => true,
+            TirExprKind::Index { .. } => true,
+            // Dereference is a valid l-value: *ref = value
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                ..
+            } => true,
+            _ => false,
+        };
+
+        if !is_valid_lvalue {
+            // Report error for invalid assignment target
+            self.errors.push(TypeError::CannotAssign {
+                message: "expression is not assignable".to_string(),
+                span: assign.target.span(),
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, assign.span);
+        }
+
         TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(target),
@@ -2434,10 +2475,8 @@ impl<'a> Resolver<'a> {
                     // Check if this is a variant case construction (Color::Red)
                     else if let Some((module_path, _, cases)) = self.variant_cases.get(prefix) {
                         // Find the case by name
-                        if let Some((case_index, (case_name, field_types))) = cases
-                            .iter()
-                            .enumerate()
-                            .find(|(_, (n, _))| n == suffix)
+                        if let Some((case_index, (case_name, field_types))) =
+                            cases.iter().enumerate().find(|(_, (n, _))| n == suffix)
                         {
                             // Validate argument count
                             if args.len() != field_types.len() {
@@ -2454,10 +2493,10 @@ impl<'a> Resolver<'a> {
                             }
 
                             // Create variant type
-                            let variant_type = self.type_table.borrow_mut().make_variant(
-                                prefix.to_string(),
-                                module_path.clone(),
-                            );
+                            let variant_type = self
+                                .type_table
+                                .borrow_mut()
+                                .make_variant(prefix.to_string(), module_path.clone());
 
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
@@ -3034,8 +3073,10 @@ impl<'a> Resolver<'a> {
         }
 
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
-        if let ResolvedType::Variant { name, module_path: _ } =
-            self.type_table.borrow().get(target_type_id).clone()
+        if let ResolvedType::Variant {
+            name,
+            module_path: _,
+        } = self.type_table.borrow().get(target_type_id).clone()
         {
             // Look up the variant case info
             if let Some((_, _type_params, cases)) = self.variant_cases.get(&name) {
@@ -3761,7 +3802,7 @@ impl<'a> Resolver<'a> {
             let _init_stmt = self.resolve_let(init, ctx);
         }
 
-        // Resolve the condition - pattern conditions are not supported in if expressions
+        // Resolve the condition
         let condition = match &if_expr.condition {
             ast::IfCondition::Expr(expr) => self.resolve_expr(expr, ctx),
             ast::IfCondition::Pattern { span, .. } => {

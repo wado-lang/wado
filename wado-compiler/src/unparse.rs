@@ -788,6 +788,7 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(expr);
             }
             IfCondition::Pattern { pattern, expr, .. } => {
+                self.output.push_str("let ");
                 self.unparse_pattern(pattern);
                 self.output.push_str(" = ");
                 self.unparse_expr(expr);

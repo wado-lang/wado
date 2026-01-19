@@ -1490,7 +1490,11 @@ impl Monomorphizer {
             }
             TirExprKind::VariantConstruct { fields, .. } => {
                 for field in fields {
-                    self.collect_func_instantiation_sites_in_expr(field, generic_functions, type_table);
+                    self.collect_func_instantiation_sites_in_expr(
+                        field,
+                        generic_functions,
+                        type_table,
+                    );
                 }
             }
             // Literals and simple expressions

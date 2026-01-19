@@ -742,34 +742,38 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::If)?;
 
-        // Check for if-let-init: `if let x = expr; condition { ... }`
-        let init = if self.check(&TokenKind::Let) {
-            let let_stmt = self.parse_let_stmt_inner()?;
-            self.expect(&TokenKind::Semicolon)?;
-            match let_stmt {
-                Stmt::Let(ls) => Some(Box::new(ls)),
-                _ => unreachable!(),
-            }
-        } else {
-            None
-        };
+        let mut init = None;
+        let condition;
 
-        // Check for pattern condition: `if Some(x) = expr { ... }` or `if None = expr { ... }`
-        // This is detected by seeing an uppercase identifier that looks like a variant
-        let condition = if self.is_pattern_condition() {
-            let pattern_span = self.peek().span;
-            let pattern = self.parse_pattern()?;
-            self.expect(&TokenKind::Eq)?;
-            let expr = self.parse_expr()?;
-            let span = pattern_span.merge(&expr.span());
-            IfCondition::Pattern {
-                pattern,
-                expr,
-                span,
+        // Check for if-let: either Rust-style pattern matching or Go-style init
+        if self.check(&TokenKind::Let) {
+            self.advance(); // consume 'let'
+
+            // Check if this is Rust-style pattern matching (uppercase identifier = pattern start)
+            if self.is_pattern_start() {
+                // Rust-style: `if let Some(x) = expr { ... }` or `if let None = expr { ... }`
+                let pattern_span = self.peek().span;
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::Eq)?;
+                let expr = self.parse_expr()?;
+                let span = pattern_span.merge(&expr.span());
+                condition = IfCondition::Pattern {
+                    pattern,
+                    expr,
+                    span,
+                };
+            } else {
+                // Go-style: `if let x = expr; condition { ... }`
+                // We already consumed 'let', need to parse variable declaration
+                let let_stmt = self.parse_let_stmt_after_let()?;
+                self.expect(&TokenKind::Semicolon)?;
+                init = Some(Box::new(let_stmt));
+                condition = IfCondition::Expr(self.parse_expr()?);
             }
         } else {
-            IfCondition::Expr(self.parse_expr()?)
-        };
+            // No 'let', just a regular condition expression
+            condition = IfCondition::Expr(self.parse_expr()?);
+        }
 
         let then_block = self.parse_block()?;
 
@@ -792,48 +796,47 @@ impl Parser {
         }))
     }
 
-    /// Check if the upcoming tokens look like a pattern condition: `Some(x) =` or `None =`
-    fn is_pattern_condition(&self) -> bool {
-        // Look for uppercase identifier (variant name)
-        if let TokenKind::Ident(name) = self.peek_kind()
-            && name.chars().next().is_some_and(|c| c.is_uppercase())
-        {
-            // Check for `VariantName(` or `VariantName =`
-            let pos = self.pos;
-            if pos + 1 < self.tokens.len() {
-                let next = &self.tokens[pos + 1].kind;
-                if matches!(next, TokenKind::Eq) {
-                    // None =
-                    return true;
-                }
-                if matches!(next, TokenKind::LParen) {
-                    // Some( - need to find matching ) and check for =
-                    // Use a simple scan to find the matching paren
-                    let mut depth = 0;
-                    let mut i = pos + 1;
-                    while i < self.tokens.len() {
-                        match &self.tokens[i].kind {
-                            TokenKind::LParen => depth += 1,
-                            TokenKind::RParen => {
-                                depth -= 1;
-                                if depth == 0 {
-                                    // Check if next token is =
-                                    if i + 1 < self.tokens.len()
-                                        && matches!(self.tokens[i + 1].kind, TokenKind::Eq)
-                                    {
-                                        return true;
-                                    }
-                                    break;
-                                }
-                            }
-                            _ => {}
-                        }
-                        i += 1;
-                    }
-                }
-            }
+    /// Check if the next tokens look like a pattern start (uppercase identifier)
+    fn is_pattern_start(&self) -> bool {
+        if let TokenKind::Ident(name) = self.peek_kind() {
+            // Uppercase identifier indicates a variant pattern like Some, None, Ok, Err
+            name.chars().next().is_some_and(|c| c.is_uppercase())
+        } else {
+            false
         }
-        false
+    }
+
+    /// Parse the rest of a let statement after the 'let' keyword has been consumed
+    fn parse_let_stmt_after_let(&mut self) -> ParseResult<LetStmt> {
+        let start_span = self.peek().span;
+
+        let is_mut = if self.check(&TokenKind::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
+        let name = self.consume_ident()?;
+
+        let ty = if self.check(&TokenKind::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        self.expect(&TokenKind::Eq)?;
+        let value = self.parse_expr()?;
+
+        Ok(LetStmt {
+            name,
+            is_mut,
+            is_reactive: false,
+            ty,
+            value,
+            span: start_span,
+        })
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {

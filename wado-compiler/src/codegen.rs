@@ -2777,7 +2777,12 @@ impl Codegen {
             .collect();
 
         // Find the maximum number of fields across all cases
-        let max_fields = variant.cases.iter().map(|c| c.fields.len()).max().unwrap_or(0);
+        let max_fields = variant
+            .cases
+            .iter()
+            .map(|c| c.fields.len())
+            .max()
+            .unwrap_or(0);
 
         // Build the struct fields: tag (i32) + max_fields payload fields
         let mut fields = Vec::with_capacity(1 + max_fields);
@@ -2807,7 +2812,10 @@ impl Codegen {
             let (storage_type, field_type) = if field_types_at_idx.is_empty() {
                 // No fields at this index (shouldn't happen if max_fields > 0)
                 (StorageType::Val(ValType::I32), ValType::I32)
-            } else if field_types_at_idx.iter().all(|t| *t == field_types_at_idx[0]) {
+            } else if field_types_at_idx
+                .iter()
+                .all(|t| *t == field_types_at_idx[0])
+            {
                 // All cases have the same type at this position
                 (
                     StorageType::Val(field_types_at_idx[0]),

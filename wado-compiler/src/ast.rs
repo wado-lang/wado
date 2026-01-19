@@ -332,7 +332,7 @@ pub struct ReturnStmt {
 pub enum IfCondition {
     /// Regular boolean expression: `if x > 0 { ... }`
     Expr(Expr),
-    /// Pattern match: `if Some(x) = expr { ... }`
+    /// Rust-style pattern match: `if let Some(x) = expr { ... }`
     Pattern {
         pattern: Pattern,
         expr: Expr,
