@@ -603,12 +603,11 @@ impl Parser {
 
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
         // Check for labeled block: `LABEL: { ... }`
-        if let TokenKind::Ident(_) = self.peek_kind() {
-            if matches!(self.peek_nth(1).kind, TokenKind::Colon)
-                && matches!(self.peek_nth(2).kind, TokenKind::LBrace)
-            {
-                return self.parse_labeled_block_stmt();
-            }
+        if let TokenKind::Ident(_) = self.peek_kind()
+            && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+            && matches!(self.peek_nth(2).kind, TokenKind::LBrace)
+        {
+            return self.parse_labeled_block_stmt();
         }
 
         match self.peek_kind() {

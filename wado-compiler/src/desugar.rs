@@ -8,8 +8,8 @@
 use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
-    EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function, IfExpr,
-    IfStmt, IdentExpr, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt, MatchArm,
+    EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt, MatchArm,
     MatchExpr, MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl,
     StructLiteralExpr, StructLiteralField, TemplatePart, TemplateStringExpr, TupleLiteralExpr,
     TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
@@ -26,7 +26,11 @@ struct DesugarContext {
 pub fn desugar_module(module: &Module) -> Module {
     let mut ctx = DesugarContext { assert_counter: 0 };
     Module::with_metadata(
-        module.items.iter().map(|item| desugar_item(item, &mut ctx)).collect(),
+        module
+            .items
+            .iter()
+            .map(|item| desugar_item(item, &mut ctx))
+            .collect(),
         module.shebang().map(String::from),
         module.data_section().map(String::from),
     )
@@ -64,7 +68,11 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
     ImplBlock {
         type_params: impl_block.type_params.clone(),
         ty: impl_block.ty.clone(),
-        methods: impl_block.methods.iter().map(|m| desugar_function(m, ctx)).collect(),
+        methods: impl_block
+            .methods
+            .iter()
+            .map(|m| desugar_function(m, ctx))
+            .collect(),
         span: impl_block.span,
     }
 }
@@ -249,7 +257,10 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
                     condition: desugar_expr(&i.condition),
                     then_block: desugar_block(&i.then_block, &mut temp_ctx),
-                    else_block: i.else_block.as_ref().map(|b| desugar_block(b, &mut temp_ctx)),
+                    else_block: i
+                        .else_block
+                        .as_ref()
+                        .map(|b| desugar_block(b, &mut temp_ctx)),
                     span: i.span,
                 }))
             }
@@ -421,7 +432,12 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     let desugared_condition = desugar_expr(&assert_stmt.condition);
 
     // Collect intermediates from the desugared condition
-    collect_intermediates(&desugared_condition, &mut intermediates, &mut var_counter, true);
+    collect_intermediates(
+        &desugared_condition,
+        &mut intermediates,
+        &mut var_counter,
+        true,
+    );
 
     // Build the list of let statements for intermediates
     let mut stmts: Vec<Stmt> = Vec::new();
@@ -438,7 +454,8 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     }
 
     // Build the condition expression using the intermediate variables
-    let reconstructed_condition = reconstruct_with_intermediates(&desugared_condition, &intermediates);
+    let reconstructed_condition =
+        reconstruct_with_intermediates(&desugared_condition, &intermediates);
 
     // Store condition in a variable (scoped to this labeled block)
     let cond_var = "__cond".to_string();
@@ -462,7 +479,10 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             expr: Box::new(desugar_expr(msg)),
             format: None,
         });
-        template_parts.push(TemplatePart::String(format!("\ncondition: {}\n", condition_source)));
+        template_parts.push(TemplatePart::String(format!(
+            "\ncondition: {}\n",
+            condition_source
+        )));
     } else {
         template_parts.push(TemplatePart::String(format!(
             "Assertion failed:\ncondition: {}\n",
@@ -582,10 +602,7 @@ fn collect_intermediates(
 }
 
 /// Reconstruct the condition expression using intermediate variable references.
-fn reconstruct_with_intermediates(
-    expr: &Expr,
-    intermediates: &[(String, String, Expr)],
-) -> Expr {
+fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String, Expr)]) -> Expr {
     // Find if this expression matches an intermediate
     let source = unparse_expr_simple(expr);
     for (var_name, int_source, _) in intermediates {

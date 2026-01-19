@@ -1053,7 +1053,11 @@ impl Monomorphizer {
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
-                self.collect_func_instantiation_sites_in_block(block, generic_functions, type_table);
+                self.collect_func_instantiation_sites_in_block(
+                    block,
+                    generic_functions,
+                    type_table,
+                );
             }
         }
     }
