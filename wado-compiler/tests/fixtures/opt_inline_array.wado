@@ -1,0 +1,18 @@
+// Test for inlining functions that use Array types
+// This tests that local_types are pushed in the correct order during inlining
+// (params first, then non-params) to match index assignment order.
+
+use {println, Stdout} from "core:cli";
+
+fn test(n: i32) -> i32 {
+    let arr = Array::<i32>::with_capacity(n);
+    return arr.len();
+}
+
+fn run() with Stdout {
+    let x = test(10);
+    println(`{x}`);
+}
+
+__DATA__
+{"stdout": "0\n"}
