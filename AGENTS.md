@@ -278,6 +278,12 @@ Run the following to set up your development environment:
 make on-task-started  # install mise and project tools
 ```
 
+If this is your first time running mise in this repository, you may need to trust the configuration file:
+
+```sh
+mise trust  # trust .mise.toml (first time only)
+```
+
 ### When Completing a Task
 
 When you have completed a task, make sure everything is up-to-date and tested:
