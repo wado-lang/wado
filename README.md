@@ -202,16 +202,31 @@ Agent finds pattern → Human reviews → Deterministic optimization rule added
 
 Show the generated WAT to an agent and ask it to spot inefficiencies. Review the suggestions, then implement them as permanent optimization passes.
 
-### Install `cargo`
+### Install Development Tools
+
+#### Using mise (Recommended)
+
+[mise](https://mise.jdx.dev/) manages all required development tools automatically:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Install mise
+curl https://mise.run | sh
+
+# Install all project tools
+mise install
 ```
 
-### Install `wasmtime`
+#### Manual Installation
+
+If you prefer manual installation:
 
 ```sh
-cargo install wasmtime
+# Install Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install Wasm tools
+cargo install wasm-tools
+cargo install wasmtime-cli
 ```
 
 ### Build and Test

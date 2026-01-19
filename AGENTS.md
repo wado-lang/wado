@@ -244,11 +244,23 @@ WEPs combine language specification and implementation strategy in a single docu
 
 ## Project Development
 
-You can use `cargo` to manage the project, and also `Makefile` is provided for convenience:
+### Tool Management
+
+This project uses [mise](https://mise.jdx.dev/) for development tool version management.
 
 ```sh
-make install-deps  # install all dependency tools (wasm-tools, wasmtime, etc.)
+mise install  # install all required tools (wasm-tools, wasmtime, node, etc.)
+```
 
+Alternatively, use the Makefile:
+
+```sh
+make install-deps  # manual installation of dependency tools
+```
+
+### Building and Testing
+
+```sh
 make build
 make test
 
