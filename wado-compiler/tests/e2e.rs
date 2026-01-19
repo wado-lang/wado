@@ -182,6 +182,11 @@ struct TestSpec {
     /// If set, the test expects compilation to fail with this message.
     #[serde(default)]
     compile_error: Option<String>,
+
+    /// Whether to skip this test.
+    /// Can be overridden with WADO_FORCE_RUN_SKIPPED=1 environment variable.
+    #[serde(default)]
+    skip: bool,
 }
 
 fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
@@ -333,6 +338,18 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
 
     // Parse the test spec from JSON
     let spec = parse_test_spec(data_section, &test_id);
+
+    // Check if this test should be skipped
+    let force_run = std::env::var("WADO_FORCE_RUN_SKIPPED")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if spec.skip && !force_run {
+        // Skip this test - it's not yet implemented
+        // Print a message so it's clear the test was intentionally skipped
+        eprintln!("[{test_id}] SKIPPED (skip: true in __DATA__)");
+        return;
+    }
 
     // Try to compile the fixture
     let compile_result = compile_file_with_opts(fixture_path, opt_level);

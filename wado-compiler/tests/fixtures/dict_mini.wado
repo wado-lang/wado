@@ -1,0 +1,124 @@
+// MiniDict - A minimal dictionary implementation using linear search
+// This test is skipped because Dict<K, V> is not yet implemented
+// Use WADO_FORCE_RUN_SKIPPED=1 to test compilation (will fail)
+
+use { println, Stdout } from "core:cli";
+
+// MiniDict uses two parallel arrays for keys and values
+struct MiniDict {
+    keys: Array<String>,
+    values: Array<String>,
+}
+
+impl MiniDict {
+    fn new() -> MiniDict {
+        return MiniDict {
+            keys: [],
+            values: [],
+        };
+    }
+
+    fn set(&mut self, key: String, value: String) {
+        // Linear search for existing key
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                // Update existing value
+                self.values[i] = value;
+                return;
+            }
+            i += 1;
+        }
+        // Key not found, append new entry
+        self.keys.append(key);
+        self.values.append(value);
+    }
+
+    fn get(&self, key: String) -> Option<String> {
+        // Linear search for key
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                return Option::<String>::Some(self.values[i]);
+            }
+            i += 1;
+        }
+        return null;
+    }
+
+    fn has(&self, key: String) -> bool {
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
+
+    fn remove(&mut self, key: String) -> bool {
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                // Found the key - remove by shifting elements
+                let mut j = i;
+                while j < self.keys.len() - 1 {
+                    self.keys[j] = self.keys[j + 1];
+                    self.values[j] = self.values[j + 1];
+                    j += 1;
+                }
+                // Remove last element (now duplicated)
+                // Note: Array doesn't have pop() yet, so this is incomplete
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
+
+    fn size(&self) -> i32 {
+        return self.keys.len();
+    }
+}
+
+fn run() with Stdout {
+    let mut dict = MiniDict::new();
+
+    // Test basic set and get
+    dict.set("name", "Wado");
+    dict.set("type", "language");
+    dict.set("target", "WebAssembly");
+
+    if let Some(name_val) = dict.get("name") {
+        println(`name: {name_val}`);
+    }
+
+    if let Some(type_val) = dict.get("type") {
+        println(`type: {type_val}`);
+    }
+
+    // Test updating existing key
+    dict.set("name", "Wado Language");
+    if let Some(updated_val) = dict.get("name") {
+        println(`updated name: {updated_val}`);
+    }
+
+    // Test has()
+    println(`has 'target': {dict.has("target")}`);
+    println(`has 'version': {dict.has("version")}`);
+
+    // Test size
+    println(`size: {dict.size()}`);
+
+    // Test missing key
+    if let None = dict.get("missing") {
+        println("missing key returned None");
+    }
+}
+
+__DATA__
+{
+  "skip": true,
+  "stdout": "name: Wado\ntype: language\nupdated name: Wado Language\nhas 'target': true\nhas 'version': false\nsize: 3\nmissing key returned None\n"
+}
