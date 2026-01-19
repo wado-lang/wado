@@ -121,6 +121,22 @@ pub struct Codegen {
     /// Reset before codegen starts, incremented each time we encounter a Closure expression.
     /// Must match the order in which closures were collected by collect_closures_from_module.
     closure_codegen_counter: RefCell<u32>,
+    /// Registry of custom variant types
+    /// Key: variant name (e.g., "Shape")
+    /// Value: VariantTypeInfo with struct type index and case metadata
+    variant_types: RefCell<HashMap<String, VariantTypeInfo>>,
+}
+
+/// Information about a custom variant type's Wasm GC representation
+#[derive(Clone, Debug)]
+struct VariantTypeInfo {
+    /// The GC struct type index for this variant
+    struct_type_idx: u32,
+    /// Information about each case: (case_name, field_count)
+    cases: Vec<(String, usize)>,
+    /// Field types for the payload fields (after the tag)
+    /// Index 0 corresponds to field index 1 in the struct (field 0 is the tag)
+    field_types: Vec<ValType>,
 }
 
 /// Information about a closure to be generated
@@ -403,6 +419,7 @@ impl Codegen {
             canonical_closure_types: RefCell::new(HashMap::new()),
             pending_closures: RefCell::new(Vec::new()),
             closure_codegen_counter: RefCell::new(0),
+            variant_types: RefCell::new(HashMap::new()),
         }
     }
 
@@ -1022,6 +1039,33 @@ impl Codegen {
         for tir_struct in sorted_mono {
             let struct_name = StructName::new(vec![], tir_struct.name.clone());
             self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
+        }
+
+        // PHASE 4.5: Register variant types (tagged unions)
+        // Register variants from imported modules first
+        for (path, tir_mod) in all_tir_modules {
+            if path == &entry_tir.path {
+                continue;
+            }
+            for variant in &tir_mod.variants {
+                if !variant.is_pub {
+                    continue;
+                }
+                // Skip generic variants - they will be registered when monomorphized
+                if !variant.type_params.is_empty() {
+                    continue;
+                }
+                self.register_variant_type(variant, &tir_mod.type_table.borrow(), &mut builder);
+            }
+        }
+
+        // Register variants from main module
+        for variant in &entry_tir.variants {
+            // Skip generic variants - they will be registered when monomorphized
+            if !variant.type_params.is_empty() {
+                continue;
+            }
+            self.register_variant_type(variant, type_table, &mut builder);
         }
 
         // PHASE 5: Register ALL array types (including struct-based like Array<String>)
@@ -2701,6 +2745,110 @@ impl Codegen {
         type_idx
     }
 
+    /// Register a custom variant type as a Wasm GC struct.
+    ///
+    /// Variant representation: (tag: i32, field0, field1, ...)
+    /// - Tag field identifies the case (0-based index)
+    /// - Payload fields are the union of all case fields
+    ///
+    /// For variants with heterogeneous field types, we use the largest field count
+    /// and store all fields. Unused fields for smaller cases are zeroed.
+    fn register_variant_type(
+        &mut self,
+        variant: &crate::tir::TirVariantDecl,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) -> u32 {
+        // Skip generic variants (they will be registered when monomorphized)
+        if !variant.type_params.is_empty() {
+            return u32::MAX;
+        }
+
+        // Already registered?
+        if self.variant_types.borrow().contains_key(&variant.name) {
+            return self.variant_types.borrow()[&variant.name].struct_type_idx;
+        }
+
+        // Collect case metadata
+        let cases: Vec<(String, usize)> = variant
+            .cases
+            .iter()
+            .map(|c| (c.name.clone(), c.fields.len()))
+            .collect();
+
+        // Find the maximum number of fields across all cases
+        let max_fields = variant.cases.iter().map(|c| c.fields.len()).max().unwrap_or(0);
+
+        // Build the struct fields: tag (i32) + max_fields payload fields
+        let mut fields = Vec::with_capacity(1 + max_fields);
+
+        // Field 0: tag (discriminant)
+        fields.push(FieldType {
+            element_type: StorageType::Val(ValType::I32),
+            mutable: false, // Tag is immutable once set
+        });
+
+        // Collect all field types from all cases to determine the payload types
+        // For now, use a simple approach: if all fields at position i have the same type,
+        // use that type; otherwise use eqref (GC supertype for all ref types)
+        let mut payload_field_types: Vec<ValType> = Vec::with_capacity(max_fields);
+
+        for field_idx in 0..max_fields {
+            let mut field_types_at_idx: Vec<ValType> = Vec::new();
+
+            for case in &variant.cases {
+                if field_idx < case.fields.len() {
+                    let wasm_type = self.type_id_to_valtype(type_table, case.fields[field_idx]);
+                    field_types_at_idx.push(wasm_type);
+                }
+            }
+
+            // Determine the storage type for this field position
+            let (storage_type, field_type) = if field_types_at_idx.is_empty() {
+                // No fields at this index (shouldn't happen if max_fields > 0)
+                (StorageType::Val(ValType::I32), ValType::I32)
+            } else if field_types_at_idx.iter().all(|t| *t == field_types_at_idx[0]) {
+                // All cases have the same type at this position
+                (
+                    StorageType::Val(field_types_at_idx[0]),
+                    field_types_at_idx[0],
+                )
+            } else {
+                // Heterogeneous types - use eqref as a common supertype
+                // This allows any ref type to be stored
+                let eqref = ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Abstract {
+                        shared: false,
+                        ty: AbstractHeapType::Eq,
+                    },
+                });
+                (StorageType::Val(eqref), eqref)
+            };
+
+            payload_field_types.push(field_type);
+            fields.push(FieldType {
+                element_type: storage_type,
+                mutable: true,
+            });
+        }
+
+        // Define the GC struct type
+        let type_idx = builder.define_gc_struct_type(&variant.name, &fields);
+
+        // Store in registry
+        self.variant_types.borrow_mut().insert(
+            variant.name.clone(),
+            VariantTypeInfo {
+                struct_type_idx: type_idx,
+                cases,
+                field_types: payload_field_types,
+            },
+        );
+
+        type_idx
+    }
+
     /// Register box types for primitive references.
     /// Box types are single-field mutable structs that wrap primitive values,
     /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
@@ -3679,6 +3827,11 @@ impl Codegen {
             TirExprKind::OptionSome { value } => {
                 Self::collect_closures_from_expr(value, closures);
             }
+            TirExprKind::VariantConstruct { fields, .. } => {
+                for field in fields {
+                    Self::collect_closures_from_expr(field, closures);
+                }
+            }
             // Leaf nodes - no nested expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -3911,6 +4064,11 @@ impl Codegen {
             }
             TirExprKind::OptionSome { value } => {
                 Self::find_closure_locals_in_expr(value, result, closure_counter);
+            }
+            TirExprKind::VariantConstruct { fields, .. } => {
+                for field in fields {
+                    Self::find_closure_locals_in_expr(field, result, closure_counter);
+                }
             }
             // Terminals - no closures inside
             TirExprKind::IntLiteral { .. }
@@ -4328,8 +4486,17 @@ impl Codegen {
             ResolvedType::Result { .. } => {
                 panic!("Result type codegen not yet implemented")
             }
-            ResolvedType::Variant { .. } => {
-                panic!("Variant type codegen not yet implemented")
+            ResolvedType::Variant { name, .. } => {
+                // Custom variant types are represented as GC struct references
+                let variant_types = self.variant_types.borrow();
+                if let Some(info) = variant_types.get(name) {
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(info.struct_type_idx),
+                    })
+                } else {
+                    panic!("Variant type not registered: {}", name);
+                }
             }
             ResolvedType::Dict { .. } => {
                 panic!("Dict type codegen not yet implemented")
@@ -4733,6 +4900,70 @@ impl Codegen {
                         self.generate_expr(func, value, type_table, ctx, builder);
                     }
                 }
+            }
+
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name: _,
+                fields,
+            } => {
+                // Custom variant construction: Shape::Circle(5.0)
+                // Layout: struct { tag: i32, field0, field1, ... }
+
+                // Get the variant name from the type
+                let variant_name = match type_table.get(*variant_type) {
+                    ResolvedType::Variant { name, .. } => name.clone(),
+                    other => panic!(
+                        "Expected Variant type for VariantConstruct, got: {:?}",
+                        other
+                    ),
+                };
+
+                // Look up the registered variant type
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
+                    panic!("Variant type not registered: {}", variant_name);
+                });
+
+                let struct_type_idx = variant_info.struct_type_idx;
+                let field_types = variant_info.field_types.clone();
+                let max_fields = field_types.len();
+                drop(variant_types);
+
+                // Push the tag (case index)
+                func.instruction(&Instruction::I32Const(*case_index as i32));
+
+                // Push the field values
+                for field_expr in fields {
+                    self.generate_expr(func, field_expr, type_table, ctx, builder);
+                }
+
+                // Pad with default values if this case has fewer fields than max
+                for pad_idx in fields.len()..max_fields {
+                    let field_type = &field_types[pad_idx];
+                    // Generate default value for this type
+                    match field_type {
+                        ValType::I32 => func.instruction(&Instruction::I32Const(0)),
+                        ValType::I64 => func.instruction(&Instruction::I64Const(0)),
+                        ValType::F32 => func.instruction(&Instruction::F32Const(0.0_f32.into())),
+                        ValType::F64 => func.instruction(&Instruction::F64Const(0.0_f64.into())),
+                        ValType::Ref(_) => {
+                            // For reference types, use ref.null with the appropriate heap type
+                            func.instruction(&Instruction::RefNull(HeapType::Abstract {
+                                shared: false,
+                                ty: AbstractHeapType::None,
+                            }))
+                        }
+                        ValType::V128 => {
+                            // V128 zero constant
+                            func.instruction(&Instruction::V128Const(0))
+                        }
+                    };
+                }
+
+                // Create the struct
+                func.instruction(&Instruction::StructNew(struct_type_idx));
             }
 
             TirExprKind::Unit => {
@@ -8355,6 +8586,9 @@ impl Codegen {
                         .any(|arm| Self::expr_needs_async_scratch_locals(&arm.body))
             }
             TirExprKind::OptionSome { value } => Self::expr_needs_async_scratch_locals(value),
+            TirExprKind::VariantConstruct { fields, .. } => {
+                fields.iter().any(Self::expr_needs_async_scratch_locals)
+            }
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }

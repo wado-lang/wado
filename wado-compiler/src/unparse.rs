@@ -2119,6 +2119,25 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(value);
                 self.output.push(')');
             }
+            TirExprKind::VariantConstruct {
+                case_name, fields, ..
+            } => {
+                // Get the variant type name from the type_id
+                let type_name = self.type_table.type_name(expr.type_id);
+                self.output.push_str(&type_name);
+                self.output.push_str("::");
+                self.output.push_str(case_name);
+                if !fields.is_empty() {
+                    self.output.push('(');
+                    for (i, field) in fields.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.unparse_expr(field);
+                    }
+                    self.output.push(')');
+                }
+            }
             TirExprKind::Unit => {
                 self.output.push_str("()");
             }

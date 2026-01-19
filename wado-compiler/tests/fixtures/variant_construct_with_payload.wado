@@ -1,0 +1,24 @@
+// Test custom variant construction with payloads
+
+use { println, Stdout } from "core:cli";
+
+// A variant with payload fields
+variant Shape {
+    Circle(f64),
+    Rectangle(f64, f64),
+    Point,
+}
+
+fn run() with Stdout {
+    // Construct variants with payloads
+    let c = Shape::Circle(5.0);
+    let rect = Shape::Rectangle(10.0, 20.0);
+    let p = Shape::Point;
+
+    // We can't print variants yet (no pattern matching),
+    // but we can verify construction works
+    println("variant with payload works");
+}
+
+__DATA__
+{"stdout": "variant with payload works\n"}

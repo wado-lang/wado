@@ -526,6 +526,11 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         TirExprKind::OptionSome { value } => {
             collect_callees_from_expr(value, callees);
         }
+        TirExprKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_callees_from_expr(field, callees);
+            }
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1539,6 +1544,20 @@ fn remap_expr(
         },
         TirExprKind::OptionSome { value } => TirExprKind::OptionSome {
             value: Box::new(remap_expr(value, param_to_local, local_offset, param_count)),
+        },
+        TirExprKind::VariantConstruct {
+            variant_type,
+            case_index,
+            case_name,
+            fields,
+        } => TirExprKind::VariantConstruct {
+            variant_type: *variant_type,
+            case_index: *case_index,
+            case_name: case_name.clone(),
+            fields: fields
+                .iter()
+                .map(|f| remap_expr(f, param_to_local, local_offset, param_count))
+                .collect(),
         },
         // Leaf nodes - no remapping needed
         TirExprKind::IntLiteral { .. }
@@ -2560,6 +2579,11 @@ fn analyze_expr(
         }
         TirExprKind::OptionSome { value } => {
             analyze_expr(value, current_module, type_table, analysis);
+        }
+        TirExprKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                analyze_expr(field, current_module, type_table, analysis);
+            }
         }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }

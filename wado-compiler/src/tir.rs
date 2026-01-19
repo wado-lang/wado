@@ -426,6 +426,10 @@ impl TypeTable {
         self.intern(ResolvedType::Struct { name, module_path })
     }
 
+    pub fn make_variant(&mut self, name: String, module_path: Vec<String>) -> TypeId {
+        self.intern(ResolvedType::Variant { name, module_path })
+    }
+
     /// Find the type_id for a struct by name and module path (O(1) lookup via intern_map)
     pub fn find_struct_type(&self, name: &str, module_path: &[String]) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
@@ -832,6 +836,18 @@ pub enum TirExprKind {
     OptionSome {
         value: Box<TirExpr>,
     },
+
+    /// Custom variant construction: `Shape::Circle(5.0)` or `MyVariant::Unit`
+    VariantConstruct {
+        /// The variant type (e.g., ResolvedType::Variant { name: "Shape", ... })
+        variant_type: TypeId,
+        /// The case index (0-based position in variant declaration)
+        case_index: u32,
+        /// The case name (for debugging/error messages)
+        case_name: String,
+        /// Field values (empty for unit variants)
+        fields: Vec<TirExpr>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1106,6 +1122,31 @@ pub struct TirVariant {
     pub span: Span,
 }
 
+/// A variant type declaration (tagged union, distinct from enum)
+/// e.g., `variant Shape { Circle(f64), Rectangle(f64, f64), Point }`
+#[derive(Debug, Clone)]
+pub struct TirVariantDecl {
+    pub name: String,
+    pub is_pub: bool,
+    /// Generic type parameters (e.g., `T` in `variant Option<T>`)
+    pub type_params: Vec<TirTypeParam>,
+    /// Cases of the variant (e.g., Some, None for Option)
+    pub cases: Vec<TirVariantCase>,
+    pub span: Span,
+}
+
+/// A case in a variant declaration
+/// e.g., `Circle(f64)` or `Point`
+#[derive(Debug, Clone)]
+pub struct TirVariantCase {
+    pub name: String,
+    /// Case index (0-based)
+    pub index: u32,
+    /// Payload field types (empty for unit cases like `None`)
+    pub fields: Vec<TypeId>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct TirTypeAlias {
     pub name: String,
@@ -1160,6 +1201,8 @@ pub struct TirModule {
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
     pub structs: Vec<TirStruct>,
     pub enums: Vec<TirEnum>,
+    /// Custom variant declarations (tagged unions with payloads)
+    pub variants: Vec<TirVariantDecl>,
     pub type_aliases: Vec<TirTypeAlias>,
     pub effects: Vec<TirEffect>,
     pub impls: Vec<TirImpl>,
@@ -1185,6 +1228,7 @@ impl TirModule {
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
+            variants: Vec::new(),
             type_aliases: Vec::new(),
             effects: Vec::new(),
             impls: Vec::new(),
@@ -1204,6 +1248,7 @@ impl TirModule {
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
+            variants: Vec::new(),
             type_aliases: Vec::new(),
             effects: Vec::new(),
             impls: Vec::new(),

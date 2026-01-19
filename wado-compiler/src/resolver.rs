@@ -24,8 +24,8 @@ use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock,
     TirCapture, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
-    TypeTable,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
+    TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -42,6 +42,11 @@ fn string_module_path() -> Vec<String> {
 
 /// Struct field info: (module_path, fields) where fields is a list of (name, type_id) pairs
 type StructFieldInfo = (Vec<String>, Vec<(String, TypeId)>);
+
+/// Variant case info: case_name -> field_type_ids
+type VariantCaseData = (String, Vec<TypeId>);
+/// Variant info: (module_path, type_params, cases)
+type VariantInfo = (Vec<String>, Vec<String>, Vec<VariantCaseData>);
 
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
@@ -329,6 +334,8 @@ pub struct Resolver<'a> {
     type_aliases: HashMap<String, TypeId>,
     /// Struct field info (struct name -> (module_path, fields))
     struct_fields: HashMap<String, StructFieldInfo>,
+    /// Variant case info (variant name -> (module_path, type_params, cases))
+    variant_cases: HashMap<String, VariantInfo>,
     /// Function return types (name -> return type)
     function_return_types: HashMap<String, TypeId>,
     /// Imported function names for the current module
@@ -368,6 +375,7 @@ impl<'a> Resolver<'a> {
             loaded_modules,
             type_aliases: HashMap::new(),
             struct_fields: HashMap::new(),
+            variant_cases: HashMap::new(),
             function_return_types: HashMap::new(),
             imported_functions: HashSet::new(),
             errors: Vec::new(),
@@ -434,6 +442,10 @@ impl<'a> Resolver<'a> {
                         }
                     }
                 }
+                Item::Variant(variant_decl) => {
+                    let tir_variant = self.resolve_variant_decl(variant_decl);
+                    tir_module.variants.push(tir_variant);
+                }
                 // Other items will be added as needed
                 _ => {}
             }
@@ -472,13 +484,26 @@ impl<'a> Resolver<'a> {
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
         let mut type_aliases = HashMap::new();
         let mut struct_fields = HashMap::new();
+        let mut variant_cases: HashMap<String, VariantInfo> = HashMap::new();
 
-        // First pass: collect struct names from all modules (for forward references)
+        // First pass: collect struct and variant names from all modules (for forward references)
         for (path, module) in modules {
             for item in &module.items {
-                if let Item::Struct(struct_decl) = item {
-                    // Insert with empty fields first - will be populated in second sub-pass
-                    struct_fields.insert(struct_decl.name.clone(), (path.clone(), Vec::new()));
+                match item {
+                    Item::Struct(struct_decl) => {
+                        // Insert with empty fields first - will be populated in second sub-pass
+                        struct_fields.insert(struct_decl.name.clone(), (path.clone(), Vec::new()));
+                    }
+                    Item::Variant(variant_decl) => {
+                        // Insert with empty cases first - will be populated in second sub-pass
+                        let type_params: Vec<String> =
+                            variant_decl.type_params.iter().map(|p| p.name.clone()).collect();
+                        variant_cases.insert(
+                            variant_decl.name.clone(),
+                            (path.clone(), type_params, Vec::new()),
+                        );
+                    }
+                    _ => {}
                 }
             }
         }
@@ -509,6 +534,32 @@ impl<'a> Resolver<'a> {
                             &struct_fields,
                         );
                         type_aliases.insert(type_alias.name.clone(), type_id);
+                    }
+                    Item::Variant(variant_decl) => {
+                        // Resolve variant case field types
+                        let type_params: Vec<String> =
+                            variant_decl.type_params.iter().map(|p| p.name.clone()).collect();
+                        let mut cases = Vec::new();
+                        for case in &variant_decl.cases {
+                            let field_types = if let Some(fields) = &case.fields {
+                                fields
+                                    .iter()
+                                    .map(|ty| {
+                                        Self::resolve_type_static(
+                                            ty,
+                                            &mut type_table.borrow_mut(),
+                                            &type_aliases,
+                                            &struct_fields,
+                                        )
+                                    })
+                                    .collect()
+                            } else {
+                                Vec::new()
+                            };
+                            cases.push((case.name.clone(), field_types));
+                        }
+                        variant_cases
+                            .insert(variant_decl.name.clone(), (path.clone(), type_params, cases));
                     }
                     _ => {}
                 }
@@ -578,6 +629,7 @@ impl<'a> Resolver<'a> {
                 loaded_modules: modules,
                 type_aliases: type_aliases.clone(),
                 struct_fields: struct_fields.clone(),
+                variant_cases: variant_cases.clone(),
                 function_return_types,
                 imported_functions,
                 errors: Vec::new(),
@@ -882,6 +934,41 @@ impl<'a> Resolver<'a> {
                     let type_id = self.resolve_type(&type_alias.ty);
                     self.type_aliases.insert(type_alias.name.clone(), type_id);
                 }
+                Item::Variant(variant_decl) => {
+                    // Set up type parameters in scope for resolving field types
+                    let old_type_params = std::mem::take(&mut self.current_type_params);
+                    for (index, param) in variant_decl.type_params.iter().enumerate() {
+                        let type_id = self
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(param.name.clone(), index as u32);
+                        self.current_type_params
+                            .insert(param.name.clone(), (index as u32, type_id));
+                    }
+
+                    // Collect type parameters
+                    let type_params: Vec<String> =
+                        variant_decl.type_params.iter().map(|p| p.name.clone()).collect();
+
+                    // Collect variant cases with resolved field types
+                    let mut cases = Vec::new();
+                    for case in &variant_decl.cases {
+                        let field_types: Vec<TypeId> = case
+                            .fields
+                            .as_ref()
+                            .map(|fields| fields.iter().map(|f| self.resolve_type(f)).collect())
+                            .unwrap_or_default();
+                        cases.push((case.name.clone(), field_types));
+                    }
+
+                    self.variant_cases.insert(
+                        variant_decl.name.clone(),
+                        (self.current_module_path.clone(), type_params, cases),
+                    );
+
+                    // Restore type params scope
+                    self.current_type_params = old_type_params;
+                }
                 _ => {}
             }
         }
@@ -1002,6 +1089,59 @@ impl<'a> Resolver<'a> {
             monomorph_info: None, // Not from monomorphization
             fields,
             span: struct_decl.span,
+        }
+    }
+
+    /// Resolve a variant declaration
+    fn resolve_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
+        // Set up type parameters in scope before resolving field types
+        let old_type_params = std::mem::take(&mut self.current_type_params);
+        for (index, param) in variant_decl.type_params.iter().enumerate() {
+            let type_id = self
+                .type_table
+                .borrow_mut()
+                .make_type_param(param.name.clone(), index as u32);
+            self.current_type_params
+                .insert(param.name.clone(), (index as u32, type_id));
+        }
+
+        // Resolve each case
+        let mut cases = Vec::new();
+        for (index, case) in variant_decl.cases.iter().enumerate() {
+            let fields = if let Some(field_types) = &case.fields {
+                field_types.iter().map(|ty| self.resolve_type(ty)).collect()
+            } else {
+                Vec::new()
+            };
+            cases.push(TirVariantCase {
+                name: case.name.clone(),
+                index: index as u32,
+                fields,
+                span: case.span,
+            });
+        }
+
+        // Restore previous type params scope
+        self.current_type_params = old_type_params;
+
+        // Convert AST type params to TIR type params
+        let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                bounds: p.bounds.clone(),
+                index: i as u32,
+            })
+            .collect();
+
+        TirVariantDecl {
+            name: variant_decl.name.clone(),
+            is_pub: variant_decl.is_pub,
+            type_params,
+            cases,
+            span: variant_decl.span,
         }
     }
 
@@ -1919,6 +2059,48 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Check for qualified variant case names like Color::Red (without parentheses)
+        if let Some(pos) = ident.name.find("::") {
+            let prefix = &ident.name[..pos];
+            let suffix = &ident.name[pos + 2..];
+
+            if let Some((module_path, _, cases)) = self.variant_cases.get(prefix) {
+                // Find the case by name
+                if let Some((case_index, (case_name, field_types))) = cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (n, _))| n == suffix)
+                {
+                    // Unit variant - must have no fields
+                    if !field_types.is_empty() {
+                        self.errors.push(TypeError::ArgumentCountMismatch {
+                            expected: field_types.len(),
+                            found: 0,
+                            span: ident.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                    }
+
+                    // Create variant type
+                    let variant_type = self.type_table.borrow_mut().make_variant(
+                        prefix.to_string(),
+                        module_path.clone(),
+                    );
+
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_name.clone(),
+                            fields: vec![],
+                        },
+                        variant_type,
+                        ident.span,
+                    );
+                }
+            }
+        }
+
         // Otherwise it's a global reference (function, constant, etc.)
         // For now, return Unknown type - will be resolved by looking up in symbol table
         TirExpr::new(
@@ -2248,6 +2430,53 @@ impl<'a> Resolver<'a> {
                             call.span,
                             ctx,
                         );
+                    }
+                    // Check if this is a variant case construction (Color::Red)
+                    else if let Some((module_path, _, cases)) = self.variant_cases.get(prefix) {
+                        // Find the case by name
+                        if let Some((case_index, (case_name, field_types))) = cases
+                            .iter()
+                            .enumerate()
+                            .find(|(_, (n, _))| n == suffix)
+                        {
+                            // Validate argument count
+                            if args.len() != field_types.len() {
+                                self.errors.push(TypeError::ArgumentCountMismatch {
+                                    expected: field_types.len(),
+                                    found: args.len(),
+                                    span: call.span,
+                                });
+                                return TirExpr::new(
+                                    TirExprKind::Unit,
+                                    TypeTable::ERROR,
+                                    call.span,
+                                );
+                            }
+
+                            // Create variant type
+                            let variant_type = self.type_table.borrow_mut().make_variant(
+                                prefix.to_string(),
+                                module_path.clone(),
+                            );
+
+                            return TirExpr::new(
+                                TirExprKind::VariantConstruct {
+                                    variant_type,
+                                    case_index: case_index as u32,
+                                    case_name: case_name.clone(),
+                                    fields: args,
+                                },
+                                variant_type,
+                                call.span,
+                            );
+                        } else {
+                            // Unknown case name
+                            self.errors.push(TypeError::UnknownFunction {
+                                name: format!("{}::{}", prefix, suffix),
+                                span: call.span,
+                            });
+                            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                        }
                     }
                     // Effect operations and other qualified calls - always allowed
                     // (validated by effect system/codegen)
@@ -2803,6 +3032,58 @@ impl<'a> Resolver<'a> {
                 }
             }
         }
+
+        // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
+        if let ResolvedType::Variant { name, module_path: _ } =
+            self.type_table.borrow().get(target_type_id).clone()
+        {
+            // Look up the variant case info
+            if let Some((_, _type_params, cases)) = self.variant_cases.get(&name) {
+                // Find the case by name
+                if let Some((case_index, (case_name, field_types))) = cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (n, _))| n == &static_call.method)
+                {
+                    // Validate argument count
+                    if args.len() != field_types.len() {
+                        self.errors.push(TypeError::ArgumentCountMismatch {
+                            expected: field_types.len(),
+                            found: args.len(),
+                            span: static_call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                    }
+
+                    // Create VariantConstruct expression
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type: target_type_id,
+                            case_index: case_index as u32,
+                            case_name: case_name.clone(),
+                            fields: args,
+                        },
+                        target_type_id,
+                        static_call.span,
+                    );
+                } else {
+                    // Unknown case name
+                    self.errors.push(TypeError::UnknownFunction {
+                        name: format!("{}::{}", name, static_call.method),
+                        span: static_call.span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                }
+            } else {
+                // Variant not found in variant_cases (shouldn't happen)
+                self.errors.push(TypeError::UnknownType {
+                    name: name.clone(),
+                    span: static_call.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+            }
+        }
+
         let (struct_name, module_path, mangled_struct_name, struct_type_args) =
             match self.type_table.borrow().get(target_type_id) {
                 ResolvedType::Struct { name, module_path } => {
@@ -4122,7 +4403,7 @@ impl<'a> Resolver<'a> {
             "()" => TypeTable::UNIT,
             "!" => TypeTable::NEVER,
 
-            // Check type aliases, then struct definitions
+            // Check type aliases, struct definitions, and variants
             _ => {
                 if let Some(&type_id) = self.type_aliases.get(name) {
                     type_id
@@ -4131,6 +4412,11 @@ impl<'a> Resolver<'a> {
                     self.type_table
                         .borrow_mut()
                         .make_struct(name.to_string(), module_path.clone())
+                } else if let Some((module_path, _, _)) = self.variant_cases.get(name) {
+                    // It's a variant - use the module path where it was defined
+                    self.type_table
+                        .borrow_mut()
+                        .make_variant(name.to_string(), module_path.clone())
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN
