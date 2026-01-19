@@ -11,13 +11,13 @@ struct "Box<i32>" {
 }
 
 fn run() with Stdout {
-    let b1: Box<i32> = "make_box<i32>"(42);
-    core::cli::println(core::internal::string_concat("make_box: ", b1.get().to_string()));
+    let b1: Box<i32> = move "make_box<i32>"(42);
+    core::cli::println(move core::internal::string_concat(move "make_box: ", move b1.get().to_string()));
     let v: i32 = "unwrap_box<i32>"(b1);
-    core::cli::println(core::internal::string_concat("unwrap_box: ", v.to_string()));
-    let b2: Box<i64> = "make_box<i64>"(100 as i64);
-    let b3: Box<i64> = "transform_box<i64>"(b2);
-    core::cli::println(core::internal::string_concat("transform_box: ", b3.get().to_string()));
+    core::cli::println(move core::internal::string_concat(move "unwrap_box: ", move v.to_string()));
+    let b2: Box<i64> = move "make_box<i64>"(100 as i64);
+    let b3: Box<i64> = move "transform_box<i64>"(b2);
+    core::cli::println(move core::internal::string_concat(move "transform_box: ", move b3.get().to_string()));
 }
 
 pub fn "Box<i64>::get"(self: Box<i64>) -> i64 {

@@ -5,8 +5,8 @@
 fn run() with Stdout {
     let x: i32 = "first<i32,i64>"(10, 20 as i64);
     let y: i64 = "second<i32,i64>"(10, 20 as i64);
-    let z: String = "first<String,i32>"("hello", 42);
-    core::cli::println(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat(core::internal::string_concat("x: ", x.to_string()), ", y: "), y.to_string()), ", z: "), z));
+    let z: String = move "first<String,i32>"("hello", 42);
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "x: ", move x.to_string()), move ", y: "), move y.to_string()), move ", z: "), z));
 }
 
 fn "first<String,i32>"(a: String, b: i32) -> String {
