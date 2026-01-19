@@ -22,7 +22,7 @@ pub mod syntax;
 pub mod tir;
 pub mod token;
 pub mod unparse;
-pub mod wasi_registry;
+pub mod component_model;
 pub mod wasm_builder;
 pub mod wasm_postprocess;
 pub mod world_registry;

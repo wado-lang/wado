@@ -16,7 +16,7 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
     TirFunction, TirModule, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::wasi_registry::{
+use crate::component_model::{
     WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
     return_type_requires_outptr, wasi_type_to_valtype,
 };
