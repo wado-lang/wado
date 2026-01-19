@@ -38,8 +38,17 @@ jobs:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run integrity checks
-        run: make clippy-fix update-bundled update-golden-fixtures format
+      - name: Run clippy-fix
+        run: make clippy-fix
+
+      - name: Update bundled
+        run: make update-bundled
+
+      - name: Update golden fixtures
+        run: make update-golden-fixtures
+
+      - name: Format
+        run: make format
 
       - name: Check for uncommitted changes
         id: diff
