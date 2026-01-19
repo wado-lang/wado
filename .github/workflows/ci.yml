@@ -11,37 +11,15 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  integrity:
-    name: Integrity
+  ci:
+    name: CI
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
 
-      - name: Check formatting
-        run: cargo fmt --all --check
-
-      - name: Run clippy
-        run: cargo clippy --locked --all-targets --all-features
-
-      - name: Build wado-compiler for wasm32
-        run: cargo build -p wado-compiler --target wasm32-unknown-unknown --locked
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
       - uses: actions/cache@v5
         with:
           path: |
@@ -57,5 +35,44 @@ jobs:
       - name: Setup mold linker
         uses: rui314/setup-mold@v1
 
-      - name: Run tests
-        run: cargo test --locked --all
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install wasm-tools
+        run: cargo install wasm-tools --locked
+
+      - name: Add wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Run on-task-done
+        run: make on-task-done
+
+      - name: Check for uncommitted changes
+        id: diff
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "clean=true" >> $GITHUB_OUTPUT
+          else
+            echo "clean=false" >> $GITHUB_OUTPUT
+            echo "::error::Uncommitted changes detected after 'make on-task-done'. Run 'make on-task-done' locally and commit the changes."
+            git diff --stat
+            exit 1
+          fi
+
+      - name: Comment on PR with diff
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DIFF_STAT=$(git diff --stat)
+          gh pr comment ${{ github.event.pull_request.number }} --body "## ⚠️ Uncommitted changes detected
+
+          Running \`make on-task-done\` produced the following changes:
+
+          \`\`\`
+          ${DIFF_STAT}
+          \`\`\`
+
+          Please run \`make on-task-done\` locally and commit the changes."
