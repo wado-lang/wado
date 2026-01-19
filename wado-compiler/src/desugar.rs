@@ -8,9 +8,9 @@ use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
     EffectDecl, EnumDecl, Expr, FieldAccessExpr, ForOfStmt, ForStmt, Function, IfExpr, IfStmt,
-    ImplBlock, IndexExpr, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
-    ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField,
-    TemplateStringExpr, TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
+    ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt, MatchArm, MatchExpr,
+    MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr,
+    StructLiteralField, TemplateStringExpr, TupleLiteralExpr, TypeAlias, UnaryExpr, WhileStmt,
 };
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
@@ -148,6 +148,11 @@ fn desugar_stmt(stmt: &Stmt) -> Stmt {
         }),
         Stmt::Break(b) => Stmt::Break(BreakStmt { span: b.span }),
         Stmt::Continue(c) => Stmt::Continue(ContinueStmt { span: c.span }),
+        Stmt::LabeledBlock(lb) => Stmt::LabeledBlock(LabeledBlockStmt {
+            label: lb.label.clone(),
+            block: desugar_block(&lb.block),
+            span: lb.span,
+        }),
     }
 }
 

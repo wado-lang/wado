@@ -3547,6 +3547,9 @@ impl Codegen {
             TirStmtKind::Assert { condition, .. } => {
                 Self::collect_closures_from_expr(condition, closures);
             }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                Self::collect_closures_from_block(block, closures);
+            }
             TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
         }
     }
@@ -3782,6 +3785,9 @@ impl Codegen {
             }
             TirStmtKind::Assert { condition, .. } => {
                 Self::find_closure_locals_in_expr(condition, result, closure_counter);
+            }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                Self::find_closure_locals_in_block(block, result, closure_counter);
             }
             TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
         }
@@ -6961,6 +6967,12 @@ impl Codegen {
                     // No enclosing loop - this should have been caught earlier
                     panic!("continue outside of loop");
                 }
+            }
+
+            TirStmtKind::LabeledBlock { block, .. } => {
+                // Generate a simple block - the label is for future use (break/continue)
+                // For now, just generate the block contents in sequence
+                self.generate_block(func, block, type_table, ctx, builder);
             }
 
             TirStmtKind::Assert {

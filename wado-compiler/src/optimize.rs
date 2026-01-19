@@ -427,6 +427,9 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
                 collect_callees_from_expr(msg, callees);
             }
         }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            collect_callees_from_block(block, callees);
+        }
         TirStmtKind::Break | TirStmtKind::Continue => {}
     }
 }
@@ -984,6 +987,21 @@ fn inline_calls_in_block(
                     stmt.span,
                 ));
             }
+            TirStmtKind::LabeledBlock { label, mut block } => {
+                inline_calls_in_block(
+                    &mut block,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                );
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::LabeledBlock { label, block },
+                    stmt.span,
+                ));
+            }
             TirStmtKind::Break | TirStmtKind::Continue => {
                 new_stmts.push(stmt);
             }
@@ -1231,6 +1249,10 @@ fn remap_stmt(
                     )
                 })
                 .collect(),
+        },
+        TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
+            label: label.clone(),
+            block: remap_block(block, param_to_local, local_offset, param_count),
         },
         TirStmtKind::Break => TirStmtKind::Break,
         TirStmtKind::Continue => TirStmtKind::Continue,
@@ -2215,6 +2237,9 @@ fn analyze_block(
                 analysis
                     .effect_calls
                     .insert(("Stderr".to_string(), "write_via_stream".to_string()));
+            }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                analyze_block(block, current_module, type_table, analysis);
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
         }

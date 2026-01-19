@@ -1239,7 +1239,28 @@ impl<'a> Resolver<'a> {
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
             Stmt::Assert(assert_stmt) => self.resolve_assert(assert_stmt, ctx),
+            Stmt::LabeledBlock(labeled_block) => {
+                vec![self.resolve_labeled_block(labeled_block, ctx)]
+            }
         }
+    }
+
+    /// Resolve a labeled block statement
+    fn resolve_labeled_block(
+        &mut self,
+        labeled_block: &ast::LabeledBlockStmt,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
+        // resolve_block already handles scope entry/exit
+        let block = self.resolve_block(&labeled_block.block, ctx);
+
+        TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label: labeled_block.label.clone(),
+                block,
+            },
+            labeled_block.span,
+        )
     }
 
     /// Resolve a let statement

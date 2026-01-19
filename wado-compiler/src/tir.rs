@@ -991,6 +991,11 @@ pub enum TirStmtKind {
     },
     Break,
     Continue,
+    /// Labeled block: `LABEL: { ... }` - creates a new scope with local bindings
+    LabeledBlock {
+        label: String,
+        block: TirBlock,
+    },
     Assert {
         condition: TirExpr,
         condition_source: String,

@@ -6,11 +6,11 @@ use crate::ast::{
     AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, EffectDecl,
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LetStmt,
-    Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Param, Pattern, ResourceDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, WhileStmt, WorldDecl,
+    Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item,
+    LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
+    Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, TemplateStringExpr, TupleLiteralExpr, Type, TypeAlias,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -644,7 +644,21 @@ impl<'a> Unparser<'a> {
             Stmt::Break(_) => self.unparse_break(),
             Stmt::Continue(_) => self.unparse_continue(),
             Stmt::Assert(a) => self.unparse_assert(a),
+            Stmt::LabeledBlock(lb) => self.unparse_labeled_block(lb),
         }
+    }
+
+    fn unparse_labeled_block(&mut self, lb: &LabeledBlockStmt) {
+        self.write_indent();
+        self.output.push_str(&lb.label);
+        self.output.push_str(": {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&lb.block);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
     }
 
     fn unparse_let(&mut self, l: &LetStmt) {
@@ -1351,6 +1365,7 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::Break(b) => b.span,
         Stmt::Continue(c) => c.span,
         Stmt::Assert(a) => a.span,
+        Stmt::LabeledBlock(lb) => lb.span,
     }
 }
 
@@ -1795,6 +1810,16 @@ impl<'a> TirUnparser<'a> {
             TirStmtKind::Continue => {
                 self.write_indent();
                 self.output.push_str("continue;\n");
+            }
+            TirStmtKind::LabeledBlock { label, block } => {
+                self.write_indent();
+                self.output.push_str(label);
+                self.output.push_str(": {\n");
+                self.indent_level += 1;
+                self.unparse_block(block);
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push_str("}\n");
             }
             TirStmtKind::Assert {
                 condition,

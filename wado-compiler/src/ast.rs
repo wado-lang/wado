@@ -282,6 +282,16 @@ pub enum Stmt {
     Break(BreakStmt),
     Continue(ContinueStmt),
     Assert(AssertStmt),
+    LabeledBlock(LabeledBlockStmt),
+}
+
+/// Labeled block statement: `LABEL: { ... }`
+/// Creates a new scope with local bindings. The label is required to reduce syntactic ambiguity.
+#[derive(Debug, Clone)]
+pub struct LabeledBlockStmt {
+    pub label: String,
+    pub block: Block,
+    pub span: Span,
 }
 
 /// Assert statement: `assert expr;` or `assert expr, "message";`

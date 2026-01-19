@@ -490,6 +490,9 @@ impl Monomorphizer {
                 self.rewrite_types_in_block(body, type_table);
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.rewrite_types_in_block(block, type_table);
+            }
             TirStmtKind::Assert {
                 condition,
                 message,
@@ -1062,7 +1065,28 @@ impl Monomorphizer {
                 );
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue | TirStmtKind::Assert { .. } => {}
+            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.collect_func_instantiation_sites_in_block(block, generic_functions, type_table);
+            }
+            TirStmtKind::Assert {
+                condition,
+                message,
+                intermediates,
+                ..
+            } => {
+                self.collect_func_instantiation_sites_in_expr(
+                    condition,
+                    generic_functions,
+                    type_table,
+                );
+                if let Some(msg) = message {
+                    self.collect_func_instantiation_sites_in_expr(msg, generic_functions, type_table);
+                }
+                for (_, expr, _) in intermediates {
+                    self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
+                }
+            }
         }
     }
 
@@ -1738,7 +1762,25 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(iterable, substitution, type_table);
                 self.substitute_types_in_block(body, substitution, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue | TirStmtKind::Assert { .. } => {}
+            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.substitute_types_in_block(block, substitution, type_table);
+            }
+            TirStmtKind::Assert {
+                condition,
+                message,
+                intermediates,
+                ..
+            } => {
+                self.substitute_types_in_expr(condition, substitution, type_table);
+                if let Some(msg) = message {
+                    self.substitute_types_in_expr(msg, substitution, type_table);
+                }
+                for (_, expr, type_id) in intermediates {
+                    self.substitute_types_in_expr(expr, substitution, type_table);
+                    *type_id = self.substitute_type(*type_id, substitution, type_table);
+                }
+            }
         }
     }
 
@@ -2221,7 +2263,24 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(iterable, type_table);
                 self.rewrite_function_calls_in_block(body, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue | TirStmtKind::Assert { .. } => {}
+            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.rewrite_function_calls_in_block(block, type_table);
+            }
+            TirStmtKind::Assert {
+                condition,
+                message,
+                intermediates,
+                ..
+            } => {
+                self.rewrite_function_calls_in_expr(condition, type_table);
+                if let Some(msg) = message {
+                    self.rewrite_function_calls_in_expr(msg, type_table);
+                }
+                for (_, expr, _) in intermediates {
+                    self.rewrite_function_calls_in_expr(expr, type_table);
+                }
+            }
         }
     }
 
@@ -2540,6 +2599,9 @@ impl StringCollector {
                 self.collect_block(body);
             }
             TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.collect_block(block);
+            }
             TirStmtKind::Assert {
                 condition,
                 condition_source,
