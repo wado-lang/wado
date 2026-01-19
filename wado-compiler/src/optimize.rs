@@ -4,6 +4,7 @@
 //! - Dead Code Elimination (DCE) at function level
 //! - Usage analysis for conditional feature inclusion
 
+use crate::component_model::WasiRegistry;
 use crate::name::{FreeFunctionName, FunctionId, MethodName};
 use crate::project::Project;
 use crate::tir::{
@@ -1827,19 +1828,6 @@ fn inline_calls_in_expr(
 // - `base + counter * step` where counter increments by 1
 // - Nested loops with induction variables
 
-/// Standard WASI functions for each effect (for O0 mode)
-pub const STANDARD_WASI_FUNCTIONS: &[&str] = &[
-    "Stdout::write_via_stream",
-    "Stderr::write_via_stream",
-    "Environment::get_arguments",
-    "Environment::get_environment",
-    "Environment::get_initial_cwd",
-    "MonotonicClock::now",
-    "MonotonicClock::get_resolution",
-    "MonotonicClock::wait_until",
-    "MonotonicClock::wait_for",
-];
-
 // =============================================================================
 // Dead Code Elimination (DCE)
 // =============================================================================
@@ -2095,9 +2083,10 @@ fn populate_all_features(project: &mut Project) {
     project.all_reachable = true;
     // Standard effects (all except Exit which requires explicit usage)
     project.used_effects = WasiEffect::STANDARD.iter().copied().collect();
-    // Standard WASI functions for the above effects
-    project.used_wasi_functions = STANDARD_WASI_FUNCTIONS
-        .iter()
+    // Standard WASI functions from the stdlib registry
+    let (wasi_registry, _world_registry) = WasiRegistry::build_from_stdlib();
+    project.used_wasi_functions = wasi_registry
+        .all_function_names()
         .map(|s| s.to_string())
         .collect();
     // All importable builtins when DCE is disabled
