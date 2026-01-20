@@ -36,7 +36,7 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Emit blank lines to reach the target line, updating last_source_line
+    /// Emit blank lines to reach the target line, updating `last_source_line`
     fn emit_blank_lines_to(&mut self, target_line: usize) {
         if self.last_source_line > 0 && target_line > self.last_source_line {
             let blanks = self
@@ -169,13 +169,13 @@ impl<'a> Unparser<'a> {
     fn unparse_import_attributes(&mut self, attrs: &ImportAttributes) {
         let mut parts = Vec::new();
         if let Some(v) = &attrs.version {
-            parts.push(format!("version: \"{}\"", v));
+            parts.push(format!("version: \"{v}\""));
         }
         if let Some(t) = &attrs.type_hint {
-            parts.push(format!("type: \"{}\"", t));
+            parts.push(format!("type: \"{t}\""));
         }
         if let Some(i) = &attrs.integrity {
-            parts.push(format!("integrity: \"{}\"", i));
+            parts.push(format!("integrity: \"{i}\""));
         }
         if !parts.is_empty() {
             self.output.push_str(" with { ");
@@ -1733,7 +1733,7 @@ impl<'a> TirUnparser<'a> {
         if is_valid_ident(name) {
             name.to_string()
         } else {
-            format!("\"{}\"", name)
+            format!("\"{name}\"")
         }
     }
 
@@ -2195,7 +2195,7 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::Capture { name, index } => {
                 // Display as captured variable with index for debugging
                 self.output
-                    .push_str(&format!("@capture[{}]:{}", index, name));
+                    .push_str(&format!("@capture[{index}]:{name}"));
             }
             TirExprKind::Binary { left, op, right } => {
                 self.output.push('(');
@@ -2296,7 +2296,7 @@ impl<'a> TirUnparser<'a> {
                 // First arg is the receiver (self)
                 self.unparse_expr(receiver);
                 // Then the rest of the args
-                for arg in args.iter() {
+                for arg in args {
                     self.output.push_str(", ");
                     self.unparse_expr(arg);
                 }
@@ -2467,7 +2467,7 @@ impl<'a> TirUnparser<'a> {
                 match lit {
                     TirLiteralPattern::Int(v) => self.output.push_str(&v.to_string()),
                     TirLiteralPattern::Bool(b) => {
-                        self.output.push_str(if *b { "true" } else { "false" })
+                        self.output.push_str(if *b { "true" } else { "false" });
                     }
                     TirLiteralPattern::Char(c) => {
                         self.output.push('\'');

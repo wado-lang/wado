@@ -6,7 +6,7 @@
 //! - Browser with in-memory sources
 //! - LSP with editor buffers
 //!
-//! See WEP: CompilerHost Abstraction for Compiler I/O
+//! See WEP: `CompilerHost` Abstraction for Compiler I/O
 
 use std::future::Future;
 
@@ -150,7 +150,7 @@ pub struct DiagnosticSpan {
 }
 
 impl DiagnosticSpan {
-    /// Create a DiagnosticSpan from a Span and optional filename
+    /// Create a `DiagnosticSpan` from a Span and optional filename
     pub fn from_span(span: &Span, filename: Option<&str>) -> Self {
         DiagnosticSpan {
             file: filename.unwrap_or_default().to_string(),
@@ -252,7 +252,7 @@ pub trait CompilerHost: Send + Sync {
 
 /// A simple in-memory compiler host for testing
 ///
-/// This host stores sources in a HashMap and collects diagnostics in a Vec.
+/// This host stores sources in a `HashMap` and collects diagnostics in a Vec.
 #[derive(Debug, Default)]
 pub struct InMemoryCompilerHost {
     /// Source files by path

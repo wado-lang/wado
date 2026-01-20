@@ -604,15 +604,15 @@ impl<'a> Lexer<'a> {
         if self.peek_char() == Some('0') {
             self.advance();
             match self.peek_char() {
-                Some('x') | Some('X') => {
+                Some('x' | 'X') => {
                     self.advance();
                     return self.lex_hex_number(start, start_line, start_column);
                 }
-                Some('b') | Some('B') => {
+                Some('b' | 'B') => {
                     self.advance();
                     return self.lex_binary_number(start, start_line, start_column);
                 }
-                Some('o') | Some('O') => {
+                Some('o' | 'O') => {
                     self.advance();
                     return self.lex_octal_number(start, start_line, start_column);
                 }
@@ -657,10 +657,10 @@ impl<'a> Lexer<'a> {
         };
 
         // Check for scientific notation (e or E)
-        let has_exponent = if let Some('e') | Some('E') = self.peek_char() {
+        let has_exponent = if let Some('e' | 'E') = self.peek_char() {
             self.advance();
             // Optional sign
-            if let Some('+') | Some('-') = self.peek_char() {
+            if let Some('+' | '-') = self.peek_char() {
                 self.advance();
             }
             // Must have at least one digit
@@ -997,13 +997,13 @@ impl<'a> Lexer<'a> {
                 // High surrogates (0xD800-0xDBFF) -> PUA (0xE000-0xE7FF)
                 // Low surrogates (0xDC00-0xDFFF) -> PUA (0xE800-0xEBFF)
                 let pua_code = if is_high_surrogate(code_unit) {
-                    (code_unit - 0xD800) as u32 + 0xE000
+                    u32::from(code_unit - 0xD800) + 0xE000
                 } else {
-                    (code_unit - 0xDC00) as u32 + 0xE800
+                    u32::from(code_unit - 0xDC00) + 0xE800
                 };
                 Ok(char::from_u32(pua_code).unwrap())
             } else {
-                char::from_u32(code_unit as u32).ok_or_else(|| LexError {
+                char::from_u32(u32::from(code_unit)).ok_or_else(|| LexError {
                     message: format!("invalid unicode code point: U+{code_unit:04X}"),
                     span: Span::new(start, self.pos, start_line, start_column),
                 })
@@ -1139,8 +1139,8 @@ fn char_to_surrogate(c: char) -> Option<u16> {
 }
 
 fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
-    let high = (high - 0xD800) as u32;
-    let low = (low - 0xDC00) as u32;
+    let high = u32::from(high - 0xD800);
+    let low = u32::from(low - 0xDC00);
     0x10000 + (high << 10) + low
 }
 

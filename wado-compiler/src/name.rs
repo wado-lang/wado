@@ -53,7 +53,7 @@ pub struct FreeFunctionName {
     pub name: String,
     /// Whether this function is monomorphized (instantiated from a generic)
     pub is_monomorphized: bool,
-    /// Base generic name if monomorphized (e.g., "Array" for "Array<i32>::len")
+    /// Base generic name if monomorphized (e.g., "Array" for "Array<i32>`::len`")
     pub base_name: Option<String>,
 }
 
@@ -92,7 +92,7 @@ impl FreeFunctionName {
         }
     }
 
-    /// Create a FreeFunctionName from string literal slices.
+    /// Create a `FreeFunctionName` from string literal slices.
     /// Convenience method for when you have &[&str] instead of &[String].
     pub fn from_strs(module_path: &[&str], name: &str) -> Self {
         Self {
@@ -103,7 +103,7 @@ impl FreeFunctionName {
         }
     }
 
-    /// Create a FreeFunctionName with monomorphization metadata.
+    /// Create a `FreeFunctionName` with monomorphization metadata.
     pub fn with_monomorph_info(module_path: Vec<String>, name: String, base_name: String) -> Self {
         Self {
             module_path,
@@ -192,8 +192,8 @@ pub enum FunctionId {
 impl fmt::Display for FunctionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FunctionId::Free(free) => write!(f, "{}", free),
-            FunctionId::Method(method) => write!(f, "{}", method),
+            FunctionId::Free(free) => write!(f, "{free}"),
+            FunctionId::Method(method) => write!(f, "{method}"),
         }
     }
 }
@@ -244,7 +244,7 @@ impl StructName {
         }
     }
 
-    /// Create a StructName from string literal slices.
+    /// Create a `StructName` from string literal slices.
     /// Convenience method for when you have &[&str] instead of &[String].
     pub fn from_strs(module_path: &[&str], name: &str) -> Self {
         Self {
@@ -345,7 +345,7 @@ pub fn validate_module_path(path: &str) -> Result<(), String> {
     // Try to parse as a URI reference
     match UriRef::parse(path) {
         Ok(_) => Ok(()),
-        Err(e) => Err(format!("invalid module path: {}", e)),
+        Err(e) => Err(format!("invalid module path: {e}")),
     }
 }
 
@@ -381,7 +381,7 @@ pub fn normalize_module_path(path: &str) -> String {
     // so we use our manual implementation for relative module paths.
     // We still use fluent-uri for validation and encoding normalization.
     let uri_ref =
-        UriRef::parse(path).unwrap_or_else(|e| panic!("invalid module path '{}': {}", path, e));
+        UriRef::parse(path).unwrap_or_else(|e| panic!("invalid module path '{path}': {e}"));
 
     // Apply encoding normalization (percent-encoding, etc.)
     let normalized = uri_ref.normalize();
@@ -417,13 +417,13 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
         relative.to_string()
     } else if let Some(stripped) = relative.strip_prefix("./") {
         // ./foo from ./sub/ becomes ./sub/foo
-        format!("{}/{}", base_dir, stripped)
+        format!("{base_dir}/{stripped}")
     } else if relative.starts_with("../") {
         // ../foo from ./sub/ needs parent resolution
-        format!("{}/{}", base_dir, relative)
+        format!("{base_dir}/{relative}")
     } else {
         // bare name like "foo.wado" - treat as relative to base dir
-        format!("{}/{}", base_dir, relative)
+        format!("{base_dir}/{relative}")
     };
 
     // Normalize the result to resolve . and ..
@@ -446,7 +446,7 @@ pub fn canonicalize_entry_point(filename: &str) -> String {
         .next()
         .unwrap_or(filename);
 
-    format!("./{}", name)
+    format!("./{name}")
 }
 
 /// Convert a filesystem path to a canonical module path.
@@ -460,8 +460,8 @@ pub fn canonicalize_entry_point(filename: &str) -> String {
 /// The `file_path` is the absolute path to the module file.
 ///
 /// Example:
-/// - project_root: `/home/user/project`
-/// - file_path: `/home/user/project/src/lib.wado`
+/// - `project_root`: `/home/user/project`
+/// - `file_path`: `/home/user/project/src/lib.wado`
 /// - result: `./src/lib.wado`
 pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<String> {
     // Normalize separators to forward slashes
@@ -478,7 +478,7 @@ pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<
     if relative.starts_with("./") {
         Some(relative.to_string())
     } else {
-        Some(format!("./{}", relative))
+        Some(format!("./{relative}"))
     }
 }
 
@@ -497,7 +497,7 @@ fn get_parent_path(path: &str) -> &str {
 /// Remove dot segments (`.` and `..`) from a path.
 ///
 /// This implements RFC 3986 Section 5.2.4 for relative paths,
-/// which fluent-uri's normalize() doesn't handle.
+/// which fluent-uri's `normalize()` doesn't handle.
 fn remove_dot_segments(path: &str) -> String {
     // Convert backslashes to forward slashes
     let path = path.replace('\\', "/");
@@ -528,7 +528,7 @@ fn remove_dot_segments(path: &str) -> String {
 
     // Preserve leading ./ for relative paths
     if has_leading_dot && !result.starts_with("..") {
-        format!("./{}", result)
+        format!("./{result}")
     } else if result.is_empty() {
         ".".to_string()
     } else {
@@ -560,7 +560,7 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
 /// - `mangle_method_generic("Array", &["String"], "len")` → `"Array<String>::len"`
 pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_name: &str) -> String {
     let mangled_struct = mangle_generic_name(struct_name, type_args);
-    format!("{}::{}", mangled_struct, method_name)
+    format!("{mangled_struct}::{method_name}")
 }
 
 /// Build a function type name from parameter count and return type name.
@@ -569,7 +569,7 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
 /// - `mangle_fn_type(2, "i32")` → `"Fn<2,i32>"`
 /// - `mangle_fn_type(0, "String")` → `"Fn<0,String>"`
 pub fn mangle_fn_type(param_count: usize, ret_type: &str) -> String {
-    format!("Fn<{},{}>", param_count, ret_type)
+    format!("Fn<{param_count},{ret_type}>")
 }
 
 /// Build a tuple type name from element type names.
@@ -586,7 +586,7 @@ pub fn mangle_tuple_type(elem_types: &[String]) -> String {
 /// Examples:
 /// - `mangle_option_type("i32")` → `"Option<i32>"`
 pub fn mangle_option_type(inner_type: &str) -> String {
-    format!("Option<{}>", inner_type)
+    format!("Option<{inner_type}>")
 }
 
 /// Build an Array type name from element type name.
@@ -594,7 +594,7 @@ pub fn mangle_option_type(inner_type: &str) -> String {
 /// Examples:
 /// - `mangle_array_type("i32")` → `"Array<i32>"`
 pub fn mangle_array_type(elem_type: &str) -> String {
-    format!("Array<{}>", elem_type)
+    format!("Array<{elem_type}>")
 }
 
 #[cfg(test)]

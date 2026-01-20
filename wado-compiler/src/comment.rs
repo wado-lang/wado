@@ -27,7 +27,7 @@ pub enum CommentKind {
 }
 
 /// Maps byte positions to comments.
-/// Uses BTreeMap for ordered iteration (important for unparsing).
+/// Uses `BTreeMap` for ordered iteration (important for unparsing).
 #[derive(Debug, Clone, Default)]
 pub struct CommentMap {
     /// Comments indexed by their start byte position
@@ -136,7 +136,7 @@ impl CommentMap {
     }
 
     /// Count blank lines between two line numbers.
-    /// Returns the number of consecutive empty lines between end of prev_line and start of next_line.
+    /// Returns the number of consecutive empty lines between end of `prev_line` and start of `next_line`.
     /// Rule: 0 → 0, 1 → 1, 2+ → 2
     pub fn blank_lines_between(&self, prev_line: usize, next_line: usize) -> usize {
         if next_line <= prev_line + 1 {

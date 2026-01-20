@@ -40,7 +40,7 @@ use wasmparser::{Validator, WasmFeatures};
 /// Used to avoid repeated allocations when looking up String type
 const STRING_MODULE_PATH: &[&str] = &["core", "prelude"];
 
-/// Helper to convert STRING_MODULE_PATH to Vec<String> (for APIs requiring owned strings)
+/// Helper to convert `STRING_MODULE_PATH` to Vec<String> (for APIs requiring owned strings)
 fn string_module_path() -> Vec<String> {
     STRING_MODULE_PATH
         .iter()
@@ -69,7 +69,7 @@ struct BuildMainModuleParams<'a> {
     project: &'a Project,
     module_name: &'a str,
     /// WASI functions that are available (lowered at component level)
-    /// These are the local alias names (e.g., "wasi:cli/Stdout::write_via_stream")
+    /// These are the local alias names (e.g., "`wasi:cli/Stdout::write_via_stream`")
     available_wasi_funcs: &'a HashSet<String>,
 }
 
@@ -85,46 +85,46 @@ pub struct Codegen {
     world_registry: WorldRegistry,
     /// Type index for string-array (GC array<u8>), set when types are defined
     string_array_type_idx: u32,
-    /// Registry of user-defined struct types (keyed by StructName for type safety)
+    /// Registry of user-defined struct types (keyed by `StructName` for type safety)
     struct_types: HashMap<StructName, StructTypeInfo>,
-    /// Registry of tuple types (keyed by element TypeIds, maps to GC struct type index)
-    /// Uses RefCell for lazy registration during codegen
+    /// Registry of tuple types (keyed by element `TypeIds`, maps to GC struct type index)
+    /// Uses `RefCell` for lazy registration during codegen
     tuple_types: RefCell<HashMap<Vec<TypeId>, u32>>,
-    /// Registry of raw array types (keyed by element TypeId, maps to GC array type index)
-    /// These are the underlying builtin::array<T> types used in Array<T>.repr
+    /// Registry of raw array types (keyed by element `TypeId`, maps to GC array type index)
+    /// These are the underlying `builtin::array`<T> types used in Array<T>.repr
     array_types: HashMap<TypeId, u32>,
-    /// Registry of Array<T> struct types (keyed by element TypeId, maps to GC struct type index)
+    /// Registry of Array<T> struct types (keyed by element `TypeId`, maps to GC struct type index)
     /// Array<T> is a struct with fields: repr (ref to GC array), used (i32)
     array_struct_types: HashMap<TypeId, u32>,
-    /// Registry of box types for primitive references (keyed by ValType, maps to GC struct type index)
+    /// Registry of box types for primitive references (keyed by `ValType`, maps to GC struct type index)
     /// Box types are single-field mutable structs that allow references to primitives
     box_types: HashMap<ValType, u32>,
     /// Counter for generating unique closure IDs
     closure_counter: RefCell<u32>,
     /// Registry of closure environment types
-    /// Key: vector of (type_id, is_mut) for each capture
-    /// Value: (env_type_idx, env_type_name)
+    /// Key: vector of (`type_id`, `is_mut`) for each capture
+    /// Value: (`env_type_idx`, `env_type_name`)
     closure_env_types: RefCell<HashMap<Vec<(TypeId, bool)>, (u32, String)>>,
     /// Registry of closure struct types (env + funcref pair)
-    /// Key: (env_type_idx, fn_type_idx)
-    /// Value: closure_struct_type_idx
+    /// Key: (`env_type_idx`, `fn_type_idx`)
+    /// Value: `closure_struct_type_idx`
     #[allow(dead_code)]
     closure_struct_types: RefCell<HashMap<(u32, u32), u32>>,
     /// Registry of canonical closure types based on user-visible function signature.
     /// Used for function type parameters (e.g., `fn(i32) -> i32`).
-    /// Key: (param_type_ids, return_type_id)
-    /// Value: (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx)
+    /// Key: (`param_type_ids`, `return_type_id`)
+    /// Value: (`canonical_fn_type_idx`, `canonical_fn_type_name`, `canonical_closure_struct_type_idx`)
     canonical_closure_types: RefCell<HashMap<(Vec<TypeId>, TypeId), (u32, String, u32)>>,
     /// Pending closure implementation functions to generate
-    /// (closure_id, captures, params, body, return_type, env_type_idx, closure_type_idx)
+    /// (`closure_id`, captures, params, body, `return_type`, `env_type_idx`, `closure_type_idx`)
     pending_closures: RefCell<Vec<ClosureInfo>>,
     /// Counter for tracking which closure we're generating during codegen.
     /// Reset before codegen starts, incremented each time we encounter a Closure expression.
-    /// Must match the order in which closures were collected by collect_closures_from_module.
+    /// Must match the order in which closures were collected by `collect_closures_from_module`.
     closure_codegen_counter: RefCell<u32>,
     /// Registry of custom variant types
     /// Key: variant name (e.g., "Shape")
-    /// Value: VariantTypeInfo with struct type index and case metadata
+    /// Value: `VariantTypeInfo` with struct type index and case metadata
     variant_types: RefCell<HashMap<String, VariantTypeInfo>>,
 }
 
@@ -133,7 +133,7 @@ pub struct Codegen {
 struct VariantTypeInfo {
     /// The GC struct type index for this variant
     struct_type_idx: u32,
-    /// Information about each case: (case_name, field_count)
+    /// Information about each case: (`case_name`, `field_count`)
     #[allow(dead_code)]
     cases: Vec<(String, usize)>,
     /// Field types for the payload fields (after the tag)
@@ -160,7 +160,7 @@ struct ClosureInfo {
     /// Wasm type index for the closure function type (env + params -> result)
     #[allow(dead_code)]
     fn_type_idx: u32,
-    /// Wasm type name for the closure function type (needed for define_func)
+    /// Wasm type name for the closure function type (needed for `define_func`)
     fn_type_name: String,
     /// Wasm type index for the closure struct type (env + funcref)
     closure_struct_type_idx: u32,
@@ -185,27 +185,27 @@ struct FunctionContext {
     locals: HashMap<String, u32>,
     /// Map from variable name to type (for type inference)
     local_type_map: HashMap<String, ValType>,
-    /// Number of parameters (locals 0..param_count are parameters)
+    /// Number of parameters (locals `0..param_count` are parameters)
     #[allow(dead_code)]
     param_count: u32,
     /// Next available local index for new variables
     next_local: u32,
     /// Local types for non-parameter locals (for function declaration)
     local_types: Vec<ValType>,
-    /// Return type of the function (for ref.as_non_null handling)
+    /// Return type of the function (for `ref.as_non_null` handling)
     return_type: Option<ValType>,
-    /// Pending branch hint from builtin::likely() or builtin::unlikely()
+    /// Pending branch hint from `builtin::likely()` or `builtin::unlikely()`
     /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
     pending_branch_hint: Option<bool>,
     /// Collected branch hints for this function (offset, taken)
     branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
-    /// Stack of (extra_depth, break_offset) for each loop level.
-    /// extra_depth: incremented by if statements inside the loop
-    /// break_offset: 1 for while/loop, 2 for for loops (because for loops have an extra body block)
-    /// For break: use break_offset + extra_depth
-    /// For continue: use extra_depth
+    /// Stack of (`extra_depth`, `break_offset`) for each loop level.
+    /// `extra_depth`: incremented by if statements inside the loop
+    /// `break_offset`: 1 for while/loop, 2 for for loops (because for loops have an extra body block)
+    /// For break: use `break_offset` + `extra_depth`
+    /// For continue: use `extra_depth`
     loop_info: Vec<(u32, u32)>,
     /// Counter for generating unique for-of local names (to support nested for-of loops)
     for_of_counter: u32,
@@ -222,7 +222,7 @@ struct FunctionContext {
     local_index_offset: u32,
     /// Map from local index to closure id (for closures stored in locals)
     local_closure_ids: HashMap<u32, u32>,
-    /// Counter for generating unique IndirectCall temp locals (to support nested closure calls)
+    /// Counter for generating unique `IndirectCall` temp locals (to support nested closure calls)
     indirect_call_counter: u32,
 }
 
@@ -274,8 +274,8 @@ impl FunctionContext {
     }
 
     /// Set closure context for generating a closure implementation function.
-    /// This enables TirExprKind::Capture to generate proper struct.get instructions.
-    /// Also sets local_index_offset to 1 to account for the env parameter at index 0.
+    /// This enables `TirExprKind::Capture` to generate proper struct.get instructions.
+    /// Also sets `local_index_offset` to 1 to account for the env parameter at index 0.
     fn set_closure_info(&mut self, env_type_idx: u32, captures: &[TirCapture]) {
         self.closure_env_type_idx = Some(env_type_idx);
         self.closure_captures = captures.to_vec();
@@ -298,7 +298,7 @@ impl FunctionContext {
         self.return_type = Some(ty);
     }
 
-    /// Set a pending branch hint (from builtin::likely/unlikely)
+    /// Set a pending branch hint (from `builtin::likely/unlikely`)
     fn set_branch_hint(&mut self, taken: bool) {
         self.pending_branch_hint = Some(taken);
     }
@@ -371,7 +371,7 @@ impl Default for Codegen {
     }
 }
 
-/// Convert a snake_case identifier to kebab-case for Component Model
+/// Convert a `snake_case` identifier to kebab-case for Component Model
 fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
 }
@@ -396,7 +396,7 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
             "String" => ComponentValType::Primitive(PrimitiveValType::String),
             _ => panic!("unsupported Wado primitive type for CM: {}", named.name),
         },
-        _ => panic!("unsupported Wado type for CM primitive: {:?}", ty),
+        _ => panic!("unsupported Wado type for CM primitive: {ty:?}"),
     }
 }
 
@@ -448,7 +448,7 @@ impl Codegen {
     }
 
     /// Look up a struct type by name and module path.
-    /// Tries qualified StructName first, falls back to simple name (empty module_path).
+    /// Tries qualified `StructName` first, falls back to simple name (empty `module_path`).
     fn lookup_struct_type(&self, name: &str, module_path: &[String]) -> Option<&StructTypeInfo> {
         if !module_path.is_empty() {
             // Try qualified name first
@@ -514,7 +514,7 @@ impl Codegen {
             }
             ResolvedType::Option(inner) => {
                 let inner_name = self.mangle_type_for_struct_name(*inner, type_table);
-                format!("Option<{}>", inner_name)
+                format!("Option<{inner_name}>")
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, use the inner type's name
@@ -589,7 +589,7 @@ impl Codegen {
         // in_degree[A] = number of dependencies A has (structs that A needs)
         let mut in_degree: HashMap<String, usize> = HashMap::new();
         for s in structs {
-            let struct_deps = deps.get(&s.name).map(|d| d.len()).unwrap_or(0);
+            let struct_deps = deps.get(&s.name).map(std::vec::Vec::len).unwrap_or(0);
             in_degree.insert(s.name.clone(), struct_deps);
         }
 
@@ -1399,7 +1399,7 @@ impl Codegen {
         drop(pending_closures);
 
         // Data count section (required for array.new_data with GC)
-        let data_count = if string_data.is_empty() { 0 } else { 1 };
+        let data_count = u32::from(!string_data.is_empty());
         module.section(&DataCountSection { count: data_count });
 
         // ========================================
@@ -1421,7 +1421,7 @@ impl Codegen {
         }
 
         // Generate user-defined functions from entry TIR (excluding 'run' which is handled specially)
-        for tir_func_rc in entry_tir.functions.iter() {
+        for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
             if tir_func.name == "run" {
                 continue; // Skip run - it's handled separately as entry point
@@ -1865,7 +1865,7 @@ impl Codegen {
                 // Print WAT for debugging before panicking
                 eprintln!("=== MAIN MODULE WAT (for debugging) ===");
                 if let Ok(wat) = wasmprinter::print_bytes(&main_module) {
-                    eprintln!("{}", wat);
+                    eprintln!("{wat}");
                 }
                 eprintln!("=== END MAIN MODULE WAT ===");
                 panic!("Core module validation failed: {e}");
@@ -2021,7 +2021,7 @@ impl Codegen {
         }
 
         ctx.register_instance("types");
-        let types_import_path = format!("wasi:cli/types@{}", cli_version);
+        let types_import_path = format!("wasi:cli/types@{cli_version}");
         builder.import(
             &types_import_path,
             wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
@@ -2342,7 +2342,7 @@ impl Codegen {
             }
 
             ctx.register_instance("stdout");
-            let stdout_import_path = format!("wasi:cli/stdout@{}", cli_version);
+            let stdout_import_path = format!("wasi:cli/stdout@{cli_version}");
             builder.import(
                 &stdout_import_path,
                 wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
@@ -2399,7 +2399,7 @@ impl Codegen {
             }
 
             ctx.register_instance("stderr");
-            let stderr_import_path = format!("wasi:cli/stderr@{}", cli_version);
+            let stderr_import_path = format!("wasi:cli/stderr@{cli_version}");
             builder.import(
                 &stderr_import_path,
                 wasm_encoder::ComponentTypeRef::Instance(stderr_instance_type),
@@ -2417,9 +2417,9 @@ impl Codegen {
     /// Ensure Environment interface is imported if it's used.
     ///
     /// Environment provides:
-    /// - get-arguments: func() -> list<string>
-    /// - get-environment: func() -> list<tuple<string, string>>
-    /// - initial-cwd: func() -> option<string>
+    /// - get-arguments: `func()` -> list<string>
+    /// - get-environment: `func()` -> list<tuple<string, string>>
+    /// - initial-cwd: `func()` -> option<string>
     fn ensure_environment_imported(
         &self,
         builder: &mut ComponentBuilder,
@@ -2497,7 +2497,7 @@ impl Codegen {
         }
 
         ctx.register_instance("environment");
-        let env_import_path = format!("wasi:cli/environment@{}", cli_version);
+        let env_import_path = format!("wasi:cli/environment@{cli_version}");
         builder.import(
             &env_import_path,
             wasm_encoder::ComponentTypeRef::Instance(env_instance_type),
@@ -2582,7 +2582,7 @@ impl Codegen {
         }
 
         ctx.register_instance("exit");
-        let exit_import_path = format!("wasi:cli/exit@{}", cli_version);
+        let exit_import_path = format!("wasi:cli/exit@{cli_version}");
         builder.import(
             &exit_import_path,
             wasm_encoder::ComponentTypeRef::Instance(exit_instance_type),
@@ -2644,7 +2644,7 @@ impl Codegen {
                 }
                 _ => panic!("unsupported generic param type for CM: {}", generic.name),
             },
-            _ => panic!("unsupported Wado param type for CM: {:?}", ty),
+            _ => panic!("unsupported Wado param type for CM: {ty:?}"),
         }
     }
 
@@ -2689,7 +2689,7 @@ impl Codegen {
                 }
                 _ => panic!("unsupported generic return type for CM: {}", generic.name),
             },
-            _ => panic!("unsupported Wado return type for CM: {:?}", ty),
+            _ => panic!("unsupported Wado return type for CM: {ty:?}"),
         }
     }
 
@@ -2720,7 +2720,7 @@ impl Codegen {
         false
     }
 
-    /// Register a struct type from TIR with a StructName key
+    /// Register a struct type from TIR with a `StructName` key
     fn register_struct_type(
         &mut self,
         struct_name: StructName,
@@ -2884,7 +2884,7 @@ impl Codegen {
     /// Box types are single-field mutable structs that wrap primitive values,
     /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
     fn register_box_types(&mut self, builder: &mut CoreModuleBuilder, project: &Project) {
-        use PrimitiveType::*;
+        use PrimitiveType::{I32, I16, I8, U32, U16, U8, Bool, Char, I64, U64, F32, F64};
 
         // Check which ValTypes are needed based on used_box_primitives
         let needs_box_i32 = project
@@ -2918,13 +2918,13 @@ impl Codegen {
         }
     }
 
-    /// Get the box type index for a primitive ValType.
-    /// Returns None if no box type is registered for this ValType.
+    /// Get the box type index for a primitive `ValType`.
+    /// Returns None if no box type is registered for this `ValType`.
     fn get_box_type_idx(&self, val_type: ValType) -> Option<u32> {
         self.box_types.get(&val_type).copied()
     }
 
-    /// Get the tuple type index for a TypeId that is known to be a tuple.
+    /// Get the tuple type index for a `TypeId` that is known to be a tuple.
     /// Returns None if the type is not a registered tuple.
     fn get_tuple_type_idx(&self, element_types: &[TypeId]) -> Option<u32> {
         self.tuple_types.borrow().get(element_types).copied()
@@ -2971,7 +2971,7 @@ impl Codegen {
                 self.get_struct_or_tuple_type_idx(*inner, type_table)
             }
             other => {
-                panic!("expected struct or tuple type, got: {:?}", other);
+                panic!("expected struct or tuple type, got: {other:?}");
             }
         }
     }
@@ -3034,7 +3034,7 @@ impl Codegen {
                     // Array is now a struct with (repr, used) fields
                     // 1. Store the source struct
                     let source_struct_local = ctx.alloc_local(
-                        &format!("__copy_array_struct_source_{}", raw_array_type_idx),
+                        &format!("__copy_array_struct_source_{raw_array_type_idx}"),
                         ValType::Ref(RefType {
                             nullable: true,
                             heap_type: HeapType::Concrete(array_struct_type_idx),
@@ -3100,7 +3100,7 @@ impl Codegen {
     ) {
         // Use pre-allocated temp local for the source struct reference
         let source_local = ctx.alloc_local(
-            &format!("__copy_source_{}", type_idx),
+            &format!("__copy_source_{type_idx}"),
             ValType::Ref(RefType {
                 nullable: true,
                 heap_type: HeapType::Concrete(type_idx),
@@ -3136,25 +3136,25 @@ impl Codegen {
     ) {
         // Use pre-allocated temp locals for the array copy
         let source_local = ctx.alloc_local(
-            &format!("__copy_array_source_{}", array_type_idx),
+            &format!("__copy_array_source_{array_type_idx}"),
             ValType::Ref(RefType {
                 nullable: true,
                 heap_type: HeapType::Concrete(array_type_idx),
             }),
         );
         let counter_local = ctx.alloc_local(
-            &format!("__copy_array_counter_{}", array_type_idx),
+            &format!("__copy_array_counter_{array_type_idx}"),
             ValType::I32,
         );
         let dest_local = ctx.alloc_local(
-            &format!("__copy_array_dest_{}", array_type_idx),
+            &format!("__copy_array_dest_{array_type_idx}"),
             ValType::Ref(RefType {
                 nullable: true,
                 heap_type: HeapType::Concrete(array_type_idx),
             }),
         );
         let len_local = ctx.alloc_local(
-            &format!("__copy_array_len_{}", array_type_idx),
+            &format!("__copy_array_len_{array_type_idx}"),
             ValType::I32,
         );
 
@@ -3342,7 +3342,7 @@ impl Codegen {
         func.instruction(&Instruction::End); // end $done
     }
 
-    /// Pre-register all tuple types found in a TypeTable.
+    /// Pre-register all tuple types found in a `TypeTable`.
     /// This must be called before code generation to ensure tuple types are available.
     fn register_tuple_types_from_table(
         &mut self,
@@ -3381,7 +3381,7 @@ impl Codegen {
         }
     }
 
-    /// Get or create an array type for a given element TypeId.
+    /// Get or create an array type for a given element `TypeId`.
     /// Returns the Wasm type index for the GC array type.
     fn get_or_create_array_type(
         &mut self,
@@ -3415,14 +3415,14 @@ impl Codegen {
         };
 
         // Generate a type name based on element type
-        let type_name = format!("array_{}", element_type_id);
+        let type_name = format!("array_{element_type_id}");
         let type_idx = builder.define_gc_array_type(&type_name, storage_type, true);
 
         self.array_types.insert(element_type_id, type_idx);
         type_idx
     }
 
-    /// Get or create an Array<T> struct type for a given element TypeId.
+    /// Get or create an Array<T> struct type for a given element `TypeId`.
     /// Array<T> is a struct with fields: repr (ref to GC array), used (i32)
     /// Returns the Wasm type index for the GC struct type.
     fn get_or_create_array_struct_type(
@@ -3458,7 +3458,7 @@ impl Codegen {
             },
         ];
 
-        let type_name = format!("Array_{}", element_type_id);
+        let type_name = format!("Array_{element_type_id}");
         let type_idx = builder.define_gc_struct_type(&type_name, &fields);
 
         self.array_struct_types.insert(element_type_id, type_idx);
@@ -3474,7 +3474,7 @@ impl Codegen {
     }
 
     /// Get or create a closure environment type for the given captures.
-    /// Returns (env_type_idx, env_type_name).
+    /// Returns (`env_type_idx`, `env_type_name`).
     fn get_or_create_closure_env_type(
         &self,
         captures: &[crate::tir::TirCapture],
@@ -3491,7 +3491,7 @@ impl Codegen {
 
         // Create the environment struct type
         let closure_id = self.get_next_closure_id();
-        let type_name = format!("ClosureEnv_{}", closure_id);
+        let type_name = format!("ClosureEnv_{closure_id}");
 
         let fields: Vec<FieldType> = captures
             .iter()
@@ -3513,55 +3513,9 @@ impl Codegen {
         (type_idx, type_name)
     }
 
-    /// Get or create a closure struct type (env + funcref pair).
-    /// Returns the closure struct type index.
-    #[allow(dead_code)]
-    fn get_or_create_closure_struct_type(
-        &self,
-        env_type_idx: u32,
-        fn_type_idx: u32,
-        builder: &mut CoreModuleBuilder,
-    ) -> u32 {
-        let key = (env_type_idx, fn_type_idx);
-
-        // Check if already registered
-        if let Some(&type_idx) = self.closure_struct_types.borrow().get(&key) {
-            return type_idx;
-        }
-
-        // Create the closure struct type with two fields:
-        // - field 0: env (ref to environment struct)
-        // - field 1: func (funcref to implementation function)
-        let closure_id = self.get_next_closure_id();
-        let type_name = format!("Closure_{}", closure_id);
-
-        let fields = vec![
-            FieldType {
-                element_type: StorageType::Val(ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(env_type_idx),
-                })),
-                mutable: false,
-            },
-            FieldType {
-                element_type: StorageType::Val(ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(fn_type_idx),
-                })),
-                mutable: false,
-            },
-        ];
-
-        let type_idx = builder.define_gc_struct_type(&type_name, &fields);
-
-        self.closure_struct_types.borrow_mut().insert(key, type_idx);
-
-        type_idx
-    }
-
     /// Get or create a canonical closure type for a function signature.
     /// This is used for function type parameters (e.g., `fn(i32) -> i32`).
-    /// Returns (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx).
+    /// Returns (`canonical_fn_type_idx`, `canonical_fn_type_name`, `canonical_closure_struct_type_idx`).
     ///
     /// The canonical closure uses `(ref struct)` as the environment type,
     /// allowing any closure with the same user-visible signature to be compatible.
@@ -3602,12 +3556,12 @@ impl Codegen {
                 vec![self.type_id_to_valtype(type_table, return_type)]
             };
 
-        let fn_type_name = format!("$canonical_closure_fn_{}", closure_id);
+        let fn_type_name = format!("$canonical_closure_fn_{closure_id}");
         builder.define_func_type(&fn_type_name, &fn_param_types, &fn_return_types);
         let fn_type_idx = builder.type_idx(&fn_type_name);
 
         // Create canonical closure struct type (generic env + funcref)
-        let struct_type_name = format!("CanonicalClosure_{}", closure_id);
+        let struct_type_name = format!("CanonicalClosure_{closure_id}");
         let fields = vec![
             FieldType {
                 element_type: StorageType::Val(ValType::Ref(RefType {
@@ -3845,7 +3799,7 @@ impl Codegen {
     }
 
     /// Find return type in a closure block body by scanning for return statements.
-    /// Similar to Resolver::find_return_type_in_block.
+    /// Similar to `Resolver::find_return_type_in_block`.
     fn find_return_type_in_closure_block(block: &TirBlock) -> Option<TypeId> {
         for stmt in &block.stmts {
             if let Some(type_id) = Self::find_return_type_in_closure_stmt(stmt) {
@@ -3886,8 +3840,8 @@ impl Codegen {
     }
 
     /// Find local variables that store closure values.
-    /// Returns a map from local_index to closure_id.
-    /// This must traverse in the same order as collect_closures_from_* to match closure IDs.
+    /// Returns a map from `local_index` to `closure_id`.
+    /// This must traverse in the same order as `collect_closures_from`_* to match closure IDs.
     fn find_closure_locals(block: &TirBlock) -> HashMap<u32, u32> {
         let mut result = HashMap::new();
         let mut closure_counter: u32 = 0;
@@ -4089,7 +4043,7 @@ impl Codegen {
     /// Called during the type definition phase before code generation.
     /// Register closure types only (env structs, function types, closure structs).
     /// Does NOT define the closure functions yet - that happens after imports.
-    /// Returns partial ClosureInfo with func_idx set to 0 (placeholder).
+    /// Returns partial `ClosureInfo` with `func_idx` set to 0 (placeholder).
     fn register_closure_types(
         &self,
         closures: &[CollectedClosure],
@@ -4100,7 +4054,7 @@ impl Codegen {
 
         for (idx, collected) in closures.iter().enumerate() {
             let closure_id = idx as u32;
-            let func_name = format!("$closure_{}", closure_id);
+            let func_name = format!("$closure_{closure_id}");
 
             // Create environment type (specific to this closure's captures)
             let (env_type_idx, _env_type_name) =
@@ -4139,7 +4093,7 @@ impl Codegen {
     }
 
     /// Define closure functions (must be called after imports are defined).
-    /// Updates the func_idx in each ClosureInfo.
+    /// Updates the `func_idx` in each `ClosureInfo`.
     fn define_closure_funcs(closure_infos: &mut [ClosureInfo], builder: &mut CoreModuleBuilder) {
         for info in closure_infos.iter_mut() {
             let func_idx = builder.define_func(&info.func_name, &info.fn_type_name);
@@ -4182,8 +4136,8 @@ impl Codegen {
         }
     }
 
-    /// Pre-register all array types found in a TypeTable.
-    /// Registers both raw array types (for builtin::array<T>) and Array struct types (for Array<T>).
+    /// Pre-register all array types found in a `TypeTable`.
+    /// Registers both raw array types (for `builtin::array`<T>) and Array struct types (for Array<T>).
     fn register_array_types_from_table(
         &mut self,
         type_table: &TypeTable,
@@ -4305,7 +4259,7 @@ impl Codegen {
         }
     }
 
-    /// Convert TIR TypeId to Wasm ValType
+    /// Convert TIR `TypeId` to Wasm `ValType`
     fn type_id_to_valtype(&self, type_table: &TypeTable, type_id: TypeId) -> ValType {
         match type_table.get(type_id) {
             // Primitive types
@@ -4496,7 +4450,7 @@ impl Codegen {
                         heap_type: HeapType::Concrete(info.struct_type_idx),
                     })
                 } else {
-                    panic!("Variant type not registered: {}", name);
+                    panic!("Variant type not registered: {name}");
                 }
             }
             ResolvedType::Dict { .. } => {
@@ -4524,8 +4478,7 @@ impl Codegen {
                     })
                 } else {
                     panic!(
-                        "unknown monomorphized generic struct type in type_id_to_valtype: {}",
-                        mangled_name
+                        "unknown monomorphized generic struct type in type_id_to_valtype: {mangled_name}"
                     )
                 }
             }
@@ -4570,7 +4523,7 @@ impl Codegen {
             },
 
             TirExprKind::BoolLiteral(b) => {
-                func.instruction(&Instruction::I32Const(if *b { 1 } else { 0 }));
+                func.instruction(&Instruction::I32Const(i32::from(*b)));
             }
 
             TirExprKind::CharLiteral(c) => {
@@ -4647,8 +4600,7 @@ impl Codegen {
                             func.instruction(&Instruction::StructNew(box_idx));
                         } else {
                             panic!(
-                                "Box type not registered for {:?}. Make sure to use &{:?} somewhere.",
-                                prim, prim
+                                "Box type not registered for {prim:?}. Make sure to use &{prim:?} somewhere."
                             );
                         }
                     }
@@ -4674,15 +4626,14 @@ impl Codegen {
                 let variant_name = match type_table.get(*variant_type) {
                     ResolvedType::Variant { name, .. } => name.clone(),
                     other => panic!(
-                        "Expected Variant type for VariantConstruct, got: {:?}",
-                        other
+                        "Expected Variant type for VariantConstruct, got: {other:?}"
                     ),
                 };
 
                 // Look up the registered variant type
                 let variant_types = self.variant_types.borrow();
                 let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {}", variant_name);
+                    panic!("Variant type not registered: {variant_name}");
                 });
 
                 let struct_type_idx = variant_info.struct_type_idx;
@@ -4976,7 +4927,7 @@ impl Codegen {
                             } else if let ResolvedType::String = base_type {
                                 (self.string_array_type_idx, ArrayKind::String)
                             } else {
-                                panic!("index assignment on non-array type: {:?}", base_type);
+                                panic!("index assignment on non-array type: {base_type:?}");
                             };
 
                         // Generate array reference first
@@ -5058,8 +5009,7 @@ impl Codegen {
                                     });
                                 } else {
                                     panic!(
-                                        "no box type for primitive in deref assignment: {:?}",
-                                        prim
+                                        "no box type for primitive in deref assignment: {prim:?}"
                                     );
                                 }
                             } else {
@@ -5313,7 +5263,7 @@ impl Codegen {
                     for arg in args {
                         self.generate_expr(func, arg, type_table, ctx, builder);
                     }
-                    let full_name = format!("{}::{}", effect_name, op_name);
+                    let full_name = format!("{effect_name}::{op_name}");
                     if let Some(func_idx) = builder.try_func_idx(&full_name) {
                         func.instruction(&Instruction::Call(func_idx));
                     } else {
@@ -5391,7 +5341,7 @@ impl Codegen {
                                 func.instruction(&Instruction::Call(set_func_idx));
                             }
                             _ => {
-                                panic!("unknown method {} on String type", method_name);
+                                panic!("unknown method {method_name} on String type");
                             }
                         }
                     }
@@ -5444,7 +5394,7 @@ impl Codegen {
                             // Method not found - also try the simple alias name
                             // Monomorphized methods are registered with an alias using just
                             // the struct name and method (e.g., "Pair<i32,i64>::get_first")
-                            let simple_name = format!("{}::{}", name, method_name);
+                            let simple_name = format!("{name}::{method_name}");
                             if let Some(idx) = builder.try_func_idx(&simple_name) {
                                 // Generate code for the receiver (self parameter)
                                 self.generate_expr(func, receiver, type_table, ctx, builder);
@@ -5456,8 +5406,7 @@ impl Codegen {
                                 func.instruction(&Instruction::Call(idx));
                             } else {
                                 panic!(
-                                    "unknown method: {} (also tried alias: {})",
-                                    mangled_name, simple_name
+                                    "unknown method: {mangled_name} (also tried alias: {simple_name})"
                                 );
                             }
                         }
@@ -5484,7 +5433,7 @@ impl Codegen {
                                 PrimitiveType::Bool => "core/internal/bool_to_string",
                                 PrimitiveType::Char => "core/internal/char_to_string",
                                 _ => {
-                                    panic!("to_string not supported for primitive type: {:?}", prim)
+                                    panic!("to_string not supported for primitive type: {prim:?}")
                                 }
                             };
                             if let Some(func_idx) = builder.try_func_idx(func_name) {
@@ -5494,8 +5443,7 @@ impl Codegen {
                             }
                         } else {
                             panic!(
-                                "unknown method {} on primitive type {:?}",
-                                method_name, prim
+                                "unknown method {method_name} on primitive type {prim:?}"
                             );
                         }
                     }
@@ -5509,7 +5457,7 @@ impl Codegen {
                         let element_type = type_args[0];
                         // Build mangled method name: Array<String>::len
                         let elem_name = self.mangle_type_for_struct_name(element_type, type_table);
-                        let func_name = format!("Array<{}>::{}", elem_name, method_name);
+                        let func_name = format!("Array<{elem_name}>::{method_name}");
 
                         // Generate receiver
                         self.generate_expr(func, receiver, type_table, ctx, builder);
@@ -5559,7 +5507,7 @@ impl Codegen {
                                 func.instruction(&Instruction::Call(set_func_idx));
                             }
                             _ => {
-                                panic!("unknown method {} on String type", method_name);
+                                panic!("unknown method {method_name} on String type");
                             }
                         }
                     }
@@ -5577,7 +5525,7 @@ impl Codegen {
                             .collect();
                         let mangled_struct_name = format!("{}<{}>", name, type_arg_names.join(","));
                         let mangled_method_name =
-                            format!("{}::{}", mangled_struct_name, method_name);
+                            format!("{mangled_struct_name}::{method_name}");
 
                         // Build full method name with module path
                         let full_method_name = MethodName::new(
@@ -5604,8 +5552,7 @@ impl Codegen {
                             func.instruction(&Instruction::Call(idx));
                         } else {
                             panic!(
-                                "unknown method {} on generic struct {}: tried {} and {}",
-                                method_name, name, full_method_name, mangled_method_name
+                                "unknown method {method_name} on generic struct {name}: tried {full_method_name} and {mangled_method_name}"
                             );
                         }
                     }
@@ -6002,7 +5949,7 @@ impl Codegen {
                             // Create the tuple struct
                             func.instruction(&Instruction::StructNew(type_idx));
                         } else {
-                            panic!("tuple type not registered: {:?}", elem_type_ids);
+                            panic!("tuple type not registered: {elem_type_ids:?}");
                         }
                     } else {
                         panic!(
@@ -6021,8 +5968,7 @@ impl Codegen {
                 // specific env type before accessing fields.
                 let env_type_idx = ctx.closure_env_type_idx.unwrap_or_else(|| {
                     panic!(
-                        "capture access for '{}' (index {}) outside of closure context",
-                        name, index
+                        "capture access for '{name}' (index {index}) outside of closure context"
                     )
                 });
 
@@ -6115,7 +6061,7 @@ impl Codegen {
                 // We use a counter to ensure nested calls don't share the same local.
                 let call_id = ctx.indirect_call_counter;
                 ctx.indirect_call_counter += 1;
-                let local_name = format!("__indirect_call_{}_{}", closure_struct_type_idx, call_id);
+                let local_name = format!("__indirect_call_{closure_struct_type_idx}_{call_id}");
                 let closure_local = ctx.alloc_local(
                     &local_name,
                     ValType::Ref(RefType {
@@ -6252,7 +6198,7 @@ impl Codegen {
                     } else if let ResolvedType::String = base_type {
                         (self.string_array_type_idx, ArrayKind::String)
                     } else {
-                        panic!("index assignment on non-array type: {:?}", base_type);
+                        panic!("index assignment on non-array type: {base_type:?}");
                     };
 
                 self.generate_expr(func, array_expr, type_table, ctx, builder);
@@ -6296,7 +6242,7 @@ impl Codegen {
                             });
                             // No need to push the value back - it's a statement
                         } else {
-                            panic!("no box type for primitive in deref assignment: {:?}", prim);
+                            panic!("no box type for primitive in deref assignment: {prim:?}");
                         }
                     } else {
                         panic!("deref assignment for non-primitive types not yet supported");
@@ -6309,10 +6255,10 @@ impl Codegen {
         }
     }
 
-    /// Try to generate an inverted condition for br_if optimization.
+    /// Try to generate an inverted condition for `br_if` optimization.
     /// Returns true if the condition was inverted and generated, false otherwise.
-    /// This eliminates the pattern: condition + i32.eqz + br_if
-    /// by directly generating: inverted_condition + br_if
+    /// This eliminates the pattern: condition + i32.eqz + `br_if`
+    /// by directly generating: `inverted_condition` + `br_if`
     fn try_generate_inverted_condition(
         &self,
         func: &mut Function,
@@ -7235,8 +7181,7 @@ impl Codegen {
             // Unsupported pattern
             _ => {
                 panic!(
-                    "Unsupported if-pattern: {:?} on type {:?}",
-                    pattern, scrutinee_type
+                    "Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}"
                 );
             }
         }
@@ -7323,7 +7268,7 @@ impl Codegen {
                 self.type_id_to_valtype(type_table, local_type_id)
             };
 
-            let local_name = format!("_local_{}", local_idx);
+            let local_name = format!("_local_{local_idx}");
             func_ctx.alloc_local(&local_name, local_type);
         }
 
@@ -7533,7 +7478,7 @@ impl Codegen {
                 self.type_id_to_valtype(type_table, local_type_id)
             };
 
-            let local_name = format!("_local_{}", local_idx);
+            let local_name = format!("_local_{local_idx}");
             func_ctx.alloc_local(&local_name, local_type);
         }
 
@@ -7600,8 +7545,8 @@ impl Codegen {
     ///
     /// This handles:
     /// 1. Local functions (simple name lookup)
-    /// 2. Builtin functions (builtin:: namespace)
-    /// 3. Core library functions (core:: namespace)
+    /// 2. Builtin functions (`builtin::` namespace)
+    /// 3. Core library functions (`core::` namespace)
     /// 4. Qualified names from imported modules
     fn resolve_call_target(
         &self,
@@ -7630,8 +7575,7 @@ impl Codegen {
         // Methods use TirExprKind::MethodCall instead.
         debug_assert!(
             !func_name.contains("::"),
-            "TirExprKind::Call should not have method-style names: {}",
-            func_name
+            "TirExprKind::Call should not have method-style names: {func_name}"
         );
 
         // Strategy 3: Build mangled name and try lookup
@@ -7688,7 +7632,7 @@ impl Codegen {
         } else {
             format!("{}::{}", module_path.join("::"), func_name)
         };
-        panic!("unknown function: {}", full_name);
+        panic!("unknown function: {full_name}");
     }
 
     /// Generate wait logic for pending effect subtasks
@@ -8109,8 +8053,8 @@ impl Codegen {
 
     /// Pre-allocate scratch locals for async effect handling
     ///
-    /// These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
-    /// and builtin::effect_wait (used by ambient logging functions like log_stdout).
+    /// These are needed for `builtin::call_indirect_stdout/stderr_write_via_stream`
+    /// and `builtin::effect_wait` (used by ambient logging functions like `log_stdout`).
     /// Only allocate when the function actually uses these builtins.
     fn preallocate_async_scratch_locals(ctx: &mut FunctionContext) {
         // Scratch locals for write_via_stream async handling
@@ -8120,7 +8064,7 @@ impl Codegen {
 
     /// Pre-allocate scratch locals for Environment calls
     ///
-    /// Environment calls (get_arguments, get_environment, get_initial_cwd) need
+    /// Environment calls (`get_arguments`, `get_environment`, `get_initial_cwd`) need
     /// a local to hold the outptr for CM ABI conversion.
     fn preallocate_environment_scratch_locals(ctx: &mut FunctionContext) {
         ctx.alloc_local("__cm_outptr", ValType::I32);
@@ -8262,9 +8206,9 @@ impl Codegen {
     /// Check if a function body uses async builtins that need scratch locals.
     ///
     /// Returns true if the body calls:
-    /// - builtin::call_indirect_stdout_write_via_stream
-    /// - builtin::call_indirect_stderr_write_via_stream
-    /// - builtin::effect_wait
+    /// - `builtin::call_indirect_stdout_write_via_stream`
+    /// - `builtin::call_indirect_stderr_write_via_stream`
+    /// - `builtin::effect_wait`
     fn needs_async_scratch_locals(block: &TirBlock) -> bool {
         for stmt in &block.stmts {
             if Self::stmt_needs_async_scratch_locals(stmt) {
@@ -8458,7 +8402,7 @@ impl Codegen {
                 ResolvedType::Tuple(elements) => {
                     if let Some(type_idx) = self.get_tuple_type_idx(elements) {
                         ctx.alloc_local(
-                            &format!("__copy_source_{}", type_idx),
+                            &format!("__copy_source_{type_idx}"),
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(type_idx),
@@ -8476,7 +8420,7 @@ impl Codegen {
                             self.array_struct_types.get(&elem_type)
                         {
                             ctx.alloc_local(
-                                &format!("__copy_array_struct_source_{}", raw_array_type_idx),
+                                &format!("__copy_array_struct_source_{raw_array_type_idx}"),
                                 ValType::Ref(RefType {
                                     nullable: true,
                                     heap_type: HeapType::Concrete(array_struct_type_idx),
@@ -8485,25 +8429,25 @@ impl Codegen {
                         }
                         // Allocate locals for raw array copy operations
                         ctx.alloc_local(
-                            &format!("__copy_array_source_{}", raw_array_type_idx),
+                            &format!("__copy_array_source_{raw_array_type_idx}"),
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(raw_array_type_idx),
                             }),
                         );
                         ctx.alloc_local(
-                            &format!("__copy_array_dest_{}", raw_array_type_idx),
+                            &format!("__copy_array_dest_{raw_array_type_idx}"),
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(raw_array_type_idx),
                             }),
                         );
                         ctx.alloc_local(
-                            &format!("__copy_array_counter_{}", raw_array_type_idx),
+                            &format!("__copy_array_counter_{raw_array_type_idx}"),
                             ValType::I32,
                         );
                         ctx.alloc_local(
-                            &format!("__copy_array_len_{}", raw_array_type_idx),
+                            &format!("__copy_array_len_{raw_array_type_idx}"),
                             ValType::I32,
                         );
                     }
@@ -8752,7 +8696,7 @@ impl Codegen {
         }
     }
 
-    /// Pre-allocate locals for IfPattern statements in a block
+    /// Pre-allocate locals for `IfPattern` statements in a block
     fn preallocate_if_pattern_locals(
         &self,
         block: &TirBlock,
@@ -8826,7 +8770,7 @@ impl Codegen {
         // Pre-allocate temp locals for each call site
         for (struct_type_idx, count) in call_counts {
             for i in 0..count {
-                let name = format!("__indirect_call_{}_{}", struct_type_idx, i);
+                let name = format!("__indirect_call_{struct_type_idx}_{i}");
                 ctx.alloc_local(
                     &name,
                     ValType::Ref(RefType {
@@ -8838,7 +8782,7 @@ impl Codegen {
         }
     }
 
-    /// Count IndirectCall expressions in a block, grouped by closure struct type
+    /// Count `IndirectCall` expressions in a block, grouped by closure struct type
     fn count_indirect_calls_in_block(
         block: &TirBlock,
         type_table: &TypeTable,
@@ -8999,7 +8943,7 @@ impl Codegen {
         }
     }
 
-    /// Pre-allocate locals for Array#append() method calls.
+    /// Pre-allocate locals for `Array#append()` method calls.
     /// This scans the TIR for append calls and pre-allocates the 5 locals needed per element type.
     fn preallocate_array_append_locals(
         &self,
@@ -9036,7 +8980,7 @@ impl Codegen {
         }
     }
 
-    /// Collect element types of arrays that have append() called on them
+    /// Collect element types of arrays that have `append()` called on them
     fn collect_array_append_types(
         block: &TirBlock,
         type_table: &TypeTable,
@@ -9217,7 +9161,7 @@ impl Codegen {
                 ..
             } => {
                 let local_type = self.type_id_to_valtype(type_table, *type_id);
-                let local_name = format!("_local_{}", local_index);
+                let local_name = format!("_local_{local_index}");
                 ctx.alloc_local(&local_name, local_type);
             }
             TirStmtKind::If {
@@ -9309,7 +9253,7 @@ impl Codegen {
 
     /// Convert a world export function type to Core Wasm params
     ///
-    /// For async exports, the core function has no params (async uses task_return).
+    /// For async exports, the core function has no params (async uses `task_return`).
     /// For sync exports, params are mapped directly.
     fn world_export_to_core_params(&self, export: &WorldExportInfo) -> Vec<ValType> {
         if export.is_async {
@@ -9326,7 +9270,7 @@ impl Codegen {
 
     /// Convert a world export function type to Core Wasm results
     ///
-    /// For async exports, there's no return (result passed via task_return).
+    /// For async exports, there's no return (result passed via `task_return`).
     /// For sync exports, the return type is mapped directly.
     fn world_export_to_core_results(&self, export: &WorldExportInfo) -> Vec<ValType> {
         if export.is_async {
@@ -9412,7 +9356,7 @@ impl Codegen {
     }
 }
 
-/// Convert a PrimitiveType to its corresponding Wasm ValType.
+/// Convert a `PrimitiveType` to its corresponding Wasm `ValType`.
 /// Used for boxing primitives in references.
 fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
     match prim {

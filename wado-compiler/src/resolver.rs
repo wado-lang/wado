@@ -32,7 +32,7 @@ use crate::token::Span;
 /// Module path for the String struct in core/prelude
 const STRING_MODULE_PATH: &[&str] = &["core", "prelude"];
 
-/// Helper to convert STRING_MODULE_PATH to Vec<String>
+/// Helper to convert `STRING_MODULE_PATH` to Vec<String>
 fn string_module_path() -> Vec<String> {
     STRING_MODULE_PATH
         .iter()
@@ -40,12 +40,12 @@ fn string_module_path() -> Vec<String> {
         .collect()
 }
 
-/// Struct field info: (module_path, fields) where fields is a list of (name, type_id) pairs
+/// Struct field info: (`module_path`, fields) where fields is a list of (name, `type_id`) pairs
 type StructFieldInfo = (Vec<String>, Vec<(String, TypeId)>);
 
-/// Variant case info: case_name -> field_type_ids
+/// Variant case info: `case_name` -> `field_type_ids`
 type VariantCaseData = (String, Vec<TypeId>);
-/// Variant info: (module_path, type_params, cases)
+/// Variant info: (`module_path`, `type_params`, cases)
 type VariantInfo = (Vec<String>, Vec<String>, Vec<VariantCaseData>);
 
 /// Errors from the type resolution phase
@@ -187,7 +187,7 @@ struct MethodInfo {
 
 /// Function context during resolution with scope tracking
 struct FunctionContext {
-    /// Stack of scopes (each scope maps name -> LocalVar)
+    /// Stack of scopes (each scope maps name -> `LocalVar`)
     scopes: Vec<HashMap<String, LocalVar>>,
     /// Next local index (Wasm locals are function-wide)
     next_local: u32,
@@ -198,7 +198,7 @@ struct FunctionContext {
     local_types: Vec<TypeId>,
     /// Local indices that have their address taken (&x or &mut x)
     address_taken_locals: HashSet<u32>,
-    /// Outer context locals for closure capture detection (name -> LocalVar snapshot)
+    /// Outer context locals for closure capture detection (name -> `LocalVar` snapshot)
     /// Only set for closure contexts
     outer_locals: HashMap<String, LocalVar>,
     /// Captured variables detected during resolution (name -> capture index)
@@ -315,7 +315,7 @@ impl FunctionContext {
         None
     }
 
-    /// Get the list of captures for building TirCapture entries
+    /// Get the list of captures for building `TirCapture` entries
     fn get_captures(&self) -> Vec<(String, u32, &LocalVar)> {
         let mut captures: Vec<_> = self
             .captured_vars
@@ -350,9 +350,9 @@ pub struct Resolver<'a> {
     loaded_modules: &'a HashMap<Vec<String>, Module>,
     /// Type aliases (name -> resolved type)
     type_aliases: HashMap<String, TypeId>,
-    /// Struct field info (struct name -> (module_path, fields))
+    /// Struct field info (struct name -> (`module_path`, fields))
     struct_fields: HashMap<String, StructFieldInfo>,
-    /// Variant case info (variant name -> (module_path, type_params, cases))
+    /// Variant case info (variant name -> (`module_path`, `type_params`, cases))
     variant_cases: HashMap<String, VariantInfo>,
     /// Function return types (name -> return type)
     function_return_types: HashMap<String, TypeId>,
@@ -360,20 +360,20 @@ pub struct Resolver<'a> {
     imported_functions: HashSet<String>,
     /// Errors collected during resolution
     errors: Vec<TypeError>,
-    /// Current module path being resolved (for struct type module_path)
+    /// Current module path being resolved (for struct type `module_path`)
     current_module_path: Vec<String>,
     /// Current module items (for local function parameter lookup)
     current_module_items: Vec<Item>,
-    /// Type parameters currently in scope (name -> (index, TypeId))
+    /// Type parameters currently in scope (name -> (index, `TypeId`))
     /// Set when resolving generic structs or functions
     current_type_params: HashMap<String, (u32, TypeId)>,
     /// Generic struct definitions (name -> type param count)
     /// Used to determine if a struct is generic
     generic_struct_names: HashSet<String>,
-    /// Generic function type parameters (func_name -> type_params)
+    /// Generic function type parameters (`func_name` -> `type_params`)
     /// Used for substituting type parameters in return types
     generic_function_params: HashMap<String, Vec<(String, TypeId)>>,
-    /// Generic method type parameters (mangled_name -> type_params)
+    /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
     generic_method_params: HashMap<String, Vec<(String, TypeId)>>,
 }
@@ -772,7 +772,7 @@ impl<'a> Resolver<'a> {
         sorted_indices.iter().map(|&i| paths[i].clone()).collect()
     }
 
-    /// Static version of resolve_type for use before the resolver is fully constructed
+    /// Static version of `resolve_type` for use before the resolver is fully constructed
     fn resolve_type_static(
         ty: &Type,
         type_table: &mut TypeTable,
@@ -2278,7 +2278,7 @@ impl<'a> Resolver<'a> {
         {
             self.errors.push(TypeError::TypeMismatch {
                 expected: "mutable variable".to_string(),
-                found: format!("immutable variable '{}'", name),
+                found: format!("immutable variable '{name}'"),
                 span: unary.span,
             });
         }
@@ -2494,7 +2494,7 @@ impl<'a> Resolver<'a> {
                     // Static methods are registered with mangled names "Type::method"
                     else if self.is_static_method(prefix, suffix) {
                         // Return as a static method call - will be converted to StaticCall below
-                        let mangled_name = format!("{}::{}", prefix, suffix);
+                        let mangled_name = format!("{prefix}::{suffix}");
                         return self.resolve_static_method_call_from_qualified(
                             prefix,
                             suffix,
@@ -2543,7 +2543,7 @@ impl<'a> Resolver<'a> {
                         } else {
                             // Unknown case name
                             self.errors.push(TypeError::UnknownFunction {
-                                name: format!("{}::{}", prefix, suffix),
+                                name: format!("{prefix}::{suffix}"),
                                 span: call.span,
                             });
                             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
@@ -2890,7 +2890,7 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a type without registering new types
     /// This is used for lookups where we need immutable access. It only handles
-    /// primitive types and type aliases. For generic types, use resolve_type instead.
+    /// primitive types and type aliases. For generic types, use `resolve_type` instead.
     fn resolve_type_no_register(&self, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => match named.name.as_str() {
@@ -3024,7 +3024,7 @@ impl<'a> Resolver<'a> {
                 }
                 ResolvedType::BuiltinArray(elem) => {
                     let elem_name = self.mangle_type_name(elem);
-                    let mangled = format!("Array<{}>", elem_name);
+                    let mangled = format!("Array<{elem_name}>");
                     (mangled, Some("Array".to_string()), Some(vec![elem]))
                 }
                 _ => (self.mangle_type_name(base_type_id), None, None),
@@ -3229,15 +3229,15 @@ impl<'a> Resolver<'a> {
         }
 
         // Build monomorph_info for generic instantiations
-        let monomorph_info = if !struct_type_args.is_empty() {
+        let monomorph_info = if struct_type_args.is_empty() {
+            None
+        } else {
             // Generic static method: track the original generic name
             let generic_name = format!("{}::{}", struct_name, static_call.method);
             Some(MonomorphInfo {
                 generic_name,
                 type_args: struct_type_args,
             })
-        } else {
-            None
         };
 
         TirExpr::new(
@@ -3268,7 +3268,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Also try with just StructName::method (for non-generic types)
-        let simple_name = format!("{}::{}", struct_name, method_name);
+        let simple_name = format!("{struct_name}::{method_name}");
         if let Some(&return_type) = self.function_return_types.get(&simple_name) {
             return return_type;
         }
@@ -3327,7 +3327,7 @@ impl<'a> Resolver<'a> {
 
         // Search all loaded modules if module_path is empty
         if module_path.is_empty() {
-            for (_, module) in self.loaded_modules.iter() {
+            for module in self.loaded_modules.values() {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
                         let impl_struct_name = self.get_type_name(&impl_block.ty);
@@ -3383,7 +3383,7 @@ impl<'a> Resolver<'a> {
     /// Check if a qualified name `struct_name::method_name` is a static method
     fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
         // Build the mangled function name
-        let mangled_name = format!("{}::{}", struct_name, method_name);
+        let mangled_name = format!("{struct_name}::{method_name}");
 
         // Check if it's registered in function_return_types (static methods are registered there)
         if self.function_return_types.contains_key(&mangled_name) {
@@ -3391,7 +3391,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Also check in loaded modules' impl blocks
-        for (_, module) in self.loaded_modules.iter() {
+        for module in self.loaded_modules.values() {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item {
                     let impl_struct_name = self.get_type_name(&impl_block.ty);
@@ -3479,7 +3479,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Check loaded modules
-        for (path, module) in self.loaded_modules.iter() {
+        for (path, module) in self.loaded_modules {
             for item in &module.items {
                 if let Item::Struct(s) = item
                     && s.name == struct_name
@@ -3548,7 +3548,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Look up method info based on receiver type and method name.
-    /// Returns MethodInfo including return type and self_kind, or None if not found.
+    /// Returns `MethodInfo` including return type and `self_kind`, or None if not found.
     fn lookup_method_info(&self, receiver_type: TypeId, method_name: &str) -> Option<MethodInfo> {
         // First, get the base (non-reference) type for method lookup
         let base_type_id = self.get_base_type(receiver_type);
@@ -3603,7 +3603,7 @@ impl<'a> Resolver<'a> {
         };
 
         // Build the mangled method name and look it up locally first
-        let mangled_name = format!("{}::{}", struct_name, method_name);
+        let mangled_name = format!("{struct_name}::{method_name}");
         if let Some(&return_type) = self.function_return_types.get(&mangled_name) {
             // For locally registered methods, we need to find the self_kind from the AST
             // Check current module items for the method definition
@@ -3659,7 +3659,7 @@ impl<'a> Resolver<'a> {
         // Search all loaded modules if module_path is empty (for prelude types)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
         if module_path.is_empty() {
-            for (_, module) in self.loaded_modules.iter() {
+            for module in self.loaded_modules.values() {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
                         // Skip trait impls - only look at inherent impls
@@ -3695,7 +3695,7 @@ impl<'a> Resolver<'a> {
         None
     }
 
-    /// Find the self_kind for a method in current module items
+    /// Find the `self_kind` for a method in current module items
     fn find_method_self_kind(&self, struct_name: &str, method_name: &str) -> Option<ast::SelfKind> {
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item {
@@ -3770,24 +3770,21 @@ impl<'a> Resolver<'a> {
             }
             ast::SelfKind::MutRef => {
                 // Method expects &mut self
-                match &receiver_type {
-                    ResolvedType::MutRef(_) => {
-                        // Already &mut T, use as-is
-                        receiver
-                    }
-                    _ => {
-                        // Value T, need to add &mut
-                        let mut_ref_type =
-                            self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                        TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::MutRef,
-                                expr: Box::new(receiver),
-                            },
-                            mut_ref_type,
-                            span,
-                        )
-                    }
+                if let ResolvedType::MutRef(_) = &receiver_type {
+                    // Already &mut T, use as-is
+                    receiver
+                } else {
+                    // Value T, need to add &mut
+                    let mut_ref_type =
+                        self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::MutRef,
+                            expr: Box::new(receiver),
+                        },
+                        mut_ref_type,
+                        span,
+                    )
                 }
             }
         }
@@ -3813,7 +3810,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Find a trait method for a given type and method name.
-    /// Returns (trait_name, MethodInfo) if found, None otherwise.
+    /// Returns (`trait_name`, `MethodInfo`) if found, None otherwise.
     /// This is used when an inherent method is not found.
     fn find_trait_method_for_type(
         &mut self,
@@ -3844,7 +3841,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Also check all loaded modules
-        for (_, module) in self.loaded_modules.iter() {
+        for module in self.loaded_modules.values() {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && let Some(trait_type) = &impl_block.trait_type
@@ -4335,7 +4332,7 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a template string
     /// Resolve a template string - desugars to string concatenation
-    /// `Hello, {name}!` → string_concat("Hello, ", to_string(name), "!")
+    /// `Hello, {name}!` → `string_concat("Hello`, ", `to_string(name)`, "!")
     fn resolve_template_string(
         &mut self,
         template: &ast::TemplateStringExpr,
@@ -4368,7 +4365,7 @@ impl<'a> Resolver<'a> {
                     } else {
                         // Call to_string method
                         let receiver_type_name = self.mangle_type_name(resolved.type_id);
-                        let mangled_method_name = format!("{}::to_string", receiver_type_name);
+                        let mangled_method_name = format!("{receiver_type_name}::to_string");
                         TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(resolved.clone()),
@@ -4664,7 +4661,7 @@ impl<'a> Resolver<'a> {
         )
     }
 
-    /// Resolve a type from AST Type to TypeId
+    /// Resolve a type from AST Type to `TypeId`
     fn resolve_type(&mut self, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => self.resolve_named_type(&named.name, named.span),
@@ -4706,37 +4703,31 @@ impl<'a> Resolver<'a> {
         &mut self,
         namespaced: &crate::ast::NamespacedGenericType,
     ) -> TypeId {
-        match namespaced.namespace.as_str() {
-            "builtin" => match namespaced.name.as_str() {
-                "array" => {
-                    if namespaced.args.len() != 1 {
-                        self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: 1,
-                            found: namespaced.args.len(),
-                            span: namespaced.span,
-                        });
-                        return TypeTable::ERROR;
-                    }
-                    let element_type = self.resolve_type(&namespaced.args[0]);
-                    self.type_table
-                        .borrow_mut()
-                        .make_builtin_array(element_type)
-                }
-                _ => {
-                    self.errors.push(TypeError::UnknownType {
-                        name: format!("builtin::{}", namespaced.name),
-                        span: namespaced.span,
-                    });
-                    TypeTable::ERROR
-                }
-            },
-            _ => {
-                self.errors.push(TypeError::UnknownType {
-                    name: format!("{}::{}", namespaced.namespace, namespaced.name),
+        if namespaced.namespace.as_str() == "builtin" { if namespaced.name.as_str() == "array" {
+            if namespaced.args.len() != 1 {
+                self.errors.push(TypeError::ArgumentCountMismatch {
+                    expected: 1,
+                    found: namespaced.args.len(),
                     span: namespaced.span,
                 });
-                TypeTable::ERROR
+                return TypeTable::ERROR;
             }
+            let element_type = self.resolve_type(&namespaced.args[0]);
+            self.type_table
+                .borrow_mut()
+                .make_builtin_array(element_type)
+        } else {
+            self.errors.push(TypeError::UnknownType {
+                name: format!("builtin::{}", namespaced.name),
+                span: namespaced.span,
+            });
+            TypeTable::ERROR
+        } } else {
+            self.errors.push(TypeError::UnknownType {
+                name: format!("{}::{}", namespaced.namespace, namespaced.name),
+                span: namespaced.span,
+            });
+            TypeTable::ERROR
         }
     }
 
@@ -4906,7 +4897,7 @@ impl<'a> Resolver<'a> {
     }
 }
 
-/// Convert AST BinaryOp to TIR BinaryOp
+/// Convert AST `BinaryOp` to TIR `BinaryOp`
 fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
     match op {
         BinaryOp::Add => TirBinaryOp::Add,
@@ -4930,7 +4921,7 @@ fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
     }
 }
 
-/// Convert AST UnaryOp to TIR UnaryOp
+/// Convert AST `UnaryOp` to TIR `UnaryOp`
 fn convert_unary_op(op: UnaryOp) -> TirUnaryOp {
     match op {
         UnaryOp::Neg => TirUnaryOp::Neg,

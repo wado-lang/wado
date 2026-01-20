@@ -10,13 +10,13 @@ use crate::ast::{Function, Type};
 /// Information about a builtin function
 #[derive(Debug, Clone)]
 pub struct BuiltinFunctionInfo {
-    /// Function name (e.g., "stream_new")
+    /// Function name (e.g., "`stream_new`")
     pub name: String,
     /// Canonical name from #[canonical("...")] attribute (e.g., "stream-new")
     /// None means this builtin compiles to Wasm instructions directly
     pub canonical_name: Option<String>,
     /// Import namespace from #[namespace("...")] attribute (default: "wasi")
-    /// Only relevant for functions with canonical_name
+    /// Only relevant for functions with `canonical_name`
     pub namespace: String,
     /// Parameter types
     pub params: Vec<(String, Type)>,
@@ -29,11 +29,11 @@ pub struct BuiltinFunctionInfo {
 /// Registry of builtin functions for code generation
 ///
 /// Collects function signatures from core:builtin and provides:
-/// - Type lookup for builtin:: calls
+/// - Type lookup for `builtin::` calls
 /// - Parameter validation (future)
 #[derive(Debug, Default)]
 pub struct BuiltinRegistry {
-    /// function_name -> function info
+    /// `function_name` -> function info
     functions: HashMap<String, BuiltinFunctionInfo>,
 }
 

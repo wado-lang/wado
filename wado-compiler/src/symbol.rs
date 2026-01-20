@@ -45,7 +45,7 @@ pub struct FunctionSymbol {
     pub return_type: Option<String>,
     /// Effect requirements
     pub effects: Vec<String>,
-    /// Whether this is a builtin function (e.g., println from core::cli)
+    /// Whether this is a builtin function (e.g., println from `core::cli`)
     pub is_builtin: bool,
     /// WASI import metadata if this function maps to a WASI function
     pub wasi_import: Option<WasiImport>,
@@ -248,11 +248,11 @@ impl SymbolTable {
 
     /// Get all struct import aliases
     ///
-    /// Returns tuples of (alias_name, module_path, original_struct_name) for imports where:
+    /// Returns tuples of (`alias_name`, `module_path`, `original_struct_name`) for imports where:
     /// - The alias name differs from the original name
     /// - The imported symbol is a struct
     ///
-    /// The module_path can be used to construct qualified names for collision handling.
+    /// The `module_path` can be used to construct qualified names for collision handling.
     pub fn get_struct_aliases(&self) -> Vec<(String, Vec<String>, String)> {
         let mut aliases = Vec::new();
         for (alias_name, &symbol_id) in &self.imports {

@@ -21,7 +21,7 @@ pub struct WorldExportInfo {
 }
 
 impl WorldExportInfo {
-    /// Create from a parsed WorldExport
+    /// Create from a parsed `WorldExport`
     pub fn from_ast(export: &WorldExport) -> Self {
         let params = export
             .params
@@ -53,7 +53,7 @@ pub struct WorldInfo {
 /// - Export signature lookup for component generation
 #[derive(Debug, Default)]
 pub struct WorldRegistry {
-    /// world_name -> world info
+    /// `world_name` -> world info
     worlds: HashMap<String, WorldInfo>,
 }
 

@@ -52,7 +52,7 @@ impl std::fmt::Display for ModuleLoadError {
                 write!(f, "lex error in {}: {}", path.join("::"), message)
             }
             ModuleLoadError::IoError { path, message } => {
-                write!(f, "error reading '{}': {}", path, message)
+                write!(f, "error reading '{path}': {message}")
             }
         }
     }
@@ -64,7 +64,7 @@ impl std::error::Error for ModuleLoadError {}
 ///
 /// Loads and parses modules, caching the results.
 /// Core library modules are loaded from embedded sources in the compiler binary.
-/// Local .wado files are loaded from the filesystem relative to base_path.
+/// Local .wado files are loaded from the filesystem relative to `base_path`.
 ///
 /// Module paths are canonicalized before caching to ensure that the same file
 /// imported via different paths (e.g., `./geometry.wado` vs `./sub/../geometry.wado`)
