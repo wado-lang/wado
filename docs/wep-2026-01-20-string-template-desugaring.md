@@ -54,7 +54,7 @@ Where `__default_template__` is implemented as:
 ```wado
 fn __default_template__<T>(strings: TemplateStrings, values: T) -> String {
     let mut result = strings.cooked[0];
-    for let [i, v] of values {
+    for let [i, v] of values.entries() {
         result += to_string(v);
         result += strings.cooked[i + 1];
     }
@@ -91,7 +91,7 @@ The tag function receives the raw values (not stringified), enabling type-safe q
 impl String {
     fn raw<T>(strings: TemplateStrings, values: T) -> String {
         let mut result = strings.raw[0];  // Uses raw, not cooked
-        for let [i, v] of values {
+        for let [i, v] of values.entries() {
             result += to_string(v);
             result += strings.raw[i + 1];
         }
@@ -168,29 +168,27 @@ Lexer change required: `{{` → `{`, `}}` → `}` in template strings.
 
 ### Compile-Time Tuple Enumeration
 
-Tuple `for-of` always yields `[index, value]` pairs, unlike Array `for-of` which yields values only. This reflects the fundamental difference between tuple and array iteration:
-
-- **Array**: Runtime loop, homogeneous types, index is runtime value
-- **Tuple**: Compile-time unrolling, heterogeneous types, index is compile-time constant
+`for-of` yields values only for both Array and Tuple, consistent with JavaScript and Rust. To get `[index, value]` pairs, use `.entries()`:
 
 ```wado
-// Tuple: always [index, value]
-for let [i, v] of tuple_expr {
-    // i: compile-time constant index
-    // v: tuple_expr[i], type varies per iteration
-}
+// Array (runtime)
+for let v of array { }              // value only
+for let [i, v] of array.entries() { }  // [index, value]
 
-// Array: value only (like JavaScript)
-for let v of array_expr {
-    // v: element value
-}
+// Tuple (compile-time unrolling)
+for let v of tuple { }              // value only
+for let [i, v] of tuple.entries() { }  // [index, value]
 ```
+
+Key difference:
+- **Array `.entries()`**: Runtime method, returns `Iterator<[i32, T]>`
+- **Tuple `.entries()`**: Compile-time method, triggers loop unrolling with `[i, v]` pairs
 
 Expansion example:
 
 ```wado
 let t: [i32, String, f64] = [1, "hi", 3.14];
-for let [i, v] of t {
+for let [i, v] of t.entries() {
     println(`{i}: {v}`);
 }
 ```
@@ -215,19 +213,19 @@ Becomes:
 }
 ```
 
-Value-only iteration (discard index):
+Value-only iteration:
 
 ```wado
-for let [_, v] of tuple {
-    // use v only
+for let v of tuple {
+    // v changes type each iteration (comptime unrolling)
 }
 ```
 
 Constraints:
-- `tuple_expr` must have a tuple type
+- Tuple `for-of` and `.entries()` are compile-time unrolled
 - Loop body must be valid for each element type (checked after expansion)
-- `break` and `continue` are not allowed (compile error)
-- `i` is a compile-time constant, usable in array/tuple indexing
+- `break` and `continue` are not allowed in tuple iteration (compile error)
+- Index from `.entries()` is a compile-time constant, usable in array/tuple indexing
 
 ### Edge Cases
 
@@ -257,7 +255,9 @@ Constraints:
 
 ### Phase 3: Compile-Time Tuple Enumeration
 
-- [ ] Parse `for let [i, v] of expr` syntax
+- [ ] Implement `for let v of tuple` (value-only, comptime unrolling)
+- [ ] Implement `tuple.entries()` comptime method
+- [ ] Implement `for let [i, v] of tuple.entries()` (index+value, comptime unrolling)
 - [ ] Implement loop unrolling in desugar phase
 - [ ] Type-check each unrolled block independently
 
@@ -281,10 +281,12 @@ Constraints:
 - `String::raw` works naturally without parser special-casing
 - Type-safe interpolation values in tagged templates
 - Compile-time tuple enumeration has broader applications
+- Consistent `for-of` semantics with JavaScript/Rust (value only, `.entries()` for index+value)
 
 ### Negative
 
 - Compile-time tuple enumeration adds complexity to the compiler
+- Tuple `.entries()` as a comptime method is a novel concept requiring careful design
 - TemplateStrings struct adds runtime overhead (two arrays)
 - Breaking change if existing code relies on current lowering
 
