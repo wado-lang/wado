@@ -420,11 +420,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     let symbols = analyzer.into_symbols();
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(
-        &symbols,
-        &load_result.modules,
-    )
-    .ok();
+    let tir_modules = Resolver::resolve_all_modules(&symbols, &load_result.modules).ok();
 
     // === Phase 8: Lower all modules ===
     // Use lower_modules_indexed for cross-module generic function support

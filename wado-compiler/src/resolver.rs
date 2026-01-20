@@ -380,10 +380,7 @@ pub struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     /// Create a new resolver
-    pub fn new(
-        symbols: &'a SymbolTable,
-        loaded_modules: &'a HashMap<Vec<String>, Module>,
-    ) -> Self {
+    pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
         Self {
             type_table: Rc::new(RefCell::new(TypeTable::new())),
             symbols,
