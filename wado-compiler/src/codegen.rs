@@ -793,8 +793,9 @@ impl Codegen {
                     let struct_name = &func.name[..sep_pos];
                     let method_name = &func.name[sep_pos + 2..];
 
-                    // Skip non-pub methods
-                    if !func.is_pub {
+                    // Skip non-pub methods (except monomorphized ones which are generated for
+                    // concrete instantiation sites and must be included)
+                    if !func.is_pub && func.monomorph_info.is_none() {
                         continue;
                     }
                     // Skip bodyless methods
@@ -1068,23 +1069,8 @@ impl Codegen {
             self.register_variant_type(variant, type_table, &mut builder);
         }
 
-        // PHASE 5: Register ALL array types (including struct-based like Array<String>)
-        // This must happen after ALL struct registration (including monomorphized ones)
-        // because array types with struct elements need type_id_to_valtype to work.
-        self.register_array_types_from_table(type_table, &mut builder);
-        for (path, tir_mod) in all_tir_modules {
-            if path != &entry_tir.path {
-                self.register_array_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
-            }
-        }
-
-        // Register box types for primitive references (&i32, &mut f64, etc.)
-        self.register_box_types(&mut builder, project);
-
-        // Register canonical closure types for function type parameters.
-        // This must happen BEFORE user-defined function types are defined,
-        // because function parameters of type fn(T1, T2) -> R need to use
-        // the canonical closure struct type.
+        // Register canonical closure types BEFORE array types.
+        // This is needed so that Array<fn(...)> can use the correct closure struct type.
         self.register_canonical_closure_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
             if path != &entry_tir.path {
@@ -1094,6 +1080,20 @@ impl Codegen {
                 );
             }
         }
+
+        // PHASE 5: Register ALL array types (including struct-based like Array<String>)
+        // This must happen after ALL struct registration (including monomorphized ones)
+        // because array types with struct elements need type_id_to_valtype to work.
+        // Also must be after canonical closure types for Array<fn(...)> to work.
+        self.register_array_types_from_table(type_table, &mut builder);
+        for (path, tir_mod) in all_tir_modules {
+            if path != &entry_tir.path {
+                self.register_array_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
+            }
+        }
+
+        // Register box types for primitive references (&i32, &mut f64, etc.)
+        self.register_box_types(&mut builder, project);
 
         // WASI effect function types - derived from wasi/*.wado definitions
         // DCE: Only define types for WASI functions that are actually available (lowered)
@@ -1331,6 +1331,10 @@ impl Codegen {
                 // For monomorphized methods, also register an alias
                 // with just the simple name (e.g., Array<i32>::len)
                 if tir_func.monomorph_info.is_some() {
+                    eprintln!(
+                        "[DEBUG] Registering alias for monomorphized method: {} -> idx {}",
+                        tir_func.name, func_idx
+                    );
                     builder.define_func_alias(&tir_func.name, func_idx);
                 }
             } else {
@@ -4475,6 +4479,23 @@ impl Codegen {
         }
     }
 
+    /// Check if a type is a reference type (struct, string, variant, etc.)
+    /// These types are represented as GC references in Wasm.
+    fn type_is_reference(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
+        matches!(
+            type_table.get(type_id),
+            ResolvedType::String
+                | ResolvedType::Struct { .. }
+                | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Tuple(_)
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Ref(_)
+                | ResolvedType::MutRef(_)
+                | ResolvedType::Option(_)
+                | ResolvedType::Function { .. }
+        )
+    }
+
     // ========================================================================
     // Code Generation
     // ========================================================================
@@ -5367,7 +5388,18 @@ impl Codegen {
                             }
                         });
 
-                        if let Some(idx) = func_idx {
+                        // Also try simple alias names for monomorphized methods
+                        // These are registered with an alias using just the struct name and method
+                        let simple_name = MethodName::format_local(&name, None, &method_name);
+                        // For trait methods, also include trait in the simple name
+                        let simple_trait_name =
+                            MethodName::format_local(&name, trait_name.as_deref(), &method_name);
+
+                        let final_func_idx = func_idx
+                            .or_else(|| builder.try_func_idx(&simple_trait_name))
+                            .or_else(|| builder.try_func_idx(&simple_name));
+
+                        if let Some(idx) = final_func_idx {
                             // Generate code for the receiver (self parameter)
                             self.generate_expr(func, receiver, type_table, ctx, builder);
 
@@ -5379,24 +5411,9 @@ impl Codegen {
                             // Call the method
                             func.instruction(&Instruction::Call(idx));
                         } else {
-                            // Method not found - also try the simple alias name
-                            // Monomorphized methods are registered with an alias using just
-                            // the struct name and method (e.g., "Pair<i32,i64>::get_first")
-                            let simple_name = format!("{name}::{method_name}");
-                            if let Some(idx) = builder.try_func_idx(&simple_name) {
-                                // Generate code for the receiver (self parameter)
-                                self.generate_expr(func, receiver, type_table, ctx, builder);
-                                // Generate code for other arguments
-                                for arg in args {
-                                    self.generate_expr(func, arg, type_table, ctx, builder);
-                                }
-                                // Call the method
-                                func.instruction(&Instruction::Call(idx));
-                            } else {
-                                panic!(
-                                    "unknown method: {mangled_name} (also tried alias: {simple_name})"
-                                );
-                            }
+                            panic!(
+                                "unknown method: {mangled_name} (also tried aliases: {simple_trait_name}, {simple_name})"
+                            );
                         }
                     }
 
@@ -5432,28 +5449,6 @@ impl Codegen {
                         } else {
                             panic!("unknown method {method_name} on primitive type {prim:?}");
                         }
-                    }
-
-                    // Array method calls - call the monomorphized methods
-                    // Monomorphized methods are registered with aliases using their simple name
-                    // (e.g., Array<String>::len) regardless of which module they're in
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } if name == "Array" && type_args.len() == 1 => {
-                        let element_type = type_args[0];
-                        // Build mangled method name: Array<String>::len
-                        let elem_name = self.mangle_type_for_struct_name(element_type, type_table);
-                        let func_name = format!("Array<{elem_name}>::{method_name}");
-
-                        // Generate receiver
-                        self.generate_expr(func, receiver, type_table, ctx, builder);
-                        // Generate arguments
-                        for arg in args {
-                            self.generate_expr(func, arg, type_table, ctx, builder);
-                        }
-                        // Call the monomorphized method
-                        let func_idx = builder.func_idx(&func_name);
-                        func.instruction(&Instruction::Call(func_idx));
                     }
 
                     // String method calls - String is now a struct, call the struct methods
@@ -5510,21 +5505,42 @@ impl Codegen {
                             .map(|t| self.mangle_type_for_struct_name(*t, type_table))
                             .collect();
                         let mangled_struct_name = format!("{}<{}>", name, type_arg_names.join(","));
-                        let mangled_method_name = format!("{mangled_struct_name}::{method_name}");
+
+                        // For trait methods, use the trait name in the method reference
+                        // e.g., Triple<i32>^IndexValue<i32>::index_value
+                        let mangled_method_name = MethodName::format_local(
+                            &mangled_struct_name,
+                            trait_name.as_deref(),
+                            &method_name,
+                        );
 
                         // Build full method name with module path
                         let full_method_name = MethodName::new(
                             module_path.join("/"),
                             mangled_struct_name.clone(),
-                            None,
+                            trait_name.clone(),
                             method_name.clone(),
                         )
                         .to_string();
 
-                        // Try full method name first, then simple name
+                        // Also try non-monomorphized names for generic trait methods
+                        // e.g., Triple^IndexValue::index_value (without type args)
+                        let generic_method_name =
+                            MethodName::format_local(&name, trait_name.as_deref(), &method_name);
+                        let generic_full_method_name = MethodName::new(
+                            module_path.join("/"),
+                            name.clone(),
+                            trait_name.clone(),
+                            method_name.clone(),
+                        )
+                        .to_string();
+
+                        // Try all possible method names
                         let func_idx = builder
                             .try_func_idx(&full_method_name)
-                            .or_else(|| builder.try_func_idx(&mangled_method_name));
+                            .or_else(|| builder.try_func_idx(&mangled_method_name))
+                            .or_else(|| builder.try_func_idx(&generic_full_method_name))
+                            .or_else(|| builder.try_func_idx(&generic_method_name));
 
                         if let Some(idx) = func_idx {
                             // Generate receiver
@@ -5537,7 +5553,7 @@ impl Codegen {
                             func.instruction(&Instruction::Call(idx));
                         } else {
                             panic!(
-                                "unknown method {method_name} on generic struct {name}: tried {full_method_name} and {mangled_method_name}"
+                                "unknown method {method_name} on generic struct {name}: tried [{full_method_name}], [{mangled_method_name}], [{generic_full_method_name}], [{generic_method_name}]"
                             );
                         }
                     }
@@ -7710,8 +7726,10 @@ impl Codegen {
                 self.generate_effect_wait(func, ctx, builder);
             }
             "builtin::array_len" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
+                // Generate array argument and ensure it's non-null
+                if let Some(arr_arg) = args.first() {
+                    self.generate_expr(func, arr_arg, type_table, ctx, builder);
+                    func.instruction(&Instruction::RefAsNonNull);
                 }
                 func.instruction(&Instruction::ArrayLen);
             }
@@ -7842,10 +7860,20 @@ impl Codegen {
                             .array_types
                             .get(element_type)
                             .expect("Array type should be registered for array_get");
-                        for arg in args {
+                        // Generate array argument and ensure it's non-null
+                        // (struct field access returns nullable refs)
+                        self.generate_expr(func, arr_arg, type_table, ctx, builder);
+                        func.instruction(&Instruction::RefAsNonNull);
+                        // Generate remaining arguments (index)
+                        for arg in args.iter().skip(1) {
                             self.generate_expr(func, arg, type_table, ctx, builder);
                         }
                         func.instruction(&Instruction::ArrayGet(array_type_idx));
+                        // For reference element types, array.get returns nullable ref but
+                        // the expected return type is non-null, so add ref.as_non_null
+                        if self.type_is_reference(*element_type, type_table) {
+                            func.instruction(&Instruction::RefAsNonNull);
+                        }
                     } else {
                         panic!("array_get first argument must be builtin::array<T>");
                     }
@@ -7860,7 +7888,12 @@ impl Codegen {
                             .array_types
                             .get(element_type)
                             .expect("Array type should be registered for array_set");
-                        for arg in args {
+                        // Generate array argument and ensure it's non-null
+                        // (struct field access returns nullable refs)
+                        self.generate_expr(func, arr_arg, type_table, ctx, builder);
+                        func.instruction(&Instruction::RefAsNonNull);
+                        // Generate remaining arguments (index, value)
+                        for arg in args.iter().skip(1) {
                             self.generate_expr(func, arg, type_table, ctx, builder);
                         }
                         func.instruction(&Instruction::ArraySet(array_type_idx));
@@ -7870,6 +7903,8 @@ impl Codegen {
                 }
             }
             "builtin::array_copy" => {
+                // array.copy: (dst_arr, dst_offset, src_arr, src_offset, len)
+                // Both arrays need to be non-null
                 if let Some(dst_arg) = args.first() {
                     if let ResolvedType::BuiltinArray(element_type) =
                         type_table.get(dst_arg.type_id)
@@ -7878,9 +7913,18 @@ impl Codegen {
                             .array_types
                             .get(element_type)
                             .expect("Array type should be registered for array_copy");
-                        for arg in args {
-                            self.generate_expr(func, arg, type_table, ctx, builder);
-                        }
+                        // Generate dst array and ensure non-null
+                        self.generate_expr(func, &args[0], type_table, ctx, builder);
+                        func.instruction(&Instruction::RefAsNonNull);
+                        // dst_offset
+                        self.generate_expr(func, &args[1], type_table, ctx, builder);
+                        // Generate src array and ensure non-null
+                        self.generate_expr(func, &args[2], type_table, ctx, builder);
+                        func.instruction(&Instruction::RefAsNonNull);
+                        // src_offset
+                        self.generate_expr(func, &args[3], type_table, ctx, builder);
+                        // len
+                        self.generate_expr(func, &args[4], type_table, ctx, builder);
                         func.instruction(&Instruction::ArrayCopy {
                             array_type_index_dst: array_type_idx,
                             array_type_index_src: array_type_idx,

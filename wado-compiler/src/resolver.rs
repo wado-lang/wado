@@ -411,6 +411,16 @@ struct IndexMutTraitInfo {
     trait_name: String,
 }
 
+/// Info about an `IndexValue` trait implementation
+struct IndexValueTraitInfo {
+    /// The Output associated type
+    output_type: TypeId,
+    /// Self kind for the `index_value` method (&self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexValue`<i32>")
+    trait_name: String,
+}
+
 impl<'a> Resolver<'a> {
     /// Create a new resolver
     pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
@@ -473,7 +483,27 @@ impl<'a> Resolver<'a> {
                         .as_ref()
                         .map(|t| self.get_type_name(t));
 
+                    // Register type parameters from impl block's generic type FIRST
+                    // e.g., impl IndexValue<i32> for Triple<T> needs T registered
+                    let old_type_params = std::mem::take(&mut self.current_type_params);
+                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                        for (i, arg) in generic.args.iter().enumerate() {
+                            if let ast::Type::Named(named) = arg {
+                                let name = &named.name;
+                                if !self.current_type_params.contains_key(name) {
+                                    let type_id = self
+                                        .type_table
+                                        .borrow_mut()
+                                        .make_type_param(name.clone(), i as u32);
+                                    self.current_type_params
+                                        .insert(name.clone(), (i as u32, type_id));
+                                }
+                            }
+                        }
+                    }
+
                     // Set up associated type bindings for trait implementations
+                    // This now works because type params (like T) are registered above
                     let old_associated_type_bindings =
                         std::mem::take(&mut self.current_associated_type_bindings);
                     if impl_block.trait_type.is_some() {
@@ -504,8 +534,9 @@ impl<'a> Resolver<'a> {
                         }
                     }
 
-                    // Restore old associated type bindings
+                    // Restore old associated type bindings and type params
                     self.current_associated_type_bindings = old_associated_type_bindings;
+                    self.current_type_params = old_type_params;
                 }
                 Item::Trait(_trait_decl) => {
                     // Trait declarations are handled in the first pass (signature registration)
@@ -2391,14 +2422,9 @@ impl<'a> Resolver<'a> {
                 _ => indexed_expr.type_id,
             };
 
-            // Check if this is NOT an Array type (Arrays use direct codegen)
-            let is_array = self
-                .type_table
-                .borrow()
-                .as_array(indexed_expr.type_id)
-                .is_some();
-
-            if !is_array {
+            // Check for IndexAssign trait implementation
+            // Arrays now use IndexAssign trait like other types
+            {
                 // Check for IndexAssign trait implementation
                 let struct_name = match self.type_table.borrow().get(base_type_id).clone() {
                     ResolvedType::Struct { name, .. } => name,
@@ -2411,7 +2437,7 @@ impl<'a> Resolver<'a> {
                     let index_type = index_resolved.type_id;
 
                     if let Some(trait_info) =
-                        self.find_index_assign_trait_impl(&struct_name, index_type)
+                        self.find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
                     {
                         // Generate: expr.index_assign(index, value)
                         let value = self.resolve_expr(&assign.value, ctx);
@@ -4067,10 +4093,11 @@ impl<'a> Resolver<'a> {
     fn find_index_trait_impl(
         &mut self,
         struct_name: &str,
+        base_type_id: TypeId,
         _index_type: TypeId,
     ) -> Option<IndexTraitInfo> {
         // Look for impl Index<...> for StructName
-        self.find_indexing_trait_impl(struct_name, "Index", "index", "Output")
+        self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output")
             .map(|(output_type, self_kind, trait_name)| IndexTraitInfo {
                 output_type,
                 self_kind,
@@ -4082,25 +4109,33 @@ impl<'a> Resolver<'a> {
     fn find_index_assign_trait_impl(
         &mut self,
         struct_name: &str,
+        base_type_id: TypeId,
         _index_type: TypeId,
     ) -> Option<IndexAssignTraitInfo> {
         // Look for impl IndexAssign<...> for StructName
-        self.find_indexing_trait_impl(struct_name, "IndexAssign", "index_assign", "Input")
-            .map(|(input_type, self_kind, trait_name)| IndexAssignTraitInfo {
-                _input_type: input_type,
-                self_kind,
-                trait_name,
-            })
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexAssign",
+            "index_assign",
+            "Input",
+        )
+        .map(|(input_type, self_kind, trait_name)| IndexAssignTraitInfo {
+            _input_type: input_type,
+            self_kind,
+            trait_name,
+        })
     }
 
     /// Find `IndexMut` trait implementation for a type
     fn find_index_mut_trait_impl(
         &mut self,
         struct_name: &str,
+        base_type_id: TypeId,
         _index_type: TypeId,
     ) -> Option<IndexMutTraitInfo> {
         // Look for impl IndexMut<...> for StructName
-        self.find_indexing_trait_impl(struct_name, "IndexMut", "index_mut", "Output")
+        self.find_indexing_trait_impl(struct_name, base_type_id, "IndexMut", "index_mut", "Output")
             .map(|(output_type, self_kind, trait_name)| IndexMutTraitInfo {
                 output_type,
                 self_kind,
@@ -4108,14 +4143,46 @@ impl<'a> Resolver<'a> {
             })
     }
 
+    /// Find `IndexValue` trait implementation for a type
+    fn find_index_value_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        _index_type: TypeId,
+    ) -> Option<IndexValueTraitInfo> {
+        // Look for impl IndexValue<...> for StructName
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexValue",
+            "index_value",
+            "Output",
+        )
+        .map(|(output_type, self_kind, trait_name)| IndexValueTraitInfo {
+            output_type,
+            self_kind,
+            trait_name,
+        })
+    }
+
     /// Helper to find indexing trait implementations (Index, `IndexMut`, or `IndexAssign`)
     fn find_indexing_trait_impl(
         &mut self,
         struct_name: &str,
+        base_type_id: TypeId,
         trait_base_name: &str,
         method_name: &str,
         assoc_type_name: &str,
     ) -> Option<(TypeId, ast::SelfKind, String)> {
+        // Get concrete type arguments from the base type (for generic instances like Triple<i32>)
+        let concrete_type_args: Vec<TypeId> =
+            if let ResolvedType::GenericInstance { type_args, .. } =
+                self.type_table.borrow().get(base_type_id).clone()
+            {
+                type_args
+            } else {
+                Vec::new()
+            };
         // Collect impl blocks to check
         let mut impl_blocks_to_check: Vec<(
             Type,
@@ -4168,13 +4235,20 @@ impl<'a> Resolver<'a> {
                 continue;
             }
 
+            // Build type parameter mapping from impl_ty to concrete types
+            // e.g., for `impl IndexValue<i32> for Triple<T>` with concrete type `Triple<i32>`
+            // we build the mapping: {"T" -> i32}
+            let type_param_mapping = Self::build_type_param_mapping(&impl_ty, &concrete_type_args);
+
             // Find the method
             for method in &methods {
                 if method.name == method_name {
                     // Set up associated type bindings
                     let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
                     for binding in &associated_types {
-                        let type_id = self.resolve_type(&binding.ty);
+                        // Resolve the associated type, substituting type parameters
+                        let type_id =
+                            self.resolve_type_with_param_mapping(&binding.ty, &type_param_mapping);
                         self.current_associated_type_bindings
                             .insert(binding.name.clone(), type_id);
                     }
@@ -4195,13 +4269,101 @@ impl<'a> Resolver<'a> {
                     // Restore associated type bindings
                     self.current_associated_type_bindings = old_bindings;
 
-                    // Return base trait name (e.g., "Index" not "Index<i32>")
-                    return Some((assoc_type, self_kind, trait_name.clone()));
+                    // Return base trait name (e.g., "IndexValue" not "IndexValue<i32>")
+                    // Strip type parameters if present
+                    let base_trait_name = if let Some(bracket_pos) = trait_name.find('<') {
+                        trait_name[..bracket_pos].to_string()
+                    } else {
+                        trait_name.clone()
+                    };
+                    return Some((assoc_type, self_kind, base_trait_name));
                 }
             }
         }
 
         None
+    }
+
+    /// Build a mapping from type parameter names to concrete type IDs.
+    /// For `impl Trait for Container<T>` with concrete type `Container<i32>`,
+    /// returns `{"T" -> i32's TypeId}`.
+    fn build_type_param_mapping(
+        impl_ty: &Type,
+        concrete_type_args: &[TypeId],
+    ) -> HashMap<String, TypeId> {
+        let mut mapping = HashMap::new();
+
+        // Extract type parameter names from impl_ty
+        let type_param_names: Vec<String> = match impl_ty {
+            Type::Generic(g) => g
+                .args
+                .iter()
+                .filter_map(|arg| {
+                    if let Type::Named(n) = arg {
+                        // Single uppercase letter or PascalCase names are likely type parameters
+                        Some(n.name.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+
+        // Map each type parameter name to its concrete type
+        for (i, param_name) in type_param_names.into_iter().enumerate() {
+            if let Some(&type_id) = concrete_type_args.get(i) {
+                mapping.insert(param_name, type_id);
+            }
+        }
+
+        mapping
+    }
+
+    /// Resolve a type, substituting type parameters using the provided mapping.
+    fn resolve_type_with_param_mapping(
+        &mut self,
+        ty: &Type,
+        type_param_mapping: &HashMap<String, TypeId>,
+    ) -> TypeId {
+        match ty {
+            Type::Named(n) => {
+                // Check if this is a type parameter that should be substituted
+                if let Some(&type_id) = type_param_mapping.get(&n.name) {
+                    return type_id;
+                }
+                // Otherwise, resolve normally
+                self.resolve_type(ty)
+            }
+            Type::Generic(g) => {
+                // Resolve generic type with substituted arguments
+                let resolved_args: Vec<TypeId> = g
+                    .args
+                    .iter()
+                    .map(|arg| self.resolve_type_with_param_mapping(arg, type_param_mapping))
+                    .collect();
+
+                // Find the base type and create a generic instance
+                let base_name = &g.name;
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::GenericInstance {
+                        name: base_name.clone(),
+                        module_path: self.current_module_path.clone(),
+                        type_args: resolved_args,
+                    })
+            }
+            Type::Reference(inner) => {
+                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
+                self.type_table.borrow_mut().make_ref(inner_id)
+            }
+            Type::MutReference(inner) => {
+                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
+                self.type_table.borrow_mut().make_mut_ref(inner_id)
+            }
+            // For other types, fall back to normal resolution
+            _ => self.resolve_type(ty),
+        }
     }
 
     /// Try to resolve a method call on an index expression using `IndexMut`.
@@ -4245,7 +4407,8 @@ impl<'a> Resolver<'a> {
         let index_resolved = self.resolve_expr(&index_expr.index, ctx);
         let index_type = index_resolved.type_id;
 
-        let index_mut_info = self.find_index_mut_trait_impl(&struct_name, index_type)?;
+        let index_mut_info =
+            self.find_index_mut_trait_impl(&struct_name, base_type_id, index_type)?;
 
         // Now we need to check if the method being called requires &mut self
         // First, look up method info on the OUTPUT type (what IndexMut returns)
@@ -4544,21 +4707,8 @@ impl<'a> Resolver<'a> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
         }
 
-        // Check if this is an Array type (use direct indexing)
-        let array_element_type = self.type_table.borrow().as_array(expr.type_id);
-        if let Some(element_type) = array_element_type {
-            let index_expr = self.resolve_expr(&index.index, ctx);
-            return TirExpr::new(
-                TirExprKind::Index {
-                    expr: Box::new(expr),
-                    index: Box::new(index_expr),
-                },
-                element_type,
-                index.span,
-            );
-        }
-
-        // For custom types, look for Index trait implementation
+        // For Array and custom types, look for Index or IndexValue trait implementation
+        // (Array implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance { name, .. } => name.clone(),
@@ -4569,7 +4719,10 @@ impl<'a> Resolver<'a> {
             let index_expr = self.resolve_expr(&index.index, ctx);
             let index_type = index_expr.type_id;
 
-            if let Some(trait_info) = self.find_index_trait_impl(&struct_name, index_type) {
+            // First, try Index trait (returns reference)
+            if let Some(trait_info) =
+                self.find_index_trait_impl(&struct_name, base_type_id, index_type)
+            {
                 // Generate: *expr.index(index_expr)
                 // First, create the method call to .index(index_expr)
                 let receiver = self.adjust_receiver_for_self_kind(
@@ -4613,11 +4766,43 @@ impl<'a> Resolver<'a> {
                     index.span,
                 );
             }
+
+            // Fallback: try IndexValue trait (returns value by copy)
+            if let Some(trait_info) =
+                self.find_index_value_trait_impl(&struct_name, base_type_id, index_type)
+            {
+                // Generate: expr.index_value(index_expr)
+                let receiver = self.adjust_receiver_for_self_kind(
+                    expr.clone(),
+                    trait_info.self_kind,
+                    index.span,
+                );
+
+                // Get the mangled method name: StructName^IndexValue<IndexType>::index_value
+                let mangled_method_name =
+                    format!("{}^{}::index_value", struct_name, trait_info.trait_name);
+
+                // IndexValue returns Output directly (not a reference)
+                return TirExpr::new(
+                    TirExprKind::MethodCall {
+                        receiver: Box::new(receiver),
+                        func: FunctionRef::External {
+                            module_path: self.current_module_path.clone(),
+                            name: mangled_method_name,
+                            monomorph_info: None,
+                        },
+                        type_args: vec![],
+                        args: vec![index_expr],
+                    },
+                    trait_info.output_type,
+                    index.span,
+                );
+            }
         }
 
         // Fallback: report error for unsupported indexing
         self.errors.push(TypeError::TypeMismatch {
-            expected: "array or type implementing Index trait".to_string(),
+            expected: "array or type implementing Index or IndexValue trait".to_string(),
             found: self.type_table.borrow().type_name(expr.type_id),
             span: index.span,
         });

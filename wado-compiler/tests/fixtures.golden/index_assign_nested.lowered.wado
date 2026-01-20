@@ -5,15 +5,23 @@
 fn run() with Stdout {
     let indices: Array<i32> = move [2, 0, 1];
     let mut values: Array<i32> = move [0, 0, 0];
-    values[indices[0]] = 100;
-    values[indices[1]] = 200;
-    values[indices[2]] = 300;
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"(values[0]), move " "), move "i32::to_string"(values[1])), move " "), move "i32::to_string"(values[2])));
+    "Array<i32>^IndexAssign::index_assign"(&mut values, "Array<i32>^IndexValue::index_value"(&indices, 0), 100);
+    "Array<i32>^IndexAssign::index_assign"(&mut values, "Array<i32>^IndexValue::index_value"(&indices, 1), 200);
+    "Array<i32>^IndexAssign::index_assign"(&mut values, "Array<i32>^IndexValue::index_value"(&indices, 2), 300);
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&values, 0)), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&values, 1))), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&values, 2))));
     let source: Array<i32> = move [10, 20, 30];
     let mut dest: Array<i32> = move [0, 0, 0];
-    dest[0] = source[2];
-    dest[1] = source[0];
-    dest[2] = source[1];
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"(dest[0]), move " "), move "i32::to_string"(dest[1])), move " "), move "i32::to_string"(dest[2])));
+    "Array<i32>^IndexAssign::index_assign"(&mut dest, 0, "Array<i32>^IndexValue::index_value"(&source, 2));
+    "Array<i32>^IndexAssign::index_assign"(&mut dest, 1, "Array<i32>^IndexValue::index_value"(&source, 0));
+    "Array<i32>^IndexAssign::index_assign"(&mut dest, 2, "Array<i32>^IndexValue::index_value"(&source, 1));
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&dest, 0)), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&dest, 1))), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&dest, 2))));
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    return core::builtin::array_get::<i32>(self.repr, index);
+}
+
+fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
+    core::builtin::array_set::<i32>(self.repr, index, value);
 }
 

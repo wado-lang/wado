@@ -4,30 +4,39 @@ This WEP defines the trait system for indexing operations (`[]` operator) in Wad
 
 ## Context
 
-Wado needs traits to support indexing operations on collections like `Array<T>`, `Dict<K, V>`, and user-defined types. The design must account for:
+Wado needs traits to support indexing operations on collections like `Array<T>` and user-defined types. The design must account for:
 
-1. **Three distinct operations**:
-   - Read: `let x = arr[i]`
-   - Mutable access: `arr[i].method()` where method takes `&mut self`
-   - Assignment: `arr[i] = value`
+1. **Four distinct operations**:
+   - Read (reference): `let x = container[i]` where container returns `&T`
+   - Read (value): `let x = container[i]` where container returns `T` by value
+   - Mutable access: `container[i].method()` where method takes `&mut self`
+   - Assignment: `container[i] = value`
 
-2. **Wasm GC constraints**: In Wasm GC, `array.get` returns a value (not a reference), and `array.set` takes a value. You cannot get a mutable reference to a primitive array element.
+2. **Wasm GC constraints**: In Wasm GC, `array.get` returns a value for primitives but a reference for reference types. You cannot get a mutable reference to a primitive array element.
 
 3. **Flexibility**: Different collection types may support different subsets of operations.
 
 ## Decision
 
-Split indexing into three independent traits:
+Split indexing into four independent traits:
 
 ```wado
-/// Read-only indexing: container[index] -> &Output
+/// Read-only indexing returning a reference: container[index] -> &Output
 pub trait Index<IndexType> {
     type Output;
     fn index(&self, index: IndexType) -> &Self::Output;
 }
 
+/// Read-only indexing returning a value: container[index] -> Output
+/// Use this for containers of primitives where references cannot be returned.
+pub trait IndexValue<IndexType> {
+    type Output;
+    fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
 /// Mutable access: container[index].mutating_method()
-pub trait IndexMut<IndexType>: Index<IndexType> {
+pub trait IndexMut<IndexType> {
+    type Output;
     fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
 }
 
@@ -40,153 +49,165 @@ pub trait IndexAssign<IndexType> {
 
 ### Design Rationale
 
-#### Why Three Traits Instead of One?
+#### Why Four Traits?
 
-A single `Indexable` trait would force all operations to be implemented together:
+The key insight is that `Index` (returning `&Output`) and `IndexValue` (returning `Output`) serve different use cases:
 
-```wado
-// NOT chosen: Forces all three operations
-trait Indexable<Idx> {
-    type Element;
-    fn get(&self, idx: Idx) -> Self::Element;
-    fn get_mut(&mut self, idx: Idx) -> &mut Self::Element;
-    fn set(&mut self, idx: Idx, value: Self::Element);
-}
-```
+- `Index` returns a reference - works for containers storing reference types
+- `IndexValue` returns a copy - necessary for containers storing primitives
 
-This fails for collections that only support a subset of operations.
+This separation is semantically honest about Wasm GC's constraints rather than hiding them behind leaky abstractions like proxy objects.
 
-#### Why IndexMut Extends Index?
+#### Why Not Proxy Objects?
 
-`IndexMut` requires `Index` as a supertrait because:
+C++'s `vector<bool>` uses proxy objects that pretend to be references. This is widely considered a design mistake because:
 
-- Mutable access logically implies readable access
-- They share the same `Output` type
-- Rust uses this pattern successfully
+- Proxies don't behave like real references (`auto x = vec[i]` captures proxy, not value)
+- Template code breaks unexpectedly
+- Mental model mismatch causes bugs
 
-#### Why IndexAssign is Independent?
+By using `IndexValue`, we're explicit: "you get a copy, not a reference."
 
-`IndexAssign` is separate from `Index`/`IndexMut` because:
+#### IndexMut Without Index?
 
-- Assignment doesn't require returning a reference
-- `Input` type may differ from `Output` (e.g., accepting owned values vs returning references)
-- Some types support read + assign but not mutable references (Wasm GC primitives)
+`IndexMut` does NOT require `Index` as a supertrait because:
+
+- A container might support mutable access but not immutable reference return
+- For value types, `IndexValue` provides the read capability instead
+
+### Compiler Resolution
+
+The compiler desugars `[]` syntax based on which traits are implemented:
+
+#### For Read (`let x = container[i]`)
+
+1. Check `Index<Idx>` → generate `*container.index(i)`
+2. Else check `IndexValue<Idx>` → generate `container.index_value(i)`
+3. Else error
+
+#### For Method Call (`container[i].method()`)
+
+1. If method takes `&mut self`:
+   - Check `IndexMut<Idx>` → generate `container.index_mut(i).method()`
+   - Else error: "cannot mutate indexed value"
+2. If method takes `&self`:
+   - Check `Index<Idx>` or `IndexMut<Idx>` → use reference
+   - Else check `IndexValue<Idx>` → generate `container.index_value(i).method()` (method called on temporary)
+3. Else error
+
+#### For Assignment (`container[i] = value`)
+
+1. Check `IndexAssign<Idx>` → generate `container.index_assign(i, value)`
+2. Else error
 
 ### Use Cases
 
-#### Index Only (Read-Only)
+#### Index Only (Reference Types)
 
-| Type               | Description                                          |
-| ------------------ | ---------------------------------------------------- |
-| Immutable strings  | `str[i]` returns char, but strings are immutable     |
-| Range objects      | `range[i]` computes i-th value, no storage to mutate |
-| Computed sequences | Fibonacci where `fib[n]` computes on demand          |
-| Frozen collections | Immutable maps, frozen sets                          |
-| Read-only views    | Slices without modification rights                   |
-| Constant tables    | Configuration tables that should never be modified   |
+| Type             | Description                                       |
+| ---------------- | ------------------------------------------------- |
+| `Array<Struct>`  | Returns `&Struct` - actual reference to GC object |
+| Custom container | User-defined container with reference storage     |
+| Tree nodes       | `tree[path]` returns reference to node            |
 
-#### Index + IndexAssign (No Mutable Access)
+#### IndexValue Only (Value Types)
 
-| Type               | Description                                            |
-| ------------------ | ------------------------------------------------------ |
-| Primitive arrays   | Wasm GC: can read/write `i32` but can't get `&mut i32` |
-| Remote collections | Can GET/PUT but no live mutable references             |
-| Database-backed    | Read/write records but no mutable references           |
-| Copy-on-write      | Replace is cheap, mutable access requires copy         |
+| Type               | Description                                   |
+| ------------------ | --------------------------------------------- |
+| `Array<i32>`       | Returns `i32` by value - cannot return `&i32` |
+| Computed sequences | Fibonacci where `fib[n]` computes on demand   |
+| Range objects      | `range[i]` computes i-th value, no storage    |
+| Packed bit arrays  | `bits[i]` returns extracted bool              |
 
-#### Index + IndexMut (No Assignment)
+#### IndexValue + IndexAssign (Primitive Arrays)
 
-| Type                 | Description                                    |
-| -------------------- | ---------------------------------------------- |
-| Fixed object pools   | Mutate existing objects but can't replace them |
-| Interned collections | Mutate properties but not object identity      |
+| Type           | Description                               |
+| -------------- | ----------------------------------------- |
+| `Array<i32>`   | Read returns copy, write replaces element |
+| `Array<f64>`   | Same - Wasm GC constraint                 |
+| Remote storage | Can GET/PUT values but no live references |
 
-#### All Three (Full Access)
+#### Index + IndexMut + IndexAssign (Full Access)
 
-| Type                                     | Description                   |
-| ---------------------------------------- | ----------------------------- |
-| `Array<T>` where T is a reference type   | Full read/mutate/write access |
-| `Dict<K, V>` where V is a reference type | Full access to values         |
-
-### Compiler Desugaring
-
-The compiler desugars `[]` syntax based on context:
-
-```wado
-// Read context
-let x = arr[i];
-// Desugars to:
-let x = *arr.index(i);
-
-// Mutable method call
-arr[i].push(value);
-// Desugars to:
-arr.index_mut(i).push(value);
-
-// Assignment
-arr[i] = value;
-// Desugars to:
-arr.index_assign(i, value);
-```
+| Type            | Description                                        |
+| --------------- | -------------------------------------------------- |
+| `Array<Struct>` | Full read/mutate/write for reference element types |
+| Custom maps     | Full access to stored reference values             |
 
 ### Implementation for Array
 
 ```wado
-// For reference element types (T where T is not a primitive)
-impl Index<i32> for Array<T> {
+// For ALL element types: value-based read and assignment
+impl IndexValue<i32> for Array<T> {
     type Output = T;
-    fn index(&self, index: i32) -> &Self::Output {
-        return builtin::array_get_ref(self.repr, index);
-    }
-}
-
-impl IndexMut<i32> for Array<T> {
-    fn index_mut(&mut self, index: i32) -> &mut Self::Output {
-        return builtin::array_get_mut_ref(self.repr, index);
+    fn index_value(&self, index: i32) -> Self::Output {
+        return builtin::array_get::<T>(self.repr, index);
     }
 }
 
 impl IndexAssign<i32> for Array<T> {
     type Input = T;
     fn index_assign(&mut self, index: i32, value: Self::Input) {
-        builtin::array_set(self.repr, index, value);
+        builtin::array_set::<T>(self.repr, index, value);
     }
 }
 
-// For primitive types (i32, f64, etc.) - only Index and IndexAssign
-// IndexMut is NOT implemented because Wasm GC cannot provide &mut to primitives
+// For reference element types only (when trait bounds are available):
+// impl Index<i32> for Array<T> where T: Reference { ... }
+// impl IndexMut<i32> for Array<T> where T: Reference { ... }
 ```
+
+### Optimization: Pattern Recognition
+
+After inlining `IndexValue::index_value` and `IndexAssign::index_assign` to `builtin::array_get`/`builtin::array_set`, the optimizer can recognize patterns:
+
+```wado
+// Source
+arr[i] = arr[i] + 1;
+
+// After desugaring
+arr.index_assign(i, arr.index_value(i) + 1);
+
+// After inlining
+builtin::array_set(repr, i, builtin::array_get(repr, i) + 1);
+
+// Optimizer can potentially fuse to read-modify-write
+```
+
+This keeps the semantic layer clean while allowing low-level optimization.
 
 ## Consequences
 
 ### Advantages
 
-1. **Flexibility**: Collections implement only the operations they support
-2. **Type safety**: Compile-time errors for unsupported operations
-3. **Wasm GC compatible**: Primitive arrays work without fake mutable references
-4. **Clear semantics**: Each trait has one responsibility
-5. **Familiar**: Similar to Rust's `Index`/`IndexMut` with Wasm-specific `IndexAssign`
+1. **Semantically honest**: `IndexValue` clearly means "you get a copy"
+2. **Wasm GC compatible**: No fake references for primitives
+3. **General**: Works for any `Container<Primitive>`, not just Array
+4. **No proxy objects**: Avoids C++ `vector<bool>` mistakes
+5. **Flexible**: Collections implement only what they support
+6. **Optimizable**: Inlining enables pattern recognition
 
 ### Trade-offs
 
-1. **More traits to implement**: Full access requires three impl blocks
-2. **Learning curve**: Users must understand when each trait applies
-3. **Potential confusion**: `IndexMut` vs `IndexAssign` naming may need explanation
+1. **Four traits**: More traits to understand than Rust's two
+2. **No `arr[i].mutate()` for primitives**: But this is honest - you CAN'T mutate a copy
+3. **Learning curve**: Users must understand Index vs IndexValue distinction
 
-### Migration Path
+### Error Messages
 
-Existing code using explicit method calls (`arr.get(i)`, `arr.set(i, v)`) continues to work. The `[]` syntax is purely ergonomic sugar.
+The compiler should provide clear errors:
 
-## Implementation Status
-
-- [x] Trait definitions in `core:prelude` (Index, IndexMut, IndexAssign)
-- [x] `IndexAssign<i32>` implementation for `Array<T>`
-- [x] Compiler: `[]` read desugaring to `Index::index()` for custom types
-- [x] Compiler: `[]` assignment desugaring to `IndexAssign::index_assign()` for custom types
-- [x] Direct codegen for `Array<T>` indexing (optimized path)
-- [x] `IndexMut` desugaring for mutable method calls (`arr[i].method()`)
-- [ ] `Index` and `IndexMut` for `Array<T>` with reference element types
-- [ ] Supertrait syntax (`trait IndexMut<Idx>: Index<Idx>`)
+```
+error: cannot mutate indexed value
+  --> file.wado:10:5
+   |
+10 |     arr[i].increment();
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `Array<i32>` implements `IndexValue`, not `IndexMut`
+   = note: primitive array elements cannot be mutated in place
+   = help: use `arr[i] = arr[i] + 1` instead
+```
 
 ## Related
 

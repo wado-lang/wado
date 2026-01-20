@@ -41,19 +41,23 @@ fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -
     let mut i: i32 = 0;
     let _licm_entries: Array<[String, String]> = .entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if (_licm_entries[i].0 == key) {
+        if ("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0 == key) {
             return true;
         }
     }
     return false;
 }
 
+fn "Array<Tuple<String,String>>^IndexValue::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
+    return core::builtin::array_get::<[String, String]>(self.repr, index);
+}
+
 fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -> Option<String> {
     let mut i: i32 = 0;
     let _licm_entries: Array<[String, String]> = .entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if (_licm_entries[i].0 == key) {
-            return Option::Some(_licm_entries[i].1);
+        if ("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0 == key) {
+            return Option::Some("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).1);
         }
     }
     return null;
@@ -63,8 +67,8 @@ fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: Strin
     let mut i: i32 = 0;
     let _licm_entries: Array<[String, String]> = .entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if (_licm_entries[i].0 == key) {
-            _licm_entries[i] = [key, value];
+        if ("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0 == key) {
+            "Array<Tuple<String,String>>^IndexAssign::index_assign"(&mut _licm_entries, i, move [key, value]);
             return;
         }
     }
@@ -85,6 +89,10 @@ pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>,
     }
     core::builtin::array_set::<[String, String]>(self.repr, used, value);
     self.used = (used + 1);
+}
+
+fn "Array<Tuple<String,String>>^IndexAssign::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) {
+    core::builtin::array_set::<[String, String]>(self.repr, index, value);
 }
 
 fn "MiniDict<String,String>::new"() -> MiniDict<String,String> {

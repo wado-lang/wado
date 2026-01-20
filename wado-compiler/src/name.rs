@@ -159,6 +159,59 @@ impl MethodName {
             method_name,
         }
     }
+
+    /// Returns the local part of the method name without the module path.
+    /// Format: `Struct^Trait::method` or `Struct::method`
+    pub fn local_name(&self) -> String {
+        Self::format_local(
+            &self.struct_name,
+            self.trait_name.as_deref(),
+            &self.method_name,
+        )
+    }
+
+    /// Format a local method name (without module path).
+    /// This is the canonical way to build method names like `Struct^Trait::method`.
+    pub fn format_local(struct_name: &str, trait_name: Option<&str>, method_name: &str) -> String {
+        match trait_name {
+            Some(trait_n) => format!("{struct_name}^{trait_n}::{method_name}"),
+            None => format!("{struct_name}::{method_name}"),
+        }
+    }
+
+    /// Format a struct name with type arguments and optional trait.
+    /// Format: `Struct<TypeArgs>^Trait` or `Struct<TypeArgs>`
+    pub fn format_struct_with_args(
+        struct_name: &str,
+        type_args: &[String],
+        trait_name: Option<&str>,
+    ) -> String {
+        let struct_part = if type_args.is_empty() {
+            struct_name.to_string()
+        } else {
+            format!("{}<{}>", struct_name, type_args.join(","))
+        };
+        match trait_name {
+            Some(trait_n) => format!("{struct_part}^{trait_n}"),
+            None => struct_part,
+        }
+    }
+
+    /// Join a struct part (which may include ^Trait) with a method part.
+    /// This is the final step of method name construction.
+    pub fn join_struct_method(struct_part: &str, method_part: &str) -> String {
+        format!("{struct_part}::{method_part}")
+    }
+
+    /// Format a method name with type arguments.
+    /// Format: `method<TypeArgs>` or `method`
+    pub fn format_method_with_args(method_name: &str, type_args: &[String]) -> String {
+        if type_args.is_empty() {
+            method_name.to_string()
+        } else {
+            format!("{}<{}>", method_name, type_args.join(","))
+        }
+    }
 }
 
 impl fmt::Display for MethodName {

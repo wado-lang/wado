@@ -99,10 +99,18 @@ impl Array<T> {
     }
 }
 
-// IndexAssign implementation for Array<T>
-// Note: Index and IndexMut are not implemented because Wasm GC cannot
-// return references to array elements for primitive types.
-// The [] operator for reading uses direct codegen instead.
+// IndexValue implementation for Array<T> - value-based read
+// Returns a copy of the element. Works for all element types including primitives.
+impl IndexValue<i32> for Array<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        return builtin::array_get::<T>(self.repr, index);
+    }
+}
+
+// IndexAssign implementation for Array<T> - value-based write
+// Assigns to the element at the given index.
 impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
@@ -140,6 +148,16 @@ pub trait IndexAssign<IndexType> {
 
     /// Assigns a value to the element at the given index.
     fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+
+/// Trait for value-returning indexing operations.
+/// Use this for containers of primitives where references cannot be returned.
+/// Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
+pub trait IndexValue<IndexType> {
+    type Output;
+
+    /// Returns a copy of the element at the given index.
+    fn index_value(&self, index: IndexType) -> Self::Output;
 }
 
 /// Optional value - either Some(T) or None
