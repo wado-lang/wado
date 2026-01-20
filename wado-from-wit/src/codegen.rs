@@ -13,6 +13,7 @@ pub struct WadoCodeGenerator {
 }
 
 impl WadoCodeGenerator {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             output: String::new(),
@@ -61,7 +62,7 @@ impl WadoCodeGenerator {
             self.writeln("//");
             self.writeln("// Source files:");
             for source in &module.source_files {
-                self.writeln(&format!("//   - {}", source));
+                self.writeln(&format!("//   - {source}"));
             }
         }
 
@@ -83,27 +84,27 @@ impl WadoCodeGenerator {
                     return;
                 }
                 if let Some(ref attr) = a.wasi_attr {
-                    self.writeln(&format!("#[wasi(\"{}\")]", attr));
+                    self.writeln(&format!("#[wasi(\"{attr}\")]"));
                 }
                 self.writeln(&format!(
                     "pub type {} = {};",
                     a.name,
-                    self.format_type(&a.target)
+                    Self::format_type(&a.target)
                 ));
             }
         }
     }
 
     fn write_enum(&mut self, e: &WadoEnum) {
-        self.write_doc_comment(&e.doc_comment);
+        self.write_doc_comment(e.doc_comment.as_ref());
         if let Some(ref attr) = e.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{}\")]", attr));
+            self.writeln(&format!("#[wasi(\"{attr}\")]"));
         }
         self.writeln(&format!("pub enum {} {{", e.name));
         self.indent += 1;
 
         for variant in &e.variants {
-            self.write_doc_comment(&variant.doc_comment);
+            self.write_doc_comment(variant.doc_comment.as_ref());
             self.writeln(&format!("{},", variant.name));
         }
 
@@ -112,15 +113,15 @@ impl WadoCodeGenerator {
     }
 
     fn write_flags(&mut self, f: &WadoFlags) {
-        self.write_doc_comment(&f.doc_comment);
+        self.write_doc_comment(f.doc_comment.as_ref());
         if let Some(ref attr) = f.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{}\")]", attr));
+            self.writeln(&format!("#[wasi(\"{attr}\")]"));
         }
         self.writeln(&format!("pub flags {} {{", f.name));
         self.indent += 1;
 
         for flag in &f.flags {
-            self.write_doc_comment(&flag.doc_comment);
+            self.write_doc_comment(flag.doc_comment.as_ref());
             self.writeln(&format!("{},", flag.name));
         }
 
@@ -129,16 +130,20 @@ impl WadoCodeGenerator {
     }
 
     fn write_struct(&mut self, s: &WadoStruct) {
-        self.write_doc_comment(&s.doc_comment);
+        self.write_doc_comment(s.doc_comment.as_ref());
         if let Some(ref attr) = s.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{}\")]", attr));
+            self.writeln(&format!("#[wasi(\"{attr}\")]"));
         }
         self.writeln(&format!("pub struct {} {{", s.name));
         self.indent += 1;
 
         for field in &s.fields {
-            self.write_doc_comment(&field.doc_comment);
-            self.writeln(&format!("{}: {},", field.name, self.format_type(&field.ty)));
+            self.write_doc_comment(field.doc_comment.as_ref());
+            self.writeln(&format!(
+                "{}: {},",
+                field.name,
+                Self::format_type(&field.ty)
+            ));
         }
 
         self.indent -= 1;
@@ -146,17 +151,17 @@ impl WadoCodeGenerator {
     }
 
     fn write_variant(&mut self, v: &WadoVariant) {
-        self.write_doc_comment(&v.doc_comment);
+        self.write_doc_comment(v.doc_comment.as_ref());
         if let Some(ref attr) = v.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{}\")]", attr));
+            self.writeln(&format!("#[wasi(\"{attr}\")]"));
         }
         self.writeln(&format!("pub variant {} {{", v.name));
         self.indent += 1;
 
         for case in &v.cases {
-            self.write_doc_comment(&case.doc_comment);
+            self.write_doc_comment(case.doc_comment.as_ref());
             match &case.payload {
-                Some(ty) => self.writeln(&format!("{}({}),", case.name, self.format_type(ty))),
+                Some(ty) => self.writeln(&format!("{}({}),", case.name, Self::format_type(ty))),
                 None => self.writeln(&format!("{},", case.name)),
             }
         }
@@ -166,7 +171,7 @@ impl WadoCodeGenerator {
     }
 
     fn write_resource(&mut self, resource: &WadoResource) {
-        self.write_doc_comment(&resource.doc_comment);
+        self.write_doc_comment(resource.doc_comment.as_ref());
         self.writeln(&format!("#[wasi(\"{}\")]", resource.wasi_attr));
 
         if resource.methods.is_empty() {
@@ -185,7 +190,7 @@ impl WadoCodeGenerator {
     }
 
     fn write_effect(&mut self, effect: &WadoEffect) {
-        self.write_doc_comment(&effect.doc_comment);
+        self.write_doc_comment(effect.doc_comment.as_ref());
         self.writeln(&format!("#[wasi(\"{}\")]", effect.wasi_interface));
         self.writeln(&format!("pub effect {} {{", effect.name));
         self.indent += 1;
@@ -199,14 +204,14 @@ impl WadoCodeGenerator {
     }
 
     fn write_function(&mut self, func: &WadoFunction) {
-        self.write_doc_comment(&func.doc_comment);
+        self.write_doc_comment(func.doc_comment.as_ref());
         self.writeln(&format!("#[wasi(\"{}\")]", func.wasi_attr));
 
-        let params = self.format_params(&func.params);
+        let params = Self::format_params(&func.params);
 
         let return_type = match (&func.return_type, func.never_returns) {
             (_, true) => " -> !".to_string(),
-            (Some(ty), false) => format!(" -> {}", self.format_type(ty)),
+            (Some(ty), false) => format!(" -> {}", Self::format_type(ty)),
             (None, false) => String::new(),
         };
 
@@ -218,7 +223,7 @@ impl WadoCodeGenerator {
     }
 
     fn write_world(&mut self, world: &WadoWorld) {
-        self.write_doc_comment(&world.doc_comment);
+        self.write_doc_comment(world.doc_comment.as_ref());
         self.writeln(&format!("pub world {} {{", world.name));
         self.indent += 1;
 
@@ -226,7 +231,7 @@ impl WadoCodeGenerator {
             self.writeln(&format!("import {} {{", import.effect_name));
             self.indent += 1;
             for func in &import.functions {
-                self.writeln(&format!("{},", func));
+                self.writeln(&format!("{func},"));
             }
             self.indent -= 1;
             self.writeln("}");
@@ -235,11 +240,11 @@ impl WadoCodeGenerator {
 
         for export in &world.exports {
             let async_kw = if export.is_async { "async " } else { "" };
-            let params = self.format_params(&export.params);
+            let params = Self::format_params(&export.params);
             let return_type = export
                 .return_type
                 .as_ref()
-                .map(|ty| format!(" -> {}", self.format_type(ty)))
+                .map(|ty| format!(" -> {}", Self::format_type(ty)))
                 .unwrap_or_default();
 
             self.writeln(&format!(
@@ -252,15 +257,15 @@ impl WadoCodeGenerator {
         self.writeln("}");
     }
 
-    fn format_params(&self, params: &[WadoParam]) -> String {
+    fn format_params(params: &[WadoParam]) -> String {
         params
             .iter()
-            .map(|p| format!("{}: {}", p.name, self.format_type(&p.ty)))
+            .map(|p| format!("{}: {}", p.name, Self::format_type(&p.ty)))
             .collect::<Vec<_>>()
             .join(", ")
     }
 
-    fn format_type(&self, ty: &WadoType) -> String {
+    fn format_type(ty: &WadoType) -> String {
         match ty {
             WadoType::Bool => "bool".to_string(),
             WadoType::Char => "char".to_string(),
@@ -277,49 +282,47 @@ impl WadoCodeGenerator {
             WadoType::F32 => "f32".to_string(),
             WadoType::F64 => "f64".to_string(),
             WadoType::String => "String".to_string(),
-            WadoType::Option(inner) => format!("Option<{}>", self.format_type(inner)),
+            WadoType::Option(inner) => format!("Option<{}>", Self::format_type(inner)),
             WadoType::Result { ok, err } => {
                 let ok_ty = ok
                     .as_ref()
-                    .map(|t| self.format_type(t))
-                    .unwrap_or_else(|| "()".to_string());
+                    .map_or_else(|| "()".to_string(), |t| Self::format_type(t));
                 let err_ty = err
                     .as_ref()
-                    .map(|t| self.format_type(t))
-                    .unwrap_or_else(|| "()".to_string());
-                format!("Result<{}, {}>", ok_ty, err_ty)
+                    .map_or_else(|| "()".to_string(), |t| Self::format_type(t));
+                format!("Result<{ok_ty}, {err_ty}>")
             }
-            WadoType::Array(inner) => format!("Array<{}>", self.format_type(inner)),
+            WadoType::Array(inner) => format!("Array<{}>", Self::format_type(inner)),
             WadoType::Tuple(types) => {
                 if types.is_empty() {
                     "()".to_string()
                 } else {
                     let inner = types
                         .iter()
-                        .map(|t| self.format_type(t))
+                        .map(Self::format_type)
                         .collect::<Vec<_>>()
                         .join(", ");
-                    format!("Tuple<{}>", inner)
+                    format!("Tuple<{inner}>")
                 }
             }
-            WadoType::Stream(inner) => format!("Stream<{}>", self.format_type(inner)),
-            WadoType::Future(inner) => format!("Future<{}>", self.format_type(inner)),
+            WadoType::Stream(inner) => format!("Stream<{}>", Self::format_type(inner)),
+            WadoType::Future(inner) => format!("Future<{}>", Self::format_type(inner)),
             WadoType::Named(name) => name.clone(),
-            WadoType::Borrow(inner) => format!("&{}", self.format_type(inner)),
+            WadoType::Borrow(inner) => format!("&{}", Self::format_type(inner)),
         }
     }
 
-    fn write_doc_comment(&mut self, doc: &Option<String>) {
+    fn write_doc_comment(&mut self, doc: Option<&String>) {
         if let Some(doc) = doc {
             for line in doc.lines() {
-                self.writeln(&format!("/// {}", line));
+                self.writeln(&format!("/// {line}"));
             }
         }
     }
 
     fn writeln(&mut self, line: &str) {
         let indent = "    ".repeat(self.indent);
-        writeln!(self.output, "{}{}", indent, line).unwrap();
+        writeln!(self.output, "{indent}{line}").unwrap();
     }
 }
 

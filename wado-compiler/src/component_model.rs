@@ -15,7 +15,7 @@ use crate::ast::{GenericType, Type, WasiImport};
 pub struct WasiFunctionInfo {
     /// Effect name (e.g., "Stdout")
     pub effect_name: String,
-    /// Method name in Wado (e.g., "write_via_stream")
+    /// Method name in Wado (e.g., "`write_via_stream`")
     pub method_name: String,
     /// WASI function name (e.g., "write-via-stream")
     pub wasi_func_name: String,
@@ -52,7 +52,7 @@ impl WasiFunctionInfo {
 /// - Uses Wado effect/method names (not WIT interface/function names)
 /// - Uses `::` as method separator (Wado convention)
 pub fn build_local_alias_name(package: &str, effect_name: &str, method_name: &str) -> String {
-    format!("wasi:{}/{}::{}", package, effect_name, method_name)
+    format!("wasi:{package}/{effect_name}::{method_name}")
 }
 
 /// Information about a WASI interface (grouping functions by interface)
@@ -75,20 +75,20 @@ pub struct WasiInterfaceInfo {
 /// Registry of WASI imports for code generation
 ///
 /// Collects information from effect definitions and provides:
-/// - Resolution of effect calls (e.g., "Stdout::write_via_stream") to local names
+/// - Resolution of effect calls (e.g., "`Stdout::write_via_stream`") to local names
 /// - Iteration over interfaces for Component Model import generation
 #[derive(Debug, Default)]
 pub struct WasiRegistry {
-    /// Effect::method -> function info
+    /// `Effect::method` -> function info
     effect_to_func: HashMap<String, WasiFunctionInfo>,
 
     /// Interface path -> list of functions
-    /// Using BTreeMap for deterministic ordering
+    /// Using `BTreeMap` for deterministic ordering
     interfaces: BTreeMap<String, Vec<WasiFunctionInfo>>,
 
-    /// Local alias -> (interface_path, wasi_func_name)
-    /// Key format: wasi:{package}/{effect_name}::{method_name}
-    /// e.g., "wasi:cli/Stdout::write_via_stream"
+    /// Local alias -> (`interface_path`, `wasi_func_name`)
+    /// Key format: `wasi:{package}/{effect_name}::{method_name`}
+    /// e.g., "`wasi:cli/Stdout::write_via_stream`"
     local_aliases: HashMap<String, (String, String)>,
 
     /// Track which WASI function names are used to detect collisions
@@ -217,7 +217,7 @@ impl WasiRegistry {
     ///
     /// # Arguments
     /// * `effect_name` - The effect name (e.g., "Stdout")
-    /// * `method_name` - The method name (e.g., "write_via_stream")
+    /// * `method_name` - The method name (e.g., "`write_via_stream`")
     /// * `wasi` - The parsed WASI import metadata
     /// * `is_async` - Whether this is an async function
     /// * `params` - Parameter names and types
@@ -265,7 +265,7 @@ impl WasiRegistry {
         self.used_names.insert(local_name.clone());
 
         // Register in effect -> func map
-        let qualified_name = format!("{}::{}", effect_name, method_name);
+        let qualified_name = format!("{effect_name}::{method_name}");
         self.effect_to_func
             .insert(qualified_name.clone(), func_info.clone());
 
@@ -283,10 +283,10 @@ impl WasiRegistry {
     /// Resolve an effect function call to its component-level local alias name
     ///
     /// # Arguments
-    /// * `name` - The qualified effect call (e.g., "Stdout::write_via_stream")
+    /// * `name` - The qualified effect call (e.g., "`Stdout::write_via_stream`")
     ///
     /// # Returns
-    /// The component-level local function name (e.g., "wasi:cli/Stdout::write_via_stream")
+    /// The component-level local function name (e.g., "`wasi:cli/Stdout::write_via_stream`")
     pub fn resolve(&self, name: &str) -> Option<String> {
         if !name.contains("::") {
             return None;
@@ -399,12 +399,12 @@ impl WasiRegistry {
         None
     }
 
-    /// Get the function info for stdout's write_via_stream
+    /// Get the function info for stdout's `write_via_stream`
     pub fn get_stdout_write_via_stream(&self) -> Option<&WasiFunctionInfo> {
         self.effect_to_func.get("Stdout::write_via_stream")
     }
 
-    /// Get the function info for stderr's write_via_stream
+    /// Get the function info for stderr's `write_via_stream`
     pub fn get_stderr_write_via_stream(&self) -> Option<&WasiFunctionInfo> {
         self.effect_to_func.get("Stderr::write_via_stream")
     }
@@ -412,11 +412,11 @@ impl WasiRegistry {
     /// Get all registered WASI function names
     ///
     /// Returns an iterator over function names in `Effect::method` format
-    /// (e.g., "Stdout::write_via_stream", "MonotonicClock::now").
+    /// (e.g., "`Stdout::write_via_stream`", "`MonotonicClock::now`").
     ///
-    /// Used by the optimizer to populate used_wasi_functions in O0 mode.
+    /// Used by the optimizer to populate `used_wasi_functions` in O0 mode.
     pub fn all_function_names(&self) -> impl Iterator<Item = &str> {
-        self.effect_to_func.keys().map(|s| s.as_str())
+        self.effect_to_func.keys().map(std::string::String::as_str)
     }
 
     // ============================================================================
@@ -489,7 +489,7 @@ impl WasiRegistry {
 // Type Conversion (AST Type to Wasm ValType)
 // ============================================================================
 
-/// Convert a pre-resolved AST type to Wasm ValType
+/// Convert a pre-resolved AST type to Wasm `ValType`
 ///
 /// This is a pure conversion function - type aliases must already be resolved
 /// before calling this function. Use `WasiRegistry::resolve_type()` during

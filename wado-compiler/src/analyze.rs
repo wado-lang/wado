@@ -181,10 +181,7 @@ impl Analyzer {
             Ok(m) => m.clone(),
             Err(e) => {
                 // Log but don't fail - implicit modules are optional
-                eprintln!(
-                    "Warning: failed to load implicit module {:?}: {}",
-                    module_path, e
-                );
+                eprintln!("Warning: failed to load implicit module {module_path:?}: {e}");
                 return;
             }
         };
@@ -602,7 +599,7 @@ impl Analyzer {
 
     /// Analyze pre-loaded modules (new pipeline)
     ///
-    /// This method takes modules that were already loaded by ModuleLoader
+    /// This method takes modules that were already loaded by `ModuleLoader`
     /// and builds a symbol table from them.
     ///
     /// # Arguments

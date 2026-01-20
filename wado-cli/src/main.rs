@@ -1,3 +1,17 @@
+// Allow certain pedantic lints that are common in CLI code:
+// - ref_option: &Option<T> is fine when coming from struct fields
+// - missing_panics_doc: Mutex unwrap panics are obvious
+// - struct_excessive_bools: CLI option structs naturally have many bools
+// - too_many_lines: Large functions are acceptable in CLI code
+// - needless_pass_by_value: Ownership transfer is sometimes intentional
+#![allow(
+    clippy::ref_option,
+    clippy::missing_panics_doc,
+    clippy::struct_excessive_bools,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value
+)]
+
 mod args;
 mod compile;
 mod compiler_host;

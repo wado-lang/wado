@@ -45,7 +45,7 @@ pub struct Project {
     pub all_reachable: bool,
     /// Set of used WASI effects
     pub used_effects: HashSet<WasiEffect>,
-    /// Set of used WASI functions (e.g., "Stdout::write_via_stream")
+    /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: HashSet<String>,
     /// Set of used builtin functions
     pub used_builtins: HashSet<CanonBuiltin>,

@@ -111,7 +111,7 @@ impl CoreModuleBuilder {
     }
 
     /// Define a GC struct type and return its index
-    /// Uses is_final: false to allow more flexible subtyping with exact types
+    /// Uses `is_final`: false to allow more flexible subtyping with exact types
     pub fn define_gc_struct_type(&mut self, name: &str, fields: &[FieldType]) -> u32 {
         use wasm_encoder::StructType;
         let idx = self.next_type_idx;
@@ -176,7 +176,6 @@ impl CoreModuleBuilder {
     }
 
     /// Define a function with an alias (same index, different name)
-    #[allow(dead_code)]
     pub fn define_func_alias(&mut self, alias_name: &str, func_idx: u32) {
         self.func_names.insert(alias_name.to_string(), func_idx);
     }
@@ -206,43 +205,6 @@ impl CoreModuleBuilder {
     /// Try to get function index by name, returns None if not found
     pub fn try_func_idx(&self, name: &str) -> Option<u32> {
         self.func_names.get(name).copied()
-    }
-
-    /// Get all registered function names (for debugging)
-    #[allow(dead_code)]
-    pub fn func_names_iter(&self) -> impl Iterator<Item = &String> {
-        self.func_names.keys()
-    }
-
-    /// Add a function name to the name section (names are automatically tracked)
-    #[allow(dead_code)]
-    pub fn add_func_name(&mut self, _func_name: &str) {
-        // Names are tracked in func_names during define_func/import_func
-        // build_name_section() uses func_names to build the name section
-    }
-
-    /// Get access to the types section for complex type definitions
-    #[allow(dead_code)]
-    pub fn types_mut(&mut self) -> &mut TypeSection {
-        &mut self.types
-    }
-
-    /// Get access to the imports section
-    #[allow(dead_code)]
-    pub fn imports_mut(&mut self) -> &mut ImportSection {
-        &mut self.imports
-    }
-
-    /// Get access to the functions section
-    #[allow(dead_code)]
-    pub fn functions_mut(&mut self) -> &mut FunctionSection {
-        &mut self.functions
-    }
-
-    /// Get access to the exports section
-    #[allow(dead_code)]
-    pub fn exports_mut(&mut self) -> &mut ExportSection {
-        &mut self.exports
     }
 
     /// Get the types section (for module building)
@@ -289,18 +251,12 @@ impl CoreModuleBuilder {
         names
     }
 
-    /// Create a RefType for the string array (GC array<u8>)
+    /// Create a `RefType` for the string array (GC array<u8>)
     pub fn string_ref_type(&self) -> RefType {
         RefType {
             nullable: false,
             heap_type: HeapType::Concrete(self.type_idx("string-array")),
         }
-    }
-
-    /// Create a ValType for the string array (GC array<u8>)
-    #[allow(dead_code)]
-    pub fn string_val_type(&self) -> ValType {
-        ValType::Ref(self.string_ref_type())
     }
 }
 
@@ -315,7 +271,7 @@ impl Default for CoreModuleBuilder {
 // ============================================================================
 
 /// Tracks component-level indices for types, instances, and core functions.
-/// Used alongside wasm-encoder's ComponentBuilder to eliminate magic numbers.
+/// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
 pub struct ComponentModelContext {
     // Component type indices
     type_names: HashMap<String, u32>,

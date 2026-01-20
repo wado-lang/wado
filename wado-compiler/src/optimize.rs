@@ -145,7 +145,7 @@ impl CanonBuiltin {
         CanonBuiltin::SubtaskDrop,
     ];
 
-    /// Waitable-set builtins (only needed when effect_wait is called)
+    /// Waitable-set builtins (only needed when `effect_wait` is called)
     pub const WAITABLE_SET: &'static [CanonBuiltin] = &[
         CanonBuiltin::WaitableSetNew,
         CanonBuiltin::WaitableJoin,
@@ -157,7 +157,7 @@ impl CanonBuiltin {
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
 
-/// Effect usage: function ID -> set of (effect_name, operation_name) pairs
+/// Effect usage: function ID -> set of (`effect_name`, `operation_name`) pairs
 type EffectUsageMap = HashMap<FunctionId, HashSet<(String, String)>>;
 
 /// Optimization level for the compiler.
@@ -1890,7 +1890,7 @@ fn inline_calls_in_expr(
 struct FunctionAnalysis {
     /// Functions called by this function
     callees: HashSet<FunctionId>,
-    /// Effect calls: (effect_name, op_name)
+    /// Effect calls: (`effect_name`, `op_name`)
     effect_calls: HashSet<(String, String)>,
     /// Primitive types that need box types (for references like &i32, &mut f64)
     used_box_primitives: HashSet<PrimitiveType>,
@@ -1924,7 +1924,7 @@ fn analyze_project(project: &mut Project) {
                 if let Some(effect) = WasiEffect::from_str(effect_name) {
                     used_effects.insert(effect);
                 }
-                used_wasi_functions.insert(format!("{}::{}", effect_name, op_name));
+                used_wasi_functions.insert(format!("{effect_name}::{op_name}"));
             }
         }
         if let Some(prims) = box_primitives_map.get(func_id) {
@@ -2141,7 +2141,7 @@ fn analyze_project(project: &mut Project) {
 
 /// Populate project with all features enabled (no DCE, for O0 mode).
 fn populate_all_features(project: &mut Project) {
-    use PrimitiveType::*;
+    use PrimitiveType::{F32, F64, I32, I64};
 
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;
@@ -2151,7 +2151,7 @@ fn populate_all_features(project: &mut Project) {
     let (wasi_registry, _world_registry) = WasiRegistry::build_from_stdlib();
     project.used_wasi_functions = wasi_registry
         .all_function_names()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     // All importable builtins when DCE is disabled
     project.used_builtins = CanonBuiltin::ALL.iter().copied().collect();
@@ -2163,7 +2163,7 @@ fn populate_all_features(project: &mut Project) {
 type BoxPrimitivesMap = HashMap<FunctionId, HashSet<PrimitiveType>>;
 
 /// Build call graph and effect usage from all TIR modules
-/// Returns (call_graph, effect_usage, box_primitives_map)
+/// Returns (`call_graph`, `effect_usage`, `box_primitives_map`)
 fn build_analysis_graph(
     modules: &IndexMap<Vec<String>, TirModule>,
 ) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap) {
@@ -2194,7 +2194,7 @@ fn build_analysis_graph(
                 if let Some(monomorph_info) = &func.monomorph_info {
                     // Monomorphized method - use FreeFunctionName with metadata
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        path.to_vec(),
+                        path.clone(),
                         func.name.clone(),
                         monomorph_info.generic_name.clone(),
                     ))
@@ -2210,7 +2210,7 @@ fn build_analysis_graph(
                 // Regular function - use FreeFunctionName
                 if let Some(monomorph_info) = &func.monomorph_info {
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        path.to_vec(),
+                        path.clone(),
                         func.name.clone(),
                         monomorph_info.generic_name.clone(),
                     ))
@@ -2378,8 +2378,7 @@ fn analyze_expr(
             // Methods use TirExprKind::MethodCall instead. The only exception is "builtin::*".
             debug_assert!(
                 !func_name.contains("::") || func_name.starts_with("builtin::"),
-                "TirExprKind::Call should not have method-style names: {}",
-                func_name
+                "TirExprKind::Call should not have method-style names: {func_name}"
             );
 
             // Build function ID for the called function
@@ -2507,7 +2506,7 @@ fn analyze_expr(
                             .collect();
                         let mangled_func_name =
                             format!("{}<{}>::{}", name, type_arg_names.join(","), method_name);
-                        let base_name = format!("{}::{}", name, method_name);
+                        let base_name = format!("{name}::{method_name}");
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                             vec![],
                             mangled_func_name,
@@ -2518,8 +2517,8 @@ fn analyze_expr(
                     ResolvedType::BuiltinArray(elem_type) => {
                         // Array<T> method call (e.g., arr.len(), arr.append())
                         let elem_name = mangle_type_for_name(elem_type, type_table);
-                        let mangled_func_name = format!("Array<{}>::{}", elem_name, method_name);
-                        let base_name = format!("Array::{}", method_name);
+                        let mangled_func_name = format!("Array<{elem_name}>::{method_name}");
+                        let base_name = format!("Array::{method_name}");
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                             vec![],
                             mangled_func_name,
@@ -2681,7 +2680,7 @@ fn analyze_expr(
     }
 }
 
-/// Add the appropriate to_string function call for a type
+/// Add the appropriate `to_string` function call for a type
 fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut FunctionAnalysis) {
     let core_internal: &[&str] = &["core", "internal"];
     match type_table.get(type_id) {
@@ -2712,7 +2711,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
 }
 
 /// Mangle a type ID into a string suitable for struct/function names.
-/// Used for creating monomorphized function names like Array<i32>::len.
+/// Used for creating monomorphized function names like Array<i32>`::len`.
 fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => match prim {
@@ -2760,7 +2759,7 @@ fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
         }
         ResolvedType::Option(inner) => {
             let inner_name = mangle_type_for_name(*inner, type_table);
-            format!("Option<{}>", inner_name)
+            format!("Option<{inner_name}>")
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             mangle_type_for_name(*inner, type_table)
@@ -2869,7 +2868,7 @@ fn remove_unreachable_functions(project: &mut Project) {
 }
 
 /// Check if a generic function has any monomorphized version that is reachable.
-/// For example, "Array::with_capacity" should be kept if "Array<i32>::with_capacity" is reachable.
+/// For example, "`Array::with_capacity`" should be kept if "Array<i32>`::with_capacity`" is reachable.
 fn is_generic_func_reachable(
     reachable: &HashSet<FunctionId>,
     module_path: &[String],

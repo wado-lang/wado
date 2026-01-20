@@ -113,12 +113,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
             }
             Long("format") => {
                 let fmt_str = require_string(&mut parser);
-                match OutputFormat::from_str(&fmt_str) {
-                    Some(f) => format = Some(f),
-                    None => {
-                        eprintln!("Error: unknown format '{fmt_str}'. Use 'wasm' or 'wat'");
-                        process::exit(1);
-                    }
+                if let Some(f) = OutputFormat::from_str(&fmt_str) {
+                    format = Some(f);
+                } else {
+                    eprintln!("Error: unknown format '{fmt_str}'. Use 'wasm' or 'wat'");
+                    process::exit(1);
                 }
             }
             Value(val) => {
@@ -138,7 +137,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     }
 }
 
-/// Convert CLI OptLevel to compiler OptLevel
+/// Convert CLI `OptLevel` to compiler `OptLevel`
 fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     match level {
         OptLevel::O0 => wado_compiler::OptLevel::None,
@@ -167,7 +166,10 @@ pub async fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
     };
 
     // Get base path for relative imports
-    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
     // Compile using async API
@@ -219,20 +221,19 @@ pub async fn run(opts: CompileOptions) {
         .unwrap_or(OutputFormat::Wasm);
 
     // Determine output path, using format to pick extension if no -o specified
-    let output_path = match &opts.output {
-        Some(path) => Path::new(path).to_path_buf(),
-        None => {
-            let ext = match format {
-                OutputFormat::Wasm => "wasm",
-                OutputFormat::Wat => "wat",
-            };
-            Path::new(&opts.input).with_extension(ext)
-        }
+    let output_path = if let Some(path) = &opts.output {
+        Path::new(path).to_path_buf()
+    } else {
+        let ext = match format {
+            OutputFormat::Wasm => "wasm",
+            OutputFormat::Wat => "wat",
+        };
+        Path::new(&opts.input).with_extension(ext)
     };
 
     match format {
         OutputFormat::Wasm => match fs::write(&output_path, &wasm) {
-            Ok(_) => {
+            Ok(()) => {
                 eprintln!("Generated: {}", output_path.display());
             }
             Err(e) => {
@@ -243,7 +244,7 @@ pub async fn run(opts: CompileOptions) {
         OutputFormat::Wat => {
             let wat = wasm_to_wat(&wasm);
             match fs::write(&output_path, &wat) {
-                Ok(_) => {
+                Ok(()) => {
                     eprintln!("Generated: {}", output_path.display());
                 }
                 Err(e) => {

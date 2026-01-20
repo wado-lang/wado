@@ -24,6 +24,7 @@ pub struct FilesystemCompilerHost {
 
 impl FilesystemCompilerHost {
     /// Create a new filesystem host with the given base path
+    #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
         Self {
             base_path,
@@ -33,6 +34,7 @@ impl FilesystemCompilerHost {
     }
 
     /// Create a host that collects diagnostics without printing
+    #[must_use]
     pub fn silent(base_path: PathBuf) -> Self {
         Self {
             base_path,

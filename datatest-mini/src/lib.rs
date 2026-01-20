@@ -1,4 +1,4 @@
-//! Minimal proc_macro for generating test functions from fixture files.
+//! Minimal `proc_macro` for generating test functions from fixture files.
 //!
 //! This crate provides a drop-in replacement for datatest-stable.
 //!
@@ -33,6 +33,14 @@ use std::path::Path;
 ///
 /// Multiple test sets can be specified by adding more entries.
 /// The test function name is used as the module name (e.g., `test_fn::file_name`).
+///
+/// # Panics
+///
+/// Panics if:
+/// - `CARGO_MANIFEST_DIR` environment variable is not set
+/// - The fixture directory does not exist
+/// - The pattern regex is invalid
+/// - The fixture directory cannot be read
 #[proc_macro]
 pub fn harness(input: TokenStream) -> TokenStream {
     let entries = parse_harness_entries(input);
@@ -43,9 +51,11 @@ pub fn harness(input: TokenStream) -> TokenStream {
 
     for entry in entries {
         let full_path = Path::new(&manifest_dir).join(&entry.root);
-        if !full_path.exists() {
-            panic!("fixture directory does not exist: {}", full_path.display());
-        }
+        assert!(
+            full_path.exists(),
+            "fixture directory does not exist: {}",
+            full_path.display()
+        );
 
         let regex = Regex::new(&entry.pattern)
             .unwrap_or_else(|e| panic!("invalid pattern '{}': {}", entry.pattern, e));
@@ -60,7 +70,7 @@ pub fn harness(input: TokenStream) -> TokenStream {
         );
     }
 
-    generate_test_functions(all_tests)
+    generate_test_functions(&all_tests)
 }
 
 struct HarnessEntry {
@@ -180,8 +190,8 @@ fn collect_matching_files(
         Err(e) => panic!("failed to read directory {}: {}", current_path.display(), e),
     };
 
-    let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
-    entries.sort_by_key(|e| e.path());
+    let mut entries: Vec<_> = entries.filter_map(std::result::Result::ok).collect();
+    entries.sort_by_key(std::fs::DirEntry::path);
 
     for entry in entries {
         let path = entry.path();
@@ -220,12 +230,12 @@ fn collect_matching_files(
     }
 }
 
-fn generate_test_functions(tests: Vec<TestEntry>) -> TokenStream {
+fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
     use std::collections::BTreeMap;
 
     // Group tests by module name
     let mut modules: BTreeMap<String, Vec<&TestEntry>> = BTreeMap::new();
-    for test in &tests {
+    for test in tests {
         modules
             .entry(test.module_name.clone())
             .or_default()

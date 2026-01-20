@@ -1,3 +1,73 @@
+// Allow certain pedantic lints that are common in compiler code:
+// - cast_possible_truncation: Wasm uses 32-bit types, casts are intentional
+// - cast_possible_wrap: Same reason as above
+// - similar_names: Variable names like is_i32/is_i64/is_f32/is_f64 are intentional
+// - too_many_lines: Large functions are acceptable in compiler code
+// - must_use_candidate: Not all functions need must_use
+// - return_self_not_must_use: Same reason as above
+// - missing_errors_doc: Error documentation is in the return type
+// - missing_panics_doc: Panics are documented by unreachable!() etc
+// - module_name_repetitions: Type names like LexerError in lexer module are fine
+// - unused_self: Visitor pattern methods may not use self yet
+// - only_used_in_recursion: Recursive algorithms naturally have this
+// - trivially_copy_pass_by_ref: u8 by ref is fine for consistency
+// - type_complexity: Complex types are normal in compilers
+// - needless_pass_by_value: Ownership transfer is sometimes intentional
+// - items_after_statements: Items in functions are fine for test helpers
+// - should_implement_trait: from_str method doesn't always match FromStr trait
+// - too_many_arguments: Complex functions in compiler may need many args
+// - ref_option: &Option<T> is fine when coming from struct fields
+// - map_unwrap_or: auto-fix causes type mismatches with &String/&str
+// - redundant_else: Sometimes explicit else blocks are clearer
+// - match_same_arms: Sometimes explicit arms with comments are clearer
+// - match_wildcard_for_single_variants: Explicit arms are sometimes clearer
+// - assigning_clones: clone_from() pattern not always clearer
+// - doc_link_with_quotes: Doc style preference
+// - format_push_string: push_str(format!()) is fine
+// - needless_range_loop: Sometimes index variable is needed for context
+// - case_sensitive_file_extension_comparisons: Intentional in compiler
+// - implicit_hasher: Default hasher is fine
+// - unnecessary_wraps: Option/Result wrapping can be intentional
+// - manual_let_else: Explicit match is sometimes clearer
+// - collapsible_match: Sometimes explicit match is clearer
+// - used_underscore_binding: Sometimes needed for unused bindings
+// - self_only_used_in_recursion: Recursive methods naturally have this
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::module_name_repetitions,
+    clippy::unused_self,
+    clippy::only_used_in_recursion,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::type_complexity,
+    clippy::needless_pass_by_value,
+    clippy::items_after_statements,
+    clippy::should_implement_trait,
+    clippy::too_many_arguments,
+    clippy::ref_option,
+    clippy::map_unwrap_or,
+    clippy::redundant_else,
+    clippy::match_same_arms,
+    clippy::match_wildcard_for_single_variants,
+    clippy::assigning_clones,
+    clippy::doc_link_with_quotes,
+    clippy::format_push_string,
+    clippy::needless_range_loop,
+    clippy::case_sensitive_file_extension_comparisons,
+    clippy::implicit_hasher,
+    clippy::unnecessary_wraps,
+    clippy::manual_let_else,
+    clippy::collapsible_match,
+    clippy::used_underscore_binding,
+    clippy::self_only_used_in_recursion
+)]
+
 pub mod analyze;
 pub mod ast;
 pub mod bind;
@@ -85,14 +155,14 @@ pub struct DumpResult {
     pub comments: comment::CommentMap,
 }
 
-/// Compile Wado source code with a CompilerHost for I/O operations.
+/// Compile Wado source code with a `CompilerHost` for I/O operations.
 ///
 /// This is the main compilation entry point. It runs the full compilation pipeline:
 /// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> codegen
 ///
 /// # Arguments
 /// * `source` - The entry module source code
-/// * `host` - CompilerHost for loading imported modules and emitting diagnostics
+/// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
 /// * `filename` - Optional filename for error messages
 /// * `opt_level` - Optimization level
 ///
@@ -191,7 +261,6 @@ pub async fn compile_with_host<H: CompilerHost>(
         load_result.entry_path.clone(),
         load_result.implicit_modules.clone(),
         module_name,
-        source,
     )
     .map_err(|errors| {
         let msg = errors
@@ -323,13 +392,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     let symbols = analyzer.into_symbols();
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(
-        &symbols,
-        &load_result.modules,
-        &load_result.entry_path,
-        source,
-    )
-    .ok();
+    let tir_modules = Resolver::resolve_all_modules(&symbols, &load_result.modules).ok();
 
     // === Phase 8: Lower all modules ===
     // Use lower_modules_indexed for cross-module generic function support

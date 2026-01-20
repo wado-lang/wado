@@ -60,8 +60,8 @@ pub fn lower_project(mut project: Project) -> Project {
 /// This function enables monomorphization of generic functions defined in one module
 /// but used in another (e.g., Array methods from prelude used in user code).
 ///
-/// IMPORTANT: Requires unified type tables - all modules must share the same TypeTable
-/// so that TypeIds are valid across modules.
+/// IMPORTANT: Requires unified type tables - all modules must share the same `TypeTable`
+/// so that `TypeIds` are valid across modules.
 pub fn lower_modules_indexed(
     modules: IndexMap<Vec<String>, TirModule>,
 ) -> IndexMap<Vec<String>, TirModule> {
@@ -113,21 +113,21 @@ fn lower_with_cross_module_generics(
 
 /// Monomorphizer collects generic instantiations and generates concrete types
 struct Monomorphizer {
-    /// Map from (generic_name, type_args) to mangled name for structs
+    /// Map from (`generic_name`, `type_args`) to mangled name for structs
     instantiated: HashMap<InstantiationKey, String>,
     /// Work queue of pending struct instantiations
     pending: Vec<InstantiationKey>,
-    /// Map from GenericInstance TypeId to monomorphized Struct TypeId
+    /// Map from `GenericInstance` `TypeId` to monomorphized Struct `TypeId`
     type_substitutions: HashMap<TypeId, TypeId>,
-    /// Map from GenericInstance TypeId to mangled struct name
+    /// Map from `GenericInstance` `TypeId` to mangled struct name
     type_to_mangled_name: HashMap<TypeId, String>,
-    /// Map from (generic_func_name, type_args) to mangled function name
+    /// Map from (`generic_func_name`, `type_args`) to mangled function name
     function_instantiated: HashMap<InstantiationKey, String>,
     /// Work queue of pending function instantiations
     function_pending: Vec<InstantiationKey>,
-    /// Reverse lookup: mangled struct name -> InstantiationKey
+    /// Reverse lookup: mangled struct name -> `InstantiationKey`
     mangled_struct_to_key: HashMap<String, InstantiationKey>,
-    /// Reverse lookup: mangled function name -> InstantiationKey
+    /// Reverse lookup: mangled function name -> `InstantiationKey`
     mangled_func_to_key: HashMap<String, InstantiationKey>,
 }
 
@@ -274,8 +274,8 @@ impl Monomorphizer {
     /// This enables monomorphization of generic functions defined in other modules
     /// (e.g., Array methods from prelude used in user code).
     ///
-    /// IMPORTANT: Requires unified type tables - TypeIds in external_generic_functions
-    /// must be valid in the module's type_table.
+    /// IMPORTANT: Requires unified type tables - `TypeIds` in `external_generic_functions`
+    /// must be valid in the module's `type_table`.
     fn monomorphize_with_externals(
         &mut self,
         mut module: TirModule,
@@ -402,7 +402,7 @@ impl Monomorphizer {
         module
     }
 
-    /// Rewrite all GenericInstance type_ids in expressions to use monomorphized struct types
+    /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
     fn rewrite_types_in_module(&self, module: &mut TirModule) {
         // Rewrite struct field types
         for strct in &mut module.structs {
@@ -652,8 +652,8 @@ impl Monomorphizer {
         }
     }
 
-    /// Rewrite a single type_id: if it's a GenericInstance, return the concrete struct type_id.
-    /// Also handles container types (Array, Option, Tuple) that may contain GenericInstance.
+    /// Rewrite a single `type_id`: if it's a `GenericInstance`, return the concrete struct `type_id`.
+    /// Also handles container types (Array, Option, Tuple) that may contain `GenericInstance`.
     fn rewrite_type_id(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
         // First check direct substitution
         if let Some(&new_id) = self.type_substitutions.get(&type_id) {
@@ -664,10 +664,10 @@ impl Monomorphizer {
         match type_table.get(type_id).clone() {
             ResolvedType::Option(inner_id) => {
                 let new_inner_id = self.rewrite_type_id(inner_id, type_table);
-                if new_inner_id != inner_id {
-                    type_table.make_option(new_inner_id)
-                } else {
+                if new_inner_id == inner_id {
                     type_id
+                } else {
+                    type_table.make_option(new_inner_id)
                 }
             }
             ResolvedType::Tuple(elem_ids) => {
@@ -675,10 +675,10 @@ impl Monomorphizer {
                     .iter()
                     .map(|&id| self.rewrite_type_id(id, type_table))
                     .collect();
-                if new_elem_ids != elem_ids {
-                    type_table.make_tuple(new_elem_ids)
-                } else {
+                if new_elem_ids == elem_ids {
                     type_id
+                } else {
+                    type_table.make_tuple(new_elem_ids)
                 }
             }
             ResolvedType::Result { ok, err } => {
@@ -694,7 +694,7 @@ impl Monomorphizer {
         }
     }
 
-    /// Collect all GenericInstance types from the type table
+    /// Collect all `GenericInstance` types from the type table
     fn collect_instantiation_sites(&mut self, type_table: &TypeTable) {
         for id in 0..type_table.len() as TypeId {
             if let ResolvedType::GenericInstance {
@@ -741,10 +741,10 @@ impl Monomorphizer {
         format!("{}<{}>", key.name, args.join(","))
     }
 
-    /// Convert a TypeId to a mangled name component
+    /// Convert a `TypeId` to a mangled name component
     fn type_id_to_name_component(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(p) => format!("{:?}", p).to_lowercase(),
+            ResolvedType::Primitive(p) => format!("{p:?}").to_lowercase(),
             ResolvedType::String => "String".to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
@@ -783,7 +783,7 @@ impl Monomorphizer {
                 // For references, use the inner type's name
                 self.type_id_to_name_component(*inner, type_table)
             }
-            _ => format!("T{}", type_id),
+            _ => format!("T{type_id}"),
         }
     }
 
@@ -1189,7 +1189,7 @@ impl Monomorphizer {
                         self.get_struct_name_from_type(receiver.type_id, type_table)
                     {
                         // Construct the mangled method name: Struct::method
-                        let full_method_name = format!("{}::{}", struct_name, method_name);
+                        let full_method_name = format!("{struct_name}::{method_name}");
                         if generic_functions.contains_key(&full_method_name) {
                             let key = InstantiationKey {
                                 name: full_method_name,
@@ -1212,7 +1212,7 @@ impl Monomorphizer {
                             let impl_type_args = struct_key.type_args.clone();
 
                             // Look for generic method: BaseStruct::method
-                            let generic_method_name = format!("{}::{}", base_struct, method_name);
+                            let generic_method_name = format!("{base_struct}::{method_name}");
                             if let Some(generic_func_rc) =
                                 generic_functions.get(&generic_method_name)
                             {
@@ -1251,7 +1251,7 @@ impl Monomorphizer {
                     && !impl_type_args.is_empty()
                 {
                     // Look for generic method: BaseStruct::method
-                    let generic_method_name = format!("{}::{}", base_struct, method_name);
+                    let generic_method_name = format!("{base_struct}::{method_name}");
                     if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                         let generic_func = generic_func_rc.borrow();
                         // Only queue if we have the right number of type args
@@ -1286,7 +1286,7 @@ impl Monomorphizer {
                     let impl_type_args = struct_key.type_args.clone();
 
                     // Look for generic method: BaseStruct::method
-                    let generic_method_name = format!("{}::{}", base_struct, method_name);
+                    let generic_method_name = format!("{base_struct}::{method_name}");
                     if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                         let generic_func = generic_func_rc.borrow();
                         // Only queue if we have the right number of type args
@@ -1349,7 +1349,7 @@ impl Monomorphizer {
                         let type_args = struct_key.type_args.clone();
 
                         // Look for generic method: BaseStruct::method
-                        let generic_method_name = format!("{}::{}", base_struct, method_name);
+                        let generic_method_name = format!("{base_struct}::{method_name}");
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
                             // Only queue if we have the right number of type args
@@ -1517,7 +1517,7 @@ impl Monomorphizer {
         }
     }
 
-    /// Get the struct name from a type_id, unwrapping references if needed
+    /// Get the struct name from a `type_id`, unwrapping references if needed
     /// For generic instances, returns the mangled name with type args (e.g., "Array<i32>")
     fn get_struct_name_from_type(&self, type_id: TypeId, type_table: &TypeTable) -> Option<String> {
         match type_table.get(type_id) {
@@ -1543,8 +1543,8 @@ impl Monomorphizer {
         }
     }
 
-    /// Get the base struct name and type args from a type_id, unwrapping references if needed
-    /// Returns (base_name, type_args) for GenericInstance, (name, []) for Struct
+    /// Get the base struct name and type args from a `type_id`, unwrapping references if needed
+    /// Returns (`base_name`, `type_args`) for `GenericInstance`, (name, []) for Struct
     fn get_struct_info_from_type(
         &self,
         type_id: TypeId,
@@ -1579,8 +1579,8 @@ impl Monomorphizer {
     }
 
     /// Generate mangled name for method instantiation
-    /// Format: StructWithImplArgs::methodWithMethodArgs
-    /// e.g., Container::transform with [i32, i64] and impl_type_params_count=1 -> Container<i32>::transform<i64>
+    /// Format: `StructWithImplArgs::methodWithMethodArgs`
+    /// e.g., `Container::transform` with [i32, i64] and `impl_type_params_count=1` -> Container<i32>`::transform`<i64>
     fn mangle_method_name(
         &self,
         key: &InstantiationKey,
@@ -1619,17 +1619,17 @@ impl Monomorphizer {
                 format!("{}<{}>", method_name, method_arg_names.join(","))
             };
 
-            format!("{}::{}", mangled_struct, mangled_method)
+            format!("{mangled_struct}::{mangled_method}")
         } else {
             // Fallback to regular function mangling
             self.mangle_function_name(key, type_table)
         }
     }
 
-    /// Convert a TypeId to its string representation for name mangling
+    /// Convert a `TypeId` to its string representation for name mangling
     fn type_id_to_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(p) => format!("{:?}", p).to_lowercase(),
+            ResolvedType::Primitive(p) => format!("{p:?}").to_lowercase(),
             ResolvedType::String => "String".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -1914,10 +1914,10 @@ impl Monomorphizer {
                             let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
                             // Replace type param in angle bracket syntax: <T> -> <i32>
                             new_func_name = new_func_name
-                                .replace(&format!("<{}>", name), &format!("<{}>", concrete_name))
-                                .replace(&format!("<{},", name), &format!("<{},", concrete_name))
-                                .replace(&format!(",{}>", name), &format!(",{}>", concrete_name))
-                                .replace(&format!(",{},", name), &format!(",{},", concrete_name));
+                                .replace(&format!("<{name}>"), &format!("<{concrete_name}>"))
+                                .replace(&format!("<{name},"), &format!("<{concrete_name},"))
+                                .replace(&format!(",{name}>"), &format!(",{concrete_name}>"))
+                                .replace(&format!(",{name},"), &format!(",{concrete_name},"));
                             break;
                         }
                     }
@@ -1956,10 +1956,10 @@ impl Monomorphizer {
                             let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
                             // Replace type param in angle bracket syntax: <T> -> <i32>
                             new_func_name = new_func_name
-                                .replace(&format!("<{}>", name), &format!("<{}>", concrete_name))
-                                .replace(&format!("<{},", name), &format!("<{},", concrete_name))
-                                .replace(&format!(",{}>", name), &format!(",{}>", concrete_name))
-                                .replace(&format!(",{},", name), &format!(",{},", concrete_name));
+                                .replace(&format!("<{name}>"), &format!("<{concrete_name}>"))
+                                .replace(&format!("<{name},"), &format!("<{concrete_name},"))
+                                .replace(&format!(",{name}>"), &format!(",{concrete_name}>"))
+                                .replace(&format!(",{name},"), &format!(",{concrete_name},"));
                             break;
                         }
                     }
@@ -2126,7 +2126,7 @@ impl Monomorphizer {
         }
     }
 
-    /// Sync local_types array from Let statements that may have been updated
+    /// Sync `local_types` array from Let statements that may have been updated
     fn sync_local_types_from_lets(block: &TirBlock, local_types: &mut [TypeId]) {
         for stmt in &block.stmts {
             match &stmt.kind {
@@ -2160,7 +2160,7 @@ impl Monomorphizer {
         }
     }
 
-    /// Update all Local expression types based on local_types array
+    /// Update all Local expression types based on `local_types` array
     fn update_local_expr_types(block: &mut TirBlock, local_types: &[TypeId]) {
         for stmt in &mut block.stmts {
             Self::update_local_expr_types_in_stmt(stmt, local_types);
@@ -2431,7 +2431,7 @@ impl Monomorphizer {
                     && let Some(struct_name) =
                         self.get_struct_name_from_type(receiver.type_id, type_table)
                 {
-                    let full_method_name = format!("{}::{}", struct_name, method_name);
+                    let full_method_name = format!("{struct_name}::{method_name}");
                     let key = InstantiationKey {
                         name: full_method_name.clone(),
                         type_args: type_args.clone(),
@@ -2459,7 +2459,7 @@ impl Monomorphizer {
                         combined_type_args.extend(type_args.iter().copied());
 
                         // Look up with base struct name and combined type args
-                        let generic_method_name = format!("{}::{}", base_struct, method_name);
+                        let generic_method_name = format!("{base_struct}::{method_name}");
                         let combined_key = InstantiationKey {
                             name: generic_method_name.clone(),
                             type_args: combined_type_args.clone(),

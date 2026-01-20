@@ -40,7 +40,7 @@ use wasmparser::{Validator, WasmFeatures};
 /// Used to avoid repeated allocations when looking up String type
 const STRING_MODULE_PATH: &[&str] = &["core", "prelude"];
 
-/// Helper to convert STRING_MODULE_PATH to Vec<String> (for APIs requiring owned strings)
+/// Helper to convert `STRING_MODULE_PATH` to Vec<String> (for APIs requiring owned strings)
 fn string_module_path() -> Vec<String> {
     STRING_MODULE_PATH
         .iter()
@@ -69,7 +69,7 @@ struct BuildMainModuleParams<'a> {
     project: &'a Project,
     module_name: &'a str,
     /// WASI functions that are available (lowered at component level)
-    /// These are the local alias names (e.g., "wasi:cli/Stdout::write_via_stream")
+    /// These are the local alias names (e.g., "`wasi:cli/Stdout::write_via_stream`")
     available_wasi_funcs: &'a HashSet<String>,
 }
 
@@ -85,45 +85,46 @@ pub struct Codegen {
     world_registry: WorldRegistry,
     /// Type index for string-array (GC array<u8>), set when types are defined
     string_array_type_idx: u32,
-    /// Registry of user-defined struct types (keyed by StructName for type safety)
+    /// Registry of user-defined struct types (keyed by `StructName` for type safety)
     struct_types: HashMap<StructName, StructTypeInfo>,
-    /// Registry of tuple types (keyed by element TypeIds, maps to GC struct type index)
-    /// Uses RefCell for lazy registration during codegen
+    /// Registry of tuple types (keyed by element `TypeIds`, maps to GC struct type index)
+    /// Uses `RefCell` for lazy registration during codegen
     tuple_types: RefCell<HashMap<Vec<TypeId>, u32>>,
-    /// Registry of raw array types (keyed by element TypeId, maps to GC array type index)
-    /// These are the underlying builtin::array<T> types used in Array<T>.repr
+    /// Registry of raw array types (keyed by element `TypeId`, maps to GC array type index)
+    /// These are the underlying `builtin::array`<T> types used in Array<T>.repr
     array_types: HashMap<TypeId, u32>,
-    /// Registry of Array<T> struct types (keyed by element TypeId, maps to GC struct type index)
+    /// Registry of Array<T> struct types (keyed by element `TypeId`, maps to GC struct type index)
     /// Array<T> is a struct with fields: repr (ref to GC array), used (i32)
     array_struct_types: HashMap<TypeId, u32>,
-    /// Registry of box types for primitive references (keyed by ValType, maps to GC struct type index)
+    /// Registry of box types for primitive references (keyed by `ValType`, maps to GC struct type index)
     /// Box types are single-field mutable structs that allow references to primitives
     box_types: HashMap<ValType, u32>,
     /// Counter for generating unique closure IDs
     closure_counter: RefCell<u32>,
     /// Registry of closure environment types
-    /// Key: vector of (type_id, is_mut) for each capture
-    /// Value: (env_type_idx, env_type_name)
+    /// Key: vector of (`type_id`, `is_mut`) for each capture
+    /// Value: (`env_type_idx`, `env_type_name`)
     closure_env_types: RefCell<HashMap<Vec<(TypeId, bool)>, (u32, String)>>,
     /// Registry of closure struct types (env + funcref pair)
-    /// Key: (env_type_idx, fn_type_idx)
-    /// Value: closure_struct_type_idx
+    /// Key: (`env_type_idx`, `fn_type_idx`)
+    /// Value: `closure_struct_type_idx`
+    #[allow(dead_code)]
     closure_struct_types: RefCell<HashMap<(u32, u32), u32>>,
     /// Registry of canonical closure types based on user-visible function signature.
     /// Used for function type parameters (e.g., `fn(i32) -> i32`).
-    /// Key: (param_type_ids, return_type_id)
-    /// Value: (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx)
+    /// Key: (`param_type_ids`, `return_type_id`)
+    /// Value: (`canonical_fn_type_idx`, `canonical_fn_type_name`, `canonical_closure_struct_type_idx`)
     canonical_closure_types: RefCell<HashMap<(Vec<TypeId>, TypeId), (u32, String, u32)>>,
     /// Pending closure implementation functions to generate
-    /// (closure_id, captures, params, body, return_type, env_type_idx, closure_type_idx)
+    /// (`closure_id`, captures, params, body, `return_type`, `env_type_idx`, `closure_type_idx`)
     pending_closures: RefCell<Vec<ClosureInfo>>,
     /// Counter for tracking which closure we're generating during codegen.
     /// Reset before codegen starts, incremented each time we encounter a Closure expression.
-    /// Must match the order in which closures were collected by collect_closures_from_module.
+    /// Must match the order in which closures were collected by `collect_closures_from_module`.
     closure_codegen_counter: RefCell<u32>,
     /// Registry of custom variant types
     /// Key: variant name (e.g., "Shape")
-    /// Value: VariantTypeInfo with struct type index and case metadata
+    /// Value: `VariantTypeInfo` with struct type index and case metadata
     variant_types: RefCell<HashMap<String, VariantTypeInfo>>,
 }
 
@@ -132,7 +133,8 @@ pub struct Codegen {
 struct VariantTypeInfo {
     /// The GC struct type index for this variant
     struct_type_idx: u32,
-    /// Information about each case: (case_name, field_count)
+    /// Information about each case: (`case_name`, `field_count`)
+    #[allow(dead_code)]
     cases: Vec<(String, usize)>,
     /// Field types for the payload fields (after the tag)
     /// Index 0 corresponds to field index 1 in the struct (field 0 is the tag)
@@ -143,6 +145,7 @@ struct VariantTypeInfo {
 #[derive(Clone)]
 struct ClosureInfo {
     /// Unique closure ID
+    #[allow(dead_code)]
     id: u32,
     /// Captured variables from outer scope
     captures: Vec<TirCapture>,
@@ -155,8 +158,9 @@ struct ClosureInfo {
     /// Wasm type index for the environment struct
     env_type_idx: u32,
     /// Wasm type index for the closure function type (env + params -> result)
+    #[allow(dead_code)]
     fn_type_idx: u32,
-    /// Wasm type name for the closure function type (needed for define_func)
+    /// Wasm type name for the closure function type (needed for `define_func`)
     fn_type_name: String,
     /// Wasm type index for the closure struct type (env + funcref)
     closure_struct_type_idx: u32,
@@ -181,27 +185,27 @@ struct FunctionContext {
     locals: HashMap<String, u32>,
     /// Map from variable name to type (for type inference)
     local_type_map: HashMap<String, ValType>,
-    /// Number of parameters (locals 0..param_count are parameters)
+    /// Number of parameters (locals `0..param_count` are parameters)
     #[allow(dead_code)]
     param_count: u32,
     /// Next available local index for new variables
     next_local: u32,
     /// Local types for non-parameter locals (for function declaration)
     local_types: Vec<ValType>,
-    /// Return type of the function (for ref.as_non_null handling)
+    /// Return type of the function (for `ref.as_non_null` handling)
     return_type: Option<ValType>,
-    /// Pending branch hint from builtin::likely() or builtin::unlikely()
+    /// Pending branch hint from `builtin::likely()` or `builtin::unlikely()`
     /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
     pending_branch_hint: Option<bool>,
     /// Collected branch hints for this function (offset, taken)
     branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
-    /// Stack of (extra_depth, break_offset) for each loop level.
-    /// extra_depth: incremented by if statements inside the loop
-    /// break_offset: 1 for while/loop, 2 for for loops (because for loops have an extra body block)
-    /// For break: use break_offset + extra_depth
-    /// For continue: use extra_depth
+    /// Stack of (`extra_depth`, `break_offset`) for each loop level.
+    /// `extra_depth`: incremented by if statements inside the loop
+    /// `break_offset`: 1 for while/loop, 2 for for loops (because for loops have an extra body block)
+    /// For break: use `break_offset` + `extra_depth`
+    /// For continue: use `extra_depth`
     loop_info: Vec<(u32, u32)>,
     /// Counter for generating unique for-of local names (to support nested for-of loops)
     for_of_counter: u32,
@@ -218,7 +222,7 @@ struct FunctionContext {
     local_index_offset: u32,
     /// Map from local index to closure id (for closures stored in locals)
     local_closure_ids: HashMap<u32, u32>,
-    /// Counter for generating unique IndirectCall temp locals (to support nested closure calls)
+    /// Counter for generating unique `IndirectCall` temp locals (to support nested closure calls)
     indirect_call_counter: u32,
 }
 
@@ -270,8 +274,8 @@ impl FunctionContext {
     }
 
     /// Set closure context for generating a closure implementation function.
-    /// This enables TirExprKind::Capture to generate proper struct.get instructions.
-    /// Also sets local_index_offset to 1 to account for the env parameter at index 0.
+    /// This enables `TirExprKind::Capture` to generate proper struct.get instructions.
+    /// Also sets `local_index_offset` to 1 to account for the env parameter at index 0.
     fn set_closure_info(&mut self, env_type_idx: u32, captures: &[TirCapture]) {
         self.closure_env_type_idx = Some(env_type_idx);
         self.closure_captures = captures.to_vec();
@@ -290,7 +294,11 @@ impl FunctionContext {
         id
     }
 
-    /// Set a pending branch hint (from builtin::likely/unlikely)
+    fn set_return_type(&mut self, ty: ValType) {
+        self.return_type = Some(ty);
+    }
+
+    /// Set a pending branch hint (from `builtin::likely/unlikely`)
     fn set_branch_hint(&mut self, taken: bool) {
         self.pending_branch_hint = Some(taken);
     }
@@ -300,10 +308,6 @@ impl FunctionContext {
         if let Some(taken) = self.pending_branch_hint.take() {
             self.branch_hints.push((offset, taken));
         }
-    }
-
-    fn set_return_type(&mut self, ty: ValType) {
-        self.return_type = Some(ty);
     }
 
     /// Add a parameter (must be called before any locals)
@@ -367,7 +371,7 @@ impl Default for Codegen {
     }
 }
 
-/// Convert a snake_case identifier to kebab-case for Component Model
+/// Convert a `snake_case` identifier to kebab-case for Component Model
 fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
 }
@@ -392,7 +396,7 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
             "String" => ComponentValType::Primitive(PrimitiveValType::String),
             _ => panic!("unsupported Wado primitive type for CM: {}", named.name),
         },
-        _ => panic!("unsupported Wado type for CM primitive: {:?}", ty),
+        _ => panic!("unsupported Wado type for CM primitive: {ty:?}"),
     }
 }
 
@@ -444,7 +448,7 @@ impl Codegen {
     }
 
     /// Look up a struct type by name and module path.
-    /// Tries qualified StructName first, falls back to simple name (empty module_path).
+    /// Tries qualified `StructName` first, falls back to simple name (empty `module_path`).
     fn lookup_struct_type(&self, name: &str, module_path: &[String]) -> Option<&StructTypeInfo> {
         if !module_path.is_empty() {
             // Try qualified name first
@@ -510,7 +514,7 @@ impl Codegen {
             }
             ResolvedType::Option(inner) => {
                 let inner_name = self.mangle_type_for_struct_name(*inner, type_table);
-                format!("Option<{}>", inner_name)
+                format!("Option<{inner_name}>")
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, use the inner type's name
@@ -585,7 +589,7 @@ impl Codegen {
         // in_degree[A] = number of dependencies A has (structs that A needs)
         let mut in_degree: HashMap<String, usize> = HashMap::new();
         for s in structs {
-            let struct_deps = deps.get(&s.name).map(|d| d.len()).unwrap_or(0);
+            let struct_deps = deps.get(&s.name).map(std::vec::Vec::len).unwrap_or(0);
             in_degree.insert(s.name.clone(), struct_deps);
         }
 
@@ -1395,7 +1399,7 @@ impl Codegen {
         drop(pending_closures);
 
         // Data count section (required for array.new_data with GC)
-        let data_count = if string_data.is_empty() { 0 } else { 1 };
+        let data_count = u32::from(!string_data.is_empty());
         module.section(&DataCountSection { count: data_count });
 
         // ========================================
@@ -1405,7 +1409,7 @@ impl Codegen {
         *self.closure_codegen_counter.borrow_mut() = 0;
         let mut code = CodeSection::new();
         let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
-        let import_count = builder.import_func_count;
+        let mut func_idx = builder.import_func_count;
         let empty_path: &[String] = &[];
 
         // Generate closure implementation function bodies FIRST (they were declared first)
@@ -1413,10 +1417,11 @@ impl Codegen {
         for closure_info in &pending_closures {
             let wasm_func = self.generate_closure_function(closure_info, type_table, &builder);
             code.function(&wasm_func);
+            func_idx += 1;
         }
 
         // Generate user-defined functions from entry TIR (excluding 'run' which is handled specially)
-        for (idx, tir_func_rc) in entry_tir.functions.iter().enumerate() {
+        for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
             if tir_func.name == "run" {
                 continue; // Skip run - it's handled separately as entry point
@@ -1434,8 +1439,9 @@ impl Codegen {
                 self.generate_function(&tir_func, type_table, &builder, empty_path);
             code.function(&wasm_func);
             if !hints.is_empty() {
-                all_branch_hints.push((import_count + idx as u32, hints));
+                all_branch_hints.push((func_idx, hints));
             }
+            func_idx += 1;
         }
 
         // Generate loaded module functions (TIR path)
@@ -1449,9 +1455,13 @@ impl Codegen {
                 continue;
             }
 
-            let (wasm_func, _hints) =
+            let (wasm_func, hints) =
                 self.generate_function(&tir_func, func_type_table, &builder, module_path);
             code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((func_idx, hints));
+            }
+            func_idx += 1;
         }
 
         // Generate impl methods from loaded modules (TIR path)
@@ -1467,9 +1477,13 @@ impl Codegen {
                 continue;
             }
 
-            let (wasm_func, _hints) =
+            let (wasm_func, hints) =
                 self.generate_function(&tir_method, method_type_table, &builder, module_path);
             code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((func_idx, hints));
+            }
+            func_idx += 1;
         }
 
         // Generate run function (entry point with task.return wrapper)
@@ -1494,7 +1508,7 @@ impl Codegen {
 
         code.function(&run_wasm_func);
 
-        // Branch hints section
+        // Branch hints section (emit before code section for proper placement)
         if !all_branch_hints.is_empty() {
             let mut hints = BranchHints::new();
             for (func_idx, func_hints) in all_branch_hints {
@@ -1502,7 +1516,7 @@ impl Codegen {
                     func_idx,
                     func_hints.into_iter().map(|(offset, taken)| BranchHint {
                         branch_func_offset: offset,
-                        branch_hint_value: if taken { 1 } else { 0 },
+                        branch_hint_value: u32::from(taken),
                     }),
                 );
             }
@@ -1851,7 +1865,7 @@ impl Codegen {
                 // Print WAT for debugging before panicking
                 eprintln!("=== MAIN MODULE WAT (for debugging) ===");
                 if let Ok(wat) = wasmprinter::print_bytes(&main_module) {
-                    eprintln!("{}", wat);
+                    eprintln!("{wat}");
                 }
                 eprintln!("=== END MAIN MODULE WAT ===");
                 panic!("Core module validation failed: {e}");
@@ -2007,7 +2021,7 @@ impl Codegen {
         }
 
         ctx.register_instance("types");
-        let types_import_path = format!("wasi:cli/types@{}", cli_version);
+        let types_import_path = format!("wasi:cli/types@{cli_version}");
         builder.import(
             &types_import_path,
             wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
@@ -2328,7 +2342,7 @@ impl Codegen {
             }
 
             ctx.register_instance("stdout");
-            let stdout_import_path = format!("wasi:cli/stdout@{}", cli_version);
+            let stdout_import_path = format!("wasi:cli/stdout@{cli_version}");
             builder.import(
                 &stdout_import_path,
                 wasm_encoder::ComponentTypeRef::Instance(stdout_instance_type),
@@ -2385,7 +2399,7 @@ impl Codegen {
             }
 
             ctx.register_instance("stderr");
-            let stderr_import_path = format!("wasi:cli/stderr@{}", cli_version);
+            let stderr_import_path = format!("wasi:cli/stderr@{cli_version}");
             builder.import(
                 &stderr_import_path,
                 wasm_encoder::ComponentTypeRef::Instance(stderr_instance_type),
@@ -2403,9 +2417,9 @@ impl Codegen {
     /// Ensure Environment interface is imported if it's used.
     ///
     /// Environment provides:
-    /// - get-arguments: func() -> list<string>
-    /// - get-environment: func() -> list<tuple<string, string>>
-    /// - initial-cwd: func() -> option<string>
+    /// - get-arguments: `func()` -> list<string>
+    /// - get-environment: `func()` -> list<tuple<string, string>>
+    /// - initial-cwd: `func()` -> option<string>
     fn ensure_environment_imported(
         &self,
         builder: &mut ComponentBuilder,
@@ -2483,7 +2497,7 @@ impl Codegen {
         }
 
         ctx.register_instance("environment");
-        let env_import_path = format!("wasi:cli/environment@{}", cli_version);
+        let env_import_path = format!("wasi:cli/environment@{cli_version}");
         builder.import(
             &env_import_path,
             wasm_encoder::ComponentTypeRef::Instance(env_instance_type),
@@ -2568,7 +2582,7 @@ impl Codegen {
         }
 
         ctx.register_instance("exit");
-        let exit_import_path = format!("wasi:cli/exit@{}", cli_version);
+        let exit_import_path = format!("wasi:cli/exit@{cli_version}");
         builder.import(
             &exit_import_path,
             wasm_encoder::ComponentTypeRef::Instance(exit_instance_type),
@@ -2630,7 +2644,7 @@ impl Codegen {
                 }
                 _ => panic!("unsupported generic param type for CM: {}", generic.name),
             },
-            _ => panic!("unsupported Wado param type for CM: {:?}", ty),
+            _ => panic!("unsupported Wado param type for CM: {ty:?}"),
         }
     }
 
@@ -2675,7 +2689,7 @@ impl Codegen {
                 }
                 _ => panic!("unsupported generic return type for CM: {}", generic.name),
             },
-            _ => panic!("unsupported Wado return type for CM: {:?}", ty),
+            _ => panic!("unsupported Wado return type for CM: {ty:?}"),
         }
     }
 
@@ -2706,7 +2720,7 @@ impl Codegen {
         false
     }
 
-    /// Register a struct type from TIR with a StructName key
+    /// Register a struct type from TIR with a `StructName` key
     fn register_struct_type(
         &mut self,
         struct_name: StructName,
@@ -2870,7 +2884,7 @@ impl Codegen {
     /// Box types are single-field mutable structs that wrap primitive values,
     /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
     fn register_box_types(&mut self, builder: &mut CoreModuleBuilder, project: &Project) {
-        use PrimitiveType::*;
+        use PrimitiveType::{Bool, Char, F32, F64, I8, I16, I32, I64, U8, U16, U32, U64};
 
         // Check which ValTypes are needed based on used_box_primitives
         let needs_box_i32 = project
@@ -2904,13 +2918,13 @@ impl Codegen {
         }
     }
 
-    /// Get the box type index for a primitive ValType.
-    /// Returns None if no box type is registered for this ValType.
+    /// Get the box type index for a primitive `ValType`.
+    /// Returns None if no box type is registered for this `ValType`.
     fn get_box_type_idx(&self, val_type: ValType) -> Option<u32> {
         self.box_types.get(&val_type).copied()
     }
 
-    /// Get the tuple type index for a TypeId that is known to be a tuple.
+    /// Get the tuple type index for a `TypeId` that is known to be a tuple.
     /// Returns None if the type is not a registered tuple.
     fn get_tuple_type_idx(&self, element_types: &[TypeId]) -> Option<u32> {
         self.tuple_types.borrow().get(element_types).copied()
@@ -2957,7 +2971,7 @@ impl Codegen {
                 self.get_struct_or_tuple_type_idx(*inner, type_table)
             }
             other => {
-                panic!("expected struct or tuple type, got: {:?}", other);
+                panic!("expected struct or tuple type, got: {other:?}");
             }
         }
     }
@@ -3020,7 +3034,7 @@ impl Codegen {
                     // Array is now a struct with (repr, used) fields
                     // 1. Store the source struct
                     let source_struct_local = ctx.alloc_local(
-                        &format!("__copy_array_struct_source_{}", raw_array_type_idx),
+                        &format!("__copy_array_struct_source_{raw_array_type_idx}"),
                         ValType::Ref(RefType {
                             nullable: true,
                             heap_type: HeapType::Concrete(array_struct_type_idx),
@@ -3086,7 +3100,7 @@ impl Codegen {
     ) {
         // Use pre-allocated temp local for the source struct reference
         let source_local = ctx.alloc_local(
-            &format!("__copy_source_{}", type_idx),
+            &format!("__copy_source_{type_idx}"),
             ValType::Ref(RefType {
                 nullable: true,
                 heap_type: HeapType::Concrete(type_idx),
@@ -3122,27 +3136,25 @@ impl Codegen {
     ) {
         // Use pre-allocated temp locals for the array copy
         let source_local = ctx.alloc_local(
-            &format!("__copy_array_source_{}", array_type_idx),
+            &format!("__copy_array_source_{array_type_idx}"),
             ValType::Ref(RefType {
                 nullable: true,
                 heap_type: HeapType::Concrete(array_type_idx),
             }),
         );
         let counter_local = ctx.alloc_local(
-            &format!("__copy_array_counter_{}", array_type_idx),
+            &format!("__copy_array_counter_{array_type_idx}"),
             ValType::I32,
         );
         let dest_local = ctx.alloc_local(
-            &format!("__copy_array_dest_{}", array_type_idx),
+            &format!("__copy_array_dest_{array_type_idx}"),
             ValType::Ref(RefType {
                 nullable: true,
                 heap_type: HeapType::Concrete(array_type_idx),
             }),
         );
-        let len_local = ctx.alloc_local(
-            &format!("__copy_array_len_{}", array_type_idx),
-            ValType::I32,
-        );
+        let len_local =
+            ctx.alloc_local(&format!("__copy_array_len_{array_type_idx}"), ValType::I32);
 
         // Store source to temp local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -3328,7 +3340,7 @@ impl Codegen {
         func.instruction(&Instruction::End); // end $done
     }
 
-    /// Pre-register all tuple types found in a TypeTable.
+    /// Pre-register all tuple types found in a `TypeTable`.
     /// This must be called before code generation to ensure tuple types are available.
     fn register_tuple_types_from_table(
         &mut self,
@@ -3367,7 +3379,7 @@ impl Codegen {
         }
     }
 
-    /// Get or create an array type for a given element TypeId.
+    /// Get or create an array type for a given element `TypeId`.
     /// Returns the Wasm type index for the GC array type.
     fn get_or_create_array_type(
         &mut self,
@@ -3401,14 +3413,14 @@ impl Codegen {
         };
 
         // Generate a type name based on element type
-        let type_name = format!("array_{}", element_type_id);
+        let type_name = format!("array_{element_type_id}");
         let type_idx = builder.define_gc_array_type(&type_name, storage_type, true);
 
         self.array_types.insert(element_type_id, type_idx);
         type_idx
     }
 
-    /// Get or create an Array<T> struct type for a given element TypeId.
+    /// Get or create an Array<T> struct type for a given element `TypeId`.
     /// Array<T> is a struct with fields: repr (ref to GC array), used (i32)
     /// Returns the Wasm type index for the GC struct type.
     fn get_or_create_array_struct_type(
@@ -3444,7 +3456,7 @@ impl Codegen {
             },
         ];
 
-        let type_name = format!("Array_{}", element_type_id);
+        let type_name = format!("Array_{element_type_id}");
         let type_idx = builder.define_gc_struct_type(&type_name, &fields);
 
         self.array_struct_types.insert(element_type_id, type_idx);
@@ -3460,7 +3472,7 @@ impl Codegen {
     }
 
     /// Get or create a closure environment type for the given captures.
-    /// Returns (env_type_idx, env_type_name).
+    /// Returns (`env_type_idx`, `env_type_name`).
     fn get_or_create_closure_env_type(
         &self,
         captures: &[crate::tir::TirCapture],
@@ -3477,7 +3489,7 @@ impl Codegen {
 
         // Create the environment struct type
         let closure_id = self.get_next_closure_id();
-        let type_name = format!("ClosureEnv_{}", closure_id);
+        let type_name = format!("ClosureEnv_{closure_id}");
 
         let fields: Vec<FieldType> = captures
             .iter()
@@ -3499,54 +3511,9 @@ impl Codegen {
         (type_idx, type_name)
     }
 
-    /// Get or create a closure struct type (env + funcref pair).
-    /// Returns the closure struct type index.
-    fn get_or_create_closure_struct_type(
-        &self,
-        env_type_idx: u32,
-        fn_type_idx: u32,
-        builder: &mut CoreModuleBuilder,
-    ) -> u32 {
-        let key = (env_type_idx, fn_type_idx);
-
-        // Check if already registered
-        if let Some(&type_idx) = self.closure_struct_types.borrow().get(&key) {
-            return type_idx;
-        }
-
-        // Create the closure struct type with two fields:
-        // - field 0: env (ref to environment struct)
-        // - field 1: func (funcref to implementation function)
-        let closure_id = self.get_next_closure_id();
-        let type_name = format!("Closure_{}", closure_id);
-
-        let fields = vec![
-            FieldType {
-                element_type: StorageType::Val(ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(env_type_idx),
-                })),
-                mutable: false,
-            },
-            FieldType {
-                element_type: StorageType::Val(ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(fn_type_idx),
-                })),
-                mutable: false,
-            },
-        ];
-
-        let type_idx = builder.define_gc_struct_type(&type_name, &fields);
-
-        self.closure_struct_types.borrow_mut().insert(key, type_idx);
-
-        type_idx
-    }
-
     /// Get or create a canonical closure type for a function signature.
     /// This is used for function type parameters (e.g., `fn(i32) -> i32`).
-    /// Returns (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx).
+    /// Returns (`canonical_fn_type_idx`, `canonical_fn_type_name`, `canonical_closure_struct_type_idx`).
     ///
     /// The canonical closure uses `(ref struct)` as the environment type,
     /// allowing any closure with the same user-visible signature to be compatible.
@@ -3587,12 +3554,12 @@ impl Codegen {
                 vec![self.type_id_to_valtype(type_table, return_type)]
             };
 
-        let fn_type_name = format!("$canonical_closure_fn_{}", closure_id);
+        let fn_type_name = format!("$canonical_closure_fn_{closure_id}");
         builder.define_func_type(&fn_type_name, &fn_param_types, &fn_return_types);
         let fn_type_idx = builder.type_idx(&fn_type_name);
 
         // Create canonical closure struct type (generic env + funcref)
-        let struct_type_name = format!("CanonicalClosure_{}", closure_id);
+        let struct_type_name = format!("CanonicalClosure_{closure_id}");
         let fields = vec![
             FieldType {
                 element_type: StorageType::Val(ValType::Ref(RefType {
@@ -3830,7 +3797,7 @@ impl Codegen {
     }
 
     /// Find return type in a closure block body by scanning for return statements.
-    /// Similar to Resolver::find_return_type_in_block.
+    /// Similar to `Resolver::find_return_type_in_block`.
     fn find_return_type_in_closure_block(block: &TirBlock) -> Option<TypeId> {
         for stmt in &block.stmts {
             if let Some(type_id) = Self::find_return_type_in_closure_stmt(stmt) {
@@ -3871,8 +3838,8 @@ impl Codegen {
     }
 
     /// Find local variables that store closure values.
-    /// Returns a map from local_index to closure_id.
-    /// This must traverse in the same order as collect_closures_from_* to match closure IDs.
+    /// Returns a map from `local_index` to `closure_id`.
+    /// This must traverse in the same order as `collect_closures_from`_* to match closure IDs.
     fn find_closure_locals(block: &TirBlock) -> HashMap<u32, u32> {
         let mut result = HashMap::new();
         let mut closure_counter: u32 = 0;
@@ -4074,7 +4041,7 @@ impl Codegen {
     /// Called during the type definition phase before code generation.
     /// Register closure types only (env structs, function types, closure structs).
     /// Does NOT define the closure functions yet - that happens after imports.
-    /// Returns partial ClosureInfo with func_idx set to 0 (placeholder).
+    /// Returns partial `ClosureInfo` with `func_idx` set to 0 (placeholder).
     fn register_closure_types(
         &self,
         closures: &[CollectedClosure],
@@ -4085,7 +4052,7 @@ impl Codegen {
 
         for (idx, collected) in closures.iter().enumerate() {
             let closure_id = idx as u32;
-            let func_name = format!("$closure_{}", closure_id);
+            let func_name = format!("$closure_{closure_id}");
 
             // Create environment type (specific to this closure's captures)
             let (env_type_idx, _env_type_name) =
@@ -4124,7 +4091,7 @@ impl Codegen {
     }
 
     /// Define closure functions (must be called after imports are defined).
-    /// Updates the func_idx in each ClosureInfo.
+    /// Updates the `func_idx` in each `ClosureInfo`.
     fn define_closure_funcs(closure_infos: &mut [ClosureInfo], builder: &mut CoreModuleBuilder) {
         for info in closure_infos.iter_mut() {
             let func_idx = builder.define_func(&info.func_name, &info.fn_type_name);
@@ -4167,8 +4134,8 @@ impl Codegen {
         }
     }
 
-    /// Pre-register all array types found in a TypeTable.
-    /// Registers both raw array types (for builtin::array<T>) and Array struct types (for Array<T>).
+    /// Pre-register all array types found in a `TypeTable`.
+    /// Registers both raw array types (for `builtin::array`<T>) and Array struct types (for Array<T>).
     fn register_array_types_from_table(
         &mut self,
         type_table: &TypeTable,
@@ -4290,7 +4257,7 @@ impl Codegen {
         }
     }
 
-    /// Convert TIR TypeId to Wasm ValType
+    /// Convert TIR `TypeId` to Wasm `ValType`
     fn type_id_to_valtype(&self, type_table: &TypeTable, type_id: TypeId) -> ValType {
         match type_table.get(type_id) {
             // Primitive types
@@ -4481,7 +4448,7 @@ impl Codegen {
                         heap_type: HeapType::Concrete(info.struct_type_idx),
                     })
                 } else {
-                    panic!("Variant type not registered: {}", name);
+                    panic!("Variant type not registered: {name}");
                 }
             }
             ResolvedType::Dict { .. } => {
@@ -4509,8 +4476,7 @@ impl Codegen {
                     })
                 } else {
                     panic!(
-                        "unknown monomorphized generic struct type in type_id_to_valtype: {}",
-                        mangled_name
+                        "unknown monomorphized generic struct type in type_id_to_valtype: {mangled_name}"
                     )
                 }
             }
@@ -4520,248 +4486,6 @@ impl Codegen {
     // ========================================================================
     // Code Generation
     // ========================================================================
-
-    /// Generate code for a TIR expression with span-based cache lookup
-    /// This prevents re-evaluation of expressions that have already been cached
-    fn generate_expr_with_cache(
-        &self,
-        func: &mut Function,
-        expr: &TirExpr,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-        span_cache: &std::collections::HashMap<(usize, usize), u32>,
-    ) {
-        // Check if this expression was already cached
-        let span_key = (expr.span.start, expr.span.end);
-        if let Some(&local_idx) = span_cache.get(&span_key) {
-            func.instruction(&Instruction::LocalGet(local_idx));
-            return;
-        }
-
-        // Not cached - handle recursively for compound expressions
-        match &expr.kind {
-            TirExprKind::Binary { left, op, right } => {
-                // Recursively handle with cache for sub-expressions
-                self.generate_expr_with_cache(func, left, type_table, ctx, builder, span_cache);
-
-                // Check if i32 to i64 promotion is needed
-                let left_is_i64 = matches!(
-                    type_table.get(left.type_id),
-                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-                );
-                let right_is_i64 = matches!(
-                    type_table.get(right.type_id),
-                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-                );
-                let left_is_i32 = matches!(
-                    type_table.get(left.type_id),
-                    ResolvedType::Primitive(
-                        PrimitiveType::I32
-                            | PrimitiveType::U32
-                            | PrimitiveType::I16
-                            | PrimitiveType::U16
-                            | PrimitiveType::I8
-                            | PrimitiveType::U8
-                    )
-                );
-                let right_is_i32 = matches!(
-                    type_table.get(right.type_id),
-                    ResolvedType::Primitive(
-                        PrimitiveType::I32
-                            | PrimitiveType::U32
-                            | PrimitiveType::I16
-                            | PrimitiveType::U16
-                            | PrimitiveType::I8
-                            | PrimitiveType::U8
-                    )
-                );
-
-                // Promote left if needed
-                if right_is_i64 && left_is_i32 {
-                    func.instruction(&Instruction::I64ExtendI32S);
-                }
-
-                self.generate_expr_with_cache(func, right, type_table, ctx, builder, span_cache);
-
-                // Promote right if needed
-                if left_is_i64 && right_is_i32 {
-                    func.instruction(&Instruction::I64ExtendI32S);
-                }
-
-                // Determine effective type and emit op
-                let left_type = type_table.get(left.type_id);
-                let use_i64 = left_is_i64 || right_is_i64;
-                let use_f64 = matches!(left_type, ResolvedType::Primitive(PrimitiveType::F64));
-                let use_f32 = matches!(left_type, ResolvedType::Primitive(PrimitiveType::F32));
-
-                // Check if the left operand is unsigned (determines operation signedness)
-                let is_unsigned = matches!(
-                    left_type,
-                    ResolvedType::Primitive(
-                        PrimitiveType::U8
-                            | PrimitiveType::U16
-                            | PrimitiveType::U32
-                            | PrimitiveType::U64
-                    )
-                );
-
-                if use_f64 {
-                    self.emit_f64_binary_op(func, op);
-                } else if use_f32 {
-                    self.emit_f32_binary_op(func, op);
-                } else if use_i64 {
-                    if is_unsigned {
-                        self.emit_u64_binary_op(func, op);
-                    } else {
-                        self.emit_i64_binary_op(func, op);
-                    }
-                } else if is_unsigned {
-                    self.emit_u32_binary_op(func, op);
-                } else {
-                    self.emit_i32_binary_op(func, op);
-                }
-            }
-            TirExprKind::Unary { op, expr: inner } => {
-                self.generate_expr_with_cache(func, inner, type_table, ctx, builder, span_cache);
-                self.generate_unary_op(func, *op, inner.type_id, type_table);
-            }
-            // For other expressions, delegate to the non-cached version
-            _ => {
-                self.generate_expr(func, expr, type_table, ctx, builder);
-            }
-        }
-    }
-
-    /// Emit i32 binary operation instruction
-    fn emit_i32_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
-        match op {
-            TirBinaryOp::Add => func.instruction(&Instruction::I32Add),
-            TirBinaryOp::Sub => func.instruction(&Instruction::I32Sub),
-            TirBinaryOp::Mul => func.instruction(&Instruction::I32Mul),
-            TirBinaryOp::Div => func.instruction(&Instruction::I32DivS),
-            TirBinaryOp::Mod => func.instruction(&Instruction::I32RemS),
-            TirBinaryOp::Eq => func.instruction(&Instruction::I32Eq),
-            TirBinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
-            TirBinaryOp::Lt => func.instruction(&Instruction::I32LtS),
-            TirBinaryOp::LtEq => func.instruction(&Instruction::I32LeS),
-            TirBinaryOp::Gt => func.instruction(&Instruction::I32GtS),
-            TirBinaryOp::GtEq => func.instruction(&Instruction::I32GeS),
-            TirBinaryOp::And => func.instruction(&Instruction::I32And),
-            TirBinaryOp::Or => func.instruction(&Instruction::I32Or),
-            TirBinaryOp::BitAnd => func.instruction(&Instruction::I32And),
-            TirBinaryOp::BitOr => func.instruction(&Instruction::I32Or),
-            TirBinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
-            TirBinaryOp::Shl => func.instruction(&Instruction::I32Shl),
-            TirBinaryOp::Shr => func.instruction(&Instruction::I32ShrS),
-        };
-    }
-
-    /// Emit i64 binary operation instruction
-    fn emit_i64_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
-        match op {
-            TirBinaryOp::Add => func.instruction(&Instruction::I64Add),
-            TirBinaryOp::Sub => func.instruction(&Instruction::I64Sub),
-            TirBinaryOp::Mul => func.instruction(&Instruction::I64Mul),
-            TirBinaryOp::Div => func.instruction(&Instruction::I64DivS),
-            TirBinaryOp::Mod => func.instruction(&Instruction::I64RemS),
-            TirBinaryOp::Eq => func.instruction(&Instruction::I64Eq),
-            TirBinaryOp::NotEq => func.instruction(&Instruction::I64Ne),
-            TirBinaryOp::Lt => func.instruction(&Instruction::I64LtS),
-            TirBinaryOp::LtEq => func.instruction(&Instruction::I64LeS),
-            TirBinaryOp::Gt => func.instruction(&Instruction::I64GtS),
-            TirBinaryOp::GtEq => func.instruction(&Instruction::I64GeS),
-            TirBinaryOp::And => func.instruction(&Instruction::I32And), // Logical AND: result is i32
-            TirBinaryOp::Or => func.instruction(&Instruction::I32Or),   // Logical OR: result is i32
-            TirBinaryOp::BitAnd => func.instruction(&Instruction::I64And),
-            TirBinaryOp::BitOr => func.instruction(&Instruction::I64Or),
-            TirBinaryOp::BitXor => func.instruction(&Instruction::I64Xor),
-            TirBinaryOp::Shl => func.instruction(&Instruction::I64Shl),
-            TirBinaryOp::Shr => func.instruction(&Instruction::I64ShrS),
-        };
-    }
-
-    /// Emit u32 binary operation instruction (unsigned)
-    fn emit_u32_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
-        match op {
-            TirBinaryOp::Add => func.instruction(&Instruction::I32Add),
-            TirBinaryOp::Sub => func.instruction(&Instruction::I32Sub),
-            TirBinaryOp::Mul => func.instruction(&Instruction::I32Mul),
-            TirBinaryOp::Div => func.instruction(&Instruction::I32DivU), // Unsigned division
-            TirBinaryOp::Mod => func.instruction(&Instruction::I32RemU), // Unsigned remainder
-            TirBinaryOp::Eq => func.instruction(&Instruction::I32Eq),
-            TirBinaryOp::NotEq => func.instruction(&Instruction::I32Ne),
-            TirBinaryOp::Lt => func.instruction(&Instruction::I32LtU), // Unsigned less than
-            TirBinaryOp::LtEq => func.instruction(&Instruction::I32LeU), // Unsigned less or equal
-            TirBinaryOp::Gt => func.instruction(&Instruction::I32GtU), // Unsigned greater than
-            TirBinaryOp::GtEq => func.instruction(&Instruction::I32GeU), // Unsigned greater or equal
-            TirBinaryOp::And => func.instruction(&Instruction::I32And),
-            TirBinaryOp::Or => func.instruction(&Instruction::I32Or),
-            TirBinaryOp::BitAnd => func.instruction(&Instruction::I32And),
-            TirBinaryOp::BitOr => func.instruction(&Instruction::I32Or),
-            TirBinaryOp::BitXor => func.instruction(&Instruction::I32Xor),
-            TirBinaryOp::Shl => func.instruction(&Instruction::I32Shl),
-            TirBinaryOp::Shr => func.instruction(&Instruction::I32ShrU), // Unsigned right shift
-        };
-    }
-
-    /// Emit u64 binary operation instruction (unsigned)
-    fn emit_u64_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
-        match op {
-            TirBinaryOp::Add => func.instruction(&Instruction::I64Add),
-            TirBinaryOp::Sub => func.instruction(&Instruction::I64Sub),
-            TirBinaryOp::Mul => func.instruction(&Instruction::I64Mul),
-            TirBinaryOp::Div => func.instruction(&Instruction::I64DivU), // Unsigned division
-            TirBinaryOp::Mod => func.instruction(&Instruction::I64RemU), // Unsigned remainder
-            TirBinaryOp::Eq => func.instruction(&Instruction::I64Eq),
-            TirBinaryOp::NotEq => func.instruction(&Instruction::I64Ne),
-            TirBinaryOp::Lt => func.instruction(&Instruction::I64LtU), // Unsigned less than
-            TirBinaryOp::LtEq => func.instruction(&Instruction::I64LeU), // Unsigned less or equal
-            TirBinaryOp::Gt => func.instruction(&Instruction::I64GtU), // Unsigned greater than
-            TirBinaryOp::GtEq => func.instruction(&Instruction::I64GeU), // Unsigned greater or equal
-            TirBinaryOp::And => func.instruction(&Instruction::I32And), // Logical AND: result is i32
-            TirBinaryOp::Or => func.instruction(&Instruction::I32Or),   // Logical OR: result is i32
-            TirBinaryOp::BitAnd => func.instruction(&Instruction::I64And),
-            TirBinaryOp::BitOr => func.instruction(&Instruction::I64Or),
-            TirBinaryOp::BitXor => func.instruction(&Instruction::I64Xor),
-            TirBinaryOp::Shl => func.instruction(&Instruction::I64Shl),
-            TirBinaryOp::Shr => func.instruction(&Instruction::I64ShrU), // Unsigned right shift
-        };
-    }
-
-    /// Emit f32 binary operation instruction
-    fn emit_f32_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
-        match op {
-            TirBinaryOp::Add => func.instruction(&Instruction::F32Add),
-            TirBinaryOp::Sub => func.instruction(&Instruction::F32Sub),
-            TirBinaryOp::Mul => func.instruction(&Instruction::F32Mul),
-            TirBinaryOp::Div => func.instruction(&Instruction::F32Div),
-            TirBinaryOp::Eq => func.instruction(&Instruction::F32Eq),
-            TirBinaryOp::NotEq => func.instruction(&Instruction::F32Ne),
-            TirBinaryOp::Lt => func.instruction(&Instruction::F32Lt),
-            TirBinaryOp::LtEq => func.instruction(&Instruction::F32Le),
-            TirBinaryOp::Gt => func.instruction(&Instruction::F32Gt),
-            TirBinaryOp::GtEq => func.instruction(&Instruction::F32Ge),
-            _ => func.instruction(&Instruction::I32Const(0)), // Unsupported ops
-        };
-    }
-
-    /// Emit f64 binary operation instruction
-    fn emit_f64_binary_op(&self, func: &mut Function, op: &TirBinaryOp) {
-        match op {
-            TirBinaryOp::Add => func.instruction(&Instruction::F64Add),
-            TirBinaryOp::Sub => func.instruction(&Instruction::F64Sub),
-            TirBinaryOp::Mul => func.instruction(&Instruction::F64Mul),
-            TirBinaryOp::Div => func.instruction(&Instruction::F64Div),
-            TirBinaryOp::Eq => func.instruction(&Instruction::F64Eq),
-            TirBinaryOp::NotEq => func.instruction(&Instruction::F64Ne),
-            TirBinaryOp::Lt => func.instruction(&Instruction::F64Lt),
-            TirBinaryOp::LtEq => func.instruction(&Instruction::F64Le),
-            TirBinaryOp::Gt => func.instruction(&Instruction::F64Gt),
-            TirBinaryOp::GtEq => func.instruction(&Instruction::F64Ge),
-            _ => func.instruction(&Instruction::I32Const(0)), // Unsupported ops
-        };
-    }
 
     /// Generate code for a TIR expression
     fn generate_expr(
@@ -4797,7 +4521,7 @@ impl Codegen {
             },
 
             TirExprKind::BoolLiteral(b) => {
-                func.instruction(&Instruction::I32Const(if *b { 1 } else { 0 }));
+                func.instruction(&Instruction::I32Const(i32::from(*b)));
             }
 
             TirExprKind::CharLiteral(c) => {
@@ -4874,8 +4598,7 @@ impl Codegen {
                             func.instruction(&Instruction::StructNew(box_idx));
                         } else {
                             panic!(
-                                "Box type not registered for {:?}. Make sure to use &{:?} somewhere.",
-                                prim, prim
+                                "Box type not registered for {prim:?}. Make sure to use &{prim:?} somewhere."
                             );
                         }
                     }
@@ -4900,16 +4623,13 @@ impl Codegen {
                 // Get the variant name from the type
                 let variant_name = match type_table.get(*variant_type) {
                     ResolvedType::Variant { name, .. } => name.clone(),
-                    other => panic!(
-                        "Expected Variant type for VariantConstruct, got: {:?}",
-                        other
-                    ),
+                    other => panic!("Expected Variant type for VariantConstruct, got: {other:?}"),
                 };
 
                 // Look up the registered variant type
                 let variant_types = self.variant_types.borrow();
                 let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {}", variant_name);
+                    panic!("Variant type not registered: {variant_name}");
                 });
 
                 let struct_type_idx = variant_info.struct_type_idx;
@@ -5203,7 +4923,7 @@ impl Codegen {
                             } else if let ResolvedType::String = base_type {
                                 (self.string_array_type_idx, ArrayKind::String)
                             } else {
-                                panic!("index assignment on non-array type: {:?}", base_type);
+                                panic!("index assignment on non-array type: {base_type:?}");
                             };
 
                         // Generate array reference first
@@ -5285,8 +5005,7 @@ impl Codegen {
                                     });
                                 } else {
                                     panic!(
-                                        "no box type for primitive in deref assignment: {:?}",
-                                        prim
+                                        "no box type for primitive in deref assignment: {prim:?}"
                                     );
                                 }
                             } else {
@@ -5540,7 +5259,7 @@ impl Codegen {
                     for arg in args {
                         self.generate_expr(func, arg, type_table, ctx, builder);
                     }
-                    let full_name = format!("{}::{}", effect_name, op_name);
+                    let full_name = format!("{effect_name}::{op_name}");
                     if let Some(func_idx) = builder.try_func_idx(&full_name) {
                         func.instruction(&Instruction::Call(func_idx));
                     } else {
@@ -5618,7 +5337,7 @@ impl Codegen {
                                 func.instruction(&Instruction::Call(set_func_idx));
                             }
                             _ => {
-                                panic!("unknown method {} on String type", method_name);
+                                panic!("unknown method {method_name} on String type");
                             }
                         }
                     }
@@ -5671,7 +5390,7 @@ impl Codegen {
                             // Method not found - also try the simple alias name
                             // Monomorphized methods are registered with an alias using just
                             // the struct name and method (e.g., "Pair<i32,i64>::get_first")
-                            let simple_name = format!("{}::{}", name, method_name);
+                            let simple_name = format!("{name}::{method_name}");
                             if let Some(idx) = builder.try_func_idx(&simple_name) {
                                 // Generate code for the receiver (self parameter)
                                 self.generate_expr(func, receiver, type_table, ctx, builder);
@@ -5683,8 +5402,7 @@ impl Codegen {
                                 func.instruction(&Instruction::Call(idx));
                             } else {
                                 panic!(
-                                    "unknown method: {} (also tried alias: {})",
-                                    mangled_name, simple_name
+                                    "unknown method: {mangled_name} (also tried alias: {simple_name})"
                                 );
                             }
                         }
@@ -5711,7 +5429,7 @@ impl Codegen {
                                 PrimitiveType::Bool => "core/internal/bool_to_string",
                                 PrimitiveType::Char => "core/internal/char_to_string",
                                 _ => {
-                                    panic!("to_string not supported for primitive type: {:?}", prim)
+                                    panic!("to_string not supported for primitive type: {prim:?}")
                                 }
                             };
                             if let Some(func_idx) = builder.try_func_idx(func_name) {
@@ -5720,10 +5438,7 @@ impl Codegen {
                                 panic!("missing builtin function: {func_name}");
                             }
                         } else {
-                            panic!(
-                                "unknown method {} on primitive type {:?}",
-                                method_name, prim
-                            );
+                            panic!("unknown method {method_name} on primitive type {prim:?}");
                         }
                     }
 
@@ -5736,7 +5451,7 @@ impl Codegen {
                         let element_type = type_args[0];
                         // Build mangled method name: Array<String>::len
                         let elem_name = self.mangle_type_for_struct_name(element_type, type_table);
-                        let func_name = format!("Array<{}>::{}", elem_name, method_name);
+                        let func_name = format!("Array<{elem_name}>::{method_name}");
 
                         // Generate receiver
                         self.generate_expr(func, receiver, type_table, ctx, builder);
@@ -5786,7 +5501,7 @@ impl Codegen {
                                 func.instruction(&Instruction::Call(set_func_idx));
                             }
                             _ => {
-                                panic!("unknown method {} on String type", method_name);
+                                panic!("unknown method {method_name} on String type");
                             }
                         }
                     }
@@ -5803,8 +5518,7 @@ impl Codegen {
                             .map(|t| self.mangle_type_for_struct_name(*t, type_table))
                             .collect();
                         let mangled_struct_name = format!("{}<{}>", name, type_arg_names.join(","));
-                        let mangled_method_name =
-                            format!("{}::{}", mangled_struct_name, method_name);
+                        let mangled_method_name = format!("{mangled_struct_name}::{method_name}");
 
                         // Build full method name with module path
                         let full_method_name = MethodName::new(
@@ -5831,8 +5545,7 @@ impl Codegen {
                             func.instruction(&Instruction::Call(idx));
                         } else {
                             panic!(
-                                "unknown method {} on generic struct {}: tried {} and {}",
-                                method_name, name, full_method_name, mangled_method_name
+                                "unknown method {method_name} on generic struct {name}: tried {full_method_name} and {mangled_method_name}"
                             );
                         }
                     }
@@ -6229,7 +5942,7 @@ impl Codegen {
                             // Create the tuple struct
                             func.instruction(&Instruction::StructNew(type_idx));
                         } else {
-                            panic!("tuple type not registered: {:?}", elem_type_ids);
+                            panic!("tuple type not registered: {elem_type_ids:?}");
                         }
                     } else {
                         panic!(
@@ -6247,10 +5960,7 @@ impl Codegen {
                 // Since the function type uses generic (ref struct), we need to cast to the
                 // specific env type before accessing fields.
                 let env_type_idx = ctx.closure_env_type_idx.unwrap_or_else(|| {
-                    panic!(
-                        "capture access for '{}' (index {}) outside of closure context",
-                        name, index
-                    )
+                    panic!("capture access for '{name}' (index {index}) outside of closure context")
                 });
 
                 // Get env from local 0 (first parameter in closure functions)
@@ -6342,7 +6052,7 @@ impl Codegen {
                 // We use a counter to ensure nested calls don't share the same local.
                 let call_id = ctx.indirect_call_counter;
                 ctx.indirect_call_counter += 1;
-                let local_name = format!("__indirect_call_{}_{}", closure_struct_type_idx, call_id);
+                let local_name = format!("__indirect_call_{closure_struct_type_idx}_{call_id}");
                 let closure_local = ctx.alloc_local(
                     &local_name,
                     ValType::Ref(RefType {
@@ -6479,7 +6189,7 @@ impl Codegen {
                     } else if let ResolvedType::String = base_type {
                         (self.string_array_type_idx, ArrayKind::String)
                     } else {
-                        panic!("index assignment on non-array type: {:?}", base_type);
+                        panic!("index assignment on non-array type: {base_type:?}");
                     };
 
                 self.generate_expr(func, array_expr, type_table, ctx, builder);
@@ -6523,7 +6233,7 @@ impl Codegen {
                             });
                             // No need to push the value back - it's a statement
                         } else {
-                            panic!("no box type for primitive in deref assignment: {:?}", prim);
+                            panic!("no box type for primitive in deref assignment: {prim:?}");
                         }
                     } else {
                         panic!("deref assignment for non-primitive types not yet supported");
@@ -6536,10 +6246,10 @@ impl Codegen {
         }
     }
 
-    /// Try to generate an inverted condition for br_if optimization.
+    /// Try to generate an inverted condition for `br_if` optimization.
     /// Returns true if the condition was inverted and generated, false otherwise.
-    /// This eliminates the pattern: condition + i32.eqz + br_if
-    /// by directly generating: inverted_condition + br_if
+    /// This eliminates the pattern: condition + i32.eqz + `br_if`
+    /// by directly generating: `inverted_condition` + `br_if`
     fn try_generate_inverted_condition(
         &self,
         func: &mut Function,
@@ -7071,6 +6781,8 @@ impl Codegen {
                 else_block,
             } => {
                 self.generate_expr(func, condition, type_table, ctx, builder);
+                // Record branch hint at the current offset (before emitting the if instruction)
+                ctx.consume_branch_hint(func.byte_len() as u32);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 // If creates a block level - increment extra depth if we're inside a loop
                 if let Some((extra, _)) = ctx.loop_info.last_mut() {
@@ -7459,15 +7171,14 @@ impl Codegen {
 
             // Unsupported pattern
             _ => {
-                panic!(
-                    "Unsupported if-pattern: {:?} on type {:?}",
-                    pattern, scrutinee_type
-                );
+                panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
             }
         }
     }
 
     /// Generate a Wasm function from TIR function
+    ///
+    /// Returns the generated function and any branch hints collected during generation.
     fn generate_function(
         &self,
         tir_func: &TirFunction,
@@ -7546,7 +7257,7 @@ impl Codegen {
                 self.type_id_to_valtype(type_table, local_type_id)
             };
 
-            let local_name = format!("_local_{}", local_idx);
+            let local_name = format!("_local_{local_idx}");
             func_ctx.alloc_local(&local_name, local_type);
         }
 
@@ -7607,9 +7318,8 @@ impl Codegen {
         }
         wasm_func.instruction(&Instruction::End);
 
-        // Collect branch hints (empty for now)
-        let branch_hints = Vec::new();
-
+        // Return function and collected branch hints
+        let branch_hints = func_ctx.branch_hints;
         (wasm_func, branch_hints)
     }
 
@@ -7757,7 +7467,7 @@ impl Codegen {
                 self.type_id_to_valtype(type_table, local_type_id)
             };
 
-            let local_name = format!("_local_{}", local_idx);
+            let local_name = format!("_local_{local_idx}");
             func_ctx.alloc_local(&local_name, local_type);
         }
 
@@ -7824,8 +7534,8 @@ impl Codegen {
     ///
     /// This handles:
     /// 1. Local functions (simple name lookup)
-    /// 2. Builtin functions (builtin:: namespace)
-    /// 3. Core library functions (core:: namespace)
+    /// 2. Builtin functions (`builtin::` namespace)
+    /// 3. Core library functions (`core::` namespace)
     /// 4. Qualified names from imported modules
     fn resolve_call_target(
         &self,
@@ -7854,8 +7564,7 @@ impl Codegen {
         // Methods use TirExprKind::MethodCall instead.
         debug_assert!(
             !func_name.contains("::"),
-            "TirExprKind::Call should not have method-style names: {}",
-            func_name
+            "TirExprKind::Call should not have method-style names: {func_name}"
         );
 
         // Strategy 3: Build mangled name and try lookup
@@ -7912,7 +7621,7 @@ impl Codegen {
         } else {
             format!("{}::{}", module_path.join("::"), func_name)
         };
-        panic!("unknown function: {}", full_name);
+        panic!("unknown function: {full_name}");
     }
 
     /// Generate wait logic for pending effect subtasks
@@ -7984,12 +7693,14 @@ impl Codegen {
     ) {
         match builtin_name {
             "builtin::likely" => {
+                // Pass through the argument and set branch hint for the next branch
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 ctx.set_branch_hint(true);
             }
             "builtin::unlikely" => {
+                // Pass through the argument and set branch hint for the next branch
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
@@ -8331,8 +8042,8 @@ impl Codegen {
 
     /// Pre-allocate scratch locals for async effect handling
     ///
-    /// These are needed for builtin::call_indirect_stdout/stderr_write_via_stream
-    /// and builtin::effect_wait (used by ambient logging functions like log_stdout).
+    /// These are needed for `builtin::call_indirect_stdout/stderr_write_via_stream`
+    /// and `builtin::effect_wait` (used by ambient logging functions like `log_stdout`).
     /// Only allocate when the function actually uses these builtins.
     fn preallocate_async_scratch_locals(ctx: &mut FunctionContext) {
         // Scratch locals for write_via_stream async handling
@@ -8342,7 +8053,7 @@ impl Codegen {
 
     /// Pre-allocate scratch locals for Environment calls
     ///
-    /// Environment calls (get_arguments, get_environment, get_initial_cwd) need
+    /// Environment calls (`get_arguments`, `get_environment`, `get_initial_cwd`) need
     /// a local to hold the outptr for CM ABI conversion.
     fn preallocate_environment_scratch_locals(ctx: &mut FunctionContext) {
         ctx.alloc_local("__cm_outptr", ValType::I32);
@@ -8484,9 +8195,9 @@ impl Codegen {
     /// Check if a function body uses async builtins that need scratch locals.
     ///
     /// Returns true if the body calls:
-    /// - builtin::call_indirect_stdout_write_via_stream
-    /// - builtin::call_indirect_stderr_write_via_stream
-    /// - builtin::effect_wait
+    /// - `builtin::call_indirect_stdout_write_via_stream`
+    /// - `builtin::call_indirect_stderr_write_via_stream`
+    /// - `builtin::effect_wait`
     fn needs_async_scratch_locals(block: &TirBlock) -> bool {
         for stmt in &block.stmts {
             if Self::stmt_needs_async_scratch_locals(stmt) {
@@ -8680,7 +8391,7 @@ impl Codegen {
                 ResolvedType::Tuple(elements) => {
                     if let Some(type_idx) = self.get_tuple_type_idx(elements) {
                         ctx.alloc_local(
-                            &format!("__copy_source_{}", type_idx),
+                            &format!("__copy_source_{type_idx}"),
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(type_idx),
@@ -8698,7 +8409,7 @@ impl Codegen {
                             self.array_struct_types.get(&elem_type)
                         {
                             ctx.alloc_local(
-                                &format!("__copy_array_struct_source_{}", raw_array_type_idx),
+                                &format!("__copy_array_struct_source_{raw_array_type_idx}"),
                                 ValType::Ref(RefType {
                                     nullable: true,
                                     heap_type: HeapType::Concrete(array_struct_type_idx),
@@ -8707,25 +8418,25 @@ impl Codegen {
                         }
                         // Allocate locals for raw array copy operations
                         ctx.alloc_local(
-                            &format!("__copy_array_source_{}", raw_array_type_idx),
+                            &format!("__copy_array_source_{raw_array_type_idx}"),
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(raw_array_type_idx),
                             }),
                         );
                         ctx.alloc_local(
-                            &format!("__copy_array_dest_{}", raw_array_type_idx),
+                            &format!("__copy_array_dest_{raw_array_type_idx}"),
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(raw_array_type_idx),
                             }),
                         );
                         ctx.alloc_local(
-                            &format!("__copy_array_counter_{}", raw_array_type_idx),
+                            &format!("__copy_array_counter_{raw_array_type_idx}"),
                             ValType::I32,
                         );
                         ctx.alloc_local(
-                            &format!("__copy_array_len_{}", raw_array_type_idx),
+                            &format!("__copy_array_len_{raw_array_type_idx}"),
                             ValType::I32,
                         );
                     }
@@ -8974,7 +8685,7 @@ impl Codegen {
         }
     }
 
-    /// Pre-allocate locals for IfPattern statements in a block
+    /// Pre-allocate locals for `IfPattern` statements in a block
     fn preallocate_if_pattern_locals(
         &self,
         block: &TirBlock,
@@ -9048,7 +8759,7 @@ impl Codegen {
         // Pre-allocate temp locals for each call site
         for (struct_type_idx, count) in call_counts {
             for i in 0..count {
-                let name = format!("__indirect_call_{}_{}", struct_type_idx, i);
+                let name = format!("__indirect_call_{struct_type_idx}_{i}");
                 ctx.alloc_local(
                     &name,
                     ValType::Ref(RefType {
@@ -9060,7 +8771,7 @@ impl Codegen {
         }
     }
 
-    /// Count IndirectCall expressions in a block, grouped by closure struct type
+    /// Count `IndirectCall` expressions in a block, grouped by closure struct type
     fn count_indirect_calls_in_block(
         block: &TirBlock,
         type_table: &TypeTable,
@@ -9221,7 +8932,7 @@ impl Codegen {
         }
     }
 
-    /// Pre-allocate locals for Array#append() method calls.
+    /// Pre-allocate locals for `Array#append()` method calls.
     /// This scans the TIR for append calls and pre-allocates the 5 locals needed per element type.
     fn preallocate_array_append_locals(
         &self,
@@ -9258,7 +8969,7 @@ impl Codegen {
         }
     }
 
-    /// Collect element types of arrays that have append() called on them
+    /// Collect element types of arrays that have `append()` called on them
     fn collect_array_append_types(
         block: &TirBlock,
         type_table: &TypeTable,
@@ -9439,7 +9150,7 @@ impl Codegen {
                 ..
             } => {
                 let local_type = self.type_id_to_valtype(type_table, *type_id);
-                let local_name = format!("_local_{}", local_index);
+                let local_name = format!("_local_{local_index}");
                 ctx.alloc_local(&local_name, local_type);
             }
             TirStmtKind::If {
@@ -9531,7 +9242,7 @@ impl Codegen {
 
     /// Convert a world export function type to Core Wasm params
     ///
-    /// For async exports, the core function has no params (async uses task_return).
+    /// For async exports, the core function has no params (async uses `task_return`).
     /// For sync exports, params are mapped directly.
     fn world_export_to_core_params(&self, export: &WorldExportInfo) -> Vec<ValType> {
         if export.is_async {
@@ -9548,7 +9259,7 @@ impl Codegen {
 
     /// Convert a world export function type to Core Wasm results
     ///
-    /// For async exports, there's no return (result passed via task_return).
+    /// For async exports, there's no return (result passed via `task_return`).
     /// For sync exports, the return type is mapped directly.
     fn world_export_to_core_results(&self, export: &WorldExportInfo) -> Vec<ValType> {
         if export.is_async {
@@ -9558,70 +9269,6 @@ impl Codegen {
             vec![wasi_type_to_valtype(ret_ty)]
         } else {
             vec![]
-        }
-    }
-
-    /// Generate a String struct from static data
-    /// String is a struct with one field: repr (builtin::array<u8>)
-    fn generate_string_from_data(&self, func: &mut Function, s: &str, builder: &CoreModuleBuilder) {
-        let string_array_type = builder.type_idx("string-array");
-        let offset = self.get_string_offset(s);
-        let len = s.len();
-
-        // 1. Create the raw byte array
-        func.instruction(&Instruction::I32Const(offset as i32));
-        func.instruction(&Instruction::I32Const(len as i32));
-        func.instruction(&Instruction::ArrayNewData {
-            array_type_index: string_array_type,
-            array_data_index: 0,
-        });
-
-        // 2. Create the String struct
-        let string_struct_info = self
-            .lookup_struct_type("String", &string_module_path())
-            .expect("String struct not found");
-        func.instruction(&Instruction::StructNew(string_struct_info.type_idx));
-    }
-
-    /// Generate value to string conversion based on TypeId (semantic type)
-    /// This preserves the distinction between bool and i32 (both are ValType::I32 in Wasm)
-    fn generate_value_to_string_from_type_id(
-        &self,
-        func: &mut Function,
-        type_id: TypeId,
-        type_table: &TypeTable,
-        builder: &CoreModuleBuilder,
-    ) {
-        match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => {
-                let func_name = match prim {
-                    PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => {
-                        "core/internal/i32_to_string"
-                    }
-                    PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => {
-                        "core/internal/u32_to_string"
-                    }
-                    PrimitiveType::I64 => "core/internal/i64_to_string",
-                    PrimitiveType::U64 => "core/internal/u64_to_string",
-                    PrimitiveType::F32 => "core/internal/f32_to_string",
-                    PrimitiveType::F64 => "core/internal/f64_to_string",
-                    PrimitiveType::Bool => "core/internal/bool_to_string",
-                    PrimitiveType::Char => "core/internal/char_to_string",
-                    _ => return, // I128, U128 not yet supported
-                };
-                func.instruction(&Instruction::Call(builder.func_idx(func_name)));
-            }
-            ResolvedType::String => {
-                // String is already a string - just need ref.as_non_null for non-null ref
-                func.instruction(&Instruction::RefAsNonNull);
-            }
-            ResolvedType::Struct { name, .. } if name == "String" => {
-                // String struct (same as ResolvedType::String)
-                func.instruction(&Instruction::RefAsNonNull);
-            }
-            _ => {
-                // For other types (structs, etc.), treat as string (no conversion)
-            }
         }
     }
 
@@ -9698,7 +9345,7 @@ impl Codegen {
     }
 }
 
-/// Convert a PrimitiveType to its corresponding Wasm ValType.
+/// Convert a `PrimitiveType` to its corresponding Wasm `ValType`.
 /// Used for boxing primitives in references.
 fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
     match prim {

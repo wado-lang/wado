@@ -18,16 +18,21 @@ pub struct Transformer<'a> {
 }
 
 impl<'a> Transformer<'a> {
+    #[must_use]
     pub fn new(resolve: &'a Resolve) -> Self {
         Self { resolve }
     }
 
     /// Transform a WIT interface to a Wado module
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if type transformation fails.
     pub fn transform_interface(&self, iface_id: InterfaceId) -> Result<WadoModule> {
         let iface = &self.resolve.interfaces[iface_id];
-        let (pkg_name, iface_name, version) = self.get_interface_path(iface_id)?;
+        let (pkg_name, iface_name, version) = self.get_interface_path(iface_id);
 
-        let wasi_interface = format!("wasi:{}/{}@{}", pkg_name, iface_name, version);
+        let wasi_interface = format!("wasi:{pkg_name}/{iface_name}@{version}");
 
         let mut module = WadoModule::new(iface_name.clone(), version.clone());
 
@@ -70,7 +75,11 @@ impl<'a> Transformer<'a> {
         Ok(module)
     }
 
-    /// Transform a WIT world to a WadoWorld
+    /// Transform a WIT world to a `WadoWorld`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if type transformation fails.
     pub fn transform_world(&self, world_id: WorldId) -> Result<WadoWorld> {
         let world = &self.resolve.worlds[world_id];
         let world_name = world.name.clone();
@@ -83,7 +92,7 @@ impl<'a> Transformer<'a> {
                 let iface = &self.resolve.interfaces[*id];
                 let iface_name = match key {
                     WorldKey::Name(n) => n.clone(),
-                    WorldKey::Interface(id) => self.get_interface_name(*id)?,
+                    WorldKey::Interface(id) => self.get_interface_name(*id),
                 };
 
                 let functions: Vec<String> =
@@ -103,11 +112,11 @@ impl<'a> Transformer<'a> {
                 WorldItem::Function(func) => {
                     let name = match key {
                         WorldKey::Name(n) => to_snake_case(n),
-                        _ => continue,
+                        WorldKey::Interface(_) => continue,
                     };
 
                     let params = self.transform_params(&func.params)?;
-                    let return_type = self.transform_result(&func.result)?;
+                    let return_type = self.transform_result(func.result.as_ref())?;
 
                     exports.push(WadoWorldExport {
                         name,
@@ -125,7 +134,7 @@ impl<'a> Transformer<'a> {
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
                         ) {
                             let params = self.transform_params(&func.params)?;
-                            let return_type = self.transform_result(&func.result)?;
+                            let return_type = self.transform_result(func.result.as_ref())?;
 
                             exports.push(WadoWorldExport {
                                 name: to_snake_case(func_name),
@@ -136,7 +145,7 @@ impl<'a> Transformer<'a> {
                         }
                     }
                 }
-                _ => {}
+                WorldItem::Type(_) => {}
             }
         }
 
@@ -148,7 +157,7 @@ impl<'a> Transformer<'a> {
         })
     }
 
-    fn get_interface_path(&self, iface_id: InterfaceId) -> Result<(String, String, String)> {
+    fn get_interface_path(&self, iface_id: InterfaceId) -> (String, String, String) {
         let iface = &self.resolve.interfaces[iface_id];
         let iface_name = iface.name.clone().unwrap_or_else(|| "unknown".to_string());
 
@@ -159,17 +168,16 @@ impl<'a> Transformer<'a> {
                 .name
                 .version
                 .as_ref()
-                .map(|v| v.to_string())
-                .unwrap_or_else(|| "0.0.0".to_string());
-            Ok((pkg_name, iface_name, version))
+                .map_or_else(|| "0.0.0".to_string(), ToString::to_string);
+            (pkg_name, iface_name, version)
         } else {
-            Ok(("unknown".to_string(), iface_name, "0.0.0".to_string()))
+            ("unknown".to_string(), iface_name, "0.0.0".to_string())
         }
     }
 
-    fn get_interface_name(&self, iface_id: InterfaceId) -> Result<String> {
+    fn get_interface_name(&self, iface_id: InterfaceId) -> String {
         let iface = &self.resolve.interfaces[iface_id];
-        Ok(iface.name.clone().unwrap_or_else(|| "unknown".to_string()))
+        iface.name.clone().unwrap_or_else(|| "unknown".to_string())
     }
 
     fn transform_function(
@@ -178,10 +186,10 @@ impl<'a> Transformer<'a> {
         func: &Function,
         wasi_interface: &str,
     ) -> Result<WadoFunction> {
-        let wasi_attr = format!("{}#{}", wasi_interface, name);
+        let wasi_attr = format!("{wasi_interface}#{name}");
 
         let params = self.transform_params(&func.params)?;
-        let return_type = self.transform_result(&func.result)?;
+        let return_type = self.transform_result(func.result.as_ref())?;
 
         // Check if this is an async function
         let is_async = matches!(func.kind, FunctionKind::AsyncFreestanding);
@@ -209,7 +217,7 @@ impl<'a> Transformer<'a> {
             .collect()
     }
 
-    fn transform_result(&self, result: &Option<Type>) -> Result<Option<WadoType>> {
+    fn transform_result(&self, result: Option<&Type>) -> Result<Option<WadoType>> {
         match result {
             Some(ty) => Ok(Some(self.transform_type(*ty)?)),
             None => Ok(None),
@@ -387,7 +395,7 @@ impl<'a> Transformer<'a> {
                     cases,
                 })))
             }
-            TypeDefKind::Resource => Ok(None), // Resources handled separately
+            // Resources handled separately by transform_resource
             TypeDefKind::Type(inner) => {
                 // Type alias (e.g., `type instant = u64;` in WIT)
                 let target = self.transform_type(*inner)?;
@@ -441,7 +449,7 @@ impl<'a> Transformer<'a> {
                             doc_comment: func.docs.contents.clone(),
                             wasi_attr: method_attr,
                             params: self.transform_params(&func.params)?,
-                            return_type: self.transform_result(&func.result)?,
+                            return_type: self.transform_result(func.result.as_ref())?,
                             is_async: false,
                             never_returns: false,
                         });

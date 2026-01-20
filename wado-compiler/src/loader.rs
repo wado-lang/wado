@@ -39,7 +39,7 @@ impl std::fmt::Display for LoadError {
                 write!(f, "lex error in {}: {}", path.join("::"), message)
             }
             LoadError::IoError { path, message } => {
-                write!(f, "error reading '{}': {}", path, message)
+                write!(f, "error reading '{path}': {message}")
             }
         }
     }
@@ -70,7 +70,7 @@ pub struct LoadResult {
 /// Module loader
 ///
 /// Loads all modules upfront before analysis and codegen.
-/// Uses a CompilerHost for I/O operations.
+/// Uses a `CompilerHost` for I/O operations.
 pub struct ModuleLoader {
     /// Cache of already parsed modules
     loaded: HashMap<Vec<String>, Module>,
@@ -90,14 +90,14 @@ impl ModuleLoader {
         }
     }
 
-    /// Load all modules starting from the entry source using a CompilerHost
+    /// Load all modules starting from the entry source using a `CompilerHost`
     ///
     /// This loads the entry module and all its transitive dependencies.
     /// It also loads implicit modules (core:prelude, core:internal, core:builtin).
     ///
     /// # Arguments
     /// * `entry_source` - Source code of the entry module
-    /// * `host` - CompilerHost for loading user modules and emitting diagnostics
+    /// * `host` - `CompilerHost` for loading user modules and emitting diagnostics
     pub async fn load_all<H: CompilerHost>(
         mut self,
         entry_source: &str,
@@ -266,7 +266,7 @@ impl ModuleLoader {
         vec![canonical]
     }
 
-    /// Get source code for a module using CompilerHost
+    /// Get source code for a module using `CompilerHost`
     async fn get_source_with_host<H: CompilerHost>(
         &self,
         module_path: &[String],

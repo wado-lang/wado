@@ -4,7 +4,7 @@
 //! optimization, and code generation. Every expression has a resolved type.
 //!
 //! Key properties:
-//! - All types resolved to TypeId (no string-based type names)
+//! - All types resolved to `TypeId` (no string-based type names)
 //! - All variable references resolved (local index known)
 //! - All function calls resolved
 //! - No syntactic sugar (desugared before TIR)
@@ -71,9 +71,9 @@ impl TypeParamId {
 /// - The substitution correctly handles offset indices used for method type params
 #[derive(Debug, Clone, Default)]
 pub struct SubstitutionContext {
-    /// Maps type param index to concrete type (index is as stored in TypeParam)
+    /// Maps type param index to concrete type (index is as stored in `TypeParam`)
     /// For impl params: indices 0, 1, 2, ...
-    /// For method params: indices offset, offset+1, ... (where offset = impl_params.len())
+    /// For method params: indices offset, offset+1, ... (where offset = `impl_params.len()`)
     substitutions: HashMap<u32, TypeId>,
 }
 
@@ -93,7 +93,7 @@ impl SubstitutionContext {
         self
     }
 
-    /// Add method-level type args (e.g., U=i64 for transform::<i64>)
+    /// Add method-level type args (e.g., U=i64 for `transform::`<i64>)
     /// These are substituted at offset indices (offset, offset+1, ...)
     /// where offset is the number of impl type params
     pub fn with_method_args(mut self, args: &[TypeId], offset: u32) -> Self {
@@ -430,7 +430,7 @@ impl TypeTable {
         self.intern(ResolvedType::Variant { name, module_path })
     }
 
-    /// Find the type_id for a struct by name and module path (O(1) lookup via intern_map)
+    /// Find the `type_id` for a struct by name and module path (O(1) lookup via `intern_map`)
     pub fn find_struct_type(&self, name: &str, module_path: &[String]) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
@@ -471,7 +471,7 @@ impl TypeTable {
         })
     }
 
-    /// Create an Array<T> type (GenericInstance { name: "Array", ... })
+    /// Create an Array<T> type (`GenericInstance` { name: "Array", ... })
     pub fn make_array(&mut self, element: TypeId) -> TypeId {
         self.make_generic_instance(
             "Array".to_string(),
@@ -664,7 +664,7 @@ impl FunctionRef {
     }
 
     /// Get the fully qualified function name including module path.
-    /// For external functions, this returns "{module_path}/{name}".
+    /// For external functions, this returns "{`module_path}/{name`}".
     /// For resolved functions, this returns just the name.
     pub fn full_name(&self) -> String {
         match self {
@@ -682,16 +682,14 @@ impl FunctionRef {
     }
 
     /// Get the builtin function name if this is a builtin call.
-    /// Returns the qualified name (e.g., "builtin::array_len").
-    /// Builtin functions have module_path == ["core", "builtin"].
+    /// Returns the qualified name (e.g., "`builtin::array_len`").
+    /// Builtin functions have `module_path` == ["core", "builtin"].
     pub fn builtin_name(&self) -> Option<String> {
         match self {
             FunctionRef::Resolved(_) => None,
             FunctionRef::External {
                 module_path, name, ..
-            } if module_path.as_slice() == ["core", "builtin"] => {
-                Some(format!("builtin::{}", name))
-            }
+            } if module_path.as_slice() == ["core", "builtin"] => Some(format!("builtin::{name}")),
             FunctionRef::External { .. } => None,
         }
     }
@@ -705,8 +703,8 @@ impl FunctionRef {
     }
 
     /// Get the base generic name if this is a monomorphized function.
-    /// For "Box<i32>::get", returns "Box".
-    /// For "Container<i32>::transform<i64>", returns "Container".
+    /// For "Box<i32>`::get`", returns "Box".
+    /// For "Container<i32>`::transform`<i64>", returns "Container".
     pub fn base_struct_name(&self) -> Option<String> {
         match self {
             FunctionRef::Resolved(func) => {
@@ -714,12 +712,12 @@ impl FunctionRef {
                 func.monomorph_info
                     .as_ref()
                     .and_then(|info| info.generic_name.split("::").next())
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
             }
             FunctionRef::External { monomorph_info, .. } => monomorph_info
                 .as_ref()
                 .and_then(|info| info.generic_name.split("::").next())
-                .map(|s| s.to_string()),
+                .map(std::string::ToString::to_string),
         }
     }
 }
@@ -850,14 +848,14 @@ pub enum TirExprKind {
         args: Vec<TirExpr>,
     },
 
-    /// Option::Some(value) construction
+    /// `Option::Some(value)` construction
     OptionSome {
         value: Box<TirExpr>,
     },
 
     /// Custom variant construction: `Shape::Circle(5.0)` or `MyVariant::Unit`
     VariantConstruct {
-        /// The variant type (e.g., ResolvedType::Variant { name: "Shape", ... })
+        /// The variant type (e.g., `ResolvedType::Variant` { name: "Shape", ... })
         variant_type: TypeId,
         /// The case index (0-based position in variant declaration)
         case_index: u32,
@@ -1060,7 +1058,7 @@ pub enum TirStmtKind {
 // Items (Top-level Declarations)
 // ============================================================================
 
-/// Generic type parameter in TIR (from AST GenericParam)
+/// Generic type parameter in TIR (from AST `GenericParam`)
 #[derive(Debug, Clone)]
 pub struct TirTypeParam {
     pub name: String,

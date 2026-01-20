@@ -1,14 +1,26 @@
 // The parser implementation of Wado with recursive descent parser.
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
-use crate::ast::*;
+use crate::ast::{
+    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
+    ChainedComparison, ClosureExpr, ClosureParam, ComparisonChainExpr, CompoundAssignExpr,
+    CompoundAssignOp, ContinueStmt, EffectDecl, EffectMethod, EnumDecl, EnumVariant, Expr,
+    ExprStmt, FieldAccessExpr, FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function,
+    FunctionType, GenericType, IdentExpr, IfCondition, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, IntLiteral, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern, ResourceDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
+    WorldExport, WorldImport,
+};
 use crate::token::{Span, Token, TokenKind};
 
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
-    /// Tracks when we've split a GtGt into two Gt tokens for nested generics.
-    /// When true, the next expect_gt call should succeed without consuming a token.
+    /// Tracks when we've split a `GtGt` into two Gt tokens for nested generics.
+    /// When true, the next `expect_gt` call should succeed without consuming a token.
     pending_gt: bool,
     /// Shebang line, passed from the lexer.
     shebang: Option<String>,
@@ -125,7 +137,7 @@ impl Parser {
     }
 
     /// Expect a > token for closing generic type arguments.
-    /// Handles the case where >> is lexed as GtGt instead of two separate Gt tokens.
+    /// Handles the case where >> is lexed as `GtGt` instead of two separate Gt tokens.
     /// This is necessary for nested generics like Array<Tuple<String, String>>.
     fn expect_gt(&mut self) -> ParseResult<()> {
         // First check if we have a pending > from a previous GtGt split
@@ -361,7 +373,7 @@ impl Parser {
         Ok(items)
     }
 
-    /// Parse simple use items (name or name as alias) for use inside Effect::{...}
+    /// Parse simple use items (name or name as alias) for use inside `Effect::`{...}
     fn parse_use_item_simple_list(&mut self) -> ParseResult<Vec<UseItemSimple>> {
         let mut items = vec![];
 
@@ -409,7 +421,7 @@ impl Parser {
                     "type" => attrs.type_hint = Some(value),
                     _ => {
                         return Err(ParseError {
-                            message: format!("unknown import attribute: {}", key),
+                            message: format!("unknown import attribute: {key}"),
                             span: self.peek().span,
                         });
                     }
@@ -725,10 +737,10 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Return)?;
 
-        let value = if !self.check(&TokenKind::Semicolon) {
-            Some(self.parse_expr()?)
-        } else {
+        let value = if self.check(&TokenKind::Semicolon) {
             None
+        } else {
+            Some(self.parse_expr()?)
         };
 
         self.expect(&TokenKind::Semicolon)?;
@@ -801,7 +813,7 @@ impl Parser {
     fn is_pattern_start(&self) -> bool {
         if let TokenKind::Ident(name) = self.peek_kind() {
             // Uppercase identifier indicates a variant pattern like Some, None, Ok, Err
-            name.chars().next().is_some_and(|c| c.is_uppercase())
+            name.chars().next().is_some_and(char::is_uppercase)
         } else {
             false
         }
@@ -989,7 +1001,6 @@ impl Parser {
         Ok(Stmt::Continue(ContinueStmt { span }))
     }
 
-    #[allow(dead_code)]
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::LParen) {
             // Tuple pattern: (a, b, c)
@@ -1012,7 +1023,7 @@ impl Parser {
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
-            } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
+            } else if name.chars().next().is_some_and(char::is_uppercase) {
                 // Uppercase identifier - could be variant pattern like Some(x) or None
                 if self.check(&TokenKind::LParen) {
                     // Variant with bindings: Some(x)
@@ -1684,7 +1695,7 @@ impl Parser {
                     } else {
                         // This is a qualified name like Effect::function
                         let method = self.consume_ident()?;
-                        let qualified_name = format!("{}::{}", name, method);
+                        let qualified_name = format!("{name}::{method}");
                         Ok(Expr::Ident(IdentExpr {
                             name: qualified_name,
                             span: start_span,
@@ -2660,7 +2671,7 @@ impl Parser {
     }
 
     /// Extract interpolation expression and format specifier from template string
-    /// Returns (expression_string, optional_format_spec)
+    /// Returns (`expression_string`, `optional_format_spec`)
     fn extract_interpolation(
         &mut self,
         chars: &mut std::iter::Peekable<std::str::Chars>,

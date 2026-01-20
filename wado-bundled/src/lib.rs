@@ -29,9 +29,11 @@ unsafe fn copy_to_ptr(dest_ptr: i32, src: &[u8]) {
 /// # Safety
 /// The buffer must be at least 24 bytes (ryu's max output for f64)
 #[unsafe(no_mangle)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
     let mut ryu_buffer = ryu::Buffer::new();
     let formatted = ryu_buffer.format(value);
+    // SAFETY: ryu's max output for f64 is 24 bytes, which fits in i32
     unsafe { copy_to_ptr(buffer_ptr, formatted.as_bytes()) };
     formatted.len() as i32
 }
@@ -41,9 +43,11 @@ pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
 /// # Safety
 /// The buffer must be at least 16 bytes (ryu's max output for f32)
 #[unsafe(no_mangle)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
     let mut ryu_buffer = ryu::Buffer::new();
     let formatted = ryu_buffer.format(value);
+    // SAFETY: ryu's max output for f32 is 16 bytes, which fits in i32
     unsafe { copy_to_ptr(buffer_ptr, formatted.as_bytes()) };
     formatted.len() as i32
 }

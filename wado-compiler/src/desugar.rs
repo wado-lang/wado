@@ -512,19 +512,17 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             format: None,
         });
         template_parts.push(TemplatePart::String(format!(
-            "\ncondition: {}\n",
-            condition_source
+            "\ncondition: {condition_source}\n"
         )));
     } else {
         template_parts.push(TemplatePart::String(format!(
-            "Assertion failed:\ncondition: {}\n",
-            condition_source
+            "Assertion failed:\ncondition: {condition_source}\n"
         )));
     }
 
     // Add each intermediate value
     for (var_name, source, _) in &intermediates {
-        template_parts.push(TemplatePart::String(format!("{}: ", source)));
+        template_parts.push(TemplatePart::String(format!("{source}: ")));
         template_parts.push(TemplatePart::Interpolation {
             expr: Box::new(Expr::Ident(IdentExpr {
                 name: var_name.clone(),
@@ -576,14 +574,14 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
 
     // Wrap everything in a labeled block
     Stmt::LabeledBlock(LabeledBlockStmt {
-        label: format!("__assert_{}", assert_id),
+        label: format!("__assert_{assert_id}"),
         block: Block { stmts, span },
         span,
     })
 }
 
 /// Collect intermediate expressions that should be cached for power-assert display.
-/// Returns (var_name, source_text, original_expr) for each intermediate.
+/// Returns (`var_name`, `source_text`, `original_expr`) for each intermediate.
 fn collect_intermediates(
     expr: &Expr,
     intermediates: &mut Vec<(String, String, Expr)>,
