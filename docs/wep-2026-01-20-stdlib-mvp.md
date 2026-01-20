@@ -22,22 +22,22 @@ Research into WASI proposals and wasmtime implementation status:
 
 #### WASI Proposals by Phase
 
-| Phase | Proposals |
-|-------|-----------|
-| Phase 3 (Implementation) | cli, clocks, random, filesystem, sockets, http |
-| Phase 2 (Spec Text) | clocks:timezone, wasi-nn, wasi-gfx |
+| Phase                      | Proposals                                                              |
+| -------------------------- | ---------------------------------------------------------------------- |
+| Phase 3 (Implementation)   | cli, clocks, random, filesystem, sockets, http                         |
+| Phase 2 (Spec Text)        | clocks:timezone, wasi-nn, wasi-gfx                                     |
 | Phase 1 (Feature Proposal) | crypto, keyvalue, logging, messaging, sql, url, threads, pattern-match |
 
 #### Wasmtime v40 Implementation Status
 
-| Interface | Crate | Status |
-|-----------|-------|--------|
-| cli, clocks, filesystem, random, sockets | wasmtime-wasi | ✅ Stable |
-| http | wasmtime-wasi-http | ⚠️ Experimental |
-| keyvalue | wasmtime-wasi-keyvalue | ✅ Available (in-memory) |
-| nn | wasmtime-wasi-nn | ⚠️ Experimental (OpenVINO, ONNX) |
-| crypto | wasmtime-wasi-crypto | ⚠️ Stale (no updates since 2023-09) |
-| pattern-match (regex) | - | ❌ Not implemented |
+| Interface                                | Crate                  | Status                              |
+| ---------------------------------------- | ---------------------- | ----------------------------------- |
+| cli, clocks, filesystem, random, sockets | wasmtime-wasi          | ✅ Stable                           |
+| http                                     | wasmtime-wasi-http     | ⚠️ Experimental                     |
+| keyvalue                                 | wasmtime-wasi-keyvalue | ✅ Available (in-memory)            |
+| nn                                       | wasmtime-wasi-nn       | ⚠️ Experimental (OpenVINO, ONNX)    |
+| crypto                                   | wasmtime-wasi-crypto   | ⚠️ Stale (no updates since 2023-09) |
+| pattern-match (regex)                    | -                      | ❌ Not implemented                  |
 
 #### Features NOT in WASI
 
@@ -271,25 +271,21 @@ struct FilterIter<I, F> { iter: I, pred: F }
 
 ### 4. `core:collections`
 
-#### Dict (HashMap)
+Two map implementations are provided: `HashMap` for O(1) average access and `TreeMap` for ordered keys.
+
+#### HashMap
 
 ```wado
-struct Dict<K, V> {
+struct HashMap<K, V> {
     // Internal: array of buckets with chaining
     buckets: builtin::array<Option<Entry<K, V>>>,
     len: i32,
 }
 
-struct Entry<K, V> {
-    key: K,
-    value: V,
-    next: Option<&Entry<K, V>>,  // chaining for collisions
-}
-
-impl Dict<K, V> {
+impl HashMap<K, V> {
     // === Construction ===
-    fn new() -> Dict<K, V>;
-    fn with_capacity(n: i32) -> Dict<K, V>;
+    fn new() -> HashMap<K, V>;
+    fn with_capacity(n: i32) -> HashMap<K, V>;
 
     // === Size ===
     fn len(&self) -> i32;
@@ -306,28 +302,75 @@ impl Dict<K, V> {
     fn remove(&mut self, key: &K) -> Option<V>;
     fn clear(&mut self);
 
-    // === Iteration ===
+    // === Iteration (unordered) ===
     fn keys(&self) -> Array<K>;
     fn values(&self) -> Array<V>;
     fn entries(&self) -> Array<[K, V]>;
 
     // === Bulk Operations ===
-    fn extend(&mut self, other: &Dict<K, V>);
+    fn extend(&mut self, other: &HashMap<K, V>);
 }
 ```
 
-#### Set
+#### TreeMap
+
+Ordered map using a balanced tree (e.g., red-black tree). Keys are iterated in sorted order.
 
 ```wado
-struct Set<T> {
-    // Internal: backed by Dict<T, ()>
-    dict: Dict<T, ()>,
+struct TreeMap<K, V> {
+    // Internal: balanced tree structure
+    root: Option<&Node<K, V>>,
+    len: i32,
 }
 
-impl Set<T> {
+impl TreeMap<K, V> {
     // === Construction ===
-    fn new() -> Set<T>;
-    fn from_array(arr: &Array<T>) -> Set<T>;
+    fn new() -> TreeMap<K, V>;
+
+    // === Size ===
+    fn len(&self) -> i32;
+    fn is_empty(&self) -> bool;
+
+    // === Access ===
+    fn get(&self, key: &K) -> Option<&V>;
+    fn get_mut(&mut self, key: &K) -> Option<&mut V>;
+    fn contains_key(&self, key: &K) -> bool;
+
+    // === Modification ===
+    fn insert(&mut self, key: K, value: V) -> Option<V>;
+    fn remove(&mut self, key: &K) -> Option<V>;
+    fn clear(&mut self);
+
+    // === Ordered iteration ===
+    fn keys(&self) -> Array<K>;      // sorted order
+    fn values(&self) -> Array<V>;    // sorted by key
+    fn entries(&self) -> Array<[K, V]>;
+
+    // === Range queries ===
+    fn first(&self) -> Option<[K, V]>;   // minimum key
+    fn last(&self) -> Option<[K, V]>;    // maximum key
+    fn range(&self, start: &K, end: &K) -> Array<[K, V]>;
+}
+```
+
+#### HashSet and TreeSet
+
+```wado
+struct HashSet<T> {
+    // Internal: backed by HashMap<T, ()>
+    map: HashMap<T, ()>,
+}
+
+struct TreeSet<T> {
+    // Internal: backed by TreeMap<T, ()>
+    map: TreeMap<T, ()>,
+}
+
+// Both HashSet and TreeSet share this interface
+impl HashSet<T> {  // (same for TreeSet<T>)
+    // === Construction ===
+    fn new() -> HashSet<T>;
+    fn from_array(arr: &Array<T>) -> HashSet<T>;
 
     // === Size ===
     fn len(&self) -> i32;
@@ -342,28 +385,35 @@ impl Set<T> {
     fn clear(&mut self);
 
     // === Set Operations ===
-    fn union(&self, other: &Set<T>) -> Set<T>;
-    fn intersection(&self, other: &Set<T>) -> Set<T>;
-    fn difference(&self, other: &Set<T>) -> Set<T>;
-    fn symmetric_difference(&self, other: &Set<T>) -> Set<T>;
-    fn is_subset(&self, other: &Set<T>) -> bool;
-    fn is_superset(&self, other: &Set<T>) -> bool;
-    fn is_disjoint(&self, other: &Set<T>) -> bool;
+    fn union(&self, other: &HashSet<T>) -> HashSet<T>;
+    fn intersection(&self, other: &HashSet<T>) -> HashSet<T>;
+    fn difference(&self, other: &HashSet<T>) -> HashSet<T>;
+    fn symmetric_difference(&self, other: &HashSet<T>) -> HashSet<T>;
+    fn is_subset(&self, other: &HashSet<T>) -> bool;
+    fn is_superset(&self, other: &HashSet<T>) -> bool;
+    fn is_disjoint(&self, other: &HashSet<T>) -> bool;
 
     // === Conversion ===
     fn to_array(&self) -> Array<T>;
 }
+
+// TreeSet additional methods (ordered)
+impl TreeSet<T> {
+    fn first(&self) -> Option<T>;
+    fn last(&self) -> Option<T>;
+    fn range(&self, start: &T, end: &T) -> Array<T>;
+}
 ```
 
-#### Hash Trait
+#### Hash and Ord Traits
 
-Dict and Set require a way to hash keys. Options:
+HashMap/HashSet require Hash trait; TreeMap/TreeSet require Ord trait. Options:
 
-1. **Built-in hash for primitives**: Compiler generates hash for i32, i64, String, etc.
-2. **Hash trait**: User-implementable trait for custom types
+1. **Built-in hash/ord for primitives**: Compiler generates Hash/Ord for i32, i64, String, etc.
+2. **User-implementable traits**: Hash and Ord traits for custom types
 3. **Identity hash for GC references**: Use Wasm GC reference identity
 
-MVP approach: Built-in hash for primitive types (i32, i64, f64, String, char, bool). Custom struct hashing deferred to post-MVP.
+MVP approach: Built-in Hash and Ord for primitive types (i32, i64, f64, String, char, bool). Custom struct hashing/ordering deferred to post-MVP.
 
 ```wado
 // Compiler-provided for primitives
@@ -371,23 +421,31 @@ trait Hash {
     fn hash(&self) -> u64;
 }
 
-// Built-in implementations
+trait Ord {
+    fn cmp(&self, other: &Self) -> i32;  // -1, 0, 1
+}
+
+// Built-in implementations for primitives
 impl Hash for i32 { ... }
 impl Hash for i64 { ... }
 impl Hash for String { ... }
+impl Ord for i32 { ... }
+impl Ord for i64 { ... }
+impl Ord for String { ... }  // lexicographic
 // etc.
 ```
 
 ## Implementation Phases
 
-| Phase | Scope | Dependencies | Effort |
-|-------|-------|--------------|--------|
-| 1 | `core:math` (Wasm native) | None | Low |
-| 2 | `String` basic methods | None | Medium |
-| 3 | `core:math` (libm) | Bundled libm | Medium |
-| 4 | `Array` iterator methods | Closure improvements | Medium |
-| 5 | `Dict` and `Set` | Hash for primitives | High |
-| 6 | Lazy iterators | Trait bounds | High |
+| Phase | Scope                        | Dependencies          | Effort |
+| ----- | ---------------------------- | --------------------- | ------ |
+| 1     | `core:math` (Wasm native)    | None                  | Low    |
+| 2     | `String` basic methods       | None                  | Medium |
+| 3     | `core:math` (libm)           | Bundled libm          | Medium |
+| 4     | `Array` iterator methods     | Closure improvements  | Medium |
+| 5     | `HashMap`, `HashSet`         | Hash for primitives   | High   |
+| 5b    | `TreeMap`, `TreeSet`         | Ord for primitives    | High   |
+| 6     | Lazy iterators               | Trait bounds          | High   |
 
 ### Phase 1: core:math (Wasm Native)
 
@@ -425,12 +483,19 @@ Integrate deterministic libm (per WEP-2026-01-10-deterministic-libm):
 - `enumerate`, `zip`
 - `sort_by`
 
-### Phase 5: Dict and Set
+### Phase 5: HashMap and HashSet
 
 - Implement Hash trait for primitives
-- Dict with chaining collision resolution
-- Set backed by Dict
+- HashMap with chaining collision resolution
+- HashSet backed by HashMap
 - Set operations (union, intersection, etc.)
+
+### Phase 5b: TreeMap and TreeSet
+
+- Implement Ord trait for primitives
+- TreeMap with red-black tree or similar balanced tree
+- TreeSet backed by TreeMap
+- Range queries (first, last, range)
 
 ### Phase 6: Lazy Iterators (Post-MVP)
 
@@ -466,12 +531,14 @@ Integrate deterministic libm (per WEP-2026-01-10-deterministic-libm):
 ### Use WASI for Everything
 
 Rejected because:
+
 - Math, String, Iterator, Collections have no WASI proposals
 - WASI focuses on I/O and system interfaces, not computational utilities
 
 ### Minimal stdlib (User-land Libraries)
 
 Rejected because:
+
 - Core operations like String.split() are too fundamental
 - No package manager yet for distributing user libraries
 - Consistency across Wado programs is valuable
@@ -479,6 +546,7 @@ Rejected because:
 ### Full Unicode String Support in MVP
 
 Deferred because:
+
 - ICU is large (~25MB)
 - ASCII-only covers most programming use cases
 - Can add Unicode support later without breaking changes
