@@ -55,7 +55,7 @@ on-task-done: clippy-fix update-bundled update-golden-fixtures test format
 .PHONY: format
 format:
 	cargo fmt --verbose --all
-	npx prettier --write spec.md AGENTS.md README.md docs/*.md benchmark/*.md
+	dprint fmt
 
 .PHONY: format-wado
 format-wado:
