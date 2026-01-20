@@ -1,0 +1,23 @@
+use { println, Stdout } from "core:cli";
+
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+struct Person {
+    name: String,
+}
+
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return `Hello, {self.name}!`;
+    }
+}
+
+fn run() with Stdout {
+    let p = Person { name: "Alice" };
+    println(p.greet());
+}
+
+__DATA__
+{"stdout": "Hello, Alice!\n"}

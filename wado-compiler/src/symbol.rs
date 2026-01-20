@@ -24,6 +24,8 @@ pub enum SymbolKind {
     Enum(EnumSymbol),
     /// A variant definition (tagged union with payloads)
     Variant(VariantSymbol),
+    /// A trait definition
+    Trait(TraitSymbol),
     /// A type alias
     TypeAlias(TypeAliasSymbol),
     /// A local variable
@@ -77,6 +79,15 @@ pub struct EnumSymbol {
 pub struct VariantSymbol {
     /// Case names (e.g., "Some", "None" for Option)
     pub cases: Vec<String>,
+}
+
+/// Trait symbol data
+#[derive(Debug, Clone)]
+pub struct TraitSymbol {
+    /// Method names defined in this trait
+    pub methods: Vec<String>,
+    /// Type parameter names
+    pub type_params: Vec<String>,
 }
 
 /// Type alias symbol data

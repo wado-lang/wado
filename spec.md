@@ -1211,6 +1211,87 @@ type UserData = struct {
 };
 ```
 
+### Traits
+
+Traits define shared behavior that types can implement. Wado uses **static dispatch** for trait methods - all calls are resolved at compile time.
+
+```wado
+// Trait declaration
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+// Trait implementation
+struct Person {
+    name: String,
+}
+
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return `Hello, {self.name}!`;
+    }
+}
+
+// Usage
+let p = Person { name: "Alice" };
+println(p.greet());  // "Hello, Alice!"
+```
+
+**Multiple Traits:**
+
+A struct can implement multiple traits:
+
+```wado
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Aged {
+    fn age(&self) -> i32;
+}
+
+impl Named for Person {
+    fn name(&self) -> String { return self.name; }
+}
+
+impl Aged for Person {
+    fn age(&self) -> i32 { return self.age; }
+}
+```
+
+**Method Resolution:**
+
+When a method is called on a value:
+
+1. **Inherent methods** (defined in `impl Type { }`) are checked first
+2. **Trait methods** (defined in `impl Trait for Type { }`) are checked if no inherent method matches
+3. If multiple traits define the same method name, it's a compile error
+
+```wado
+struct Robot { id: i32 }
+
+// Inherent method
+impl Robot {
+    fn greet(&self) -> String { return "Beep boop"; }
+}
+
+// Trait method (won't be called because inherent method exists)
+impl Greet for Robot {
+    fn greet(&self) -> String { return "Hello from trait"; }
+}
+
+let r = Robot { id: 1 };
+r.greet();  // Returns "Beep boop" (inherent method wins)
+```
+
+**Not Yet Implemented:**
+
+- Trait bounds (`fn foo<T: Display>(x: T)`)
+- Default method implementations
+- Associated types
+- Trait objects (`dyn Trait`)
+- Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
+
 ### Enums, Variants, and Flags
 
 Wado follows Component Model's distinction between enums and variants (unlike Rust):

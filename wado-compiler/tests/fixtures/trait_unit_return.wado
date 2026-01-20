@@ -1,0 +1,24 @@
+// Test: trait method with no return type (unit)
+use { println, Stdout } from "core:cli";
+
+trait Printable {
+    fn print(&self) with Stdout;
+}
+
+struct Message {
+    text: String,
+}
+
+impl Printable for Message {
+    fn print(&self) with Stdout {
+        println(`Message: {self.text}`);
+    }
+}
+
+fn run() with Stdout {
+    let m = Message { text: "Hello, World!" };
+    m.print();
+}
+
+__DATA__
+{"stdout": "Message: Hello, World!\n"}

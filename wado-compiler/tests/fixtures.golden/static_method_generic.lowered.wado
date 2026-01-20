@@ -4,19 +4,19 @@
 
 fn run() with Stdout {
     let mut arr: Array<i32> = move "Array<i32>::with_capacity"(10);
-    core::cli::println(move core::internal::string_concat(move "initial len: ", move arr.len().to_string()));
-    core::cli::println(move core::internal::string_concat(move "initial capacity: ", move arr.capacity().to_string()));
-    arr.append(1);
-    arr.append(2);
-    arr.append(3);
-    core::cli::println(move core::internal::string_concat(move "after append len: ", move arr.len().to_string()));
-    core::cli::println(move core::internal::string_concat(move "after append capacity: ", move arr.capacity().to_string()));
-    core::cli::println(move core::internal::string_concat(move "arr[0]: ", move arr[0].to_string()));
-    core::cli::println(move core::internal::string_concat(move "arr[1]: ", move arr[1].to_string()));
-    core::cli::println(move core::internal::string_concat(move "arr[2]: ", move arr[2].to_string()));
+    core::cli::println(move core::internal::string_concat(move "initial len: ", move "i32::to_string"("Array<i32>::len"(&arr))));
+    core::cli::println(move core::internal::string_concat(move "initial capacity: ", move "i32::to_string"("Array<i32>::capacity"(&arr))));
+    "Array<i32>::append"(&mut arr, 1);
+    "Array<i32>::append"(&mut arr, 2);
+    "Array<i32>::append"(&mut arr, 3);
+    core::cli::println(move core::internal::string_concat(move "after append len: ", move "i32::to_string"("Array<i32>::len"(&arr))));
+    core::cli::println(move core::internal::string_concat(move "after append capacity: ", move "i32::to_string"("Array<i32>::capacity"(&arr))));
+    core::cli::println(move core::internal::string_concat(move "arr[0]: ", move "i32::to_string"(arr[0])));
+    core::cli::println(move core::internal::string_concat(move "arr[1]: ", move "i32::to_string"(arr[1])));
+    core::cli::println(move core::internal::string_concat(move "arr[2]: ", move "i32::to_string"(arr[2])));
 }
 
-pub fn "Array<i32>::append"(self: Array<i32>, value: i32) {
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {
@@ -32,11 +32,11 @@ pub fn "Array<i32>::append"(self: Array<i32>, value: i32) {
     self.used = (used + 1);
 }
 
-pub fn "Array<i32>::capacity"(self: Array<i32>) -> i32 {
+pub fn "Array<i32>::capacity"(self: &Array<i32>) -> i32 {
     return core::builtin::array_len(self.repr);
 }
 
-pub fn "Array<i32>::len"(self: Array<i32>) -> i32 {
+pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
     return self.used;
 }
 

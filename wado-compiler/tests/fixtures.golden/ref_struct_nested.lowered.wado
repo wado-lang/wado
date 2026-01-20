@@ -20,8 +20,8 @@ fn set_inner_value(o: &mut Outer, v: i32) {
 
 fn run() with Stdout {
     let mut o: Outer = move Outer { inner: Inner { value: 42 } };
-    core::cli::println(move get_inner_value(&o).to_string());
+    core::cli::println(move "i32::to_string"(get_inner_value(&o)));
     set_inner_value(&mut o, 100);
-    core::cli::println(move get_inner_value(&o).to_string());
+    core::cli::println(move "i32::to_string"(get_inner_value(&o)));
 }
 

@@ -8,7 +8,7 @@ fn run() with Stdout {
     for ; (i < 5); i = (i + 1) {
         let captured: i32 = i;
         let get_captured: fn(i32) -> i32 = |_: i32| captures[captured] @capture[0]:captured;
-        closures.append(get_captured);
+        "Array<Fn<1,i32>>::append"(&mut closures, get_captured);
     }
     let _inline_f: fn(i32) -> i32 = closures[0];
     let _inline_x: i32 = 0;
@@ -25,10 +25,10 @@ fn run() with Stdout {
     let _inline_f: fn(i32) -> i32 = closures[4];
     let _inline_x: i32 = 0;
     let r4: i32 = f(x);
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move r0.to_string(), move ","), move r1.to_string()), move ","), move r2.to_string()), move ","), move r3.to_string()), move ","), move r4.to_string()));
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"(r0), move ","), move "i32::to_string"(r1)), move ","), move "i32::to_string"(r2)), move ","), move "i32::to_string"(r3)), move ","), move "i32::to_string"(r4)));
 }
 
-pub fn "Array<Fn<1,i32>>::append"(self: Array<fn(i32) -> i32>, value: fn(i32) -> i32) {
+pub fn "Array<Fn<1,i32>>::append"(self: &mut Array<fn(i32) -> i32>, value: fn(i32) -> i32) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {

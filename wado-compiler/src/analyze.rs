@@ -10,7 +10,8 @@ use crate::module_loader::{ModuleLoadError, ModuleResolver};
 use crate::name::validate_module_path;
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
-    SymbolTable, TypeAliasSymbol, VariantSymbol, WorldExportSymbol, WorldImportSymbol, WorldSymbol,
+    SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol, WorldExportSymbol, WorldImportSymbol,
+    WorldSymbol,
 };
 use crate::token::Span;
 
@@ -289,6 +290,20 @@ impl Analyzer {
                         module_path,
                         Some(variant_decl.span),
                     );
+                }
+
+                Item::Trait(trait_decl) => {
+                    let kind = SymbolKind::Trait(TraitSymbol {
+                        methods: trait_decl.methods.iter().map(|m| m.name.clone()).collect(),
+                        type_params: trait_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect(),
+                    });
+
+                    self.symbols
+                        .define(&trait_decl.name, kind, module_path, Some(trait_decl.span));
                 }
 
                 Item::Type(type_alias) => {

@@ -7,17 +7,17 @@ struct Point {
     y: i32,
 }
 
-fn Point::origin() -> Point {
+fn "Point::origin"() -> Point {
     return Point { x: 0, y: 0 };
 }
 
-fn Point::sum(self: Point) -> i32 {
+fn "Point::sum"(self: &Point) -> i32 {
     return (self.x + self.y);
 }
 
 fn run() with Stdout {
-    let p: Point = move Point::origin();
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "origin: (", move p.x.to_string()), move ", "), move p.y.to_string()), move ")"));
-    core::cli::println(move core::internal::string_concat(move "sum: ", move p.sum().to_string()));
+    let p: Point = move "Point::origin"();
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "origin: (", move "i32::to_string"(p.x)), move ", "), move "i32::to_string"(p.y)), move ")"));
+    core::cli::println(move core::internal::string_concat(move "sum: ", move "i32::to_string"("Point::sum"(&p))));
 }
 

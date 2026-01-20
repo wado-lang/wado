@@ -56,6 +56,7 @@ pub enum Item {
     Variant(VariantDecl),
     Type(TypeAlias),
     Impl(ImplBlock),
+    Trait(TraitDecl),
     Resource(ResourceDecl),
     World(WorldDecl),
 }
@@ -969,10 +970,24 @@ pub struct TypeAlias {
     pub span: Span,
 }
 
+/// Trait declaration: `trait Foo { fn method(&self) -> T; }`
+#[derive(Debug, Clone)]
+pub struct TraitDecl {
+    pub name: String,
+    pub is_pub: bool,
+    pub type_params: Vec<GenericParam>,
+    /// Trait methods. Body is None for required methods.
+    pub methods: Vec<Function>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     /// Generic type parameters: `impl<T> Box<T> { ... }`
     pub type_params: Vec<GenericParam>,
+    /// The trait being implemented, if any: `impl Trait for Type`
+    /// None for inherent impl blocks: `impl Type`
+    pub trait_type: Option<Type>,
     pub ty: Type,
     pub methods: Vec<Function>,
     pub span: Span,

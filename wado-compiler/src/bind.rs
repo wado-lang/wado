@@ -152,6 +152,12 @@ impl Binder {
                 self.bind_function(method);
             }
         }
+        // Trait declarations contain method signatures (with optional bodies)
+        if let Item::Trait(trait_decl) = item {
+            for method in &trait_decl.methods {
+                self.bind_function(method);
+            }
+        }
     }
 
     /// Bind a function's local variables

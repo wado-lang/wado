@@ -15,11 +15,11 @@ struct "Box<i32>" {
     value: i32,
 }
 
-fn Point::sum(self: Point) -> i32 {
+fn "Point::sum"(self: &Point) -> i32 {
     return (self.x + self.y);
 }
 
-fn Point::scale(self: Point, factor: i32) -> i32 {
+fn "Point::scale"(self: &Point, factor: i32) -> i32 {
     return ((self.x + self.y) * factor);
 }
 
@@ -27,87 +27,87 @@ fn run() with Stdout {
     let p: Point = move Point { x: 10, y: 20 };
     let p_ref: &Point = &p;
     __assert_0: {
-        let __v0: i32 = (*p_ref).sum();
+        let __v0: i32 = "Point::sum"(p_ref);
         let __cond: bool = (__v0 == 30);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.sum() == 30\n", move "p_ref.sum(): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.sum() == 30\n", move "p_ref.sum(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     __assert_1: {
-        let __v0: i32 = (*p_ref).scale(2);
+        let __v0: i32 = "Point::scale"(p_ref, 2);
         let __cond: bool = (__v0 == 60);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.scale(2) == 60\n", move "p_ref.scale(2): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.scale(2) == 60\n", move "p_ref.scale(2): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     let p_ref2: &&Point = &p_ref;
     __assert_2: {
-        let __v0: i32 = (**p_ref2).sum();
+        let __v0: i32 = "Point::sum"(p_ref2);
         let __cond: bool = (__v0 == 30);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref2.sum() == 30\n", move "p_ref2.sum(): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref2.sum() == 30\n", move "p_ref2.sum(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     let box_i32: Box<i32> = move Box<i32> { value: 42 };
     let box_ref: &Box<i32> = &box_i32;
     __assert_3: {
-        let __v0: i32 = (*box_ref).get();
+        let __v0: i32 = "Box<i32>::get"(box_ref);
         let __cond: bool = (__v0 == 42);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: box_ref.get() == 42\n", move "box_ref.get(): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: box_ref.get() == 42\n", move "box_ref.get(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     let box_str: Box<String> = move Box<String> { value: "hello" };
     let box_str_ref: &Box<String> = &box_str;
-    let inner: String = move (*box_str_ref).get();
+    let inner: String = move "Box<String>::get"(box_str_ref);
     __assert_4: {
-        let __v0: i32 = inner.len();
+        let __v0: i32 = "String::len"(&inner);
         let __cond: bool = (__v0 == 5);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: inner.len() == 5\n", move "inner.len(): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: inner.len() == 5\n", move "inner.len(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     let s: String = move "hello";
     let s_ref: &String = &s;
     __assert_5: {
-        let __v0: i32 = (*s_ref).len();
+        let __v0: i32 = "String::len"(s_ref);
         let __cond: bool = (__v0 == 5);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: s_ref.len() == 5\n", move "s_ref.len(): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: s_ref.len() == 5\n", move "s_ref.len(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     __assert_6: {
-        let __v0: i32 = (*s_ref).get(0);
+        let __v0: i32 = "String::get"(s_ref, 0);
         let __cond: bool = (__v0 == 'h' as i32);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: s_ref.get(0) == 'h' as Named(NamedType { name: \"i32\", span: Span { start: 1204, end: 1207, line: 56, column: 35, end_line: 56 } })\n", move "s_ref.get(0): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: s_ref.get(0) == 'h' as Named(NamedType { name: \"i32\", span: Span { start: 1204, end: 1207, line: 56, column: 35, end_line: 56 } })\n", move "s_ref.get(0): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     let mut p2: Point = move Point { x: 5, y: 10 };
     let p2_mut_ref: &mut Point = &mut p2;
     __assert_7: {
-        let __v0: i32 = (*p2_mut_ref).sum();
+        let __v0: i32 = "Point::sum"(p2_mut_ref);
         let __cond: bool = (__v0 == 15);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p2_mut_ref.sum() == 15\n", move "p2_mut_ref.sum(): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p2_mut_ref.sum() == 15\n", move "p2_mut_ref.sum(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     let p_ref3: &&&Point = &p_ref2;
     __assert_8: {
-        let __v0: i32 = (***p_ref3).sum();
+        let __v0: i32 = "Point::sum"(p_ref3);
         let __cond: bool = (__v0 == 30);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref3.sum() == 30\n", move "p_ref3.sum(): "), move __v0.to_string()), move "\n"));
+            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref3.sum() == 30\n", move "p_ref3.sum(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     core::cli::println(move "all auto-deref tests passed");
 }
 
-fn "Box<String>::get"(self: Box<String>) -> String {
+fn "Box<String>::get"(self: &Box<String>) -> String {
     return self.value;
 }
 
-fn "Box<i32>::get"(self: Box<i32>) -> i32 {
+fn "Box<i32>::get"(self: &Box<i32>) -> i32 {
     return self.value;
 }
 

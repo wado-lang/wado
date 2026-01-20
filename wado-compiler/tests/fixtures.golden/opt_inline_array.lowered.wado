@@ -5,11 +5,11 @@
 fn run() with Stdout {
     let _inline_n: i32 = 10;
     let arr: Array<i32> = move "Array<i32>::with_capacity"(n);
-    let x: i32 = arr.len();
-    core::cli::println(move x.to_string());
+    let x: i32 = "Array<i32>::len"(&arr);
+    core::cli::println(move "i32::to_string"(x));
 }
 
-pub fn "Array<i32>::len"(self: Array<i32>) -> i32 {
+pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
     return self.used;
 }
 

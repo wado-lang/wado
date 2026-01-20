@@ -6,18 +6,18 @@ struct Holder {
     base: i32,
 }
 
-fn Holder::get_base(self: Holder) -> i32 {
+fn "Holder::get_base"(self: &Holder) -> i32 {
     return self.base;
 }
 
 fn run() with Stdout {
     let h: Holder = move Holder { base: 10 };
-    let x: i32 = h."add_to<i32>"(5);
-    let b: i32 = h.get_base();
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "x: ", move x.to_string()), move ", base: "), move b.to_string()));
+    let x: i32 = "Holder::add_to<i32>"(&h, 5);
+    let b: i32 = "Holder::get_base"(&h);
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "x: ", move "i32::to_string"(x)), move ", base: "), move "i32::to_string"(b)));
 }
 
-fn "Holder::add_to<i32>"(self: Holder, x: i32) -> i32 {
+fn "Holder::add_to<i32>"(self: &Holder, x: i32) -> i32 {
     return x;
 }
 
