@@ -202,13 +202,11 @@ This project relies on the following Wasm features:
 
 ## Rules for Rust
 
-- Do not use wildcard imports (`use ...::*;`).
 - Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/`.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Avoid using well-known floating point number constants like PI, E, etc. in tests not to violate the Clippy `approx_constant` rule.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
-- Use string interpolation (`print!("foo: {foo}")`) - only variables are allowed inside the interpolation, though.
 - YAGNI. Do the simplest thing that could possibly work.
 
 ## Rules for Markdown
