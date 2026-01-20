@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process;
 
@@ -20,6 +21,9 @@ pub struct DumpOptions {
     pub show_optimize: bool,
     pub unparse: bool,
     pub opt_level: OptLevel,
+    /// Output template for bulk generation, e.g., "path/to/{name}.lowered.wado"
+    /// {name} is replaced with the input file's basename without extension
+    pub output_template: Option<String>,
 }
 
 pub fn print_usage() {
@@ -49,6 +53,11 @@ pub fn print_usage() {
     eprintln!("  -O2          Full optimizations (DCE + inlining)");
     eprintln!("  -Os          Size optimizations (O2 + strip names)");
     eprintln!();
+    eprintln!("Output:");
+    eprintln!("  -o <template>  Output template for bulk file generation");
+    eprintln!("                 {{name}} is replaced with input filename (without extension)");
+    eprintln!("                 Example: -o 'out/{{name}}.lowered.wado'");
+    eprintln!();
     eprintln!("Other:");
     eprintln!("  --help       Show this help message");
 }
@@ -65,6 +74,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_optimize = false;
     let mut unparse = false;
     let mut opt_level = OptLevel::None;
+    let mut output_template: Option<String> = None;
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -109,6 +119,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                     }
                 };
             }
+            Short('o') | Long("output") => {
+                let template = parser.value().unwrap_or_else(|_| {
+                    eprintln!("Error: -o requires an output template");
+                    process::exit(1);
+                });
+                output_template = Some(template.to_string_lossy().into_owned());
+            }
             Value(val) => {
                 inputs.push(val.to_string_lossy().into_owned());
             }
@@ -150,10 +167,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_optimize,
         unparse,
         opt_level,
+        output_template,
     }
 }
 
 pub async fn run(opts: DumpOptions) {
+    // Bulk file output mode
+    if let Some(ref template) = opts.output_template {
+        run_bulk(&opts, template).await;
+        return;
+    }
+
+    // Normal stdout mode
     let multiple_files = opts.inputs.len() > 1;
 
     for input in &opts.inputs {
@@ -163,6 +188,122 @@ pub async fn run(opts: DumpOptions) {
 
         run_single(&opts, input).await;
     }
+}
+
+/// Bulk file output mode - writes each input to a file based on template
+async fn run_bulk(opts: &DumpOptions, template: &str) {
+    let mut success_count = 0;
+    let mut skip_count = 0;
+
+    for input in &opts.inputs {
+        let path = Path::new(input);
+        let name = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let output_path = template.replace("{name}", &name);
+
+        // Ensure parent directory exists
+        if let Some(parent) = Path::new(&output_path).parent()
+            && !parent.as_os_str().is_empty()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            eprintln!(
+                "  WARNING: Failed to create directory {}: {e}",
+                parent.display()
+            );
+            skip_count += 1;
+            continue;
+        }
+
+        match generate_output(opts, input).await {
+            Ok(content) => {
+                if content.is_empty() {
+                    eprintln!("  WARNING: Empty output for {} (skipping)", output_path);
+                    // Remove stale file if it exists
+                    let _ = fs::remove_file(&output_path);
+                    skip_count += 1;
+                } else {
+                    match fs::write(&output_path, content) {
+                        Ok(()) => {
+                            eprintln!("  Generated {}", output_path);
+                            success_count += 1;
+                        }
+                        Err(e) => {
+                            eprintln!("  WARNING: Failed to write {}: {e}", output_path);
+                            skip_count += 1;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("  WARNING: Failed to generate {}: {e}", output_path);
+                // Remove stale file if it exists
+                let _ = fs::remove_file(&output_path);
+                skip_count += 1;
+            }
+        }
+    }
+
+    eprintln!("Generated {} files ({} skipped)", success_count, skip_count);
+}
+
+/// Generate output content for a single file, returning the content string
+async fn generate_output(opts: &DumpOptions, input: &str) -> Result<String, String> {
+    let path = Path::new(input);
+
+    // Read source file
+    let source =
+        fs::read_to_string(path).map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
+
+    // Get base path for relative imports
+    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let host = FilesystemCompilerHost::new(base_path);
+
+    // Dump using async API
+    let result = wado_compiler::dump_with_host(&source, &host, Some(input), opts.opt_level)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut output = Vec::new();
+
+    // For golden fixtures (--optimize --unparse), extract only the entry module
+    if opts.show_optimize && opts.unparse {
+        if let Some(ref project) = result.optimized_project {
+            // Find the entry module (empty path)
+            for (module_path, module) in &project.tir_modules {
+                if module_path.is_empty() {
+                    let name = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    writeln!(output, "// Golden file: Lowered TIR with -O2 optimization").unwrap();
+                    writeln!(output, "// Source: tests/fixtures/{}.wado", name).unwrap();
+                    writeln!(output, "// Generated by: make update-golden-fixtures").unwrap();
+                    writeln!(output).unwrap();
+
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    // Strip __DATA__ section (same as original awk script)
+                    let content = if let Some(idx) = unparsed.find("\n__DATA__\n") {
+                        &unparsed[..idx + 1] // Include the newline before __DATA__
+                    } else if let Some(idx) = unparsed.find("__DATA__\n") {
+                        &unparsed[..idx]
+                    } else {
+                        &unparsed
+                    };
+                    write!(output, "{}", content).unwrap();
+                    break;
+                }
+            }
+        }
+    } else {
+        // For other phases, generate full output (not implemented for bulk yet)
+        return Err("Bulk output only supports --optimize --unparse mode".to_string());
+    }
+
+    Ok(String::from_utf8(output).unwrap())
 }
 
 async fn run_single(opts: &DumpOptions, input: &str) {

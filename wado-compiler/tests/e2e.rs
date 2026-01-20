@@ -182,6 +182,13 @@ struct TestSpec {
     /// If set, the test expects compilation to fail with this message.
     #[serde(default)]
     compile_error: Option<String>,
+
+    /// Whether this is a TODO test (not yet implemented feature).
+    /// TODO tests MUST fail (compile error, runtime error, or wrong output).
+    /// If a TODO test passes, the test will fail to remind you to remove the TODO flag.
+    #[serde(default)]
+    #[serde(rename = "TODO")]
+    todo: bool,
 }
 
 fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
@@ -334,6 +341,45 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
     // Parse the test spec from JSON
     let spec = parse_test_spec(data_section, &test_id);
 
+    // Handle TODO tests - they must fail
+    if spec.todo {
+        eprintln!("[{test_id}] TODO test - expecting failure");
+
+        // Use catch_unwind to recover from panics
+        let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_normal_test(fixture_path, opt_level, &spec, &test_id)
+        }));
+
+        match test_result {
+            Ok(()) => {
+                // Test passed, but it's a TODO test, so it should have failed!
+                panic!(
+                    "[{test_id}] TODO test PASSED! This means the feature is now implemented.\n\
+                     Please remove 'TODO: true' from the __DATA__ section."
+                );
+            }
+            Err(err) => {
+                // Test failed as expected for a TODO test
+                // Extract panic message - Box<dyn Any> needs downcast to get the actual message
+                let msg = err
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| err.downcast_ref::<&str>().copied())
+                    .unwrap_or("(unknown panic)");
+
+                eprintln!("[{test_id}] TODO test failed as expected (feature not yet implemented)");
+                eprintln!("[{test_id}] Error: {msg}");
+                return;
+            }
+        }
+    }
+
+    // Normal test - run without panic recovery
+    run_normal_test(fixture_path, opt_level, &spec, &test_id);
+}
+
+/// Run a normal (non-TODO) test
+fn run_normal_test(fixture_path: &Path, opt_level: OptLevel, spec: &TestSpec, test_id: &str) {
     // Try to compile the fixture
     let compile_result = compile_file_with_opts(fixture_path, opt_level);
 
@@ -367,7 +413,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
     });
 
     // Verify the result matches expectations
-    verify_result(&result, &spec, &test_id);
+    verify_result(&result, spec, test_id);
 }
 
 /// Test function for O0 (no optimization)

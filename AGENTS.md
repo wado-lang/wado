@@ -32,14 +32,15 @@ Each test fixture group has the same prefix in their filenames.
 
 #### Data Section Schema
 
-| Field             | Type       | Description                              |
-| ----------------- | ---------- | ---------------------------------------- |
-| `stdout`          | `string`   | Expected stdout (exact match)            |
-| `stderr`          | `string`   | Expected stderr (exact match)            |
-| `stdout_contains` | `string[]` | Strings that must appear in stdout       |
-| `stderr_contains` | `string[]` | Strings that must appear in stderr       |
-| `trapped`         | `bool`     | Whether the program should trap          |
-| `compile_error`   | `string`   | Expected compile error (substring match) |
+| Field             | Type       | Description                                                |
+| ----------------- | ---------- | ---------------------------------------------------------- |
+| `stdout`          | `string`   | Expected stdout (exact match)                              |
+| `stderr`          | `string`   | Expected stderr (exact match)                              |
+| `stdout_contains` | `string[]` | Strings that must appear in stdout                         |
+| `stderr_contains` | `string[]` | Strings that must appear in stderr                         |
+| `trapped`         | `bool`     | Whether the program should trap                            |
+| `compile_error`   | `string`   | Expected compile error (substring match)                   |
+| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented |
 
 #### Examples
 
@@ -61,6 +62,20 @@ fn run() {
 
 __DATA__
 {"compile_error": "!= operator cannot be chained"}
+```
+
+```wado
+// TODO test - for unimplemented features
+// Test runs but MUST fail (compile/runtime error or wrong output)
+// If it passes, the test fails to remind you to remove TODO
+fn run() {
+    let dict = MiniDict::new();  // Not yet implemented
+    dict.set("key", "value");
+    println(dict.get("key"));
+}
+
+__DATA__
+{"TODO": true, "stdout": "value\n"}
 ```
 
 ### The `wasi:*` Modules

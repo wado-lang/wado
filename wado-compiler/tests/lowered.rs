@@ -117,7 +117,14 @@ fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>>
         let project = result
             .optimized_project
             .expect("Optimized project should be available");
-        let actual_module = extract_entry_module(&project);
+        let actual_module_raw = extract_entry_module(&project);
+
+        // Remove __DATA__ section if present (not part of TIR)
+        let actual_module = if let Some(pos) = actual_module_raw.find("\n__DATA__\n") {
+            actual_module_raw[..pos].to_string()
+        } else {
+            actual_module_raw
+        };
 
         // Extract expected content (skip header lines)
         let expected_lines: Vec<&str> = golden_content
