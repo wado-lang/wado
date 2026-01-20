@@ -1284,11 +1284,59 @@ let r = Robot { id: 1 };
 r.greet();  // Returns "Beep boop" (inherent method wins)
 ```
 
+**Associated Types:**
+
+Traits can declare associated types - placeholder types that are specified by implementors:
+
+```wado
+trait Container {
+    type Item;  // Associated type declaration
+
+    fn get(&self) -> Self::Item;
+    fn set(&mut self, value: Self::Item);
+}
+
+struct IntBox {
+    value: i32,
+}
+
+impl Container for IntBox {
+    type Item = i32;  // Associated type binding
+
+    fn get(&self) -> Self::Item {
+        return self.value;
+    }
+
+    fn set(&mut self, value: Self::Item) {
+        self.value = value;
+    }
+}
+```
+
+Within trait methods and implementations, `Self::TypeName` refers to the associated type. The type is resolved at compile time based on the implementing type.
+
+**Standard Library Traits:**
+
+The prelude defines `Index` and `IndexAssign` traits using associated types:
+
+```wado
+pub trait Index<IndexType> {
+    type Output;
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+
+pub trait IndexAssign<IndexType> {
+    type Input;
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+```
+
+Note: `IndexAssign` takes a value parameter rather than returning `&mut T` (like Rust's `IndexMut`). This design reflects Wasm GC semantics where you cannot get a mutable reference to an array element - reading (`array.get`) and writing (`array.set`) are fundamentally different operations.
+
 **Not Yet Implemented:**
 
 - Trait bounds (`fn foo<T: Display>(x: T)`)
 - Default method implementations
-- Associated types
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
 

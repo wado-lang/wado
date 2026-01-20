@@ -7312,9 +7312,14 @@ impl Codegen {
             self.generate_block(&mut wasm_func, body, type_table, &mut func_ctx, builder);
         }
 
-        // Add implicit return if needed
+        // Add implicit return handling
         if tir_func.return_type == TypeTable::UNIT {
             // Unit return - no value needed
+        } else {
+            // Non-unit return: add unreachable in case all paths return early
+            // (e.g., if/else where both branches have return statements).
+            // This satisfies Wasm's type checker which requires a value on stack at function end.
+            wasm_func.instruction(&Instruction::Unreachable);
         }
         wasm_func.instruction(&Instruction::End);
 

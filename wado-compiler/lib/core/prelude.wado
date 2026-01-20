@@ -87,6 +87,59 @@ impl Array<T> {
         builtin::array_set::<T>(self.repr, used, value);
         self.used = used + 1;
     }
+
+    /// Get an element by index (returns a copy)
+    pub fn get(&self, index: i32) -> T {
+        return builtin::array_get::<T>(self.repr, index);
+    }
+
+    /// Set an element by index
+    pub fn set(&mut self, index: i32, value: T) {
+        builtin::array_set::<T>(self.repr, index, value);
+    }
+}
+
+// IndexAssign implementation for Array<T>
+// Note: Index and IndexMut are not implemented because Wasm GC cannot
+// return references to array elements for primitive types.
+// The [] operator for reading uses direct codegen instead.
+impl IndexAssign<i32> for Array<T> {
+    type Input = T;
+
+    fn index_assign(&mut self, index: i32, value: Self::Input) {
+        builtin::array_set::<T>(self.repr, index, value);
+    }
+}
+
+/// Trait for immutable indexing operations.
+/// Types implementing this trait can be indexed with the `[]` operator for reading.
+pub trait Index<IndexType> {
+    type Output;
+
+    /// Returns a reference to the element at the given index.
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+
+/// Trait for mutable indexing operations.
+/// Types implementing this trait can be indexed with the `[]` operator to get
+/// a mutable reference: `container[i].mutating_method()`.
+/// Note: Requires Index to be implemented (supertrait relationship).
+pub trait IndexMut<IndexType> {
+    type Output;
+
+    /// Returns a mutable reference to the element at the given index.
+    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+
+/// Trait for index assignment operations.
+/// Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
+/// This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
+/// to primitive array elements - reading and writing are fundamentally different operations.
+pub trait IndexAssign<IndexType> {
+    type Input;
+
+    /// Assigns a value to the element at the given index.
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
 }
 
 /// Optional value - either Some(T) or None

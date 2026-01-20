@@ -970,12 +970,29 @@ pub struct TypeAlias {
     pub span: Span,
 }
 
-/// Trait declaration: `trait Foo { fn method(&self) -> T; }`
+/// Associated type declaration in a trait: `type Output;`
+#[derive(Debug, Clone)]
+pub struct AssociatedTypeDecl {
+    pub name: String,
+    pub span: Span,
+}
+
+/// Associated type binding in an impl block: `type Output = T;`
+#[derive(Debug, Clone)]
+pub struct AssociatedTypeBinding {
+    pub name: String,
+    pub ty: Type,
+    pub span: Span,
+}
+
+/// Trait declaration: `trait Foo { type Output; fn method(&self) -> Self::Output; }`
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
     pub name: String,
     pub is_pub: bool,
     pub type_params: Vec<GenericParam>,
+    /// Associated type declarations: `type Output;`
+    pub associated_types: Vec<AssociatedTypeDecl>,
     /// Trait methods. Body is None for required methods.
     pub methods: Vec<Function>,
     pub span: Span,
@@ -989,6 +1006,8 @@ pub struct ImplBlock {
     /// None for inherent impl blocks: `impl Type`
     pub trait_type: Option<Type>,
     pub ty: Type,
+    /// Associated type bindings: `type Output = T;`
+    pub associated_types: Vec<AssociatedTypeBinding>,
     pub methods: Vec<Function>,
     pub span: Span,
 }

@@ -443,6 +443,22 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+
+        // Unparse associated type bindings
+        for assoc in &i.associated_types {
+            self.write_indent();
+            self.output.push_str("type ");
+            self.output.push_str(&assoc.name);
+            self.output.push_str(" = ");
+            self.unparse_type(&assoc.ty);
+            self.output.push_str(";\n");
+        }
+
+        // Add blank line between associated types and methods if both present
+        if !i.associated_types.is_empty() && !i.methods.is_empty() {
+            self.output.push('\n');
+        }
+
         for (idx, method) in i.methods.iter().enumerate() {
             if idx > 0 {
                 self.output.push('\n');
@@ -468,6 +484,20 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+
+        // Unparse associated type declarations
+        for assoc in &t.associated_types {
+            self.write_indent();
+            self.output.push_str("type ");
+            self.output.push_str(&assoc.name);
+            self.output.push_str(";\n");
+        }
+
+        // Add blank line between associated types and methods if both present
+        if !t.associated_types.is_empty() && !t.methods.is_empty() {
+            self.output.push('\n');
+        }
+
         for (idx, method) in t.methods.iter().enumerate() {
             if idx > 0 {
                 self.output.push('\n');

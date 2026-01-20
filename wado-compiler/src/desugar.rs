@@ -71,6 +71,7 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
         type_params: impl_block.type_params.clone(),
         trait_type: impl_block.trait_type.clone(),
         ty: impl_block.ty.clone(),
+        associated_types: impl_block.associated_types.clone(),
         methods: impl_block
             .methods
             .iter()
@@ -85,6 +86,7 @@ fn desugar_trait(trait_decl: &TraitDecl, ctx: &mut DesugarContext) -> TraitDecl 
         name: trait_decl.name.clone(),
         is_pub: trait_decl.is_pub,
         type_params: trait_decl.type_params.clone(),
+        associated_types: trait_decl.associated_types.clone(),
         methods: trait_decl
             .methods
             .iter()

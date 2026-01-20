@@ -376,6 +376,39 @@ pub struct Resolver<'a> {
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
     generic_method_params: HashMap<String, Vec<(String, TypeId)>>,
+    /// Current associated type bindings in scope (`Self::Name` -> resolved type)
+    /// Set when resolving trait implementations
+    current_associated_type_bindings: HashMap<String, TypeId>,
+}
+
+/// Info about an Index trait implementation
+struct IndexTraitInfo {
+    /// The Output associated type
+    output_type: TypeId,
+    /// Self kind for the index method (&self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "Index<i32>")
+    trait_name: String,
+}
+
+/// Info about an `IndexAssign` trait implementation
+struct IndexAssignTraitInfo {
+    /// The Input associated type (reserved for future type checking)
+    _input_type: TypeId,
+    /// Self kind for the `index_assign` method (&mut self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexAssign`<i32>")
+    trait_name: String,
+}
+
+/// Info about an `IndexMut` trait implementation
+struct IndexMutTraitInfo {
+    /// The Output associated type
+    output_type: TypeId,
+    /// Self kind for the `index_mut` method (&mut self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexMut`")
+    trait_name: String,
 }
 
 impl<'a> Resolver<'a> {
@@ -397,6 +430,7 @@ impl<'a> Resolver<'a> {
             generic_struct_names: HashSet::new(),
             generic_function_params: HashMap::new(),
             generic_method_params: HashMap::new(),
+            current_associated_type_bindings: HashMap::new(),
         }
     }
 
@@ -438,6 +472,18 @@ impl<'a> Resolver<'a> {
                         .trait_type
                         .as_ref()
                         .map(|t| self.get_type_name(t));
+
+                    // Set up associated type bindings for trait implementations
+                    let old_associated_type_bindings =
+                        std::mem::take(&mut self.current_associated_type_bindings);
+                    if impl_block.trait_type.is_some() {
+                        for binding in &impl_block.associated_types {
+                            let type_id = self.resolve_type(&binding.ty);
+                            self.current_associated_type_bindings
+                                .insert(binding.name.clone(), type_id);
+                        }
+                    }
+
                     for method in &impl_block.methods {
                         if let Some(mut tir_func) = self.resolve_method(
                             method,
@@ -457,6 +503,9 @@ impl<'a> Resolver<'a> {
                             tir_module.add_function(tir_func);
                         }
                     }
+
+                    // Restore old associated type bindings
+                    self.current_associated_type_bindings = old_associated_type_bindings;
                 }
                 Item::Trait(_trait_decl) => {
                     // Trait declarations are handled in the first pass (signature registration)
@@ -662,6 +711,7 @@ impl<'a> Resolver<'a> {
                 generic_struct_names: HashSet::new(),
                 generic_function_params: HashMap::new(),
                 generic_method_params: HashMap::new(),
+                current_associated_type_bindings: HashMap::new(),
             };
 
             match resolver.resolve_module(module, path.clone()) {
@@ -1048,6 +1098,17 @@ impl<'a> Resolver<'a> {
                         }
                     }
 
+                    // Set up associated type bindings for trait implementations
+                    let old_associated_type_bindings =
+                        std::mem::take(&mut self.current_associated_type_bindings);
+                    if impl_block.trait_type.is_some() {
+                        for binding in &impl_block.associated_types {
+                            let type_id = self.resolve_type(&binding.ty);
+                            self.current_associated_type_bindings
+                                .insert(binding.name.clone(), type_id);
+                        }
+                    }
+
                     // Collect method signatures with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
                     let trait_name = impl_block
@@ -1074,8 +1135,9 @@ impl<'a> Resolver<'a> {
                         self.function_return_types.insert(mangled_name, return_type);
                     }
 
-                    // Restore type parameters
+                    // Restore type parameters and associated type bindings
                     self.current_type_params = old_type_params;
+                    self.current_associated_type_bindings = old_associated_type_bindings;
                 }
                 _ => {}
             }
@@ -2318,6 +2380,72 @@ impl<'a> Resolver<'a> {
 
     /// Resolve an assignment expression
     fn resolve_assign(&mut self, assign: &ast::AssignExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
+        if let ast::Expr::Index(index_expr) = &assign.target {
+            // Resolve the indexed expression to get its type
+            let indexed_expr = self.resolve_expr(&index_expr.expr, ctx);
+
+            // Get base type (unwrap reference if needed)
+            let base_type_id = match self.type_table.borrow().get(indexed_expr.type_id) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                _ => indexed_expr.type_id,
+            };
+
+            // Check if this is NOT an Array type (Arrays use direct codegen)
+            let is_array = self
+                .type_table
+                .borrow()
+                .as_array(indexed_expr.type_id)
+                .is_some();
+
+            if !is_array {
+                // Check for IndexAssign trait implementation
+                let struct_name = match self.type_table.borrow().get(base_type_id).clone() {
+                    ResolvedType::Struct { name, .. } => name,
+                    ResolvedType::GenericInstance { name, .. } => name,
+                    _ => String::new(),
+                };
+
+                if !struct_name.is_empty() {
+                    let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+                    let index_type = index_resolved.type_id;
+
+                    if let Some(trait_info) =
+                        self.find_index_assign_trait_impl(&struct_name, index_type)
+                    {
+                        // Generate: expr.index_assign(index, value)
+                        let value = self.resolve_expr(&assign.value, ctx);
+
+                        let receiver = self.adjust_receiver_for_self_kind(
+                            indexed_expr,
+                            trait_info.self_kind,
+                            assign.span,
+                        );
+
+                        // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
+                        let mangled_method_name =
+                            format!("{}^{}::index_assign", struct_name, trait_info.trait_name);
+
+                        return TirExpr::new(
+                            TirExprKind::MethodCall {
+                                receiver: Box::new(receiver),
+                                func: FunctionRef::External {
+                                    module_path: self.current_module_path.clone(),
+                                    name: mangled_method_name,
+                                    monomorph_info: None,
+                                },
+                                type_args: vec![],
+                                args: vec![index_resolved, value],
+                            },
+                            TypeTable::UNIT,
+                            assign.span,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Standard assignment handling
         let target = self.resolve_expr(&assign.target, ctx);
         let value = self.resolve_expr(&assign.value, ctx);
 
@@ -2929,6 +3057,16 @@ impl<'a> Resolver<'a> {
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        // Check for IndexMut desugaring: container[i].method() where method needs &mut self
+        // We need to detect this BEFORE resolving the receiver, because resolve_index
+        // would otherwise generate Index::index instead of IndexMut::index_mut
+        if let ast::Expr::Index(index_expr) = &method_call.receiver
+            && let Some(result) =
+                self.try_resolve_index_mut_method_call(index_expr, method_call, ctx)
+        {
+            return result;
+        }
+
         let mut receiver = self.resolve_expr(&method_call.receiver, ctx);
         let args: Vec<TirExpr> = method_call
             .args
@@ -3820,7 +3958,13 @@ impl<'a> Resolver<'a> {
         let mut found_traits: Vec<(String, MethodInfo)> = Vec::new();
 
         // Collect impl blocks to check (avoiding borrow issues)
-        let mut impl_blocks_to_check: Vec<(Type, Type, Vec<Function>)> = Vec::new();
+        // Include associated type bindings for resolving Self::* types
+        let mut impl_blocks_to_check: Vec<(
+            Type,
+            Type,
+            Vec<Function>,
+            Vec<crate::ast::AssociatedTypeBinding>,
+        )> = Vec::new();
 
         // Check specific module if provided
         if !module_path.is_empty()
@@ -3834,6 +3978,7 @@ impl<'a> Resolver<'a> {
                         impl_block.ty.clone(),
                         trait_type.clone(),
                         impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
                     ));
                 }
             }
@@ -3849,6 +3994,7 @@ impl<'a> Resolver<'a> {
                         impl_block.ty.clone(),
                         trait_type.clone(),
                         impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
                     ));
                 }
             }
@@ -3863,14 +4009,24 @@ impl<'a> Resolver<'a> {
                     impl_block.ty.clone(),
                     trait_type.clone(),
                     impl_block.methods.clone(),
+                    impl_block.associated_types.clone(),
                 ));
             }
         }
 
         // Now process the collected impl blocks with mutable access
-        for (impl_ty, trait_type, methods) in impl_blocks_to_check {
+        for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
             let impl_struct_name = self.get_type_name(&impl_ty);
             if impl_struct_name == struct_name {
+                // Set up associated type bindings for resolving Self::* types
+                let old_associated_type_bindings =
+                    std::mem::take(&mut self.current_associated_type_bindings);
+                for binding in &associated_types {
+                    let type_id = self.resolve_type(&binding.ty);
+                    self.current_associated_type_bindings
+                        .insert(binding.name.clone(), type_id);
+                }
+
                 for method in &methods {
                     if method.name == method_name {
                         let trait_name = self.get_type_name(&trait_type);
@@ -3893,6 +4049,9 @@ impl<'a> Resolver<'a> {
                         ));
                     }
                 }
+
+                // Restore associated type bindings
+                self.current_associated_type_bindings = old_associated_type_bindings;
             }
         }
 
@@ -3902,6 +4061,305 @@ impl<'a> Resolver<'a> {
         // Return the first one found (if there are multiple, it would be ambiguous,
         // but we'll handle that later with explicit disambiguation syntax)
         found_traits.into_iter().next()
+    }
+
+    /// Find Index trait implementation for a type
+    fn find_index_trait_impl(
+        &mut self,
+        struct_name: &str,
+        _index_type: TypeId,
+    ) -> Option<IndexTraitInfo> {
+        // Look for impl Index<...> for StructName
+        self.find_indexing_trait_impl(struct_name, "Index", "index", "Output")
+            .map(|(output_type, self_kind, trait_name)| IndexTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+            })
+    }
+
+    /// Find `IndexAssign` trait implementation for a type
+    fn find_index_assign_trait_impl(
+        &mut self,
+        struct_name: &str,
+        _index_type: TypeId,
+    ) -> Option<IndexAssignTraitInfo> {
+        // Look for impl IndexAssign<...> for StructName
+        self.find_indexing_trait_impl(struct_name, "IndexAssign", "index_assign", "Input")
+            .map(|(input_type, self_kind, trait_name)| IndexAssignTraitInfo {
+                _input_type: input_type,
+                self_kind,
+                trait_name,
+            })
+    }
+
+    /// Find `IndexMut` trait implementation for a type
+    fn find_index_mut_trait_impl(
+        &mut self,
+        struct_name: &str,
+        _index_type: TypeId,
+    ) -> Option<IndexMutTraitInfo> {
+        // Look for impl IndexMut<...> for StructName
+        self.find_indexing_trait_impl(struct_name, "IndexMut", "index_mut", "Output")
+            .map(|(output_type, self_kind, trait_name)| IndexMutTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+            })
+    }
+
+    /// Helper to find indexing trait implementations (Index, `IndexMut`, or `IndexAssign`)
+    fn find_indexing_trait_impl(
+        &mut self,
+        struct_name: &str,
+        trait_base_name: &str,
+        method_name: &str,
+        assoc_type_name: &str,
+    ) -> Option<(TypeId, ast::SelfKind, String)> {
+        // Collect impl blocks to check
+        let mut impl_blocks_to_check: Vec<(
+            Type,
+            Type,
+            Vec<Function>,
+            Vec<crate::ast::AssociatedTypeBinding>,
+        )> = Vec::new();
+
+        // Check all loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                impl_blocks_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.methods.clone(),
+                    impl_block.associated_types.clone(),
+                ));
+            }
+        }
+
+        // Process collected impl blocks
+        for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
+            let impl_struct_name = self.get_type_name(&impl_ty);
+            if impl_struct_name != struct_name {
+                continue;
+            }
+
+            // Check if this is the target trait (Index or IndexAssign)
+            // Use base trait name (e.g., "Index" not "Index<i32>") for method mangling
+            let trait_name = self.get_type_name(&trait_type);
+            if !trait_name.starts_with(trait_base_name) {
+                continue;
+            }
+
+            // Find the method
+            for method in &methods {
+                if method.name == method_name {
+                    // Set up associated type bindings
+                    let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
+                    for binding in &associated_types {
+                        let type_id = self.resolve_type(&binding.ty);
+                        self.current_associated_type_bindings
+                            .insert(binding.name.clone(), type_id);
+                    }
+
+                    // Get the associated type (Output or Input)
+                    let assoc_type = self
+                        .current_associated_type_bindings
+                        .get(assoc_type_name)
+                        .copied()
+                        .unwrap_or(TypeTable::UNKNOWN);
+
+                    let self_kind = method
+                        .params
+                        .first()
+                        .map(|p| p.self_kind)
+                        .unwrap_or(ast::SelfKind::None);
+
+                    // Restore associated type bindings
+                    self.current_associated_type_bindings = old_bindings;
+
+                    // Return base trait name (e.g., "Index" not "Index<i32>")
+                    return Some((assoc_type, self_kind, trait_name.clone()));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Try to resolve a method call on an index expression using `IndexMut`.
+    /// Returns Some(TirExpr) if the method needs &mut self and the type implements `IndexMut`.
+    /// Returns None if we should fall back to normal resolution (using Index).
+    fn try_resolve_index_mut_method_call(
+        &mut self,
+        index_expr: &ast::IndexExpr,
+        method_call: &ast::MethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> Option<TirExpr> {
+        // First, resolve the indexed container to get its type
+        let container_expr = self.resolve_expr(&index_expr.expr, ctx);
+
+        // Check if this is an Array type (Arrays use optimized direct access, not traits)
+        let is_array = self
+            .type_table
+            .borrow()
+            .as_array(container_expr.type_id)
+            .is_some();
+        if is_array {
+            return None; // Use normal resolution for arrays
+        }
+
+        // Get base type (unwrap reference if needed)
+        let base_type_id = match self.type_table.borrow().get(container_expr.type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => container_expr.type_id,
+        };
+
+        // Get struct name from base type
+        let (struct_name, _module_path) = match self.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Struct { name, module_path } => (name, module_path),
+            ResolvedType::GenericInstance {
+                name, module_path, ..
+            } => (name, module_path),
+            _ => return None, // Not a struct type
+        };
+
+        // Check if the type implements IndexMut
+        let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+        let index_type = index_resolved.type_id;
+
+        let index_mut_info = self.find_index_mut_trait_impl(&struct_name, index_type)?;
+
+        // Now we need to check if the method being called requires &mut self
+        // First, look up method info on the OUTPUT type (what IndexMut returns)
+        let output_type = index_mut_info.output_type;
+        let output_base_type_id = match self.type_table.borrow().get(output_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => output_type,
+        };
+
+        let (output_struct_name, output_module_path) =
+            match self.type_table.borrow().get(output_base_type_id).clone() {
+                ResolvedType::Struct { name, module_path } => (name, module_path),
+                ResolvedType::GenericInstance {
+                    name, module_path, ..
+                } => (name, module_path),
+                _ => (self.mangle_type_name(output_base_type_id), vec![]),
+            };
+
+        // Look up method info to check if it needs &mut self
+        let mut method_info = self.lookup_method_info(output_type, &method_call.method);
+        let mut method_trait_name: Option<String> = None;
+
+        if method_info.is_none()
+            && let Some((found_trait, info)) = self.find_trait_method_for_type(
+                &output_struct_name,
+                &method_call.method,
+                &output_module_path,
+            )
+        {
+            method_trait_name = Some(found_trait);
+            method_info = Some(info);
+        }
+
+        let MethodInfo {
+            return_type,
+            self_kind,
+        } = method_info?;
+
+        // Only use IndexMut if the method requires &mut self
+        if self_kind != ast::SelfKind::MutRef {
+            return None; // Method doesn't need &mut, fall back to Index
+        }
+
+        // Generate: container.index_mut(index).method(args)
+        // Step 1: Create container.index_mut(index) call
+        let receiver_for_index_mut = self.adjust_receiver_for_self_kind(
+            container_expr,
+            index_mut_info.self_kind,
+            index_expr.span,
+        );
+
+        let mangled_index_mut_name =
+            format!("{}^{}::index_mut", struct_name, index_mut_info.trait_name);
+
+        // IndexMut returns &mut Output
+        let mut_ref_output_type = self
+            .type_table
+            .borrow_mut()
+            .make_mut_ref(index_mut_info.output_type);
+
+        let index_mut_call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver_for_index_mut),
+                func: FunctionRef::External {
+                    module_path: self.current_module_path.clone(),
+                    name: mangled_index_mut_name,
+                    monomorph_info: None,
+                },
+                type_args: vec![],
+                args: vec![index_resolved],
+            },
+            mut_ref_output_type,
+            index_expr.span,
+        );
+
+        // Step 2: Resolve method args
+        let args: Vec<TirExpr> = method_call
+            .args
+            .iter()
+            .map(|a| self.resolve_expr(a, ctx))
+            .collect();
+
+        // Step 3: Resolve method type args
+        let type_args: Vec<TypeId> = method_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
+        // Step 4: Create the method call on the result of index_mut
+        // The receiver for the method is index_mut_call (which has type &mut Output)
+        let receiver_for_method =
+            self.adjust_receiver_for_self_kind(index_mut_call, self_kind, method_call.span);
+
+        // Build mangled method name
+        let mangled_method_name = match &method_trait_name {
+            Some(trait_n) => format!("{}^{}::{}", output_struct_name, trait_n, method_call.method),
+            None => format!("{}::{}", output_struct_name, method_call.method),
+        };
+
+        Some(TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver_for_method),
+                func: FunctionRef::External {
+                    module_path: self.current_module_path.clone(),
+                    name: mangled_method_name,
+                    monomorph_info: None,
+                },
+                type_args,
+                args,
+            },
+            return_type,
+            method_call.span,
+        ))
     }
 
     /// Resolve a field access
@@ -4086,22 +4544,84 @@ impl<'a> Resolver<'a> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
         }
 
-        // Array indexing
-        let element_type = self
-            .type_table
-            .borrow()
-            .as_array(expr.type_id)
-            .unwrap_or(TypeTable::UNKNOWN);
-        let index_expr = self.resolve_expr(&index.index, ctx);
+        // Check if this is an Array type (use direct indexing)
+        let array_element_type = self.type_table.borrow().as_array(expr.type_id);
+        if let Some(element_type) = array_element_type {
+            let index_expr = self.resolve_expr(&index.index, ctx);
+            return TirExpr::new(
+                TirExprKind::Index {
+                    expr: Box::new(expr),
+                    index: Box::new(index_expr),
+                },
+                element_type,
+                index.span,
+            );
+        }
 
-        TirExpr::new(
-            TirExprKind::Index {
-                expr: Box::new(expr),
-                index: Box::new(index_expr),
-            },
-            element_type,
-            index.span,
-        )
+        // For custom types, look for Index trait implementation
+        let struct_name = match &base_type {
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { name, .. } => name.clone(),
+            _ => String::new(),
+        };
+
+        if !struct_name.is_empty() {
+            let index_expr = self.resolve_expr(&index.index, ctx);
+            let index_type = index_expr.type_id;
+
+            if let Some(trait_info) = self.find_index_trait_impl(&struct_name, index_type) {
+                // Generate: *expr.index(index_expr)
+                // First, create the method call to .index(index_expr)
+                let receiver = self.adjust_receiver_for_self_kind(
+                    expr.clone(),
+                    trait_info.self_kind,
+                    index.span,
+                );
+
+                // Get the mangled method name: StructName^Index<IndexType>::index
+                let mangled_method_name =
+                    format!("{}^{}::index", struct_name, trait_info.trait_name);
+
+                // The method returns &Output, so the type is Ref(output_type)
+                let ref_output_type = self
+                    .type_table
+                    .borrow_mut()
+                    .make_ref(trait_info.output_type);
+
+                let method_call = TirExpr::new(
+                    TirExprKind::MethodCall {
+                        receiver: Box::new(receiver),
+                        func: FunctionRef::External {
+                            module_path: self.current_module_path.clone(),
+                            name: mangled_method_name,
+                            monomorph_info: None,
+                        },
+                        type_args: vec![],
+                        args: vec![index_expr],
+                    },
+                    ref_output_type,
+                    index.span,
+                );
+
+                // Dereference the result: *expr.index(...)
+                return TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: Box::new(method_call),
+                    },
+                    trait_info.output_type,
+                    index.span,
+                );
+            }
+        }
+
+        // Fallback: report error for unsupported indexing
+        self.errors.push(TypeError::TypeMismatch {
+            expected: "array or type implementing Index trait".to_string(),
+            found: self.type_table.borrow().type_name(expr.type_id),
+            span: index.span,
+        });
+        TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span)
     }
 
     /// Resolve an if expression
@@ -4697,11 +5217,25 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Resolve a namespaced generic type like `builtin::array<T>`
+    /// Resolve a namespaced generic type like `builtin::array<T>` or `Self::Output`
     fn resolve_namespaced_generic_type(
         &mut self,
         namespaced: &crate::ast::NamespacedGenericType,
     ) -> TypeId {
+        // Handle Self::AssociatedType
+        if namespaced.namespace.as_str() == "Self" {
+            // Look up the associated type binding
+            if let Some(&type_id) = self.current_associated_type_bindings.get(&namespaced.name) {
+                return type_id;
+            }
+            // If not found, it's an unknown associated type
+            self.errors.push(TypeError::UnknownType {
+                name: format!("Self::{}", namespaced.name),
+                span: namespaced.span,
+            });
+            return TypeTable::ERROR;
+        }
+
         if namespaced.namespace.as_str() == "builtin" {
             if namespaced.name.as_str() == "array" {
                 if namespaced.args.len() != 1 {

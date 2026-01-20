@@ -1,0 +1,38 @@
+// Test: Index traits in a loop
+use { println, Stdout } from "core:cli";
+
+struct Accumulator {
+    sum: i32,
+}
+
+impl Accumulator {
+    fn add(&mut self, n: i32) {
+        self.sum = self.sum + n;
+    }
+}
+
+struct Wrapper {
+    acc: Accumulator,
+}
+
+impl IndexMut<i32> for Wrapper {
+    type Output = Accumulator;
+
+    fn index_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.acc;
+    }
+}
+
+fn run() with Stdout {
+    let mut w = Wrapper { acc: Accumulator { sum: 0 } };
+
+    // Use IndexMut in a loop
+    for let mut i = 1; i <= 5; i += 1 {
+        w[0].add(i);
+    }
+
+    println(`Sum 1-5: {w.acc.sum}`);
+}
+
+__DATA__
+{"stdout": "Sum 1-5: 15\n"}

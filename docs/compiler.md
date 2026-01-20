@@ -465,6 +465,52 @@ println("Person^Greet::greet"(p));
 - **Inlining possible**: Optimizer can inline trait methods
 - **Dead code elimination**: Unused trait implementations are removed
 
+### Associated Types
+
+Traits can declare associated types using `type Name;` syntax. Implementors bind these types using `type Name = ConcreteType;`.
+
+**AST Representation:**
+
+```rust
+// In trait declarations
+struct AssociatedTypeDecl {
+    name: String,
+    span: Span,
+}
+
+// In impl blocks
+struct AssociatedTypeBinding {
+    name: String,
+    ty: Type,
+    span: Span,
+}
+```
+
+**Resolution:**
+
+When resolving `Self::TypeName` in trait methods:
+
+1. The resolver maintains `current_associated_type_bindings: HashMap<String, TypeId>`
+2. Before resolving methods in a trait impl, bindings are collected from the impl block
+3. `Self::TypeName` is parsed as `Type::NamespacedGeneric { namespace: "Self", name: "TypeName" }`
+4. Resolution looks up the type name in the current bindings
+
+**Example:**
+
+```wado
+trait Container {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+impl Container for IntBox {
+    type Item = i32;  // Binding: "Item" -> i32
+    fn get(&self) -> Self::Item {  // Self::Item resolves to i32
+        return self.value;
+    }
+}
+```
+
 ### Type System
 
 **Primitive Layer (`builtin::`):**
@@ -621,6 +667,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `impl` blocks
 - [x] `trait` declarations (static dispatch)
 - [x] `impl Trait for Type` (trait implementations)
+- [x] Associated types in traits (`type Output;` and `type Output = T;`)
 - [x] `enum` declarations (payload-free, CM semantics)
 - [x] `type` aliases
 - [x] `impl` blocks
