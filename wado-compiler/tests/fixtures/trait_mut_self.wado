@@ -1,0 +1,31 @@
+// Test: trait method with &mut self
+use { println, Stdout } from "core:cli";
+
+trait Resettable {
+    fn reset(&mut self);
+    fn value(&self) -> i32;
+}
+
+struct Counter {
+    count: i32,
+}
+
+impl Resettable for Counter {
+    fn reset(&mut self) {
+        self.count = 0;
+    }
+
+    fn value(&self) -> i32 {
+        return self.count;
+    }
+}
+
+fn run() with Stdout {
+    let mut c = Counter { count: 42 };
+    println(`Before: {c.value()}`);
+    c.reset();
+    println(`After: {c.value()}`);
+}
+
+__DATA__
+{"stdout": "Before: 42\nAfter: 0\n"}

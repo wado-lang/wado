@@ -1,0 +1,48 @@
+// Test: multiple traits on the same struct
+use { println, Stdout } from "core:cli";
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Aged {
+    fn age(&self) -> i32;
+}
+
+trait Located {
+    fn location(&self) -> String;
+}
+
+struct Person {
+    name: String,
+    age: i32,
+    city: String,
+}
+
+impl Named for Person {
+    fn name(&self) -> String {
+        return self.name;
+    }
+}
+
+impl Aged for Person {
+    fn age(&self) -> i32 {
+        return self.age;
+    }
+}
+
+impl Located for Person {
+    fn location(&self) -> String {
+        return self.city;
+    }
+}
+
+fn run() with Stdout {
+    let p = Person { name: "Alice", age: 30, city: "Tokyo" };
+    println(`Name: {p.name()}`);
+    println(`Age: {p.age()}`);
+    println(`Location: {p.location()}`);
+}
+
+__DATA__
+{"stdout": "Name: Alice\nAge: 30\nLocation: Tokyo\n"}

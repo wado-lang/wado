@@ -196,6 +196,7 @@ impl Parser {
             TokenKind::Variant => self.parse_variant_decl(is_pub).map(Item::Variant),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
+            TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
             TokenKind::World => self.parse_world_decl().map(Item::World),
             _ => Err(ParseError {
@@ -2390,7 +2391,18 @@ impl Parser {
         // Parse generic parameters like <T>
         let type_params = self.parse_generic_params()?;
 
-        let ty = self.parse_type()?;
+        // Parse first type (could be trait name or target type)
+        let first_type = self.parse_type()?;
+
+        // Check if this is `impl Trait for Type` or just `impl Type`
+        let (trait_type, ty) = if self.check(&TokenKind::For) {
+            self.advance(); // consume 'for'
+            let target_type = self.parse_type()?;
+            (Some(first_type), target_type)
+        } else {
+            (None, first_type)
+        };
+
         self.expect(&TokenKind::LBrace)?;
 
         let mut methods = Vec::new();
@@ -2409,7 +2421,43 @@ impl Parser {
 
         Ok(ImplBlock {
             type_params,
+            trait_type,
             ty,
+            methods,
+            span: start_span.merge(&end_span),
+        })
+    }
+
+    /// Parse a trait declaration
+    /// ```wado
+    /// trait Display {
+    ///     fn display(&self) -> String;
+    /// }
+    /// ```
+    fn parse_trait_decl(&mut self, is_pub: bool) -> ParseResult<TraitDecl> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Trait)?;
+
+        let name = self.consume_ident()?;
+
+        // Parse generic parameters like <T>
+        let type_params = self.parse_generic_params()?;
+
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut methods = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            let attrs = self.parse_attributes()?;
+            // Trait methods are not pub (visibility comes from trait itself)
+            methods.push(self.parse_function(false, attrs)?);
+        }
+
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
+
+        Ok(TraitDecl {
+            name,
+            is_pub,
+            type_params,
             methods,
             span: start_span.merge(&end_span),
         })

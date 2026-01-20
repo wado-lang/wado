@@ -11,29 +11,29 @@ struct Vector2D {
     y: f64,
 }
 
-pub fn Circle::diameter(self: Circle) -> f64 {
+pub fn "Circle::diameter"(self: &Circle) -> f64 {
     return (self.radius * 2.0);
 }
 
-pub fn Circle::circumference(self: Circle) -> f64 {
+pub fn "Circle::circumference"(self: &Circle) -> f64 {
     return ((2.0 * 3.14159) * self.radius);
 }
 
-pub fn Vector2D::length_squared(self: Vector2D) -> f64 {
+pub fn "Vector2D::length_squared"(self: &Vector2D) -> f64 {
     return ((self.x * self.x) + (self.y * self.y));
 }
 
-pub fn Vector2D::dot(self: Vector2D, other_x: f64, other_y: f64) -> f64 {
+pub fn "Vector2D::dot"(self: &Vector2D, other_x: f64, other_y: f64) -> f64 {
     return ((self.x * other_x) + (self.y * other_y));
 }
 
 fn run() with Stdout {
     let c: Circle = move Circle { radius: 5.0 };
-    core::cli::println(move core::internal::string_concat(move "diameter: ", move c.diameter().to_string()));
-    core::cli::println(move core::internal::string_concat(move "circumference: ", move c.circumference().to_string()));
+    core::cli::println(move core::internal::string_concat(move "diameter: ", move "f64::to_string"("Circle::diameter"(&c))));
+    core::cli::println(move core::internal::string_concat(move "circumference: ", move "f64::to_string"("Circle::circumference"(&c))));
     let v: Vector2D = move Vector2D { x: 3.0, y: 4.0 };
-    core::cli::println(move core::internal::string_concat(move "length_squared: ", move v.length_squared().to_string()));
-    core::cli::println(move core::internal::string_concat(move "dot(1,2): ", move v.dot(1.0, 2.0).to_string()));
+    core::cli::println(move core::internal::string_concat(move "length_squared: ", move "f64::to_string"("Vector2D::length_squared"(&v))));
+    core::cli::println(move core::internal::string_concat(move "dot(1,2): ", move "f64::to_string"("Vector2D::dot"(&v, 1.0, 2.0))));
 }
 
 __DATA__

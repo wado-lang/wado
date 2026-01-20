@@ -9,8 +9,8 @@ use crate::ast::{
     Function, FunctionType, IfCondition, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
     Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
     Module, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TupleLiteralExpr, Type,
-    TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
+    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TraitDecl, TupleLiteralExpr,
+    Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
     WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
@@ -95,6 +95,7 @@ impl<'a> Unparser<'a> {
             Item::Variant(v) => self.unparse_variant(v),
             Item::Type(t) => self.unparse_type_alias(t),
             Item::Impl(i) => self.unparse_impl(i),
+            Item::Trait(t) => self.unparse_trait(t),
             Item::Effect(e) => self.unparse_effect(e),
             Item::Resource(r) => self.unparse_resource(r),
             Item::World(w) => self.unparse_world(w),
@@ -431,11 +432,43 @@ impl<'a> Unparser<'a> {
         self.output.push_str("impl");
         self.unparse_generic_params(&i.type_params);
         self.output.push(' ');
+
+        // Handle `impl Trait for Type` vs `impl Type`
+        if let Some(trait_type) = &i.trait_type {
+            self.unparse_type(trait_type);
+            self.output.push_str(" for ");
+        }
+
         self.unparse_type(&i.ty);
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
         for (idx, method) in i.methods.iter().enumerate() {
+            if idx > 0 {
+                self.output.push('\n');
+            }
+            self.unparse_function(method);
+        }
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_trait(&mut self, t: &TraitDecl) {
+        self.write_indent();
+
+        if t.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("trait ");
+        self.output.push_str(&t.name);
+        self.unparse_generic_params(&t.type_params);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        for (idx, method) in t.methods.iter().enumerate() {
             if idx > 0 {
                 self.output.push('\n');
             }
@@ -1418,6 +1451,7 @@ fn get_item_span(item: &Item) -> Span {
         Item::Variant(v) => v.span,
         Item::Type(t) => t.span,
         Item::Impl(i) => i.span,
+        Item::Trait(t) => t.span,
         Item::Effect(e) => e.span,
         Item::Resource(r) => r.span,
         Item::World(w) => w.span,
@@ -1668,6 +1702,7 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
 // TIR Unparser
 // ============================================================================
 
+use crate::lexer::is_valid_ident;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
     TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeTable,
@@ -1692,12 +1727,13 @@ impl<'a> TirUnparser<'a> {
     }
 
     /// Quote an identifier if it contains characters that make it invalid Wado syntax.
-    /// Monomorphized names like `Box<i32>` contain `<`, `>`, `,` which aren't valid in identifiers.
+    /// Valid Wado identifiers match /^[a-zA-Z_][a-zA-Z0-9_]*$/
+    /// Names with `<`, `>`, `,` (monomorphized), `^` (trait), `::` (namespaced) need quoting.
     fn quote_if_needed(name: &str) -> String {
-        if name.contains('<') || name.contains('>') || name.contains(',') {
-            format!("\"{}\"", name)
-        } else {
+        if is_valid_ident(name) {
             name.to_string()
+        } else {
+            format!("\"{}\"", name)
         }
     }
 
@@ -2242,27 +2278,10 @@ impl<'a> TirUnparser<'a> {
                 type_args,
                 args,
             } => {
-                // Extract method name from func (format is "StructName::method_name")
-                let method_name = {
-                    let full_name = func.name();
-                    if let Some(pos) = full_name.rfind("::") {
-                        full_name[pos + 2..].to_string()
-                    } else {
-                        full_name
-                    }
-                };
-                // Wrap unary expressions in parentheses for correct precedence
-                // e.g., (*p_ref).method() not *p_ref.method()
-                let needs_parens = matches!(receiver.kind, TirExprKind::Unary { .. });
-                if needs_parens {
-                    self.output.push('(');
-                }
-                self.unparse_expr(receiver);
-                if needs_parens {
-                    self.output.push(')');
-                }
-                self.output.push('.');
-                self.output.push_str(&Self::quote_if_needed(&method_name));
+                // Lowered TIR: show as static function call with receiver as first arg
+                // e.g., cat.describe() becomes "Cat^Describe::describe"(cat)
+                let full_name = func.name();
+                self.output.push_str(&Self::quote_if_needed(&full_name));
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {
@@ -2274,10 +2293,11 @@ impl<'a> TirUnparser<'a> {
                     self.output.push('>');
                 }
                 self.output.push('(');
-                for (i, arg) in args.iter().enumerate() {
-                    if i > 0 {
-                        self.output.push_str(", ");
-                    }
+                // First arg is the receiver (self)
+                self.unparse_expr(receiver);
+                // Then the rest of the args
+                for arg in args.iter() {
+                    self.output.push_str(", ");
                     self.unparse_expr(arg);
                 }
                 self.output.push(')');

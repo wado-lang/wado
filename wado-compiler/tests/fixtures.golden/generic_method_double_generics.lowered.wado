@@ -12,19 +12,19 @@ struct "Container<i32>" {
 
 fn run() with Stdout {
     let c: Container<i32> = move "Container<i32>::new"(42);
-    core::cli::println(move core::internal::string_concat(move "value: ", move c.get().to_string()));
-    let result: i32 = c."transform<i32>"(100);
-    core::cli::println(move core::internal::string_concat(move "transform: ", move result.to_string()));
-    let combined_same: i32 = c."combine<i32,i32>"(200, 300);
-    core::cli::println(move core::internal::string_concat(move "combine same: ", move combined_same.to_string()));
-    let combined_mixed: i32 = c."combine<i32,i64>"(400, 500 as i64);
-    core::cli::println(move core::internal::string_concat(move "combine mixed: ", move combined_mixed.to_string()));
+    core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"("Container<i32>::get"(&c))));
+    let result: i32 = "Container<i32>::transform<i32>"(&c, 100);
+    core::cli::println(move core::internal::string_concat(move "transform: ", move "i32::to_string"(result)));
+    let combined_same: i32 = "Container<i32>::combine<i32,i32>"(&c, 200, 300);
+    core::cli::println(move core::internal::string_concat(move "combine same: ", move "i32::to_string"(combined_same)));
+    let combined_mixed: i32 = "Container<i32>::combine<i32,i64>"(&c, 400, 500 as i64);
+    core::cli::println(move core::internal::string_concat(move "combine mixed: ", move "i32::to_string"(combined_mixed)));
     let c2: Container<i64> = move "Container<i64>::new"(1000 as i64);
-    let result2: i32 = c2."transform<i32>"(99);
-    core::cli::println(move core::internal::string_concat(move "c2 transform: ", move result2.to_string()));
+    let result2: i32 = "Container<i64>::transform<i32>"(&c2, 99);
+    core::cli::println(move core::internal::string_concat(move "c2 transform: ", move "i32::to_string"(result2)));
 }
 
-pub fn "Container<i64>::transform<i32>"(self: Container<i64>, f_result: i32) -> i32 {
+pub fn "Container<i64>::transform<i32>"(self: &Container<i64>, f_result: i32) -> i32 {
     let _: i64 = self.value;
     return f_result;
 }
@@ -33,24 +33,24 @@ pub fn "Container<i64>::new"(value: i64) -> Container<i64> {
     return Container<i64> { value: value };
 }
 
-pub fn "Container<i32>::combine<i32,i64>"(self: Container<i32>, u: i32, v: i64) -> i32 {
+pub fn "Container<i32>::combine<i32,i64>"(self: &Container<i32>, u: i32, v: i64) -> i32 {
     let _v: i32 = self.value;
     let _w: i64 = v;
     return u;
 }
 
-pub fn "Container<i32>::combine<i32,i32>"(self: Container<i32>, u: i32, v: i32) -> i32 {
+pub fn "Container<i32>::combine<i32,i32>"(self: &Container<i32>, u: i32, v: i32) -> i32 {
     let _v: i32 = self.value;
     let _w: i32 = v;
     return u;
 }
 
-pub fn "Container<i32>::transform<i32>"(self: Container<i32>, f_result: i32) -> i32 {
+pub fn "Container<i32>::transform<i32>"(self: &Container<i32>, f_result: i32) -> i32 {
     let _: i32 = self.value;
     return f_result;
 }
 
-pub fn "Container<i32>::get"(self: Container<i32>) -> i32 {
+pub fn "Container<i32>::get"(self: &Container<i32>) -> i32 {
     return self.value;
 }
 

@@ -11,7 +11,7 @@ use crate::ast::{
     EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function, IdentExpr,
     IfCondition, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt,
     MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt,
-    StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart, TemplateStringExpr,
+    StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart, TemplateStringExpr, TraitDecl,
     TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
@@ -40,6 +40,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
     match item {
         Item::Function(f) => Item::Function(desugar_function(f, ctx)),
         Item::Impl(i) => Item::Impl(desugar_impl(i, ctx)),
+        Item::Trait(t) => Item::Trait(desugar_trait(t, ctx)),
         Item::Struct(s) => Item::Struct(desugar_struct(s)),
         Item::Enum(e) => Item::Enum(desugar_enum(e)),
         Item::Variant(v) => Item::Variant(v.clone()),
@@ -68,6 +69,7 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
 fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
     ImplBlock {
         type_params: impl_block.type_params.clone(),
+        trait_type: impl_block.trait_type.clone(),
         ty: impl_block.ty.clone(),
         methods: impl_block
             .methods
@@ -75,6 +77,20 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
             .map(|m| desugar_function(m, ctx))
             .collect(),
         span: impl_block.span,
+    }
+}
+
+fn desugar_trait(trait_decl: &TraitDecl, ctx: &mut DesugarContext) -> TraitDecl {
+    TraitDecl {
+        name: trait_decl.name.clone(),
+        is_pub: trait_decl.is_pub,
+        type_params: trait_decl.type_params.clone(),
+        methods: trait_decl
+            .methods
+            .iter()
+            .map(|m| desugar_function(m, ctx))
+            .collect(),
+        span: trait_decl.span,
     }
 }
 

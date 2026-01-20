@@ -177,6 +177,13 @@ struct LocalVar {
     is_mut: bool,
 }
 
+/// Method lookup result including return type and self parameter kind
+#[derive(Debug, Clone, Copy)]
+struct MethodInfo {
+    return_type: TypeId,
+    self_kind: ast::SelfKind,
+}
+
 /// Function context during resolution with scope tracking
 struct FunctionContext {
     /// Stack of scopes (each scope maps name -> LocalVar)
@@ -442,15 +449,33 @@ impl<'a> Resolver<'a> {
                 Item::Impl(impl_block) => {
                     // Resolve impl block methods with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
+                    let trait_name = impl_block
+                        .trait_type
+                        .as_ref()
+                        .map(|t| self.get_type_name(t));
                     for method in &impl_block.methods {
-                        if let Some(mut tir_func) =
-                            self.resolve_method(method, &struct_name, &impl_block.ty)
-                        {
-                            // Mangle the method name: StructName::method_name
-                            tir_func.name = format!("{}::{}", struct_name, method.name);
+                        if let Some(mut tir_func) = self.resolve_method(
+                            method,
+                            &struct_name,
+                            &impl_block.ty,
+                            trait_name.as_deref(),
+                        ) {
+                            // Mangle the method name:
+                            // - Trait impl: StructName^TraitName::method_name
+                            // - Inherent impl: StructName::method_name
+                            tir_func.name = match &trait_name {
+                                Some(trait_n) => {
+                                    format!("{}^{}::{}", struct_name, trait_n, method.name)
+                                }
+                                None => format!("{}::{}", struct_name, method.name),
+                            };
                             tir_module.add_function(tir_func);
                         }
                     }
+                }
+                Item::Trait(_trait_decl) => {
+                    // Trait declarations are handled in the first pass (signature registration)
+                    // No TIR output needed for trait declarations themselves
                 }
                 Item::Variant(variant_decl) => {
                     let tir_variant = self.resolve_variant_decl(variant_decl);
@@ -1046,13 +1071,27 @@ impl<'a> Resolver<'a> {
 
                     // Collect method signatures with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
+                    let trait_name = impl_block
+                        .trait_type
+                        .as_ref()
+                        .map(|t| self.get_type_name(t));
+
                     for method in &impl_block.methods {
                         let return_type = method
                             .return_type
                             .as_ref()
                             .map(|t| self.resolve_type(t))
                             .unwrap_or(TypeTable::UNIT);
-                        let mangled_name = format!("{}::{}", struct_name, method.name);
+
+                        // Mangle the method name:
+                        // - Trait impl: StructName^TraitName::method_name
+                        // - Inherent impl: StructName::method_name
+                        let mangled_name = match &trait_name {
+                            Some(trait_n) => {
+                                format!("{}^{}::{}", struct_name, trait_n, method.name)
+                            }
+                            None => format!("{}::{}", struct_name, method.name),
+                        };
                         self.function_return_types.insert(mangled_name, return_type);
                     }
 
@@ -1255,6 +1294,7 @@ impl<'a> Resolver<'a> {
         func: &Function,
         struct_name: &str,
         impl_type: &Type,
+        trait_name: Option<&str>,
     ) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
         let old_type_params = std::mem::take(&mut self.current_type_params);
@@ -1307,7 +1347,11 @@ impl<'a> Resolver<'a> {
 
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
-        let mangled_name = format!("{}::{}", struct_name, func.name);
+        // Use trait-mangled name for trait impls: StructName^TraitName::method_name
+        let mangled_name = match trait_name {
+            Some(t) => format!("{}^{}::{}", struct_name, t, func.name),
+            None => format!("{}::{}", struct_name, func.name),
+        };
         self.function_return_types
             .insert(mangled_name.clone(), return_type);
 
@@ -1316,12 +1360,21 @@ impl<'a> Resolver<'a> {
         // Resolve parameters (including &self)
         let mut params = Vec::new();
         for param in &func.params {
-            let is_self = !matches!(param.self_kind, ast::SelfKind::None);
-            let type_id = if is_self {
-                // &self parameter type is the impl type (e.g., Box<i32> for `impl Box<i32>`)
-                self.resolve_type(impl_type)
-            } else {
-                self.resolve_type(&param.ty)
+            let type_id = match param.self_kind {
+                ast::SelfKind::Ref => {
+                    // &self: wrap impl type in immutable reference
+                    let inner_type = self.resolve_type(impl_type);
+                    self.type_table.borrow_mut().make_ref(inner_type)
+                }
+                ast::SelfKind::MutRef => {
+                    // &mut self: wrap impl type in mutable reference
+                    let inner_type = self.resolve_type(impl_type);
+                    self.type_table.borrow_mut().make_mut_ref(inner_type)
+                }
+                ast::SelfKind::None => {
+                    // Regular parameter
+                    self.resolve_type(&param.ty)
+                }
             };
             let index = ctx.add_local(param.name.clone(), type_id, false);
             params.push(TirParam {
@@ -2911,27 +2964,43 @@ impl<'a> Resolver<'a> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
-        // Auto-dereference: if receiver is Ref or MutRef, dereference it
-        // This allows method calls like `ref_to_string.len()` to work
-        loop {
-            match self.type_table.borrow().get(receiver.type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    // Insert a deref operation
-                    receiver = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(receiver),
-                        },
-                        inner,
-                        method_call.span,
-                    );
-                }
-                _ => break,
-            }
+        // Get the base (non-ref) type for method lookup and struct name extraction
+        let base_type_id = self.get_base_type(receiver.type_id);
+
+        // Get struct name from base type
+        let (struct_name, module_path) = match self.type_table.borrow().get(base_type_id) {
+            ResolvedType::Struct { name, module_path } => (name.clone(), module_path.clone()),
+            ResolvedType::GenericInstance {
+                name, module_path, ..
+            } => (name.clone(), module_path.clone()),
+            _ => (self.mangle_type_name(base_type_id), vec![]),
+        };
+
+        // Look up method info based on receiver type
+        // First try inherent method, then trait methods
+        let mut method_info = self.lookup_method_info(receiver.type_id, &method_call.method);
+        let mut trait_name: Option<String> = None;
+
+        // If inherent method not found, try trait methods
+        if method_info.is_none()
+            && let Some((found_trait, info)) =
+                self.find_trait_method_for_type(&struct_name, &method_call.method, &module_path)
+        {
+            trait_name = Some(found_trait);
+            method_info = Some(info);
         }
 
-        // Look up method return type based on receiver type
-        let mut return_type = self.lookup_method_return_type(receiver.type_id, &method_call.method);
+        // Get method info (with default fallback)
+        let MethodInfo {
+            mut return_type,
+            self_kind,
+        } = method_info.unwrap_or(MethodInfo {
+            return_type: TypeTable::UNKNOWN,
+            self_kind: ast::SelfKind::Ref, // Default to &self
+        });
+
+        // Adjust receiver based on what the method expects (self_kind)
+        receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, method_call.span);
 
         // Build unified substitution context for double generics
         // Type param indices are assigned as follows:
@@ -2940,11 +3009,11 @@ impl<'a> Resolver<'a> {
         let mut subst_ctx = SubstitutionContext::new();
         let mut impl_offset = 0u32;
 
-        // First, add impl-level type args from receiver's generic type
+        // First, add impl-level type args from receiver's generic type (use base type)
         if let ResolvedType::GenericInstance {
             type_args: receiver_type_args,
             ..
-        } = self.type_table.borrow().get(receiver.type_id).clone()
+        } = self.type_table.borrow().get(base_type_id).clone()
             && !receiver_type_args.is_empty()
         {
             impl_offset = receiver_type_args.len() as u32;
@@ -2961,9 +3030,9 @@ impl<'a> Resolver<'a> {
             return_type = subst_ctx.substitute(return_type, &mut self.type_table.borrow_mut());
         }
 
-        // Get struct name and monomorph info from receiver type for mangled method name
+        // Get struct name and monomorph info from base type for mangled method name
         let (receiver_struct_name, base_struct_name, receiver_type_args) =
-            match self.type_table.borrow().get(receiver.type_id).clone() {
+            match self.type_table.borrow().get(base_type_id).clone() {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
                 } => {
@@ -2979,9 +3048,19 @@ impl<'a> Resolver<'a> {
                     let mangled = format!("Array<{}>", elem_name);
                     (mangled, Some("Array".to_string()), Some(vec![elem]))
                 }
-                _ => (self.mangle_type_name(receiver.type_id), None, None),
+                _ => (self.mangle_type_name(base_type_id), None, None),
             };
-        let mangled_method_name = format!("{}::{}", receiver_struct_name, method_call.method);
+
+        // Build mangled method name:
+        // - Trait method: StructName^TraitName::method_name
+        // - Inherent method: StructName::method_name
+        let mangled_method_name = match &trait_name {
+            Some(trait_n) => format!(
+                "{}^{}::{}",
+                receiver_struct_name, trait_n, method_call.method
+            ),
+            None => format!("{}::{}", receiver_struct_name, method_call.method),
+        };
 
         // Build monomorph_info for method calls on generic types
         let monomorph_info =
@@ -3489,71 +3568,108 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Look up method return type based on receiver type and method name
-    fn lookup_method_return_type(&self, receiver_type: TypeId, method_name: &str) -> TypeId {
-        // Get the struct name and module path from the receiver type
-        let (struct_name, module_path) = match self.type_table.borrow().get(receiver_type) {
+    /// Look up method info based on receiver type and method name.
+    /// Returns MethodInfo including return type and self_kind, or None if not found.
+    fn lookup_method_info(&self, receiver_type: TypeId, method_name: &str) -> Option<MethodInfo> {
+        // First, get the base (non-reference) type for method lookup
+        let base_type_id = self.get_base_type(receiver_type);
+        let base_type = self.type_table.borrow().get(base_type_id).clone();
+
+        // Get the struct name and module path from the base type
+        let (struct_name, module_path) = match &base_type {
             ResolvedType::Struct { name, module_path } => (name.clone(), module_path.clone()),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
                 name, module_path, ..
             } => (name.clone(), module_path.clone()),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                match self.type_table.borrow().get(*inner) {
-                    ResolvedType::Struct { name, module_path } => {
-                        (name.clone(), module_path.clone())
-                    }
-                    ResolvedType::GenericInstance {
-                        name, module_path, ..
-                    } => (name.clone(), module_path.clone()),
-                    _ => return TypeTable::UNKNOWN,
-                }
-            }
             // Primitive types have built-in methods like to_string()
             ResolvedType::Primitive(_) => {
                 if method_name == "to_string" {
-                    // Return String struct type
-                    return self
+                    // Return String struct type - primitives use value receiver
+                    let return_type = self
                         .type_table
                         .borrow()
                         .find_struct_type("String", &string_module_path())
                         .unwrap_or(TypeTable::UNKNOWN);
+                    return Some(MethodInfo {
+                        return_type,
+                        self_kind: ast::SelfKind::None,
+                    });
                 }
-                return TypeTable::UNKNOWN;
+                return None;
             }
             // String type (legacy - String is now a struct, but handle for backwards compat)
-            ResolvedType::String => {
-                match method_name {
-                    "len" => return TypeTable::I32,
-                    "get" => return TypeTable::I32, // returns u8 as i32
-                    "set" => return TypeTable::UNIT, // mutating method
-                    _ => return TypeTable::UNKNOWN,
+            ResolvedType::String => match method_name {
+                "len" => {
+                    return Some(MethodInfo {
+                        return_type: TypeTable::I32,
+                        self_kind: ast::SelfKind::Ref,
+                    });
                 }
-            }
-            _ => return TypeTable::UNKNOWN,
+                "get" => {
+                    return Some(MethodInfo {
+                        return_type: TypeTable::I32,
+                        self_kind: ast::SelfKind::Ref,
+                    });
+                }
+                "set" => {
+                    return Some(MethodInfo {
+                        return_type: TypeTable::UNIT,
+                        self_kind: ast::SelfKind::MutRef,
+                    });
+                }
+                _ => return None,
+            },
+            _ => return None,
         };
 
         // Build the mangled method name and look it up locally first
         let mangled_name = format!("{}::{}", struct_name, method_name);
         if let Some(&return_type) = self.function_return_types.get(&mangled_name) {
-            return return_type;
+            // For locally registered methods, we need to find the self_kind from the AST
+            // Check current module items for the method definition
+            if let Some(self_kind) = self.find_method_self_kind(&struct_name, method_name) {
+                return Some(MethodInfo {
+                    return_type,
+                    self_kind,
+                });
+            }
+            // Fallback: assume &self for methods (most common case)
+            return Some(MethodInfo {
+                return_type,
+                self_kind: ast::SelfKind::Ref,
+            });
         }
 
         // Try looking up in loaded modules (for imported structs)
+        // Only check inherent impls (not trait impls) - trait impls are handled separately
         if !module_path.is_empty()
             && let Some(module) = self.loaded_modules.get(&module_path)
         {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item {
+                    // Skip trait impls - only look at inherent impls
+                    if impl_block.trait_type.is_some() {
+                        continue;
+                    }
                     let impl_struct_name = self.get_type_name(&impl_block.ty);
                     if impl_struct_name == struct_name {
                         for method in &impl_block.methods {
                             if method.name == method_name {
-                                return method
+                                let return_type = method
                                     .return_type
                                     .as_ref()
                                     .map(|t| self.resolve_type_no_register(t))
                                     .unwrap_or(TypeTable::UNIT);
+                                let self_kind = method
+                                    .params
+                                    .first()
+                                    .map(|p| p.self_kind)
+                                    .unwrap_or(ast::SelfKind::None);
+                                return Some(MethodInfo {
+                                    return_type,
+                                    self_kind,
+                                });
                             }
                         }
                     }
@@ -3562,19 +3678,33 @@ impl<'a> Resolver<'a> {
         }
 
         // Search all loaded modules if module_path is empty (for prelude types)
+        // Only check inherent impls (not trait impls) - trait impls are handled separately
         if module_path.is_empty() {
             for (_, module) in self.loaded_modules.iter() {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
+                        // Skip trait impls - only look at inherent impls
+                        if impl_block.trait_type.is_some() {
+                            continue;
+                        }
                         let impl_struct_name = self.get_type_name(&impl_block.ty);
                         if impl_struct_name == struct_name {
                             for method in &impl_block.methods {
                                 if method.name == method_name {
-                                    return method
+                                    let return_type = method
                                         .return_type
                                         .as_ref()
                                         .map(|t| self.resolve_type_no_register(t))
                                         .unwrap_or(TypeTable::UNIT);
+                                    let self_kind = method
+                                        .params
+                                        .first()
+                                        .map(|p| p.self_kind)
+                                        .unwrap_or(ast::SelfKind::None);
+                                    return Some(MethodInfo {
+                                        return_type,
+                                        self_kind,
+                                    });
                                 }
                             }
                         }
@@ -3583,7 +3713,220 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        TypeTable::UNKNOWN
+        None
+    }
+
+    /// Find the self_kind for a method in current module items
+    fn find_method_self_kind(&self, struct_name: &str, method_name: &str) -> Option<ast::SelfKind> {
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item {
+                // Skip trait impls
+                if impl_block.trait_type.is_some() {
+                    continue;
+                }
+                let impl_struct_name = self.get_type_name(&impl_block.ty);
+                if impl_struct_name == struct_name {
+                    for method in &impl_block.methods {
+                        if method.name == method_name {
+                            return method.params.first().map(|p| p.self_kind);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Get the base (non-reference) type by stripping all Ref/MutRef wrappers
+    fn get_base_type(&self, type_id: TypeId) -> TypeId {
+        let mut current = type_id;
+        loop {
+            match self.type_table.borrow().get(current).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    current = inner;
+                }
+                _ => return current,
+            }
+        }
+    }
+
+    /// Adjust the receiver expression to match what the method's self parameter expects
+    fn adjust_receiver_for_self_kind(
+        &mut self,
+        receiver: TirExpr,
+        self_kind: ast::SelfKind,
+        span: Span,
+    ) -> TirExpr {
+        let receiver_type = self.type_table.borrow().get(receiver.type_id).clone();
+
+        match self_kind {
+            ast::SelfKind::None => {
+                // Method expects value (self), so deref all refs
+                self.deref_to_value(receiver, span)
+            }
+            ast::SelfKind::Ref => {
+                // Method expects &self
+                match &receiver_type {
+                    ResolvedType::Ref(_) => {
+                        // Already &T, use as-is
+                        receiver
+                    }
+                    ResolvedType::MutRef(_) => {
+                        // &mut T can be coerced to &T, use as-is
+                        receiver
+                    }
+                    _ => {
+                        // Value T, need to add &
+                        let ref_type = self.type_table.borrow_mut().make_ref(receiver.type_id);
+                        TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Ref,
+                                expr: Box::new(receiver),
+                            },
+                            ref_type,
+                            span,
+                        )
+                    }
+                }
+            }
+            ast::SelfKind::MutRef => {
+                // Method expects &mut self
+                match &receiver_type {
+                    ResolvedType::MutRef(_) => {
+                        // Already &mut T, use as-is
+                        receiver
+                    }
+                    _ => {
+                        // Value T, need to add &mut
+                        let mut_ref_type =
+                            self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                        TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::MutRef,
+                                expr: Box::new(receiver),
+                            },
+                            mut_ref_type,
+                            span,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /// Dereference a receiver until it's a value (non-reference) type
+    fn deref_to_value(&self, mut receiver: TirExpr, span: Span) -> TirExpr {
+        loop {
+            match self.type_table.borrow().get(receiver.type_id).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    receiver = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Deref,
+                            expr: Box::new(receiver),
+                        },
+                        inner,
+                        span,
+                    );
+                }
+                _ => return receiver,
+            }
+        }
+    }
+
+    /// Find a trait method for a given type and method name.
+    /// Returns (trait_name, MethodInfo) if found, None otherwise.
+    /// This is used when an inherent method is not found.
+    fn find_trait_method_for_type(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        module_path: &[String],
+    ) -> Option<(String, MethodInfo)> {
+        let mut found_traits: Vec<(String, MethodInfo)> = Vec::new();
+
+        // Collect impl blocks to check (avoiding borrow issues)
+        let mut impl_blocks_to_check: Vec<(Type, Type, Vec<Function>)> = Vec::new();
+
+        // Check specific module if provided
+        if !module_path.is_empty()
+            && let Some(module) = self.loaded_modules.get(module_path)
+        {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Also check all loaded modules
+        for (_, module) in self.loaded_modules.iter() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                impl_blocks_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.methods.clone(),
+                ));
+            }
+        }
+
+        // Now process the collected impl blocks with mutable access
+        for (impl_ty, trait_type, methods) in impl_blocks_to_check {
+            let impl_struct_name = self.get_type_name(&impl_ty);
+            if impl_struct_name == struct_name {
+                for method in &methods {
+                    if method.name == method_name {
+                        let trait_name = self.get_type_name(&trait_type);
+                        let return_type = method
+                            .return_type
+                            .as_ref()
+                            .map(|t| self.resolve_type(t))
+                            .unwrap_or(TypeTable::UNIT);
+                        let self_kind = method
+                            .params
+                            .first()
+                            .map(|p| p.self_kind)
+                            .unwrap_or(ast::SelfKind::None);
+                        found_traits.push((
+                            trait_name,
+                            MethodInfo {
+                                return_type,
+                                self_kind,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Remove duplicates
+        found_traits.dedup_by(|a, b| a.0 == b.0);
+
+        // Return the first one found (if there are multiple, it would be ambiguous,
+        // but we'll handle that later with explicit disambiguation syntax)
+        found_traits.into_iter().next()
     }
 
     /// Resolve a field access

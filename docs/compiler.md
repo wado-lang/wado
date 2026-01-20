@@ -415,6 +415,56 @@ When resolving relative imports, the path is resolved against the importing modu
 
 The analyzer validates module paths before loading to provide better error messages for invalid paths. Paths must be valid URI references per RFC 3986.
 
+### Trait Static Dispatch
+
+Wado traits use **static dispatch** (also known as "static resolution" or "monomorphization"). All trait method calls are resolved at compile time to concrete implementations. There is no runtime vtable or dynamic dispatch.
+
+**How It Works:**
+
+1. When a trait method is called (e.g., `person.greet()`), the resolver looks up the concrete type of the receiver
+2. The resolver finds the matching `impl Trait for Type` block
+3. The method call is lowered to a static function call with a mangled name: `Type^Trait::method`
+
+**Example Lowering:**
+
+```wado
+// Source code
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return `Hello, {self.name}!`;
+    }
+}
+
+let p = Person { name: "Alice" };
+println(p.greet());
+```
+
+```wado
+// Lowered TIR (pseudo-Wado)
+fn "Person^Greet::greet"(self: Person) -> String {
+    return core::internal::string_concat("Hello, ", self.name, "!");
+}
+
+let p = Person { name: "Alice" };
+println("Person^Greet::greet"(p));
+```
+
+**Method Resolution Priority:**
+
+1. **Inherent methods** (methods in `impl Type { }`) take priority over trait methods
+2. **Trait methods** (methods in `impl Trait for Type { }`) are used when no inherent method matches
+3. If multiple traits define the same method name, it's currently a compile error (disambiguation syntax not yet implemented)
+
+**Advantages of Static Dispatch:**
+
+- **Zero runtime overhead**: No vtable lookup
+- **Inlining possible**: Optimizer can inline trait methods
+- **Dead code elimination**: Unused trait implementations are removed
+
 ### Type System
 
 **Primitive Layer (`builtin::`):**
@@ -569,7 +619,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `effect` declarations
 - [x] `struct` declarations
 - [x] `impl` blocks
-- [ ] `trait` declarations
+- [x] `trait` declarations (static dispatch)
+- [x] `impl Trait for Type` (trait implementations)
 - [x] `enum` declarations (payload-free, CM semantics)
 - [x] `type` aliases
 - [x] `impl` blocks
