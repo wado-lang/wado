@@ -210,6 +210,11 @@ This project relies on the following Wasm features:
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
 - YAGNI. Do the simplest thing that could possibly work.
 
+### Rules for Compiler Development
+
+- Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formatting.
+- Minimize hard-coded logic. Define builtin and internal functions in Wado source files whenever possible.
+
 ## Rules for Markdown
 
 - Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
