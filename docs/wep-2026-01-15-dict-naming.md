@@ -207,7 +207,7 @@ None needed - this is the initial naming decision. No existing code uses a diffe
 
 ## References
 
-- [Comparison of programming languages (associative array) - Wikipedia](<https://en.wikipedia.org/wiki/Comparison_of_programming_languages_(associative_array)>)
+- [Comparison of programming languages (associative array) - Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_programming_languages_(associative_array))
 - [Python dict documentation](https://docs.python.org/3/library/stdtypes.html#dict)
 - [Julia Dict documentation](https://docs.julialang.org/en/v1/base/collections/#Dictionaries)
 - Component Model specification: list<tuple<K, V>> mapping

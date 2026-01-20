@@ -16,7 +16,7 @@ Several languages provide similar mechanisms:
 
 Other testing approaches include:
 
-- **Cram tests**: Shell session format with `$ ` prefixed commands
+- **Cram tests**: Shell session format with `$` prefixed commands
 - **LLVM lit/FileCheck**: `RUN:` and `CHECK:` directives in comments
 - **OCaml ppx_expect**: `[%expect {...}]` blocks with auto-promotion
 - **Snapshot testing**: External golden files in `testdata/` or `__snapshots__/`
