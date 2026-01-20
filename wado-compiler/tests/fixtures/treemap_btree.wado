@@ -201,11 +201,10 @@ impl TreeMap<K, V> {
 
     fn split_child(&mut self, parent: &mut BTreeNode<K, V>, child_index: i32) {
         let full_child = parent.children[child_index];
-        let mut new_sibling = if full_child.is_leaf {
-            BTreeNode::<K, V>::new_leaf()
-        } else {
-            BTreeNode::<K, V>::new_internal()
-        };
+        let mut new_sibling = BTreeNode::<K, V>::new_leaf();
+        if !full_child.is_leaf {
+            new_sibling = BTreeNode::<K, V>::new_internal();
+        }
 
         let mid = self.t - 1;
 
