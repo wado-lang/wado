@@ -1,7 +1,7 @@
 //! Syntax definition generator subcommand
 //!
 //! Transforms canonical syntax definitions from wado-compiler into
-//! editor-specific formats (TextMate grammar, VS Code language configuration).
+//! editor-specific formats (`TextMate` grammar, VS Code language configuration).
 
 use std::fs;
 use std::io::{self, Write};
@@ -97,23 +97,20 @@ pub fn run(opts: SyntaxOptions) {
         }
     };
 
-    match opts.output {
-        Some(path) => {
-            fs::write(&path, &output_str).unwrap_or_else(|e| {
-                exit_error(&format!("failed to write to {path}: {e}"));
-            });
-            eprintln!("Generated: {path}");
-        }
-        None => {
-            io::stdout()
-                .write_all(output_str.as_bytes())
-                .expect("failed to write to stdout");
-            println!();
-        }
+    if let Some(path) = opts.output {
+        fs::write(&path, &output_str).unwrap_or_else(|e| {
+            exit_error(&format!("failed to write to {path}: {e}"));
+        });
+        eprintln!("Generated: {path}");
+    } else {
+        io::stdout()
+            .write_all(output_str.as_bytes())
+            .expect("failed to write to stdout");
+        println!();
     }
 }
 
-/// Generate TextMate grammar JSON for VS Code
+/// Generate `TextMate` grammar JSON for VS Code
 fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
     // Helper to create keyword regex pattern
     let keyword_pattern = |words: &[&str]| -> String { format!("\\b({})\\b", words.join("|")) };
@@ -146,7 +143,7 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
         .chain(def.operators.other.iter())
         .copied()
         .collect();
-    all_operators.sort_by(|a, b| b.len().cmp(&a.len()));
+    all_operators.sort_by_key(|op| std::cmp::Reverse(op.len()));
 
     json!({
         "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",

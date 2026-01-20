@@ -139,13 +139,12 @@ fn run_filter_mode(package_name: &str, package_version: &str, skip_unstable: boo
         .context("Failed to read from stdin")?;
 
     // Prepend package declaration if not present
-    let input = if !input.contains("package ") {
-        format!(
-            "package {}:{}@{};\n\n{}",
-            package_name, package_name, package_version, input
-        )
-    } else {
+    let input = if input.contains("package ") {
         input
+    } else {
+        format!(
+            "package {package_name}:{package_name}@{package_version};\n\n{input}"
+        )
     };
 
     // Parse WIT
@@ -162,7 +161,7 @@ fn run_filter_mode(package_name: &str, package_version: &str, skip_unstable: boo
     let transformer = Transformer::new(&resolve);
     let mut generator = WadoCodeGenerator::new();
 
-    for (iface_id, _iface) in resolve.interfaces.iter() {
+    for (iface_id, _iface) in &resolve.interfaces {
         let mut module = transformer
             .transform_interface(iface_id)
             .context("Failed to transform interface")?;
@@ -203,7 +202,7 @@ fn run_directory_mode(
         .with_context(|| format!("Failed to create directory {}", output_dir.display()))?;
 
     // Process each package
-    for (_current_pkg_id, pkg) in resolve.packages.iter() {
+    for (_current_pkg_id, pkg) in &resolve.packages {
         let pkg_name = &pkg.name.name;
 
         // Filter by package if specified
@@ -214,9 +213,7 @@ fn run_directory_mode(
         let version = pkg
             .name
             .version
-            .as_ref()
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "0.0.0".to_string());
+            .as_ref().map_or_else(|| "0.0.0".to_string(), std::string::ToString::to_string);
 
         // Create a single combined module for the entire package
         let mut combined_module = wado_from_wit::WadoModule::new(pkg_name.clone(), version);
@@ -232,7 +229,7 @@ fn run_directory_mode(
 
             let module = transformer
                 .transform_interface(*iface_id)
-                .with_context(|| format!("Failed to transform interface {}", iface_name))?;
+                .with_context(|| format!("Failed to transform interface {iface_name}"))?;
 
             // Merge module contents
             combined_module.types.extend(module.types);
@@ -248,7 +245,7 @@ fn run_directory_mode(
 
             let world = transformer
                 .transform_world(*world_id)
-                .with_context(|| format!("Failed to transform world {}", world_name))?;
+                .with_context(|| format!("Failed to transform world {world_name}"))?;
             combined_module.worlds.push(world);
         }
 
@@ -269,7 +266,7 @@ fn run_directory_mode(
         let code = generator.generate(&combined_module);
 
         // Write combined file (e.g., wasi/cli.wado)
-        let output_path = output_dir.join(format!("{}.wado", pkg_name));
+        let output_path = output_dir.join(format!("{pkg_name}.wado"));
         fs::write(&output_path, code)
             .with_context(|| format!("Failed to write {}", output_path.display()))?;
 

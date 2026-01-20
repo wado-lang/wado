@@ -108,6 +108,7 @@ pub struct Codegen {
     /// Registry of closure struct types (env + funcref pair)
     /// Key: (env_type_idx, fn_type_idx)
     /// Value: closure_struct_type_idx
+    #[allow(dead_code)]
     closure_struct_types: RefCell<HashMap<(u32, u32), u32>>,
     /// Registry of canonical closure types based on user-visible function signature.
     /// Used for function type parameters (e.g., `fn(i32) -> i32`).
@@ -133,6 +134,7 @@ struct VariantTypeInfo {
     /// The GC struct type index for this variant
     struct_type_idx: u32,
     /// Information about each case: (case_name, field_count)
+    #[allow(dead_code)]
     cases: Vec<(String, usize)>,
     /// Field types for the payload fields (after the tag)
     /// Index 0 corresponds to field index 1 in the struct (field 0 is the tag)
@@ -143,6 +145,7 @@ struct VariantTypeInfo {
 #[derive(Clone)]
 struct ClosureInfo {
     /// Unique closure ID
+    #[allow(dead_code)]
     id: u32,
     /// Captured variables from outer scope
     captures: Vec<TirCapture>,
@@ -155,6 +158,7 @@ struct ClosureInfo {
     /// Wasm type index for the environment struct
     env_type_idx: u32,
     /// Wasm type index for the closure function type (env + params -> result)
+    #[allow(dead_code)]
     fn_type_idx: u32,
     /// Wasm type name for the closure function type (needed for define_func)
     fn_type_name: String,
@@ -194,6 +198,7 @@ struct FunctionContext {
     /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
     pending_branch_hint: Option<bool>,
     /// Collected branch hints for this function (offset, taken)
+    #[allow(dead_code)]
     branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
@@ -296,6 +301,7 @@ impl FunctionContext {
     }
 
     /// Consume pending branch hint and record it at the given offset
+    #[allow(dead_code)]
     fn consume_branch_hint(&mut self, offset: u32) {
         if let Some(taken) = self.pending_branch_hint.take() {
             self.branch_hints.push((offset, taken));
@@ -3501,6 +3507,7 @@ impl Codegen {
 
     /// Get or create a closure struct type (env + funcref pair).
     /// Returns the closure struct type index.
+    #[allow(dead_code)]
     fn get_or_create_closure_struct_type(
         &self,
         env_type_idx: u32,
@@ -4523,6 +4530,7 @@ impl Codegen {
 
     /// Generate code for a TIR expression with span-based cache lookup
     /// This prevents re-evaluation of expressions that have already been cached
+    #[allow(dead_code)]
     fn generate_expr_with_cache(
         &self,
         func: &mut Function,
@@ -9563,6 +9571,7 @@ impl Codegen {
 
     /// Generate a String struct from static data
     /// String is a struct with one field: repr (builtin::array<u8>)
+    #[allow(dead_code)]
     fn generate_string_from_data(&self, func: &mut Function, s: &str, builder: &CoreModuleBuilder) {
         let string_array_type = builder.type_idx("string-array");
         let offset = self.get_string_offset(s);
@@ -9585,6 +9594,7 @@ impl Codegen {
 
     /// Generate value to string conversion based on TypeId (semantic type)
     /// This preserves the distinction between bool and i32 (both are ValType::I32 in Wasm)
+    #[allow(dead_code)]
     fn generate_value_to_string_from_type_id(
         &self,
         func: &mut Function,

@@ -1,3 +1,101 @@
+// Allow certain pedantic lints that are common in compiler code:
+// - cast_possible_truncation: Wasm uses 32-bit types, casts are intentional
+// - cast_possible_wrap: Same reason as above
+// - doc_markdown: Doc style backticks requirement is overly strict
+// - doc_link_with_quotes: Doc link style preference
+// - similar_names: Variable names like is_i32/is_i64/is_f32/is_f64 are intentional
+// - too_many_lines: Large functions are acceptable in compiler code
+// - struct_excessive_bools: CLI option structs naturally have many bools
+// - must_use_candidate: Not all functions need must_use
+// - return_self_not_must_use: Same reason as above
+// - missing_errors_doc: Error documentation is in the return type
+// - missing_panics_doc: Panics are documented by unreachable!() etc
+// - match_same_arms: Sometimes explicit arms are clearer
+// - match_wildcard_for_single_variants: Explicit arms are sometimes clearer
+// - module_name_repetitions: Type names like LexerError in lexer module are fine
+// - redundant_else: Sometimes explicit else blocks are clearer
+// - unnested_or_patterns: Style preference
+// - unused_self: Visitor pattern methods may not use self yet
+// - only_used_in_recursion: Recursive algorithms naturally have this
+// - map_unwrap_or: map().unwrap_or() is often clearer than map_or()
+// - trivially_copy_pass_by_ref: u8 by ref is fine for consistency
+// - type_complexity: Complex types are normal in compilers
+// - implicit_hasher: Default hasher is fine
+// - needless_pass_by_value: Ownership transfer is sometimes intentional
+// - uninlined_format_args: Style preference (format!("{}", x) vs format!("{x}"))
+// - assigning_clones: clone_from pattern not always clearer
+// - redundant_closure_for_method_calls: Explicit closures are sometimes clearer
+// - explicit_iter_loop: .iter() is sometimes clearer
+// - cast_lossless: Explicit casts are sometimes clearer
+// - format_push_string: push_str(format!()) is fine
+// - items_after_statements: Items in functions are fine for test helpers
+// - should_implement_trait: from_str method doesn't always match FromStr trait
+// - single_match_else: Explicit match is sometimes clearer
+// - if_not_else: !condition is sometimes clearer
+// - bool_to_int_with_if: Explicit if for bool to int is clearer
+// - case_sensitive_file_extension_comparisons: Intentional in compiler
+// - manual_let_else: Explicit match is sometimes clearer
+// - unnecessary_wraps: Option/Result wrapping can be intentional
+// - used_underscore_binding: Sometimes needed to suppress unused warnings
+// - semicolon_if_nothing_returned: Style preference
+// - wildcard_imports: Used for variant imports
+// - too_many_arguments: Complex functions in compiler may need many args
+// - collapsible_match: Sometimes explicit match is clearer
+// - needless_range_loop: Sometimes index variable is clearer
+// - ref_option: &Option<T> is fine when coming from struct fields
+// - redundant_closure: Explicit closures are sometimes clearer
+// - enum_glob_use: Wildcard imports for variants is fine
+// - implicit_clone: Explicit clone is sometimes clearer
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::doc_markdown,
+    clippy::doc_link_with_quotes,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::match_same_arms,
+    clippy::match_wildcard_for_single_variants,
+    clippy::module_name_repetitions,
+    clippy::redundant_else,
+    clippy::unnested_or_patterns,
+    clippy::unused_self,
+    clippy::only_used_in_recursion,
+    clippy::map_unwrap_or,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::type_complexity,
+    clippy::implicit_hasher,
+    clippy::needless_pass_by_value,
+    clippy::uninlined_format_args,
+    clippy::assigning_clones,
+    clippy::redundant_closure_for_method_calls,
+    clippy::explicit_iter_loop,
+    clippy::cast_lossless,
+    clippy::format_push_string,
+    clippy::items_after_statements,
+    clippy::should_implement_trait,
+    clippy::single_match_else,
+    clippy::if_not_else,
+    clippy::bool_to_int_with_if,
+    clippy::case_sensitive_file_extension_comparisons,
+    clippy::manual_let_else,
+    clippy::unnecessary_wraps,
+    clippy::used_underscore_binding,
+    clippy::semicolon_if_nothing_returned,
+    clippy::wildcard_imports,
+    clippy::too_many_arguments,
+    clippy::collapsible_match,
+    clippy::needless_range_loop,
+    clippy::ref_option,
+    clippy::redundant_closure,
+    clippy::enum_glob_use,
+    clippy::implicit_clone,
+    clippy::self_only_used_in_recursion
+)]
+
 pub mod analyze;
 pub mod ast;
 pub mod bind;

@@ -101,7 +101,7 @@ pub fn run(opts: FormatOptions) {
             // Write back to file only if changed
             if original != formatted {
                 match fs::write(path, &formatted) {
-                    Ok(_) => {
+                    Ok(()) => {
                         eprintln!("Formatted: {input} ({elapsed_ms}ms)");
                     }
                     Err(e) => {

@@ -170,6 +170,7 @@ impl std::error::Error for TypeError {}
 /// Local variable information during resolution
 #[derive(Debug, Clone)]
 struct LocalVar {
+    #[allow(dead_code)] // For debugging
     name: String,
     type_id: TypeId,
     index: u32,
@@ -360,6 +361,7 @@ pub struct Resolver<'a> {
     /// Errors collected during resolution
     errors: Vec<TypeError>,
     /// Source code for extracting source text (for power-assert)
+    #[allow(dead_code)] // For future power-assert feature
     source_code: &'a str,
     /// Current module path being resolved (for struct type module_path)
     current_module_path: Vec<String>,
@@ -407,6 +409,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Get source text for a span (for power-assert)
+    #[allow(dead_code)] // For future power-assert feature
     fn get_source_text(&self, span: &crate::token::Span) -> String {
         if span.start < self.source_code.len() && span.end <= self.source_code.len() {
             self.source_code[span.start..span.end].to_string()
