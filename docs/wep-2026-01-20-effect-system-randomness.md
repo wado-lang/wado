@@ -15,6 +15,7 @@ Modern hash map implementations require random seeding to protect against Hash D
 Haskell's `unordered-containers` library currently has **no Hash DoS protection** and explicitly documents this limitation. The recommended workaround is to use `Data.Map` (tree-based, O(log n)) for untrusted input.
 
 Challenges:
+
 - All HashMaps share the same default salt
 - Generating random seeds requires the IO monad
 - Tension between pure interface and security needs
@@ -49,12 +50,14 @@ pub effect InsecureSeed {
 ```
 
 Key properties:
+
 - Intended to be called **once** during initialization
 - **Not cryptographically secure** (CSPRNG not required)
 - May even be deterministic (for testing/replay scenarios)
 - Expected future evolution: will likely become a **value import** (constant)
 
 This is distinct from:
+
 - `Random`: Cryptographically secure random bytes (for security)
 - `Insecure`: Fast pseudo-random bytes (for simulations, games)
 
@@ -118,6 +121,7 @@ fn process() /* with InsecureSeed? */ {
 ```
 
 Rationale:
+
 - Follows WASI's capability-based security model
 - Makes effect dependencies visible in the type system
 - Allows deterministic environments (testing, replay) to omit this import
@@ -133,6 +137,7 @@ When in doubt, developers should use `TreeMap`:
 4. **Deterministic**: Same input always produces same structure (useful for testing)
 
 Use `HashMap` only when:
+
 - Performance profiling shows `TreeMap` is a bottleneck
 - Working with very large datasets where O(1) vs O(log n) matters
 - Willing to add `InsecureSeed` effect to the dependency chain
@@ -148,6 +153,7 @@ use {HashMap} from "core:collections";
 ```
 
 Rationale:
+
 - Keeps prelude minimal (YAGNI principle)
 - Makes dependencies explicit
 - Effect requirements (for `HashMap`) become visible at import site
@@ -185,15 +191,18 @@ The coercion mechanism handles calling constructors with appropriate effects.
 ### Compared to Alternatives
 
 #### Alternative: O(log n) only (like Haskell recommendation)
+
 - **Rejected**: Leaves performance on the table for legitimate use cases
 - Wado provides both options, letting developers choose
 
 #### Alternative: Make InsecureSeed ambient/implicit
+
 - **Rejected**: Violates effect system principles
 - Hides security-relevant dependencies
 - Breaks deterministic execution guarantees
 
 #### Alternative: HashMap with fixed seed (no effect)
+
 - **Rejected**: Vulnerable to Hash DoS attacks
 - Security cannot be optional for default implementations
 
@@ -206,6 +215,7 @@ let map = HashMap::new() /* with InsecureSeed? */;
 ```
 
 Possible syntaxes to consider:
+
 - `HashMap::new() with InsecureSeed`
 - `with InsecureSeed { HashMap::new() }`
 - Effect inference (constructor signature already declares the requirement)
@@ -233,6 +243,7 @@ open: func(identifier: string) -> result<bucket, error>
 ```
 
 Backend implementations can include:
+
 - Redis
 - DynamoDB
 - MongoDB
@@ -241,19 +252,20 @@ Backend implementations can include:
 
 ### Key Differences
 
-| Aspect | TreeMap/HashMap | wasi-keyvalue |
-|--------|-----------------|---------------|
-| **Purpose** | In-memory data structures | Persistent external storage |
-| **Scope** | Process-local | Cross-service, shared |
-| **Latency** | Nanoseconds to microseconds | Milliseconds (network I/O) |
-| **Persistence** | Volatile (lost on exit) | Durable (survives restarts) |
-| **Capacity** | Memory-limited | Storage-limited (typically larger) |
-| **Effects** | InsecureSeed (HashMap only) | I/O effects (always) |
-| **Consistency** | Immediate | Read-your-writes guaranteed |
+| Aspect          | TreeMap/HashMap             | wasi-keyvalue                      |
+| --------------- | --------------------------- | ---------------------------------- |
+| **Purpose**     | In-memory data structures   | Persistent external storage        |
+| **Scope**       | Process-local               | Cross-service, shared              |
+| **Latency**     | Nanoseconds to microseconds | Milliseconds (network I/O)         |
+| **Persistence** | Volatile (lost on exit)     | Durable (survives restarts)        |
+| **Capacity**    | Memory-limited              | Storage-limited (typically larger) |
+| **Effects**     | InsecureSeed (HashMap only) | I/O effects (always)               |
+| **Consistency** | Immediate                   | Read-your-writes guaranteed        |
 
 ### When to Use Each
 
 **Use TreeMap or HashMap for:**
+
 - Application state during execution
 - Caching frequently accessed data
 - Local data structures (counters, indexes, lookups)
@@ -261,6 +273,7 @@ Backend implementations can include:
 - Temporary data that doesn't need to persist
 
 **Use wasi-keyvalue for:**
+
 - Persistent data across application restarts
 - Sharing data between microservices
 - User sessions, preferences, or profiles
@@ -294,6 +307,7 @@ fn process_user_request(user_id: String) /* with InsecureSeed, IO */ {
 ### Implementation Status
 
 As of 2025, wasmtime's `wasmtime_wasi_keyvalue` crate provides:
+
 - In-memory backend (for development/testing)
 - Experimental P3 support (unstable, not production-ready)
 - External backend support (planned, not yet implemented)
@@ -319,6 +333,7 @@ Both provide O(log n) guarantees. B-Tree may have better practical performance d
 ### Testing
 
 Deterministic test environments can:
+
 - Use `TreeMap` exclusively (no random seed needed)
 - Or provide a deterministic `InsecureSeed` implementation that returns constant values
 
