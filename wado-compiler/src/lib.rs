@@ -423,7 +423,6 @@ pub async fn dump_with_host<H: CompilerHost>(
     let tir_modules = Resolver::resolve_all_modules(
         &symbols,
         &load_result.modules,
-        &load_result.entry_path,
     )
     .ok();
 

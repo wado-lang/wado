@@ -27,7 +27,7 @@ use heck::ToKebabCase;
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::{
-    AbstractHeapType, Alias, CanonicalOption, CodeSection,
+    AbstractHeapType, Alias, BranchHint, BranchHints, CanonicalOption, CodeSection,
     ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr,
     DataCountSection, DataSection, DataSegment, DataSegmentMode, ElementSection, Elements,
     ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType, InstanceType,
@@ -194,6 +194,11 @@ struct FunctionContext {
     local_types: Vec<ValType>,
     /// Return type of the function (for ref.as_non_null handling)
     return_type: Option<ValType>,
+    /// Pending branch hint from builtin::likely() or builtin::unlikely()
+    /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
+    pending_branch_hint: Option<bool>,
+    /// Collected branch hints for this function (offset, taken)
+    branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
     /// Stack of (extra_depth, break_offset) for each loop level.
@@ -230,6 +235,8 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
+            pending_branch_hint: None,
+            branch_hints: Vec::new(),
             current_module_path: Vec::new(),
             loop_info: Vec::new(),
             for_of_counter: 0,
@@ -251,6 +258,8 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
+            pending_branch_hint: None,
+            branch_hints: Vec::new(),
             current_module_path: module_path,
             loop_info: Vec::new(),
             for_of_counter: 0,
@@ -287,6 +296,18 @@ impl FunctionContext {
 
     fn set_return_type(&mut self, ty: ValType) {
         self.return_type = Some(ty);
+    }
+
+    /// Set a pending branch hint (from builtin::likely/unlikely)
+    fn set_branch_hint(&mut self, taken: bool) {
+        self.pending_branch_hint = Some(taken);
+    }
+
+    /// Consume pending branch hint and record it at the given offset
+    fn consume_branch_hint(&mut self, offset: u32) {
+        if let Some(taken) = self.pending_branch_hint.take() {
+            self.branch_hints.push((offset, taken));
+        }
     }
 
     /// Add a parameter (must be called before any locals)
@@ -1387,6 +1408,8 @@ impl Codegen {
         // Reset closure codegen counter - must match the order closures were collected
         *self.closure_codegen_counter.borrow_mut() = 0;
         let mut code = CodeSection::new();
+        let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
+        let mut func_idx = builder.import_func_count;
         let empty_path: &[String] = &[];
 
         // Generate closure implementation function bodies FIRST (they were declared first)
@@ -1394,6 +1417,7 @@ impl Codegen {
         for closure_info in &pending_closures {
             let wasm_func = self.generate_closure_function(closure_info, type_table, &builder);
             code.function(&wasm_func);
+            func_idx += 1;
         }
 
         // Generate user-defined functions from entry TIR (excluding 'run' which is handled specially)
@@ -1411,8 +1435,13 @@ impl Codegen {
             if has_type_params {
                 continue;
             }
-            let wasm_func = self.generate_function(&tir_func, type_table, &builder, empty_path);
+            let (wasm_func, hints) =
+                self.generate_function(&tir_func, type_table, &builder, empty_path);
             code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((func_idx, hints));
+            }
+            func_idx += 1;
         }
 
         // Generate loaded module functions (TIR path)
@@ -1426,8 +1455,13 @@ impl Codegen {
                 continue;
             }
 
-            let wasm_func = self.generate_function(&tir_func, func_type_table, &builder, module_path);
+            let (wasm_func, hints) =
+                self.generate_function(&tir_func, func_type_table, &builder, module_path);
             code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((func_idx, hints));
+            }
+            func_idx += 1;
         }
 
         // Generate impl methods from loaded modules (TIR path)
@@ -1443,9 +1477,13 @@ impl Codegen {
                 continue;
             }
 
-            let wasm_func =
+            let (wasm_func, hints) =
                 self.generate_function(&tir_method, method_type_table, &builder, module_path);
             code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((func_idx, hints));
+            }
+            func_idx += 1;
         }
 
         // Generate run function (entry point with task.return wrapper)
@@ -1469,6 +1507,21 @@ impl Codegen {
         };
 
         code.function(&run_wasm_func);
+
+        // Branch hints section (emit before code section for proper placement)
+        if !all_branch_hints.is_empty() {
+            let mut hints = BranchHints::new();
+            for (func_idx, func_hints) in all_branch_hints {
+                hints.function_hints(
+                    func_idx,
+                    func_hints.into_iter().map(|(offset, taken)| BranchHint {
+                        branch_func_offset: offset,
+                        branch_hint_value: u32::from(taken),
+                    }),
+                );
+            }
+            module.section(&hints);
+        }
 
         module.section(&code);
 
@@ -7034,6 +7087,8 @@ impl Codegen {
                 else_block,
             } => {
                 self.generate_expr(func, condition, type_table, ctx, builder);
+                // Record branch hint at the current offset (before emitting the if instruction)
+                ctx.consume_branch_hint(func.byte_len() as u32);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 // If creates a block level - increment extra depth if we're inside a loop
                 if let Some((extra, _)) = ctx.loop_info.last_mut() {
@@ -7431,13 +7486,15 @@ impl Codegen {
     }
 
     /// Generate a Wasm function from TIR function
+    ///
+    /// Returns the generated function and any branch hints collected during generation.
     fn generate_function(
         &self,
         tir_func: &TirFunction,
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
         module_path: &[String],
-    ) -> Function {
+    ) -> (Function, Vec<(u32, bool)>) {
         // Create function context - TIR already has local count and types
         let mut func_ctx =
             FunctionContext::with_module_path(tir_func.params.len() as u32, module_path.to_vec());
@@ -7570,7 +7627,9 @@ impl Codegen {
         }
         wasm_func.instruction(&Instruction::End);
 
-        wasm_func
+        // Return function and collected branch hints
+        let branch_hints = func_ctx.branch_hints;
+        (wasm_func, branch_hints)
     }
 
     /// Generate a closure implementation function.
@@ -7943,11 +8002,19 @@ impl Codegen {
         builder: &CoreModuleBuilder,
     ) {
         match builtin_name {
-            "builtin::likely" | "builtin::unlikely" => {
-                // These are hint functions that just pass through their argument
+            "builtin::likely" => {
+                // Pass through the argument and set branch hint for the next branch
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
+                ctx.set_branch_hint(true);
+            }
+            "builtin::unlikely" => {
+                // Pass through the argument and set branch hint for the next branch
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                ctx.set_branch_hint(false);
             }
             "builtin::unreachable" => {
                 func.instruction(&Instruction::Unreachable);

@@ -497,7 +497,6 @@ impl<'a> Resolver<'a> {
     pub fn resolve_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a HashMap<Vec<String>, Module>,
-        entry_path: &[String],
     ) -> Result<IndexMap<Vec<String>, TirModule>, Vec<TypeError>> {
         let mut result = IndexMap::new();
         let mut all_errors = Vec::new();
@@ -4968,7 +4967,7 @@ pub fn resolve_to_project(
     implicit_modules: HashSet<Vec<String>>,
     module_name: String,
 ) -> Result<Project, Vec<TypeError>> {
-    let tir_modules = Resolver::resolve_all_modules(&symbols, modules, &entry_path)?;
+    let tir_modules = Resolver::resolve_all_modules(&symbols, modules)?;
 
     Ok(Project::new(
         entry_path,
