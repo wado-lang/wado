@@ -114,7 +114,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
             Long("format") => {
                 let fmt_str = require_string(&mut parser);
                 if let Some(f) = OutputFormat::from_str(&fmt_str) {
-                    format = Some(f)
+                    format = Some(f);
                 } else {
                     eprintln!("Error: unknown format '{fmt_str}'. Use 'wasm' or 'wat'");
                     process::exit(1);
