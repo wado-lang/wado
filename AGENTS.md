@@ -234,6 +234,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [JSON Module Import](./docs/wep-2026-01-18-json-module-import.md)
 - [Operator Overloading](./docs/wep-2026-01-18-operator-overloading.md)
 - [Iterator-Based Literal Coercion](./docs/wep-2026-01-18-iterator-based-literal-coercion.md)
+- [Effect System and Randomness in Collections](./docs/wep-2026-01-20-effect-system-randomness.md)
 
 ### Structure
 
