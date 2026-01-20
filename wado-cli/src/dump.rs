@@ -197,8 +197,10 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
 
     for input in &opts.inputs {
         let path = Path::new(input);
-        let name = path
-            .file_stem().map_or_else(|| "unknown".to_string(), |s| s.to_string_lossy().into_owned());
+        let name = path.file_stem().map_or_else(
+            || "unknown".to_string(),
+            |s| s.to_string_lossy().into_owned(),
+        );
 
         let output_path = template.replace("{name}", &name);
 
@@ -256,7 +258,10 @@ async fn generate_output(opts: &DumpOptions, input: &str) -> Result<String, Stri
         fs::read_to_string(path).map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
 
     // Get base path for relative imports
-    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
     // Dump using async API
@@ -272,8 +277,10 @@ async fn generate_output(opts: &DumpOptions, input: &str) -> Result<String, Stri
             // Find the entry module (empty path)
             for (module_path, module) in &project.tir_modules {
                 if module_path.is_empty() {
-                    let name = path
-                        .file_stem().map_or_else(|| "unknown".to_string(), |s| s.to_string_lossy().into_owned());
+                    let name = path.file_stem().map_or_else(
+                        || "unknown".to_string(),
+                        |s| s.to_string_lossy().into_owned(),
+                    );
 
                     writeln!(output, "// Golden file: Lowered TIR with -O2 optimization").unwrap();
                     writeln!(output, "// Source: tests/fixtures/{name}.wado").unwrap();
@@ -315,7 +322,10 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     };
 
     // Get base path for relative imports
-    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
     // Dump using async API

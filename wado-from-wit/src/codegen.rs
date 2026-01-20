@@ -13,7 +13,7 @@ pub struct WadoCodeGenerator {
 }
 
 impl WadoCodeGenerator {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             output: String::new(),
@@ -139,7 +139,11 @@ impl WadoCodeGenerator {
 
         for field in &s.fields {
             self.write_doc_comment(field.doc_comment.as_ref());
-            self.writeln(&format!("{}: {},", field.name, Self::format_type(&field.ty)));
+            self.writeln(&format!(
+                "{}: {},",
+                field.name,
+                Self::format_type(&field.ty)
+            ));
         }
 
         self.indent -= 1;
@@ -281,9 +285,11 @@ impl WadoCodeGenerator {
             WadoType::Option(inner) => format!("Option<{}>", Self::format_type(inner)),
             WadoType::Result { ok, err } => {
                 let ok_ty = ok
-                    .as_ref().map_or_else(|| "()".to_string(), |t| Self::format_type(t));
+                    .as_ref()
+                    .map_or_else(|| "()".to_string(), |t| Self::format_type(t));
                 let err_ty = err
-                    .as_ref().map_or_else(|| "()".to_string(), |t| Self::format_type(t));
+                    .as_ref()
+                    .map_or_else(|| "()".to_string(), |t| Self::format_type(t));
                 format!("Result<{ok_ty}, {err_ty}>")
             }
             WadoType::Array(inner) => format!("Array<{}>", Self::format_type(inner)),

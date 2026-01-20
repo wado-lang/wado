@@ -33,7 +33,9 @@ pub fn require_string(parser: &mut Parser) -> String {
 
 /// Require that an input file was specified
 pub fn require_input(input: Option<String>, print_usage: fn()) -> String {
-    if let Some(f) = input { f } else {
+    if let Some(f) = input {
+        f
+    } else {
         eprintln!("Error: no input file specified");
         print_usage();
         process::exit(1);

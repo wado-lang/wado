@@ -14,7 +14,7 @@ pub struct WadoModule {
 }
 
 impl WadoModule {
-    #[must_use] 
+    #[must_use]
     pub fn new(package_name: String, package_version: String) -> Self {
         Self {
             package_name,

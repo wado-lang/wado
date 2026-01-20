@@ -18,7 +18,7 @@ pub struct Transformer<'a> {
 }
 
 impl<'a> Transformer<'a> {
-    #[must_use] 
+    #[must_use]
     pub fn new(resolve: &'a Resolve) -> Self {
         Self { resolve }
     }

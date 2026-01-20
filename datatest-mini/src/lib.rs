@@ -51,7 +51,11 @@ pub fn harness(input: TokenStream) -> TokenStream {
 
     for entry in entries {
         let full_path = Path::new(&manifest_dir).join(&entry.root);
-        assert!(full_path.exists(), "fixture directory does not exist: {}", full_path.display());
+        assert!(
+            full_path.exists(),
+            "fixture directory does not exist: {}",
+            full_path.display()
+        );
 
         let regex = Regex::new(&entry.pattern)
             .unwrap_or_else(|e| panic!("invalid pattern '{}': {}", entry.pattern, e));

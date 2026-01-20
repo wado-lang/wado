@@ -113,7 +113,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
             }
             Long("format") => {
                 let fmt_str = require_string(&mut parser);
-                if let Some(f) = OutputFormat::from_str(&fmt_str) { format = Some(f) } else {
+                if let Some(f) = OutputFormat::from_str(&fmt_str) {
+                    format = Some(f)
+                } else {
                     eprintln!("Error: unknown format '{fmt_str}'. Use 'wasm' or 'wat'");
                     process::exit(1);
                 }
@@ -164,7 +166,10 @@ pub async fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
     };
 
     // Get base path for relative imports
-    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
     // Compile using async API
@@ -216,7 +221,9 @@ pub async fn run(opts: CompileOptions) {
         .unwrap_or(OutputFormat::Wasm);
 
     // Determine output path, using format to pick extension if no -o specified
-    let output_path = if let Some(path) = &opts.output { Path::new(path).to_path_buf() } else {
+    let output_path = if let Some(path) = &opts.output {
+        Path::new(path).to_path_buf()
+    } else {
         let ext = match format {
             OutputFormat::Wasm => "wasm",
             OutputFormat::Wat => "wat",

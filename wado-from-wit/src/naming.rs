@@ -3,19 +3,19 @@
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
 /// Convert WIT kebab-case to Wado `snake_case` for function/field names
-#[must_use] 
+#[must_use]
 pub fn to_snake_case(name: &str) -> String {
     name.to_snake_case()
 }
 
 /// Convert WIT kebab-case to Wado `UpperCamelCase` for type names
-#[must_use] 
+#[must_use]
 pub fn to_upper_camel_case(name: &str) -> String {
     name.to_upper_camel_case()
 }
 
 /// Escape Wado keywords with % prefix
-#[must_use] 
+#[must_use]
 pub fn escape_keyword(name: &str) -> String {
     match name {
         "type" | "fn" | "let" | "mut" | "pub" | "use" | "if" | "else" | "while" | "for"

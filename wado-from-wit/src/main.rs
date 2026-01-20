@@ -142,9 +142,7 @@ fn run_filter_mode(package_name: &str, package_version: &str, skip_unstable: boo
     let input = if input.contains("package ") {
         input
     } else {
-        format!(
-            "package {package_name}:{package_name}@{package_version};\n\n{input}"
-        )
+        format!("package {package_name}:{package_name}@{package_version};\n\n{input}")
     };
 
     // Parse WIT
@@ -213,7 +211,8 @@ fn run_directory_mode(
         let version = pkg
             .name
             .version
-            .as_ref().map_or_else(|| "0.0.0".to_string(), std::string::ToString::to_string);
+            .as_ref()
+            .map_or_else(|| "0.0.0".to_string(), std::string::ToString::to_string);
 
         // Create a single combined module for the entire package
         let mut combined_module = wado_from_wit::WadoModule::new(pkg_name.clone(), version);
