@@ -289,7 +289,6 @@ pub async fn compile_with_host<H: CompilerHost>(
         load_result.entry_path.clone(),
         load_result.implicit_modules.clone(),
         module_name,
-        source,
     )
     .map_err(|errors| {
         let msg = errors
@@ -425,7 +424,6 @@ pub async fn dump_with_host<H: CompilerHost>(
         &symbols,
         &load_result.modules,
         &load_result.entry_path,
-        source,
     )
     .ok();
 

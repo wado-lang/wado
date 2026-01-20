@@ -27,7 +27,7 @@ use heck::ToKebabCase;
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::{
-    AbstractHeapType, Alias, BranchHint, BranchHints, CanonicalOption, CodeSection,
+    AbstractHeapType, Alias, CanonicalOption, CodeSection,
     ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr,
     DataCountSection, DataSection, DataSegment, DataSegmentMode, ElementSection, Elements,
     ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType, InstanceType,
@@ -194,12 +194,6 @@ struct FunctionContext {
     local_types: Vec<ValType>,
     /// Return type of the function (for ref.as_non_null handling)
     return_type: Option<ValType>,
-    /// Pending branch hint from builtin::likely() or builtin::unlikely()
-    /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
-    pending_branch_hint: Option<bool>,
-    /// Collected branch hints for this function (offset, taken)
-    #[allow(dead_code)]
-    branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
     /// Stack of (extra_depth, break_offset) for each loop level.
@@ -236,8 +230,6 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
-            pending_branch_hint: None,
-            branch_hints: Vec::new(),
             current_module_path: Vec::new(),
             loop_info: Vec::new(),
             for_of_counter: 0,
@@ -259,8 +251,6 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
-            pending_branch_hint: None,
-            branch_hints: Vec::new(),
             current_module_path: module_path,
             loop_info: Vec::new(),
             for_of_counter: 0,
@@ -293,19 +283,6 @@ impl FunctionContext {
         let id = self.for_of_counter;
         self.for_of_counter += 1;
         id
-    }
-
-    /// Set a pending branch hint (from builtin::likely/unlikely)
-    fn set_branch_hint(&mut self, taken: bool) {
-        self.pending_branch_hint = Some(taken);
-    }
-
-    /// Consume pending branch hint and record it at the given offset
-    #[allow(dead_code)]
-    fn consume_branch_hint(&mut self, offset: u32) {
-        if let Some(taken) = self.pending_branch_hint.take() {
-            self.branch_hints.push((offset, taken));
-        }
     }
 
     fn set_return_type(&mut self, ty: ValType) {
@@ -1410,8 +1387,6 @@ impl Codegen {
         // Reset closure codegen counter - must match the order closures were collected
         *self.closure_codegen_counter.borrow_mut() = 0;
         let mut code = CodeSection::new();
-        let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
-        let import_count = builder.import_func_count;
         let empty_path: &[String] = &[];
 
         // Generate closure implementation function bodies FIRST (they were declared first)
@@ -1422,7 +1397,7 @@ impl Codegen {
         }
 
         // Generate user-defined functions from entry TIR (excluding 'run' which is handled specially)
-        for (idx, tir_func_rc) in entry_tir.functions.iter().enumerate() {
+        for tir_func_rc in entry_tir.functions.iter() {
             let tir_func = tir_func_rc.borrow();
             if tir_func.name == "run" {
                 continue; // Skip run - it's handled separately as entry point
@@ -1436,12 +1411,8 @@ impl Codegen {
             if has_type_params {
                 continue;
             }
-            let (wasm_func, hints) =
-                self.generate_function(&tir_func, type_table, &builder, empty_path);
+            let wasm_func = self.generate_function(&tir_func, type_table, &builder, empty_path);
             code.function(&wasm_func);
-            if !hints.is_empty() {
-                all_branch_hints.push((import_count + idx as u32, hints));
-            }
         }
 
         // Generate loaded module functions (TIR path)
@@ -1455,8 +1426,7 @@ impl Codegen {
                 continue;
             }
 
-            let (wasm_func, _hints) =
-                self.generate_function(&tir_func, func_type_table, &builder, module_path);
+            let wasm_func = self.generate_function(&tir_func, func_type_table, &builder, module_path);
             code.function(&wasm_func);
         }
 
@@ -1473,7 +1443,7 @@ impl Codegen {
                 continue;
             }
 
-            let (wasm_func, _hints) =
+            let wasm_func =
                 self.generate_function(&tir_method, method_type_table, &builder, module_path);
             code.function(&wasm_func);
         }
@@ -1499,21 +1469,6 @@ impl Codegen {
         };
 
         code.function(&run_wasm_func);
-
-        // Branch hints section
-        if !all_branch_hints.is_empty() {
-            let mut hints = BranchHints::new();
-            for (func_idx, func_hints) in all_branch_hints {
-                hints.function_hints(
-                    func_idx,
-                    func_hints.into_iter().map(|(offset, taken)| BranchHint {
-                        branch_func_offset: offset,
-                        branch_hint_value: if taken { 1 } else { 0 },
-                    }),
-                );
-            }
-            module.section(&hints);
-        }
 
         module.section(&code);
 
@@ -7482,7 +7437,7 @@ impl Codegen {
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
         module_path: &[String],
-    ) -> (Function, Vec<(u32, bool)>) {
+    ) -> Function {
         // Create function context - TIR already has local count and types
         let mut func_ctx =
             FunctionContext::with_module_path(tir_func.params.len() as u32, module_path.to_vec());
@@ -7615,10 +7570,7 @@ impl Codegen {
         }
         wasm_func.instruction(&Instruction::End);
 
-        // Collect branch hints (empty for now)
-        let branch_hints = Vec::new();
-
-        (wasm_func, branch_hints)
+        wasm_func
     }
 
     /// Generate a closure implementation function.
@@ -7991,17 +7943,11 @@ impl Codegen {
         builder: &CoreModuleBuilder,
     ) {
         match builtin_name {
-            "builtin::likely" => {
+            "builtin::likely" | "builtin::unlikely" => {
+                // These are hint functions that just pass through their argument
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
-                ctx.set_branch_hint(true);
-            }
-            "builtin::unlikely" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                ctx.set_branch_hint(false);
             }
             "builtin::unreachable" => {
                 func.instruction(&Instruction::Unreachable);

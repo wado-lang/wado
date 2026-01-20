@@ -360,9 +360,6 @@ pub struct Resolver<'a> {
     imported_functions: HashSet<String>,
     /// Errors collected during resolution
     errors: Vec<TypeError>,
-    /// Source code for extracting source text (for power-assert)
-    #[allow(dead_code)] // For future power-assert feature
-    source_code: &'a str,
     /// Current module path being resolved (for struct type module_path)
     current_module_path: Vec<String>,
     /// Current module items (for local function parameter lookup)
@@ -386,7 +383,6 @@ impl<'a> Resolver<'a> {
     pub fn new(
         symbols: &'a SymbolTable,
         loaded_modules: &'a HashMap<Vec<String>, Module>,
-        source_code: &'a str,
     ) -> Self {
         Self {
             type_table: Rc::new(RefCell::new(TypeTable::new())),
@@ -398,23 +394,12 @@ impl<'a> Resolver<'a> {
             function_return_types: HashMap::new(),
             imported_functions: HashSet::new(),
             errors: Vec::new(),
-            source_code,
             current_module_path: Vec::new(),
             current_module_items: Vec::new(),
             current_type_params: HashMap::new(),
             generic_struct_names: HashSet::new(),
             generic_function_params: HashMap::new(),
             generic_method_params: HashMap::new(),
-        }
-    }
-
-    /// Get source text for a span (for power-assert)
-    #[allow(dead_code)] // For future power-assert feature
-    fn get_source_text(&self, span: &crate::token::Span) -> String {
-        if span.start < self.source_code.len() && span.end <= self.source_code.len() {
-            self.source_code[span.start..span.end].to_string()
-        } else {
-            String::from("<unknown>")
         }
     }
 
@@ -513,7 +498,6 @@ impl<'a> Resolver<'a> {
         symbols: &'a SymbolTable,
         modules: &'a HashMap<Vec<String>, Module>,
         entry_path: &[String],
-        entry_source: &'a str,
     ) -> Result<IndexMap<Vec<String>, TirModule>, Vec<TypeError>> {
         let mut result = IndexMap::new();
         let mut all_errors = Vec::new();
@@ -666,9 +650,6 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            // Use entry source only for entry module, empty for others
-            let source = if path == entry_path { entry_source } else { "" };
-
             let mut resolver = Resolver {
                 type_table: Rc::clone(&type_table), // Share the same TypeTable via Rc::clone
                 symbols,
@@ -679,7 +660,6 @@ impl<'a> Resolver<'a> {
                 function_return_types,
                 imported_functions,
                 errors: Vec::new(),
-                source_code: source,
                 current_module_path: Vec::new(), // Set in resolve_module
                 current_module_items: Vec::new(), // Set in resolve_module
                 current_type_params: HashMap::new(),
@@ -4972,9 +4952,8 @@ pub fn resolve_module(
     module_path: Vec<String>,
     symbols: &SymbolTable,
     loaded_modules: &HashMap<Vec<String>, Module>,
-    source_code: &str,
 ) -> Result<TirModule, Vec<TypeError>> {
-    let mut resolver = Resolver::new(symbols, loaded_modules, source_code);
+    let mut resolver = Resolver::new(symbols, loaded_modules);
     resolver.resolve_module(module, module_path)
 }
 
@@ -4988,9 +4967,8 @@ pub fn resolve_to_project(
     entry_path: Vec<String>,
     implicit_modules: HashSet<Vec<String>>,
     module_name: String,
-    entry_source: &str,
 ) -> Result<Project, Vec<TypeError>> {
-    let tir_modules = Resolver::resolve_all_modules(&symbols, modules, &entry_path, entry_source)?;
+    let tir_modules = Resolver::resolve_all_modules(&symbols, modules, &entry_path)?;
 
     Ok(Project::new(
         entry_path,
