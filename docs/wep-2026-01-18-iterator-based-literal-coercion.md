@@ -421,9 +421,9 @@ This requires `Dict` to implement `FromIterator<[K, V]>`, which is natural.
 | **Compiler complexity** | High (special cases)       | Low (general rule)           |
 | **Extensibility**       | ❌ Compiler changes needed | ✅ Trait implementation only |
 | **User-defined types**  | ❌ Not supported           | ✅ Fully supported           |
-| **Performance**         | ✅ Direct codegen          | ⚠️ Requires optimization     |
+| **Performance**         | ✅ Direct codegen          | ⚠️ Requires optimization      |
 | **Consistency**         | ❌ Array is special        | ✅ All collections equal     |
-| **Error messages**      | ⚠️ "Type mismatch"         | ✅ "Missing trait impl"      |
+| **Error messages**      | ⚠️ "Type mismatch"          | ✅ "Missing trait impl"      |
 | **Maintenance**         | ❌ High                    | ✅ Low                       |
 
 ## Examples

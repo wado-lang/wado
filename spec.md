@@ -2140,7 +2140,6 @@ world WorldName {
     export async fn exported_function(arg: Type) -> ReturnType;
     export fn synchronous_function() -> i32;
 }
-
 ```
 
 > **TBD: Component/Module Structure**

@@ -25,11 +25,11 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
 
 ### Conversion Patterns
 
-| Case                         | Example                            | Rust | Go  | Zig | Swift |
-| ---------------------------- | ---------------------------------- | ---- | --- | --- | ----- |
-| Literal → variable           | `let x: i64 = 32;`                 | ✅   | ✅  | ✅  | ✅    |
-| Untyped literal → variable   | Go: `const C = 32; var x i64 = C`  | N/A  | ✅  | ✅  | ✅    |
-| Typed value → different type | `let x: i64 = 32; let z: i32 = x;` | ❌   | ❌  | ❌  | ❌    |
+| Case                         | Example                            | Rust | Go | Zig | Swift |
+| ---------------------------- | ---------------------------------- | ---- | -- | --- | ----- |
+| Literal → variable           | `let x: i64 = 32;`                 | ✅   | ✅ | ✅  | ✅    |
+| Untyped literal → variable   | Go: `const C = 32; var x i64 = C`  | N/A  | ✅ | ✅  | ✅    |
+| Typed value → different type | `let x: i64 = 32; let z: i32 = x;` | ❌   | ❌ | ❌  | ❌    |
 
 **Key finding**: All languages allow flexibility at the "untyped" stage only. Once a value has a concrete type, implicit conversions are disallowed.
 
