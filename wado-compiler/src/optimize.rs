@@ -2141,7 +2141,7 @@ fn analyze_project(project: &mut Project) {
 
 /// Populate project with all features enabled (no DCE, for O0 mode).
 fn populate_all_features(project: &mut Project) {
-    use PrimitiveType::{I32, I64, F32, F64};
+    use PrimitiveType::{F32, F64, I32, I64};
 
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;

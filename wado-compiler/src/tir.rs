@@ -689,9 +689,7 @@ impl FunctionRef {
             FunctionRef::Resolved(_) => None,
             FunctionRef::External {
                 module_path, name, ..
-            } if module_path.as_slice() == ["core", "builtin"] => {
-                Some(format!("builtin::{name}"))
-            }
+            } if module_path.as_slice() == ["core", "builtin"] => Some(format!("builtin::{name}")),
             FunctionRef::External { .. } => None,
         }
     }

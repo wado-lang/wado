@@ -3775,8 +3775,7 @@ impl<'a> Resolver<'a> {
                     receiver
                 } else {
                     // Value T, need to add &mut
-                    let mut_ref_type =
-                        self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                    let mut_ref_type = self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -4703,26 +4702,28 @@ impl<'a> Resolver<'a> {
         &mut self,
         namespaced: &crate::ast::NamespacedGenericType,
     ) -> TypeId {
-        if namespaced.namespace.as_str() == "builtin" { if namespaced.name.as_str() == "array" {
-            if namespaced.args.len() != 1 {
-                self.errors.push(TypeError::ArgumentCountMismatch {
-                    expected: 1,
-                    found: namespaced.args.len(),
+        if namespaced.namespace.as_str() == "builtin" {
+            if namespaced.name.as_str() == "array" {
+                if namespaced.args.len() != 1 {
+                    self.errors.push(TypeError::ArgumentCountMismatch {
+                        expected: 1,
+                        found: namespaced.args.len(),
+                        span: namespaced.span,
+                    });
+                    return TypeTable::ERROR;
+                }
+                let element_type = self.resolve_type(&namespaced.args[0]);
+                self.type_table
+                    .borrow_mut()
+                    .make_builtin_array(element_type)
+            } else {
+                self.errors.push(TypeError::UnknownType {
+                    name: format!("builtin::{}", namespaced.name),
                     span: namespaced.span,
                 });
-                return TypeTable::ERROR;
+                TypeTable::ERROR
             }
-            let element_type = self.resolve_type(&namespaced.args[0]);
-            self.type_table
-                .borrow_mut()
-                .make_builtin_array(element_type)
         } else {
-            self.errors.push(TypeError::UnknownType {
-                name: format!("builtin::{}", namespaced.name),
-                span: namespaced.span,
-            });
-            TypeTable::ERROR
-        } } else {
             self.errors.push(TypeError::UnknownType {
                 name: format!("{}::{}", namespaced.namespace, namespaced.name),
                 span: namespaced.span,

@@ -2194,8 +2194,7 @@ impl<'a> TirUnparser<'a> {
             }
             TirExprKind::Capture { name, index } => {
                 // Display as captured variable with index for debugging
-                self.output
-                    .push_str(&format!("@capture[{index}]:{name}"));
+                self.output.push_str(&format!("@capture[{index}]:{name}"));
             }
             TirExprKind::Binary { left, op, right } => {
                 self.output.push('(');

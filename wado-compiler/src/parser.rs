@@ -1,7 +1,19 @@
 // The parser implementation of Wado with recursive descent parser.
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
-use crate::ast::{Module, Item, Attribute, WasiImport, ResourceDecl, UseDecl, UseItem, UseItemSimple, ImportAttributes, Function, Param, Type, NamedType, SelfKind, Block, Stmt, LabeledBlockStmt, AssertStmt, LetStmt, ReturnStmt, IfCondition, IfStmt, WhileStmt, ForOfStmt, ExprStmt, ForStmt, LoopStmt, BreakStmt, ContinueStmt, Pattern, Expr, AssignExpr, CompoundAssignOp, CompoundAssignExpr, BinaryExpr, BinaryOp, ChainedComparison, ComparisonChainExpr, UnaryOp, UnaryExpr, CallExpr, MethodCallExpr, FieldAccessExpr, IndexExpr, CastExpr, StaticMethodCallExpr, GenericType, IdentExpr, LiteralExpr, Literal, IntLiteral, FloatLiteral, TupleLiteralExpr, ClosureExpr, ClosureParam, FunctionType, NamespacedGenericType, EffectDecl, EffectMethod, StructDecl, StructField, EnumDecl, EnumVariant, VariantDecl, VariantCase, TypeAlias, ImplBlock, TraitDecl, WorldDecl, WorldImport, WorldExport, FormatSpec, StructLiteralField, StructLiteralExpr};
+use crate::ast::{
+    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
+    ChainedComparison, ClosureExpr, ClosureParam, ComparisonChainExpr, CompoundAssignExpr,
+    CompoundAssignOp, ContinueStmt, EffectDecl, EffectMethod, EnumDecl, EnumVariant, Expr,
+    ExprStmt, FieldAccessExpr, FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function,
+    FunctionType, GenericType, IdentExpr, IfCondition, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, IntLiteral, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern, ResourceDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
+    WorldExport, WorldImport,
+};
 use crate::token::{Span, Token, TokenKind};
 
 pub struct Parser {

@@ -2884,7 +2884,7 @@ impl Codegen {
     /// Box types are single-field mutable structs that wrap primitive values,
     /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
     fn register_box_types(&mut self, builder: &mut CoreModuleBuilder, project: &Project) {
-        use PrimitiveType::{I32, I16, I8, U32, U16, U8, Bool, Char, I64, U64, F32, F64};
+        use PrimitiveType::{Bool, Char, F32, F64, I8, I16, I32, I64, U8, U16, U32, U64};
 
         // Check which ValTypes are needed based on used_box_primitives
         let needs_box_i32 = project
@@ -3153,10 +3153,8 @@ impl Codegen {
                 heap_type: HeapType::Concrete(array_type_idx),
             }),
         );
-        let len_local = ctx.alloc_local(
-            &format!("__copy_array_len_{array_type_idx}"),
-            ValType::I32,
-        );
+        let len_local =
+            ctx.alloc_local(&format!("__copy_array_len_{array_type_idx}"), ValType::I32);
 
         // Store source to temp local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -4625,9 +4623,7 @@ impl Codegen {
                 // Get the variant name from the type
                 let variant_name = match type_table.get(*variant_type) {
                     ResolvedType::Variant { name, .. } => name.clone(),
-                    other => panic!(
-                        "Expected Variant type for VariantConstruct, got: {other:?}"
-                    ),
+                    other => panic!("Expected Variant type for VariantConstruct, got: {other:?}"),
                 };
 
                 // Look up the registered variant type
@@ -5442,9 +5438,7 @@ impl Codegen {
                                 panic!("missing builtin function: {func_name}");
                             }
                         } else {
-                            panic!(
-                                "unknown method {method_name} on primitive type {prim:?}"
-                            );
+                            panic!("unknown method {method_name} on primitive type {prim:?}");
                         }
                     }
 
@@ -5524,8 +5518,7 @@ impl Codegen {
                             .map(|t| self.mangle_type_for_struct_name(*t, type_table))
                             .collect();
                         let mangled_struct_name = format!("{}<{}>", name, type_arg_names.join(","));
-                        let mangled_method_name =
-                            format!("{mangled_struct_name}::{method_name}");
+                        let mangled_method_name = format!("{mangled_struct_name}::{method_name}");
 
                         // Build full method name with module path
                         let full_method_name = MethodName::new(
@@ -5967,9 +5960,7 @@ impl Codegen {
                 // Since the function type uses generic (ref struct), we need to cast to the
                 // specific env type before accessing fields.
                 let env_type_idx = ctx.closure_env_type_idx.unwrap_or_else(|| {
-                    panic!(
-                        "capture access for '{name}' (index {index}) outside of closure context"
-                    )
+                    panic!("capture access for '{name}' (index {index}) outside of closure context")
                 });
 
                 // Get env from local 0 (first parameter in closure functions)
@@ -7180,9 +7171,7 @@ impl Codegen {
 
             // Unsupported pattern
             _ => {
-                panic!(
-                    "Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}"
-                );
+                panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
             }
         }
     }
