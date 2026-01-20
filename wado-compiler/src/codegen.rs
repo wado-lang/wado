@@ -1307,14 +1307,23 @@ impl Codegen {
             if has_type_params {
                 continue;
             }
-            // Methods have names like "Point::sum" - use fully mangled name
+            // Methods have names like "Point::sum" or "Point^Trait::method" - use fully mangled name
             if let Some(sep_pos) = tir_func.name.find("::") {
-                let struct_name = &tir_func.name[..sep_pos];
+                let prefix = &tir_func.name[..sep_pos];
                 let method_name = &tir_func.name[sep_pos + 2..];
+                // Check for trait impl: "StructName^TraitName"
+                let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
+                    (
+                        &prefix[..caret_pos],
+                        Some(prefix[caret_pos + 1..].to_string()),
+                    )
+                } else {
+                    (prefix, None)
+                };
                 let mangled_name = MethodName::new(
                     entry_tir.path.join("/"),
                     struct_name.to_string(),
-                    None,
+                    trait_name,
                     method_name.to_string(),
                 )
                 .to_string();
@@ -5547,23 +5556,79 @@ impl Codegen {
                 args,
                 ..
             } => {
-                // Extract method name from func reference (format: "StructName::method")
-                let method_name = {
+                // Extract method name and trait name from func reference
+                // Format can be "StructName::method" or "StructName^TraitName::method"
+                let (method_name, trait_name) = {
                     let name = method_func.name();
                     if let Some(pos) = name.rfind("::") {
-                        name[pos + 2..].to_string()
+                        let method = name[pos + 2..].to_string();
+                        let prefix = &name[..pos];
+                        // Check for trait impl: "StructName^TraitName"
+                        let trait_n = prefix
+                            .find('^')
+                            .map(|caret_pos| prefix[caret_pos + 1..].to_string());
+                        (method, trait_n)
                     } else {
-                        name
+                        (name, None)
                     }
                 };
-                match type_table.get(receiver.type_id) {
+                // Get the base type for method lookup (strip Ref/MutRef)
+                let base_receiver_type = {
+                    let mut t = type_table.get(receiver.type_id).clone();
+                    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = t {
+                        t = type_table.get(inner).clone();
+                    }
+                    t
+                };
+
+                match base_receiver_type {
                     // Struct method call
+                    ResolvedType::Struct {
+                        ref name,
+                        ref module_path,
+                    } if name == "String" && module_path == &string_module_path() => {
+                        // String struct - handle specially like legacy ResolvedType::String
+                        match method_name.as_str() {
+                            "len" => {
+                                // Generate the receiver (the string)
+                                self.generate_expr(func, receiver, type_table, ctx, builder);
+                                // Call String::len method
+                                let len_func_idx = builder.func_idx("core/prelude/String::len");
+                                func.instruction(&Instruction::Call(len_func_idx));
+                            }
+                            "get" => {
+                                // string.get(index) -> call String::get method
+                                self.generate_expr(func, receiver, type_table, ctx, builder);
+                                if let Some(index_arg) = args.first() {
+                                    self.generate_expr(func, index_arg, type_table, ctx, builder);
+                                }
+                                let get_func_idx = builder.func_idx("core/prelude/String::get");
+                                func.instruction(&Instruction::Call(get_func_idx));
+                            }
+                            "set" => {
+                                // string.set(index, value) -> call String::set method
+                                self.generate_expr(func, receiver, type_table, ctx, builder);
+                                if let Some(index_arg) = args.first() {
+                                    self.generate_expr(func, index_arg, type_table, ctx, builder);
+                                }
+                                if let Some(value_arg) = args.get(1) {
+                                    self.generate_expr(func, value_arg, type_table, ctx, builder);
+                                }
+                                let set_func_idx = builder.func_idx("core/prelude/String::set");
+                                func.instruction(&Instruction::Call(set_func_idx));
+                            }
+                            _ => {
+                                panic!("unknown method {} on String type", method_name);
+                            }
+                        }
+                    }
+
                     ResolvedType::Struct { name, module_path } => {
-                        // Build the fully mangled method name: path/Struct::method
+                        // Build the fully mangled method name: path/Struct^Trait::method or path/Struct::method
                         let mangled_name = MethodName::new(
                             module_path.join("/"),
                             name.clone(),
-                            None,
+                            trait_name.clone(),
                             method_name.clone(),
                         )
                         .to_string();

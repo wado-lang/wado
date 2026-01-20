@@ -663,6 +663,24 @@ impl FunctionRef {
         }
     }
 
+    /// Get the fully qualified function name including module path.
+    /// For external functions, this returns "{module_path}/{name}".
+    /// For resolved functions, this returns just the name.
+    pub fn full_name(&self) -> String {
+        match self {
+            FunctionRef::Resolved(func) => func.borrow().name.clone(),
+            FunctionRef::External {
+                module_path, name, ..
+            } => {
+                if module_path.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{}/{}", module_path.join("/"), name)
+                }
+            }
+        }
+    }
+
     /// Get the builtin function name if this is a builtin call.
     /// Returns the qualified name (e.g., "builtin::array_len").
     /// Builtin functions have module_path == ["core", "builtin"].
@@ -1179,10 +1197,32 @@ pub struct TirEffectOp {
     pub span: Span,
 }
 
+/// Trait declaration
+#[derive(Debug, Clone)]
+pub struct TirTrait {
+    pub name: String,
+    pub is_pub: bool,
+    pub type_params: Vec<TirTypeParam>,
+    pub methods: Vec<TirTraitMethod>,
+    pub span: Span,
+}
+
+/// A method signature in a trait
+#[derive(Debug, Clone)]
+pub struct TirTraitMethod {
+    pub name: String,
+    pub params: Vec<TirParam>,
+    pub return_type: TypeId,
+    pub has_default_body: bool,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct TirImpl {
     /// Generic type parameters for the impl block (e.g., `impl<T> Box<T>`)
     pub type_params: Vec<TirTypeParam>,
+    /// The trait being implemented, if any (e.g., "Display" for `impl Display for Type`)
+    pub trait_name: Option<String>,
     pub target_type: TypeId,
     pub methods: Vec<TirFunction>,
     pub span: Span,
@@ -1213,6 +1253,7 @@ pub struct TirModule {
     pub variants: Vec<TirVariantDecl>,
     pub type_aliases: Vec<TirTypeAlias>,
     pub effects: Vec<TirEffect>,
+    pub traits: Vec<TirTrait>,
     pub impls: Vec<TirImpl>,
     pub data_section: Option<String>,
     pub string_literals: Vec<String>,
@@ -1239,6 +1280,7 @@ impl TirModule {
             variants: Vec::new(),
             type_aliases: Vec::new(),
             effects: Vec::new(),
+            traits: Vec::new(),
             impls: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
@@ -1259,6 +1301,7 @@ impl TirModule {
             variants: Vec::new(),
             type_aliases: Vec::new(),
             effects: Vec::new(),
+            traits: Vec::new(),
             impls: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
@@ -1298,6 +1341,10 @@ impl TirModule {
 
     pub fn add_effect(&mut self, effect: TirEffect) {
         self.effects.push(effect);
+    }
+
+    pub fn add_trait(&mut self, trait_decl: TirTrait) {
+        self.traits.push(trait_decl);
     }
 
     pub fn add_impl(&mut self, impl_block: TirImpl) {

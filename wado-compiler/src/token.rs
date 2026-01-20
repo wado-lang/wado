@@ -32,6 +32,7 @@ pub enum TokenKind {
     Variant,
     Type,
     Impl,
+    Trait,
     Resource,
     World,
     Async,

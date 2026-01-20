@@ -1,0 +1,37 @@
+// Test: trait with multiple methods
+use { println, Stdout } from "core:cli";
+
+trait Shape {
+    fn area(&self) -> f64;
+    fn perimeter(&self) -> f64;
+    fn name(&self) -> String;
+}
+
+struct Rectangle {
+    width: f64,
+    height: f64,
+}
+
+impl Shape for Rectangle {
+    fn area(&self) -> f64 {
+        return self.width * self.height;
+    }
+
+    fn perimeter(&self) -> f64 {
+        return 2.0 * (self.width + self.height);
+    }
+
+    fn name(&self) -> String {
+        return "Rectangle";
+    }
+}
+
+fn run() with Stdout {
+    let r = Rectangle { width: 3.0, height: 4.0 };
+    println(r.name());
+    println(`Area: {r.area()}`);
+    println(`Perimeter: {r.perimeter()}`);
+}
+
+__DATA__
+{"stdout": "Rectangle\nArea: 12.0\nPerimeter: 14.0\n"}

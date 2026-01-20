@@ -343,6 +343,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                         exports.join(", ")
                     )
                 }
+                wado_compiler::symbol::SymbolKind::Trait(t) => {
+                    format!("trait{{ {} }}", t.methods.join(", "))
+                }
             };
             println!(
                 "  [{}] {} :: {} = {}",

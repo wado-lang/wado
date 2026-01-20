@@ -259,6 +259,46 @@ let origin = Point::origin();
 let arr = Array::<i32>::with_capacity(10);
 ```
 
+## Traits
+
+```wado
+// Trait declaration
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+// Trait implementation
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return `Hello, {self.name}!`;
+    }
+}
+
+// Multiple traits on the same struct
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Aged {
+    fn age(&self) -> i32;
+}
+
+impl Named for Person {
+    fn name(&self) -> String { return self.name; }
+}
+
+impl Aged for Person {
+    fn age(&self) -> i32 { return self.age; }
+}
+
+// Trait method call (resolved at compile time)
+let p = Person { name: "Alice", age: 30 };
+println(p.greet());  // Calls Person's Greet::greet
+println(p.name());   // Calls Person's Named::name
+```
+
+Traits use static dispatch - method calls are resolved at compile time to the concrete implementation.
+
 ## Control Flow
 
 ```wado
@@ -550,7 +590,8 @@ Wado intentionally does not support macros.
 - `enum` construction (parsed but no codegen)
 - `match` statements/expressions
 - `flags` (bit flags)
-- `trait` declarations
+- Trait bounds (`T: Display`)
+- Default trait method implementations
 - Effect handlers
 - `reactive` values and `observe()`
 - Closures that capture outer variables (pure closures work)

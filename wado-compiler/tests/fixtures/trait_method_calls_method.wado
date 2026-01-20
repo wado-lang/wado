@@ -1,0 +1,34 @@
+// Test: trait method calling another method on self
+use { println, Stdout } from "core:cli";
+
+trait Describable {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// Inherent impl with helper method
+impl Point {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+// Trait impl that calls inherent method
+impl Describable for Point {
+    fn describe(&self) -> String {
+        let s = self.sum();
+        return `Point({self.x}, {self.y}) sum={s}`;
+    }
+}
+
+fn run() with Stdout {
+    let p = Point { x: 3, y: 4 };
+    println(p.describe());
+}
+
+__DATA__
+{"stdout": "Point(3, 4) sum=7\n"}

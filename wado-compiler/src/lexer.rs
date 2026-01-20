@@ -4,6 +4,17 @@
 use crate::comment::{Comment, CommentKind};
 use crate::token::{Span, Token, TokenKind};
 
+/// Check if a string is a valid Wado identifier.
+/// Valid identifiers match the pattern /^[a-zA-Z_][a-zA-Z0-9_]*$/
+pub fn is_valid_ident(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 pub struct Lexer<'a> {
     input: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
@@ -570,6 +581,7 @@ impl<'a> Lexer<'a> {
             "variant" => TokenKind::Variant,
             "type" => TokenKind::Type,
             "impl" => TokenKind::Impl,
+            "trait" => TokenKind::Trait,
             "resource" => TokenKind::Resource,
             "world" => TokenKind::World,
             "async" => TokenKind::Async,
@@ -1135,6 +1147,26 @@ fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_is_valid_ident() {
+        // Valid identifiers
+        assert!(is_valid_ident("foo"));
+        assert!(is_valid_ident("_foo"));
+        assert!(is_valid_ident("foo_bar"));
+        assert!(is_valid_ident("foo123"));
+        assert!(is_valid_ident("_"));
+        assert!(is_valid_ident("_123"));
+
+        // Invalid identifiers
+        assert!(!is_valid_ident("")); // empty
+        assert!(!is_valid_ident("123foo")); // starts with digit
+        assert!(!is_valid_ident("foo::bar")); // contains ::
+        assert!(!is_valid_ident("Foo^Bar::baz")); // contains ^ and ::
+        assert!(!is_valid_ident("Box<i32>")); // contains < and >
+        assert!(!is_valid_ident("foo-bar")); // contains -
+        assert!(!is_valid_ident("foo bar")); // contains space
+    }
 
     #[test]
     fn test_simple_tokens() {

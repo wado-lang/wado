@@ -447,7 +447,15 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
                 collect_callees_from_expr(arg, callees);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => {
+            // Method calls need to mark the method function as used
+            // Use full_name() to get the qualified name including module path
+            callees.insert(func.full_name());
             collect_callees_from_expr(receiver, callees);
             for arg in args {
                 collect_callees_from_expr(arg, callees);
@@ -2090,14 +2098,25 @@ fn analyze_project(project: &mut Project) {
         for (func_name, strings) in &module.function_strings {
             // Build function ID to check if it's reachable
             let func_id = if func_name.contains("::") {
-                // Method name like "Point::sum" - use MethodName
+                // Method name like "Point::sum" or "Point^Trait::method" - use MethodName
                 let parts: Vec<&str> = func_name.splitn(2, "::").collect();
                 if parts.len() == 2 {
+                    let prefix = parts[0];
+                    let method_name = parts[1];
+                    // Check for trait impl: "StructName^TraitName"
+                    let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
+                        (
+                            &prefix[..caret_pos],
+                            Some(prefix[caret_pos + 1..].to_string()),
+                        )
+                    } else {
+                        (prefix, None)
+                    };
                     FunctionId::Method(MethodName::new(
                         module_path.join("/"),
-                        parts[0].to_string(),
-                        None,
-                        parts[1].to_string(),
+                        struct_name.to_string(),
+                        trait_name,
+                        method_name.to_string(),
                     ))
                 } else {
                     FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, func_name))
@@ -2161,8 +2180,17 @@ fn build_analysis_graph(
             // Methods have names like "Point::sum", regular functions don't contain "::"
             let func_id = if let Some(sep_pos) = func.name.find("::") {
                 // This is a method - use MethodName or FreeFunctionName with monomorph info
-                let struct_name = &func.name[..sep_pos];
+                let prefix = &func.name[..sep_pos];
                 let method_name = &func.name[sep_pos + 2..];
+                // Check for trait impl: "StructName^TraitName"
+                let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
+                    (
+                        &prefix[..caret_pos],
+                        Some(prefix[caret_pos + 1..].to_string()),
+                    )
+                } else {
+                    (prefix, None)
+                };
                 if let Some(monomorph_info) = &func.monomorph_info {
                     // Monomorphized method - use FreeFunctionName with metadata
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
@@ -2174,7 +2202,7 @@ fn build_analysis_graph(
                     FunctionId::Method(MethodName::new(
                         path.join("/"),
                         struct_name.to_string(),
-                        None,
+                        trait_name,
                         method_name.to_string(),
                     ))
                 }
@@ -2423,14 +2451,31 @@ fn analyze_expr(
                 analysis.callees.insert(callee_id);
             } else {
                 // Non-monomorphized method - determine target from receiver type
-                let receiver_type = type_table.get(receiver.type_id);
+                // First strip any reference wrappers to get the base type
+                let mut current_type = type_table.get(receiver.type_id);
+                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = current_type {
+                    current_type = type_table.get(*inner);
+                }
+                let base_receiver_type = current_type.clone();
+
                 let method_name = func_name
                     .rfind("::")
                     .map(|pos| &func_name[pos + 2..])
                     .unwrap_or(&func_name)
                     .to_string();
 
-                match receiver_type {
+                // Check for trait impl: "StructName^TraitName::method"
+                let trait_name = {
+                    let prefix = func_name
+                        .find("::")
+                        .map(|pos| &func_name[..pos])
+                        .unwrap_or(&func_name);
+                    prefix
+                        .find('^')
+                        .map(|caret_pos| prefix[caret_pos + 1..].to_string())
+                };
+
+                match base_receiver_type {
                     ResolvedType::Struct {
                         name, module_path, ..
                     } => {
@@ -2438,7 +2483,7 @@ fn analyze_expr(
                         let method_id = FunctionId::Method(MethodName::new(
                             module_path.join("/"),
                             name.clone(),
-                            None,
+                            trait_name.clone(),
                             method_name,
                         ));
                         analysis.callees.insert(method_id);
@@ -2472,7 +2517,7 @@ fn analyze_expr(
                     }
                     ResolvedType::BuiltinArray(elem_type) => {
                         // Array<T> method call (e.g., arr.len(), arr.append())
-                        let elem_name = mangle_type_for_name(*elem_type, type_table);
+                        let elem_name = mangle_type_for_name(elem_type, type_table);
                         let mangled_func_name = format!("Array<{}>::{}", elem_name, method_name);
                         let base_name = format!("Array::{}", method_name);
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
@@ -2774,14 +2819,24 @@ fn remove_unreachable_functions(project: &mut Project) {
                 // Could be either:
                 // - Instance method tracked as FunctionId::Method
                 // - Static method tracked as FunctionId::Free with mangled name
-                let struct_name = &func.name[..sep_pos];
+                let prefix = &func.name[..sep_pos];
                 let method_name = &func.name[sep_pos + 2..];
+
+                // Check for trait impl: "StructName^TraitName::method"
+                let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
+                    (
+                        &prefix[..caret_pos],
+                        Some(prefix[caret_pos + 1..].to_string()),
+                    )
+                } else {
+                    (prefix, None)
+                };
 
                 // Try as instance method (FunctionId::Method)
                 let method_id = FunctionId::Method(MethodName::new(
                     module_path.join("/"),
                     struct_name.to_string(),
-                    None,
+                    trait_name,
                     method_name.to_string(),
                 ));
                 if project.reachable_functions.contains(&method_id) {
