@@ -207,11 +207,15 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
         // Ensure parent directory exists
         if let Some(parent) = Path::new(&output_path).parent()
             && !parent.as_os_str().is_empty()
-                && let Err(e) = fs::create_dir_all(parent) {
-                    eprintln!("  WARNING: Failed to create directory {}: {e}", parent.display());
-                    skip_count += 1;
-                    continue;
-                }
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            eprintln!(
+                "  WARNING: Failed to create directory {}: {e}",
+                parent.display()
+            );
+            skip_count += 1;
+            continue;
+        }
 
         match generate_output(opts, input).await {
             Ok(content) => {
@@ -250,8 +254,8 @@ async fn generate_output(opts: &DumpOptions, input: &str) -> Result<String, Stri
     let path = Path::new(input);
 
     // Read source file
-    let source = fs::read_to_string(path)
-        .map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
+    let source =
+        fs::read_to_string(path).map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
 
     // Get base path for relative imports
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
