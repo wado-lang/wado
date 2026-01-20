@@ -212,6 +212,94 @@ Possible syntaxes to consider:
 
 This decision affects ergonomics and will be addressed in a future WEP.
 
+## Relationship with wasi-keyvalue
+
+WASI provides a separate key-value storage API called `wasi-keyvalue`, which is currently in Phase 2 of standardization. This is a **complementary API** that serves a fundamentally different purpose than `TreeMap` and `HashMap`.
+
+### wasi-keyvalue Overview
+
+`wasi-keyvalue` provides an abstraction layer over external persistent storage systems:
+
+```wit
+resource bucket {
+    get: func(key: string) -> result<option<list<u8>>, error>
+    set: func(key: string, value: list<u8>) -> result<_, error>
+    delete: func(key: string) -> result<_, error>
+    exists: func(key: string) -> result<bool, error>
+    list-keys: func(cursor: option<u64>) -> result<key-response, error>
+}
+
+open: func(identifier: string) -> result<bucket, error>
+```
+
+Backend implementations can include:
+- Redis
+- DynamoDB
+- MongoDB
+- CosmosDB
+- In-memory (for testing)
+
+### Key Differences
+
+| Aspect | TreeMap/HashMap | wasi-keyvalue |
+|--------|-----------------|---------------|
+| **Purpose** | In-memory data structures | Persistent external storage |
+| **Scope** | Process-local | Cross-service, shared |
+| **Latency** | Nanoseconds to microseconds | Milliseconds (network I/O) |
+| **Persistence** | Volatile (lost on exit) | Durable (survives restarts) |
+| **Capacity** | Memory-limited | Storage-limited (typically larger) |
+| **Effects** | InsecureSeed (HashMap only) | I/O effects (always) |
+| **Consistency** | Immediate | Read-your-writes guaranteed |
+
+### When to Use Each
+
+**Use TreeMap or HashMap for:**
+- Application state during execution
+- Caching frequently accessed data
+- Local data structures (counters, indexes, lookups)
+- Performance-critical in-memory operations
+- Temporary data that doesn't need to persist
+
+**Use wasi-keyvalue for:**
+- Persistent data across application restarts
+- Sharing data between microservices
+- User sessions, preferences, or profiles
+- Data that must survive crashes or deployments
+- Database-backed storage
+
+### Complementary Usage
+
+Both APIs can coexist in the same application:
+
+```wado
+use {HashMap} from "core:collections";
+use {open} from "wasi:keyvalue";
+
+fn process_user_request(user_id: String) /* with InsecureSeed, IO */ {
+    // Local cache for this request (fast, ephemeral)
+    let cache: HashMap<String, Data> = HashMap::new();
+
+    // Persistent user data (durable, shared across instances)
+    let store = open("user-sessions")?;
+    let session_data = store.get(user_id)?;
+
+    // Use cache for temporary computations
+    cache.insert("temp", compute(session_data));
+
+    // Save result back to persistent storage
+    store.set(user_id, serialize(result))?;
+}
+```
+
+### Implementation Status
+
+As of 2025, wasmtime's `wasmtime_wasi_keyvalue` crate provides:
+- In-memory backend (for development/testing)
+- Experimental P3 support (unstable, not production-ready)
+- External backend support (planned, not yet implemented)
+
+The presence of `wasi-keyvalue` does not diminish the need for `TreeMap` and `HashMap`. They operate at different layers of the application stack and serve complementary purposes.
+
 ## Implementation Notes
 
 ### TreeMap Implementation Options
@@ -237,6 +325,8 @@ Deterministic test environments can:
 ## References
 
 - WASI P3 `wasi:random/insecure-seed` specification
+- WASI Key-Value specification: https://github.com/WebAssembly/wasi-keyvalue
+- wasmtime_wasi_keyvalue documentation: https://docs.wasmtime.dev/api/wasmtime_wasi_keyvalue/
 - Rust HashMap documentation: https://doc.rust-lang.org/std/collections/struct.HashMap.html
 - Haskell unordered-containers issue: https://github.com/haskell-unordered-containers/unordered-containers/issues/265
 - Koka hash map challenges: https://zephyrtronium.github.io/articles/koka-experience.html
