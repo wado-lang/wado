@@ -168,16 +168,25 @@ Lexer change required: `{{` → `{`, `}}` → `}` in template strings.
 
 ### Compile-Time Tuple Enumeration
 
-New syntax for iterating over tuples at compile time:
+Tuple `for-of` always yields `[index, value]` pairs, unlike Array `for-of` which yields values only. This reflects the fundamental difference between tuple and array iteration:
+
+- **Array**: Runtime loop, homogeneous types, index is runtime value
+- **Tuple**: Compile-time unrolling, heterogeneous types, index is compile-time constant
 
 ```wado
+// Tuple: always [index, value]
 for let [i, v] of tuple_expr {
     // i: compile-time constant index
     // v: tuple_expr[i], type varies per iteration
 }
+
+// Array: value only (like JavaScript)
+for let v of array_expr {
+    // v: element value
+}
 ```
 
-Expansion:
+Expansion example:
 
 ```wado
 let t: [i32, String, f64] = [1, "hi", 3.14];
@@ -190,16 +199,27 @@ Becomes:
 
 ```wado
 {
+    let i = 0;
     let v = t.0;  // v: i32
-    println(`{0}: {v}`);
+    println(`{i}: {v}`);
 }
 {
+    let i = 1;
     let v = t.1;  // v: String
-    println(`{1}: {v}`);
+    println(`{i}: {v}`);
 }
 {
+    let i = 2;
     let v = t.2;  // v: f64
-    println(`{2}: {v}`);
+    println(`{i}: {v}`);
+}
+```
+
+Value-only iteration (discard index):
+
+```wado
+for let [_, v] of tuple {
+    // use v only
 }
 ```
 
