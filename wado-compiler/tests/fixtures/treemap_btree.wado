@@ -304,7 +304,7 @@ impl TreeMap<K, V> {
     }
 
     fn iter(&self) -> Array<[K, V]> {
-        let result: Array<[K, V]> = [];
+        let mut result: Array<[K, V]> = [];
         if let Some(root) = self.root {
             self.collect_entries(root, &mut result);
         }
@@ -349,14 +349,14 @@ fn run() {
     if let Some(val) = map.get(&"banana") {
         println(`banana = {val}`);
     }
-    if let Some(val) = map.get(&"date") {
-        println(`date = {val}`);
+    if let Some(val2) = map.get(&"date") {
+        println(`date = {val2}`);
     }
 
     // Test update
     map.insert("banana", 20);
-    if let Some(val) = map.get(&"banana") {
-        println(`banana (updated) = {val}`);
+    if let Some(val3) = map.get(&"banana") {
+        println(`banana (updated) = {val3}`);
     }
 
     // Test deletion
