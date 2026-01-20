@@ -248,6 +248,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Operator Overloading](./docs/wep-2026-01-18-operator-overloading.md)
 - [Iterator-Based Literal Coercion](./docs/wep-2026-01-18-iterator-based-literal-coercion.md)
 - [Effect System and Randomness in Collections](./docs/wep-2026-01-20-effect-system-randomness.md)
+- [String Template Desugaring](./docs/wep-2026-01-20-string-template-desugaring.md)
 
 ### Structure
 
