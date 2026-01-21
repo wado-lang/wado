@@ -497,7 +497,6 @@ impl Codegen {
                 PrimitiveType::Char => "char".to_string(),
             },
             ResolvedType::Unit => "unit".to_string(),
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -610,7 +609,6 @@ impl Codegen {
                 PrimitiveType::Char => "char".to_string(),
             },
             ResolvedType::Unit => "unit".to_string(),
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -1114,13 +1112,14 @@ impl Codegen {
             }
         }
 
-        // PHASE 2.5: Register String array types
-        // String struct is now registered (in PHASE 1), so we can register Array<String>
-        // This must happen before PHASE 4 because monomorphized structs may have Array<String> fields
-        self.register_string_array_types_from_table(type_table, &mut builder);
+        // PHASE 2.5: Register arrays of non-monomorphized structs
+        // This must happen BEFORE monomorphized struct registration because
+        // monomorphized structs (e.g., BTreeNode<String, i32>) may have fields
+        // that are arrays of non-monomorphized structs (e.g., Array<String>).
+        self.register_non_monomorphized_struct_arrays(type_table, &mut builder);
         for (module_source, tir_mod) in all_tir_modules {
             if module_source != entry_module_source {
-                self.register_string_array_types_from_table(
+                self.register_non_monomorphized_struct_arrays(
                     &tir_mod.type_table.borrow(),
                     &mut builder,
                 );
@@ -3346,9 +3345,7 @@ impl Codegen {
     /// Option<T> needs copying if T needs copying.
     fn needs_value_copy(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
-            ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::String => true,
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Tuple(elements) => !elements.is_empty(),
             ResolvedType::Option(inner) => self.needs_value_copy(*inner, type_table),
             _ => false,
@@ -3388,11 +3385,7 @@ impl Codegen {
                 name, type_args, ..
             } if name == "Array" && type_args.len() == 1 => {
                 let elem_type = type_args[0];
-                // For Array<String>, use the internal.wado helper function
-                if matches!(type_table.get(elem_type), ResolvedType::String) {
-                    let copy_func_idx = builder.func_idx("core/internal/array_copy_string");
-                    func.instruction(&Instruction::Call(copy_func_idx));
-                } else if let Some(&raw_array_type_idx) = self.array_types.get(&elem_type) {
+                if let Some(&raw_array_type_idx) = self.array_types.get(&elem_type) {
                     // Get the Array struct type
                     let array_struct_type_idx = *self
                         .array_struct_types
@@ -3430,14 +3423,6 @@ impl Codegen {
                     func.instruction(&Instruction::StructNew(array_struct_type_idx));
                 } else {
                     panic!("unknown array type");
-                }
-            }
-            ResolvedType::String => {
-                // String is now a struct, delegate to struct copy
-                if let Some(info) = self.lookup_struct_type("String", &string_module_source()) {
-                    self.generate_struct_copy(func, info.type_idx, info.field_count, ctx);
-                } else {
-                    panic!("String struct not found in generate_value_copy");
                 }
             }
             ResolvedType::Option(inner) => {
@@ -3768,7 +3753,6 @@ impl Codegen {
                 PrimitiveType::Bool => "bool".to_string(),
                 PrimitiveType::Char => "char".to_string(),
             },
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -4596,9 +4580,11 @@ impl Codegen {
         }
     }
 
-    /// Pre-register String array types (where element type is String).
-    /// These can be registered after String struct is registered, but before monomorphized structs.
-    fn register_string_array_types_from_table(
+    /// Pre-register arrays of non-monomorphized structs.
+    /// This includes arrays like Array<String> where String is a non-monomorphized struct.
+    /// Must be called after non-monomorphized structs are registered (PHASE 1-2)
+    /// and before monomorphized structs are registered (PHASE 3-4).
+    fn register_non_monomorphized_struct_arrays(
         &mut self,
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
@@ -4612,25 +4598,28 @@ impl Codegen {
                 } else {
                     continue;
                 };
-            // Only process String element types
-            // String can appear as ResolvedType::String or Struct { name: "String" }
-            let is_string = match type_table.get(element_type_id) {
-                ResolvedType::String => true,
-                ResolvedType::Struct { name, .. } if name == "String" => true,
+
+            // Only process non-monomorphized struct element types
+            // Monomorphized structs have names like "Pair<i32,String>", non-monomorphized are simple like "String"
+            let is_non_monomorphized_struct = match type_table.get(element_type_id) {
+                ResolvedType::Struct { name, .. } => !name.contains('<'),
                 _ => false,
             };
-            if !is_string {
+            if !is_non_monomorphized_struct {
                 continue;
             }
+
             // Skip array types with type parameters (unmonomorphized generics)
             if type_table.contains_type_param(element_type_id) {
                 continue;
             }
-            // Register raw array type
+
+            // Register raw array type (for builtin::array<T>)
             if !self.array_types.contains_key(&element_type_id) {
                 self.get_or_create_array_type(element_type_id, type_table, builder);
             }
-            // Also register Array struct type for Array<T>
+
+            // Also register Array struct type (for Array<T>)
             if is_array_struct && !self.array_struct_types.contains_key(&element_type_id) {
                 self.get_or_create_array_struct_type(element_type_id, type_table, builder);
             }
@@ -4786,20 +4775,6 @@ impl Codegen {
 
             // Never type - functions that never return
             ResolvedType::Never => ValType::I32, // Placeholder, never actually used
-
-            // String type - now a struct, delegate to struct lookup
-            ResolvedType::String => {
-                if let Some(struct_info) =
-                    self.lookup_struct_type("String", &string_module_source())
-                {
-                    ValType::Ref(RefType {
-                        nullable: false,
-                        heap_type: HeapType::Concrete(struct_info.type_idx),
-                    })
-                } else {
-                    panic!("String struct not found in type_id_to_valtype")
-                }
-            }
 
             // Struct type
             ResolvedType::Struct {
@@ -5013,8 +4988,7 @@ impl Codegen {
     fn type_is_reference(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
         matches!(
             type_table.get(type_id),
-            ResolvedType::String
-                | ResolvedType::Struct { .. }
+            ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
                 | ResolvedType::Tuple(_)
                 | ResolvedType::Variant { .. }
@@ -5528,23 +5502,25 @@ impl Codegen {
                             Array { struct_type_idx: u32 },
                             String,
                         }
-                        let (raw_array_type_idx, array_kind) =
-                            if let Some(element_type) = type_table.as_array(base_type_id) {
-                                let raw_type_idx = self
-                                    .array_types
-                                    .get(&element_type)
-                                    .copied()
-                                    .unwrap_or(self.string_array_type_idx);
-                                let struct_type_idx = *self
-                                    .array_struct_types
-                                    .get(&element_type)
-                                    .expect("Array struct type should be registered");
-                                (raw_type_idx, ArrayKind::Array { struct_type_idx })
-                            } else if let ResolvedType::String = base_type {
-                                (self.string_array_type_idx, ArrayKind::String)
-                            } else {
-                                panic!("index assignment on non-array type: {base_type:?}");
-                            };
+                        let (raw_array_type_idx, array_kind) = if let Some(element_type) =
+                            type_table.as_array(base_type_id)
+                        {
+                            let raw_type_idx = self
+                                .array_types
+                                .get(&element_type)
+                                .copied()
+                                .unwrap_or(self.string_array_type_idx);
+                            let struct_type_idx = *self
+                                .array_struct_types
+                                .get(&element_type)
+                                .expect("Array struct type should be registered");
+                            (raw_type_idx, ArrayKind::Array { struct_type_idx })
+                        } else if matches!(base_type, ResolvedType::Struct { name, .. } if name == "String")
+                        {
+                            (self.string_array_type_idx, ArrayKind::String)
+                        } else {
+                            panic!("index assignment on non-array type: {base_type:?}");
+                        };
 
                         // Generate array reference first
                         self.generate_expr(func, array_expr, type_table, ctx, builder);
@@ -6064,48 +6040,6 @@ impl Codegen {
                         }
                     }
 
-                    // String method calls - String is now a struct, call the struct methods
-                    ResolvedType::String => {
-                        match method_name.as_str() {
-                            "len" => {
-                                // Generate the receiver (the string)
-                                self.generate_expr(func, receiver, type_table, ctx, builder);
-                                // Call String::len method
-                                let len_func_idx = builder.func_idx("core/prelude/String::len");
-                                func.instruction(&Instruction::Call(len_func_idx));
-                            }
-                            "get" => {
-                                // string.get(index) -> call String::get method
-                                // Generate receiver (string)
-                                self.generate_expr(func, receiver, type_table, ctx, builder);
-                                // Generate index argument
-                                if let Some(index_arg) = args.first() {
-                                    self.generate_expr(func, index_arg, type_table, ctx, builder);
-                                }
-                                let get_func_idx = builder.func_idx("core/prelude/String::get");
-                                func.instruction(&Instruction::Call(get_func_idx));
-                            }
-                            "set" => {
-                                // string.set(index, value) -> call String::set method
-                                // Generate receiver (string)
-                                self.generate_expr(func, receiver, type_table, ctx, builder);
-                                // Generate index argument
-                                if let Some(index_arg) = args.first() {
-                                    self.generate_expr(func, index_arg, type_table, ctx, builder);
-                                }
-                                // Generate value argument
-                                if let Some(value_arg) = args.get(1) {
-                                    self.generate_expr(func, value_arg, type_table, ctx, builder);
-                                }
-                                let set_func_idx = builder.func_idx("core/prelude/String::set");
-                                func.instruction(&Instruction::Call(set_func_idx));
-                            }
-                            _ => {
-                                panic!("unknown method {method_name} on String type");
-                            }
-                        }
-                    }
-
                     // User-defined generic struct method calls (e.g., Box<i32>.get())
                     ResolvedType::GenericInstance {
                         name,
@@ -6341,62 +6275,65 @@ impl Codegen {
                 };
                 let base_type = type_table.get(base_type_id);
                 // Track element type info for post-array-get processing
-                let (raw_array_type_idx, element_is_ref, closure_cast_type_idx) =
-                    if let Some(element_type) = type_table.as_array(base_type_id) {
-                        let element_resolved = type_table.get(element_type);
-                        let is_ref = matches!(
-                            element_resolved,
-                            ResolvedType::String
-                                | ResolvedType::GenericInstance { .. }
-                                | ResolvedType::Struct { .. }
-                                | ResolvedType::Function { .. }
-                        );
-                        // For function types, we need to cast structref to canonical closure type
-                        let closure_type_idx = if let ResolvedType::Function {
-                            params,
-                            return_type,
-                            ..
-                        } = element_resolved
-                        {
-                            let canonical = self.canonical_closure_types.borrow();
-                            canonical
-                                .get(&(params.clone(), *return_type))
-                                .map(|(_, _, struct_idx)| *struct_idx)
-                        } else {
-                            None
-                        };
-                        let array_struct_type_idx = self
-                            .array_struct_types
+                let (raw_array_type_idx, element_is_ref, closure_cast_type_idx) = if let Some(
+                    element_type,
+                ) =
+                    type_table.as_array(base_type_id)
+                {
+                    let element_resolved = type_table.get(element_type);
+                    let is_ref = matches!(
+                        element_resolved,
+                        ResolvedType::GenericInstance { .. }
+                            | ResolvedType::Struct { .. }
+                            | ResolvedType::Function { .. }
+                    );
+                    // For function types, we need to cast structref to canonical closure type
+                    let closure_type_idx = if let ResolvedType::Function {
+                        params,
+                        return_type,
+                        ..
+                    } = element_resolved
+                    {
+                        let canonical = self.canonical_closure_types.borrow();
+                        canonical
+                            .get(&(params.clone(), *return_type))
+                            .map(|(_, _, struct_idx)| *struct_idx)
+                    } else {
+                        None
+                    };
+                    let array_struct_type_idx = self
+                        .array_struct_types
+                        .get(&element_type)
+                        .expect("Array struct type should be registered");
+                    // Access the repr field (field 0) to get the raw array
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: *array_struct_type_idx,
+                        field_index: 0, // repr is field 0
+                    });
+                    (
+                        self.array_types
                             .get(&element_type)
-                            .expect("Array struct type should be registered");
-                        // Access the repr field (field 0) to get the raw array
+                            .copied()
+                            .unwrap_or(self.string_array_type_idx),
+                        is_ref,
+                        closure_type_idx,
+                    )
+                } else if matches!(base_type, ResolvedType::Struct { name, .. } if name == "String")
+                {
+                    // String is now a struct with repr field (field 0) containing the array
+                    // First access the repr field, then do array.get
+                    if let Some(struct_info) =
+                        self.lookup_struct_type("String", &string_module_source())
+                    {
                         func.instruction(&Instruction::StructGet {
-                            struct_type_index: *array_struct_type_idx,
+                            struct_type_index: struct_info.type_idx,
                             field_index: 0, // repr is field 0
                         });
-                        (
-                            self.array_types
-                                .get(&element_type)
-                                .copied()
-                                .unwrap_or(self.string_array_type_idx),
-                            is_ref,
-                            closure_type_idx,
-                        )
-                    } else if let ResolvedType::String = base_type {
-                        // String is now a struct with repr field (field 0) containing the array
-                        // First access the repr field, then do array.get
-                        if let Some(struct_info) =
-                            self.lookup_struct_type("String", &string_module_source())
-                        {
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: struct_info.type_idx,
-                                field_index: 0, // repr is field 0
-                            });
-                        }
-                        (self.string_array_type_idx, false, None)
-                    } else {
-                        (self.string_array_type_idx, false, None)
-                    };
+                    }
+                    (self.string_array_type_idx, false, None)
+                } else {
+                    (self.string_array_type_idx, false, None)
+                };
 
                 // Now generate index and do array access
                 self.generate_expr(func, index, type_table, ctx, builder);
@@ -6797,23 +6734,25 @@ impl Codegen {
                     Array { struct_type_idx: u32 },
                     String,
                 }
-                let (raw_array_type_idx, array_kind) =
-                    if let Some(element_type) = type_table.as_array(base_type_id) {
-                        let raw_type_idx = self
-                            .array_types
-                            .get(&element_type)
-                            .copied()
-                            .unwrap_or(self.string_array_type_idx);
-                        let struct_type_idx = *self
-                            .array_struct_types
-                            .get(&element_type)
-                            .expect("Array struct type should be registered");
-                        (raw_type_idx, ArrayKind::Array { struct_type_idx })
-                    } else if let ResolvedType::String = base_type {
-                        (self.string_array_type_idx, ArrayKind::String)
-                    } else {
-                        panic!("index assignment on non-array type: {base_type:?}");
-                    };
+                let (raw_array_type_idx, array_kind) = if let Some(element_type) =
+                    type_table.as_array(base_type_id)
+                {
+                    let raw_type_idx = self
+                        .array_types
+                        .get(&element_type)
+                        .copied()
+                        .unwrap_or(self.string_array_type_idx);
+                    let struct_type_idx = *self
+                        .array_struct_types
+                        .get(&element_type)
+                        .expect("Array struct type should be registered");
+                    (raw_type_idx, ArrayKind::Array { struct_type_idx })
+                } else if matches!(base_type, ResolvedType::Struct { name, .. } if name == "String")
+                {
+                    (self.string_array_type_idx, ArrayKind::String)
+                } else {
+                    panic!("index assignment on non-array type: {base_type:?}");
+                };
 
                 self.generate_expr(func, array_expr, type_table, ctx, builder);
                 match &array_kind {
@@ -8415,58 +8354,6 @@ impl Codegen {
                     memory_index: 0,
                 }));
             }
-            "builtin::array_new_string" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                let string_type_id = type_table
-                    .find_struct_type("String", &string_module_source())
-                    .expect("String struct should be defined in core/prelude");
-                let array_of_string_type = *self
-                    .array_types
-                    .get(&string_type_id)
-                    .expect("Array<String> raw array type should be registered");
-                func.instruction(&Instruction::ArrayNewDefault(array_of_string_type));
-            }
-            "builtin::array_wrap_string" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                let string_type_id = type_table
-                    .find_struct_type("String", &string_module_source())
-                    .expect("String struct should be defined in core/prelude");
-                let array_struct_type = *self
-                    .array_struct_types
-                    .get(&string_type_id)
-                    .expect("Array<String> struct type should be registered");
-                func.instruction(&Instruction::StructNew(array_struct_type));
-            }
-            "builtin::array_set_string" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                let string_type_id = type_table
-                    .find_struct_type("String", &string_module_source())
-                    .expect("String struct should be defined in core/prelude");
-                let array_of_string_type = *self
-                    .array_types
-                    .get(&string_type_id)
-                    .expect("Array<String> type should be registered");
-                func.instruction(&Instruction::ArraySet(array_of_string_type));
-            }
-            "builtin::array_get_string" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                let string_type_id = type_table
-                    .find_struct_type("String", &string_module_source())
-                    .expect("String struct should be defined in core/prelude");
-                let array_of_string_type = *self
-                    .array_types
-                    .get(&string_type_id)
-                    .expect("Array<String> type should be registered");
-                func.instruction(&Instruction::ArrayGet(array_of_string_type));
-            }
             "builtin::array_new" => {
                 if let ResolvedType::BuiltinArray(element_type) = type_table.get(expr.type_id) {
                     let array_type_idx = *self
@@ -9112,18 +8999,6 @@ impl Codegen {
                         ctx.alloc_local(
                             &format!("__copy_array_len_{raw_array_type_idx}"),
                             ValType::I32,
-                        );
-                    }
-                }
-                ResolvedType::String => {
-                    // String is now a struct, allocate struct copy local
-                    if let Some(info) = self.lookup_struct_type("String", &string_module_source()) {
-                        ctx.alloc_local(
-                            &format!("__copy_source_{}", info.type_idx),
-                            ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(info.type_idx),
-                            }),
                         );
                     }
                 }

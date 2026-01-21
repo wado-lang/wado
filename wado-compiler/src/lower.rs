@@ -880,7 +880,6 @@ impl Monomorphizer {
     fn type_id_to_name_component(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
             ResolvedType::Primitive(p) => format!("{p:?}").to_lowercase(),
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::Option(inner) => {
@@ -1846,7 +1845,6 @@ impl Monomorphizer {
     fn type_id_to_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
             ResolvedType::Primitive(p) => format!("{p:?}").to_lowercase(),
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -2997,7 +2995,6 @@ impl Monomorphizer {
         // Get the struct name from the operand type
         let operand_type = type_table.get(left.type_id);
         let struct_name = match operand_type {
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
