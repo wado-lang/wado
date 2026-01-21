@@ -13,6 +13,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::name::{LocalMethodName, ModuleSource};
 use crate::token::Span;
 
 // ============================================================================
@@ -140,7 +141,7 @@ impl SubstitutionContext {
             }
             ResolvedType::GenericInstance {
                 name,
-                module_path,
+                module_source,
                 type_args,
             } => {
                 // Recursively substitute in nested generic instances
@@ -148,7 +149,7 @@ impl SubstitutionContext {
                     .iter()
                     .map(|&arg| self.substitute(arg, type_table))
                     .collect();
-                type_table.make_generic_instance(name, module_path, new_args)
+                type_table.make_generic_instance(name, module_source, new_args)
             }
             ResolvedType::Function {
                 params,
@@ -217,15 +218,15 @@ pub enum ResolvedType {
     String,
     Struct {
         name: String,
-        module_path: Vec<String>,
+        module_source: ModuleSource,
     },
     Enum {
         name: String,
-        module_path: Vec<String>,
+        module_source: ModuleSource,
     },
     Variant {
         name: String,
-        module_path: Vec<String>,
+        module_source: ModuleSource,
     },
     Option(TypeId),
     Result {
@@ -255,7 +256,7 @@ pub enum ResolvedType {
     GenericInstance {
         /// Base generic type name (e.g., "Box")
         name: String,
-        module_path: Vec<String>,
+        module_source: ModuleSource,
         /// Concrete type arguments (e.g., [i32])
         type_args: Vec<TypeId>,
     },
@@ -264,6 +265,21 @@ pub enum ResolvedType {
     BuiltinArray(TypeId),
     Unknown,
     Error,
+}
+
+impl ResolvedType {
+    /// Get the module path as a Vec<String> for backwards compatibility.
+    /// This is a transitional helper during the migration to `ModuleSource`.
+    #[must_use]
+    pub fn module_path(&self) -> Vec<String> {
+        match self {
+            Self::Struct { module_source, .. }
+            | Self::Enum { module_source, .. }
+            | Self::Variant { module_source, .. }
+            | Self::GenericInstance { module_source, .. } => module_source.to_path(),
+            _ => vec![],
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -410,26 +426,35 @@ impl TypeTable {
         })
     }
 
-    pub fn make_struct(&mut self, name: String, module_path: Vec<String>) -> TypeId {
-        self.intern(ResolvedType::Struct { name, module_path })
+    pub fn make_struct(&mut self, name: String, module_source: ModuleSource) -> TypeId {
+        self.intern(ResolvedType::Struct {
+            name,
+            module_source,
+        })
     }
 
-    pub fn make_variant(&mut self, name: String, module_path: Vec<String>) -> TypeId {
-        self.intern(ResolvedType::Variant { name, module_path })
+    pub fn make_variant(&mut self, name: String, module_source: ModuleSource) -> TypeId {
+        self.intern(ResolvedType::Variant {
+            name,
+            module_source,
+        })
     }
 
-    /// Find the `type_id` for a struct by name and module path (O(1) lookup via `intern_map`)
-    pub fn find_struct_type(&self, name: &str, module_path: &[String]) -> Option<TypeId> {
+    /// Find the `type_id` for a struct by name and module source (O(1) lookup via `intern_map`)
+    pub fn find_struct_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
             name: name.to_string(),
-            module_path: module_path.to_vec(),
+            module_source: module_source.clone(),
         };
         self.intern_map.get(&key).copied()
     }
 
-    pub fn make_enum(&mut self, name: String, module_path: Vec<String>) -> TypeId {
-        self.intern(ResolvedType::Enum { name, module_path })
+    pub fn make_enum(&mut self, name: String, module_source: ModuleSource) -> TypeId {
+        self.intern(ResolvedType::Enum {
+            name,
+            module_source,
+        })
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
@@ -449,12 +474,12 @@ impl TypeTable {
     pub fn make_generic_instance(
         &mut self,
         name: String,
-        module_path: Vec<String>,
+        module_source: ModuleSource,
         type_args: Vec<TypeId>,
     ) -> TypeId {
         self.intern(ResolvedType::GenericInstance {
             name,
-            module_path,
+            module_source,
             type_args,
         })
     }
@@ -463,7 +488,7 @@ impl TypeTable {
     pub fn make_array(&mut self, element: TypeId) -> TypeId {
         self.make_generic_instance(
             "Array".to_string(),
-            vec!["core".to_string(), "prelude".to_string()],
+            ModuleSource::core("prelude"),
             vec![element],
         )
     }
@@ -609,10 +634,12 @@ pub enum FunctionRef {
     Resolved(Rc<RefCell<TirFunction>>),
     /// Reference to an external/unresolved function
     External {
-        module_path: Vec<String>,
+        module_source: ModuleSource,
         name: String,
         /// Monomorphization info for external monomorphized functions
         monomorph_info: Option<MonomorphInfo>,
+        /// Parsed method info for external methods (None for free functions)
+        method_info: Option<LocalMethodName>,
     },
 }
 
@@ -625,12 +652,17 @@ impl FunctionRef {
         }
     }
 
-    /// Get the module path (empty for resolved functions)
-    pub fn module_path(&self) -> Vec<String> {
+    /// Get the module source
+    pub fn module_source(&self) -> ModuleSource {
         match self {
-            FunctionRef::Resolved(_) => vec![],
-            FunctionRef::External { module_path, .. } => module_path.clone(),
+            FunctionRef::Resolved(_) => ModuleSource::EntryPoint,
+            FunctionRef::External { module_source, .. } => module_source.clone(),
         }
+    }
+
+    /// Get the module path (for backwards compatibility)
+    pub fn module_path(&self) -> Vec<String> {
+        self.module_source().to_path()
     }
 
     /// Check if this is a resolved reference
@@ -647,18 +679,21 @@ impl FunctionRef {
     }
 
     /// Get the fully qualified function name including module path.
-    /// For external functions, this returns "{`module_path}/{name`}".
+    /// For external functions, this returns "{`module_source}/{name`}".
     /// For resolved functions, this returns just the name.
     pub fn full_name(&self) -> String {
         match self {
             FunctionRef::Resolved(func) => func.borrow().name.clone(),
             FunctionRef::External {
-                module_path, name, ..
+                module_source,
+                name,
+                ..
             } => {
-                if module_path.is_empty() {
+                let path = module_source.to_path();
+                if path.is_empty() {
                     name.clone()
                 } else {
-                    format!("{}/{}", module_path.join("/"), name)
+                    format!("{}/{}", path.join("/"), name)
                 }
             }
         }
@@ -666,13 +701,15 @@ impl FunctionRef {
 
     /// Get the builtin function name if this is a builtin call.
     /// Returns the qualified name (e.g., "`builtin::array_len`").
-    /// Builtin functions have `module_path` == ["core", "builtin"].
+    /// Builtin functions have `module_source` == Core { name: "builtin" }.
     pub fn builtin_name(&self) -> Option<String> {
         match self {
             FunctionRef::Resolved(_) => None,
             FunctionRef::External {
-                module_path, name, ..
-            } if module_path.as_slice() == ["core", "builtin"] => Some(format!("builtin::{name}")),
+                module_source,
+                name,
+                ..
+            } if module_source.is_core_builtin() => Some(format!("builtin::{name}")),
             FunctionRef::External { .. } => None,
         }
     }
@@ -703,6 +740,33 @@ impl FunctionRef {
                 .map(std::string::ToString::to_string),
         }
     }
+
+    /// Get parsed method info if this is a method reference.
+    /// Returns `None` for free functions.
+    pub fn method_info(&self) -> Option<LocalMethodName> {
+        match self {
+            FunctionRef::Resolved(func) => func.borrow().method_info.clone(),
+            FunctionRef::External { method_info, .. } => method_info.clone(),
+        }
+    }
+
+    /// Check if this is a method (instance or static) as opposed to a free function.
+    pub fn is_method(&self) -> bool {
+        match self {
+            FunctionRef::Resolved(func) => func.borrow().is_method(),
+            FunctionRef::External { method_info, .. } => method_info.is_some(),
+        }
+    }
+
+    /// Check if this is a trait method.
+    pub fn is_trait_method(&self) -> bool {
+        match self {
+            FunctionRef::Resolved(func) => func.borrow().is_trait_method(),
+            FunctionRef::External { method_info, .. } => method_info
+                .as_ref()
+                .is_some_and(LocalMethodName::is_trait_method),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -726,7 +790,7 @@ pub enum TirExprKind {
         name: String,
     },
     Global {
-        module_path: Vec<String>,
+        module_source: ModuleSource,
         name: String,
     },
 
@@ -1069,6 +1133,9 @@ pub struct TirFunction {
     pub impl_type_params: Vec<TirTypeParam>,
     /// If this function was created by monomorphization, contains the origin info
     pub monomorph_info: Option<MonomorphInfo>,
+    /// Parsed method info for methods (None for free functions)
+    /// Contains `struct_name`, `trait_name`, and `method_name` extracted from the function name.
+    pub method_info: Option<LocalMethodName>,
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
     pub effects: Vec<String>,
@@ -1079,6 +1146,22 @@ pub struct TirFunction {
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: std::collections::HashSet<u32>,
+}
+
+impl TirFunction {
+    /// Returns true if this is a method (belongs to a struct)
+    #[inline]
+    pub fn is_method(&self) -> bool {
+        self.method_info.is_some()
+    }
+
+    /// Returns true if this is a trait method (implements a trait)
+    #[inline]
+    pub fn is_trait_method(&self) -> bool {
+        self.method_info
+            .as_ref()
+            .is_some_and(super::name::LocalMethodName::is_trait_method)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1224,7 +1307,7 @@ pub struct InstantiationKey {
 
 #[derive(Debug, Clone)]
 pub struct TirModule {
-    pub path: Vec<String>,
+    pub module_source: ModuleSource,
     /// Shared type table across all modules (enables cross-module type references)
     pub type_table: Rc<RefCell<TypeTable>>,
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
@@ -1251,9 +1334,9 @@ pub struct TirModule {
 }
 
 impl TirModule {
-    pub fn new(path: Vec<String>) -> Self {
+    pub fn new(module_source: ModuleSource) -> Self {
         Self {
-            path,
+            module_source,
             type_table: Rc::new(RefCell::new(TypeTable::new())),
             functions: Vec::new(),
             structs: Vec::new(),
@@ -1272,9 +1355,12 @@ impl TirModule {
         }
     }
 
-    pub fn with_type_table(path: Vec<String>, type_table: Rc<RefCell<TypeTable>>) -> Self {
+    pub fn with_type_table(
+        module_source: ModuleSource,
+        type_table: Rc<RefCell<TypeTable>>,
+    ) -> Self {
         Self {
-            path,
+            module_source,
             type_table,
             functions: Vec::new(),
             structs: Vec::new(),

@@ -12,7 +12,9 @@ use crate::component_model::{
     WasiFunctionInfo, WasiRegistry, build_local_alias_name, is_wasi_function_supported,
     return_type_requires_outptr, wasi_type_to_valtype,
 };
-use crate::name::{FreeFunctionName, FunctionId, MethodName, StructName, build_core_internal_name};
+use crate::name::{
+    FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
+};
 use crate::optimize::{CanonBuiltin, WasiEffect};
 use crate::project::Project;
 use crate::symbol::SymbolTable;
@@ -46,6 +48,11 @@ fn string_module_path() -> Vec<String> {
         .iter()
         .map(|s| (*s).to_string())
         .collect()
+}
+
+/// Helper to get the `ModuleSource` for String type (core:prelude)
+fn string_module_source() -> ModuleSource {
+    ModuleSource::core("prelude")
 }
 
 /// Information about a user-defined struct type
@@ -684,6 +691,7 @@ impl Codegen {
         let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
         let type_table = &*entry_tir.type_table.borrow();
+        let entry_path = entry_tir.module_source.to_path();
 
         // Collect ALL functions from loaded TIR modules (core:*, etc.)
         // We need to include all functions because they may have transitive dependencies
@@ -697,7 +705,7 @@ impl Codegen {
         )> = Vec::new();
         for (path, tir_mod) in all_tir_modules {
             // Skip entry module (handled separately)
-            if path == &entry_tir.path {
+            if path == &entry_path {
                 continue;
             }
             // Skip wasi:* modules (they only contain effect declarations)
@@ -777,7 +785,7 @@ impl Codegen {
         )> = Vec::new();
         for (path, tir_mod) in all_tir_modules {
             // Skip entry module (handled separately)
-            if path == &entry_tir.path {
+            if path == &entry_path {
                 continue;
             }
             // Skip wasi:* modules
@@ -890,7 +898,7 @@ impl Codegen {
         // These don't depend on struct types
         self.register_primitive_array_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
-            if path != &entry_tir.path {
+            if path != &entry_path {
                 self.register_primitive_array_types_from_table(
                     &tir_mod.type_table.borrow(),
                     &mut builder,
@@ -905,7 +913,7 @@ impl Codegen {
         // Note: all_tir_modules is in topological order (dependency modules first)
         for (path, tir_mod) in all_tir_modules {
             // Skip entry module (handled separately)
-            if path == &entry_tir.path {
+            if path == &entry_path {
                 continue;
             }
             for tir_struct in &tir_mod.structs {
@@ -983,7 +991,7 @@ impl Codegen {
         // Register tuple types from all TIR modules
         self.register_tuple_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
-            if path != &entry_tir.path {
+            if path != &entry_path {
                 self.register_tuple_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
             }
         }
@@ -994,7 +1002,7 @@ impl Codegen {
         // type_id_to_valtype which requires the struct to be registered.
         // Skip Array monomorphized structs - they're handled by array_struct_types.
         for (path, tir_mod) in all_tir_modules {
-            if path == &entry_tir.path {
+            if path == &entry_path {
                 continue;
             }
             for tir_struct in &tir_mod.structs {
@@ -1045,7 +1053,7 @@ impl Codegen {
         // PHASE 4.5: Register variant types (tagged unions)
         // Register variants from imported modules first
         for (path, tir_mod) in all_tir_modules {
-            if path == &entry_tir.path {
+            if path == &entry_path {
                 continue;
             }
             for variant in &tir_mod.variants {
@@ -1073,7 +1081,7 @@ impl Codegen {
         // This is needed so that Array<fn(...)> can use the correct closure struct type.
         self.register_canonical_closure_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
-            if path != &entry_tir.path {
+            if path != &entry_path {
                 self.register_canonical_closure_types_from_table(
                     &tir_mod.type_table.borrow(),
                     &mut builder,
@@ -1087,7 +1095,7 @@ impl Codegen {
         // Also must be after canonical closure types for Array<fn(...)> to work.
         self.register_array_types_from_table(type_table, &mut builder);
         for (path, tir_mod) in all_tir_modules {
-            if path != &entry_tir.path {
+            if path != &entry_path {
                 self.register_array_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
             }
         }
@@ -1138,15 +1146,22 @@ impl Codegen {
                 vec![self.type_id_to_valtype(type_table, tir_func.return_type)]
             };
 
-            // Methods have names like "Point::sum" - use fully mangled name for type
-            let type_name = if let Some(sep_pos) = tir_func.name.find("::") {
-                let struct_name = &tir_func.name[..sep_pos];
-                let method_name = &tir_func.name[sep_pos + 2..];
+            // For methods, build the type name from method_info (struct name, trait name)
+            // and parse the method name from tir_func.name (which includes method type args)
+            let type_name = if let Some(ref info) = tir_func.method_info {
+                // Extract method name with type args from func.name
+                // func.name is like "Container<i32>::transform<i64>"
+                // We need the part after "::" which is "transform<i64>"
+                let method_name_with_args = if let Some(sep_pos) = tir_func.name.find("::") {
+                    tir_func.name[sep_pos + 2..].to_string()
+                } else {
+                    info.method_name.clone()
+                };
                 MethodName::new(
-                    entry_tir.path.join("/"),
-                    struct_name.to_string(),
-                    None,
-                    method_name.to_string(),
+                    entry_path.join("/"),
+                    info.struct_name.clone(),
+                    info.trait_name.clone(),
+                    method_name_with_args,
                 )
                 .to_string()
             } else {
@@ -1307,34 +1322,19 @@ impl Codegen {
             if has_type_params {
                 continue;
             }
-            // Methods have names like "Point::sum" or "Point^Trait::method" - use fully mangled name
-            if let Some(sep_pos) = tir_func.name.find("::") {
-                let prefix = &tir_func.name[..sep_pos];
-                let method_name = &tir_func.name[sep_pos + 2..];
-                // Check for trait impl: "StructName^TraitName"
-                let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
-                    (
-                        &prefix[..caret_pos],
-                        Some(prefix[caret_pos + 1..].to_string()),
-                    )
-                } else {
-                    (prefix, None)
-                };
+            // Methods have method_info metadata for building mangled names
+            if let Some(ref info) = tir_func.method_info {
                 let mangled_name = MethodName::new(
-                    entry_tir.path.join("/"),
-                    struct_name.to_string(),
-                    trait_name,
-                    method_name.to_string(),
+                    entry_path.join("/"),
+                    info.struct_name.clone(),
+                    info.trait_name.clone(),
+                    info.full_method_name(),
                 )
                 .to_string();
                 let func_idx = builder.define_func(&mangled_name, &mangled_name);
                 // For monomorphized methods, also register an alias
                 // with just the simple name (e.g., Array<i32>::len)
                 if tir_func.monomorph_info.is_some() {
-                    eprintln!(
-                        "[DEBUG] Registering alias for monomorphized method: {} -> idx {}",
-                        tir_func.name, func_idx
-                    );
                     builder.define_func_alias(&tir_func.name, func_idx);
                 }
             } else {
@@ -2934,8 +2934,11 @@ impl Codegen {
     /// Handles reference types by looking through to the inner type.
     fn get_struct_or_tuple_type_idx(&self, type_id: TypeId, type_table: &TypeTable) -> u32 {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, module_path } => {
-                if let Some(info) = self.lookup_struct_type(name, module_path) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => {
+                if let Some(info) = self.lookup_struct_type(name, &module_source.to_path()) {
                     info.type_idx
                 } else {
                     panic!("unknown struct type: {name}");
@@ -3002,8 +3005,11 @@ impl Codegen {
         builder: &CoreModuleBuilder,
     ) {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, module_path } => {
-                if let Some(info) = self.lookup_struct_type(name, module_path) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => {
+                if let Some(info) = self.lookup_struct_type(name, &module_source.to_path()) {
                     self.generate_struct_copy(func, info.type_idx, info.field_count, ctx);
                 } else {
                     panic!("unknown struct type: {name}");
@@ -4298,8 +4304,11 @@ impl Codegen {
             }
 
             // Struct type
-            ResolvedType::Struct { name, module_path } => {
-                if let Some(struct_info) = self.lookup_struct_type(name, module_path) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => {
+                if let Some(struct_info) = self.lookup_struct_type(name, &module_source.to_path()) {
                     ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(struct_info.type_idx),
@@ -4717,8 +4726,12 @@ impl Codegen {
                 }
             }
 
-            TirExprKind::Global { module_path, name } => {
+            TirExprKind::Global {
+                module_source,
+                name,
+            } => {
                 // TODO: Handle global references properly
+                let module_path = module_source.to_path();
                 let full_name = if module_path.is_empty() {
                     name.clone()
                 } else {
@@ -5288,21 +5301,13 @@ impl Codegen {
                 args,
                 ..
             } => {
-                // Extract method name and trait name from func reference
-                // Format can be "StructName::method" or "StructName^TraitName::method"
-                let (method_name, trait_name) = {
-                    let name = method_func.name();
-                    if let Some(pos) = name.rfind("::") {
-                        let method = name[pos + 2..].to_string();
-                        let prefix = &name[..pos];
-                        // Check for trait impl: "StructName^TraitName"
-                        let trait_n = prefix
-                            .find('^')
-                            .map(|caret_pos| prefix[caret_pos + 1..].to_string());
-                        (method, trait_n)
-                    } else {
-                        (name, None)
-                    }
+                // Extract method name and trait name from method_info
+                // Use full_method_name() to include method type args (e.g., "transform<i64>")
+                let (method_name, trait_name) = if let Some(info) = method_func.method_info() {
+                    (info.full_method_name(), info.trait_name)
+                } else {
+                    // Fallback to function name if no method_info
+                    (method_func.name(), None)
                 };
                 // Get the base type for method lookup (strip Ref/MutRef)
                 let base_receiver_type = {
@@ -5317,8 +5322,8 @@ impl Codegen {
                     // Struct method call
                     ResolvedType::Struct {
                         ref name,
-                        ref module_path,
-                    } if name == "String" && module_path == &string_module_path() => {
+                        ref module_source,
+                    } if name == "String" && module_source.to_path() == string_module_path() => {
                         // String struct - handle specially like legacy ResolvedType::String
                         match method_name.as_str() {
                             "len" => {
@@ -5355,8 +5360,12 @@ impl Codegen {
                         }
                     }
 
-                    ResolvedType::Struct { name, module_path } => {
+                    ResolvedType::Struct {
+                        name,
+                        module_source,
+                    } => {
                         // Build the fully mangled method name: path/Struct^Trait::method or path/Struct::method
+                        let module_path = module_source.to_path();
                         let mangled_name = MethodName::new(
                             module_path.join("/"),
                             name.clone(),
@@ -5497,9 +5506,10 @@ impl Codegen {
                     ResolvedType::GenericInstance {
                         name,
                         type_args,
-                        module_path,
+                        module_source,
                     } => {
                         // Build monomorphized struct and method name: Box<i32>::get
+                        let module_path = module_source.to_path();
                         let type_arg_names: Vec<String> = type_args
                             .iter()
                             .map(|t| self.mangle_type_for_struct_name(*t, type_table))
@@ -5649,7 +5659,7 @@ impl Codegen {
                     let return_type_info = match type_table.get(expr.type_id) {
                         ResolvedType::GenericInstance {
                             name,
-                            module_path: type_module_path,
+                            module_source: type_module_source,
                             type_args,
                         } => {
                             // Build the mangled struct name (e.g., Box<i32>)
@@ -5658,13 +5668,14 @@ impl Codegen {
                                 .map(|t| self.mangle_type_for_struct_name(*t, type_table))
                                 .collect();
                             let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                            Some((mangled, type_module_path.clone()))
+                            Some((mangled, type_module_source.to_path()))
                         }
                         ResolvedType::Struct {
                             name,
-                            module_path: type_module_path,
+                            module_source: type_module_source,
                         } => {
                             // Check if this struct is monomorphized using metadata
+                            let type_module_path = type_module_source.to_path();
                             let struct_lookup =
                                 StructName::new(type_module_path.clone(), name.clone());
                             if self
@@ -5673,7 +5684,7 @@ impl Codegen {
                                 .map(|s| s.is_monomorphized)
                                 .unwrap_or(false)
                             {
-                                Some((name.clone(), type_module_path.clone()))
+                                Some((name.clone(), type_module_path))
                             } else {
                                 None
                             }
@@ -5847,9 +5858,10 @@ impl Codegen {
                 // Create struct using struct.new
                 // Use the struct_type to get the correct lookup name (handles name collisions)
                 let struct_info = match type_table.get(*struct_type) {
-                    ResolvedType::Struct { name, module_path } => {
-                        self.lookup_struct_type(name, module_path)
-                    }
+                    ResolvedType::Struct {
+                        name,
+                        module_source,
+                    } => self.lookup_struct_type(name, &module_source.to_path()),
                     ResolvedType::GenericInstance {
                         name, type_args, ..
                     } if name == "Array" && type_args.len() == 1 => {
@@ -5870,7 +5882,7 @@ impl Codegen {
                     ResolvedType::GenericInstance {
                         name,
                         type_args,
-                        module_path,
+                        module_source,
                     } => {
                         // Generic struct literal - look up the monomorphized struct name
                         let type_arg_names: Vec<String> = type_args
@@ -5878,7 +5890,7 @@ impl Codegen {
                             .map(|t| self.mangle_type_for_struct_name(*t, type_table))
                             .collect();
                         let mangled_name = format!("{}<{}>", name, type_arg_names.join(","));
-                        self.lookup_struct_type(&mangled_name, module_path)
+                        self.lookup_struct_type(&mangled_name, &module_source.to_path())
                     }
                     _ => {
                         // Fall back to simple name lookup using struct_name
@@ -7790,7 +7802,7 @@ impl Codegen {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 let string_type_id = type_table
-                    .find_struct_type("String", &string_module_path())
+                    .find_struct_type("String", &string_module_source())
                     .expect("String struct should be defined in core/prelude");
                 let array_of_string_type = *self
                     .array_types
@@ -7803,7 +7815,7 @@ impl Codegen {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 let string_type_id = type_table
-                    .find_struct_type("String", &string_module_path())
+                    .find_struct_type("String", &string_module_source())
                     .expect("String struct should be defined in core/prelude");
                 let array_struct_type = *self
                     .array_struct_types
@@ -7816,7 +7828,7 @@ impl Codegen {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 let string_type_id = type_table
-                    .find_struct_type("String", &string_module_path())
+                    .find_struct_type("String", &string_module_source())
                     .expect("String struct should be defined in core/prelude");
                 let array_of_string_type = *self
                     .array_types
@@ -7829,7 +7841,7 @@ impl Codegen {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 let string_type_id = type_table
-                    .find_struct_type("String", &string_module_path())
+                    .find_struct_type("String", &string_module_source())
                     .expect("String struct should be defined in core/prelude");
                 let array_of_string_type = *self
                     .array_types
@@ -8418,8 +8430,11 @@ impl Codegen {
 
         for type_id in needed_types {
             match type_table.get(type_id) {
-                ResolvedType::Struct { name, module_path } => {
-                    if let Some(info) = self.lookup_struct_type(name, module_path) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                } => {
+                    if let Some(info) = self.lookup_struct_type(name, &module_source.to_path()) {
                         ctx.alloc_local(
                             &format!("__copy_source_{}", info.type_idx),
                             ValType::Ref(RefType {
@@ -9085,15 +9100,11 @@ impl Codegen {
                 args,
                 ..
             } => {
-                // Extract method name from func reference
-                let method_name = {
-                    let name = method_func.name();
-                    if let Some(pos) = name.rfind("::") {
-                        name[pos + 2..].to_string()
-                    } else {
-                        name
-                    }
-                };
+                // Extract method name from method_info
+                let method_name = method_func
+                    .method_info()
+                    .map(|info| info.method_name)
+                    .unwrap_or_else(|| method_func.name());
                 // Check if this is an append call on an Array type
                 if method_name == "append"
                     && let Some(element_type) = type_table.as_array(receiver.type_id)

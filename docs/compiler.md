@@ -380,6 +380,27 @@ The `name.rs` module centralizes all naming and mangling logic for the compiler.
 | Module-qualified struct | `{module_path}::{struct_name}`                         | `./geometry.wado::Point`             |
 | Core internal           | `core::internal::{name}`                               | `core::internal::log_stdout`         |
 
+**Utility Functions:**
+
+| Function             | Description                                        | Example                                 |
+| -------------------- | -------------------------------------------------- | --------------------------------------- |
+| `mangle_generic_name`  | Build monomorphized type name                      | `("Box", ["i32"])` → `"Box<i32>"`       |
+| `strip_type_params`    | Extract base name from generic                     | `"IndexValue<i32>"` → `"IndexValue"`    |
+| `extract_local_name`   | Strip module path prefix                           | `"./main.wado/Point"` → `"Point"`       |
+
+### ModuleSource
+
+The `ModuleSource` enum in `name.rs` provides a structured representation of where a module comes from.
+
+```rust
+pub enum ModuleSource {
+    Core { name: String },      // core:prelude, core:cli, etc.
+    Wasi { interface: String }, // wasi:cli, wasi:io, etc.
+    Local { path: String },     // ./geometry.wado, ../lib.wado
+    EntryPoint,                 // The main entry module
+}
+```
+
 ### Module Path Canonicalization
 
 The `name.rs` module also provides path canonicalization utilities to ensure the same file imported via different paths resolves to the same module identity.

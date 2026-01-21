@@ -2215,7 +2215,11 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::Local { name, .. } => {
                 self.output.push_str(name);
             }
-            TirExprKind::Global { name, module_path } => {
+            TirExprKind::Global {
+                name,
+                module_source,
+            } => {
+                let module_path = module_source.to_path();
                 if !module_path.is_empty() {
                     self.output.push_str(&module_path.join("::"));
                     self.output.push_str("::");
