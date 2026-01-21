@@ -1,5 +1,5 @@
 // Test short-circuit evaluation for && and ||
-use {println, Stdout} from "core:cli";
+use { println, Stdout } from "core:cli";
 
 fn side_effect(msg: String, result: bool) -> bool with Stdout {
     println(`side_effect called: {msg}`);
@@ -51,7 +51,7 @@ fn run() with Stdout {
     let b = false;
 
     // (a && b) is false, so right side of || should be evaluated
-    if (a && b) || side_effect("nested: should print", true) {
+    if a && b || side_effect("nested: should print", true) {
         println("nested branch taken (correct)");
     }
 
