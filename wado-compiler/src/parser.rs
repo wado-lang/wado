@@ -1877,7 +1877,7 @@ impl Parser {
         })))
     }
 
-    /// Parse argument list. Returns (args, has_trailing_comma).
+    /// Parse argument list. Returns (args, `has_trailing_comma`).
     fn parse_arg_list(&mut self) -> ParseResult<(Vec<Expr>, bool)> {
         let mut args = Vec::new();
         let mut has_trailing_comma = false;

@@ -865,12 +865,12 @@ impl<'a> Unparser<'a> {
 
         if let Some(else_block) = &i.else_block {
             // Check if this is an `else if` (else block contains only an if statement)
-            if else_block.stmts.len() == 1 {
-                if let Stmt::If(nested_if) = &else_block.stmts[0] {
-                    self.output.push_str(" else ");
-                    self.unparse_if_stmt_continuation(nested_if);
-                    return;
-                }
+            if else_block.stmts.len() == 1
+                && let Stmt::If(nested_if) = &else_block.stmts[0]
+            {
+                self.output.push_str(" else ");
+                self.unparse_if_stmt_continuation(nested_if);
+                return;
             }
             self.output.push_str(" else {\n");
             self.indent_level += 1;
@@ -916,12 +916,12 @@ impl<'a> Unparser<'a> {
 
         if let Some(else_block) = &i.else_block {
             // Check if this is an `else if` (else block contains only an if statement)
-            if else_block.stmts.len() == 1 {
-                if let Stmt::If(nested_if) = &else_block.stmts[0] {
-                    self.output.push_str(" else ");
-                    self.unparse_if_stmt_continuation(nested_if);
-                    return;
-                }
+            if else_block.stmts.len() == 1
+                && let Stmt::If(nested_if) = &else_block.stmts[0]
+            {
+                self.output.push_str(" else ");
+                self.unparse_if_stmt_continuation(nested_if);
+                return;
             }
             self.output.push_str(" else {\n");
             self.indent_level += 1;
