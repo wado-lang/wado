@@ -1,0 +1,27 @@
+// Test for array indexing method inlining inside loops
+// This tests if inlining works correctly with control flow
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let mut sum = 0;
+
+    // Loop with array read
+    for let mut i = 0; i < arr.len(); i += 1 {
+        sum += arr[i];
+    }
+
+    println(`sum: {sum}`);
+
+    // Loop with array write
+    let mut arr2: Array<i32> = [0, 0, 0];
+    for let mut i = 0; i < 3; i += 1 {
+        arr2[i] = i * 10;
+    }
+
+    println(`{arr2[0]}, {arr2[1]}, {arr2[2]}`);
+}
+
+__DATA__
+{"stdout": "sum: 150\n0, 10, 20\n"}

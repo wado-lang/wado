@@ -1,0 +1,32 @@
+// Test for array indexing with nested structs containing multiple arrays
+// This mimics the treemap structure
+
+use { println, Stdout } from "core:cli";
+
+struct Node<K, V> {
+    keys: Array<K>,
+    values: Array<V>,
+    deleted: Array<bool>,
+}
+
+fn run() with Stdout {
+    let node: Node<String, i32> = Node {
+        keys: ["apple", "banana", "cherry"],
+        values: [10, 20, 30],
+        deleted: [false, true, false],
+    };
+
+    // Access multiple arrays in the same struct
+    let mut sum = 0;
+    for let mut i = 0; i < node.keys.len(); i += 1 {
+        if !node.deleted[i] {
+            sum += node.values[i];
+        }
+    }
+
+    println(`sum (excluding deleted): {sum}`);
+    println(`first key: {node.keys[0]}`);
+}
+
+__DATA__
+{"stdout": "sum (excluding deleted): 40\nfirst key: apple\n"}

@@ -6,13 +6,10 @@ struct IntBox {
     value: i32,
 }
 
-fn "IntBox^Container::get"(self: &IntBox) -> i32 {
-    return self.value;
-}
-
 fn run() with Stdout {
     let box: IntBox = move IntBox { value: 42 };
-    let val: i32 = "IntBox^Container::get"(&box);
+    let _inline_self: &IntBox = &box;
+    let val: i32 = self.value;
     core::cli::println(move core::internal::string_concat(move "Value: ", move "i32::to_string"(val)));
 }
 

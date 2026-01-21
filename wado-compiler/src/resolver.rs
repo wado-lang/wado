@@ -1418,6 +1418,7 @@ impl<'a> Resolver<'a> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
+            needed_copy_types: std::collections::HashSet::new(),
         })
     }
 
@@ -1570,6 +1571,7 @@ impl<'a> Resolver<'a> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
+            needed_copy_types: std::collections::HashSet::new(),
         })
     }
 

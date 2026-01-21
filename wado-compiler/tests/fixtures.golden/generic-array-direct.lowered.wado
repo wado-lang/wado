@@ -4,15 +4,8 @@
 
 fn run() {
     let mut arr: Array<i32> = move [];
-    "Array<i32>::append"(&mut arr, 42);
-    core::cli::println(move core::internal::string_concat(move "Length: ", move "i32::to_string"("Array<i32>::len"(&arr))));
-}
-
-pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
-    return self.used;
-}
-
-pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+    let _inline_self: &mut Array<i32> = &mut arr;
+    let _inline_value: i32 = 42;
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {
@@ -26,5 +19,10 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     }
     core::builtin::array_set::<i32>(self.repr, used, value);
     self.used = (used + 1);
+    core::cli::println(move core::internal::string_concat(move "Length: ", move "i32::to_string"("Array<i32>::len"(&arr))));
+}
+
+pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
+    return self.used;
 }
 

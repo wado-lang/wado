@@ -7,12 +7,9 @@ struct Point {
     y: i32,
 }
 
-fn "Point::sum"(self: &Point) -> i32 {
-    return (self.x + self.y);
-}
-
 fn "Point^Describable::describe"(self: &Point) -> String {
-    let s: i32 = "Point::sum"(self);
+    let _inline_self: &Point = self;
+    let s: i32 = (self.x + self.y);
     return core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Point(", move "i32::to_string"(self.x)), move ", "), move "i32::to_string"(self.y)), move ") sum="), move "i32::to_string"(s));
 }
 

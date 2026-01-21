@@ -10,10 +10,6 @@ struct Wrapper {
     acc: Accumulator,
 }
 
-fn "Accumulator::add"(self: &mut Accumulator, n: i32) {
-    self.sum = (self.sum + n);
-}
-
 fn "Wrapper^IndexMut::index_mut"(self: &mut Wrapper, _idx: i32) -> &mut Accumulator {
     return &mut self.acc;
 }
@@ -22,7 +18,9 @@ fn run() with Stdout {
     let mut w: Wrapper = move Wrapper { acc: Accumulator { sum: 0 } };
     let mut i: i32 = 1;
     for ; (i <= 5); i = (i + 1) {
-        "Accumulator::add"("Wrapper^IndexMut::index_mut"(&mut w, 0), i);
+        let _inline_self: &mut Accumulator = "Wrapper^IndexMut::index_mut"(&mut w, 0);
+        let _inline_n: i32 = i;
+        self.sum = (self.sum + n);
     }
     core::cli::println(move core::internal::string_concat(move "Sum 1-5: ", move "i32::to_string"(w.acc.sum)));
 }

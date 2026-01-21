@@ -1,0 +1,22 @@
+// Test for array indexing method inlining with generic struct
+// This tests if inlining works correctly with generic types
+
+use { println, Stdout } from "core:cli";
+
+struct Container<T> {
+    items: Array<T>,
+}
+
+fn run() with Stdout {
+    let c: Container<i32> = Container { items: [10, 20, 30] };
+
+    // Direct array access through generic struct field
+    let first = c.items[0];
+    let second = c.items[1];
+    let third = c.items[2];
+
+    println(`{first}, {second}, {third}`);
+}
+
+__DATA__
+{"stdout": "10, 20, 30\n"}

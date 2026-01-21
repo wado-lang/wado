@@ -1158,6 +1158,9 @@ pub struct TirFunction {
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: std::collections::HashSet<u32>,
+    /// Types that need value copy operations in this function.
+    /// Populated by the optimizer after all transformations.
+    pub needed_copy_types: std::collections::HashSet<TypeId>,
 }
 
 impl TirFunction {

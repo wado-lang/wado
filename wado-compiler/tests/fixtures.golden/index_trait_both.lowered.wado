@@ -16,13 +16,12 @@ fn "SimpleArray^Index::index"(self: &SimpleArray, _idx: i32) -> &i32 {
     return &self.a;
 }
 
-fn "SimpleArray^IndexAssign::index_assign"(self: &mut SimpleArray, _idx: i32, value: i32) {
-    self.a = value;
-}
-
 fn run() with Stdout {
     let mut arr: SimpleArray = move "SimpleArray::new"();
-    "SimpleArray^IndexAssign::index_assign"(&mut arr, 0, 42);
+    let _inline_self: &mut SimpleArray = &mut arr;
+    let _inline__idx: i32 = 0;
+    let _inline_value: i32 = 42;
+    self.a = value;
     core::cli::println(move core::internal::string_concat(move "arr[0] = ", move "i32::to_string"(*"SimpleArray^Index::index"(&arr, 0))));
 }
 

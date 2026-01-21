@@ -1979,6 +1979,7 @@ impl Monomorphizer {
             local_count: generic.local_count,
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
+            needed_copy_types: std::collections::HashSet::new(),
         })
     }
 

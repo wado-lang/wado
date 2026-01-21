@@ -1296,25 +1296,6 @@ impl Codegen {
                     .iter()
                     .any(|p| type_table.contains_type_param(p.type_id));
             if has_type_params {
-                // Debug: show which function is being skipped and why
-                if tir_func.name.contains("TreeMap") && tir_func.name.contains("get") {
-                    let ret_has_param = type_table.contains_type_param(tir_func.return_type);
-                    let params_have_param: Vec<_> = tir_func
-                        .params
-                        .iter()
-                        .map(|p| {
-                            (
-                                p.name.clone(),
-                                p.type_id,
-                                type_table.contains_type_param(p.type_id),
-                            )
-                        })
-                        .collect();
-                    eprintln!(
-                        "DEBUG: Skipping function {} due to type params. return_has_param={}, params_have_param={:?}",
-                        tir_func.name, ret_has_param, params_have_param
-                    );
-                }
                 continue;
             }
             let param_types: Vec<ValType> = tir_func
@@ -3393,13 +3374,18 @@ impl Codegen {
                         .expect("Array struct type should be registered");
                     // Array is now a struct with (repr, used) fields
                     // 1. Store the source struct
-                    let source_struct_local = ctx.alloc_local(
-                        &format!("__copy_array_struct_source_{raw_array_type_idx}"),
-                        ValType::Ref(RefType {
-                            nullable: true,
-                            heap_type: HeapType::Concrete(array_struct_type_idx),
-                        }),
-                    );
+                    let source_struct_name =
+                        format!("__copy_array_struct_source_{raw_array_type_idx}");
+                    let source_struct_local =
+                        ctx.get_local(&source_struct_name).unwrap_or_else(|| {
+                            ctx.alloc_local(
+                                &source_struct_name,
+                                ValType::Ref(RefType {
+                                    nullable: true,
+                                    heap_type: HeapType::Concrete(array_struct_type_idx),
+                                }),
+                            )
+                        });
                     func.instruction(&Instruction::LocalSet(source_struct_local));
 
                     // 2. Get the repr field (raw array)
@@ -3451,13 +3437,21 @@ impl Codegen {
         ctx: &mut FunctionContext,
     ) {
         // Use pre-allocated temp local for the source struct reference
-        let source_local = ctx.alloc_local(
-            &format!("__copy_source_{type_idx}"),
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(type_idx),
-            }),
-        );
+        let local_name = format!("__copy_source_{type_idx}");
+        let source_local = ctx.get_local(&local_name).unwrap_or_else(|| {
+            // Fallback: allocate if not pre-allocated (shouldn't happen normally)
+            eprintln!(
+                "WARNING: struct copy local {} not pre-allocated, allocating now (next_local={})",
+                local_name, ctx.next_local
+            );
+            ctx.alloc_local(
+                &local_name,
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(type_idx),
+                }),
+            )
+        });
 
         // Store source to temp local (stack is now empty)
         func.instruction(&Instruction::LocalSet(source_local));
@@ -3487,26 +3481,34 @@ impl Codegen {
         ctx: &mut FunctionContext,
     ) {
         // Use pre-allocated temp locals for the array copy
-        let source_local = ctx.alloc_local(
-            &format!("__copy_array_source_{array_type_idx}"),
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(array_type_idx),
-            }),
-        );
-        let counter_local = ctx.alloc_local(
-            &format!("__copy_array_counter_{array_type_idx}"),
-            ValType::I32,
-        );
-        let dest_local = ctx.alloc_local(
-            &format!("__copy_array_dest_{array_type_idx}"),
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(array_type_idx),
-            }),
-        );
-        let len_local =
-            ctx.alloc_local(&format!("__copy_array_len_{array_type_idx}"), ValType::I32);
+        let source_name = format!("__copy_array_source_{array_type_idx}");
+        let source_local = ctx.get_local(&source_name).unwrap_or_else(|| {
+            ctx.alloc_local(
+                &source_name,
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(array_type_idx),
+                }),
+            )
+        });
+        let counter_name = format!("__copy_array_counter_{array_type_idx}");
+        let counter_local = ctx
+            .get_local(&counter_name)
+            .unwrap_or_else(|| ctx.alloc_local(&counter_name, ValType::I32));
+        let dest_name = format!("__copy_array_dest_{array_type_idx}");
+        let dest_local = ctx.get_local(&dest_name).unwrap_or_else(|| {
+            ctx.alloc_local(
+                &dest_name,
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(array_type_idx),
+                }),
+            )
+        });
+        let len_name = format!("__copy_array_len_{array_type_idx}");
+        let len_local = ctx
+            .get_local(&len_name)
+            .unwrap_or_else(|| ctx.alloc_local(&len_name, ValType::I32));
 
         // Store source to temp local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -3643,8 +3645,10 @@ impl Codegen {
             }
         };
 
-        // Allocate temp local
-        let source_local = ctx.alloc_local("__copy_option_source", option_valtype);
+        // Use pre-allocated temp local or allocate if not found
+        let source_local = ctx
+            .get_local("__copy_option_source")
+            .unwrap_or_else(|| ctx.alloc_local("__copy_option_source", option_valtype));
 
         // Store source to local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -7845,8 +7849,12 @@ impl Codegen {
         }
 
         // Pre-allocate locals for value copy operations (struct, array, tuple)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
+        if !tir_func.needed_copy_types.is_empty() {
+            self.preallocate_value_copy_locals(
+                &tir_func.needed_copy_types,
+                type_table,
+                &mut func_ctx,
+            );
         }
 
         // Pre-allocate scratch locals for async effect handling (only if needed)
@@ -8060,8 +8068,12 @@ impl Codegen {
         }
 
         // Pre-allocate locals for value copy operations (struct, array, tuple)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
+        if !tir_func.needed_copy_types.is_empty() {
+            self.preallocate_value_copy_locals(
+                &tir_func.needed_copy_types,
+                type_table,
+                &mut func_ctx,
+            );
         }
 
         // Pre-allocate scratch locals for async effect handling (only if needed)
@@ -8923,25 +8935,22 @@ impl Codegen {
     }
 
     /// Pre-allocate locals for value copy operations (struct, array, tuple).
-    /// This must be called before code generation to ensure copy locals are available.
     fn preallocate_value_copy_locals(
         &self,
-        block: &TirBlock,
+        needed_types: &std::collections::HashSet<TypeId>,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
     ) {
-        let mut needed_types: std::collections::HashSet<TypeId> = std::collections::HashSet::new();
-        self.collect_copy_types(block, type_table, &mut needed_types);
-
-        for type_id in needed_types {
+        for &type_id in needed_types {
             match type_table.get(type_id) {
                 ResolvedType::Struct {
                     name,
                     module_source,
                 } => {
                     if let Some(info) = self.lookup_struct_type(name, module_source) {
+                        let local_name = format!("__copy_source_{}", info.type_idx);
                         ctx.alloc_local(
-                            &format!("__copy_source_{}", info.type_idx),
+                            &local_name,
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(info.type_idx),
@@ -9004,165 +9013,6 @@ impl Codegen {
                 }
                 _ => {}
             }
-        }
-    }
-
-    /// Collect all types that need value copy from a block
-    fn collect_copy_types(
-        &self,
-        block: &TirBlock,
-        type_table: &TypeTable,
-        needed_types: &mut std::collections::HashSet<TypeId>,
-    ) {
-        for stmt in &block.stmts {
-            self.collect_copy_types_from_stmt(stmt, type_table, needed_types);
-        }
-    }
-
-    /// Collect copy types from a statement
-    fn collect_copy_types_from_stmt(
-        &self,
-        stmt: &TirStmt,
-        type_table: &TypeTable,
-        needed_types: &mut std::collections::HashSet<TypeId>,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.collect_copy_types_from_expr(value, type_table, needed_types);
-                if self.needs_value_copy(value.type_id, type_table) {
-                    needed_types.insert(value.type_id);
-                }
-            }
-            TirStmtKind::Expr(expr) => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirStmtKind::While { condition, body } => {
-                self.collect_copy_types_from_expr(condition, type_table, needed_types);
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::For {
-                condition,
-                update,
-                body,
-            } => {
-                if let Some(e) = condition {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-                if let Some(e) = update {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.collect_copy_types_from_expr(iterable, type_table, needed_types);
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::Loop { body } => {
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.collect_copy_types_from_expr(condition, type_table, needed_types);
-                self.collect_copy_types(then_block, type_table, needed_types);
-                if let Some(e) = else_block {
-                    self.collect_copy_types(e, type_table, needed_types);
-                }
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            _ => {}
-        }
-    }
-
-    /// Collect copy types from an expression
-    fn collect_copy_types_from_expr(
-        &self,
-        expr: &TirExpr,
-        type_table: &TypeTable,
-        needed_types: &mut std::collections::HashSet<TypeId>,
-    ) {
-        match &expr.kind {
-            TirExprKind::Assign { target, value } => {
-                self.collect_copy_types_from_expr(target, type_table, needed_types);
-                self.collect_copy_types_from_expr(value, type_table, needed_types);
-                // Check if assigning to a local variable with value type
-                if matches!(target.kind, TirExprKind::Local { .. })
-                    && self.needs_value_copy(value.type_id, type_table)
-                {
-                    needed_types.insert(value.type_id);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.collect_copy_types_from_expr(left, type_table, needed_types);
-                self.collect_copy_types_from_expr(right, type_table, needed_types);
-            }
-            TirExprKind::Unary { expr, .. } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    self.collect_copy_types_from_expr(arg, type_table, needed_types);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.collect_copy_types_from_expr(receiver, type_table, needed_types);
-                for arg in args {
-                    self.collect_copy_types_from_expr(arg, type_table, needed_types);
-                }
-            }
-            TirExprKind::FieldAccess { expr, .. } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirExprKind::Index { expr, index } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-                self.collect_copy_types_from_expr(index, type_table, needed_types);
-            }
-            TirExprKind::ArrayLiteral { elements } => {
-                for e in elements {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.collect_copy_types_from_expr(&field.value, type_table, needed_types);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for e in elements {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.collect_copy_types_from_expr(condition, type_table, needed_types);
-                self.collect_copy_types(then_branch, type_table, needed_types);
-                if let Some(e) = else_branch {
-                    self.collect_copy_types(e, type_table, needed_types);
-                }
-            }
-            TirExprKind::Block(block) => {
-                self.collect_copy_types(block, type_table, needed_types);
-            }
-            TirExprKind::Match { expr, arms } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-                for arm in arms {
-                    self.collect_copy_types_from_expr(&arm.body, type_table, needed_types);
-                }
-            }
-            TirExprKind::Cast { expr, .. } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirExprKind::Move { value } => {
-                self.collect_copy_types_from_expr(value, type_table, needed_types);
-            }
-            _ => {}
         }
     }
 

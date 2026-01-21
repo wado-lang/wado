@@ -23,25 +23,12 @@ fn "Value::describe"(self: &Value) -> String {
     return core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
 }
 
-fn "Value::increment"(self: &mut Value) {
-    self.n = (self.n + 1);
-}
-
-fn "Value::add"(self: &mut Value, delta: i32) {
-    self.n = (self.n + delta);
-}
-
 fn "Container::from_values"(a: Value, b: Value, c: Value) -> Container {
     return Container { v0: a, v1: b, v2: c, read_count: 0, write_count: 0 };
 }
 
 fn "Container::stats"(self: &Container) -> String {
     return core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "reads=", move "i32::to_string"(self.read_count)), move ", writes="), move "i32::to_string"(self.write_count));
-}
-
-fn "Container::reset_stats"(self: &mut Container) {
-    self.read_count = 0;
-    self.write_count = 0;
 }
 
 fn "Container::total"(self: &Container) -> i32 {
@@ -73,7 +60,27 @@ fn "Container^IndexMut::index_mut"(self: &mut Container, idx: i32) -> &mut Value
     }
 }
 
-fn "Container^IndexAssign::index_assign"(self: &mut Container, idx: i32, value: Value) {
+fn run() with Stdout {
+    let mut c: Container = move "Container::from_values"("Value::new"(10, "a"), "Value::new"(20, "b"), "Value::new"(30, "c"));
+    let v0: Value = *"Container^Index::index"(&c, 0);
+    core::cli::println(move core::internal::string_concat(move "v0: ", move "Value::describe"(&v0)));
+    let v1: Value = *"Container^Index::index"(&c, 1);
+    core::cli::println(move core::internal::string_concat(move "v1: ", move "Value::describe"(&v1)));
+    let _inline_self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 0);
+    self.n = (self.n + 1);
+    let _inline_self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 1);
+    let _inline_delta: i32 = 100;
+    self.n = (self.n + delta);
+    let _inline_self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 2);
+    let _inline_delta: i32 = 200;
+    self.n = (self.n + delta);
+    core::cli::println(move "After mutations:");
+    core::cli::println(move core::internal::string_concat(move "v0: ", move "Value::describe"(&c.v0)));
+    core::cli::println(move core::internal::string_concat(move "v1: ", move "Value::describe"(&c.v1)));
+    core::cli::println(move core::internal::string_concat(move "v2: ", move "Value::describe"(&c.v2)));
+    let _inline_self: &mut Container = &mut c;
+    let _inline_idx: i32 = 2;
+    let _inline_value: Value = move "Value::new"(999, "replaced");
     self.write_count = (self.write_count + 1);
     if (idx == 0) {
         self.v0 = value;
@@ -84,29 +91,17 @@ fn "Container^IndexAssign::index_assign"(self: &mut Container, idx: i32, value: 
             self.v2 = value;
         }
     }
-}
-
-fn run() with Stdout {
-    let mut c: Container = move "Container::from_values"("Value::new"(10, "a"), "Value::new"(20, "b"), "Value::new"(30, "c"));
-    let v0: Value = *"Container^Index::index"(&c, 0);
-    core::cli::println(move core::internal::string_concat(move "v0: ", move "Value::describe"(&v0)));
-    let v1: Value = *"Container^Index::index"(&c, 1);
-    core::cli::println(move core::internal::string_concat(move "v1: ", move "Value::describe"(&v1)));
-    "Value::increment"("Container^IndexMut::index_mut"(&mut c, 0));
-    "Value::add"("Container^IndexMut::index_mut"(&mut c, 1), 100);
-    "Value::add"("Container^IndexMut::index_mut"(&mut c, 2), 200);
-    core::cli::println(move "After mutations:");
-    core::cli::println(move core::internal::string_concat(move "v0: ", move "Value::describe"(&c.v0)));
-    core::cli::println(move core::internal::string_concat(move "v1: ", move "Value::describe"(&c.v1)));
-    core::cli::println(move core::internal::string_concat(move "v2: ", move "Value::describe"(&c.v2)));
-    "Container^IndexAssign::index_assign"(&mut c, 2, move "Value::new"(999, move "replaced"));
     core::cli::println(move core::internal::string_concat(move "After replace: ", move "Value::describe"(&c.v2)));
     core::cli::println(move core::internal::string_concat(move "Total: ", move "i32::to_string"("Container::total"(&c))));
     core::cli::println(move core::internal::string_concat(move "Stats: ", move "Container::stats"(&c)));
-    "Container::reset_stats"(&mut c);
+    let _inline_self: &mut Container = &mut c;
+    self.read_count = 0;
+    self.write_count = 0;
     core::cli::println(move core::internal::string_concat(move "After reset: ", move "Container::stats"(&c)));
-    "Value::increment"("Container^IndexMut::index_mut"(&mut c, 0));
-    "Value::increment"("Container^IndexMut::index_mut"(&mut c, 1));
+    let _inline_self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 0);
+    self.n = (self.n + 1);
+    let _inline_self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 1);
+    self.n = (self.n + 1);
     core::cli::println(move core::internal::string_concat(move "Final stats: ", move "Container::stats"(&c)));
 }
 

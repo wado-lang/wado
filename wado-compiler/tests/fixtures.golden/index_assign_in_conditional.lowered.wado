@@ -6,18 +6,33 @@ fn run() with Stdout {
     let mut arr: Array<i32> = move [0, 0, 0];
     let condition: bool = true;
     if condition {
-        "Array<i32>^IndexAssign::index_assign"(&mut arr, 0, 111);
+        let _inline_self: &mut Array<i32> = &mut arr;
+        let _inline_index: i32 = 0;
+        let _inline_value: i32 = 111;
+        core::builtin::array_set::<i32>(self.repr, index, value);
     } else {
-        "Array<i32>^IndexAssign::index_assign"(&mut arr, 0, 999);
+        let _inline_self: &mut Array<i32> = &mut arr;
+        let _inline_index: i32 = 0;
+        let _inline_value: i32 = 999;
+        core::builtin::array_set::<i32>(self.repr, index, value);
     }
     if !condition {
-        "Array<i32>^IndexAssign::index_assign"(&mut arr, 1, 888);
+        let _inline_self: &mut Array<i32> = &mut arr;
+        let _inline_index: i32 = 1;
+        let _inline_value: i32 = 888;
+        core::builtin::array_set::<i32>(self.repr, index, value);
     } else {
-        "Array<i32>^IndexAssign::index_assign"(&mut arr, 1, 222);
+        let _inline_self: &mut Array<i32> = &mut arr;
+        let _inline_index: i32 = 1;
+        let _inline_value: i32 = 222;
+        core::builtin::array_set::<i32>(self.repr, index, value);
     }
     if condition {
         if condition {
-            "Array<i32>^IndexAssign::index_assign"(&mut arr, 2, 333);
+            let _inline_self: &mut Array<i32> = &mut arr;
+            let _inline_index: i32 = 2;
+            let _inline_value: i32 = 333;
+            core::builtin::array_set::<i32>(self.repr, index, value);
         }
     }
     core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 0)), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 1))), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 2))));
@@ -25,9 +40,5 @@ fn run() with Stdout {
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     return core::builtin::array_get::<i32>(self.repr, index);
-}
-
-fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
-    core::builtin::array_set::<i32>(self.repr, index, value);
 }
 

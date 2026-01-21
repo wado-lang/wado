@@ -10,10 +10,6 @@ struct Holder {
     data: Data,
 }
 
-fn "Data::set_value"(self: &mut Data, v: i32) {
-    self.value = v;
-}
-
 fn "Holder^Index::index"(self: &Holder, _idx: i32) -> &Data {
     return &self.data;
 }
@@ -23,7 +19,9 @@ fn "Holder^IndexMut::index_mut"(self: &mut Holder, _idx: i32) -> &mut Data {
 }
 
 fn modify_holder(h: &mut Holder, new_value: i32) {
-    "Data::set_value"("Holder^IndexMut::index_mut"(h, 0), new_value);
+    let _inline_self: &mut Data = "Holder^IndexMut::index_mut"(h, 0);
+    let _inline_v: i32 = new_value;
+    self.value = v;
 }
 
 fn run() with Stdout {
