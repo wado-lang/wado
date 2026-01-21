@@ -382,11 +382,11 @@ The `name.rs` module centralizes all naming and mangling logic for the compiler.
 
 **Utility Functions:**
 
-| Function             | Description                                        | Example                                 |
-| -------------------- | -------------------------------------------------- | --------------------------------------- |
-| `mangle_generic_name`  | Build monomorphized type name                      | `("Box", ["i32"])` → `"Box<i32>"`       |
-| `strip_type_params`    | Extract base name from generic                     | `"IndexValue<i32>"` → `"IndexValue"`    |
-| `extract_local_name`   | Strip module path prefix                           | `"./main.wado/Point"` → `"Point"`       |
+| Function              | Description                    | Example                              |
+| --------------------- | ------------------------------ | ------------------------------------ |
+| `mangle_generic_name` | Build monomorphized type name  | `("Box", ["i32"])` → `"Box<i32>"`    |
+| `strip_type_params`   | Extract base name from generic | `"IndexValue<i32>"` → `"IndexValue"` |
+| `extract_local_name`  | Strip module path prefix       | `"./main.wado/Point"` → `"Point"`    |
 
 ### ModuleSource
 

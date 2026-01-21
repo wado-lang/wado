@@ -64,8 +64,8 @@ pub fn lower_project(mut project: Project) -> Project {
 /// IMPORTANT: Requires unified type tables - all modules must share the same `TypeTable`
 /// so that `TypeIds` are valid across modules.
 pub fn lower_modules_indexed(
-    modules: IndexMap<Vec<String>, TirModule>,
-) -> IndexMap<Vec<String>, TirModule> {
+    modules: IndexMap<ModuleSource, TirModule>,
+) -> IndexMap<ModuleSource, TirModule> {
     // First pass: collect all generic functions from all modules
     let mut all_generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> = HashMap::new();
     for module in modules.values() {
@@ -80,9 +80,9 @@ pub fn lower_modules_indexed(
     // Second pass: lower each module using the combined generic functions
     modules
         .into_iter()
-        .map(|(path, module)| {
+        .map(|(module_source, module)| {
             (
-                path,
+                module_source,
                 lower_with_cross_module_generics(module, &all_generic_functions),
             )
         })

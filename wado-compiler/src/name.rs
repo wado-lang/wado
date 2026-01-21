@@ -253,6 +253,16 @@ impl FreeFunctionName {
         }
     }
 
+    /// Create a `FreeFunctionName` from `ModuleSource` and name.
+    pub fn from_module_source(module_source: &ModuleSource, name: &str) -> Self {
+        Self {
+            module_path: module_source.to_path(),
+            name: name.to_string(),
+            is_monomorphized: false,
+            base_name: None,
+        }
+    }
+
     /// Create a `FreeFunctionName` with monomorphization metadata.
     pub fn with_monomorph_info(module_path: Vec<String>, name: String, base_name: String) -> Self {
         Self {
@@ -307,6 +317,21 @@ impl MethodName {
             struct_name,
             trait_name,
             method_name,
+        }
+    }
+
+    /// Create a `MethodName` from `ModuleSource`.
+    pub fn from_module_source(
+        module_source: &ModuleSource,
+        struct_name: &str,
+        trait_name: Option<&str>,
+        method_name: &str,
+    ) -> Self {
+        Self {
+            filename: module_source.to_path().join("/"),
+            struct_name: struct_name.to_string(),
+            trait_name: trait_name.map(String::from),
+            method_name: method_name.to_string(),
         }
     }
 
@@ -600,29 +625,46 @@ impl From<MethodName> for FunctionId {
 /// general `TypeId` enum (similar to `FunctionId`) to handle trait types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructName {
-    /// The module path segments (e.g., `[".", "geometry.wado"]`)
-    pub module_path: Vec<String>,
+    /// The module where the struct is defined
+    pub module_source: ModuleSource,
     /// The struct name (e.g., `Point`)
     pub name: String,
 }
 
 impl StructName {
-    pub fn new(module_path: Vec<String>, name: String) -> Self {
-        Self { module_path, name }
+    #[must_use]
+    pub fn new(module_source: ModuleSource, name: String) -> Self {
+        Self {
+            module_source,
+            name,
+        }
     }
 
-    pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
+    #[must_use]
+    pub fn from_name(name: &str) -> Self {
         Self {
-            module_path: module_path.to_vec(),
+            module_source: ModuleSource::EntryPoint,
             name: name.to_string(),
         }
     }
 
-    /// Create a `StructName` from string literal slices.
-    /// Convenience method for when you have &[&str] instead of &[String].
-    pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+    /// Create a `StructName` from a module path and name.
+    /// This is a convenience method for code that still uses `Vec<String>` paths.
+    #[must_use]
+    pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
         Self {
-            module_path: module_path.iter().map(|s| (*s).to_string()).collect(),
+            module_source: ModuleSource::from_path(module_path),
+            name: name.to_string(),
+        }
+    }
+
+    /// Create a `StructName` from string slices.
+    /// This is a convenience method for tests and initialization.
+    #[must_use]
+    pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+        let path: Vec<String> = module_path.iter().map(|&s| s.to_string()).collect();
+        Self {
+            module_source: ModuleSource::from_path(&path),
             name: name.to_string(),
         }
     }
@@ -630,10 +672,11 @@ impl StructName {
 
 impl fmt::Display for StructName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.module_path.is_empty() {
-            write!(f, "{}", self.name)
-        } else {
-            write!(f, "{}/{}", self.module_path.join("/"), self.name)
+        match &self.module_source {
+            ModuleSource::EntryPoint => write!(f, "{}", self.name),
+            ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
+            ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
+            ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
         }
     }
 }
@@ -1116,16 +1159,16 @@ mod tests {
 
     #[test]
     fn test_struct_name_empty_path() {
-        let struct_name = StructName::from_strs(&[], "Point");
+        let struct_name = StructName::from_path_and_name(&[], "Point");
         assert_eq!(struct_name.to_string(), "Point");
     }
 
     #[test]
     fn test_struct_name_hash_eq() {
         use std::collections::HashSet;
-        let s1 = StructName::from_strs(&["./geometry.wado"], "Point");
-        let s2 = StructName::from_strs(&["./geometry.wado"], "Point");
-        let s3 = StructName::from_strs(&["./other.wado"], "Point");
+        let s1 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
+        let s2 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
+        let s3 = StructName::from_path_and_name(&["./other.wado".to_string()], "Point");
 
         let mut set = HashSet::new();
         set.insert(s1.clone());

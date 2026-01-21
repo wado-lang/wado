@@ -5,7 +5,7 @@
 //! - Usage analysis for conditional feature inclusion
 
 use crate::component_model::WasiRegistry;
-use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, MethodName};
+use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
@@ -340,7 +340,7 @@ fn block_has_return(block: &TirBlock) -> bool {
 }
 
 /// Detect recursive functions using call graph analysis
-fn find_recursive_functions(modules: &IndexMap<Vec<String>, TirModule>) -> HashSet<String> {
+fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> HashSet<String> {
     let mut recursive = HashSet::new();
 
     // Build a simple call graph: function name -> called function names
@@ -593,13 +593,14 @@ fn inline_functions(project: &mut Project) {
     // Also collect function_strings for each candidate (to update caller's strings after inlining)
     let mut candidate_strings: HashMap<(Vec<String>, String), Vec<String>> = HashMap::new();
 
-    for (module_path, module) in &project.tir_modules {
+    for (module_source, module) in &project.tir_modules {
+        let module_path = module_source.to_path();
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if is_inline_eligible(
                 &func,
                 &recursive_functions,
-                module_path,
+                &module_path,
                 &module.type_table.borrow(),
             ) {
                 inline_candidates.insert((module_path.clone(), func.name.clone()), func.clone());
@@ -1906,8 +1907,8 @@ fn analyze_project(project: &mut Project) {
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
     // Find entry function (run in entry module)
-    let entry_func = FunctionId::Free(FreeFunctionName::from_path_and_name(
-        &project.entry_path,
+    let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
+        &project.entry_module_source,
         "run",
     ));
 
@@ -2152,14 +2153,15 @@ type BoxPrimitivesMap = HashMap<FunctionId, HashSet<PrimitiveType>>;
 /// Build call graph and effect usage from all TIR modules
 /// Returns (`call_graph`, `effect_usage`, `box_primitives_map`)
 fn build_analysis_graph(
-    modules: &IndexMap<Vec<String>, TirModule>,
+    modules: &IndexMap<ModuleSource, TirModule>,
 ) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap) {
     let mut call_graph: CallGraph = HashMap::new();
     let mut effect_usage: EffectUsageMap = HashMap::new();
     let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
 
-    for (path, module) in modules {
+    for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
+        let path = module_source.to_path();
 
         // Analyze functions (including methods stored as functions)
         for func_rc in &module.functions {
@@ -2192,10 +2194,10 @@ fn build_analysis_graph(
                         monomorph_info.generic_name.clone(),
                     ))
                 } else {
-                    FunctionId::Free(FreeFunctionName::from_path_and_name(path, &func.name))
+                    FunctionId::Free(FreeFunctionName::from_path_and_name(&path, &func.name))
                 }
             };
-            let analysis = analyze_function(&func, path, type_table);
+            let analysis = analyze_function(&func, &path, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
                 effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -2220,7 +2222,7 @@ fn build_analysis_graph(
                     None,
                     method.name.clone(),
                 ));
-                let analysis = analyze_function(method, path, type_table);
+                let analysis = analyze_function(method, &path, type_table);
                 call_graph.insert(method_id.clone(), analysis.callees);
                 if !analysis.effect_calls.is_empty() {
                     effect_usage.insert(method_id.clone(), analysis.effect_calls);
@@ -2778,7 +2780,8 @@ fn remove_unreachable_functions(project: &mut Project) {
         return;
     }
 
-    for (module_path, module) in &mut project.tir_modules {
+    for (module_source, module) in &mut project.tir_modules {
+        let module_path = module_source.to_path();
         // Retain only reachable functions
         module.functions.retain(|func_rc| {
             let func = func_rc.borrow();
@@ -2801,7 +2804,7 @@ fn remove_unreachable_functions(project: &mut Project) {
 
                 // Try as static method (FunctionId::Free with mangled name)
                 let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    module_path,
+                    &module_path,
                     &func.name,
                 ));
                 if project.reachable_functions.contains(&free_id) {
@@ -2811,11 +2814,11 @@ fn remove_unreachable_functions(project: &mut Project) {
                 // For generic methods/static methods, check if any monomorphized version is reachable
                 // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
                 // Check if any function ID in reachable_functions matches this base name
-                is_generic_func_reachable(&project.reachable_functions, module_path, &func.name)
+                is_generic_func_reachable(&project.reachable_functions, &module_path, &func.name)
             } else {
                 // Regular function
                 let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    module_path,
+                    &module_path,
                     &func.name,
                 ));
                 project.reachable_functions.contains(&func_id)

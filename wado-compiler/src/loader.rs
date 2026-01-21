@@ -9,7 +9,7 @@ use crate::ast::{Item, Module};
 use crate::compiler_host::{CompilerHost, Diagnostic, ErrorCode, Severity, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
-use crate::name::{normalize_module_path, resolve_module_path};
+use crate::name::{ModuleSource, normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
 use crate::stdlib;
 
@@ -17,11 +17,17 @@ use crate::stdlib;
 #[derive(Debug, Clone)]
 pub enum LoadError {
     /// Module was not found
-    ModuleNotFound { path: Vec<String> },
+    ModuleNotFound { module_source: ModuleSource },
     /// Error while parsing module
-    ParseError { path: Vec<String>, message: String },
+    ParseError {
+        module_source: ModuleSource,
+        message: String,
+    },
     /// Lexer error
-    LexError { path: Vec<String>, message: String },
+    LexError {
+        module_source: ModuleSource,
+        message: String,
+    },
     /// I/O error reading file
     IoError { path: String, message: String },
 }
@@ -29,14 +35,20 @@ pub enum LoadError {
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::ModuleNotFound { path } => {
-                write!(f, "module not found: {}", path.join("::"))
+            LoadError::ModuleNotFound { module_source } => {
+                write!(f, "module not found: {module_source}")
             }
-            LoadError::ParseError { path, message } => {
-                write!(f, "parse error in {}: {}", path.join("::"), message)
+            LoadError::ParseError {
+                module_source,
+                message,
+            } => {
+                write!(f, "parse error in {module_source}: {message}")
             }
-            LoadError::LexError { path, message } => {
-                write!(f, "lex error in {}: {}", path.join("::"), message)
+            LoadError::LexError {
+                module_source,
+                message,
+            } => {
+                write!(f, "lex error in {module_source}: {message}")
             }
             LoadError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
@@ -50,7 +62,9 @@ impl std::error::Error for LoadError {}
 impl From<SourceError> for LoadError {
     fn from(err: SourceError) -> Self {
         match err {
-            SourceError::NotFound { path } => LoadError::ModuleNotFound { path: vec![path] },
+            SourceError::NotFound { path } => LoadError::ModuleNotFound {
+                module_source: ModuleSource::Local { path },
+            },
             SourceError::IoError { path, message } => LoadError::IoError { path, message },
             SourceError::NetworkError { url, message } => LoadError::IoError { path: url, message },
         }
@@ -59,12 +73,12 @@ impl From<SourceError> for LoadError {
 
 /// Result of loading all modules
 pub struct LoadResult {
-    /// All loaded modules (module path -> desugared AST)
-    pub modules: HashMap<Vec<String>, Module>,
-    /// The entry module path
-    pub entry_path: Vec<String>,
+    /// All loaded modules (module source -> desugared AST)
+    pub modules: HashMap<ModuleSource, Module>,
+    /// The entry module source
+    pub entry_module_source: ModuleSource,
     /// Modules that were implicitly loaded (not from user imports)
-    pub implicit_modules: HashSet<Vec<String>>,
+    pub implicit_modules: HashSet<ModuleSource>,
 }
 
 /// Module loader
@@ -73,11 +87,11 @@ pub struct LoadResult {
 /// Uses a `CompilerHost` for I/O operations.
 pub struct ModuleLoader {
     /// Cache of already parsed modules
-    loaded: HashMap<Vec<String>, Module>,
+    loaded: HashMap<ModuleSource, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
-    loading: HashSet<Vec<String>>,
+    loading: HashSet<ModuleSource>,
     /// Modules that were implicitly loaded
-    implicit_modules: HashSet<Vec<String>>,
+    implicit_modules: HashSet<ModuleSource>,
 }
 
 impl ModuleLoader {
@@ -104,45 +118,46 @@ impl ModuleLoader {
         host: &H,
     ) -> Result<LoadResult, LoadError> {
         // Parse entry module
-        let entry_module = self.parse_source(entry_source, &[])?;
-        let entry_path = vec![];
+        let entry_module_source = ModuleSource::EntryPoint;
+        let entry_module = self.parse_source(entry_source, &entry_module_source)?;
 
         // Desugar and store entry module
         let desugared_entry = desugar_module(&entry_module);
-        self.loaded.insert(entry_path.clone(), desugared_entry);
+        self.loaded
+            .insert(entry_module_source.clone(), desugared_entry);
 
         // Collect imports from entry module
-        let mut pending: VecDeque<(Vec<String>, Vec<String>)> = VecDeque::new();
-        self.collect_imports(&entry_module, &entry_path, &mut pending);
+        let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
+        self.collect_imports(&entry_module, &entry_module_source, &mut pending);
 
         // Load all dependencies iteratively
-        while let Some((from_path, module_path)) = pending.pop_front() {
+        while let Some((from_module_source, module_source)) = pending.pop_front() {
             // Skip if already loaded
-            if self.loaded.contains_key(&module_path) {
+            if self.loaded.contains_key(&module_source) {
                 continue;
             }
 
             // Skip if currently loading (cycle)
-            if self.loading.contains(&module_path) {
+            if self.loading.contains(&module_source) {
                 continue;
             }
 
             // Mark as loading
-            self.loading.insert(module_path.clone());
+            self.loading.insert(module_source.clone());
 
             // Load and parse the module
             let source = self
-                .get_source_with_host(&module_path, &from_path, host)
+                .get_source_with_host(&module_source, &from_module_source, host)
                 .await?;
-            let module = self.parse_source(&source, &module_path)?;
+            let module = self.parse_source(&source, &module_source)?;
 
             // Collect its imports
-            self.collect_imports(&module, &module_path, &mut pending);
+            self.collect_imports(&module, &module_source, &mut pending);
 
             // Desugar and store
             let desugared = desugar_module(&module);
-            self.loaded.insert(module_path.clone(), desugared);
-            self.loading.remove(&module_path);
+            self.loaded.insert(module_source.clone(), desugared);
+            self.loading.remove(&module_source);
         }
 
         // Load implicit modules (for compiler-generated code)
@@ -150,7 +165,7 @@ impl ModuleLoader {
 
         Ok(LoadResult {
             modules: self.loaded,
-            entry_path,
+            entry_module_source,
             implicit_modules: self.implicit_modules,
         })
     }
@@ -159,58 +174,78 @@ impl ModuleLoader {
     fn collect_imports(
         &self,
         module: &Module,
-        from_path: &[String],
-        pending: &mut VecDeque<(Vec<String>, Vec<String>)>,
+        from_module_source: &ModuleSource,
+        pending: &mut VecDeque<(ModuleSource, ModuleSource)>,
     ) {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                let resolved_path = self.resolve_import(from_path, &use_decl.source);
-                pending.push_back((from_path.to_vec(), resolved_path));
+                let resolved = self.resolve_import(from_module_source, &use_decl.source);
+                pending.push_back((from_module_source.clone(), resolved));
             }
         }
     }
 
     /// Load implicit modules required by the compiler
     async fn load_implicit_modules<H: CompilerHost>(&mut self, host: &H) -> Result<(), LoadError> {
-        let implicit_paths = [
-            vec!["core".to_string(), "prelude".to_string()],
-            vec!["core".to_string(), "internal".to_string()],
-            vec!["core".to_string(), "builtin".to_string()],
+        let implicit_module_sources = [
+            ModuleSource::Core {
+                name: "prelude".to_string(),
+            },
+            ModuleSource::Core {
+                name: "internal".to_string(),
+            },
+            ModuleSource::Core {
+                name: "builtin".to_string(),
+            },
         ];
 
-        for path in implicit_paths {
-            if self.loaded.contains_key(&path) {
+        for module_source in implicit_module_sources {
+            if self.loaded.contains_key(&module_source) {
                 continue;
             }
 
             // Try to load - errors are warnings for implicit modules
-            match self.get_source_with_host(&path, &[], host).await {
+            match self
+                .get_source_with_host(&module_source, &ModuleSource::EntryPoint, host)
+                .await
+            {
                 Ok(source) => {
-                    match self.parse_source(&source, &path) {
+                    match self.parse_source(&source, &module_source) {
                         Ok(module) => {
                             // Collect imports from implicit module
                             let mut pending = VecDeque::new();
-                            self.collect_imports(&module, &path, &mut pending);
+                            self.collect_imports(&module, &module_source, &mut pending);
 
                             // Load any dependencies of implicit modules
-                            while let Some((from_path, dep_path)) = pending.pop_front() {
-                                if self.loaded.contains_key(&dep_path) {
+                            while let Some((from_module_source, dep_module_source)) =
+                                pending.pop_front()
+                            {
+                                if self.loaded.contains_key(&dep_module_source) {
                                     continue;
                                 }
-                                if let Ok(dep_source) =
-                                    self.get_source_with_host(&dep_path, &from_path, host).await
+                                if let Ok(dep_source) = self
+                                    .get_source_with_host(
+                                        &dep_module_source,
+                                        &from_module_source,
+                                        host,
+                                    )
+                                    .await
                                     && let Ok(dep_module) =
-                                        self.parse_source(&dep_source, &dep_path)
+                                        self.parse_source(&dep_source, &dep_module_source)
                                 {
-                                    self.collect_imports(&dep_module, &dep_path, &mut pending);
+                                    self.collect_imports(
+                                        &dep_module,
+                                        &dep_module_source,
+                                        &mut pending,
+                                    );
                                     let desugared = desugar_module(&dep_module);
-                                    self.loaded.insert(dep_path, desugared);
+                                    self.loaded.insert(dep_module_source, desugared);
                                 }
                             }
 
                             let desugared = desugar_module(&module);
-                            self.loaded.insert(path.clone(), desugared);
-                            self.implicit_modules.insert(path);
+                            self.loaded.insert(module_source.clone(), desugared);
+                            self.implicit_modules.insert(module_source);
                         }
                         Err(e) => {
                             host.emit_diagnostic(Diagnostic {
@@ -239,70 +274,88 @@ impl ModuleLoader {
     }
 
     /// Resolve an import source relative to the importing module
-    fn resolve_import(&self, from_path: &[String], import_source: &str) -> Vec<String> {
+    fn resolve_import(
+        &self,
+        from_module_source: &ModuleSource,
+        import_source: &str,
+    ) -> ModuleSource {
         // Handle special prefixes
-        if import_source.starts_with("core:")
-            || import_source.starts_with("wasi:")
-            || import_source.starts_with("https://")
-            || import_source.starts_with("http://")
-        {
-            if import_source.contains(':') {
-                return import_source.splitn(2, ':').map(String::from).collect();
-            }
-            return vec![import_source.to_string()];
+        if let Some(name) = import_source.strip_prefix("core:") {
+            return ModuleSource::Core {
+                name: name.to_string(),
+            };
+        }
+        if let Some(interface) = import_source.strip_prefix("wasi:") {
+            return ModuleSource::Wasi {
+                interface: interface.to_string(),
+            };
+        }
+        if import_source.starts_with("https://") || import_source.starts_with("http://") {
+            return ModuleSource::Local {
+                path: import_source.to_string(),
+            };
         }
 
-        // For relative imports, resolve against from_path
-        if !from_path.is_empty() {
-            let from_file = &from_path[0];
-            if from_file.starts_with("./") || from_file.starts_with("../") {
-                let resolved = resolve_module_path(from_file, import_source);
-                return vec![resolved];
-            }
+        // For relative imports, resolve against from_module_source
+        if let ModuleSource::Local { path: from_file } = from_module_source
+            && (from_file.starts_with("./") || from_file.starts_with("../"))
+        {
+            let resolved = resolve_module_path(from_file, import_source);
+            return ModuleSource::Local { path: resolved };
         }
 
         // Fallback: treat as relative to project root
         let canonical = normalize_module_path(import_source);
-        vec![canonical]
+        ModuleSource::Local { path: canonical }
     }
 
     /// Get source code for a module using `CompilerHost`
     async fn get_source_with_host<H: CompilerHost>(
         &self,
-        module_path: &[String],
-        _from_path: &[String],
+        module_source: &ModuleSource,
+        _from_module_source: &ModuleSource,
         host: &H,
     ) -> Result<String, LoadError> {
-        // Check for local file path - delegate to host
-        if !module_path.is_empty() {
-            let first = &module_path[0];
-            if first.starts_with("./") || first.starts_with("../") || first.ends_with(".wado") {
-                return host.load_source(first).await.map_err(LoadError::from);
+        match module_source {
+            ModuleSource::Local { path } => host.load_source(path).await.map_err(LoadError::from),
+            ModuleSource::Core { name } => {
+                let import_path = format!("core:{name}");
+                if let Some(source) = stdlib::get_stdlib_module(&import_path) {
+                    Ok(source.to_string())
+                } else {
+                    Err(LoadError::ModuleNotFound {
+                        module_source: module_source.clone(),
+                    })
+                }
+            }
+            ModuleSource::Wasi { interface } => {
+                let import_path = format!("wasi:{interface}");
+                if let Some(source) = stdlib::get_stdlib_module(&import_path) {
+                    Ok(source.to_string())
+                } else {
+                    Err(LoadError::ModuleNotFound {
+                        module_source: module_source.clone(),
+                    })
+                }
+            }
+            ModuleSource::EntryPoint => {
+                // Entry point source is provided directly, not loaded from host
+                Err(LoadError::ModuleNotFound {
+                    module_source: module_source.clone(),
+                })
             }
         }
-
-        // Convert to import path (e.g., ["core", "cli"] -> "core:cli")
-        let import_path = if module_path.len() == 2 {
-            format!("{}:{}", module_path[0], module_path[1])
-        } else {
-            module_path.join(":")
-        };
-
-        // Try embedded stdlib (handled by compiler, not host)
-        if let Some(source) = stdlib::get_stdlib_module(&import_path) {
-            return Ok(source.to_string());
-        }
-
-        Err(LoadError::ModuleNotFound {
-            path: module_path.to_vec(),
-        })
     }
 
     /// Parse source code into a module AST
-    fn parse_source(&self, source: &str, module_path: &[String]) -> Result<Module, LoadError> {
+    fn parse_source(
+        &self,
+        source: &str,
+        module_source: &ModuleSource,
+    ) -> Result<Module, LoadError> {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().map_err(|e| LoadError::LexError {
-            path: module_path.to_vec(),
+            module_source: module_source.clone(),
             message: format!(
                 "line {}, column {}: {}",
                 e.span.line, e.span.column, e.message
@@ -312,7 +365,7 @@ impl ModuleLoader {
 
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
         parser.parse().map_err(|e| LoadError::ParseError {
-            path: module_path.to_vec(),
+            module_source: module_source.clone(),
             message: format!(
                 "line {}, column {}: {}",
                 e.span.line, e.span.column, e.message

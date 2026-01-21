@@ -5745,11 +5745,21 @@ pub fn resolve_to_project(
 ) -> Result<Project, Vec<TypeError>> {
     let tir_modules = Resolver::resolve_all_modules(&symbols, modules)?;
 
+    // Convert Vec<String> to ModuleSource at the boundary
+    let tir_modules_by_source: IndexMap<ModuleSource, TirModule> = tir_modules
+        .into_iter()
+        .map(|(path, tir)| (ModuleSource::from_path(&path), tir))
+        .collect();
+    let implicit_modules_by_source: HashSet<ModuleSource> = implicit_modules
+        .into_iter()
+        .map(|p| ModuleSource::from_path(&p))
+        .collect();
+
     Ok(Project::new(
-        entry_path,
-        tir_modules,
+        ModuleSource::from_path(&entry_path),
+        tir_modules_by_source,
         symbols,
-        implicit_modules,
+        implicit_modules_by_source,
         module_name,
     ))
 }
