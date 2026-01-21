@@ -241,6 +241,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             callee: desugar_expr(&c.callee),
             type_args: c.type_args.clone(),
             args: c.args.iter().map(desugar_expr).collect(),
+            has_trailing_comma: c.has_trailing_comma,
             span: c.span,
         })),
         Expr::MethodCall(m) => Expr::MethodCall(Box::new(MethodCallExpr {
@@ -248,12 +249,14 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             method: m.method.clone(),
             type_args: m.type_args.clone(),
             args: m.args.iter().map(desugar_expr).collect(),
+            has_trailing_comma: m.has_trailing_comma,
             span: m.span,
         })),
         Expr::StaticMethodCall(s) => Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
             target_type: s.target_type.clone(),
             method: s.method.clone(),
             args: s.args.iter().map(desugar_expr).collect(),
+            has_trailing_comma: s.has_trailing_comma,
             span: s.span,
         })),
         Expr::FieldAccess(f) => Expr::FieldAccess(Box::new(FieldAccessExpr {
@@ -335,6 +338,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     span: f.span,
                 })
                 .collect(),
+            has_trailing_comma: s.has_trailing_comma,
             span: s.span,
         })),
         Expr::TupleLiteral(t) => Expr::TupleLiteral(Box::new(TupleLiteralExpr {
@@ -548,6 +552,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         }),
         type_args: vec![],
         args: vec![error_message],
+        has_trailing_comma: false,
         span,
     }));
 

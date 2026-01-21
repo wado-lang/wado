@@ -558,6 +558,9 @@ pub struct StructLiteralExpr {
     /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
     pub name: Option<String>,
     pub fields: Vec<StructLiteralField>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    /// Multiline formatting is used when this is true.
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
@@ -713,6 +716,8 @@ pub struct CallExpr {
     /// Explicit type arguments for generic functions: `foo::<i32>(x)`
     pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
@@ -723,6 +728,8 @@ pub struct MethodCallExpr {
     /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
     pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
@@ -735,6 +742,8 @@ pub struct StaticMethodCallExpr {
     pub method: String,
     /// Arguments to the method
     pub args: Vec<Expr>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
