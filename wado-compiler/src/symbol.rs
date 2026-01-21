@@ -4,12 +4,45 @@
 //! and their metadata. It supports module namespacing and scoped lookups.
 
 use std::collections::HashMap;
+use std::ops::Index;
 
 use crate::ast::WasiImport;
 use crate::token::Span;
 
-/// Unique identifier for a symbol in the table
-pub type SymbolId = usize;
+/// Unique identifier for a symbol in the table.
+/// This is a newtype wrapper to prevent misuse of raw integers as `SymbolId`s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SymbolId(pub usize);
+
+/// A vector of symbols that can be indexed by `SymbolId`.
+#[derive(Debug, Default, Clone)]
+struct SymbolVec(Vec<Symbol>);
+
+impl SymbolVec {
+    fn push(&mut self, symbol: Symbol) {
+        self.0.push(symbol);
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn get(&self, id: SymbolId) -> Option<&Symbol> {
+        self.0.get(id.0)
+    }
+
+    fn as_slice(&self) -> &[Symbol] {
+        &self.0
+    }
+}
+
+impl Index<SymbolId> for SymbolVec {
+    type Output = Symbol;
+
+    fn index(&self, id: SymbolId) -> &Self::Output {
+        &self.0[id.0]
+    }
+}
 
 /// The kind of symbol and its associated data
 #[derive(Debug, Clone)]
@@ -185,7 +218,7 @@ impl Symbol {
 #[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
     /// All symbols in the table
-    symbols: Vec<Symbol>,
+    symbols: SymbolVec,
     /// Module path → symbol name → symbol id
     modules: HashMap<Vec<String>, HashMap<String, SymbolId>>,
     /// Imported symbols in the current module (name → symbol id)
@@ -217,7 +250,7 @@ impl SymbolTable {
         module_path: &[String],
         span: Option<Span>,
     ) -> SymbolId {
-        let id = self.symbols.len();
+        let id = SymbolId(self.symbols.len());
         let symbol = Symbol {
             id,
             name: name.to_string(),
@@ -320,7 +353,7 @@ impl SymbolTable {
     /// # Panics
     /// Panics if no scope is active (call `enter_scope` first)
     pub fn define_local(&mut self, name: &str, kind: SymbolKind, span: Option<Span>) -> SymbolId {
-        let id = self.symbols.len();
+        let id = SymbolId(self.symbols.len());
         let symbol = Symbol {
             id,
             name: name.to_string(),
@@ -358,7 +391,7 @@ impl SymbolTable {
 
     /// Get all symbols
     pub fn all_symbols(&self) -> &[Symbol] {
-        &self.symbols
+        self.symbols.as_slice()
     }
 }
 

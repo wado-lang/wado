@@ -12,6 +12,19 @@ use wasm_encoder::{
 };
 
 // ============================================================================
+// Rec Group Types
+// ============================================================================
+
+/// Kind of type within a rec group (for mutually recursive types)
+#[derive(Debug, Clone)]
+pub enum RecTypeKind {
+    /// Struct type with fields
+    Struct(Vec<FieldType>),
+    /// Array type with element type
+    Array(FieldType),
+}
+
+// ============================================================================
 // CoreModuleBuilder - Builder for Wasm core modules with dynamic index allocation
 // ============================================================================
 
@@ -130,6 +143,72 @@ impl CoreModuleBuilder {
         self.type_names.insert(name.to_string(), idx);
         self.next_type_idx += 1;
         idx
+    }
+
+    /// Reserve a type index for future use (for forward references in rec groups)
+    pub fn reserve_type_idx(&mut self, name: &str) -> u32 {
+        let idx = self.next_type_idx;
+        self.type_names.insert(name.to_string(), idx);
+        idx
+    }
+
+    /// Define a rec group containing multiple mutually recursive types.
+    /// Types within the rec group can forward-reference each other.
+    ///
+    /// Each element in `types` is (name, `RecTypeKind`) where `RecTypeKind` specifies
+    /// whether it's a struct or array type.
+    pub fn define_rec_group(&mut self, types: &[(String, RecTypeKind)]) -> Vec<u32> {
+        use wasm_encoder::StructType;
+
+        let base_idx = self.next_type_idx;
+        let mut indices = Vec::with_capacity(types.len());
+
+        // Pre-register all type names so they can be looked up during rec group construction
+        for (i, (name, _)) in types.iter().enumerate() {
+            let idx = base_idx + i as u32;
+            self.type_names.insert(name.clone(), idx);
+            indices.push(idx);
+        }
+
+        // Build SubType list for rec group
+        let subtypes: Vec<SubType> = types
+            .iter()
+            .map(|(_, kind)| match kind {
+                RecTypeKind::Struct(fields) => SubType {
+                    is_final: false,
+                    supertype_idx: None,
+                    composite_type: CompositeType {
+                        inner: CompositeInnerType::Struct(StructType {
+                            fields: fields.clone().into_boxed_slice(),
+                        }),
+                        shared: false,
+                        descriptor: None,
+                        describes: None,
+                    },
+                },
+                RecTypeKind::Array(field_type) => SubType {
+                    is_final: true,
+                    supertype_idx: None,
+                    composite_type: CompositeType {
+                        inner: CompositeInnerType::Array(ArrayType(*field_type)),
+                        shared: false,
+                        descriptor: None,
+                        describes: None,
+                    },
+                },
+            })
+            .collect();
+
+        // Emit the rec group
+        self.types.ty().rec(subtypes);
+
+        self.next_type_idx += types.len() as u32;
+        indices
+    }
+
+    /// Get the next type index without allocating it (for planning rec groups)
+    pub fn peek_next_type_idx(&self) -> u32 {
+        self.next_type_idx
     }
 
     /// Import a function and return its function index.

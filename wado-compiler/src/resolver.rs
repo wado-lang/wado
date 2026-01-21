@@ -36,13 +36,28 @@ fn string_module_source() -> ModuleSource {
     ModuleSource::core("prelude")
 }
 
-/// Struct field info: (`module_source`, fields) where fields is a list of (name, `type_id`) pairs
-type StructFieldInfo = (ModuleSource, Vec<(String, TypeId)>);
+/// Struct field info: module source and field definitions
+#[derive(Clone)]
+struct StructFieldInfo {
+    module_source: ModuleSource,
+    /// Field definitions: (name, `type_id`) pairs
+    fields: Vec<(String, TypeId)>,
+}
 
-/// Variant case info: `case_name` -> `field_type_ids`
-type VariantCaseData = (String, Vec<TypeId>);
-/// Variant info: (`module_source`, `type_params`, cases)
-type VariantInfo = (ModuleSource, Vec<String>, Vec<VariantCaseData>);
+/// Variant case info: case name and field types
+#[derive(Clone)]
+struct VariantCaseData {
+    name: String,
+    field_types: Vec<TypeId>,
+}
+
+/// Variant info: module source, type parameters, and cases
+#[derive(Clone)]
+struct VariantInfo {
+    module_source: ModuleSource,
+    type_params: Vec<String>,
+    cases: Vec<VariantCaseData>,
+}
 
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
@@ -375,6 +390,8 @@ pub struct Resolver<'a> {
     /// Current associated type bindings in scope (`Self::Name` -> resolved type)
     /// Set when resolving trait implementations
     current_associated_type_bindings: HashMap<String, TypeId>,
+    /// Current `Self` type in scope (the type being implemented in an impl block)
+    current_self_type: Option<TypeId>,
 }
 
 /// Info about an Index trait implementation
@@ -417,6 +434,14 @@ struct IndexValueTraitInfo {
     trait_name: String,
 }
 
+/// Info about a comparison trait implementation (`Eq` or `Ord`)
+struct ComparisonTraitInfo {
+    /// Self kind for the comparison method (&self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "Eq", "Ord")
+    trait_name: String,
+}
+
 impl<'a> Resolver<'a> {
     /// Create a new resolver
     pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
@@ -437,6 +462,7 @@ impl<'a> Resolver<'a> {
             generic_function_params: HashMap::new(),
             generic_method_params: HashMap::new(),
             current_associated_type_bindings: HashMap::new(),
+            current_self_type: None,
         }
     }
 
@@ -589,7 +615,10 @@ impl<'a> Resolver<'a> {
                         // Insert with empty fields first - will be populated in second sub-pass
                         struct_fields.insert(
                             struct_decl.name.clone(),
-                            (module_source.clone(), Vec::new()),
+                            StructFieldInfo {
+                                module_source: module_source.clone(),
+                                fields: Vec::new(),
+                            },
                         );
                     }
                     Item::Variant(variant_decl) => {
@@ -601,7 +630,11 @@ impl<'a> Resolver<'a> {
                             .collect();
                         variant_cases.insert(
                             variant_decl.name.clone(),
-                            (module_source.clone(), type_params, Vec::new()),
+                            VariantInfo {
+                                module_source: module_source.clone(),
+                                type_params,
+                                cases: Vec::new(),
+                            },
                         );
                     }
                     _ => {}
@@ -626,8 +659,13 @@ impl<'a> Resolver<'a> {
                             fields.push((field.name.clone(), type_id));
                         }
                         // Update the struct_fields entry with actual fields
-                        struct_fields
-                            .insert(struct_decl.name.clone(), (module_source.clone(), fields));
+                        struct_fields.insert(
+                            struct_decl.name.clone(),
+                            StructFieldInfo {
+                                module_source: module_source.clone(),
+                                fields,
+                            },
+                        );
                     }
                     Item::Type(type_alias) => {
                         let type_id = Self::resolve_type_static(
@@ -662,11 +700,18 @@ impl<'a> Resolver<'a> {
                             } else {
                                 Vec::new()
                             };
-                            cases.push((case.name.clone(), field_types));
+                            cases.push(VariantCaseData {
+                                name: case.name.clone(),
+                                field_types,
+                            });
                         }
                         variant_cases.insert(
                             variant_decl.name.clone(),
-                            (module_source.clone(), type_params, cases),
+                            VariantInfo {
+                                module_source: module_source.clone(),
+                                type_params,
+                                cases,
+                            },
                         );
                     }
                     _ => {}
@@ -745,6 +790,7 @@ impl<'a> Resolver<'a> {
                 generic_function_params: HashMap::new(),
                 generic_method_params: HashMap::new(),
                 current_associated_type_bindings: HashMap::new(),
+                current_self_type: None,
             };
 
             match resolver.resolve_module(module, ModuleSource::from_path(path)) {
@@ -791,12 +837,12 @@ impl<'a> Resolver<'a> {
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); paths.len()];
 
         // Analyze struct fields to find cross-module dependencies
-        for (struct_name, (module_source, fields)) in struct_fields {
-            let module_path = module_source.to_path();
+        for (struct_name, info) in struct_fields {
+            let module_path = info.module_source.to_path();
             let Some(&from_idx) = path_to_idx.get(&module_path) else {
                 continue;
             };
-            for (_field_name, field_type_id) in fields {
+            for (_field_name, field_type_id) in &info.fields {
                 if let ResolvedType::Struct {
                     name: ref_struct_name,
                     module_source: ref_module_source,
@@ -889,8 +935,8 @@ impl<'a> Resolver<'a> {
                     "!" => TypeTable::NEVER,
                     _ => {
                         // Check if it's a struct type
-                        if let Some((module_source, _)) = struct_fields.get(&named.name) {
-                            type_table.make_struct(named.name.clone(), module_source.clone())
+                        if let Some(info) = struct_fields.get(&named.name) {
+                            type_table.make_struct(named.name.clone(), info.module_source.clone())
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -924,7 +970,7 @@ impl<'a> Resolver<'a> {
                 }
                 _ => {
                     // Check if it's a generic struct type
-                    if let Some((module_source, _)) = struct_fields.get(&generic.name) {
+                    if let Some(info) = struct_fields.get(&generic.name) {
                         // Resolve type arguments
                         let type_args: Vec<TypeId> = generic
                             .args
@@ -940,7 +986,7 @@ impl<'a> Resolver<'a> {
                             .collect();
                         type_table.make_generic_instance(
                             generic.name.clone(),
-                            module_source.clone(),
+                            info.module_source.clone(),
                             type_args,
                         )
                     } else {
@@ -1031,7 +1077,10 @@ impl<'a> Resolver<'a> {
                     }
                     self.struct_fields.insert(
                         struct_decl.name.clone(),
-                        (self.current_module_source.clone(), fields),
+                        StructFieldInfo {
+                            module_source: self.current_module_source.clone(),
+                            fields,
+                        },
                     );
 
                     // Restore type params scope
@@ -1068,12 +1117,19 @@ impl<'a> Resolver<'a> {
                             .as_ref()
                             .map(|fields| fields.iter().map(|f| self.resolve_type(f)).collect())
                             .unwrap_or_default();
-                        cases.push((case.name.clone(), field_types));
+                        cases.push(VariantCaseData {
+                            name: case.name.clone(),
+                            field_types,
+                        });
                     }
 
                     self.variant_cases.insert(
                         variant_decl.name.clone(),
-                        (self.current_module_source.clone(), type_params, cases),
+                        VariantInfo {
+                            module_source: self.current_module_source.clone(),
+                            type_params,
+                            cases,
+                        },
                     );
 
                     // Restore type params scope
@@ -1415,6 +1471,11 @@ impl<'a> Resolver<'a> {
             type_param_list.push((param.name.clone(), type_id));
         }
 
+        // Set up Self type for the impl block
+        // This allows `&Self` to resolve correctly in method parameters
+        let old_self_type = self.current_self_type;
+        self.current_self_type = Some(self.resolve_type(impl_type));
+
         // Resolve return type
         let return_type = func
             .return_type
@@ -1485,6 +1546,9 @@ impl<'a> Resolver<'a> {
                 index: i as u32,
             })
             .collect();
+
+        // Restore Self type
+        self.current_self_type = old_self_type;
 
         Some(TirFunction {
             name: func.name.clone(), // Will be mangled by caller
@@ -2221,15 +2285,18 @@ impl<'a> Resolver<'a> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            if let Some((module_source, _, cases)) = self.variant_cases.get(prefix) {
+            if let Some(variant_info) = self.variant_cases.get(prefix) {
                 // Find the case by name
-                if let Some((case_index, (case_name, field_types))) =
-                    cases.iter().enumerate().find(|(_, (n, _))| n == suffix)
+                if let Some((case_index, case_data)) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| c.name == suffix)
                 {
                     // Unit variant - must have no fields
-                    if !field_types.is_empty() {
+                    if !case_data.field_types.is_empty() {
                         self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: field_types.len(),
+                            expected: case_data.field_types.len(),
                             found: 0,
                             span: ident.span,
                         });
@@ -2240,13 +2307,13 @@ impl<'a> Resolver<'a> {
                     let variant_type = self
                         .type_table
                         .borrow_mut()
-                        .make_variant(prefix.to_string(), module_source.clone());
+                        .make_variant(prefix.to_string(), variant_info.module_source.clone());
 
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
                             case_index: case_index as u32,
-                            case_name: case_name.clone(),
+                            case_name: case_data.name.clone(),
                             fields: vec![],
                         },
                         variant_type,
@@ -2273,68 +2340,116 @@ impl<'a> Resolver<'a> {
         let left = self.resolve_expr(&binary.left, ctx);
         let right = self.resolve_expr(&binary.right, ctx);
 
-        // Special case: String equality comparison
-        // Desugar `a == b` to `string_eq(&a, &b)` and `a != b` to `!string_eq(&a, &b)`
+        // Check if this is a comparison operation on a non-primitive type
+        // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
         let left_type = self.type_table.borrow().get(left.type_id).clone();
-        let is_string = matches!(left_type, ResolvedType::String)
-            || matches!(left_type, ResolvedType::Struct { ref name, .. } if name == "String");
-        if is_string && matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
-            // Create reference types for the arguments
-            let left_ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(left.type_id));
-            let right_ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(right.type_id));
+        let is_comparison = matches!(
+            binary.op,
+            BinaryOp::Eq
+                | BinaryOp::NotEq
+                | BinaryOp::Lt
+                | BinaryOp::LtEq
+                | BinaryOp::Gt
+                | BinaryOp::GtEq
+        );
 
-            // Wrap left and right with Ref expressions
-            let left_ref = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    expr: Box::new(left),
-                },
-                left_ref_type,
-                binary.span,
-            );
-            let right_ref = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    expr: Box::new(right),
-                },
-                right_ref_type,
-                binary.span,
-            );
+        if is_comparison {
+            // Get struct name for trait lookup
+            let struct_name = match &left_type {
+                ResolvedType::String => Some("String".to_string()),
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
 
-            let call_expr = TirExpr::new(
-                TirExprKind::Call {
-                    func: FunctionRef::External {
-                        module_source: ModuleSource::core("internal"),
-                        name: "string_eq".to_string(),
-                        monomorph_info: None,
-                        method_info: None, // Free function
-                    },
-                    type_args: vec![],
-                    args: vec![left_ref, right_ref],
-                },
-                TypeTable::BOOL,
-                binary.span,
-            );
+            if let Some(struct_name) = struct_name {
+                // Determine which trait and method to use based on operator
+                let (trait_name, method_name, needs_negation, swap_operands) = match binary.op {
+                    BinaryOp::Eq => ("Eq", "eq", false, false),
+                    BinaryOp::NotEq => ("Eq", "eq", true, false), // !a.eq(&b)
+                    BinaryOp::Lt => ("Ord", "lt", false, false),
+                    BinaryOp::Gt => ("Ord", "lt", false, true), // b.lt(&a)
+                    BinaryOp::LtEq => ("Ord", "lt", true, true), // !b.lt(&a)
+                    BinaryOp::GtEq => ("Ord", "lt", true, false), // !a.lt(&b)
+                    _ => unreachable!(),
+                };
 
-            // For NotEq, negate the result
-            if binary.op == BinaryOp::NotEq {
-                return TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(call_expr),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                );
+                // Find the appropriate trait implementation
+                let trait_info = if trait_name == "Eq" {
+                    self.find_eq_trait_impl(&struct_name, left.type_id)
+                } else {
+                    self.find_ord_trait_impl(&struct_name, left.type_id)
+                };
+
+                if let Some(trait_info) = trait_info {
+                    // Choose receiver and argument based on operand order
+                    let (receiver_expr, arg_expr) = if swap_operands {
+                        (right.clone(), left.clone())
+                    } else {
+                        (left.clone(), right.clone())
+                    };
+
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        receiver_expr,
+                        trait_info.self_kind,
+                        binary.span,
+                    );
+
+                    // Create reference type for the argument (other: &Self)
+                    let arg_ref_type = self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(arg_expr.type_id));
+
+                    let arg_ref = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(arg_expr),
+                        },
+                        arg_ref_type,
+                        binary.span,
+                    );
+
+                    // Get the mangled method name: StructName^Eq::eq or StructName^Ord::lt
+                    let mangled_method_name =
+                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+
+                    let call_expr = TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    method_name.to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![arg_ref],
+                        },
+                        TypeTable::BOOL,
+                        binary.span,
+                    );
+
+                    // Apply negation if needed (for !=, <=, >=)
+                    if needs_negation {
+                        return TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Not,
+                                expr: Box::new(call_expr),
+                            },
+                            TypeTable::BOOL,
+                            binary.span,
+                        );
+                    }
+
+                    return call_expr;
+                }
             }
-
-            return call_expr;
         }
 
         let op = convert_binary_op(binary.op);
@@ -2676,15 +2791,18 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     // Check if this is a variant case construction (Color::Red)
-                    else if let Some((module_source, _, cases)) = self.variant_cases.get(prefix) {
+                    else if let Some(variant_info) = self.variant_cases.get(prefix) {
                         // Find the case by name
-                        if let Some((case_index, (case_name, field_types))) =
-                            cases.iter().enumerate().find(|(_, (n, _))| n == suffix)
+                        if let Some((case_index, case_data)) = variant_info
+                            .cases
+                            .iter()
+                            .enumerate()
+                            .find(|(_, c)| c.name == suffix)
                         {
                             // Validate argument count
-                            if args.len() != field_types.len() {
+                            if args.len() != case_data.field_types.len() {
                                 self.errors.push(TypeError::ArgumentCountMismatch {
-                                    expected: field_types.len(),
+                                    expected: case_data.field_types.len(),
                                     found: args.len(),
                                     span: call.span,
                                 });
@@ -2696,16 +2814,16 @@ impl<'a> Resolver<'a> {
                             }
 
                             // Create variant type
-                            let variant_type = self
-                                .type_table
-                                .borrow_mut()
-                                .make_variant(prefix.to_string(), module_source.clone());
+                            let variant_type = self.type_table.borrow_mut().make_variant(
+                                prefix.to_string(),
+                                variant_info.module_source.clone(),
+                            );
 
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
                                     variant_type,
                                     case_index: case_index as u32,
-                                    case_name: case_name.clone(),
+                                    case_name: case_data.name.clone(),
                                     fields: args,
                                 },
                                 variant_type,
@@ -3335,17 +3453,18 @@ impl<'a> Resolver<'a> {
         } = self.type_table.borrow().get(target_type_id).clone()
         {
             // Look up the variant case info
-            if let Some((_, _type_params, cases)) = self.variant_cases.get(&name) {
+            if let Some(variant_info) = self.variant_cases.get(&name) {
                 // Find the case by name
-                if let Some((case_index, (case_name, field_types))) = cases
+                if let Some((case_index, case_data)) = variant_info
+                    .cases
                     .iter()
                     .enumerate()
-                    .find(|(_, (n, _))| n == &static_call.method)
+                    .find(|(_, c)| c.name == static_call.method)
                 {
                     // Validate argument count
-                    if args.len() != field_types.len() {
+                    if args.len() != case_data.field_types.len() {
                         self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: field_types.len(),
+                            expected: case_data.field_types.len(),
                             found: args.len(),
                             span: static_call.span,
                         });
@@ -3357,7 +3476,7 @@ impl<'a> Resolver<'a> {
                         TirExprKind::VariantConstruct {
                             variant_type: target_type_id,
                             case_index: case_index as u32,
-                            case_name: case_name.clone(),
+                            case_name: case_data.name.clone(),
                             fields: args,
                         },
                         target_type_id,
@@ -4215,6 +4334,106 @@ impl<'a> Resolver<'a> {
         })
     }
 
+    /// Find `Eq` trait implementation for a type
+    fn find_eq_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+    ) -> Option<ComparisonTraitInfo> {
+        self.find_comparison_trait_impl(struct_name, base_type_id, "Eq", "eq")
+    }
+
+    /// Find `Ord` trait implementation for a type
+    fn find_ord_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+    ) -> Option<ComparisonTraitInfo> {
+        self.find_comparison_trait_impl(struct_name, base_type_id, "Ord", "lt")
+    }
+
+    /// Helper to find comparison trait implementations (`Eq` or `Ord`)
+    fn find_comparison_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        trait_name: &str,
+        method_name: &str,
+    ) -> Option<ComparisonTraitInfo> {
+        // Get concrete type arguments from the base type (for generic instances)
+        let _concrete_type_args: Vec<TypeId> =
+            if let ResolvedType::GenericInstance { type_args, .. } =
+                self.type_table.borrow().get(base_type_id).clone()
+            {
+                type_args
+            } else {
+                Vec::new()
+            };
+
+        // Collect impl blocks to check
+        let mut impl_blocks_to_check: Vec<(Type, Type, Vec<Function>)> = Vec::new();
+
+        // Check all loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                impl_blocks_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.methods.clone(),
+                ));
+            }
+        }
+
+        // Process collected impl blocks
+        for (impl_ty, trait_type, methods) in impl_blocks_to_check {
+            let impl_struct_name = self.get_type_name(&impl_ty);
+            if impl_struct_name != struct_name {
+                continue;
+            }
+
+            // Check if this is the target trait
+            let found_trait_name = self.get_type_name(&trait_type);
+            if found_trait_name != trait_name {
+                continue;
+            }
+
+            // Find the method
+            for method in &methods {
+                if method.name == method_name {
+                    let self_kind = method
+                        .params
+                        .first()
+                        .map(|p| p.self_kind)
+                        .unwrap_or(ast::SelfKind::None);
+
+                    return Some(ComparisonTraitInfo {
+                        self_kind,
+                        trait_name: trait_name.to_string(),
+                    });
+                }
+            }
+        }
+
+        None
+    }
+
     /// Helper to find indexing trait implementations (Index, `IndexMut`, or `IndexAssign`)
     fn find_indexing_trait_impl(
         &mut self,
@@ -4625,8 +4844,8 @@ impl<'a> Resolver<'a> {
         match resolved {
             // Struct field access
             ResolvedType::Struct { name, .. } => {
-                if let Some((_, fields)) = self.struct_fields.get(&name) {
-                    for (index, (fname, ftype)) in fields.iter().enumerate() {
+                if let Some(struct_info) = self.struct_fields.get(&name) {
+                    for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
                         }
@@ -4652,8 +4871,8 @@ impl<'a> Resolver<'a> {
             } => {
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.struct_fields.get(&name).cloned();
-                if let Some((_, fields)) = fields_clone {
-                    for (index, (fname, ftype)) in fields.iter().enumerate() {
+                if let Some(struct_info) = fields_clone {
+                    for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
                             let concrete_type = self.substitute_type_params(*ftype, &type_args);
@@ -5330,13 +5549,78 @@ impl<'a> Resolver<'a> {
             (name.clone(), Vec::new())
         };
 
-        // Resolve field expressions first
+        // Get expected field types for coercion (for generic structs)
+        let struct_field_types: Vec<(String, TypeId)> = self
+            .struct_fields
+            .get(&struct_name)
+            .map(|info| info.fields.clone())
+            .unwrap_or_default();
+
+        // Resolve field expressions, converting tuple literals to arrays when needed
         let fields: Vec<TirStructField> = struct_lit
             .fields
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                let value = self.resolve_expr(&field.value, ctx);
+                let mut value = self.resolve_expr(&field.value, ctx);
+
+                // Check if this is a tuple literal that should become an array
+                // This happens when the struct field expects Array<T> and we have [...]
+                if let TirExprKind::TupleLiteral { elements } = &value.kind {
+                    // Check if the expected field type is Array<T>
+                    if let Some((_, expected_type_id)) =
+                        struct_field_types.iter().find(|(n, _)| n == &field.name)
+                    {
+                        let expected = self.type_table.borrow().get(*expected_type_id).clone();
+                        if let ResolvedType::GenericInstance {
+                            name,
+                            type_args: expected_type_args,
+                            ..
+                        } = expected
+                            && name == "Array"
+                        {
+                            // Determine the element type for the array
+                            let elem_type = if elements.is_empty() {
+                                // Empty array: use the expected element type from Array<T>
+                                expected_type_args
+                                    .first()
+                                    .copied()
+                                    .unwrap_or(TypeTable::UNKNOWN)
+                            } else {
+                                // Non-empty: check if all elements have the same type
+                                let first_type = elements[0].type_id;
+                                let all_same = elements.iter().all(|e| e.type_id == first_type);
+                                if all_same {
+                                    first_type
+                                } else {
+                                    // Not homogeneous, skip conversion
+                                    return TirStructField {
+                                        name: field.name.clone(),
+                                        value,
+                                        field_index: index as u32,
+                                    };
+                                }
+                            };
+
+                            // Convert tuple literal to array literal
+                            let elements_clone =
+                                if let TirExprKind::TupleLiteral { elements } = &value.kind {
+                                    elements.clone()
+                                } else {
+                                    vec![]
+                                };
+                            let array_type = self.type_table.borrow_mut().make_array(elem_type);
+                            value = TirExpr::new(
+                                TirExprKind::ArrayLiteral {
+                                    elements: elements_clone,
+                                },
+                                array_type,
+                                value.span,
+                            );
+                        }
+                    }
+                }
+
                 TirStructField {
                     name: field.name.clone(),
                     value,
@@ -5346,7 +5630,8 @@ impl<'a> Resolver<'a> {
             .collect();
 
         // Check if this is a generic struct and infer type arguments
-        let struct_type = if self.generic_struct_names.contains(&struct_name) {
+        let (struct_type, mangled_struct_name) = if self.generic_struct_names.contains(&struct_name)
+        {
             // This is a generic struct - infer type arguments from field values
             let mut type_args = self.infer_type_args_from_fields(&struct_name, &fields);
             // If we couldn't infer type from fields, try to use return type context
@@ -5357,21 +5642,34 @@ impl<'a> Resolver<'a> {
             {
                 type_args = vec![elem_type];
             }
-            self.type_table.borrow_mut().make_generic_instance(
+            let struct_type = self.type_table.borrow_mut().make_generic_instance(
                 struct_name.clone(),
                 ModuleSource::from_path(&module_path),
-                type_args,
-            )
+                type_args.clone(),
+            );
+            // Build mangled name with type arguments
+            let mangled_name = if type_args.is_empty() {
+                format!("{struct_name}<>")
+            } else {
+                let arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|&t| self.type_table.borrow().type_name(t))
+                    .collect();
+                format!("{}<{}>", struct_name, arg_names.join(","))
+            };
+            (struct_type, mangled_name)
         } else {
-            self.type_table
+            let struct_type = self
+                .type_table
                 .borrow_mut()
-                .make_struct(struct_name.clone(), ModuleSource::from_path(&module_path))
+                .make_struct(struct_name.clone(), ModuleSource::from_path(&module_path));
+            (struct_type, struct_name)
         };
 
         TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
-                struct_name,
+                struct_name: mangled_struct_name,
                 fields,
             },
             struct_type,
@@ -5386,22 +5684,18 @@ impl<'a> Resolver<'a> {
         fields: &[TirStructField],
     ) -> Vec<TypeId> {
         // Get the generic struct's field type information
-        let Some((_, field_types)) = self.struct_fields.get(struct_name) else {
+        let Some(struct_info) = self.struct_fields.get(struct_name) else {
             return vec![];
         };
 
         // Build a map from type param TypeId to concrete TypeId
         let mut type_param_map: HashMap<TypeId, TypeId> = HashMap::new();
 
-        for (struct_field, (_, expected_type_id)) in fields.iter().zip(field_types.iter()) {
+        for (struct_field, (_, expected_type_id)) in fields.iter().zip(struct_info.fields.iter()) {
             let actual_type_id = struct_field.value.type_id;
 
-            // Check if expected type is a type parameter
-            if let ResolvedType::TypeParam { .. } = self.type_table.borrow().get(*expected_type_id)
-            {
-                // Map this type param to the actual type
-                type_param_map.insert(*expected_type_id, actual_type_id);
-            }
+            // Try to unify expected_type with actual_type to extract type params
+            self.unify_types_for_inference(*expected_type_id, actual_type_id, &mut type_param_map);
         }
 
         // Collect type args in order (by TypeParam index)
@@ -5420,6 +5714,89 @@ impl<'a> Resolver<'a> {
 
         type_args.sort_by_key(|(index, _)| *index);
         type_args.into_iter().map(|(_, type_id)| type_id).collect()
+    }
+
+    /// Unify expected type with actual type to extract type parameter mappings.
+    /// This handles nested generic types like Array<T> where T is a type param.
+    fn unify_types_for_inference(
+        &self,
+        expected: TypeId,
+        actual: TypeId,
+        type_param_map: &mut HashMap<TypeId, TypeId>,
+    ) {
+        let expected_type = self.type_table.borrow().get(expected).clone();
+        let actual_type = self.type_table.borrow().get(actual).clone();
+
+        match (&expected_type, &actual_type) {
+            // Direct type parameter mapping
+            (ResolvedType::TypeParam { .. }, _) => {
+                type_param_map.insert(expected, actual);
+            }
+            // Generic instance: unify type arguments recursively
+            (
+                ResolvedType::GenericInstance {
+                    name: expected_name,
+                    type_args: expected_args,
+                    ..
+                },
+                ResolvedType::GenericInstance {
+                    name: actual_name,
+                    type_args: actual_args,
+                    ..
+                },
+            ) if expected_name == actual_name && expected_args.len() == actual_args.len() => {
+                for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
+                    self.unify_types_for_inference(exp_arg, act_arg, type_param_map);
+                }
+            }
+            // Array<K> (GenericInstance) with Tuple (homogeneous) - infer K from tuple element type
+            (
+                ResolvedType::GenericInstance {
+                    name,
+                    type_args: expected_args,
+                    ..
+                },
+                ResolvedType::Tuple(actual_elems),
+            ) if name == "Array" && expected_args.len() == 1 && !actual_elems.is_empty() => {
+                // Check if all tuple elements have the same type
+                let first_elem_type = actual_elems[0];
+                let all_same = actual_elems.iter().all(|&e| e == first_elem_type);
+                if all_same {
+                    // Unify Array's element type param with the tuple's element type
+                    self.unify_types_for_inference(
+                        expected_args[0],
+                        first_elem_type,
+                        type_param_map,
+                    );
+                }
+            }
+            // Array types (Wado's Array<T>)
+            (
+                ResolvedType::BuiltinArray(expected_elem),
+                ResolvedType::BuiltinArray(actual_elem),
+            ) => {
+                self.unify_types_for_inference(*expected_elem, *actual_elem, type_param_map);
+            }
+            // Ref types
+            (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
+            | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
+                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
+            }
+            // Option types
+            (ResolvedType::Option(expected_inner), ResolvedType::Option(actual_inner)) => {
+                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
+            }
+            // Tuple types
+            (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
+                if expected_elems.len() == actual_elems.len() =>
+            {
+                for (&exp, &act) in expected_elems.iter().zip(actual_elems.iter()) {
+                    self.unify_types_for_inference(exp, act, type_param_map);
+                }
+            }
+            // Other cases: no type params to extract
+            _ => {}
+        }
     }
 
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
@@ -5534,6 +5911,15 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a named type
     fn resolve_named_type(&mut self, name: &str, _span: Span) -> TypeId {
+        // Handle `Self` type reference in impl blocks
+        if name == "Self" {
+            if let Some(self_type) = self.current_self_type {
+                return self_type;
+            }
+            // Self used outside of impl block - return Unknown
+            return TypeTable::UNKNOWN;
+        }
+
         // First check if it's a type parameter in scope
         if let Some(&(_, type_id)) = self.current_type_params.get(name) {
             return type_id;
@@ -5562,16 +5948,16 @@ impl<'a> Resolver<'a> {
             _ => {
                 if let Some(&type_id) = self.type_aliases.get(name) {
                     type_id
-                } else if let Some((module_source, _)) = self.struct_fields.get(name) {
+                } else if let Some(struct_info) = self.struct_fields.get(name) {
                     // It's a struct - use the module source where it was defined
                     self.type_table
                         .borrow_mut()
-                        .make_struct(name.to_string(), module_source.clone())
-                } else if let Some((module_source, _, _)) = self.variant_cases.get(name) {
+                        .make_struct(name.to_string(), struct_info.module_source.clone())
+                } else if let Some(variant_info) = self.variant_cases.get(name) {
                     // It's a variant - use the module source where it was defined
                     self.type_table
                         .borrow_mut()
-                        .make_variant(name.to_string(), module_source.clone())
+                        .make_variant(name.to_string(), variant_info.module_source.clone())
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN
@@ -5663,7 +6049,7 @@ impl<'a> Resolver<'a> {
                     let module_source = self
                         .struct_fields
                         .get(name)
-                        .map(|(source, _)| source.clone())
+                        .map(|info| info.module_source.clone())
                         .unwrap_or_else(|| self.current_module_source.clone());
 
                     // Create a GenericInstance type

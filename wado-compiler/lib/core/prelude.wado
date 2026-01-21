@@ -27,6 +27,52 @@ impl String {
     }
 }
 
+// Eq implementation for String - lexicographic equality
+impl Eq for String {
+    pub fn eq(&self, other: &Self) -> bool {
+        let len_a = self.len();
+        let len_b = other.len();
+
+        if len_a != len_b {
+            return false;
+        }
+
+        for let mut i = 0; i < len_a; i += 1 {
+            if self.get(i) != other.get(i) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+// Ord implementation for String - lexicographic ordering
+impl Ord for String {
+    pub fn lt(&self, other: &Self) -> bool {
+        let len_a = self.len();
+        let len_b = other.len();
+        let mut min_len = len_a;
+        if len_b < min_len {
+            min_len = len_b;
+        }
+
+        for let mut i = 0; i < min_len; i += 1 {
+            let a_byte = self.get(i);
+            let b_byte = other.get(i);
+            if a_byte < b_byte {
+                return true;
+            }
+            if a_byte > b_byte {
+                return false;
+            }
+        }
+
+        // All compared bytes are equal, shorter string is less
+        return len_a < len_b;
+    }
+}
+
 /// Dynamic array type with O(1) amortized append
 pub struct Array<T> {
     repr: builtin::array<T>,
@@ -158,6 +204,20 @@ pub trait IndexValue<IndexType> {
 
     /// Returns a copy of the element at the given index.
     fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
+/// Trait for equality comparisons.
+/// Types implementing this trait can be compared with `==` and `!=` operators.
+pub trait Eq {
+    /// Returns true if self equals other.
+    fn eq(&self, other: &Self) -> bool;
+}
+
+/// Trait for ordering comparisons.
+/// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+pub trait Ord {
+    /// Returns true if self is less than other.
+    fn lt(&self, other: &Self) -> bool;
 }
 
 /// Optional value - either Some(T) or None

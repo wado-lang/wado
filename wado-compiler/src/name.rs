@@ -391,20 +391,23 @@ impl MethodName {
 
 impl fmt::Display for MethodName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // For entry point (empty filename), don't include the leading slash
+        let prefix = if self.filename.is_empty() {
+            String::new()
+        } else {
+            format!("{}/", self.filename)
+        };
+
         match &self.trait_name {
             Some(trait_name) => {
                 write!(
                     f,
-                    "{}/{}^{}::{}",
-                    self.filename, self.struct_name, trait_name, self.method_name
+                    "{}{}^{}::{}",
+                    prefix, self.struct_name, trait_name, self.method_name
                 )
             }
             None => {
-                write!(
-                    f,
-                    "{}/{}::{}",
-                    self.filename, self.struct_name, self.method_name
-                )
+                write!(f, "{}{}::{}", prefix, self.struct_name, self.method_name)
             }
         }
     }

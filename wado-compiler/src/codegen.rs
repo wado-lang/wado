@@ -22,14 +22,14 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
     TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder};
+use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
 use crate::world_registry::{WorldExportInfo, WorldRegistry};
 use heck::ToKebabCase;
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::{
-    AbstractHeapType, Alias, BranchHint, BranchHints, CanonicalOption, CodeSection,
+    AbstractHeapType, Alias, BlockType, BranchHint, BranchHints, CanonicalOption, CodeSection,
     ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr,
     DataCountSection, DataSection, DataSegment, DataSegmentMode, ElementSection, Elements,
     ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType, InstanceType,
@@ -103,6 +103,10 @@ pub struct Codegen {
     /// Registry of Array<T> struct types (keyed by element `TypeId`, maps to GC struct type index)
     /// Array<T> is a struct with fields: repr (ref to GC array), used (i32)
     array_struct_types: HashMap<TypeId, u32>,
+    /// Secondary lookup for array types by element type name (to handle duplicate `TypeIds`)
+    array_types_by_name: HashMap<String, u32>,
+    /// Secondary lookup for Array struct types by element type name
+    array_struct_types_by_name: HashMap<String, u32>,
     /// Registry of box types for primitive references (keyed by `ValType`, maps to GC struct type index)
     /// Box types are single-field mutable structs that allow references to primitives
     box_types: HashMap<ValType, u32>,
@@ -423,6 +427,8 @@ impl Codegen {
             tuple_types: RefCell::new(HashMap::new()),
             array_types: HashMap::new(),
             array_struct_types: HashMap::new(),
+            array_types_by_name: HashMap::new(),
+            array_struct_types_by_name: HashMap::new(),
             box_types: HashMap::new(),
             closure_counter: RefCell::new(0),
             closure_env_types: RefCell::new(HashMap::new()),
@@ -531,6 +537,7 @@ impl Codegen {
     }
 
     /// Extract struct names that a type depends on (for field types)
+    /// Returns mangled names for `GenericInstance` types (e.g., "`BTreeNode`<String,i32>")
     fn get_struct_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => vec![name.clone()],
@@ -538,7 +545,9 @@ impl Codegen {
                 name, type_args, ..
             } => {
                 // Get dependencies from type arguments
-                let mut deps = vec![name.clone()];
+                // Use mangled name for the generic instance (e.g., "BTreeNode<String,i32>")
+                let mangled_name = Self::mangle_generic_instance_name(name, type_args, type_table);
+                let mut deps = vec![mangled_name];
                 for arg in type_args {
                     deps.extend(Self::get_struct_dependencies(type_table, *arg));
                 }
@@ -561,6 +570,100 @@ impl Codegen {
                 .flat_map(|e| Self::get_struct_dependencies(type_table, *e))
                 .collect(),
             _ => vec![],
+        }
+    }
+
+    /// Mangle a generic instance name for dependency tracking (static version)
+    /// e.g., ("`BTreeNode`", [String, i32]) -> "`BTreeNode`<String,i32>"
+    fn mangle_generic_instance_name(
+        name: &str,
+        type_args: &[TypeId],
+        type_table: &TypeTable,
+    ) -> String {
+        if type_args.is_empty() {
+            return name.to_string();
+        }
+        let args: Vec<String> = type_args
+            .iter()
+            .map(|t| Self::mangle_type_for_dependency(*t, type_table))
+            .collect();
+        format!("{}<{}>", name, args.join(","))
+    }
+
+    /// Mangle a type for dependency tracking (static version of `mangle_type_for_struct_name`)
+    fn mangle_type_for_dependency(type_id: TypeId, type_table: &TypeTable) -> String {
+        match type_table.get(type_id) {
+            ResolvedType::Primitive(prim) => match prim {
+                PrimitiveType::I8 => "i8".to_string(),
+                PrimitiveType::I16 => "i16".to_string(),
+                PrimitiveType::I32 => "i32".to_string(),
+                PrimitiveType::I64 => "i64".to_string(),
+                PrimitiveType::I128 => "i128".to_string(),
+                PrimitiveType::U8 => "u8".to_string(),
+                PrimitiveType::U16 => "u16".to_string(),
+                PrimitiveType::U32 => "u32".to_string(),
+                PrimitiveType::U64 => "u64".to_string(),
+                PrimitiveType::U128 => "u128".to_string(),
+                PrimitiveType::F32 => "f32".to_string(),
+                PrimitiveType::F64 => "f64".to_string(),
+                PrimitiveType::Bool => "bool".to_string(),
+                PrimitiveType::Char => "char".to_string(),
+            },
+            ResolvedType::Unit => "unit".to_string(),
+            ResolvedType::String => "String".to_string(),
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => Self::mangle_generic_instance_name(name, type_args, type_table),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                Self::mangle_type_for_dependency(*inner, type_table)
+            }
+            _ => "unknown".to_string(),
+        }
+    }
+
+    /// Check if a struct has self-referential fields (directly or through Array/Ref/MutRef).
+    /// Returns the list of field type IDs that create the self-reference cycle.
+    fn get_self_referential_field_types(
+        struct_name: &str,
+        tir_struct: &crate::tir::TirStruct,
+        type_table: &TypeTable,
+    ) -> Vec<TypeId> {
+        let mut self_ref_fields = Vec::new();
+        for field in &tir_struct.fields {
+            if Self::type_references_struct(field.type_id, struct_name, type_table) {
+                self_ref_fields.push(field.type_id);
+            }
+        }
+        self_ref_fields
+    }
+
+    /// Check if a type references a struct by name (transitively through Array/Ref/MutRef).
+    fn type_references_struct(type_id: TypeId, struct_name: &str, type_table: &TypeTable) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::Struct { name, .. } => name == struct_name,
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                // Check if this generic instance has the same base name
+                if name == struct_name {
+                    return true;
+                }
+                // Also recurse into type args for Array<&mut BTreeNode> patterns
+                type_args
+                    .iter()
+                    .any(|arg| Self::type_references_struct(*arg, struct_name, type_table))
+            }
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                Self::type_references_struct(*inner, struct_name, type_table)
+            }
+            ResolvedType::BuiltinArray(inner) => {
+                Self::type_references_struct(*inner, struct_name, type_table)
+            }
+            ResolvedType::Option(inner) => {
+                Self::type_references_struct(*inner, struct_name, type_table)
+            }
+            _ => false,
         }
     }
 
@@ -793,14 +896,23 @@ impl Codegen {
             if module_source.is_wasi() {
                 continue;
             }
-            // Methods are stored as functions with mangled names like "Point::sum"
+            // Methods are stored as functions with mangled names like "Point::sum" or "String^Eq::eq"
             // (resolver adds them to functions, not impls)
             for func_rc in &tir_mod.functions {
                 let func = func_rc.borrow();
                 // Check if this is a method (name contains ::)
                 if let Some(sep_pos) = func.name.find("::") {
-                    let struct_name = &func.name[..sep_pos];
+                    let prefix = &func.name[..sep_pos];
                     let method_name = &func.name[sep_pos + 2..];
+
+                    // Parse struct name and optional trait name from prefix
+                    // Format: "StructName" or "StructName^TraitName"
+                    let (struct_name, trait_name): (&str, Option<&str>) =
+                        if let Some(caret_pos) = prefix.find('^') {
+                            (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
+                        } else {
+                            (prefix, None)
+                        };
 
                     // Skip non-pub methods (except monomorphized ones which are generated for
                     // concrete instantiation sites and must be included)
@@ -822,11 +934,11 @@ impl Codegen {
                     if has_type_params {
                         continue;
                     }
-                    // Build function ID for DCE check: path/Struct::method
+                    // Build function ID for DCE check: path/Struct^Trait::method or path/Struct::method
                     let method_id = FunctionId::Method(MethodName::from_module_source(
                         module_source,
                         struct_name,
-                        None,
+                        trait_name,
                         method_name,
                     ));
                     // Skip methods not reachable from entry point (DCE)
@@ -906,6 +1018,10 @@ impl Codegen {
                 );
             }
         }
+
+        // Register box types BEFORE struct types because:
+        // Option<primitive> fields need to map to nullable box references
+        self.register_box_types(&mut builder, project);
 
         // PHASE 1: Register NON-MONOMORPHIZED structs from library modules
         // These are "base" structs like String that don't depend on array types
@@ -998,6 +1114,19 @@ impl Codegen {
             }
         }
 
+        // PHASE 2.5: Register String array types
+        // String struct is now registered (in PHASE 1), so we can register Array<String>
+        // This must happen before PHASE 4 because monomorphized structs may have Array<String> fields
+        self.register_string_array_types_from_table(type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source != entry_module_source {
+                self.register_string_array_types_from_table(
+                    &tir_mod.type_table.borrow(),
+                    &mut builder,
+                );
+            }
+        }
+
         // PHASE 3: Register MONOMORPHIZED structs from library modules
         // These must be registered BEFORE array types because array types with
         // generic struct elements (e.g., Array<Pair<i32, String>>) need to call
@@ -1023,12 +1152,31 @@ impl Codegen {
                 }
                 let struct_name =
                     StructName::new(ModuleSource::EntryPoint, tir_struct.name.clone());
-                self.register_struct_type(
-                    struct_name,
-                    tir_struct,
-                    &tir_mod.type_table.borrow(),
-                    &mut builder,
-                );
+                // Check for self-referential structs
+                let lib_type_table = tir_mod.type_table.borrow();
+                let base_name = tir_struct
+                    .monomorph_info
+                    .as_ref()
+                    .map(|i| i.generic_name.as_str())
+                    .unwrap_or(&tir_struct.name);
+                let self_ref_fields =
+                    Self::get_self_referential_field_types(base_name, tir_struct, &lib_type_table);
+                if self_ref_fields.is_empty() {
+                    self.register_struct_type(
+                        struct_name,
+                        tir_struct,
+                        &lib_type_table,
+                        &mut builder,
+                    );
+                } else {
+                    self.register_self_referential_struct(
+                        struct_name,
+                        tir_struct,
+                        &self_ref_fields,
+                        &lib_type_table,
+                        &mut builder,
+                    );
+                }
             }
         }
 
@@ -1050,7 +1198,27 @@ impl Codegen {
         let sorted_mono = Self::sort_structs_topologically(&mono_structs, type_table);
         for tir_struct in sorted_mono {
             let struct_name = StructName::new(ModuleSource::EntryPoint, tir_struct.name.clone());
-            self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
+            // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
+            // For monomorphized structs, check against both the mangled name and base name
+            let base_name = tir_struct
+                .monomorph_info
+                .as_ref()
+                .map(|i| i.generic_name.as_str())
+                .unwrap_or(&tir_struct.name);
+            let self_ref_fields =
+                Self::get_self_referential_field_types(base_name, tir_struct, type_table);
+            if self_ref_fields.is_empty() {
+                self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
+            } else {
+                // Use rec group for self-referential structs
+                self.register_self_referential_struct(
+                    struct_name,
+                    tir_struct,
+                    &self_ref_fields,
+                    type_table,
+                    &mut builder,
+                );
+            }
         }
 
         // PHASE 4.5: Register variant types (tagged unions)
@@ -1103,9 +1271,6 @@ impl Codegen {
             }
         }
 
-        // Register box types for primitive references (&i32, &mut f64, etc.)
-        self.register_box_types(&mut builder, project);
-
         // WASI effect function types - derived from wasi/*.wado definitions
         // DCE: Only define types for WASI functions that are actually available (lowered)
         for interface in self.wasi_registry.interfaces() {
@@ -1132,6 +1297,25 @@ impl Codegen {
                     .iter()
                     .any(|p| type_table.contains_type_param(p.type_id));
             if has_type_params {
+                // Debug: show which function is being skipped and why
+                if tir_func.name.contains("TreeMap") && tir_func.name.contains("get") {
+                    let ret_has_param = type_table.contains_type_param(tir_func.return_type);
+                    let params_have_param: Vec<_> = tir_func
+                        .params
+                        .iter()
+                        .map(|p| {
+                            (
+                                p.name.clone(),
+                                p.type_id,
+                                type_table.contains_type_param(p.type_id),
+                            )
+                        })
+                        .collect();
+                    eprintln!(
+                        "DEBUG: Skipping function {} due to type params. return_has_param={}, params_have_param={:?}",
+                        tir_func.name, ret_has_param, params_have_param
+                    );
+                }
                 continue;
             }
             let param_types: Vec<ValType> = tir_func
@@ -2775,6 +2959,174 @@ impl Codegen {
         type_idx
     }
 
+    /// Register a self-referential struct using Wasm GC rec groups.
+    ///
+    /// For structs like `BTreeNode<K,V> { children: Array<&mut BTreeNode<K,V>> }`,
+    /// we need to use rec groups so that the types can forward-reference each other.
+    ///
+    /// This function registers:
+    /// 1. The raw GC array type for self-referential element
+    /// 2. The Array<T> struct type for the self-referential field
+    /// 3. The main struct type
+    ///
+    /// All in a single rec group so they can mutually reference each other.
+    fn register_self_referential_struct(
+        &mut self,
+        struct_name: StructName,
+        tir_struct: &crate::tir::TirStruct,
+        self_ref_field_types: &[TypeId],
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) -> u32 {
+        // Collect all types needed in the rec group:
+        // For each self-referential field type (e.g., Array<&mut BTreeNode>):
+        // 1. The raw GC array type (array of ref $struct)
+        // 2. The Array struct type (repr, used)
+        // Plus the main struct type itself
+
+        let base_idx = builder.peek_next_type_idx();
+        let mut rec_types: Vec<(String, RecTypeKind)> = Vec::new();
+        let mut array_type_mappings: Vec<(TypeId, u32, u32)> = Vec::new(); // (element_type_id, raw_array_idx, array_struct_idx)
+
+        // First, add the raw GC array types and Array struct types for self-referential fields
+        for &field_type_id in self_ref_field_types {
+            // Extract the element type from Array<T>
+            if let ResolvedType::GenericInstance {
+                name, type_args, ..
+            } = type_table.get(field_type_id)
+                && name == "Array"
+                && type_args.len() == 1
+            {
+                let element_type_id = type_args[0];
+
+                // Skip if already registered
+                if self.array_struct_types.contains_key(&element_type_id) {
+                    continue;
+                }
+
+                let raw_array_idx = base_idx + rec_types.len() as u32;
+                let array_struct_idx = base_idx + rec_types.len() as u32 + 1;
+
+                // 1. Raw GC array type with forward reference to struct
+                // The struct will be the last type in the rec group
+                let struct_idx_in_rec = base_idx + rec_types.len() as u32 + 2; // Estimate: after raw array and Array struct
+                let raw_array_name = format!("array_{element_type_id}");
+                let element_storage = StorageType::Val(ValType::Ref(RefType {
+                    nullable: true, // Must be nullable for array.new_default
+                    heap_type: HeapType::Concrete(struct_idx_in_rec),
+                }));
+                rec_types.push((
+                    raw_array_name.clone(),
+                    RecTypeKind::Array(FieldType {
+                        element_type: element_storage,
+                        mutable: true,
+                    }),
+                ));
+
+                // 2. Array struct type
+                let array_struct_name = format!("Array_{element_type_id}");
+                let array_struct_fields = vec![
+                    FieldType {
+                        element_type: StorageType::Val(ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(raw_array_idx),
+                        })),
+                        mutable: true,
+                    },
+                    FieldType {
+                        element_type: StorageType::Val(ValType::I32),
+                        mutable: true,
+                    },
+                ];
+                rec_types.push((array_struct_name, RecTypeKind::Struct(array_struct_fields)));
+
+                array_type_mappings.push((element_type_id, raw_array_idx, array_struct_idx));
+            }
+        }
+
+        // Now add the main struct type
+        let struct_type_idx = base_idx + rec_types.len() as u32;
+        let mut struct_fields = Vec::new();
+
+        for field in &tir_struct.fields {
+            // Check if this field is one of the self-referential Array types
+            let is_self_ref_array = self_ref_field_types.contains(&field.type_id);
+            let wasm_type = if is_self_ref_array {
+                // Look up the Array struct type we just planned
+                if let ResolvedType::GenericInstance { type_args, .. } =
+                    type_table.get(field.type_id)
+                {
+                    if let Some(&(_, _, array_struct_idx)) = array_type_mappings
+                        .iter()
+                        .find(|(elem_id, _, _)| *elem_id == type_args[0])
+                    {
+                        ValType::Ref(RefType {
+                            nullable: false,
+                            heap_type: HeapType::Concrete(array_struct_idx),
+                        })
+                    } else {
+                        self.type_id_to_valtype(type_table, field.type_id)
+                    }
+                } else {
+                    self.type_id_to_valtype(type_table, field.type_id)
+                }
+            } else {
+                self.type_id_to_valtype(type_table, field.type_id)
+            };
+
+            let storage_type = match wasm_type {
+                ValType::I32 => StorageType::Val(ValType::I32),
+                ValType::I64 => StorageType::Val(ValType::I64),
+                ValType::F32 => StorageType::Val(ValType::F32),
+                ValType::F64 => StorageType::Val(ValType::F64),
+                ValType::Ref(rt) => StorageType::Val(ValType::Ref(rt)),
+                _ => StorageType::Val(ValType::I32),
+            };
+            struct_fields.push(FieldType {
+                element_type: storage_type,
+                mutable: true,
+            });
+        }
+
+        rec_types.push((struct_name.name.clone(), RecTypeKind::Struct(struct_fields)));
+
+        // Define the rec group
+        let indices = builder.define_rec_group(&rec_types);
+
+        // Register the array types in our tracking maps (both by TypeId and by name)
+        for (element_type_id, raw_array_idx, array_struct_idx) in array_type_mappings {
+            self.array_types.insert(element_type_id, raw_array_idx);
+            self.array_struct_types
+                .insert(element_type_id, array_struct_idx);
+            // Also register by canonical name to handle duplicate TypeIds
+            let canonical_name = self.canonical_element_type_name(element_type_id, type_table);
+            self.array_types_by_name
+                .insert(canonical_name.clone(), raw_array_idx);
+            self.array_struct_types_by_name
+                .insert(canonical_name, array_struct_idx);
+        }
+
+        // Register the struct type
+        let field_count = tir_struct.fields.len();
+        let is_monomorphized = tir_struct.monomorph_info.is_some();
+        let base_name = tir_struct
+            .monomorph_info
+            .as_ref()
+            .map(|info| info.generic_name.clone());
+        self.struct_types.insert(
+            struct_name,
+            StructTypeInfo {
+                type_idx: struct_type_idx,
+                field_count,
+                is_monomorphized,
+                base_name,
+            },
+        );
+
+        // Return the last index (the struct type)
+        *indices.last().unwrap()
+    }
+
     /// Register a custom variant type as a Wasm GC struct.
     ///
     /// Variant representation: (tag: i32, field0, field1, ...)
@@ -3362,10 +3714,12 @@ impl Codegen {
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) {
-        for type_id in 0..type_table.len() as TypeId {
+        for type_id in type_table.iter_type_ids() {
             if let ResolvedType::Tuple(elements) = type_table.get(type_id)
                 && !elements.is_empty()
                 && !self.tuple_types.borrow().contains_key(elements)
+                // Skip tuples that contain type parameters (these are from generic templates)
+                && !elements.iter().any(|&elem| type_table.contains_type_param(elem))
             {
                 // Create the tuple type
                 let mut fields = Vec::new();
@@ -3394,6 +3748,72 @@ impl Codegen {
         }
     }
 
+    /// Generate a canonical name for an element type, used for deduplication.
+    /// This handles the case where multiple `TypeIds` represent the same type.
+    fn canonical_element_type_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
+        match type_table.get(type_id) {
+            ResolvedType::Primitive(p) => match p {
+                PrimitiveType::I8 => "i8".to_string(),
+                PrimitiveType::I16 => "i16".to_string(),
+                PrimitiveType::I32 => "i32".to_string(),
+                PrimitiveType::I64 => "i64".to_string(),
+                PrimitiveType::I128 => "i128".to_string(),
+                PrimitiveType::U8 => "u8".to_string(),
+                PrimitiveType::U16 => "u16".to_string(),
+                PrimitiveType::U32 => "u32".to_string(),
+                PrimitiveType::U64 => "u64".to_string(),
+                PrimitiveType::U128 => "u128".to_string(),
+                PrimitiveType::F32 => "f32".to_string(),
+                PrimitiveType::F64 => "f64".to_string(),
+                PrimitiveType::Bool => "bool".to_string(),
+                PrimitiveType::Char => "char".to_string(),
+            },
+            ResolvedType::String => "String".to_string(),
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.canonical_element_type_name(*t, type_table))
+                    .collect();
+                format!("{name}<{}>", args.join(","))
+            }
+            ResolvedType::Ref(inner) => {
+                format!(
+                    "ref_{}",
+                    self.canonical_element_type_name(*inner, type_table)
+                )
+            }
+            ResolvedType::MutRef(inner) => {
+                format!(
+                    "mutref_{}",
+                    self.canonical_element_type_name(*inner, type_table)
+                )
+            }
+            ResolvedType::Tuple(elems) => {
+                let parts: Vec<String> = elems
+                    .iter()
+                    .map(|t| self.canonical_element_type_name(*t, type_table))
+                    .collect();
+                format!("tuple_{}", parts.join("_"))
+            }
+            ResolvedType::Option(inner) => {
+                format!(
+                    "option_{}",
+                    self.canonical_element_type_name(*inner, type_table)
+                )
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                format!(
+                    "Array<{}>",
+                    self.canonical_element_type_name(*elem, type_table)
+                )
+            }
+            _ => format!("type_{type_id}"),
+        }
+    }
+
     /// Get or create an array type for a given element `TypeId`.
     /// Returns the Wasm type index for the GC array type.
     fn get_or_create_array_type(
@@ -3402,8 +3822,16 @@ impl Codegen {
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) -> u32 {
-        // Check if already registered
+        // Check if already registered by TypeId
         if let Some(&type_idx) = self.array_types.get(&element_type_id) {
+            return type_idx;
+        }
+
+        // Check if already registered by name (handles duplicate TypeIds)
+        let canonical_name = self.canonical_element_type_name(element_type_id, type_table);
+        if let Some(&type_idx) = self.array_types_by_name.get(&canonical_name) {
+            // Register the TypeId alias and return existing type
+            self.array_types.insert(element_type_id, type_idx);
             return type_idx;
         }
 
@@ -3432,6 +3860,7 @@ impl Codegen {
         let type_idx = builder.define_gc_array_type(&type_name, storage_type, true);
 
         self.array_types.insert(element_type_id, type_idx);
+        self.array_types_by_name.insert(canonical_name, type_idx);
         type_idx
     }
 
@@ -3444,8 +3873,22 @@ impl Codegen {
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) -> u32 {
-        // Check if already registered
+        // Check if already registered by TypeId
         if let Some(&type_idx) = self.array_struct_types.get(&element_type_id) {
+            return type_idx;
+        }
+
+        // Check if already registered by name (handles duplicate TypeIds)
+        let canonical_name = self.canonical_element_type_name(element_type_id, type_table);
+        if let Some(&type_idx) = self.array_struct_types_by_name.get(&canonical_name) {
+            // Register the TypeId alias and return existing type
+            self.array_struct_types.insert(element_type_id, type_idx);
+            // Also ensure array_types has an alias for this TypeId
+            if !self.array_types.contains_key(&element_type_id)
+                && let Some(&raw_idx) = self.array_types_by_name.get(&canonical_name)
+            {
+                self.array_types.insert(element_type_id, raw_idx);
+            }
             return type_idx;
         }
 
@@ -3475,6 +3918,8 @@ impl Codegen {
         let type_idx = builder.define_gc_struct_type(&type_name, &fields);
 
         self.array_struct_types.insert(element_type_id, type_idx);
+        self.array_struct_types_by_name
+            .insert(canonical_name, type_idx);
         type_idx
     }
 
@@ -4121,7 +4566,7 @@ impl Codegen {
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) {
-        for type_id in 0..type_table.len() as TypeId {
+        for type_id in type_table.iter_type_ids() {
             let (element_type_id, is_array_struct) =
                 if let Some(elem) = type_table.as_array(type_id) {
                     (elem, true)
@@ -4131,7 +4576,50 @@ impl Codegen {
                     continue;
                 };
             // Skip if element type is not a primitive
+            // Note: String is handled later in register_array_types_from_table because
+            // it requires the String struct to be registered first
             if !matches!(type_table.get(element_type_id), ResolvedType::Primitive(_)) {
+                continue;
+            }
+            // Skip array types with type parameters (unmonomorphized generics)
+            if type_table.contains_type_param(element_type_id) {
+                continue;
+            }
+            // Register raw array type
+            if !self.array_types.contains_key(&element_type_id) {
+                self.get_or_create_array_type(element_type_id, type_table, builder);
+            }
+            // Also register Array struct type for Array<T>
+            if is_array_struct && !self.array_struct_types.contains_key(&element_type_id) {
+                self.get_or_create_array_struct_type(element_type_id, type_table, builder);
+            }
+        }
+    }
+
+    /// Pre-register String array types (where element type is String).
+    /// These can be registered after String struct is registered, but before monomorphized structs.
+    fn register_string_array_types_from_table(
+        &mut self,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        for type_id in type_table.iter_type_ids() {
+            let (element_type_id, is_array_struct) =
+                if let Some(elem) = type_table.as_array(type_id) {
+                    (elem, true)
+                } else if let ResolvedType::BuiltinArray(elem) = type_table.get(type_id) {
+                    (*elem, false)
+                } else {
+                    continue;
+                };
+            // Only process String element types
+            // String can appear as ResolvedType::String or Struct { name: "String" }
+            let is_string = match type_table.get(element_type_id) {
+                ResolvedType::String => true,
+                ResolvedType::Struct { name, .. } if name == "String" => true,
+                _ => false,
+            };
+            if !is_string {
                 continue;
             }
             // Skip array types with type parameters (unmonomorphized generics)
@@ -4158,7 +4646,7 @@ impl Codegen {
     ) {
         // Collect all array types from the type table, including nested ones
         let mut array_types_to_register: Vec<(TypeId, bool)> = Vec::new();
-        for type_id in 0..type_table.len() as TypeId {
+        for type_id in type_table.iter_type_ids() {
             self.collect_array_types_recursive(
                 type_id,
                 type_table,
@@ -4199,7 +4687,7 @@ impl Codegen {
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) {
-        for type_id in 0..type_table.len() as TypeId {
+        for type_id in type_table.iter_type_ids() {
             if let ResolvedType::Function {
                 params,
                 return_type,
@@ -4318,7 +4806,13 @@ impl Codegen {
                 name,
                 module_source,
             } => {
-                if let Some(struct_info) = self.lookup_struct_type(name, module_source) {
+                // Special case: String struct - always use the canonical module source
+                let lookup_source = if name == "String" {
+                    string_module_source()
+                } else {
+                    module_source.clone()
+                };
+                if let Some(struct_info) = self.lookup_struct_type(name, &lookup_source) {
                     ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(struct_info.type_idx),
@@ -4340,14 +4834,17 @@ impl Codegen {
                         heap_type: HeapType::Concrete(type_idx),
                     })
                 } else {
-                    // Debug: print type_table info to understand the issue
-                    let element_resolved = type_table.get(element_type);
-                    panic!(
-                        "Array struct type not registered for element type {} (resolved: {:?})\nAvailable array types: {:?}",
-                        element_type,
-                        element_resolved,
-                        self.array_struct_types.keys().collect::<Vec<_>>()
-                    );
+                    // Array type not yet registered - this can happen with recursive types
+                    // (e.g., struct BTreeNode { children: Array<&mut BTreeNode> })
+                    // Use nullable structref as a fallback for now
+                    // TODO: Properly handle recursive types with Wasm GC rec groups
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Abstract {
+                            shared: false,
+                            ty: AbstractHeapType::Struct,
+                        },
+                    })
                 }
             }
 
@@ -4368,14 +4865,25 @@ impl Codegen {
 
             // Option<T> - nullable reference
             ResolvedType::Option(inner) => {
+                // For primitive types, use nullable box reference
+                if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                    let val_type = primitive_to_valtype(prim);
+                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                        return ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(box_type_idx),
+                        });
+                    }
+                }
+                // For reference types, make the reference nullable
                 let inner_valtype = self.type_id_to_valtype(type_table, *inner);
                 match inner_valtype {
                     ValType::Ref(ref_type) => ValType::Ref(RefType {
                         nullable: true,
                         ..ref_type
                     }),
-                    // Primitives use i32 with sentinel value for None
-                    _ => ValType::I32,
+                    // Fallback for edge cases (shouldn't happen with primitives handled above)
+                    _ => inner_valtype,
                 }
             }
 
@@ -4648,7 +5156,7 @@ impl Codegen {
             TirExprKind::VariantConstruct {
                 variant_type,
                 case_index,
-                case_name: _,
+                case_name,
                 fields,
             } => {
                 // Custom variant construction: Shape::Circle(5.0)
@@ -4659,6 +5167,54 @@ impl Codegen {
                     ResolvedType::Variant { name, .. } => name.clone(),
                     other => panic!("Expected Variant type for VariantConstruct, got: {other:?}"),
                 };
+
+                // Special handling for Option - it's a generic variant that uses nullable refs
+                if variant_name == "Option" {
+                    if case_name == "Some" && fields.len() == 1 {
+                        // Option::Some(value) - for primitives, need to box the value
+                        let inner_type = type_table.get(fields[0].type_id).clone();
+                        if let ResolvedType::Primitive(prim) = &inner_type {
+                            // Box the primitive value
+                            self.generate_expr(func, &fields[0], type_table, ctx, builder);
+                            let val_type = primitive_to_valtype(prim);
+                            if let Some(box_idx) = self.get_box_type_idx(val_type) {
+                                func.instruction(&Instruction::StructNew(box_idx));
+                            }
+                        } else {
+                            // Reference types: generate directly
+                            self.generate_expr(func, &fields[0], type_table, ctx, builder);
+                        }
+                    } else {
+                        // Option::None - generate null ref
+                        // Get the inner type from the expression's type (which should be Option<T>)
+                        let inner_valtype = match type_table.get(expr.type_id) {
+                            ResolvedType::Option(inner) => {
+                                self.type_id_to_valtype(type_table, *inner)
+                            }
+                            ResolvedType::Variant { .. } => {
+                                // Fallback for generic Option without concrete inner type
+                                ValType::Ref(RefType {
+                                    nullable: true,
+                                    heap_type: HeapType::Abstract {
+                                        shared: false,
+                                        ty: AbstractHeapType::Any,
+                                    },
+                                })
+                            }
+                            _ => ValType::I32, // Fallback for primitives
+                        };
+                        match inner_valtype {
+                            ValType::Ref(ref_type) => {
+                                func.instruction(&Instruction::RefNull(ref_type.heap_type));
+                            }
+                            _ => {
+                                // For primitives, use sentinel value (e.g., -1 for i32)
+                                func.instruction(&Instruction::I32Const(-1));
+                            }
+                        }
+                    }
+                    return;
+                }
 
                 // Look up the registered variant type
                 let variant_types = self.variant_types.borrow();
@@ -4760,6 +5316,32 @@ impl Codegen {
 
             // === Binary Operations ===
             TirExprKind::Binary { left, op, right } => {
+                // Handle short-circuit evaluation for logical operators
+                if *op == TirBinaryOp::And {
+                    // For `a && b`: if a is false, skip b and return false
+                    self.generate_expr(func, left, type_table, ctx, builder);
+                    func.instruction(&Instruction::If(BlockType::Result(ValType::I32)));
+                    // a is true, evaluate b
+                    self.generate_expr(func, right, type_table, ctx, builder);
+                    func.instruction(&Instruction::Else);
+                    // a is false, result is 0
+                    func.instruction(&Instruction::I32Const(0));
+                    func.instruction(&Instruction::End);
+                    return;
+                }
+                if *op == TirBinaryOp::Or {
+                    // For `a || b`: if a is true, skip b and return true
+                    self.generate_expr(func, left, type_table, ctx, builder);
+                    func.instruction(&Instruction::If(BlockType::Result(ValType::I32)));
+                    // a is true, result is 1
+                    func.instruction(&Instruction::I32Const(1));
+                    func.instruction(&Instruction::Else);
+                    // a is false, evaluate b
+                    self.generate_expr(func, right, type_table, ctx, builder);
+                    func.instruction(&Instruction::End);
+                    return;
+                }
+
                 // Determine if we need type promotion (e.g., i32 to i64)
                 let left_is_i64 = matches!(
                     type_table.get(left.type_id),
@@ -5331,51 +5913,60 @@ impl Codegen {
                 };
 
                 match base_receiver_type {
-                    // Struct method call
-                    ResolvedType::Struct {
-                        ref name,
-                        ref module_source,
-                    } if name == "String" && module_source.to_path() == string_module_path() => {
-                        // String struct - handle specially like legacy ResolvedType::String
-                        match method_name.as_str() {
-                            "len" => {
-                                // Generate the receiver (the string)
-                                self.generate_expr(func, receiver, type_table, ctx, builder);
-                                // Call String::len method
-                                let len_func_idx = builder.func_idx("core/prelude/String::len");
-                                func.instruction(&Instruction::Call(len_func_idx));
-                            }
-                            "get" => {
-                                // string.get(index) -> call String::get method
-                                self.generate_expr(func, receiver, type_table, ctx, builder);
-                                if let Some(index_arg) = args.first() {
-                                    self.generate_expr(func, index_arg, type_table, ctx, builder);
-                                }
-                                let get_func_idx = builder.func_idx("core/prelude/String::get");
-                                func.instruction(&Instruction::Call(get_func_idx));
-                            }
-                            "set" => {
-                                // string.set(index, value) -> call String::set method
-                                self.generate_expr(func, receiver, type_table, ctx, builder);
-                                if let Some(index_arg) = args.first() {
-                                    self.generate_expr(func, index_arg, type_table, ctx, builder);
-                                }
-                                if let Some(value_arg) = args.get(1) {
-                                    self.generate_expr(func, value_arg, type_table, ctx, builder);
-                                }
-                                let set_func_idx = builder.func_idx("core/prelude/String::set");
-                                func.instruction(&Instruction::Call(set_func_idx));
-                            }
-                            _ => {
-                                panic!("unknown method {method_name} on String type");
-                            }
-                        }
-                    }
-
+                    // General struct method call (including String)
                     ResolvedType::Struct {
                         name,
                         module_source,
                     } => {
+                        // String struct: check for optimized intrinsic methods first
+                        let is_string =
+                            name == "String" && module_source.to_path() == string_module_path();
+                        if is_string {
+                            match method_name.as_str() {
+                                "len" => {
+                                    // Generate the receiver (the string)
+                                    self.generate_expr(func, receiver, type_table, ctx, builder);
+                                    // Call String::len method
+                                    let len_func_idx = builder.func_idx("core/prelude/String::len");
+                                    func.instruction(&Instruction::Call(len_func_idx));
+                                    return;
+                                }
+                                "get" => {
+                                    // string.get(index) -> call String::get method
+                                    self.generate_expr(func, receiver, type_table, ctx, builder);
+                                    if let Some(index_arg) = args.first() {
+                                        self.generate_expr(
+                                            func, index_arg, type_table, ctx, builder,
+                                        );
+                                    }
+                                    let get_func_idx = builder.func_idx("core/prelude/String::get");
+                                    func.instruction(&Instruction::Call(get_func_idx));
+                                    return;
+                                }
+                                "set" => {
+                                    // string.set(index, value) -> call String::set method
+                                    self.generate_expr(func, receiver, type_table, ctx, builder);
+                                    if let Some(index_arg) = args.first() {
+                                        self.generate_expr(
+                                            func, index_arg, type_table, ctx, builder,
+                                        );
+                                    }
+                                    if let Some(value_arg) = args.get(1) {
+                                        self.generate_expr(
+                                            func, value_arg, type_table, ctx, builder,
+                                        );
+                                    }
+                                    let set_func_idx = builder.func_idx("core/prelude/String::set");
+                                    func.instruction(&Instruction::Call(set_func_idx));
+                                    return;
+                                }
+                                _ => {
+                                    // Fall through to general struct method handling for trait methods
+                                }
+                            }
+                        }
+
+                        // General struct method handling (trait and inherent methods)
                         // Build the fully mangled method name: path/Struct^Trait::method or path/Struct::method
                         let module_path = module_source.to_path();
                         let mangled_name = MethodName::new(
@@ -7152,6 +7743,21 @@ impl Codegen {
                     // Get the inner value (the non-null reference)
                     func.instruction(&Instruction::LocalGet(scrutinee_local));
                     func.instruction(&Instruction::RefAsNonNull);
+
+                    // For primitive types, unbox the value from the box struct
+                    // BUT skip unboxing if the local is address-taken (it expects a box ref)
+                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                    if !is_address_taken
+                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                    {
+                        let val_type = primitive_to_valtype(prim);
+                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                        }
+                    }
 
                     // Store in the binding local with proper offset
                     let adjusted_index = *local_index + ctx.local_index_offset;

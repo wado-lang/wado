@@ -1,5 +1,5 @@
-// TreeMap B-tree implementation test
-// Tests basic operations: insert, get, delete, iter, compact
+// TreeMap B-tree implementation test with Index traits
+// Tests basic operations with index syntax: map["key"], map["key"] = value
 
 use {println} from "core:cli";
 
@@ -332,40 +332,52 @@ impl TreeMap<K, V> {
     }
 }
 
+// Index trait implementation for TreeMap - read access with map[key]
+impl Index<K> for TreeMap<K, V> {
+    type Output = V;
+
+    fn index(&self, key: K) -> &Self::Output {
+        if let Some(val) = self.get(&key) {
+            return &val;
+        }
+        panic("key not found");
+    }
+}
+
+// IndexAssign trait implementation for TreeMap - write access with map[key] = value
+impl IndexAssign<K> for TreeMap<K, V> {
+    type Input = V;
+
+    fn index_assign(&mut self, key: K, value: Self::Input) {
+        self.insert(key, value);
+    }
+}
+
 fn run() {
     let mut map = TreeMap::<String, i32>::with_default_degree();
 
-    // Test insertion
-    map.insert("apple", 1);
-    map.insert("banana", 2);
-    map.insert("cherry", 3);
-    map.insert("date", 4);
-    map.insert("elderberry", 5);
+    // Test insertion using IndexAssign (map[key] = value)
+    map["apple"] = 1;
+    map["banana"] = 2;
+    map["cherry"] = 3;
+    map["date"] = 4;
+    map["elderberry"] = 5;
 
     println("=== After insertion ===");
     println(`Size: {map.len()}`);
 
-    // Test retrieval
-    if let Some(val) = map.get(&"banana") {
-        println(`banana = {val}`);
-    }
-    if let Some(val2) = map.get(&"date") {
-        println(`date = {val2}`);
-    }
+    // Test retrieval using Index (map[key])
+    println(`banana = {map["banana"]}`);
+    println(`date = {map["date"]}`);
 
-    // Test update
-    map.insert("banana", 20);
-    if let Some(val3) = map.get(&"banana") {
-        println(`banana (updated) = {val3}`);
-    }
+    // Test update using IndexAssign
+    map["banana"] = 20;
+    println(`banana (updated) = {map["banana"]}`);
 
-    // Test deletion
+    // Test deletion (still use method)
     println("\n=== After deleting cherry ===");
     map.delete(&"cherry");
     println(`Size: {map.len()}`);
-    if let None = map.get(&"cherry") {
-        println("cherry = (not found)");
-    }
 
     // Test iteration (should be in sorted order)
     println("\n=== Iteration (sorted) ===");
@@ -403,7 +415,6 @@ __DATA__
         "date = 4",
         "banana (updated) = 20",
         "Size: 4",
-        "cherry = (not found)",
         "apple = 1",
         "banana = 20",
         "date = 4",

@@ -190,7 +190,16 @@ impl SubstitutionContext {
 // Type System
 // ============================================================================
 
-pub type TypeId = u32;
+/// Type identifier for resolved types in TIR.
+/// This is a newtype wrapper to prevent misuse of raw integers as `TypeId`s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TypeId(pub u32);
+
+impl std::fmt::Display for TypeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrimitiveType {
@@ -295,25 +304,25 @@ impl Default for TypeTable {
 }
 
 impl TypeTable {
-    pub const I8: TypeId = 0;
-    pub const I16: TypeId = 1;
-    pub const I32: TypeId = 2;
-    pub const I64: TypeId = 3;
-    pub const I128: TypeId = 4;
-    pub const U8: TypeId = 5;
-    pub const U16: TypeId = 6;
-    pub const U32: TypeId = 7;
-    pub const U64: TypeId = 8;
-    pub const U128: TypeId = 9;
-    pub const F32: TypeId = 10;
-    pub const F64: TypeId = 11;
-    pub const BOOL: TypeId = 12;
-    pub const CHAR: TypeId = 13;
-    pub const UNIT: TypeId = 14;
-    pub const NEVER: TypeId = 15;
+    pub const I8: TypeId = TypeId(0);
+    pub const I16: TypeId = TypeId(1);
+    pub const I32: TypeId = TypeId(2);
+    pub const I64: TypeId = TypeId(3);
+    pub const I128: TypeId = TypeId(4);
+    pub const U8: TypeId = TypeId(5);
+    pub const U16: TypeId = TypeId(6);
+    pub const U32: TypeId = TypeId(7);
+    pub const U64: TypeId = TypeId(8);
+    pub const U128: TypeId = TypeId(9);
+    pub const F32: TypeId = TypeId(10);
+    pub const F64: TypeId = TypeId(11);
+    pub const BOOL: TypeId = TypeId(12);
+    pub const CHAR: TypeId = TypeId(13);
+    pub const UNIT: TypeId = TypeId(14);
+    pub const NEVER: TypeId = TypeId(15);
     // STRING removed - String is now a user-defined struct in core/prelude
-    pub const UNKNOWN: TypeId = 16;
-    pub const ERROR: TypeId = 17;
+    pub const UNKNOWN: TypeId = TypeId(16);
+    pub const ERROR: TypeId = TypeId(17);
 
     pub fn new() -> Self {
         let mut table = Self {
@@ -349,14 +358,14 @@ impl TypeTable {
         if let Some(&id) = self.intern_map.get(&ty) {
             return id;
         }
-        let id = self.types.len() as TypeId;
+        let id = TypeId(self.types.len() as u32);
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
         id
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
-        &self.types[id as usize]
+        &self.types[id.0 as usize]
     }
 
     pub fn is_integer(&self, id: TypeId) -> bool {
@@ -394,6 +403,11 @@ impl TypeTable {
 
     pub fn is_empty(&self) -> bool {
         self.types.len() <= 19
+    }
+
+    /// Iterate over all type IDs in the table
+    pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> {
+        (0..self.types.len() as u32).map(TypeId)
     }
 
     /// Create a raw GC array type (`builtin::array<T>`)

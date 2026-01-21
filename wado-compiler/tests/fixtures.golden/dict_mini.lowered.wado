@@ -39,9 +39,9 @@ pub fn "Array<Tuple<String,String>>::len"(self: &Array<[String, String]>) -> i32
 
 fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -> bool {
     let mut i: i32 = 0;
-    let _licm_entries: Array<[String, String]> = .entries;
+    let _licm_entries: Array<[String, String]> = self.entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if ("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0 == key) {
+        if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0, &key) {
             return true;
         }
     }
@@ -54,9 +54,9 @@ fn "Array<Tuple<String,String>>^IndexValue::index_value"(self: &Array<[String, S
 
 fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -> Option<String> {
     let mut i: i32 = 0;
-    let _licm_entries: Array<[String, String]> = .entries;
+    let _licm_entries: Array<[String, String]> = self.entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if ("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0 == key) {
+        if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0, &key) {
             return Option::Some("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).1);
         }
     }
@@ -65,9 +65,9 @@ fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -
 
 fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: String, value: String) {
     let mut i: i32 = 0;
-    let _licm_entries: Array<[String, String]> = .entries;
+    let _licm_entries: Array<[String, String]> = self.entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if ("Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0 == key) {
+        if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0, &key) {
             "Array<Tuple<String,String>>^IndexAssign::index_assign"(&mut _licm_entries, i, move [key, value]);
             return;
         }

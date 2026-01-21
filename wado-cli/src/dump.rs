@@ -496,7 +496,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             };
             println!(
                 "  [{}] {} :: {} = {}",
-                symbol.id, module_path, symbol.name, kind_str
+                symbol.id.0, module_path, symbol.name, kind_str
             );
         }
         println!();
