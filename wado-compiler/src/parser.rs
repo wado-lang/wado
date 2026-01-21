@@ -1487,7 +1487,7 @@ impl Parser {
                 TokenKind::LParen => {
                     let callee_span = expr.span();
                     self.advance();
-                    let args = self.parse_arg_list()?;
+                    let (args, has_trailing_comma) = self.parse_arg_list()?;
                     let rparen_span = self.peek().span;
                     self.expect(&TokenKind::RParen)?;
                     let merged_span = callee_span.merge(&rparen_span);
@@ -1495,6 +1495,7 @@ impl Parser {
                         callee: expr,
                         type_args: vec![],
                         args,
+                        has_trailing_comma,
                         span: merged_span,
                     }));
                 }
@@ -1509,7 +1510,7 @@ impl Parser {
                         let callee_span = expr.span();
                         let type_args = self.parse_call_type_args()?;
                         self.expect(&TokenKind::LParen)?;
-                        let args = self.parse_arg_list()?;
+                        let (args, has_trailing_comma) = self.parse_arg_list()?;
                         let rparen_span = self.peek().span;
                         self.expect(&TokenKind::RParen)?;
                         let merged_span = callee_span.merge(&rparen_span);
@@ -1517,6 +1518,7 @@ impl Parser {
                             callee: expr,
                             type_args,
                             args,
+                            has_trailing_comma,
                             span: merged_span,
                         }));
                     } else {
@@ -1566,7 +1568,7 @@ impl Parser {
                         if self.check(&TokenKind::Lt) {
                             let type_args = self.parse_call_type_args()?;
                             self.expect(&TokenKind::LParen)?;
-                            let args = self.parse_arg_list()?;
+                            let (args, has_trailing_comma) = self.parse_arg_list()?;
                             let rparen_span = self.peek().span;
                             self.expect(&TokenKind::RParen)?;
                             let merged_span = receiver_span.merge(&rparen_span);
@@ -1575,6 +1577,7 @@ impl Parser {
                                 method: field,
                                 type_args,
                                 args,
+                                has_trailing_comma,
                                 span: merged_span,
                             }));
                         } else {
@@ -1586,7 +1589,7 @@ impl Parser {
                         }
                     } else if self.check(&TokenKind::LParen) {
                         self.advance();
-                        let args = self.parse_arg_list()?;
+                        let (args, has_trailing_comma) = self.parse_arg_list()?;
                         let rparen_span = self.peek().span;
                         self.expect(&TokenKind::RParen)?;
                         let merged_span = receiver_span.merge(&rparen_span);
@@ -1595,6 +1598,7 @@ impl Parser {
                             method: field,
                             type_args: vec![],
                             args,
+                            has_trailing_comma,
                             span: merged_span,
                         }));
                     } else {
@@ -1677,7 +1681,7 @@ impl Parser {
                             self.advance(); // consume ::
                             let method = self.consume_ident()?;
                             self.expect(&TokenKind::LParen)?;
-                            let args = self.parse_arg_list()?;
+                            let (args, has_trailing_comma) = self.parse_arg_list()?;
                             let end_span = self.expect(&TokenKind::RParen)?.span;
 
                             Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
@@ -1688,6 +1692,7 @@ impl Parser {
                                 }),
                                 method,
                                 args,
+                                has_trailing_comma,
                                 span: start_span.merge(&end_span),
                             })))
                         } else {
@@ -1872,8 +1877,10 @@ impl Parser {
         })))
     }
 
-    fn parse_arg_list(&mut self) -> ParseResult<Vec<Expr>> {
+    /// Parse argument list. Returns (args, `has_trailing_comma`).
+    fn parse_arg_list(&mut self) -> ParseResult<(Vec<Expr>, bool)> {
         let mut args = Vec::new();
+        let mut has_trailing_comma = false;
 
         if !self.check(&TokenKind::RParen) {
             args.push(self.parse_expr()?);
@@ -1881,13 +1888,14 @@ impl Parser {
             while self.check(&TokenKind::Comma) {
                 self.advance();
                 if self.check(&TokenKind::RParen) {
+                    has_trailing_comma = true;
                     break;
                 }
                 args.push(self.parse_expr()?);
             }
         }
 
-        Ok(args)
+        Ok((args, has_trailing_comma))
     }
 
     fn parse_closure(&mut self) -> ParseResult<Expr> {
@@ -2862,6 +2870,7 @@ impl Parser {
         }
 
         let mut fields = Vec::new();
+        let mut has_trailing_comma = false;
 
         if !self.check(&TokenKind::RBrace) {
             loop {
@@ -2894,6 +2903,7 @@ impl Parser {
                 }
                 self.advance(); // consume comma
                 if self.check(&TokenKind::RBrace) {
+                    has_trailing_comma = true;
                     break; // trailing comma allowed
                 }
             }
@@ -2905,6 +2915,7 @@ impl Parser {
         Ok(Expr::StructLiteral(Box::new(StructLiteralExpr {
             name,
             fields,
+            has_trailing_comma,
             span: start_span.merge(&end_span),
         })))
     }
