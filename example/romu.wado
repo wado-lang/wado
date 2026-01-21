@@ -1,0 +1,71 @@
+// Romu Random Number Generator (RomuTrio variant)
+// Based on: https://www.romu-random.org/
+// Paper: Mark A. Overton "Romu: Fast Nonlinear Pseudo-Random Number Generators"
+
+use { println, Stdout } from "core:cli";
+
+// RomuTrio state: three 64-bit unsigned integers
+struct RomuState {
+    x: u64,
+    y: u64,
+    z: u64,
+}
+
+// Rotate left for u64
+fn rotl(d: u64, lrot: u64) -> u64 {
+    return (d << lrot) | (d >> (64 as u64 - lrot));
+}
+
+impl RomuState {
+    // Initialize with a seed using SplitMix64
+    fn new(seed: u64) -> RomuState {
+        // Use SplitMix64 to generate initial state
+        let mut s = seed;
+
+        s = s + 0x9E3779B97F4A7C15 as u64;
+        let mut z = s;
+        z = (z ^ (z >> 30 as u64)) * 0xBF58476D1CE4E5B9 as u64;
+        z = (z ^ (z >> 27 as u64)) * 0x94D049BB133111EB as u64;
+        let x = z ^ (z >> 31 as u64);
+
+        s = s + 0x9E3779B97F4A7C15 as u64;
+        z = s;
+        z = (z ^ (z >> 30 as u64)) * 0xBF58476D1CE4E5B9 as u64;
+        z = (z ^ (z >> 27 as u64)) * 0x94D049BB133111EB as u64;
+        let y = z ^ (z >> 31 as u64);
+
+        s = s + 0x9E3779B97F4A7C15 as u64;
+        z = s;
+        z = (z ^ (z >> 30 as u64)) * 0xBF58476D1CE4E5B9 as u64;
+        z = (z ^ (z >> 27 as u64)) * 0x94D049BB133111EB as u64;
+        let z_final = z ^ (z >> 31 as u64);
+
+        return RomuState { x, y, z: z_final };
+    }
+
+    // Generate next random u64
+    fn next(&mut self) -> u64 {
+        let xp = self.x;
+        self.x = self.z * 0xD3833E804F4C574B as u64;
+        self.y = self.y - xp;
+        self.y = rotl(self.y, 12 as u64);
+        self.z = self.z - self.y;
+        self.z = rotl(self.z, 44 as u64);
+        return xp;
+    }
+}
+
+fn run() with Stdout {
+    // Initialize with seed 12345
+    let mut rng = RomuState::new(12345 as u64);
+
+    // Generate and print 10 random numbers
+    println("Romu Random Number Generator (RomuTrio)");
+    println("Seed: 12345");
+    println("First 10 random numbers:");
+
+    for let mut i = 0; i < 10; i += 1 {
+        let r = rng.next();
+        println(`  {i}: {r}`);
+    }
+}
