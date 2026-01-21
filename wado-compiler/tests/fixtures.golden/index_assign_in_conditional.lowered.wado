@@ -6,20 +6,28 @@ fn run() with Stdout {
     let mut arr: Array<i32> = move [0, 0, 0];
     let condition: bool = true;
     if condition {
-        arr[0] = 111;
+        "Array<i32>^IndexAssign::index_assign"(&mut arr, 0, 111);
     } else {
-        arr[0] = 999;
+        "Array<i32>^IndexAssign::index_assign"(&mut arr, 0, 999);
     }
     if !condition {
-        arr[1] = 888;
+        "Array<i32>^IndexAssign::index_assign"(&mut arr, 1, 888);
     } else {
-        arr[1] = 222;
+        "Array<i32>^IndexAssign::index_assign"(&mut arr, 1, 222);
     }
     if condition {
         if condition {
-            arr[2] = 333;
+            "Array<i32>^IndexAssign::index_assign"(&mut arr, 2, 333);
         }
     }
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"(arr[0]), move " "), move "i32::to_string"(arr[1])), move " "), move "i32::to_string"(arr[2])));
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 0)), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 1))), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 2))));
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    return core::builtin::array_get::<i32>(self.repr, index);
+}
+
+fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
+    core::builtin::array_set::<i32>(self.repr, index, value);
 }
 

@@ -60,11 +60,12 @@ impl CompilerHost for TestCompilerHost {
 // Golden File Test Logic
 // ============================================================================
 
-/// Extract the entry module (empty path "") from the unparsed TIR modules
+/// Extract the entry module from the unparsed TIR modules
 fn extract_entry_module(project: &wado_compiler::Project) -> String {
-    for (path, module) in &project.tir_modules {
-        // Entry module has empty path
-        if path.is_empty() {
+    use wado_compiler::name::ModuleSource;
+    for (module_source, module) in &project.tir_modules {
+        // Entry module is ModuleSource::EntryPoint
+        if matches!(module_source, ModuleSource::EntryPoint) {
             return wado_compiler::unparse::unparse_tir(module);
         }
     }

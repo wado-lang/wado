@@ -27,6 +27,52 @@ impl String {
     }
 }
 
+// Eq implementation for String - lexicographic equality
+impl Eq for String {
+    pub fn eq(&self, other: &Self) -> bool {
+        let len_a = self.len();
+        let len_b = other.len();
+
+        if len_a != len_b {
+            return false;
+        }
+
+        for let mut i = 0; i < len_a; i += 1 {
+            if self.get(i) != other.get(i) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+// Ord implementation for String - lexicographic ordering
+impl Ord for String {
+    pub fn lt(&self, other: &Self) -> bool {
+        let len_a = self.len();
+        let len_b = other.len();
+        let mut min_len = len_a;
+        if len_b < min_len {
+            min_len = len_b;
+        }
+
+        for let mut i = 0; i < min_len; i += 1 {
+            let a_byte = self.get(i);
+            let b_byte = other.get(i);
+            if a_byte < b_byte {
+                return true;
+            }
+            if a_byte > b_byte {
+                return false;
+            }
+        }
+
+        // All compared bytes are equal, shorter string is less
+        return len_a < len_b;
+    }
+}
+
 /// Dynamic array type with O(1) amortized append
 pub struct Array<T> {
     repr: builtin::array<T>,
@@ -87,6 +133,91 @@ impl Array<T> {
         builtin::array_set::<T>(self.repr, used, value);
         self.used = used + 1;
     }
+
+    /// Get an element by index (returns a copy)
+    pub fn get(&self, index: i32) -> T {
+        return builtin::array_get::<T>(self.repr, index);
+    }
+
+    /// Set an element by index
+    pub fn set(&mut self, index: i32, value: T) {
+        builtin::array_set::<T>(self.repr, index, value);
+    }
+}
+
+// IndexValue implementation for Array<T> - value-based read
+// Returns a copy of the element. Works for all element types including primitives.
+impl IndexValue<i32> for Array<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        return builtin::array_get::<T>(self.repr, index);
+    }
+}
+
+// IndexAssign implementation for Array<T> - value-based write
+// Assigns to the element at the given index.
+impl IndexAssign<i32> for Array<T> {
+    type Input = T;
+
+    fn index_assign(&mut self, index: i32, value: Self::Input) {
+        builtin::array_set::<T>(self.repr, index, value);
+    }
+}
+
+/// Trait for immutable indexing operations.
+/// Types implementing this trait can be indexed with the `[]` operator for reading.
+pub trait Index<IndexType> {
+    type Output;
+
+    /// Returns a reference to the element at the given index.
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+
+/// Trait for mutable indexing operations.
+/// Types implementing this trait can be indexed with the `[]` operator to get
+/// a mutable reference: `container[i].mutating_method()`.
+/// Note: Requires Index to be implemented (supertrait relationship).
+pub trait IndexMut<IndexType> {
+    type Output;
+
+    /// Returns a mutable reference to the element at the given index.
+    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+
+/// Trait for index assignment operations.
+/// Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
+/// This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
+/// to primitive array elements - reading and writing are fundamentally different operations.
+pub trait IndexAssign<IndexType> {
+    type Input;
+
+    /// Assigns a value to the element at the given index.
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+
+/// Trait for value-returning indexing operations.
+/// Use this for containers of primitives where references cannot be returned.
+/// Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
+pub trait IndexValue<IndexType> {
+    type Output;
+
+    /// Returns a copy of the element at the given index.
+    fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
+/// Trait for equality comparisons.
+/// Types implementing this trait can be compared with `==` and `!=` operators.
+pub trait Eq {
+    /// Returns true if self equals other.
+    fn eq(&self, other: &Self) -> bool;
+}
+
+/// Trait for ordering comparisons.
+/// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+pub trait Ord {
+    /// Returns true if self is less than other.
+    fn lt(&self, other: &Self) -> bool;
 }
 
 /// Optional value - either Some(T) or None

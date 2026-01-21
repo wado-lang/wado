@@ -295,9 +295,26 @@ impl Aged for Person {
 let p = Person { name: "Alice", age: 30 };
 println(p.greet());  // Calls Person's Greet::greet
 println(p.name());   // Calls Person's Named::name
+
+// Trait with associated type
+trait Container {
+    type Item;
+
+    fn get(&self) -> Self::Item;
+}
+
+impl Container for IntBox {
+    type Item = i32;
+
+    fn get(&self) -> Self::Item {
+        return self.value;
+    }
+}
 ```
 
 Traits use static dispatch - method calls are resolved at compile time to the concrete implementation.
+
+Associated types allow traits to declare placeholder types that are specified by implementors. Use `Self::TypeName` to refer to an associated type within trait methods.
 
 ## Control Flow
 

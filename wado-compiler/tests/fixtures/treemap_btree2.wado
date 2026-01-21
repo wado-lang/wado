@@ -1,0 +1,423 @@
+// TreeMap B-tree implementation test with Index traits
+// Tests basic operations with index syntax: map["key"], map["key"] = value
+
+use {println} from "core:cli";
+
+// B-tree node
+struct BTreeNode<K, V> {
+    keys: Array<K>,
+    values: Array<V>,
+    deleted: Array<bool>,
+    children: Array<&mut BTreeNode<K, V>>,
+    is_leaf: bool,
+}
+
+impl BTreeNode<K, V> {
+    fn new_leaf() -> BTreeNode<K, V> {
+        return BTreeNode {
+            keys: [],
+            values: [],
+            deleted: [],
+            children: [],
+            is_leaf: true,
+        };
+    }
+
+    fn new_internal() -> BTreeNode<K, V> {
+        return BTreeNode {
+            keys: [],
+            values: [],
+            deleted: [],
+            children: [],
+            is_leaf: false,
+        };
+    }
+
+    fn find_key_index(&self, key: &K) -> i32 {
+        let mut i = 0;
+        while i < self.keys.len() && self.keys[i] < *key {
+            i += 1;
+        }
+        return i;
+    }
+
+    fn is_full(&self, max_keys: i32) -> bool {
+        let mut count = 0;
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                count += 1;
+            }
+        }
+        return count >= max_keys;
+    }
+
+    fn compact(&mut self) {
+        let new_keys: Array<K> = [];
+        let new_values: Array<V> = [];
+        let new_deleted: Array<bool> = [];
+
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                new_keys.append(self.keys[i]);
+                new_values.append(self.values[i]);
+                new_deleted.append(false);
+            }
+        }
+
+        self.keys = new_keys;
+        self.values = new_values;
+        self.deleted = new_deleted;
+
+        if !self.is_leaf {
+            for let mut i = 0; i < self.children.len(); i += 1 {
+                self.children[i].compact();
+            }
+        }
+    }
+}
+
+// TreeMap using B-tree
+struct TreeMap<K, V> {
+    root: Option<&mut BTreeNode<K, V>>,
+    t: i32,
+    size: i32,
+    deleted_count: i32,
+}
+
+impl TreeMap<K, V> {
+    fn new(t: i32) -> TreeMap<K, V> {
+        return TreeMap {
+            root: null,
+            t: t,
+            size: 0,
+            deleted_count: 0,
+        };
+    }
+
+    fn with_default_degree() -> TreeMap<K, V> {
+        return TreeMap::new(3);
+    }
+
+    fn max_keys(&self) -> i32 {
+        return 2 * self.t - 1;
+    }
+
+    fn min_keys(&self) -> i32 {
+        return self.t - 1;
+    }
+
+    fn get(&self, key: &K) -> Option<V> {
+        if let Some(root) = self.root {
+            return self.search_in_node(root, key);
+        }
+        return null;
+    }
+
+    fn search_in_node(&self, node: &BTreeNode<K, V>, key: &K) -> Option<V> {
+        let mut i = 0;
+
+        while i < node.keys.len() && *key > node.keys[i] {
+            i += 1;
+        }
+
+        if i < node.keys.len() && *key == node.keys[i] {
+            if !node.deleted[i] {
+                return Option::<V>::Some(node.values[i]);
+            }
+            return null;
+        }
+
+        if node.is_leaf {
+            return null;
+        }
+
+        return self.search_in_node(node.children[i], key);
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        if let None = self.root {
+            let mut new_root = BTreeNode::<K, V>::new_leaf();
+            new_root.keys.append(key);
+            new_root.values.append(value);
+            new_root.deleted.append(false);
+            self.root = Option::Some(&mut new_root);
+            self.size = 1;
+            return;
+        }
+
+        if let Some(root) = self.root {
+            if root.is_full(self.max_keys()) {
+                let mut new_root = BTreeNode::<K, V>::new_internal();
+                new_root.children.append(root);
+                self.split_child(&mut new_root, 0);
+                self.root = Option::Some(&mut new_root);
+            }
+
+            if let Some(r) = self.root {
+                self.insert_non_full(r, key, value);
+            }
+        }
+    }
+
+    fn insert_non_full(&mut self, node: &mut BTreeNode<K, V>, key: K, value: V) {
+        if node.is_leaf {
+            let mut pos = 0;
+            while pos < node.keys.len() && node.keys[pos] < key {
+                pos += 1;
+            }
+
+            if pos < node.keys.len() && node.keys[pos] == key {
+                node.values[pos] = value;
+                if node.deleted[pos] {
+                    node.deleted[pos] = false;
+                    self.deleted_count -= 1;
+                }
+                return;
+            }
+
+            node.keys.append(key);
+            node.values.append(value);
+            node.deleted.append(false);
+
+            self.sort_node_entries(node);
+            self.size += 1;
+        } else {
+            let mut pos = 0;
+            while pos < node.keys.len() && key > node.keys[pos] {
+                pos += 1;
+            }
+
+            if node.children[pos].is_full(self.max_keys()) {
+                self.split_child(node, pos);
+
+                if key > node.keys[pos] {
+                    pos += 1;
+                }
+            }
+
+            self.insert_non_full(node.children[pos], key, value);
+        }
+    }
+
+    fn split_child(&mut self, parent: &mut BTreeNode<K, V>, child_index: i32) {
+        let full_child = parent.children[child_index];
+        let mut new_sibling = BTreeNode::<K, V>::new_leaf();
+        if !full_child.is_leaf {
+            new_sibling = BTreeNode::<K, V>::new_internal();
+        }
+
+        let mid = self.t - 1;
+
+        for let mut i = mid + 1; i < full_child.keys.len(); i += 1 {
+            new_sibling.keys.append(full_child.keys[i]);
+            new_sibling.values.append(full_child.values[i]);
+            new_sibling.deleted.append(full_child.deleted[i]);
+        }
+
+        if !full_child.is_leaf {
+            for let mut i = mid + 1; i < full_child.children.len(); i += 1 {
+                new_sibling.children.append(full_child.children[i]);
+            }
+        }
+
+        let promoted_key = full_child.keys[mid];
+        let promoted_value = full_child.values[mid];
+        let promoted_deleted = full_child.deleted[mid];
+
+        parent.keys.append(promoted_key);
+        parent.values.append(promoted_value);
+        parent.deleted.append(promoted_deleted);
+        parent.children.append(&mut new_sibling);
+
+        self.sort_node_entries(parent);
+    }
+
+    fn sort_node_entries(&self, node: &mut BTreeNode<K, V>) {
+        for let mut i = 0; i < node.keys.len(); i += 1 {
+            for let mut j = i + 1; j < node.keys.len(); j += 1 {
+                if node.keys[i] > node.keys[j] {
+                    let temp_k = node.keys[i];
+                    node.keys[i] = node.keys[j];
+                    node.keys[j] = temp_k;
+
+                    let temp_v = node.values[i];
+                    node.values[i] = node.values[j];
+                    node.values[j] = temp_v;
+
+                    let temp_d = node.deleted[i];
+                    node.deleted[i] = node.deleted[j];
+                    node.deleted[j] = temp_d;
+                }
+            }
+        }
+    }
+
+    fn delete(&mut self, key: &K) -> bool {
+        if let Some(root) = self.root {
+            return self.delete_in_node(root, key);
+        }
+        return false;
+    }
+
+    fn delete_in_node(&mut self, node: &mut BTreeNode<K, V>, key: &K) -> bool {
+        let mut i = 0;
+
+        while i < node.keys.len() && *key > node.keys[i] {
+            i += 1;
+        }
+
+        if i < node.keys.len() && *key == node.keys[i] {
+            if !node.deleted[i] {
+                node.deleted[i] = true;
+                self.deleted_count += 1;
+                self.size -= 1;
+                return true;
+            }
+            return false;
+        }
+
+        if node.is_leaf {
+            return false;
+        }
+
+        return self.delete_in_node(node.children[i], key);
+    }
+
+    fn compact(&mut self) {
+        if let Some(root) = self.root {
+            root.compact();
+            self.deleted_count = 0;
+        }
+    }
+
+    fn needs_compaction(&self) -> bool {
+        return self.deleted_count > 0 &&
+               self.deleted_count * 4 > self.size + self.deleted_count;
+    }
+
+    fn len(&self) -> i32 {
+        return self.size;
+    }
+
+    fn is_empty(&self) -> bool {
+        return self.size == 0;
+    }
+
+    fn iter(&self) -> Array<[K, V]> {
+        let mut result: Array<[K, V]> = [];
+        if let Some(root) = self.root {
+            self.collect_entries(root, &mut result);
+        }
+        return result;
+    }
+
+    fn collect_entries(&self, node: &BTreeNode<K, V>, result: &mut Array<[K, V]>) {
+        let mut i = 0;
+
+        while i < node.keys.len() {
+            if !node.is_leaf && i < node.children.len() {
+                self.collect_entries(node.children[i], result);
+            }
+
+            if !node.deleted[i] {
+                result.append([node.keys[i], node.values[i]]);
+            }
+
+            i += 1;
+        }
+
+        if !node.is_leaf && node.children.len() > i {
+            self.collect_entries(node.children[i], result);
+        }
+    }
+}
+
+// Index trait implementation for TreeMap - read access with map[key]
+impl Index<K> for TreeMap<K, V> {
+    type Output = V;
+
+    fn index(&self, key: K) -> &Self::Output {
+        if let Some(val) = self.get(&key) {
+            return &val;
+        }
+        panic("key not found");
+    }
+}
+
+// IndexAssign trait implementation for TreeMap - write access with map[key] = value
+impl IndexAssign<K> for TreeMap<K, V> {
+    type Input = V;
+
+    fn index_assign(&mut self, key: K, value: Self::Input) {
+        self.insert(key, value);
+    }
+}
+
+fn run() {
+    let mut map = TreeMap::<String, i32>::with_default_degree();
+
+    // Test insertion using IndexAssign (map[key] = value)
+    map["apple"] = 1;
+    map["banana"] = 2;
+    map["cherry"] = 3;
+    map["date"] = 4;
+    map["elderberry"] = 5;
+
+    println("=== After insertion ===");
+    println(`Size: {map.len()}`);
+
+    // Test retrieval using Index (map[key])
+    println(`banana = {map["banana"]}`);
+    println(`date = {map["date"]}`);
+
+    // Test update using IndexAssign
+    map["banana"] = 20;
+    println(`banana (updated) = {map["banana"]}`);
+
+    // Test deletion (still use method)
+    println("\n=== After deleting cherry ===");
+    map.delete(&"cherry");
+    println(`Size: {map.len()}`);
+
+    // Test iteration (should be in sorted order)
+    println("\n=== Iteration (sorted) ===");
+    let entries = map.iter();
+    for let entry of entries {
+        let key = entry[0];
+        let value = entry[1];
+        println(`{key} = {value}`);
+    }
+
+    // Test compaction
+    println("\n=== After compaction ===");
+    if map.needs_compaction() {
+        println("Compaction needed, running...");
+        map.compact();
+    }
+    println(`Size: {map.len()}`);
+    println(`Deleted count: {map.deleted_count}`);
+
+    // Final iteration
+    println("\n=== Final iteration ===");
+    let final_entries = map.iter();
+    for let entry of final_entries {
+        let key = entry[0];
+        let value = entry[1];
+        println(`{key} = {value}`);
+    }
+}
+
+__DATA__
+{
+    "stdout_contains": [
+        "Size: 5",
+        "banana = 2",
+        "date = 4",
+        "banana (updated) = 20",
+        "Size: 4",
+        "apple = 1",
+        "banana = 20",
+        "date = 4",
+        "elderberry = 5"
+    ]
+}

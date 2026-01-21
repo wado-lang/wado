@@ -35,6 +35,156 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 
 // =============================================================================
+// Module Source Types
+// =============================================================================
+
+/// Source location of a module.
+///
+/// This enum provides a structured representation of module paths,
+/// replacing raw `Vec<String>` for better type safety and clearer semantics.
+///
+/// # Examples
+///
+/// ```ignore
+/// // Core library modules
+/// ModuleSource::Core { name: "prelude".to_string() }  // core:prelude
+/// ModuleSource::Core { name: "cli".to_string() }      // core:cli
+///
+/// // WASI modules
+/// ModuleSource::Wasi { interface: "cli".to_string() } // wasi:cli
+///
+/// // Local modules
+/// ModuleSource::Local { path: "./geometry.wado".to_string() }
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ModuleSource {
+    /// Core library module (e.g., `core:prelude`, `core:cli`, `core:internal`, `core:builtin`)
+    Core {
+        /// Module name within core (e.g., "prelude", "cli", "internal", "builtin")
+        name: String,
+    },
+    /// WASI module (e.g., `wasi:cli`, `wasi:io`)
+    Wasi {
+        /// Interface name (e.g., "cli", "io", "filesystem")
+        interface: String,
+    },
+    /// Local module relative to project root
+    Local {
+        /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
+        path: String,
+    },
+    /// Entry point module (the main file being compiled)
+    EntryPoint,
+}
+
+impl ModuleSource {
+    /// Create a core module source.
+    #[must_use]
+    pub fn core(name: impl Into<String>) -> Self {
+        Self::Core { name: name.into() }
+    }
+
+    /// Create a WASI module source.
+    #[must_use]
+    pub fn wasi(interface: impl Into<String>) -> Self {
+        Self::Wasi {
+            interface: interface.into(),
+        }
+    }
+
+    /// Create a local module source.
+    #[must_use]
+    pub fn local(path: impl Into<String>) -> Self {
+        Self::Local { path: path.into() }
+    }
+
+    /// Convert from a legacy `Vec<String>` module path.
+    ///
+    /// This enables gradual migration from the old representation.
+    #[must_use]
+    pub fn from_path(path: &[String]) -> Self {
+        match path {
+            [] => Self::EntryPoint,
+            [first] if first.starts_with("./") || first.starts_with("../") => Self::Local {
+                path: first.clone(),
+            },
+            [first, rest @ ..] if first == "core" => Self::Core {
+                name: rest.join("/"),
+            },
+            [first, rest @ ..] if first == "wasi" => Self::Wasi {
+                interface: rest.join("/"),
+            },
+            segments => {
+                // Treat as local path
+                Self::Local {
+                    path: segments.join("/"),
+                }
+            }
+        }
+    }
+
+    /// Convert to the legacy `Vec<String>` module path representation.
+    ///
+    /// This enables gradual migration while maintaining compatibility.
+    #[must_use]
+    pub fn to_path(&self) -> Vec<String> {
+        match self {
+            Self::Core { name } => vec!["core".to_string(), name.clone()],
+            Self::Wasi { interface } => vec!["wasi".to_string(), interface.clone()],
+            Self::Local { path } => vec![path.clone()],
+            Self::EntryPoint => vec![],
+        }
+    }
+
+    /// Check if this is a core module.
+    #[must_use]
+    pub fn is_core(&self) -> bool {
+        matches!(self, Self::Core { .. })
+    }
+
+    /// Check if this is a WASI module.
+    #[must_use]
+    pub fn is_wasi(&self) -> bool {
+        matches!(self, Self::Wasi { .. })
+    }
+
+    /// Check if this is a local module.
+    #[must_use]
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Local { .. })
+    }
+
+    /// Check if this is the core/internal module.
+    #[must_use]
+    pub fn is_core_internal(&self) -> bool {
+        matches!(self, Self::Core { name } if name == "internal")
+    }
+
+    /// Check if this is the core/builtin module.
+    #[must_use]
+    pub fn is_core_builtin(&self) -> bool {
+        matches!(self, Self::Core { name } if name == "builtin")
+    }
+
+    /// Check if this is the core/prelude module.
+    #[must_use]
+    pub fn is_core_prelude(&self) -> bool {
+        matches!(self, Self::Core { name } if name == "prelude")
+    }
+}
+
+impl fmt::Display for ModuleSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Core { name } => write!(f, "core:{name}"),
+            Self::Wasi { interface } => write!(f, "wasi:{interface}"),
+            Self::Local { path } => write!(f, "{path}"),
+            Self::EntryPoint => write!(f, "<entry>"),
+        }
+    }
+}
+
+// =============================================================================
 // Function Identifier Types
 // =============================================================================
 
@@ -103,6 +253,16 @@ impl FreeFunctionName {
         }
     }
 
+    /// Create a `FreeFunctionName` from `ModuleSource` and name.
+    pub fn from_module_source(module_source: &ModuleSource, name: &str) -> Self {
+        Self {
+            module_path: module_source.to_path(),
+            name: name.to_string(),
+            is_monomorphized: false,
+            base_name: None,
+        }
+    }
+
     /// Create a `FreeFunctionName` with monomorphization metadata.
     pub fn with_monomorph_info(module_path: Vec<String>, name: String, base_name: String) -> Self {
         Self {
@@ -159,26 +319,268 @@ impl MethodName {
             method_name,
         }
     }
+
+    /// Create a `MethodName` from `ModuleSource`.
+    pub fn from_module_source(
+        module_source: &ModuleSource,
+        struct_name: &str,
+        trait_name: Option<&str>,
+        method_name: &str,
+    ) -> Self {
+        Self {
+            filename: module_source.to_path().join("/"),
+            struct_name: struct_name.to_string(),
+            trait_name: trait_name.map(String::from),
+            method_name: method_name.to_string(),
+        }
+    }
+
+    /// Returns the local part of the method name without the module path.
+    /// Format: `Struct^Trait::method` or `Struct::method`
+    pub fn local_name(&self) -> String {
+        Self::format_local(
+            &self.struct_name,
+            self.trait_name.as_deref(),
+            &self.method_name,
+        )
+    }
+
+    /// Format a local method name (without module path).
+    /// This is the canonical way to build method names like `Struct^Trait::method`.
+    pub fn format_local(struct_name: &str, trait_name: Option<&str>, method_name: &str) -> String {
+        match trait_name {
+            Some(trait_n) => format!("{struct_name}^{trait_n}::{method_name}"),
+            None => format!("{struct_name}::{method_name}"),
+        }
+    }
+
+    /// Format a struct name with type arguments and optional trait.
+    /// Format: `Struct<TypeArgs>^Trait` or `Struct<TypeArgs>`
+    pub fn format_struct_with_args(
+        struct_name: &str,
+        type_args: &[String],
+        trait_name: Option<&str>,
+    ) -> String {
+        let struct_part = if type_args.is_empty() {
+            struct_name.to_string()
+        } else {
+            format!("{}<{}>", struct_name, type_args.join(","))
+        };
+        match trait_name {
+            Some(trait_n) => format!("{struct_part}^{trait_n}"),
+            None => struct_part,
+        }
+    }
+
+    /// Join a struct part (which may include ^Trait) with a method part.
+    /// This is the final step of method name construction.
+    pub fn join_struct_method(struct_part: &str, method_part: &str) -> String {
+        format!("{struct_part}::{method_part}")
+    }
+
+    /// Format a method name with type arguments.
+    /// Format: `method<TypeArgs>` or `method`
+    pub fn format_method_with_args(method_name: &str, type_args: &[String]) -> String {
+        if type_args.is_empty() {
+            method_name.to_string()
+        } else {
+            format!("{}<{}>", method_name, type_args.join(","))
+        }
+    }
 }
 
 impl fmt::Display for MethodName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // For entry point (empty filename), don't include the leading slash
+        let prefix = if self.filename.is_empty() {
+            String::new()
+        } else {
+            format!("{}/", self.filename)
+        };
+
         match &self.trait_name {
             Some(trait_name) => {
                 write!(
                     f,
-                    "{}/{}^{}::{}",
-                    self.filename, self.struct_name, trait_name, self.method_name
+                    "{}{}^{}::{}",
+                    prefix, self.struct_name, trait_name, self.method_name
                 )
             }
             None => {
-                write!(
-                    f,
-                    "{}/{}::{}",
-                    self.filename, self.struct_name, self.method_name
-                )
+                write!(f, "{}{}::{}", prefix, self.struct_name, self.method_name)
             }
         }
+    }
+}
+
+/// Extract the local part of a potentially module-qualified name.
+///
+/// Given a name like `module/path/LocalName`, returns `LocalName`.
+/// If there's no module path, returns the original string.
+///
+/// Examples:
+/// - `"./main.wado/Point::sum"` → `"Point::sum"`
+/// - `"core/prelude/String::len"` → `"String::len"`
+/// - `"Point::sum"` → `"Point::sum"`
+pub fn extract_local_name(name: &str) -> &str {
+    // Find the last '/' which separates module path from local name
+    if let Some(slash_pos) = name.rfind('/') {
+        &name[slash_pos + 1..]
+    } else {
+        name
+    }
+}
+
+/// Parsed components of a local method name (without module path).
+///
+/// This is used to extract struct/trait/method info from names like:
+/// - `Point::sum` → `struct_name="Point`", `trait_name=None`, `method_name="sum`"
+/// - `Point^Display::fmt` → `struct_name="Point`", `trait_name=Some("Display`"), `method_name="fmt`"
+#[derive(Debug, Clone)]
+pub struct LocalMethodName {
+    /// The struct name (e.g., "Point" or "Point<i32>")
+    pub struct_name: String,
+    /// The trait name if this is a trait method (e.g., "Display")
+    pub trait_name: Option<String>,
+    /// The method name (e.g., "sum" or "fmt")
+    pub method_name: String,
+    /// Method-level type args (e.g., ["i64"] for transform<i64>)
+    pub method_type_args: Vec<String>,
+}
+
+impl LocalMethodName {
+    /// Create a new `LocalMethodName` directly from components.
+    #[must_use]
+    pub fn new(struct_name: String, trait_name: Option<String>, method_name: String) -> Self {
+        Self {
+            struct_name,
+            trait_name,
+            method_name,
+            method_type_args: vec![],
+        }
+    }
+
+    /// Create a new `LocalMethodName` with all components including method type args.
+    #[must_use]
+    pub fn with_method_type_args(
+        struct_name: String,
+        trait_name: Option<String>,
+        method_name: String,
+        method_type_args: Vec<String>,
+    ) -> Self {
+        Self {
+            struct_name,
+            trait_name,
+            method_name,
+            method_type_args,
+        }
+    }
+
+    /// Create a version of this `LocalMethodName` with type args applied.
+    ///
+    /// `impl_type_args` are applied to the struct name (e.g., "Array" + ["i32"] → "Array<i32>").
+    /// `method_type_args` are stored separately (not embedded in `method_name`).
+    #[must_use]
+    pub fn with_type_args(&self, impl_type_args: &[String], method_type_args: &[String]) -> Self {
+        let mangled_struct = if impl_type_args.is_empty() {
+            self.struct_name.clone()
+        } else {
+            format!("{}<{}>", self.struct_name, impl_type_args.join(","))
+        };
+        Self {
+            struct_name: mangled_struct,
+            trait_name: self.trait_name.clone(),
+            method_name: self.method_name.clone(),
+            method_type_args: method_type_args.to_vec(),
+        }
+    }
+
+    /// Create a version with only struct type args (no method type args).
+    /// This is a convenience method for the common case.
+    #[must_use]
+    pub fn with_struct_type_args(&self, type_args: &[String]) -> Self {
+        self.with_type_args(type_args, &[])
+    }
+
+    /// Get the full method name including type args (e.g., "transform<i64>")
+    #[must_use]
+    pub fn full_method_name(&self) -> String {
+        if self.method_type_args.is_empty() {
+            self.method_name.clone()
+        } else {
+            format!("{}<{}>", self.method_name, self.method_type_args.join(","))
+        }
+    }
+
+    /// Parse a local method name string into its components.
+    ///
+    /// Expected formats:
+    /// - `StructName::method`
+    /// - `StructName^TraitName::method`
+    /// - `StructName<TypeArgs>::method`
+    /// - `StructName<TypeArgs>^TraitName::method`
+    ///
+    /// Returns `None` if the format is invalid (no `::` separator).
+    pub fn parse(name: &str) -> Option<Self> {
+        let sep_pos = name.find("::")?;
+        let prefix = &name[..sep_pos];
+        let method_part = &name[sep_pos + 2..];
+
+        // Parse method name and type args (e.g., "transform<i64>" -> "transform", ["i64"])
+        let (method_name, method_type_args) = if let Some(angle_pos) = method_part.find('<') {
+            let base_name = &method_part[..angle_pos];
+            // Extract type args from between < and >
+            let type_args_str = method_part
+                .strip_prefix(&format!("{base_name}<"))
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or("");
+            let type_args: Vec<String> = type_args_str
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+            (base_name, type_args)
+        } else {
+            (method_part, vec![])
+        };
+
+        // Check for trait separator `^` in the prefix
+        if let Some(caret_pos) = prefix.find('^') {
+            let struct_name = &prefix[..caret_pos];
+            let trait_name = &prefix[caret_pos + 1..];
+            Some(Self {
+                struct_name: struct_name.to_string(),
+                trait_name: Some(trait_name.to_string()),
+                method_name: method_name.to_string(),
+                method_type_args,
+            })
+        } else {
+            Some(Self {
+                struct_name: prefix.to_string(),
+                trait_name: None,
+                method_name: method_name.to_string(),
+                method_type_args,
+            })
+        }
+    }
+
+    /// Parse a potentially module-qualified method name.
+    ///
+    /// This first strips the module path (e.g., `./main.wado/`) and then
+    /// parses the local method name.
+    ///
+    /// Examples:
+    /// - `"./main.wado/Point::sum"` → Some(LocalMethodName { `struct_name`: "Point", ... })
+    /// - `"Point^Display::fmt"` → Some(LocalMethodName { `struct_name`: "Point", `trait_name`: Some("Display"), ... })
+    /// - `"run"` → None (not a method)
+    pub fn parse_qualified(name: &str) -> Option<Self> {
+        let local_name = extract_local_name(name);
+        Self::parse(local_name)
+    }
+
+    /// Returns true if this is a trait method.
+    pub fn is_trait_method(&self) -> bool {
+        self.trait_name.is_some()
     }
 }
 
@@ -226,29 +628,46 @@ impl From<MethodName> for FunctionId {
 /// general `TypeId` enum (similar to `FunctionId`) to handle trait types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructName {
-    /// The module path segments (e.g., `[".", "geometry.wado"]`)
-    pub module_path: Vec<String>,
+    /// The module where the struct is defined
+    pub module_source: ModuleSource,
     /// The struct name (e.g., `Point`)
     pub name: String,
 }
 
 impl StructName {
-    pub fn new(module_path: Vec<String>, name: String) -> Self {
-        Self { module_path, name }
+    #[must_use]
+    pub fn new(module_source: ModuleSource, name: String) -> Self {
+        Self {
+            module_source,
+            name,
+        }
     }
 
-    pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
+    #[must_use]
+    pub fn from_name(name: &str) -> Self {
         Self {
-            module_path: module_path.to_vec(),
+            module_source: ModuleSource::EntryPoint,
             name: name.to_string(),
         }
     }
 
-    /// Create a `StructName` from string literal slices.
-    /// Convenience method for when you have &[&str] instead of &[String].
-    pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+    /// Create a `StructName` from a module path and name.
+    /// This is a convenience method for code that still uses `Vec<String>` paths.
+    #[must_use]
+    pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
         Self {
-            module_path: module_path.iter().map(|s| (*s).to_string()).collect(),
+            module_source: ModuleSource::from_path(module_path),
+            name: name.to_string(),
+        }
+    }
+
+    /// Create a `StructName` from string slices.
+    /// This is a convenience method for tests and initialization.
+    #[must_use]
+    pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+        let path: Vec<String> = module_path.iter().map(|&s| s.to_string()).collect();
+        Self {
+            module_source: ModuleSource::from_path(&path),
             name: name.to_string(),
         }
     }
@@ -256,10 +675,11 @@ impl StructName {
 
 impl fmt::Display for StructName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.module_path.is_empty() {
-            write!(f, "{}", self.name)
-        } else {
-            write!(f, "{}/{}", self.module_path.join("/"), self.name)
+        match &self.module_source {
+            ModuleSource::EntryPoint => write!(f, "{}", self.name),
+            ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
+            ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
+            ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
         }
     }
 }
@@ -553,6 +973,24 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     }
 }
 
+/// Strip type parameters from a generic name, returning the base name.
+///
+/// This is the inverse of `mangle_generic_name` - it extracts the base name
+/// from a potentially generic name.
+///
+/// Examples:
+/// - `strip_type_params("IndexValue<i32>")` → `"IndexValue"`
+/// - `strip_type_params("Map<String,i32>")` → `"Map"`
+/// - `strip_type_params("Point")` → `"Point"` (unchanged)
+#[must_use]
+pub fn strip_type_params(name: &str) -> &str {
+    if let Some(bracket_pos) = name.find('<') {
+        &name[..bracket_pos]
+    } else {
+        name
+    }
+}
+
 /// Build a monomorphized method name from struct name, type args, and method name.
 ///
 /// Examples:
@@ -724,16 +1162,16 @@ mod tests {
 
     #[test]
     fn test_struct_name_empty_path() {
-        let struct_name = StructName::from_strs(&[], "Point");
+        let struct_name = StructName::from_path_and_name(&[], "Point");
         assert_eq!(struct_name.to_string(), "Point");
     }
 
     #[test]
     fn test_struct_name_hash_eq() {
         use std::collections::HashSet;
-        let s1 = StructName::from_strs(&["./geometry.wado"], "Point");
-        let s2 = StructName::from_strs(&["./geometry.wado"], "Point");
-        let s3 = StructName::from_strs(&["./other.wado"], "Point");
+        let s1 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
+        let s2 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
+        let s3 = StructName::from_path_and_name(&["./other.wado".to_string()], "Point");
 
         let mut set = HashSet::new();
         set.insert(s1.clone());
@@ -902,5 +1340,109 @@ mod tests {
         // Note: Most printable characters are valid in URI references,
         // so we test with control characters or invalid sequences
         assert!(validate_module_path("./file with\x00null.wado").is_err());
+    }
+
+    // =========================================================================
+    // ModuleSource Tests
+    // =========================================================================
+
+    #[test]
+    fn test_module_source_from_path_core() {
+        let source = ModuleSource::from_path(&["core".to_string(), "prelude".to_string()]);
+        assert!(matches!(source, ModuleSource::Core { name } if name == "prelude"));
+
+        let source = ModuleSource::from_path(&["core".to_string(), "cli".to_string()]);
+        assert!(matches!(source, ModuleSource::Core { name } if name == "cli"));
+
+        let source = ModuleSource::from_path(&["core".to_string(), "internal".to_string()]);
+        assert!(source.is_core_internal());
+    }
+
+    #[test]
+    fn test_module_source_from_path_wasi() {
+        let source = ModuleSource::from_path(&["wasi".to_string(), "cli".to_string()]);
+        assert!(matches!(source, ModuleSource::Wasi { interface } if interface == "cli"));
+
+        let source = ModuleSource::from_path(&["wasi".to_string(), "io".to_string()]);
+        assert!(source.is_wasi());
+    }
+
+    #[test]
+    fn test_module_source_from_path_local() {
+        let source = ModuleSource::from_path(&["./geometry.wado".to_string()]);
+        assert!(matches!(source, ModuleSource::Local { path } if path == "./geometry.wado"));
+
+        let source = ModuleSource::from_path(&["../lib.wado".to_string()]);
+        assert!(source.is_local());
+    }
+
+    #[test]
+    fn test_module_source_from_path_entry_point() {
+        let source = ModuleSource::from_path(&[]);
+        assert!(matches!(source, ModuleSource::EntryPoint));
+    }
+
+    #[test]
+    fn test_module_source_to_path() {
+        let source = ModuleSource::core("prelude");
+        assert_eq!(source.to_path(), vec!["core", "prelude"]);
+
+        let source = ModuleSource::wasi("cli");
+        assert_eq!(source.to_path(), vec!["wasi", "cli"]);
+
+        let source = ModuleSource::local("./geometry.wado");
+        assert_eq!(source.to_path(), vec!["./geometry.wado"]);
+
+        let source = ModuleSource::EntryPoint;
+        assert!(source.to_path().is_empty());
+    }
+
+    #[test]
+    fn test_module_source_display() {
+        assert_eq!(ModuleSource::core("prelude").to_string(), "core:prelude");
+        assert_eq!(ModuleSource::wasi("cli").to_string(), "wasi:cli");
+        assert_eq!(
+            ModuleSource::local("./geometry.wado").to_string(),
+            "./geometry.wado"
+        );
+        assert_eq!(ModuleSource::EntryPoint.to_string(), "<entry>");
+    }
+
+    #[test]
+    fn test_module_source_helpers() {
+        let core = ModuleSource::core("internal");
+        assert!(core.is_core());
+        assert!(core.is_core_internal());
+        assert!(!core.is_wasi());
+        assert!(!core.is_local());
+
+        let builtin = ModuleSource::core("builtin");
+        assert!(builtin.is_core_builtin());
+
+        let prelude = ModuleSource::core("prelude");
+        assert!(prelude.is_core_prelude());
+
+        let wasi = ModuleSource::wasi("cli");
+        assert!(wasi.is_wasi());
+        assert!(!wasi.is_core());
+
+        let local = ModuleSource::local("./file.wado");
+        assert!(local.is_local());
+        assert!(!local.is_core());
+    }
+
+    #[test]
+    fn test_module_source_roundtrip() {
+        // Test that from_path and to_path are inverses (for supported formats)
+        let paths = vec![
+            vec!["core".to_string(), "prelude".to_string()],
+            vec!["wasi".to_string(), "cli".to_string()],
+            vec!["./geometry.wado".to_string()],
+        ];
+
+        for path in paths {
+            let source = ModuleSource::from_path(&path);
+            assert_eq!(source.to_path(), path, "Roundtrip failed for {path:?}");
+        }
     }
 }

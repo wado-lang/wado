@@ -199,6 +199,7 @@ This project relies on the following Wasm features:
 - Everything is under discussion. We can change the spec at any time.
 - When referring to WAT, use folded style syntax.
 - Do not commit changes unless the user requests so. When commit, no need to explain the implementation details.
+- When you encounter an unrelated problem, don't remove the problematic code. For E2E tests, add the `TODO` field. For other cases, move it elsewhere. Preserve the problem as is.
 
 ## Rules for Rust
 
@@ -208,6 +209,11 @@ This project relies on the following Wasm features:
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
 - YAGNI. Do the simplest thing that could possibly work.
+
+### Rules for Compiler Development
+
+- Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formatting.
+- Minimize hard-coded logic. Define builtin and internal functions in Wado source files whenever possible.
 
 ## Rules for Markdown
 
@@ -248,6 +254,8 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Operator Overloading](./docs/wep-2026-01-18-operator-overloading.md)
 - [Iterator-Based Literal Coercion](./docs/wep-2026-01-18-iterator-based-literal-coercion.md)
 - [Effect System and Randomness in Collections](./docs/wep-2026-01-20-effect-system-randomness.md)
+- [Associated Types in Traits](./docs/wep-2026-01-20-associated-types.md)
+- [Indexing Traits Design](./docs/wep-2026-01-20-indexing-traits.md)
 
 ### Structure
 

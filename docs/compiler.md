@@ -380,6 +380,27 @@ The `name.rs` module centralizes all naming and mangling logic for the compiler.
 | Module-qualified struct | `{module_path}::{struct_name}`                         | `./geometry.wado::Point`             |
 | Core internal           | `core::internal::{name}`                               | `core::internal::log_stdout`         |
 
+**Utility Functions:**
+
+| Function              | Description                    | Example                              |
+| --------------------- | ------------------------------ | ------------------------------------ |
+| `mangle_generic_name` | Build monomorphized type name  | `("Box", ["i32"])` → `"Box<i32>"`    |
+| `strip_type_params`   | Extract base name from generic | `"IndexValue<i32>"` → `"IndexValue"` |
+| `extract_local_name`  | Strip module path prefix       | `"./main.wado/Point"` → `"Point"`    |
+
+### ModuleSource
+
+The `ModuleSource` enum in `name.rs` provides a structured representation of where a module comes from.
+
+```rust
+pub enum ModuleSource {
+    Core { name: String },      // core:prelude, core:cli, etc.
+    Wasi { interface: String }, // wasi:cli, wasi:io, etc.
+    Local { path: String },     // ./geometry.wado, ../lib.wado
+    EntryPoint,                 // The main entry module
+}
+```
+
 ### Module Path Canonicalization
 
 The `name.rs` module also provides path canonicalization utilities to ensure the same file imported via different paths resolves to the same module identity.
@@ -464,6 +485,52 @@ println("Person^Greet::greet"(p));
 - **Zero runtime overhead**: No vtable lookup
 - **Inlining possible**: Optimizer can inline trait methods
 - **Dead code elimination**: Unused trait implementations are removed
+
+### Associated Types
+
+Traits can declare associated types using `type Name;` syntax. Implementors bind these types using `type Name = ConcreteType;`.
+
+**AST Representation:**
+
+```rust
+// In trait declarations
+struct AssociatedTypeDecl {
+    name: String,
+    span: Span,
+}
+
+// In impl blocks
+struct AssociatedTypeBinding {
+    name: String,
+    ty: Type,
+    span: Span,
+}
+```
+
+**Resolution:**
+
+When resolving `Self::TypeName` in trait methods:
+
+1. The resolver maintains `current_associated_type_bindings: HashMap<String, TypeId>`
+2. Before resolving methods in a trait impl, bindings are collected from the impl block
+3. `Self::TypeName` is parsed as `Type::NamespacedGeneric { namespace: "Self", name: "TypeName" }`
+4. Resolution looks up the type name in the current bindings
+
+**Example:**
+
+```wado
+trait Container {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+impl Container for IntBox {
+    type Item = i32;  // Binding: "Item" -> i32
+    fn get(&self) -> Self::Item {  // Self::Item resolves to i32
+        return self.value;
+    }
+}
+```
 
 ### Type System
 
@@ -621,6 +688,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `impl` blocks
 - [x] `trait` declarations (static dispatch)
 - [x] `impl Trait for Type` (trait implementations)
+- [x] Associated types in traits (`type Output;` and `type Output = T;`)
 - [x] `enum` declarations (payload-free, CM semantics)
 - [x] `type` aliases
 - [x] `impl` blocks

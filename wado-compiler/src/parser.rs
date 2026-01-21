@@ -2,17 +2,17 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ChainedComparison, ClosureExpr, ClosureParam, ComparisonChainExpr, CompoundAssignExpr,
-    CompoundAssignOp, ContinueStmt, EffectDecl, EffectMethod, EnumDecl, EnumVariant, Expr,
-    ExprStmt, FieldAccessExpr, FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericType, IdentExpr, IfCondition, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, IntLiteral, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern, ResourceDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
-    WorldExport, WorldImport,
+    AssertStmt, AssignExpr, AssociatedTypeBinding, AssociatedTypeDecl, Attribute, BinaryExpr,
+    BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt, EffectDecl,
+    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, FloatLiteral, ForOfStmt,
+    ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr, IfCondition, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item, LabeledBlockStmt, LetStmt, Literal,
+    LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType, NamespacedGenericType, Param,
+    Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TraitDecl, TupleLiteralExpr, Type,
+    TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
+    WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -792,7 +792,20 @@ impl Parser {
 
         let else_block = if self.check(&TokenKind::Else) {
             self.advance();
-            Some(self.parse_block()?)
+            if self.check(&TokenKind::If) {
+                // `else if` - parse as nested if statement wrapped in a block
+                let if_stmt = self.parse_if_stmt()?;
+                let span = match &if_stmt {
+                    Stmt::If(s) => s.span,
+                    _ => unreachable!("parse_if_stmt must return Stmt::If"),
+                };
+                Some(Block {
+                    stmts: vec![if_stmt],
+                    span,
+                })
+            } else {
+                Some(self.parse_block()?)
+            }
         } else {
             None
         };
@@ -2416,16 +2429,34 @@ impl Parser {
 
         self.expect(&TokenKind::LBrace)?;
 
+        let mut associated_types = Vec::new();
         let mut methods = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
-            let is_pub = if self.check(&TokenKind::Pub) {
+
+            // Check if this is an associated type binding: `type Name = Type;`
+            if self.check(&TokenKind::Type) {
+                let type_span = self.peek().span;
                 self.advance();
-                true
+                let assoc_name = self.consume_ident()?;
+                self.expect(&TokenKind::Eq)?;
+                let assoc_ty = self.parse_type()?;
+                let end = self.expect(&TokenKind::Semicolon)?.span;
+                associated_types.push(AssociatedTypeBinding {
+                    name: assoc_name,
+                    ty: assoc_ty,
+                    span: type_span.merge(&end),
+                });
             } else {
-                false
-            };
-            methods.push(self.parse_function(is_pub, attrs)?);
+                let _ = attrs; // attrs handled in parse_function
+                let is_pub = if self.check(&TokenKind::Pub) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
+                methods.push(self.parse_function(is_pub, Vec::new())?);
+            }
         }
 
         let end_span = self.expect(&TokenKind::RBrace)?.span;
@@ -2434,6 +2465,7 @@ impl Parser {
             type_params,
             trait_type,
             ty,
+            associated_types,
             methods,
             span: start_span.merge(&end_span),
         })
@@ -2456,11 +2488,26 @@ impl Parser {
 
         self.expect(&TokenKind::LBrace)?;
 
+        let mut associated_types = Vec::new();
         let mut methods = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
-            // Trait methods are not pub (visibility comes from trait itself)
-            methods.push(self.parse_function(false, attrs)?);
+
+            // Check if this is an associated type declaration: `type Name;`
+            if self.check(&TokenKind::Type) {
+                let type_span = self.peek().span;
+                self.advance();
+                let assoc_name = self.consume_ident()?;
+                let end = self.expect(&TokenKind::Semicolon)?.span;
+                associated_types.push(AssociatedTypeDecl {
+                    name: assoc_name,
+                    span: type_span.merge(&end),
+                });
+            } else {
+                // Trait methods are not pub (visibility comes from trait itself)
+                let _ = attrs; // attrs currently unused for trait methods
+                methods.push(self.parse_function(false, Vec::new())?);
+            }
         }
 
         let end_span = self.expect(&TokenKind::RBrace)?.span;
@@ -2469,6 +2516,7 @@ impl Parser {
             name,
             is_pub,
             type_params,
+            associated_types,
             methods,
             span: start_span.merge(&end_span),
         })

@@ -14,6 +14,8 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
+use crate::name::{LocalMethodName, ModuleSource, strip_type_params};
+
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
     IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt,
@@ -29,24 +31,33 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Module path for the String struct in core/prelude
-const STRING_MODULE_PATH: &[&str] = &["core", "prelude"];
-
-/// Helper to convert `STRING_MODULE_PATH` to Vec<String>
-fn string_module_path() -> Vec<String> {
-    STRING_MODULE_PATH
-        .iter()
-        .map(|s| (*s).to_string())
-        .collect()
+/// Helper to get the `ModuleSource` for String type (core:prelude)
+fn string_module_source() -> ModuleSource {
+    ModuleSource::core("prelude")
 }
 
-/// Struct field info: (`module_path`, fields) where fields is a list of (name, `type_id`) pairs
-type StructFieldInfo = (Vec<String>, Vec<(String, TypeId)>);
+/// Struct field info: module source and field definitions
+#[derive(Clone)]
+struct StructFieldInfo {
+    module_source: ModuleSource,
+    /// Field definitions: (name, `type_id`) pairs
+    fields: Vec<(String, TypeId)>,
+}
 
-/// Variant case info: `case_name` -> `field_type_ids`
-type VariantCaseData = (String, Vec<TypeId>);
-/// Variant info: (`module_path`, `type_params`, cases)
-type VariantInfo = (Vec<String>, Vec<String>, Vec<VariantCaseData>);
+/// Variant case info: case name and field types
+#[derive(Clone)]
+struct VariantCaseData {
+    name: String,
+    field_types: Vec<TypeId>,
+}
+
+/// Variant info: module source, type parameters, and cases
+#[derive(Clone)]
+struct VariantInfo {
+    module_source: ModuleSource,
+    type_params: Vec<String>,
+    cases: Vec<VariantCaseData>,
+}
 
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
@@ -360,8 +371,8 @@ pub struct Resolver<'a> {
     imported_functions: HashSet<String>,
     /// Errors collected during resolution
     errors: Vec<TypeError>,
-    /// Current module path being resolved (for struct type `module_path`)
-    current_module_path: Vec<String>,
+    /// Current module source being resolved (for struct type `module_source`)
+    current_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
     current_module_items: Vec<Item>,
     /// Type parameters currently in scope (name -> (index, `TypeId`))
@@ -376,6 +387,59 @@ pub struct Resolver<'a> {
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
     generic_method_params: HashMap<String, Vec<(String, TypeId)>>,
+    /// Current associated type bindings in scope (`Self::Name` -> resolved type)
+    /// Set when resolving trait implementations
+    current_associated_type_bindings: HashMap<String, TypeId>,
+    /// Current `Self` type in scope (the type being implemented in an impl block)
+    current_self_type: Option<TypeId>,
+}
+
+/// Info about an Index trait implementation
+struct IndexTraitInfo {
+    /// The Output associated type
+    output_type: TypeId,
+    /// Self kind for the index method (&self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "Index<i32>")
+    trait_name: String,
+}
+
+/// Info about an `IndexAssign` trait implementation
+struct IndexAssignTraitInfo {
+    /// The Input associated type (reserved for future type checking)
+    _input_type: TypeId,
+    /// Self kind for the `index_assign` method (&mut self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexAssign`<i32>")
+    trait_name: String,
+}
+
+/// Info about an `IndexMut` trait implementation
+struct IndexMutTraitInfo {
+    /// The Output associated type
+    output_type: TypeId,
+    /// Self kind for the `index_mut` method (&mut self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexMut`")
+    trait_name: String,
+}
+
+/// Info about an `IndexValue` trait implementation
+struct IndexValueTraitInfo {
+    /// The Output associated type
+    output_type: TypeId,
+    /// Self kind for the `index_value` method (&self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexValue`<i32>")
+    trait_name: String,
+}
+
+/// Info about a comparison trait implementation (`Eq` or `Ord`)
+struct ComparisonTraitInfo {
+    /// Self kind for the comparison method (&self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "Eq", "Ord")
+    trait_name: String,
 }
 
 impl<'a> Resolver<'a> {
@@ -391,12 +455,14 @@ impl<'a> Resolver<'a> {
             function_return_types: HashMap::new(),
             imported_functions: HashSet::new(),
             errors: Vec::new(),
-            current_module_path: Vec::new(),
+            current_module_source: ModuleSource::EntryPoint,
             current_module_items: Vec::new(),
             current_type_params: HashMap::new(),
             generic_struct_names: HashSet::new(),
             generic_function_params: HashMap::new(),
             generic_method_params: HashMap::new(),
+            current_associated_type_bindings: HashMap::new(),
+            current_self_type: None,
         }
     }
 
@@ -404,10 +470,10 @@ impl<'a> Resolver<'a> {
     pub fn resolve_module(
         &mut self,
         module: &Module,
-        module_path: Vec<String>,
+        module_source: ModuleSource,
     ) -> Result<TirModule, Vec<TypeError>> {
-        // Set current module path for struct type creation
-        self.current_module_path = module_path.clone();
+        // Set current module source for struct type creation
+        self.current_module_source = module_source.clone();
         // Store current module items for local function parameter lookup
         self.current_module_items = module.items.clone();
 
@@ -418,7 +484,7 @@ impl<'a> Resolver<'a> {
         self.collect_function_signatures(module);
 
         // Third pass: resolve functions
-        let mut tir_module = TirModule::new(module_path);
+        let mut tir_module = TirModule::new(module_source.clone());
 
         for item in &module.items {
             match item {
@@ -438,6 +504,38 @@ impl<'a> Resolver<'a> {
                         .trait_type
                         .as_ref()
                         .map(|t| self.get_type_name(t));
+
+                    // Register type parameters from impl block's generic type FIRST
+                    // e.g., impl IndexValue<i32> for Triple<T> needs T registered
+                    let old_type_params = std::mem::take(&mut self.current_type_params);
+                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                        for (i, arg) in generic.args.iter().enumerate() {
+                            if let ast::Type::Named(named) = arg {
+                                let name = &named.name;
+                                if !self.current_type_params.contains_key(name) {
+                                    let type_id = self
+                                        .type_table
+                                        .borrow_mut()
+                                        .make_type_param(name.clone(), i as u32);
+                                    self.current_type_params
+                                        .insert(name.clone(), (i as u32, type_id));
+                                }
+                            }
+                        }
+                    }
+
+                    // Set up associated type bindings for trait implementations
+                    // This now works because type params (like T) are registered above
+                    let old_associated_type_bindings =
+                        std::mem::take(&mut self.current_associated_type_bindings);
+                    if impl_block.trait_type.is_some() {
+                        for binding in &impl_block.associated_types {
+                            let type_id = self.resolve_type(&binding.ty);
+                            self.current_associated_type_bindings
+                                .insert(binding.name.clone(), type_id);
+                        }
+                    }
+
                     for method in &impl_block.methods {
                         if let Some(mut tir_func) = self.resolve_method(
                             method,
@@ -457,6 +555,10 @@ impl<'a> Resolver<'a> {
                             tir_module.add_function(tir_func);
                         }
                     }
+
+                    // Restore old associated type bindings and type params
+                    self.current_associated_type_bindings = old_associated_type_bindings;
+                    self.current_type_params = old_type_params;
                 }
                 Item::Trait(_trait_decl) => {
                     // Trait declarations are handled in the first pass (signature registration)
@@ -506,11 +608,18 @@ impl<'a> Resolver<'a> {
 
         // First pass: collect struct and variant names from all modules (for forward references)
         for (path, module) in modules {
+            let module_source = ModuleSource::from_path(path);
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
                         // Insert with empty fields first - will be populated in second sub-pass
-                        struct_fields.insert(struct_decl.name.clone(), (path.clone(), Vec::new()));
+                        struct_fields.insert(
+                            struct_decl.name.clone(),
+                            StructFieldInfo {
+                                module_source: module_source.clone(),
+                                fields: Vec::new(),
+                            },
+                        );
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
@@ -521,7 +630,11 @@ impl<'a> Resolver<'a> {
                             .collect();
                         variant_cases.insert(
                             variant_decl.name.clone(),
-                            (path.clone(), type_params, Vec::new()),
+                            VariantInfo {
+                                module_source: module_source.clone(),
+                                type_params,
+                                cases: Vec::new(),
+                            },
                         );
                     }
                     _ => {}
@@ -531,6 +644,7 @@ impl<'a> Resolver<'a> {
 
         // Second sub-pass: resolve struct fields and type aliases
         for (path, module) in modules {
+            let module_source = ModuleSource::from_path(path);
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -545,7 +659,13 @@ impl<'a> Resolver<'a> {
                             fields.push((field.name.clone(), type_id));
                         }
                         // Update the struct_fields entry with actual fields
-                        struct_fields.insert(struct_decl.name.clone(), (path.clone(), fields));
+                        struct_fields.insert(
+                            struct_decl.name.clone(),
+                            StructFieldInfo {
+                                module_source: module_source.clone(),
+                                fields,
+                            },
+                        );
                     }
                     Item::Type(type_alias) => {
                         let type_id = Self::resolve_type_static(
@@ -580,11 +700,18 @@ impl<'a> Resolver<'a> {
                             } else {
                                 Vec::new()
                             };
-                            cases.push((case.name.clone(), field_types));
+                            cases.push(VariantCaseData {
+                                name: case.name.clone(),
+                                field_types,
+                            });
                         }
                         variant_cases.insert(
                             variant_decl.name.clone(),
-                            (path.clone(), type_params, cases),
+                            VariantInfo {
+                                module_source: module_source.clone(),
+                                type_params,
+                                cases,
+                            },
                         );
                     }
                     _ => {}
@@ -656,15 +783,17 @@ impl<'a> Resolver<'a> {
                 function_return_types,
                 imported_functions,
                 errors: Vec::new(),
-                current_module_path: Vec::new(), // Set in resolve_module
-                current_module_items: Vec::new(), // Set in resolve_module
+                current_module_source: ModuleSource::EntryPoint, // Set in resolve_module
+                current_module_items: Vec::new(),                // Set in resolve_module
                 current_type_params: HashMap::new(),
                 generic_struct_names: HashSet::new(),
                 generic_function_params: HashMap::new(),
                 generic_method_params: HashMap::new(),
+                current_associated_type_bindings: HashMap::new(),
+                current_self_type: None,
             };
 
-            match resolver.resolve_module(module, path.clone()) {
+            match resolver.resolve_module(module, ModuleSource::from_path(path)) {
                 Ok(tir_module) => {
                     // TypeTable is already shared via Rc, no need to merge
                     result.insert(path.clone(), tir_module);
@@ -708,21 +837,23 @@ impl<'a> Resolver<'a> {
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); paths.len()];
 
         // Analyze struct fields to find cross-module dependencies
-        for (struct_name, (module_path, fields)) in struct_fields {
-            let Some(&from_idx) = path_to_idx.get(module_path) else {
+        for (struct_name, info) in struct_fields {
+            let module_path = info.module_source.to_path();
+            let Some(&from_idx) = path_to_idx.get(&module_path) else {
                 continue;
             };
-            for (_field_name, field_type_id) in fields {
+            for (_field_name, field_type_id) in &info.fields {
                 if let ResolvedType::Struct {
                     name: ref_struct_name,
-                    module_path: ref_module_path,
+                    module_source: ref_module_source,
                 } = type_table.get(*field_type_id)
                 {
                     // Skip self-references (same struct or same module)
+                    let ref_module_path = ref_module_source.to_path();
                     if ref_struct_name == struct_name || ref_module_path == module_path {
                         continue;
                     }
-                    if let Some(&to_idx) = path_to_idx.get(ref_module_path) {
+                    if let Some(&to_idx) = path_to_idx.get(&ref_module_path) {
                         // from_idx depends on to_idx (dependency edge)
                         if seen_edges.insert((from_idx, to_idx)) {
                             dependency_count[from_idx] += 1;
@@ -804,8 +935,8 @@ impl<'a> Resolver<'a> {
                     "!" => TypeTable::NEVER,
                     _ => {
                         // Check if it's a struct type
-                        if let Some((module_path, _)) = struct_fields.get(&named.name) {
-                            type_table.make_struct(named.name.clone(), module_path.clone())
+                        if let Some(info) = struct_fields.get(&named.name) {
+                            type_table.make_struct(named.name.clone(), info.module_source.clone())
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -839,7 +970,7 @@ impl<'a> Resolver<'a> {
                 }
                 _ => {
                     // Check if it's a generic struct type
-                    if let Some((module_path, _)) = struct_fields.get(&generic.name) {
+                    if let Some(info) = struct_fields.get(&generic.name) {
                         // Resolve type arguments
                         let type_args: Vec<TypeId> = generic
                             .args
@@ -855,7 +986,7 @@ impl<'a> Resolver<'a> {
                             .collect();
                         type_table.make_generic_instance(
                             generic.name.clone(),
-                            module_path.clone(),
+                            info.module_source.clone(),
                             type_args,
                         )
                     } else {
@@ -946,7 +1077,10 @@ impl<'a> Resolver<'a> {
                     }
                     self.struct_fields.insert(
                         struct_decl.name.clone(),
-                        (self.current_module_path.clone(), fields),
+                        StructFieldInfo {
+                            module_source: self.current_module_source.clone(),
+                            fields,
+                        },
                     );
 
                     // Restore type params scope
@@ -983,12 +1117,19 @@ impl<'a> Resolver<'a> {
                             .as_ref()
                             .map(|fields| fields.iter().map(|f| self.resolve_type(f)).collect())
                             .unwrap_or_default();
-                        cases.push((case.name.clone(), field_types));
+                        cases.push(VariantCaseData {
+                            name: case.name.clone(),
+                            field_types,
+                        });
                     }
 
                     self.variant_cases.insert(
                         variant_decl.name.clone(),
-                        (self.current_module_path.clone(), type_params, cases),
+                        VariantInfo {
+                            module_source: self.current_module_source.clone(),
+                            type_params,
+                            cases,
+                        },
                     );
 
                     // Restore type params scope
@@ -1048,6 +1189,17 @@ impl<'a> Resolver<'a> {
                         }
                     }
 
+                    // Set up associated type bindings for trait implementations
+                    let old_associated_type_bindings =
+                        std::mem::take(&mut self.current_associated_type_bindings);
+                    if impl_block.trait_type.is_some() {
+                        for binding in &impl_block.associated_types {
+                            let type_id = self.resolve_type(&binding.ty);
+                            self.current_associated_type_bindings
+                                .insert(binding.name.clone(), type_id);
+                        }
+                    }
+
                     // Collect method signatures with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
                     let trait_name = impl_block
@@ -1074,8 +1226,9 @@ impl<'a> Resolver<'a> {
                         self.function_return_types.insert(mangled_name, return_type);
                     }
 
-                    // Restore type parameters
+                    // Restore type parameters and associated type bindings
                     self.current_type_params = old_type_params;
+                    self.current_associated_type_bindings = old_associated_type_bindings;
                 }
                 _ => {}
             }
@@ -1256,6 +1409,7 @@ impl<'a> Resolver<'a> {
             type_params,
             impl_type_params: vec![], // Not a method, no impl type params
             monomorph_info: None,     // Not from monomorphization
+            method_info: None,        // Not a method
             params,
             return_type,
             effects: func.effects.clone(),
@@ -1316,6 +1470,11 @@ impl<'a> Resolver<'a> {
                 .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
         }
+
+        // Set up Self type for the impl block
+        // This allows `&Self` to resolve correctly in method parameters
+        let old_self_type = self.current_self_type;
+        self.current_self_type = Some(self.resolve_type(impl_type));
 
         // Resolve return type
         let return_type = func
@@ -1388,12 +1547,21 @@ impl<'a> Resolver<'a> {
             })
             .collect();
 
+        // Restore Self type
+        self.current_self_type = old_self_type;
+
         Some(TirFunction {
             name: func.name.clone(), // Will be mangled by caller
             is_pub: func.is_pub,
             type_params,
             impl_type_params, // Type params from impl block (e.g., T from impl Counter<T>)
             monomorph_info: None, // Not from monomorphization
+            method_info: Some(LocalMethodName {
+                struct_name: struct_name.to_string(),
+                trait_name: trait_name.map(String::from),
+                method_name: func.name.clone(),
+                method_type_args: vec![],
+            }),
             params,
             return_type,
             effects: func.effects.clone(),
@@ -1560,7 +1728,7 @@ impl<'a> Resolver<'a> {
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Struct {
                         name,
-                        module_path: _,
+                        module_source: _,
                     } = target_resolved
                     {
                         let name = name.clone();
@@ -2117,15 +2285,18 @@ impl<'a> Resolver<'a> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            if let Some((module_path, _, cases)) = self.variant_cases.get(prefix) {
+            if let Some(variant_info) = self.variant_cases.get(prefix) {
                 // Find the case by name
-                if let Some((case_index, (case_name, field_types))) =
-                    cases.iter().enumerate().find(|(_, (n, _))| n == suffix)
+                if let Some((case_index, case_data)) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| c.name == suffix)
                 {
                     // Unit variant - must have no fields
-                    if !field_types.is_empty() {
+                    if !case_data.field_types.is_empty() {
                         self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: field_types.len(),
+                            expected: case_data.field_types.len(),
                             found: 0,
                             span: ident.span,
                         });
@@ -2136,13 +2307,13 @@ impl<'a> Resolver<'a> {
                     let variant_type = self
                         .type_table
                         .borrow_mut()
-                        .make_variant(prefix.to_string(), module_path.clone());
+                        .make_variant(prefix.to_string(), variant_info.module_source.clone());
 
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
                             case_index: case_index as u32,
-                            case_name: case_name.clone(),
+                            case_name: case_data.name.clone(),
                             fields: vec![],
                         },
                         variant_type,
@@ -2156,7 +2327,7 @@ impl<'a> Resolver<'a> {
         // For now, return Unknown type - will be resolved by looking up in symbol table
         TirExpr::new(
             TirExprKind::Global {
-                module_path: Vec::new(),
+                module_source: ModuleSource::EntryPoint,
                 name: ident.name.clone(),
             },
             TypeTable::UNKNOWN,
@@ -2169,67 +2340,116 @@ impl<'a> Resolver<'a> {
         let left = self.resolve_expr(&binary.left, ctx);
         let right = self.resolve_expr(&binary.right, ctx);
 
-        // Special case: String equality comparison
-        // Desugar `a == b` to `string_eq(&a, &b)` and `a != b` to `!string_eq(&a, &b)`
+        // Check if this is a comparison operation on a non-primitive type
+        // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
         let left_type = self.type_table.borrow().get(left.type_id).clone();
-        let is_string = matches!(left_type, ResolvedType::String)
-            || matches!(left_type, ResolvedType::Struct { ref name, .. } if name == "String");
-        if is_string && matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
-            // Create reference types for the arguments
-            let left_ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(left.type_id));
-            let right_ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(right.type_id));
+        let is_comparison = matches!(
+            binary.op,
+            BinaryOp::Eq
+                | BinaryOp::NotEq
+                | BinaryOp::Lt
+                | BinaryOp::LtEq
+                | BinaryOp::Gt
+                | BinaryOp::GtEq
+        );
 
-            // Wrap left and right with Ref expressions
-            let left_ref = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    expr: Box::new(left),
-                },
-                left_ref_type,
-                binary.span,
-            );
-            let right_ref = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    expr: Box::new(right),
-                },
-                right_ref_type,
-                binary.span,
-            );
+        if is_comparison {
+            // Get struct name for trait lookup
+            let struct_name = match &left_type {
+                ResolvedType::String => Some("String".to_string()),
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
 
-            let call_expr = TirExpr::new(
-                TirExprKind::Call {
-                    func: FunctionRef::External {
-                        module_path: vec!["core".to_string(), "internal".to_string()],
-                        name: "string_eq".to_string(),
-                        monomorph_info: None,
-                    },
-                    type_args: vec![],
-                    args: vec![left_ref, right_ref],
-                },
-                TypeTable::BOOL,
-                binary.span,
-            );
+            if let Some(struct_name) = struct_name {
+                // Determine which trait and method to use based on operator
+                let (trait_name, method_name, needs_negation, swap_operands) = match binary.op {
+                    BinaryOp::Eq => ("Eq", "eq", false, false),
+                    BinaryOp::NotEq => ("Eq", "eq", true, false), // !a.eq(&b)
+                    BinaryOp::Lt => ("Ord", "lt", false, false),
+                    BinaryOp::Gt => ("Ord", "lt", false, true), // b.lt(&a)
+                    BinaryOp::LtEq => ("Ord", "lt", true, true), // !b.lt(&a)
+                    BinaryOp::GtEq => ("Ord", "lt", true, false), // !a.lt(&b)
+                    _ => unreachable!(),
+                };
 
-            // For NotEq, negate the result
-            if binary.op == BinaryOp::NotEq {
-                return TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(call_expr),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                );
+                // Find the appropriate trait implementation
+                let trait_info = if trait_name == "Eq" {
+                    self.find_eq_trait_impl(&struct_name, left.type_id)
+                } else {
+                    self.find_ord_trait_impl(&struct_name, left.type_id)
+                };
+
+                if let Some(trait_info) = trait_info {
+                    // Choose receiver and argument based on operand order
+                    let (receiver_expr, arg_expr) = if swap_operands {
+                        (right.clone(), left.clone())
+                    } else {
+                        (left.clone(), right.clone())
+                    };
+
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        receiver_expr,
+                        trait_info.self_kind,
+                        binary.span,
+                    );
+
+                    // Create reference type for the argument (other: &Self)
+                    let arg_ref_type = self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(arg_expr.type_id));
+
+                    let arg_ref = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(arg_expr),
+                        },
+                        arg_ref_type,
+                        binary.span,
+                    );
+
+                    // Get the mangled method name: StructName^Eq::eq or StructName^Ord::lt
+                    let mangled_method_name =
+                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+
+                    let call_expr = TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    method_name.to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![arg_ref],
+                        },
+                        TypeTable::BOOL,
+                        binary.span,
+                    );
+
+                    // Apply negation if needed (for !=, <=, >=)
+                    if needs_negation {
+                        return TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Not,
+                                expr: Box::new(call_expr),
+                            },
+                            TypeTable::BOOL,
+                            binary.span,
+                        );
+                    }
+
+                    return call_expr;
+                }
             }
-
-            return call_expr;
         }
 
         let op = convert_binary_op(binary.op);
@@ -2318,6 +2538,72 @@ impl<'a> Resolver<'a> {
 
     /// Resolve an assignment expression
     fn resolve_assign(&mut self, assign: &ast::AssignExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
+        if let ast::Expr::Index(index_expr) = &assign.target {
+            // Resolve the indexed expression to get its type
+            let indexed_expr = self.resolve_expr(&index_expr.expr, ctx);
+
+            // Get base type (unwrap reference if needed)
+            let base_type_id = match self.type_table.borrow().get(indexed_expr.type_id) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                _ => indexed_expr.type_id,
+            };
+
+            // Check for IndexAssign trait implementation
+            // Arrays now use IndexAssign trait like other types
+            {
+                // Check for IndexAssign trait implementation
+                let struct_name = match self.type_table.borrow().get(base_type_id).clone() {
+                    ResolvedType::Struct { name, .. } => name,
+                    ResolvedType::GenericInstance { name, .. } => name,
+                    _ => String::new(),
+                };
+
+                if !struct_name.is_empty() {
+                    let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+                    let index_type = index_resolved.type_id;
+
+                    if let Some(trait_info) =
+                        self.find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
+                    {
+                        // Generate: expr.index_assign(index, value)
+                        let value = self.resolve_expr(&assign.value, ctx);
+
+                        let receiver = self.adjust_receiver_for_self_kind(
+                            indexed_expr,
+                            trait_info.self_kind,
+                            assign.span,
+                        );
+
+                        // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
+                        let mangled_method_name =
+                            format!("{}^{}::index_assign", struct_name, trait_info.trait_name);
+
+                        return TirExpr::new(
+                            TirExprKind::MethodCall {
+                                receiver: Box::new(receiver),
+                                func: FunctionRef::External {
+                                    module_source: self.current_module_source.clone(),
+                                    name: mangled_method_name,
+                                    monomorph_info: None,
+                                    method_info: Some(LocalMethodName::new(
+                                        struct_name.clone(),
+                                        Some(trait_info.trait_name.clone()),
+                                        "index_assign".to_string(),
+                                    )),
+                                },
+                                type_args: vec![],
+                                args: vec![index_resolved, value],
+                            },
+                            TypeTable::UNIT,
+                            assign.span,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Standard assignment handling
         let target = self.resolve_expr(&assign.target, ctx);
         let value = self.resolve_expr(&assign.value, ctx);
 
@@ -2505,15 +2791,18 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     // Check if this is a variant case construction (Color::Red)
-                    else if let Some((module_path, _, cases)) = self.variant_cases.get(prefix) {
+                    else if let Some(variant_info) = self.variant_cases.get(prefix) {
                         // Find the case by name
-                        if let Some((case_index, (case_name, field_types))) =
-                            cases.iter().enumerate().find(|(_, (n, _))| n == suffix)
+                        if let Some((case_index, case_data)) = variant_info
+                            .cases
+                            .iter()
+                            .enumerate()
+                            .find(|(_, c)| c.name == suffix)
                         {
                             // Validate argument count
-                            if args.len() != field_types.len() {
+                            if args.len() != case_data.field_types.len() {
                                 self.errors.push(TypeError::ArgumentCountMismatch {
-                                    expected: field_types.len(),
+                                    expected: case_data.field_types.len(),
                                     found: args.len(),
                                     span: call.span,
                                 });
@@ -2525,16 +2814,16 @@ impl<'a> Resolver<'a> {
                             }
 
                             // Create variant type
-                            let variant_type = self
-                                .type_table
-                                .borrow_mut()
-                                .make_variant(prefix.to_string(), module_path.clone());
+                            let variant_type = self.type_table.borrow_mut().make_variant(
+                                prefix.to_string(),
+                                variant_info.module_source.clone(),
+                            );
 
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
                                     variant_type,
                                     case_index: case_index as u32,
-                                    case_name: case_name.clone(),
+                                    case_name: case_data.name.clone(),
                                     fields: args,
                                 },
                                 variant_type,
@@ -2623,9 +2912,10 @@ impl<'a> Resolver<'a> {
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef::External {
-                    module_path,
+                    module_source: ModuleSource::from_path(&module_path),
                     name: func_name,
                     monomorph_info: None,
+                    method_info: None, // Free function call
                 },
                 type_args,
                 args,
@@ -2712,10 +3002,9 @@ impl<'a> Resolver<'a> {
 
     /// Get the String struct type (from prelude)
     fn get_string_struct_type(&mut self) -> TypeId {
-        self.type_table.borrow_mut().make_struct(
-            "String".to_string(),
-            vec!["core".to_string(), "prelude".to_string()],
-        )
+        self.type_table
+            .borrow_mut()
+            .make_struct("String".to_string(), ModuleSource::core("prelude"))
     }
 
     /// Get the return type of a builtin function
@@ -2929,6 +3218,16 @@ impl<'a> Resolver<'a> {
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        // Check for IndexMut desugaring: container[i].method() where method needs &mut self
+        // We need to detect this BEFORE resolving the receiver, because resolve_index
+        // would otherwise generate Index::index instead of IndexMut::index_mut
+        if let ast::Expr::Index(index_expr) = &method_call.receiver
+            && let Some(result) =
+                self.try_resolve_index_mut_method_call(index_expr, method_call, ctx)
+        {
+            return result;
+        }
+
         let mut receiver = self.resolve_expr(&method_call.receiver, ctx);
         let args: Vec<TirExpr> = method_call
             .args
@@ -2948,10 +3247,15 @@ impl<'a> Resolver<'a> {
 
         // Get struct name from base type
         let (struct_name, module_path) = match self.type_table.borrow().get(base_type_id) {
-            ResolvedType::Struct { name, module_path } => (name.clone(), module_path.clone()),
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => (name.clone(), module_source.to_path()),
             ResolvedType::GenericInstance {
-                name, module_path, ..
-            } => (name.clone(), module_path.clone()),
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.to_path()),
             _ => (self.mangle_type_name(base_type_id), vec![]),
         };
 
@@ -3053,13 +3357,25 @@ impl<'a> Resolver<'a> {
                 None
             };
 
+        // Convert method type args to string names for method_info
+        let method_type_arg_names: Vec<String> = type_args
+            .iter()
+            .map(|t| self.mangle_type_name(*t))
+            .collect();
+
         TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 func: FunctionRef::External {
-                    module_path: self.current_module_path.clone(),
+                    module_source: self.current_module_source.clone(),
                     name: mangled_method_name,
                     monomorph_info,
+                    method_info: Some(LocalMethodName::with_method_type_args(
+                        receiver_struct_name,
+                        trait_name,
+                        method_call.method.clone(),
+                        method_type_arg_names,
+                    )),
                 },
                 type_args,
                 args,
@@ -3133,21 +3449,22 @@ impl<'a> Resolver<'a> {
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
         if let ResolvedType::Variant {
             name,
-            module_path: _,
+            module_source: _,
         } = self.type_table.borrow().get(target_type_id).clone()
         {
             // Look up the variant case info
-            if let Some((_, _type_params, cases)) = self.variant_cases.get(&name) {
+            if let Some(variant_info) = self.variant_cases.get(&name) {
                 // Find the case by name
-                if let Some((case_index, (case_name, field_types))) = cases
+                if let Some((case_index, case_data)) = variant_info
+                    .cases
                     .iter()
                     .enumerate()
-                    .find(|(_, (n, _))| n == &static_call.method)
+                    .find(|(_, c)| c.name == static_call.method)
                 {
                     // Validate argument count
-                    if args.len() != field_types.len() {
+                    if args.len() != case_data.field_types.len() {
                         self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: field_types.len(),
+                            expected: case_data.field_types.len(),
                             found: args.len(),
                             span: static_call.span,
                         });
@@ -3159,7 +3476,7 @@ impl<'a> Resolver<'a> {
                         TirExprKind::VariantConstruct {
                             variant_type: target_type_id,
                             case_index: case_index as u32,
-                            case_name: case_name.clone(),
+                            case_name: case_data.name.clone(),
                             fields: args,
                         },
                         target_type_id,
@@ -3185,12 +3502,13 @@ impl<'a> Resolver<'a> {
 
         let (struct_name, module_path, mangled_struct_name, struct_type_args) =
             match self.type_table.borrow().get(target_type_id) {
-                ResolvedType::Struct { name, module_path } => {
-                    (name.clone(), module_path.clone(), name.clone(), vec![])
-                }
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
                 ResolvedType::GenericInstance {
                     name,
-                    module_path,
+                    module_source,
                     type_args,
                 } => {
                     // Build mangled name for generic type: Array<i32>
@@ -3201,7 +3519,7 @@ impl<'a> Resolver<'a> {
                     let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                     (
                         name.clone(),
-                        module_path.clone(),
+                        module_source.to_path(),
                         mangled,
                         type_args.clone(),
                     )
@@ -3243,9 +3561,14 @@ impl<'a> Resolver<'a> {
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_path,
+                    module_source: ModuleSource::from_path(&module_path),
                     name: mangled_func_name,
                     monomorph_info,
+                    method_info: Some(LocalMethodName::new(
+                        mangled_struct_name,
+                        None, // Static methods are inherent, no trait
+                        static_call.method.clone(),
+                    )),
                 },
                 args,
             },
@@ -3450,15 +3773,20 @@ impl<'a> Resolver<'a> {
             mangled_func_name,
         );
 
-        // Determine module path for the struct
-        let module_path = self.find_struct_module_path(struct_name);
+        // Determine module source for the struct
+        let module_source = self.find_struct_module_source(struct_name);
 
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_path,
+                    module_source,
                     name: mangled_func_name.to_string(),
                     monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        struct_name.to_string(),
+                        None, // Static methods are inherent, no trait
+                        method_name.to_string(),
+                    )),
                 },
                 args: args.to_vec(),
             },
@@ -3467,14 +3795,14 @@ impl<'a> Resolver<'a> {
         )
     }
 
-    /// Find the module path for a struct by name
-    fn find_struct_module_path(&self, struct_name: &str) -> Vec<String> {
+    /// Find the module source for a struct by name
+    fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
         // Check current module
         for item in &self.current_module_items {
             if let Item::Struct(s) = item
                 && s.name == struct_name
             {
-                return self.current_module_path.clone();
+                return self.current_module_source.clone();
             }
         }
 
@@ -3484,13 +3812,13 @@ impl<'a> Resolver<'a> {
                 if let Item::Struct(s) = item
                     && s.name == struct_name
                 {
-                    return path.clone();
+                    return ModuleSource::from_path(path);
                 }
             }
         }
 
-        // Default to current module path
-        self.current_module_path.clone()
+        // Default to current module source
+        self.current_module_source.clone()
     }
 
     /// Mangle a type name for use in function names
@@ -3556,11 +3884,16 @@ impl<'a> Resolver<'a> {
 
         // Get the struct name and module path from the base type
         let (struct_name, module_path) = match &base_type {
-            ResolvedType::Struct { name, module_path } => (name.clone(), module_path.clone()),
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => (name.clone(), module_source.to_path()),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
-                name, module_path, ..
-            } => (name.clone(), module_path.clone()),
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.to_path()),
             // Primitive types have built-in methods like to_string()
             ResolvedType::Primitive(_) => {
                 if method_name == "to_string" {
@@ -3568,7 +3901,7 @@ impl<'a> Resolver<'a> {
                     let return_type = self
                         .type_table
                         .borrow()
-                        .find_struct_type("String", &string_module_path())
+                        .find_struct_type("String", &string_module_source())
                         .unwrap_or(TypeTable::UNKNOWN);
                     return Some(MethodInfo {
                         return_type,
@@ -3820,7 +4153,13 @@ impl<'a> Resolver<'a> {
         let mut found_traits: Vec<(String, MethodInfo)> = Vec::new();
 
         // Collect impl blocks to check (avoiding borrow issues)
-        let mut impl_blocks_to_check: Vec<(Type, Type, Vec<Function>)> = Vec::new();
+        // Include associated type bindings for resolving Self::* types
+        let mut impl_blocks_to_check: Vec<(
+            Type,
+            Type,
+            Vec<Function>,
+            Vec<crate::ast::AssociatedTypeBinding>,
+        )> = Vec::new();
 
         // Check specific module if provided
         if !module_path.is_empty()
@@ -3834,12 +4173,207 @@ impl<'a> Resolver<'a> {
                         impl_block.ty.clone(),
                         trait_type.clone(),
                         impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
                     ));
                 }
             }
         }
 
         // Also check all loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                impl_blocks_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.methods.clone(),
+                    impl_block.associated_types.clone(),
+                ));
+            }
+        }
+
+        // Now process the collected impl blocks with mutable access
+        for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
+            let impl_struct_name = self.get_type_name(&impl_ty);
+            if impl_struct_name == struct_name {
+                // Set up associated type bindings for resolving Self::* types
+                let old_associated_type_bindings =
+                    std::mem::take(&mut self.current_associated_type_bindings);
+                for binding in &associated_types {
+                    let type_id = self.resolve_type(&binding.ty);
+                    self.current_associated_type_bindings
+                        .insert(binding.name.clone(), type_id);
+                }
+
+                for method in &methods {
+                    if method.name == method_name {
+                        let trait_name = self.get_type_name(&trait_type);
+                        let return_type = method
+                            .return_type
+                            .as_ref()
+                            .map(|t| self.resolve_type(t))
+                            .unwrap_or(TypeTable::UNIT);
+                        let self_kind = method
+                            .params
+                            .first()
+                            .map(|p| p.self_kind)
+                            .unwrap_or(ast::SelfKind::None);
+                        found_traits.push((
+                            trait_name,
+                            MethodInfo {
+                                return_type,
+                                self_kind,
+                            },
+                        ));
+                    }
+                }
+
+                // Restore associated type bindings
+                self.current_associated_type_bindings = old_associated_type_bindings;
+            }
+        }
+
+        // Remove duplicates
+        found_traits.dedup_by(|a, b| a.0 == b.0);
+
+        // Return the first one found (if there are multiple, it would be ambiguous,
+        // but we'll handle that later with explicit disambiguation syntax)
+        found_traits.into_iter().next()
+    }
+
+    /// Find Index trait implementation for a type
+    fn find_index_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        _index_type: TypeId,
+    ) -> Option<IndexTraitInfo> {
+        // Look for impl Index<...> for StructName
+        self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output")
+            .map(|(output_type, self_kind, trait_name)| IndexTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+            })
+    }
+
+    /// Find `IndexAssign` trait implementation for a type
+    fn find_index_assign_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        _index_type: TypeId,
+    ) -> Option<IndexAssignTraitInfo> {
+        // Look for impl IndexAssign<...> for StructName
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexAssign",
+            "index_assign",
+            "Input",
+        )
+        .map(|(input_type, self_kind, trait_name)| IndexAssignTraitInfo {
+            _input_type: input_type,
+            self_kind,
+            trait_name,
+        })
+    }
+
+    /// Find `IndexMut` trait implementation for a type
+    fn find_index_mut_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        _index_type: TypeId,
+    ) -> Option<IndexMutTraitInfo> {
+        // Look for impl IndexMut<...> for StructName
+        self.find_indexing_trait_impl(struct_name, base_type_id, "IndexMut", "index_mut", "Output")
+            .map(|(output_type, self_kind, trait_name)| IndexMutTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+            })
+    }
+
+    /// Find `IndexValue` trait implementation for a type
+    fn find_index_value_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        _index_type: TypeId,
+    ) -> Option<IndexValueTraitInfo> {
+        // Look for impl IndexValue<...> for StructName
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexValue",
+            "index_value",
+            "Output",
+        )
+        .map(|(output_type, self_kind, trait_name)| IndexValueTraitInfo {
+            output_type,
+            self_kind,
+            trait_name,
+        })
+    }
+
+    /// Find `Eq` trait implementation for a type
+    fn find_eq_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+    ) -> Option<ComparisonTraitInfo> {
+        self.find_comparison_trait_impl(struct_name, base_type_id, "Eq", "eq")
+    }
+
+    /// Find `Ord` trait implementation for a type
+    fn find_ord_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+    ) -> Option<ComparisonTraitInfo> {
+        self.find_comparison_trait_impl(struct_name, base_type_id, "Ord", "lt")
+    }
+
+    /// Helper to find comparison trait implementations (`Eq` or `Ord`)
+    fn find_comparison_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        trait_name: &str,
+        method_name: &str,
+    ) -> Option<ComparisonTraitInfo> {
+        // Get concrete type arguments from the base type (for generic instances)
+        let _concrete_type_args: Vec<TypeId> =
+            if let ResolvedType::GenericInstance { type_args, .. } =
+                self.type_table.borrow().get(base_type_id).clone()
+            {
+                type_args
+            } else {
+                Vec::new()
+            };
+
+        // Collect impl blocks to check
+        let mut impl_blocks_to_check: Vec<(Type, Type, Vec<Function>)> = Vec::new();
+
+        // Check all loaded modules
         for module in self.loaded_modules.values() {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
@@ -3867,41 +4401,412 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Now process the collected impl blocks with mutable access
+        // Process collected impl blocks
         for (impl_ty, trait_type, methods) in impl_blocks_to_check {
             let impl_struct_name = self.get_type_name(&impl_ty);
-            if impl_struct_name == struct_name {
-                for method in &methods {
-                    if method.name == method_name {
-                        let trait_name = self.get_type_name(&trait_type);
-                        let return_type = method
-                            .return_type
-                            .as_ref()
-                            .map(|t| self.resolve_type(t))
-                            .unwrap_or(TypeTable::UNIT);
-                        let self_kind = method
-                            .params
-                            .first()
-                            .map(|p| p.self_kind)
-                            .unwrap_or(ast::SelfKind::None);
-                        found_traits.push((
-                            trait_name,
-                            MethodInfo {
-                                return_type,
-                                self_kind,
-                            },
-                        ));
-                    }
+            if impl_struct_name != struct_name {
+                continue;
+            }
+
+            // Check if this is the target trait
+            let found_trait_name = self.get_type_name(&trait_type);
+            if found_trait_name != trait_name {
+                continue;
+            }
+
+            // Find the method
+            for method in &methods {
+                if method.name == method_name {
+                    let self_kind = method
+                        .params
+                        .first()
+                        .map(|p| p.self_kind)
+                        .unwrap_or(ast::SelfKind::None);
+
+                    return Some(ComparisonTraitInfo {
+                        self_kind,
+                        trait_name: trait_name.to_string(),
+                    });
                 }
             }
         }
 
-        // Remove duplicates
-        found_traits.dedup_by(|a, b| a.0 == b.0);
+        None
+    }
 
-        // Return the first one found (if there are multiple, it would be ambiguous,
-        // but we'll handle that later with explicit disambiguation syntax)
-        found_traits.into_iter().next()
+    /// Helper to find indexing trait implementations (Index, `IndexMut`, or `IndexAssign`)
+    fn find_indexing_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        trait_base_name: &str,
+        method_name: &str,
+        assoc_type_name: &str,
+    ) -> Option<(TypeId, ast::SelfKind, String)> {
+        // Get concrete type arguments from the base type (for generic instances like Triple<i32>)
+        let concrete_type_args: Vec<TypeId> =
+            if let ResolvedType::GenericInstance { type_args, .. } =
+                self.type_table.borrow().get(base_type_id).clone()
+            {
+                type_args
+            } else {
+                Vec::new()
+            };
+        // Collect impl blocks to check
+        let mut impl_blocks_to_check: Vec<(
+            Type,
+            Type,
+            Vec<Function>,
+            Vec<crate::ast::AssociatedTypeBinding>,
+        )> = Vec::new();
+
+        // Check all loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                impl_blocks_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.methods.clone(),
+                    impl_block.associated_types.clone(),
+                ));
+            }
+        }
+
+        // Process collected impl blocks
+        for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
+            let impl_struct_name = self.get_type_name(&impl_ty);
+            if impl_struct_name != struct_name {
+                continue;
+            }
+
+            // Check if this is the target trait (Index or IndexAssign)
+            // Use base trait name (e.g., "Index" not "Index<i32>") for method mangling
+            let trait_name = self.get_type_name(&trait_type);
+            if !trait_name.starts_with(trait_base_name) {
+                continue;
+            }
+
+            // Build type parameter mapping from impl_ty to concrete types
+            // e.g., for `impl IndexValue<i32> for Triple<T>` with concrete type `Triple<i32>`
+            // we build the mapping: {"T" -> i32}
+            let type_param_mapping = Self::build_type_param_mapping(&impl_ty, &concrete_type_args);
+
+            // Find the method
+            for method in &methods {
+                if method.name == method_name {
+                    // Set up associated type bindings
+                    let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
+                    for binding in &associated_types {
+                        // Resolve the associated type, substituting type parameters
+                        let type_id =
+                            self.resolve_type_with_param_mapping(&binding.ty, &type_param_mapping);
+                        self.current_associated_type_bindings
+                            .insert(binding.name.clone(), type_id);
+                    }
+
+                    // Get the associated type (Output or Input)
+                    let assoc_type = self
+                        .current_associated_type_bindings
+                        .get(assoc_type_name)
+                        .copied()
+                        .unwrap_or(TypeTable::UNKNOWN);
+
+                    let self_kind = method
+                        .params
+                        .first()
+                        .map(|p| p.self_kind)
+                        .unwrap_or(ast::SelfKind::None);
+
+                    // Restore associated type bindings
+                    self.current_associated_type_bindings = old_bindings;
+
+                    // Return base trait name (e.g., "IndexValue" not "IndexValue<i32>")
+                    let base_trait_name = strip_type_params(&trait_name).to_string();
+                    return Some((assoc_type, self_kind, base_trait_name));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Build a mapping from type parameter names to concrete type IDs.
+    /// For `impl Trait for Container<T>` with concrete type `Container<i32>`,
+    /// returns `{"T" -> i32's TypeId}`.
+    fn build_type_param_mapping(
+        impl_ty: &Type,
+        concrete_type_args: &[TypeId],
+    ) -> HashMap<String, TypeId> {
+        let mut mapping = HashMap::new();
+
+        // Extract type parameter names from impl_ty
+        let type_param_names: Vec<String> = match impl_ty {
+            Type::Generic(g) => g
+                .args
+                .iter()
+                .filter_map(|arg| {
+                    if let Type::Named(n) = arg {
+                        // Single uppercase letter or PascalCase names are likely type parameters
+                        Some(n.name.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+
+        // Map each type parameter name to its concrete type
+        for (i, param_name) in type_param_names.into_iter().enumerate() {
+            if let Some(&type_id) = concrete_type_args.get(i) {
+                mapping.insert(param_name, type_id);
+            }
+        }
+
+        mapping
+    }
+
+    /// Resolve a type, substituting type parameters using the provided mapping.
+    fn resolve_type_with_param_mapping(
+        &mut self,
+        ty: &Type,
+        type_param_mapping: &HashMap<String, TypeId>,
+    ) -> TypeId {
+        match ty {
+            Type::Named(n) => {
+                // Check if this is a type parameter that should be substituted
+                if let Some(&type_id) = type_param_mapping.get(&n.name) {
+                    return type_id;
+                }
+                // Otherwise, resolve normally
+                self.resolve_type(ty)
+            }
+            Type::Generic(g) => {
+                // Resolve generic type with substituted arguments
+                let resolved_args: Vec<TypeId> = g
+                    .args
+                    .iter()
+                    .map(|arg| self.resolve_type_with_param_mapping(arg, type_param_mapping))
+                    .collect();
+
+                // Find the base type and create a generic instance
+                let base_name = &g.name;
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::GenericInstance {
+                        name: base_name.clone(),
+                        module_source: self.current_module_source.clone(),
+                        type_args: resolved_args,
+                    })
+            }
+            Type::Reference(inner) => {
+                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
+                self.type_table.borrow_mut().make_ref(inner_id)
+            }
+            Type::MutReference(inner) => {
+                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
+                self.type_table.borrow_mut().make_mut_ref(inner_id)
+            }
+            // For other types, fall back to normal resolution
+            _ => self.resolve_type(ty),
+        }
+    }
+
+    /// Try to resolve a method call on an index expression using `IndexMut`.
+    /// Returns Some(TirExpr) if the method needs &mut self and the type implements `IndexMut`.
+    /// Returns None if we should fall back to normal resolution (using Index).
+    fn try_resolve_index_mut_method_call(
+        &mut self,
+        index_expr: &ast::IndexExpr,
+        method_call: &ast::MethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> Option<TirExpr> {
+        // First, resolve the indexed container to get its type
+        let container_expr = self.resolve_expr(&index_expr.expr, ctx);
+
+        // Check if this is an Array type (Arrays use optimized direct access, not traits)
+        let is_array = self
+            .type_table
+            .borrow()
+            .as_array(container_expr.type_id)
+            .is_some();
+        if is_array {
+            return None; // Use normal resolution for arrays
+        }
+
+        // Get base type (unwrap reference if needed)
+        let base_type_id = match self.type_table.borrow().get(container_expr.type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => container_expr.type_id,
+        };
+
+        // Get struct name from base type
+        let (struct_name, _module_path) = match self.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => (name, module_source.to_path()),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => (name, module_source.to_path()),
+            _ => return None, // Not a struct type
+        };
+
+        // Check if the type implements IndexMut
+        let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+        let index_type = index_resolved.type_id;
+
+        let index_mut_info =
+            self.find_index_mut_trait_impl(&struct_name, base_type_id, index_type)?;
+
+        // Now we need to check if the method being called requires &mut self
+        // First, look up method info on the OUTPUT type (what IndexMut returns)
+        let output_type = index_mut_info.output_type;
+        let output_base_type_id = match self.type_table.borrow().get(output_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => output_type,
+        };
+
+        let (output_struct_name, output_module_path) =
+            match self.type_table.borrow().get(output_base_type_id).clone() {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                } => (name, module_source.to_path()),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    ..
+                } => (name, module_source.to_path()),
+                _ => (self.mangle_type_name(output_base_type_id), vec![]),
+            };
+
+        // Look up method info to check if it needs &mut self
+        let mut method_info = self.lookup_method_info(output_type, &method_call.method);
+        let mut method_trait_name: Option<String> = None;
+
+        if method_info.is_none()
+            && let Some((found_trait, info)) = self.find_trait_method_for_type(
+                &output_struct_name,
+                &method_call.method,
+                &output_module_path,
+            )
+        {
+            method_trait_name = Some(found_trait);
+            method_info = Some(info);
+        }
+
+        let MethodInfo {
+            return_type,
+            self_kind,
+        } = method_info?;
+
+        // Only use IndexMut if the method requires &mut self
+        if self_kind != ast::SelfKind::MutRef {
+            return None; // Method doesn't need &mut, fall back to Index
+        }
+
+        // Generate: container.index_mut(index).method(args)
+        // Step 1: Create container.index_mut(index) call
+        let receiver_for_index_mut = self.adjust_receiver_for_self_kind(
+            container_expr,
+            index_mut_info.self_kind,
+            index_expr.span,
+        );
+
+        let mangled_index_mut_name =
+            format!("{}^{}::index_mut", struct_name, index_mut_info.trait_name);
+
+        // IndexMut returns &mut Output
+        let mut_ref_output_type = self
+            .type_table
+            .borrow_mut()
+            .make_mut_ref(index_mut_info.output_type);
+
+        let index_mut_call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver_for_index_mut),
+                func: FunctionRef::External {
+                    module_source: self.current_module_source.clone(),
+                    name: mangled_index_mut_name,
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        struct_name.clone(),
+                        Some(index_mut_info.trait_name.clone()),
+                        "index_mut".to_string(),
+                    )),
+                },
+                type_args: vec![],
+                args: vec![index_resolved],
+            },
+            mut_ref_output_type,
+            index_expr.span,
+        );
+
+        // Step 2: Resolve method args
+        let args: Vec<TirExpr> = method_call
+            .args
+            .iter()
+            .map(|a| self.resolve_expr(a, ctx))
+            .collect();
+
+        // Step 3: Resolve method type args
+        let type_args: Vec<TypeId> = method_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
+        // Step 4: Create the method call on the result of index_mut
+        // The receiver for the method is index_mut_call (which has type &mut Output)
+        let receiver_for_method =
+            self.adjust_receiver_for_self_kind(index_mut_call, self_kind, method_call.span);
+
+        // Build mangled method name
+        let mangled_method_name = match &method_trait_name {
+            Some(trait_n) => format!("{}^{}::{}", output_struct_name, trait_n, method_call.method),
+            None => format!("{}::{}", output_struct_name, method_call.method),
+        };
+
+        Some(TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver_for_method),
+                func: FunctionRef::External {
+                    module_source: self.current_module_source.clone(),
+                    name: mangled_method_name,
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        output_struct_name,
+                        method_trait_name,
+                        method_call.method.clone(),
+                    )),
+                },
+                type_args,
+                args,
+            },
+            return_type,
+            method_call.span,
+        ))
     }
 
     /// Resolve a field access
@@ -3939,8 +4844,8 @@ impl<'a> Resolver<'a> {
         match resolved {
             // Struct field access
             ResolvedType::Struct { name, .. } => {
-                if let Some((_, fields)) = self.struct_fields.get(&name) {
-                    for (index, (fname, ftype)) in fields.iter().enumerate() {
+                if let Some(struct_info) = self.struct_fields.get(&name) {
+                    for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
                         }
@@ -3966,8 +4871,8 @@ impl<'a> Resolver<'a> {
             } => {
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.struct_fields.get(&name).cloned();
-                if let Some((_, fields)) = fields_clone {
-                    for (index, (fname, ftype)) in fields.iter().enumerate() {
+                if let Some(struct_info) = fields_clone {
+                    for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
                             let concrete_type = self.substitute_type_params(*ftype, &type_args);
@@ -4016,7 +4921,7 @@ impl<'a> Resolver<'a> {
             }
             ResolvedType::GenericInstance {
                 name,
-                module_path,
+                module_source,
                 type_args: inner_args,
             } => {
                 // Recursively substitute in nested generic instances
@@ -4026,7 +4931,7 @@ impl<'a> Resolver<'a> {
                     .collect();
                 self.type_table
                     .borrow_mut()
-                    .make_generic_instance(name, module_path, new_args)
+                    .make_generic_instance(name, module_source, new_args)
             }
             // Other types don't contain type parameters
             _ => type_id,
@@ -4086,22 +4991,116 @@ impl<'a> Resolver<'a> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
         }
 
-        // Array indexing
-        let element_type = self
-            .type_table
-            .borrow()
-            .as_array(expr.type_id)
-            .unwrap_or(TypeTable::UNKNOWN);
-        let index_expr = self.resolve_expr(&index.index, ctx);
+        // For Array and custom types, look for Index or IndexValue trait implementation
+        // (Array implements IndexValue<i32> with type Output = T)
+        let struct_name = match &base_type {
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { name, .. } => name.clone(),
+            _ => String::new(),
+        };
 
-        TirExpr::new(
-            TirExprKind::Index {
-                expr: Box::new(expr),
-                index: Box::new(index_expr),
-            },
-            element_type,
-            index.span,
-        )
+        if !struct_name.is_empty() {
+            let index_expr = self.resolve_expr(&index.index, ctx);
+            let index_type = index_expr.type_id;
+
+            // First, try Index trait (returns reference)
+            if let Some(trait_info) =
+                self.find_index_trait_impl(&struct_name, base_type_id, index_type)
+            {
+                // Generate: *expr.index(index_expr)
+                // First, create the method call to .index(index_expr)
+                let receiver = self.adjust_receiver_for_self_kind(
+                    expr.clone(),
+                    trait_info.self_kind,
+                    index.span,
+                );
+
+                // Get the mangled method name: StructName^Index<IndexType>::index
+                let mangled_method_name =
+                    format!("{}^{}::index", struct_name, trait_info.trait_name);
+
+                // The method returns &Output, so the type is Ref(output_type)
+                let ref_output_type = self
+                    .type_table
+                    .borrow_mut()
+                    .make_ref(trait_info.output_type);
+
+                let method_call = TirExpr::new(
+                    TirExprKind::MethodCall {
+                        receiver: Box::new(receiver),
+                        func: FunctionRef::External {
+                            module_source: self.current_module_source.clone(),
+                            name: mangled_method_name,
+                            monomorph_info: None,
+                            method_info: Some(LocalMethodName::new(
+                                struct_name.clone(),
+                                Some(trait_info.trait_name.clone()),
+                                "index".to_string(),
+                            )),
+                        },
+                        type_args: vec![],
+                        args: vec![index_expr],
+                    },
+                    ref_output_type,
+                    index.span,
+                );
+
+                // Dereference the result: *expr.index(...)
+                return TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: Box::new(method_call),
+                    },
+                    trait_info.output_type,
+                    index.span,
+                );
+            }
+
+            // Fallback: try IndexValue trait (returns value by copy)
+            if let Some(trait_info) =
+                self.find_index_value_trait_impl(&struct_name, base_type_id, index_type)
+            {
+                // Generate: expr.index_value(index_expr)
+                let receiver = self.adjust_receiver_for_self_kind(
+                    expr.clone(),
+                    trait_info.self_kind,
+                    index.span,
+                );
+
+                // Get the mangled method name: StructName^IndexValue<IndexType>::index_value
+                let mangled_method_name =
+                    format!("{}^{}::index_value", struct_name, trait_info.trait_name);
+
+                // IndexValue returns Output directly (not a reference)
+                return TirExpr::new(
+                    TirExprKind::MethodCall {
+                        receiver: Box::new(receiver),
+                        func: FunctionRef::External {
+                            module_source: self.current_module_source.clone(),
+                            name: mangled_method_name,
+                            monomorph_info: None,
+                            method_info: Some(LocalMethodName::new(
+                                struct_name.clone(),
+                                Some(trait_info.trait_name.clone()),
+                                "index_value".to_string(),
+                            )),
+                        },
+                        type_args: vec![],
+                        args: vec![index_expr],
+                    },
+                    trait_info.output_type,
+                    index.span,
+                );
+            }
+        }
+
+        // Fallback: report error for unsupported indexing
+        self.errors.push(TypeError::TypeMismatch {
+            expected: "array or type implementing Index or IndexValue trait".to_string(),
+            found: self.type_table.borrow().type_name(expr.type_id),
+            span: index.span,
+        });
+        TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span)
     }
 
     /// Resolve an if expression
@@ -4369,9 +5368,14 @@ impl<'a> Resolver<'a> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(resolved.clone()),
                                 func: FunctionRef::External {
-                                    module_path: self.current_module_path.clone(),
+                                    module_source: self.current_module_source.clone(),
                                     name: mangled_method_name,
                                     monomorph_info: None,
+                                    method_info: Some(LocalMethodName::new(
+                                        receiver_type_name,
+                                        None, // to_string is an inherent method
+                                        "to_string".to_string(),
+                                    )),
                                 },
                                 type_args: vec![],
                                 args: vec![],
@@ -4406,9 +5410,10 @@ impl<'a> Resolver<'a> {
             result = TirExpr::new(
                 TirExprKind::Call {
                     func: FunctionRef::External {
-                        module_path: vec!["core".to_string(), "internal".to_string()],
+                        module_source: ModuleSource::core("internal"),
                         name: "string_concat".to_string(),
                         monomorph_info: None,
+                        method_info: None, // Free function
                     },
                     type_args: vec![],
                     args: vec![result, part],
@@ -4544,13 +5549,78 @@ impl<'a> Resolver<'a> {
             (name.clone(), Vec::new())
         };
 
-        // Resolve field expressions first
+        // Get expected field types for coercion (for generic structs)
+        let struct_field_types: Vec<(String, TypeId)> = self
+            .struct_fields
+            .get(&struct_name)
+            .map(|info| info.fields.clone())
+            .unwrap_or_default();
+
+        // Resolve field expressions, converting tuple literals to arrays when needed
         let fields: Vec<TirStructField> = struct_lit
             .fields
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                let value = self.resolve_expr(&field.value, ctx);
+                let mut value = self.resolve_expr(&field.value, ctx);
+
+                // Check if this is a tuple literal that should become an array
+                // This happens when the struct field expects Array<T> and we have [...]
+                if let TirExprKind::TupleLiteral { elements } = &value.kind {
+                    // Check if the expected field type is Array<T>
+                    if let Some((_, expected_type_id)) =
+                        struct_field_types.iter().find(|(n, _)| n == &field.name)
+                    {
+                        let expected = self.type_table.borrow().get(*expected_type_id).clone();
+                        if let ResolvedType::GenericInstance {
+                            name,
+                            type_args: expected_type_args,
+                            ..
+                        } = expected
+                            && name == "Array"
+                        {
+                            // Determine the element type for the array
+                            let elem_type = if elements.is_empty() {
+                                // Empty array: use the expected element type from Array<T>
+                                expected_type_args
+                                    .first()
+                                    .copied()
+                                    .unwrap_or(TypeTable::UNKNOWN)
+                            } else {
+                                // Non-empty: check if all elements have the same type
+                                let first_type = elements[0].type_id;
+                                let all_same = elements.iter().all(|e| e.type_id == first_type);
+                                if all_same {
+                                    first_type
+                                } else {
+                                    // Not homogeneous, skip conversion
+                                    return TirStructField {
+                                        name: field.name.clone(),
+                                        value,
+                                        field_index: index as u32,
+                                    };
+                                }
+                            };
+
+                            // Convert tuple literal to array literal
+                            let elements_clone =
+                                if let TirExprKind::TupleLiteral { elements } = &value.kind {
+                                    elements.clone()
+                                } else {
+                                    vec![]
+                                };
+                            let array_type = self.type_table.borrow_mut().make_array(elem_type);
+                            value = TirExpr::new(
+                                TirExprKind::ArrayLiteral {
+                                    elements: elements_clone,
+                                },
+                                array_type,
+                                value.span,
+                            );
+                        }
+                    }
+                }
+
                 TirStructField {
                     name: field.name.clone(),
                     value,
@@ -4560,7 +5630,8 @@ impl<'a> Resolver<'a> {
             .collect();
 
         // Check if this is a generic struct and infer type arguments
-        let struct_type = if self.generic_struct_names.contains(&struct_name) {
+        let (struct_type, mangled_struct_name) = if self.generic_struct_names.contains(&struct_name)
+        {
             // This is a generic struct - infer type arguments from field values
             let mut type_args = self.infer_type_args_from_fields(&struct_name, &fields);
             // If we couldn't infer type from fields, try to use return type context
@@ -4571,21 +5642,34 @@ impl<'a> Resolver<'a> {
             {
                 type_args = vec![elem_type];
             }
-            self.type_table.borrow_mut().make_generic_instance(
+            let struct_type = self.type_table.borrow_mut().make_generic_instance(
                 struct_name.clone(),
-                module_path,
-                type_args,
-            )
+                ModuleSource::from_path(&module_path),
+                type_args.clone(),
+            );
+            // Build mangled name with type arguments
+            let mangled_name = if type_args.is_empty() {
+                format!("{struct_name}<>")
+            } else {
+                let arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|&t| self.type_table.borrow().type_name(t))
+                    .collect();
+                format!("{}<{}>", struct_name, arg_names.join(","))
+            };
+            (struct_type, mangled_name)
         } else {
-            self.type_table
+            let struct_type = self
+                .type_table
                 .borrow_mut()
-                .make_struct(struct_name.clone(), module_path)
+                .make_struct(struct_name.clone(), ModuleSource::from_path(&module_path));
+            (struct_type, struct_name)
         };
 
         TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
-                struct_name,
+                struct_name: mangled_struct_name,
                 fields,
             },
             struct_type,
@@ -4600,22 +5684,18 @@ impl<'a> Resolver<'a> {
         fields: &[TirStructField],
     ) -> Vec<TypeId> {
         // Get the generic struct's field type information
-        let Some((_, field_types)) = self.struct_fields.get(struct_name) else {
+        let Some(struct_info) = self.struct_fields.get(struct_name) else {
             return vec![];
         };
 
         // Build a map from type param TypeId to concrete TypeId
         let mut type_param_map: HashMap<TypeId, TypeId> = HashMap::new();
 
-        for (struct_field, (_, expected_type_id)) in fields.iter().zip(field_types.iter()) {
+        for (struct_field, (_, expected_type_id)) in fields.iter().zip(struct_info.fields.iter()) {
             let actual_type_id = struct_field.value.type_id;
 
-            // Check if expected type is a type parameter
-            if let ResolvedType::TypeParam { .. } = self.type_table.borrow().get(*expected_type_id)
-            {
-                // Map this type param to the actual type
-                type_param_map.insert(*expected_type_id, actual_type_id);
-            }
+            // Try to unify expected_type with actual_type to extract type params
+            self.unify_types_for_inference(*expected_type_id, actual_type_id, &mut type_param_map);
         }
 
         // Collect type args in order (by TypeParam index)
@@ -4634,6 +5714,89 @@ impl<'a> Resolver<'a> {
 
         type_args.sort_by_key(|(index, _)| *index);
         type_args.into_iter().map(|(_, type_id)| type_id).collect()
+    }
+
+    /// Unify expected type with actual type to extract type parameter mappings.
+    /// This handles nested generic types like Array<T> where T is a type param.
+    fn unify_types_for_inference(
+        &self,
+        expected: TypeId,
+        actual: TypeId,
+        type_param_map: &mut HashMap<TypeId, TypeId>,
+    ) {
+        let expected_type = self.type_table.borrow().get(expected).clone();
+        let actual_type = self.type_table.borrow().get(actual).clone();
+
+        match (&expected_type, &actual_type) {
+            // Direct type parameter mapping
+            (ResolvedType::TypeParam { .. }, _) => {
+                type_param_map.insert(expected, actual);
+            }
+            // Generic instance: unify type arguments recursively
+            (
+                ResolvedType::GenericInstance {
+                    name: expected_name,
+                    type_args: expected_args,
+                    ..
+                },
+                ResolvedType::GenericInstance {
+                    name: actual_name,
+                    type_args: actual_args,
+                    ..
+                },
+            ) if expected_name == actual_name && expected_args.len() == actual_args.len() => {
+                for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
+                    self.unify_types_for_inference(exp_arg, act_arg, type_param_map);
+                }
+            }
+            // Array<K> (GenericInstance) with Tuple (homogeneous) - infer K from tuple element type
+            (
+                ResolvedType::GenericInstance {
+                    name,
+                    type_args: expected_args,
+                    ..
+                },
+                ResolvedType::Tuple(actual_elems),
+            ) if name == "Array" && expected_args.len() == 1 && !actual_elems.is_empty() => {
+                // Check if all tuple elements have the same type
+                let first_elem_type = actual_elems[0];
+                let all_same = actual_elems.iter().all(|&e| e == first_elem_type);
+                if all_same {
+                    // Unify Array's element type param with the tuple's element type
+                    self.unify_types_for_inference(
+                        expected_args[0],
+                        first_elem_type,
+                        type_param_map,
+                    );
+                }
+            }
+            // Array types (Wado's Array<T>)
+            (
+                ResolvedType::BuiltinArray(expected_elem),
+                ResolvedType::BuiltinArray(actual_elem),
+            ) => {
+                self.unify_types_for_inference(*expected_elem, *actual_elem, type_param_map);
+            }
+            // Ref types
+            (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
+            | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
+                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
+            }
+            // Option types
+            (ResolvedType::Option(expected_inner), ResolvedType::Option(actual_inner)) => {
+                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
+            }
+            // Tuple types
+            (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
+                if expected_elems.len() == actual_elems.len() =>
+            {
+                for (&exp, &act) in expected_elems.iter().zip(actual_elems.iter()) {
+                    self.unify_types_for_inference(exp, act, type_param_map);
+                }
+            }
+            // Other cases: no type params to extract
+            _ => {}
+        }
     }
 
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
@@ -4697,11 +5860,25 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Resolve a namespaced generic type like `builtin::array<T>`
+    /// Resolve a namespaced generic type like `builtin::array<T>` or `Self::Output`
     fn resolve_namespaced_generic_type(
         &mut self,
         namespaced: &crate::ast::NamespacedGenericType,
     ) -> TypeId {
+        // Handle Self::AssociatedType
+        if namespaced.namespace.as_str() == "Self" {
+            // Look up the associated type binding
+            if let Some(&type_id) = self.current_associated_type_bindings.get(&namespaced.name) {
+                return type_id;
+            }
+            // If not found, it's an unknown associated type
+            self.errors.push(TypeError::UnknownType {
+                name: format!("Self::{}", namespaced.name),
+                span: namespaced.span,
+            });
+            return TypeTable::ERROR;
+        }
+
         if namespaced.namespace.as_str() == "builtin" {
             if namespaced.name.as_str() == "array" {
                 if namespaced.args.len() != 1 {
@@ -4734,6 +5911,15 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a named type
     fn resolve_named_type(&mut self, name: &str, _span: Span) -> TypeId {
+        // Handle `Self` type reference in impl blocks
+        if name == "Self" {
+            if let Some(self_type) = self.current_self_type {
+                return self_type;
+            }
+            // Self used outside of impl block - return Unknown
+            return TypeTable::UNKNOWN;
+        }
+
         // First check if it's a type parameter in scope
         if let Some(&(_, type_id)) = self.current_type_params.get(name) {
             return type_id;
@@ -4762,16 +5948,16 @@ impl<'a> Resolver<'a> {
             _ => {
                 if let Some(&type_id) = self.type_aliases.get(name) {
                     type_id
-                } else if let Some((module_path, _)) = self.struct_fields.get(name) {
-                    // It's a struct - use the module path where it was defined
+                } else if let Some(struct_info) = self.struct_fields.get(name) {
+                    // It's a struct - use the module source where it was defined
                     self.type_table
                         .borrow_mut()
-                        .make_struct(name.to_string(), module_path.clone())
-                } else if let Some((module_path, _, _)) = self.variant_cases.get(name) {
-                    // It's a variant - use the module path where it was defined
+                        .make_struct(name.to_string(), struct_info.module_source.clone())
+                } else if let Some(variant_info) = self.variant_cases.get(name) {
+                    // It's a variant - use the module source where it was defined
                     self.type_table
                         .borrow_mut()
-                        .make_variant(name.to_string(), module_path.clone())
+                        .make_variant(name.to_string(), variant_info.module_source.clone())
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN
@@ -4852,19 +6038,6 @@ impl<'a> Resolver<'a> {
                     .borrow_mut()
                     .intern(ResolvedType::Future(elem))
             }
-            "Dict" => {
-                let key = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                let value = args
-                    .get(1)
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Dict { key, value })
-            }
             _ => {
                 // Check if it's a user-defined generic struct
                 if self.generic_struct_names.contains(name) {
@@ -4872,17 +6045,17 @@ impl<'a> Resolver<'a> {
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
-                    // Get the module path where the struct was defined
-                    let module_path = self
+                    // Get the module source where the struct was defined
+                    let module_source = self
                         .struct_fields
                         .get(name)
-                        .map(|(path, _)| path.clone())
-                        .unwrap_or_else(|| self.current_module_path.clone());
+                        .map(|info| info.module_source.clone())
+                        .unwrap_or_else(|| self.current_module_source.clone());
 
                     // Create a GenericInstance type
                     self.type_table.borrow_mut().make_generic_instance(
                         name.to_string(),
-                        module_path,
+                        module_source,
                         type_args,
                     )
                 } else {
@@ -4937,12 +6110,12 @@ fn convert_unary_op(op: UnaryOp) -> TirUnaryOp {
 /// Convenience function to resolve a module
 pub fn resolve_module(
     module: &Module,
-    module_path: Vec<String>,
+    module_source: ModuleSource,
     symbols: &SymbolTable,
     loaded_modules: &HashMap<Vec<String>, Module>,
 ) -> Result<TirModule, Vec<TypeError>> {
     let mut resolver = Resolver::new(symbols, loaded_modules);
-    resolver.resolve_module(module, module_path)
+    resolver.resolve_module(module, module_source)
 }
 
 /// Resolve all modules and return a Project ready for lowering.
@@ -4958,11 +6131,21 @@ pub fn resolve_to_project(
 ) -> Result<Project, Vec<TypeError>> {
     let tir_modules = Resolver::resolve_all_modules(&symbols, modules)?;
 
+    // Convert Vec<String> to ModuleSource at the boundary
+    let tir_modules_by_source: IndexMap<ModuleSource, TirModule> = tir_modules
+        .into_iter()
+        .map(|(path, tir)| (ModuleSource::from_path(&path), tir))
+        .collect();
+    let implicit_modules_by_source: HashSet<ModuleSource> = implicit_modules
+        .into_iter()
+        .map(|p| ModuleSource::from_path(&p))
+        .collect();
+
     Ok(Project::new(
-        entry_path,
-        tir_modules,
+        ModuleSource::from_path(&entry_path),
+        tir_modules_by_source,
         symbols,
-        implicit_modules,
+        implicit_modules_by_source,
         module_name,
     ))
 }

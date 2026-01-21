@@ -8,7 +8,7 @@
 //! 2. Optimize -> Project (optimized, with usage analysis)
 //! 3. Codegen takes Project and generates Wasm
 
-use crate::name::FunctionId;
+use crate::name::{FunctionId, ModuleSource};
 use crate::optimize::{CanonBuiltin, WasiEffect};
 use crate::symbol::SymbolTable;
 use crate::tir::{PrimitiveType, TirModule};
@@ -25,14 +25,14 @@ pub struct Project {
     // ========================================
     // Source artifacts
     // ========================================
-    /// Path to the entry module (e.g., ["example", "hello"])
-    pub entry_path: Vec<String>,
-    /// All TIR modules indexed by path
-    pub tir_modules: IndexMap<Vec<String>, TirModule>,
+    /// The entry module source
+    pub entry_module_source: ModuleSource,
+    /// All TIR modules indexed by module source
+    pub tir_modules: IndexMap<ModuleSource, TirModule>,
     /// Symbol table from analysis phase
     pub symbols: SymbolTable,
-    /// Implicitly imported modules (e.g., ["core", "prelude"])
-    pub implicit_modules: HashSet<Vec<String>>,
+    /// Implicitly imported modules (e.g., core:prelude)
+    pub implicit_modules: HashSet<ModuleSource>,
     /// Module name for the output (derived from filename)
     pub module_name: String,
 
@@ -62,14 +62,14 @@ pub struct Project {
 impl Project {
     /// Create a new Project from compilation artifacts (before optimization).
     pub fn new(
-        entry_path: Vec<String>,
-        tir_modules: IndexMap<Vec<String>, TirModule>,
+        entry_module_source: ModuleSource,
+        tir_modules: IndexMap<ModuleSource, TirModule>,
         symbols: SymbolTable,
-        implicit_modules: HashSet<Vec<String>>,
+        implicit_modules: HashSet<ModuleSource>,
         module_name: String,
     ) -> Self {
         Self {
-            entry_path,
+            entry_module_source,
             tir_modules,
             symbols,
             implicit_modules,
@@ -89,7 +89,7 @@ impl Project {
     /// Get the entry module TIR.
     pub fn entry_module(&self) -> &TirModule {
         self.tir_modules
-            .get(&self.entry_path)
+            .get(&self.entry_module_source)
             .expect("entry module should exist in TIR modules")
     }
 
