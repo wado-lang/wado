@@ -374,6 +374,45 @@ for let mut i = 0; i < 10; i = i + 1 {
 
 Both `break` and `continue` work with `while`, `for`, and `loop`.
 
+### Labeled Blocks
+
+Labeled blocks create a new scope for variable bindings. The label is required to avoid syntactic ambiguity with struct literals.
+
+```wado
+let x = 10;
+
+scope: {
+    let x = 20;  // shadows outer x
+    println(`x = {x}`);  // prints "x = 20"
+}
+
+println(`x = {x}`);  // prints "x = 10" (outer x unchanged)
+```
+
+**Syntax**: `LABEL: { ... }`
+
+- The label must be a valid identifier followed by a colon
+- The block creates a new variable scope
+- Variables declared inside are not accessible outside
+- Shadowing is allowed within the block
+
+**Nested Blocks**:
+
+```wado
+outer: {
+    let a = 1;
+    inner: {
+        let b = 2;
+        let sum = a + b;  // a is visible from outer scope
+        println(`{sum}`);
+    }
+    // b is not visible here
+    println(`{a}`);
+}
+```
+
+**Design Rationale**: The label is mandatory because `{ field: value }` without context could be either a block with a labeled statement or a struct literal. Requiring the label removes this ambiguity.
+
 ## Memory Model
 
 ### Core Principles
