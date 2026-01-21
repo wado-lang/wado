@@ -2356,7 +2356,6 @@ impl<'a> Resolver<'a> {
         if is_comparison {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
-                ResolvedType::String => Some("String".to_string()),
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 _ => None,
@@ -3041,15 +3040,6 @@ impl<'a> Resolver<'a> {
             "array_get_u8" => TypeTable::I32, // Returns u8 as i32
             "array_set_u8" => TypeTable::UNIT,
             "string_new" => self.get_string_struct_type(),
-            "array_new_string" => {
-                // Returns builtin::array<String>, not Array<String>
-                let string_type = self.get_string_struct_type();
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::BuiltinArray(string_type))
-            }
-            "array_get_string" => self.get_string_struct_type(),
-            "array_set_string" => TypeTable::UNIT,
 
             // Memory operations
             "realloc" => TypeTable::I32, // Returns pointer (i32)
@@ -3841,7 +3831,6 @@ impl<'a> Resolver<'a> {
                 crate::tir::PrimitiveType::Char => "char".to_string(),
             },
             ResolvedType::Unit => "unit".to_string(),
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -3910,28 +3899,6 @@ impl<'a> Resolver<'a> {
                 }
                 return None;
             }
-            // String type (legacy - String is now a struct, but handle for backwards compat)
-            ResolvedType::String => match method_name {
-                "len" => {
-                    return Some(MethodInfo {
-                        return_type: TypeTable::I32,
-                        self_kind: ast::SelfKind::Ref,
-                    });
-                }
-                "get" => {
-                    return Some(MethodInfo {
-                        return_type: TypeTable::I32,
-                        self_kind: ast::SelfKind::Ref,
-                    });
-                }
-                "set" => {
-                    return Some(MethodInfo {
-                        return_type: TypeTable::UNIT,
-                        self_kind: ast::SelfKind::MutRef,
-                    });
-                }
-                _ => return None,
-            },
             _ => return None,
         };
 

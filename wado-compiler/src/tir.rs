@@ -224,7 +224,6 @@ pub enum ResolvedType {
     Primitive(PrimitiveType),
     Unit,
     Never,
-    String,
     Struct {
         name: String,
         module_source: ModuleSource,
@@ -571,7 +570,6 @@ impl TypeTable {
             },
             ResolvedType::Unit => "()".to_string(),
             ResolvedType::Never => "!".to_string(),
-            ResolvedType::String => "String".to_string(),
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
             ResolvedType::BuiltinArray(elem) => {

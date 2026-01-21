@@ -1950,11 +1950,20 @@ fn analyze_project(project: &mut Project) {
 
     // Add cm_list_string_to_array and helper if Environment effect functions are used
     // This conversion function is called from codegen, not Wado code
+    // We need to compute transitive closure to include all functions they call
     if used_wasi_functions.contains("Environment::get_arguments")
         || used_wasi_functions.contains("Environment::get_environment")
     {
-        reachable.insert(core_internal("cm_list_string_to_array"));
-        reachable.insert(core_internal("copy_string_from_linear"));
+        let cm_list_func = core_internal("cm_list_string_to_array");
+        let copy_string_func = core_internal("copy_string_from_linear");
+
+        // Compute reachable functions from these entry points
+        let cm_list_reachable = compute_reachable(&call_graph, &cm_list_func);
+        let copy_string_reachable = compute_reachable(&call_graph, &copy_string_func);
+
+        // Add all transitively reachable functions
+        reachable.extend(cm_list_reachable);
+        reachable.extend(copy_string_reachable);
     }
 
     // Note: array_copy_string is tracked via call graph analysis
@@ -2748,7 +2757,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
                     func_name,
                 )));
         }
-        ResolvedType::String => {
+        ResolvedType::Struct { name, .. } if name == "String" => {
             // String.to_string() is a no-op, no function call needed
         }
         _ => {}
@@ -2776,7 +2785,6 @@ fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
             PrimitiveType::Char => "char".to_string(),
         },
         ResolvedType::Unit => "unit".to_string(),
-        ResolvedType::String => "String".to_string(),
         ResolvedType::Struct { name, .. } => name.clone(),
         ResolvedType::GenericInstance {
             name, type_args, ..
@@ -2883,6 +2891,17 @@ fn remove_unreachable_functions(project: &mut Project) {
                 ));
                 if project.reachable_functions.contains(&free_id) {
                     return true;
+                }
+
+                // For monomorphized methods, also check with empty module_path (entry module)
+                // Monomorphized functions are tracked in the call graph with module_path = []
+                // regardless of which module they were generated in
+                if func.monomorph_info.is_some() {
+                    let entry_module_free_id =
+                        FunctionId::Free(FreeFunctionName::from_path_and_name(&[], &func.name));
+                    if project.reachable_functions.contains(&entry_module_free_id) {
+                        return true;
+                    }
                 }
 
                 // For generic methods/static methods, check if any monomorphized version is reachable
@@ -3877,9 +3896,7 @@ fn is_fresh_value(expr: &TirExpr) -> bool {
 /// Check if a type requires value copying (composite types with value semantics).
 fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
-        ResolvedType::Struct { .. }
-        | ResolvedType::GenericInstance { .. }
-        | ResolvedType::String => true,
+        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
         ResolvedType::Tuple(elements) => !elements.is_empty(),
         ResolvedType::Option(inner) => needs_value_copy(*inner, type_table),
         // References, primitives, etc. don't need copying
