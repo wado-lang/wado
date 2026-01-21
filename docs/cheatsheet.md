@@ -366,6 +366,24 @@ loop {
     }
     continue;
 }
+
+// Labeled block (creates new scope)
+let x = 10;
+scope: {
+    let x = 20;  // shadows outer x
+    println(`x = {x}`);  // 20
+}
+println(`x = {x}`);  // 10 (outer x unchanged)
+
+// Nested labeled blocks
+outer: {
+    let a = 1;
+    inner: {
+        let b = 2;
+        println(`{a + b}`);  // 3
+    }
+    // b is not visible here
+}
 ```
 
 ## Operators
