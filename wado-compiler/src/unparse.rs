@@ -459,12 +459,44 @@ impl<'a> Unparser<'a> {
             self.output.push('\n');
         }
 
+        // Save last_source_line for method context
+        let saved_line = self.last_source_line;
+        // Initialize to the opening brace line for proper blank line tracking
+        self.last_source_line = i.span.line;
+
         for (idx, method) in i.methods.iter().enumerate() {
+            // Get the effective start line (considering leading comments)
+            let leading_comments = self.comments.leading_comments(&method.span);
+            let effective_start = leading_comments
+                .first()
+                .map_or(method.span.line, |c| c.span.line);
+
+            // Emit blank lines before the method (or its leading comments)
+            // but ensure at least one blank line between methods
             if idx > 0 {
-                self.output.push('\n');
+                let blank_lines = self
+                    .comments
+                    .blank_lines_between(self.last_source_line, effective_start)
+                    .max(1);
+                for _ in 0..blank_lines {
+                    self.output.push('\n');
+                }
             }
+
+            // Now emit leading comments (without additional blank lines)
+            for comment in leading_comments {
+                if self.emitted_comments.insert(comment.span.start) {
+                    self.write_indent();
+                    self.emit_comment(comment);
+                    self.output.push('\n');
+                }
+            }
+
             self.unparse_function(method);
+            self.last_source_line = method.span.end_line();
         }
+
+        self.last_source_line = saved_line.max(i.span.end_line());
         self.indent_level -= 1;
 
         self.write_indent();
@@ -498,10 +530,8 @@ impl<'a> Unparser<'a> {
             self.output.push('\n');
         }
 
-        for (idx, method) in t.methods.iter().enumerate() {
-            if idx > 0 {
-                self.output.push('\n');
-            }
+        // For trait declarations, don't add extra blank lines between method signatures
+        for method in &t.methods {
             self.unparse_function(method);
         }
         self.indent_level -= 1;
@@ -834,6 +864,65 @@ impl<'a> Unparser<'a> {
         self.output.push('}');
 
         if let Some(else_block) = &i.else_block {
+            // Check if this is an `else if` (else block contains only an if statement)
+            if else_block.stmts.len() == 1 {
+                if let Stmt::If(nested_if) = &else_block.stmts[0] {
+                    self.output.push_str(" else ");
+                    self.unparse_if_stmt_continuation(nested_if);
+                    return;
+                }
+            }
+            self.output.push_str(" else {\n");
+            self.indent_level += 1;
+            self.unparse_block(else_block);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push('}');
+        }
+
+        self.output.push('\n');
+    }
+
+    /// Unparse an if statement continuation (for else-if chains).
+    /// This skips the initial indent and final newline since they're handled by the parent.
+    fn unparse_if_stmt_continuation(&mut self, i: &IfStmt) {
+        self.output.push_str("if ");
+
+        // Handle optional init binding
+        if let Some(init) = &i.init {
+            self.output.push_str("let ");
+            if init.is_mut {
+                self.output.push_str("mut ");
+            }
+            self.output.push_str(&init.name);
+            if let Some(ty) = &init.ty {
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
+            self.output.push_str(" = ");
+            self.unparse_expr(&init.value);
+            self.output.push_str("; ");
+        }
+
+        self.unparse_if_condition(&i.condition);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        self.unparse_block(&i.then_block);
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push('}');
+
+        if let Some(else_block) = &i.else_block {
+            // Check if this is an `else if` (else block contains only an if statement)
+            if else_block.stmts.len() == 1 {
+                if let Stmt::If(nested_if) = &else_block.stmts[0] {
+                    self.output.push_str(" else ");
+                    self.unparse_if_stmt_continuation(nested_if);
+                    return;
+                }
+            }
             self.output.push_str(" else {\n");
             self.indent_level += 1;
             self.unparse_block(else_block);
@@ -1123,14 +1212,7 @@ impl<'a> Unparser<'a> {
             }
             self.output.push('>');
         }
-        self.output.push('(');
-        for (i, arg) in c.args.iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(", ");
-            }
-            self.unparse_expr(arg);
-        }
-        self.output.push(')');
+        self.unparse_call_args(&c.args, c.has_trailing_comma);
     }
 
     fn unparse_method_call(&mut self, m: &MethodCallExpr) {
@@ -1148,14 +1230,7 @@ impl<'a> Unparser<'a> {
             }
             self.output.push('>');
         }
-        self.output.push('(');
-        for (i, arg) in m.args.iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(", ");
-            }
-            self.unparse_expr(arg);
-        }
-        self.output.push(')');
+        self.unparse_call_args(&m.args, m.has_trailing_comma);
     }
 
     fn unparse_static_method_call(&mut self, s: &StaticMethodCallExpr) {
@@ -1176,14 +1251,33 @@ impl<'a> Unparser<'a> {
         }
         self.output.push_str("::");
         self.output.push_str(&s.method);
-        self.output.push('(');
-        for (i, arg) in s.args.iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(", ");
+        self.unparse_call_args(&s.args, s.has_trailing_comma);
+    }
+
+    fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool) {
+        if has_trailing_comma && !args.is_empty() {
+            // Multiline format with trailing comma
+            self.output.push_str("(\n");
+            self.indent_level += 1;
+            for arg in args {
+                self.write_indent();
+                self.unparse_expr(arg);
+                self.output.push_str(",\n");
             }
-            self.unparse_expr(arg);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push(')');
+        } else {
+            // Single-line format
+            self.output.push('(');
+            for (i, arg) in args.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.unparse_expr(arg);
+            }
+            self.output.push(')');
         }
-        self.output.push(')');
     }
 
     fn unparse_field_access(&mut self, f: &FieldAccessExpr) {
@@ -1374,20 +1468,38 @@ impl<'a> Unparser<'a> {
             self.output.push_str(name);
             self.output.push(' ');
         }
-        self.output.push_str("{ ");
 
-        for (i, field) in s.fields.iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(", ");
+        if s.has_trailing_comma && !s.fields.is_empty() {
+            // Multiline format with trailing comma
+            self.output.push_str("{\n");
+            self.indent_level += 1;
+            for field in &s.fields {
+                self.write_indent();
+                self.output.push_str(&field.name);
+                if !field.is_shorthand {
+                    self.output.push_str(": ");
+                    self.unparse_expr(&field.value);
+                }
+                self.output.push_str(",\n");
             }
-            self.output.push_str(&field.name);
-            if !field.is_shorthand {
-                self.output.push_str(": ");
-                self.unparse_expr(&field.value);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push('}');
+        } else {
+            // Single-line format without trailing comma
+            self.output.push_str("{ ");
+            for (i, field) in s.fields.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&field.name);
+                if !field.is_shorthand {
+                    self.output.push_str(": ");
+                    self.unparse_expr(&field.value);
+                }
             }
+            self.output.push_str(" }");
         }
-
-        self.output.push_str(" }");
     }
 
     // Helper methods
