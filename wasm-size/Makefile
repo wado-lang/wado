@@ -56,24 +56,36 @@ build-zig: $(OUT_DIR)
 
 # === TinyGo ===
 build-tinygo: $(OUT_DIR)
-	@echo "Building TinyGo..."
-	tinygo build -o $(OUT_DIR)/hello_world_tinygo.wasm -target=wasip1 -opt=z -no-debug tinygo/hello_world.go
-	tinygo build -o $(OUT_DIR)/pi_approx_tinygo.wasm -target=wasip1 -opt=z -no-debug tinygo/pi_approx.go
+	@if command -v tinygo >/dev/null 2>&1; then \
+		echo "Building TinyGo..."; \
+		tinygo build -o $(OUT_DIR)/hello_world_tinygo.wasm -target=wasip1 -opt=z -no-debug tinygo/hello_world.go; \
+		tinygo build -o $(OUT_DIR)/pi_approx_tinygo.wasm -target=wasip1 -opt=z -no-debug tinygo/pi_approx.go; \
+	else \
+		echo "SKIP: TinyGo (brew install tinygo-lang/tap/tinygo)"; \
+	fi
 
 # === AssemblyScript (uses @assemblyscript/wasi-shim for WASI support) ===
 build-assemblyscript: $(OUT_DIR)
-	@echo "Building AssemblyScript..."
-	cd assemblyscript && npm install
-	cd assemblyscript && npx asc hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o ../$(OUT_DIR)/hello_world_assemblyscript.wasm --optimize --optimizeLevel 3 --shrinkLevel 2
-	cd assemblyscript && npx asc pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o ../$(OUT_DIR)/pi_approx_assemblyscript.wasm --optimize --optimizeLevel 3 --shrinkLevel 2
+	@if command -v npm >/dev/null 2>&1; then \
+		echo "Building AssemblyScript..."; \
+		(cd assemblyscript && npm install && \
+		npx asc hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o ../$(OUT_DIR)/hello_world_assemblyscript.wasm --optimize --optimizeLevel 3 --shrinkLevel 2 && \
+		npx asc pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o ../$(OUT_DIR)/pi_approx_assemblyscript.wasm --optimize --optimizeLevel 3 --shrinkLevel 2); \
+	else \
+		echo "SKIP: AssemblyScript (npm required)"; \
+	fi
 
 # === Moonbit (uses peter-jerry-ye/wasi for WASI support) ===
 build-moonbit: $(OUT_DIR)
-	@echo "Building Moonbit..."
-	cd moonbit/hello_world && moon build --target wasm --strip
-	cd moonbit/pi_approx && moon build --target wasm --strip
-	cp moonbit/hello_world/target/wasm/release/build/src/src.wasm $(OUT_DIR)/hello_world_moonbit.wasm
-	cp moonbit/pi_approx/target/wasm/release/build/src/src.wasm $(OUT_DIR)/pi_approx_moonbit.wasm
+	@if command -v moon >/dev/null 2>&1; then \
+		echo "Building Moonbit..."; \
+		(cd moonbit/hello_world && moon build --target wasm --strip) && \
+		(cd moonbit/pi_approx && moon build --target wasm --strip) && \
+		cp moonbit/hello_world/target/wasm/release/build/src/src.wasm $(OUT_DIR)/hello_world_moonbit.wasm && \
+		cp moonbit/pi_approx/target/wasm/release/build/src/src.wasm $(OUT_DIR)/pi_approx_moonbit.wasm; \
+	else \
+		echo "SKIP: Moonbit (moon required)"; \
+	fi
 
 # === Wado (component model - wasm-opt not supported) ===
 build-wado: $(OUT_DIR)
