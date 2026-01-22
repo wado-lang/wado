@@ -73,9 +73,57 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
     let _licm_values: Array<i32> = self.values;
     for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
         if !"Array<bool>^IndexValue::index_value"(&_licm_deleted, i) {
-            "Array<String>::append"(&mut new_keys, move "Array<String>^IndexValue::index_value"(&_licm_keys, i));
-            "Array<i32>::append"(&mut new_values, "Array<i32>^IndexValue::index_value"(&_licm_values, i));
-            "Array<bool>::append"(&mut new_deleted, false);
+            __inline_Array_String___append_0: {
+                let self: &mut Array<String> = &mut new_keys;
+                let value: String = move "Array<String>^IndexValue::index_value"(&_licm_keys, i);
+                let used: i32 = self.used;
+                let capacity: i32 = core::builtin::array_len(self.repr);
+                if core::builtin::unlikely((used >= capacity)) {
+                    let mut new_capacity: i32 = (capacity * 2);
+                    if (capacity == 0) {
+                        new_capacity = 4;
+                    }
+                    let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+                    core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+                    self.repr = new_repr;
+                }
+                core::builtin::array_set::<String>(self.repr, used, value);
+                self.used = (used + 1);
+            }
+            __inline_Array_i32___append_1: {
+                let self: &mut Array<i32> = &mut new_values;
+                let value: i32 = "Array<i32>^IndexValue::index_value"(&_licm_values, i);
+                let used: i32 = self.used;
+                let capacity: i32 = core::builtin::array_len(self.repr);
+                if core::builtin::unlikely((used >= capacity)) {
+                    let mut new_capacity: i32 = (capacity * 2);
+                    if (capacity == 0) {
+                        new_capacity = 4;
+                    }
+                    let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+                    core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+                    self.repr = new_repr;
+                }
+                core::builtin::array_set::<i32>(self.repr, used, value);
+                self.used = (used + 1);
+            }
+            __inline_Array_bool___append_2: {
+                let self: &mut Array<bool> = &mut new_deleted;
+                let value: bool = false;
+                let used: i32 = self.used;
+                let capacity: i32 = core::builtin::array_len(self.repr);
+                if core::builtin::unlikely((used >= capacity)) {
+                    let mut new_capacity: i32 = (capacity * 2);
+                    if (capacity == 0) {
+                        new_capacity = 4;
+                    }
+                    let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
+                    core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
+                    self.repr = new_repr;
+                }
+                core::builtin::array_set::<bool>(self.repr, used, value);
+                self.used = (used + 1);
+            }
         }
     }
     self.keys = new_keys;
@@ -106,60 +154,12 @@ pub fn "Array<BTreeNode<String,i32>>::len"(self: &Array<&mut BTreeNode<String,i3
     return self.used;
 }
 
-pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
-        core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<bool>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     return core::builtin::array_get::<i32>(self.repr, index);
 }
 
-pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
-        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<i32>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     return core::builtin::array_get::<String>(self.repr, index);
-}
-
-pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
-        core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<String>(self.repr, used, value);
-    self.used = (used + 1);
 }
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
@@ -194,29 +194,29 @@ fn "TreeMap<String,i32>::collect_entries"(self: &TreeMap<String,i32>, node: &BTr
             "TreeMap<String,i32>::collect_entries"(self, "Array<BTreeNode<String,i32>>^IndexValue::index_value"(&_licm_children, i), result);
         }
         if !"Array<bool>^IndexValue::index_value"(&_licm_deleted, i) {
-            "Array<Tuple<String,i32>>::append"(result, move ["Array<String>^IndexValue::index_value"(&_licm_keys, i), "Array<i32>^IndexValue::index_value"(&_licm_values, i)]);
+            __inline_Array_Tuple_String_i32____append_0: {
+                let self: &mut Array<[String, i32]> = result;
+                let value: [String, i32] = move ["Array<String>^IndexValue::index_value"(&_licm_keys, i), "Array<i32>^IndexValue::index_value"(&_licm_values, i)];
+                let used: i32 = self.used;
+                let capacity: i32 = core::builtin::array_len(self.repr);
+                if core::builtin::unlikely((used >= capacity)) {
+                    let mut new_capacity: i32 = (capacity * 2);
+                    if (capacity == 0) {
+                        new_capacity = 4;
+                    }
+                    let new_repr: builtin::array<[String, i32]> = core::builtin::array_new::<[String, i32]>(new_capacity);
+                    core::builtin::array_copy::<[String, i32]>(new_repr, 0, self.repr, 0, used);
+                    self.repr = new_repr;
+                }
+                core::builtin::array_set::<[String, i32]>(self.repr, used, value);
+                self.used = (used + 1);
+            }
         }
         i = (i + 1);
     }
     if (!node.is_leaf && ("Array<BTreeNode<String,i32>>::len"(&node.children) > i)) {
         "TreeMap<String,i32>::collect_entries"(self, "Array<BTreeNode<String,i32>>^IndexValue::index_value"(&node.children, i), result);
     }
-}
-
-pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value: [String, i32]) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<[String, i32]> = core::builtin::array_new::<[String, i32]>(new_capacity);
-        core::builtin::array_copy::<[String, i32]>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<[String, i32]>(self.repr, used, value);
-    self.used = (used + 1);
 }
 
 fn "TreeMap<String,i32>::delete"(self: &mut TreeMap<String,i32>, key: &String) -> bool {
@@ -292,9 +292,57 @@ fn "TreeMap<String,i32>^IndexAssign::index_assign"(self: &mut TreeMap<String,i32
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     if None = self.root {
         let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_leaf"();
-        "Array<String>::append"(&mut new_root.keys, key);
-        "Array<i32>::append"(&mut new_root.values, value);
-        "Array<bool>::append"(&mut new_root.deleted, false);
+        __inline_Array_String___append_0: {
+            let self: &mut Array<String> = &mut new_root.keys;
+            let value: String = key;
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+                core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<String>(self.repr, used, value);
+            self.used = (used + 1);
+        }
+        __inline_Array_i32___append_1: {
+            let self: &mut Array<i32> = &mut new_root.values;
+            let value: i32 = value;
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+                core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<i32>(self.repr, used, value);
+            self.used = (used + 1);
+        }
+        __inline_Array_bool___append_2: {
+            let self: &mut Array<bool> = &mut new_root.deleted;
+            let value: bool = false;
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
+                core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<bool>(self.repr, used, value);
+            self.used = (used + 1);
+        }
         self.root = Option::Some(&mut new_root);
         self.size = 1;
         return;
@@ -302,7 +350,23 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
     if Some(root) = self.root {
         if "BTreeNode<String,i32>::is_full"(root, "TreeMap<String,i32>::max_keys"(self)) {
             let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_internal"();
-            "Array<BTreeNode<String,i32>>::append"(&mut new_root.children, root);
+            __inline_Array_BTreeNode_String_i32____append_3: {
+                let self: &mut Array<&mut BTreeNode<String,i32>> = &mut new_root.children;
+                let value: &mut BTreeNode<String,i32> = root;
+                let used: i32 = self.used;
+                let capacity: i32 = core::builtin::array_len(self.repr);
+                if core::builtin::unlikely((used >= capacity)) {
+                    let mut new_capacity: i32 = (capacity * 2);
+                    if (capacity == 0) {
+                        new_capacity = 4;
+                    }
+                    let new_repr: builtin::array<&mut BTreeNode<String,i32>> = core::builtin::array_new::<&mut BTreeNode<String,i32>>(new_capacity);
+                    core::builtin::array_copy::<&mut BTreeNode<String,i32>>(new_repr, 0, self.repr, 0, used);
+                    self.repr = new_repr;
+                }
+                core::builtin::array_set::<&mut BTreeNode<String,i32>>(self.repr, used, value);
+                self.used = (used + 1);
+            }
             "TreeMap<String,i32>::split_child"(self, &mut new_root, 0);
             self.root = Option::Some(&mut new_root);
         }
@@ -326,9 +390,57 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
             }
             return;
         }
-        "Array<String>::append"(&mut node.keys, key);
-        "Array<i32>::append"(&mut node.values, value);
-        "Array<bool>::append"(&mut node.deleted, false);
+        __inline_Array_String___append_0: {
+            let self: &mut Array<String> = &mut node.keys;
+            let value: String = key;
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+                core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<String>(self.repr, used, value);
+            self.used = (used + 1);
+        }
+        __inline_Array_i32___append_1: {
+            let self: &mut Array<i32> = &mut node.values;
+            let value: i32 = value;
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+                core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<i32>(self.repr, used, value);
+            self.used = (used + 1);
+        }
+        __inline_Array_bool___append_2: {
+            let self: &mut Array<bool> = &mut node.deleted;
+            let value: bool = false;
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
+                core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<bool>(self.repr, used, value);
+            self.used = (used + 1);
+        }
         "TreeMap<String,i32>::sort_node_entries"(self, node);
         self.size = (self.size + 1);
     } else {
@@ -348,22 +460,19 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
 
 fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &mut BTreeNode<String,i32>) {
     let mut i: i32 = 0;
-    let _licm_keys: Array<String> = node.keys;
-    let _licm_values: Array<i32> = node.values;
-    let _licm_deleted: Array<bool> = node.deleted;
     for ; (i < "Array<String>::len"(&node.keys)); i = (i + 1) {
         let mut j: i32 = (i + 1);
-        for ; (j < "Array<String>::len"(&_licm_keys)); j = (j + 1) {
-            if "String^Ord::lt"(&"Array<String>^IndexValue::index_value"(&_licm_keys, j), &"Array<String>^IndexValue::index_value"(&_licm_keys, i)) {
-                let temp_k: String = move "Array<String>^IndexValue::index_value"(&_licm_keys, i);
-                "Array<String>^IndexAssign::index_assign"(&mut _licm_keys, i, move "Array<String>^IndexValue::index_value"(&_licm_keys, j));
-                "Array<String>^IndexAssign::index_assign"(&mut _licm_keys, j, temp_k);
-                let temp_v: i32 = "Array<i32>^IndexValue::index_value"(&_licm_values, i);
-                "Array<i32>^IndexAssign::index_assign"(&mut _licm_values, i, "Array<i32>^IndexValue::index_value"(&_licm_values, j));
-                "Array<i32>^IndexAssign::index_assign"(&mut _licm_values, j, temp_v);
-                let temp_d: bool = "Array<bool>^IndexValue::index_value"(&_licm_deleted, i);
-                "Array<bool>^IndexAssign::index_assign"(&mut _licm_deleted, i, "Array<bool>^IndexValue::index_value"(&_licm_deleted, j));
-                "Array<bool>^IndexAssign::index_assign"(&mut _licm_deleted, j, temp_d);
+        for ; (j < "Array<String>::len"(&node.keys)); j = (j + 1) {
+            if "String^Ord::lt"(&"Array<String>^IndexValue::index_value"(&node.keys, j), &"Array<String>^IndexValue::index_value"(&node.keys, i)) {
+                let temp_k: String = move "Array<String>^IndexValue::index_value"(&node.keys, i);
+                "Array<String>^IndexAssign::index_assign"(&mut node.keys, i, move "Array<String>^IndexValue::index_value"(&node.keys, j));
+                "Array<String>^IndexAssign::index_assign"(&mut node.keys, j, temp_k);
+                let temp_v: i32 = "Array<i32>^IndexValue::index_value"(&node.values, i);
+                "Array<i32>^IndexAssign::index_assign"(&mut node.values, i, "Array<i32>^IndexValue::index_value"(&node.values, j));
+                "Array<i32>^IndexAssign::index_assign"(&mut node.values, j, temp_v);
+                let temp_d: bool = "Array<bool>^IndexValue::index_value"(&node.deleted, i);
+                "Array<bool>^IndexAssign::index_assign"(&mut node.deleted, i, "Array<bool>^IndexValue::index_value"(&node.deleted, j));
+                "Array<bool>^IndexAssign::index_assign"(&mut node.deleted, j, temp_d);
             }
         }
     }
@@ -381,69 +490,161 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
     let full_child: &mut BTreeNode<String,i32> = "Array<BTreeNode<String,i32>>^IndexValue::index_value"(&parent.children, child_index);
     let mut new_sibling: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_leaf"();
     if !full_child.is_leaf {
-        new_sibling = "BTreeNode<String,i32>::new_internal"();
+        new_sibling = move "BTreeNode<String,i32>::new_internal"();
     }
     let mid: i32 = (self.t - 1);
     let mut i: i32 = (mid + 1);
-    let _licm_keys: Array<String> = new_sibling.keys;
     let _licm_keys: Array<String> = full_child.keys;
-    let _licm_values: Array<i32> = new_sibling.values;
     let _licm_values: Array<i32> = full_child.values;
-    let _licm_deleted: Array<bool> = new_sibling.deleted;
     let _licm_deleted: Array<bool> = full_child.deleted;
     for ; (i < "Array<String>::len"(&full_child.keys)); i = (i + 1) {
-        "Array<String>::append"(&mut _licm_keys, move "Array<String>^IndexValue::index_value"(&_licm_keys, i));
-        "Array<i32>::append"(&mut _licm_values, "Array<i32>^IndexValue::index_value"(&_licm_values, i));
-        "Array<bool>::append"(&mut _licm_deleted, "Array<bool>^IndexValue::index_value"(&_licm_deleted, i));
+        __inline_Array_String___append_0: {
+            let self: &mut Array<String> = &mut new_sibling.keys;
+            let value: String = move "Array<String>^IndexValue::index_value"(&_licm_keys, i);
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+                core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<String>(self.repr, used, value);
+            self.used = (used + 1);
+        }
+        __inline_Array_i32___append_1: {
+            let self: &mut Array<i32> = &mut new_sibling.values;
+            let value: i32 = "Array<i32>^IndexValue::index_value"(&_licm_values, i);
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+                core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<i32>(self.repr, used, value);
+            self.used = (used + 1);
+        }
+        __inline_Array_bool___append_2: {
+            let self: &mut Array<bool> = &mut new_sibling.deleted;
+            let value: bool = "Array<bool>^IndexValue::index_value"(&_licm_deleted, i);
+            let used: i32 = self.used;
+            let capacity: i32 = core::builtin::array_len(self.repr);
+            if core::builtin::unlikely((used >= capacity)) {
+                let mut new_capacity: i32 = (capacity * 2);
+                if (capacity == 0) {
+                    new_capacity = 4;
+                }
+                let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
+                core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
+                self.repr = new_repr;
+            }
+            core::builtin::array_set::<bool>(self.repr, used, value);
+            self.used = (used + 1);
+        }
     }
     if !full_child.is_leaf {
         let mut i: i32 = (mid + 1);
-        let _licm_children: Array<&mut BTreeNode<String,i32>> = new_sibling.children;
         let _licm_children: Array<&mut BTreeNode<String,i32>> = full_child.children;
         for ; (i < "Array<BTreeNode<String,i32>>::len"(&full_child.children)); i = (i + 1) {
-            "Array<BTreeNode<String,i32>>::append"(&mut _licm_children, "Array<BTreeNode<String,i32>>^IndexValue::index_value"(&_licm_children, i));
+            __inline_Array_BTreeNode_String_i32____append_3: {
+                let self: &mut Array<&mut BTreeNode<String,i32>> = &mut new_sibling.children;
+                let value: &mut BTreeNode<String,i32> = "Array<BTreeNode<String,i32>>^IndexValue::index_value"(&_licm_children, i);
+                let used: i32 = self.used;
+                let capacity: i32 = core::builtin::array_len(self.repr);
+                if core::builtin::unlikely((used >= capacity)) {
+                    let mut new_capacity: i32 = (capacity * 2);
+                    if (capacity == 0) {
+                        new_capacity = 4;
+                    }
+                    let new_repr: builtin::array<&mut BTreeNode<String,i32>> = core::builtin::array_new::<&mut BTreeNode<String,i32>>(new_capacity);
+                    core::builtin::array_copy::<&mut BTreeNode<String,i32>>(new_repr, 0, self.repr, 0, used);
+                    self.repr = new_repr;
+                }
+                core::builtin::array_set::<&mut BTreeNode<String,i32>>(self.repr, used, value);
+                self.used = (used + 1);
+            }
         }
     }
     let promoted_key: String = move "Array<String>^IndexValue::index_value"(&full_child.keys, mid);
     let promoted_value: i32 = "Array<i32>^IndexValue::index_value"(&full_child.values, mid);
     let promoted_deleted: bool = "Array<bool>^IndexValue::index_value"(&full_child.deleted, mid);
-    "Array<String>::append"(&mut parent.keys, promoted_key);
-    "Array<i32>::append"(&mut parent.values, promoted_value);
-    "Array<bool>::append"(&mut parent.deleted, promoted_deleted);
-    "Array<BTreeNode<String,i32>>::append"(&mut parent.children, &mut new_sibling);
+    __inline_Array_String___append_4: {
+        let self: &mut Array<String> = &mut parent.keys;
+        let value: String = promoted_key;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+            core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<String>(self.repr, used, value);
+        self.used = (used + 1);
+    }
+    __inline_Array_i32___append_5: {
+        let self: &mut Array<i32> = &mut parent.values;
+        let value: i32 = promoted_value;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<i32>(self.repr, used, value);
+        self.used = (used + 1);
+    }
+    __inline_Array_bool___append_6: {
+        let self: &mut Array<bool> = &mut parent.deleted;
+        let value: bool = promoted_deleted;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
+            core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<bool>(self.repr, used, value);
+        self.used = (used + 1);
+    }
+    __inline_Array_BTreeNode_String_i32____append_7: {
+        let self: &mut Array<&mut BTreeNode<String,i32>> = &mut parent.children;
+        let value: &mut BTreeNode<String,i32> = &mut new_sibling;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<&mut BTreeNode<String,i32>> = core::builtin::array_new::<&mut BTreeNode<String,i32>>(new_capacity);
+            core::builtin::array_copy::<&mut BTreeNode<String,i32>>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<&mut BTreeNode<String,i32>>(self.repr, used, value);
+        self.used = (used + 1);
+    }
     "TreeMap<String,i32>::sort_node_entries"(self, parent);
-}
-
-pub fn "Array<BTreeNode<String,i32>>::append"(self: &mut Array<&mut BTreeNode<String, i32>>, value: &mut BTreeNode<String,i32>) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<&mut BTreeNode<String,i32>> = core::builtin::array_new::<&mut BTreeNode<String, i32>>(new_capacity);
-        core::builtin::array_copy::<&mut BTreeNode<String, i32>>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<&mut BTreeNode<String, i32>>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
-pub fn "Array<BTreeNode<String,i32>>::append"(self: &mut Array<&mut BTreeNode<String,i32>>, value: &mut BTreeNode<String,i32>) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<&mut BTreeNode<String,i32>> = core::builtin::array_new::<&mut BTreeNode<String,i32>>(new_capacity);
-        core::builtin::array_copy::<&mut BTreeNode<String,i32>>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<&mut BTreeNode<String,i32>>(self.repr, used, value);
-    self.used = (used + 1);
 }
 
 fn "BTreeNode<String,i32>::new_internal"() -> BTreeNode<String,i32> {

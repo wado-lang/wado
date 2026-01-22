@@ -9057,7 +9057,7 @@ impl Codegen {
                 // Recursively handle body
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
-            TirStmtKind::Loop { body } => {
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
             TirStmtKind::If {
@@ -9226,11 +9226,23 @@ impl Codegen {
                 Self::count_indirect_calls_in_expr(iterable, type_table, codegen, counts);
                 Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
             }
-            TirStmtKind::Loop { body } => {
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
             }
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::count_indirect_calls_in_expr(scrutinee, type_table, codegen, counts);
+                Self::count_indirect_calls_in_block(then_block, type_table, codegen, counts);
+                if let Some(else_blk) = else_block {
+                    Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
+                }
             }
             _ => {}
         }
@@ -9421,11 +9433,23 @@ impl Codegen {
                 Self::collect_array_append_types_from_expr(iterable, type_table, result);
                 Self::collect_array_append_types(body, type_table, result);
             }
-            TirStmtKind::Loop { body } => {
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::collect_array_append_types(body, type_table, result);
             }
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::collect_array_append_types_from_expr(expr, type_table, result);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::collect_array_append_types_from_expr(scrutinee, type_table, result);
+                Self::collect_array_append_types(then_block, type_table, result);
+                if let Some(else_blk) = else_block {
+                    Self::collect_array_append_types(else_blk, type_table, result);
+                }
             }
             _ => {}
         }
@@ -9561,8 +9585,19 @@ impl Codegen {
             TirStmtKind::While { body, .. }
             | TirStmtKind::For { body, .. }
             | TirStmtKind::ForOf { body, .. }
-            | TirStmtKind::Loop { body } => {
+            | TirStmtKind::Loop { body }
+            | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.preallocate_locals_from_block(body, type_table, ctx);
+            }
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.preallocate_locals_from_block(then_block, type_table, ctx);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
+                }
             }
             _ => {}
         }

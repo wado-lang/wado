@@ -214,18 +214,29 @@ fn is_inline_eligible(
         return false;
     };
 
+    // Check if this is a monomorphized Array::append method
+    // These are special-cased because they provide significant performance benefits
+    let is_array_append = func.monomorph_info.is_some()
+        && func.method_info.as_ref().is_some_and(|info| {
+            info.struct_name.starts_with("Array") && info.method_name == "append"
+        });
+
     // Don't inline core library functions (they may be called by codegen or have
     // complex type dependencies across modules)
-    if !module_path.is_empty() && module_path[0] == "core" {
+    // Exception: Array::append is allowed since it's in the entry module after monomorphization
+    if !module_path.is_empty() && module_path[0] == "core" && !is_array_append {
         return false;
     }
 
     // Don't inline functions with reference parameters
     // Reference handling during inlining is complex (address-taken locals, box structs, etc.)
-    for param in &func.params {
-        match type_table.get(param.type_id) {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-            _ => {}
+    // Exception: Allow Array::append which has &mut self
+    if !is_array_append {
+        for param in &func.params {
+            match type_table.get(param.type_id) {
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
+                _ => {}
+            }
         }
     }
 
@@ -655,6 +666,8 @@ fn inline_functions(project: &mut Project) {
                 // Take ownership of local_count and local_types to avoid borrow conflicts
                 let mut local_count = func.local_count;
                 let mut local_types = std::mem::take(&mut func.local_types);
+                // Counter for generating unique inline labels
+                let mut inline_counter: u32 = 0;
                 inline_calls_in_block(
                     &mut body,
                     &inline_candidates,
@@ -663,6 +676,7 @@ fn inline_functions(project: &mut Project) {
                     &mut local_types,
                     &module.type_table.borrow(),
                     &mut inlined_funcs,
+                    &mut inline_counter,
                 );
                 func.local_count = local_count;
                 func.local_types = local_types;
@@ -700,6 +714,7 @@ fn inline_calls_in_block(
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(Vec<String>, String)>,
+    inline_counter: &mut u32,
 ) {
     let mut new_stmts = Vec::new();
 
@@ -721,6 +736,7 @@ fn inline_calls_in_block(
                     local_count,
                     local_types,
                     type_table,
+                    inline_counter,
                 )
                 .or_else(|| {
                     try_inline_method_call_expr(
@@ -730,6 +746,7 @@ fn inline_calls_in_block(
                         local_count,
                         local_types,
                         type_table,
+                        inline_counter,
                     )
                 });
 
@@ -787,6 +804,7 @@ fn inline_calls_in_block(
                     local_count,
                     local_types,
                     type_table,
+                    inline_counter,
                 )
                 .or_else(|| {
                     try_inline_method_call_expr(
@@ -796,6 +814,7 @@ fn inline_calls_in_block(
                         local_count,
                         local_types,
                         type_table,
+                        inline_counter,
                     )
                 });
 
@@ -833,6 +852,7 @@ fn inline_calls_in_block(
                         local_count,
                         local_types,
                         type_table,
+                        inline_counter,
                     )
                     .or_else(|| {
                         try_inline_method_call_expr(
@@ -842,6 +862,7 @@ fn inline_calls_in_block(
                             local_count,
                             local_types,
                             type_table,
+                            inline_counter,
                         )
                     });
 
@@ -902,6 +923,7 @@ fn inline_calls_in_block(
                     local_types,
                     type_table,
                     inlined_funcs,
+                    inline_counter,
                 );
                 let new_else = else_block.map(|mut eb| {
                     inline_calls_in_block(
@@ -912,6 +934,7 @@ fn inline_calls_in_block(
                         local_types,
                         type_table,
                         inlined_funcs,
+                        inline_counter,
                     );
                     eb
                 });
@@ -946,6 +969,7 @@ fn inline_calls_in_block(
                     local_types,
                     type_table,
                     inlined_funcs,
+                    inline_counter,
                 );
                 new_stmts.push(TirStmt::new(
                     TirStmtKind::While { condition, body },
@@ -978,6 +1002,7 @@ fn inline_calls_in_block(
                     local_types,
                     type_table,
                     inlined_funcs,
+                    inline_counter,
                 );
                 let new_update = update.map(|mut u| {
                     inline_calls_in_expr(
@@ -1010,6 +1035,7 @@ fn inline_calls_in_block(
                     local_types,
                     type_table,
                     inlined_funcs,
+                    inline_counter,
                 );
                 new_stmts.push(TirStmt::new(TirStmtKind::Loop { body }, stmt.span));
             }
@@ -1039,6 +1065,7 @@ fn inline_calls_in_block(
                     local_types,
                     type_table,
                     inlined_funcs,
+                    inline_counter,
                 );
                 new_stmts.push(TirStmt::new(
                     TirStmtKind::ForOf {
@@ -1061,6 +1088,7 @@ fn inline_calls_in_block(
                     local_types,
                     type_table,
                     inlined_funcs,
+                    inline_counter,
                 );
                 new_stmts.push(TirStmt::new(
                     TirStmtKind::LabeledBlock { label, block },
@@ -1091,6 +1119,7 @@ fn inline_calls_in_block(
                     local_types,
                     type_table,
                     inlined_funcs,
+                    inline_counter,
                 );
                 let new_else = else_block.map(|mut eb| {
                     inline_calls_in_block(
@@ -1101,6 +1130,7 @@ fn inline_calls_in_block(
                         local_types,
                         type_table,
                         inlined_funcs,
+                        inline_counter,
                     );
                     eb
                 });
@@ -1132,6 +1162,7 @@ fn try_inline_call_expr(
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     _type_table: &TypeTable,
+    inline_counter: &mut u32,
 ) -> Option<(Vec<TirStmt>, TirExpr, (Vec<String>, String))> {
     let TirExprKind::Call {
         func,
@@ -1169,6 +1200,15 @@ fn try_inline_call_expr(
     // Get the function body
     let body = candidate.body.as_ref()?;
 
+    // Generate unique label for this inline site
+    // Sanitize function name for use as label (replace non-alphanumeric with _)
+    let sanitized_name: String = func_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .collect();
+    let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
+    *inline_counter += 1;
+
     // Calculate local index offset for remapping
     let local_offset = *local_count;
 
@@ -1176,10 +1216,10 @@ fn try_inline_call_expr(
     let callee_local_count = candidate.local_count;
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    // Create argument bindings as let statements
+    // Create argument bindings as let statements inside a labeled block
     // IMPORTANT: Push param types first to match index assignment order
     // (params get indices local_offset+0, local_offset+1, ..., then non-params follow)
-    let mut inlined_stmts = Vec::new();
+    let mut block_stmts = Vec::new();
     let mut param_to_local: HashMap<u32, u32> = HashMap::new();
 
     for (i, (param, arg)) in candidate.params.iter().zip(args.iter()).enumerate() {
@@ -1190,9 +1230,10 @@ fn try_inline_call_expr(
         local_types.push(param.type_id);
         *local_count += 1;
 
-        inlined_stmts.push(TirStmt::new(
+        // Use original parameter name (not _inline_ prefix)
+        block_stmts.push(TirStmt::new(
             TirStmtKind::Let {
-                name: format!("_inline_{}", param.name),
+                name: param.name.clone(),
                 local_index: new_local_index,
                 is_mut: false, // Parameters are immutable
                 is_reactive: false,
@@ -1216,7 +1257,19 @@ fn try_inline_call_expr(
     let (remapped_stmts, final_value) =
         remap_and_extract_return(body, &param_to_local, param_offset, callee_param_count);
 
-    inlined_stmts.extend(remapped_stmts);
+    block_stmts.extend(remapped_stmts);
+
+    // Wrap all inlined statements in a labeled block
+    let labeled_block = TirStmt::new(
+        TirStmtKind::LabeledBlock {
+            label,
+            block: TirBlock {
+                stmts: block_stmts,
+                span: expr.span,
+            },
+        },
+        expr.span,
+    );
 
     // The final expression is either the return value or unit
     let final_expr =
@@ -1224,7 +1277,7 @@ fn try_inline_call_expr(
 
     // Return the inlined function key for string literal tracking
     let inlined_key = (target_module, func_name.clone());
-    Some((inlined_stmts, final_expr, inlined_key))
+    Some((vec![labeled_block], final_expr, inlined_key))
 }
 
 /// Try to inline a method call expression, returning the inlined statements, final expression,
@@ -1236,6 +1289,7 @@ fn try_inline_method_call_expr(
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     _type_table: &TypeTable,
+    inline_counter: &mut u32,
 ) -> Option<(Vec<TirStmt>, TirExpr, (Vec<String>, String))> {
     let TirExprKind::MethodCall {
         receiver,
@@ -1274,6 +1328,15 @@ fn try_inline_method_call_expr(
     // Get the function body
     let body = candidate.body.as_ref()?;
 
+    // Generate unique label for this inline site
+    // Sanitize function name for use as label (replace non-alphanumeric with _)
+    let sanitized_name: String = func_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .collect();
+    let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
+    *inline_counter += 1;
+
     // Calculate local index offset for remapping
     let local_offset = *local_count;
 
@@ -1281,10 +1344,10 @@ fn try_inline_method_call_expr(
     let callee_local_count = candidate.local_count;
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    // Create argument bindings as let statements
+    // Create argument bindings as let statements inside a labeled block
     // IMPORTANT: Push param types first to match index assignment order
     // For methods, first param is `self` (receiver), then the rest are args
-    let mut inlined_stmts = Vec::new();
+    let mut block_stmts = Vec::new();
     let mut param_to_local: HashMap<u32, u32> = HashMap::new();
 
     // Bind receiver to first parameter (self)
@@ -1294,9 +1357,10 @@ fn try_inline_method_call_expr(
     local_types.push(first_param.type_id);
     *local_count += 1;
 
-    inlined_stmts.push(TirStmt::new(
+    // Use original parameter name (not _inline_ prefix)
+    block_stmts.push(TirStmt::new(
         TirStmtKind::Let {
-            name: format!("_inline_{}", first_param.name),
+            name: first_param.name.clone(),
             local_index: self_local_index,
             is_mut: false,
             is_reactive: false,
@@ -1313,9 +1377,10 @@ fn try_inline_method_call_expr(
         local_types.push(param.type_id);
         *local_count += 1;
 
-        inlined_stmts.push(TirStmt::new(
+        // Use original parameter name (not _inline_ prefix)
+        block_stmts.push(TirStmt::new(
             TirStmtKind::Let {
-                name: format!("_inline_{}", param.name),
+                name: param.name.clone(),
                 local_index: new_local_index,
                 is_mut: false,
                 is_reactive: false,
@@ -1340,14 +1405,26 @@ fn try_inline_method_call_expr(
     let (remapped_stmts, final_value) =
         remap_and_extract_return(body, &param_to_local, param_offset, callee_param_count);
 
-    inlined_stmts.extend(remapped_stmts);
+    block_stmts.extend(remapped_stmts);
+
+    // Wrap all inlined statements in a labeled block
+    let labeled_block = TirStmt::new(
+        TirStmtKind::LabeledBlock {
+            label,
+            block: TirBlock {
+                stmts: block_stmts,
+                span: expr.span,
+            },
+        },
+        expr.span,
+    );
 
     // The final expression is either the return value or unit
     let final_expr =
         final_value.unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span));
 
     let inlined_key = (target_module, func_name.clone());
-    Some((inlined_stmts, final_expr, inlined_key))
+    Some((vec![labeled_block], final_expr, inlined_key))
 }
 
 /// Remap local indices and extract the return value from a block
@@ -1570,15 +1647,10 @@ fn remap_expr(
     let kind = match &expr.kind {
         TirExprKind::Local { index, name } => {
             let new_index = remap_local_index(*index, param_to_local, local_offset, param_count);
-            // If this was a parameter, update the name to match the inlined local binding
-            let new_name = if *index < param_count {
-                format!("_inline_{name}")
-            } else {
-                name.clone()
-            };
+            // Keep the original name - labeled blocks provide scoping
             TirExprKind::Local {
                 index: new_index,
-                name: new_name,
+                name: name.clone(),
             }
         }
         TirExprKind::Binary { left, op, right } => TirExprKind::Binary {
@@ -3188,12 +3260,34 @@ fn collect_modified_vars_in_block(block: &TirBlock, modified: &mut HashSet<u32>)
     }
 }
 
+/// Mark the underlying local variable as modified, traversing through field accesses.
+/// This is used when taking a mutable reference to a field, e.g., `&mut self.items`.
+fn mark_local_as_modified(expr: &TirExpr, modified: &mut HashSet<u32>) {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => {
+            modified.insert(*index);
+        }
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            mark_local_as_modified(inner, modified);
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            // Handle cases like *ptr where ptr is a reference
+            mark_local_as_modified(inner, modified);
+        }
+        _ => {}
+    }
+}
+
 fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
     match &stmt.kind {
-        TirStmtKind::Let { local_index, .. } => {
+        TirStmtKind::Let {
+            local_index, value, ..
+        } => {
             // Let statements define new variables, mark them as modified
             // (they're not invariant within the loop where they're defined)
             modified.insert(*local_index);
+            // Also check the value expression for mutable references
+            collect_modified_vars_in_expr(value, modified);
         }
         TirStmtKind::Expr(expr) => {
             collect_modified_vars_in_expr(expr, modified);
@@ -3278,7 +3372,13 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
             collect_modified_vars_in_expr(left, modified);
             collect_modified_vars_in_expr(right, modified);
         }
-        TirExprKind::Unary { expr, .. } => {
+        TirExprKind::Unary { op, expr } => {
+            // If taking a mutable reference, the target could be modified
+            // Mark the underlying local as modified so LICM doesn't hoist it
+            if matches!(op, crate::tir::TirUnaryOp::MutRef) {
+                // Traverse through field accesses to find the root local
+                mark_local_as_modified(expr, modified);
+            }
             collect_modified_vars_in_expr(expr, modified);
         }
         TirExprKind::Cast { expr, .. } => {
@@ -4261,7 +4361,12 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         }
         TirExprKind::Assign { target, value } => {
             insert_moves_in_expr(target, type_table);
-            insert_moves_in_expr(value, type_table);
+            // Wrap the assigned value in Move if eligible (same as Let)
+            let old_value = std::mem::replace(
+                value.as_mut(),
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+            );
+            **value = wrap_in_move_if_eligible(old_value, type_table);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
@@ -4329,6 +4434,220 @@ fn insert_moves(project: &mut Project) {
     }
 }
 
+// =============================================================================
+// Value Copy Type Collection
+// =============================================================================
+
+/// Collect all types that need value copying in a function body.
+/// This is needed for codegen to pre-allocate scratch locals for copy operations.
+fn collect_value_copy_types_in_block(
+    block: &TirBlock,
+    type_table: &TypeTable,
+    copy_types: &mut std::collections::HashSet<TypeId>,
+) {
+    for stmt in &block.stmts {
+        collect_value_copy_types_in_stmt(stmt, type_table, copy_types);
+    }
+}
+
+/// Collect value copy types from a statement.
+fn collect_value_copy_types_in_stmt(
+    stmt: &TirStmt,
+    type_table: &TypeTable,
+    copy_types: &mut std::collections::HashSet<TypeId>,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let { type_id, value, .. } => {
+            // If assigning to a value type from a non-fresh expression, we need copy
+            if needs_value_copy(*type_id, type_table) && !is_fresh_value(value) {
+                copy_types.insert(*type_id);
+            }
+            collect_value_copy_types_in_expr(value, type_table, copy_types);
+        }
+        TirStmtKind::Expr(expr) => {
+            collect_value_copy_types_in_expr(expr, type_table, copy_types);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                collect_value_copy_types_in_expr(v, type_table, copy_types);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            collect_value_copy_types_in_expr(condition, type_table, copy_types);
+            collect_value_copy_types_in_block(then_block, type_table, copy_types);
+            if let Some(eb) = else_block {
+                collect_value_copy_types_in_block(eb, type_table, copy_types);
+            }
+        }
+        TirStmtKind::While { condition, body } => {
+            collect_value_copy_types_in_expr(condition, type_table, copy_types);
+            collect_value_copy_types_in_block(body, type_table, copy_types);
+        }
+        TirStmtKind::Loop { body } => {
+            collect_value_copy_types_in_block(body, type_table, copy_types);
+        }
+        TirStmtKind::For {
+            condition,
+            update,
+            body,
+        } => {
+            if let Some(cond) = condition {
+                collect_value_copy_types_in_expr(cond, type_table, copy_types);
+            }
+            if let Some(upd) = update {
+                collect_value_copy_types_in_expr(upd, type_table, copy_types);
+            }
+            collect_value_copy_types_in_block(body, type_table, copy_types);
+        }
+        TirStmtKind::ForOf { iterable, body, .. } => {
+            collect_value_copy_types_in_expr(iterable, type_table, copy_types);
+            collect_value_copy_types_in_block(body, type_table, copy_types);
+        }
+        TirStmtKind::Break | TirStmtKind::Continue => {}
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_value_copy_types_in_expr(scrutinee, type_table, copy_types);
+            collect_value_copy_types_in_block(then_block, type_table, copy_types);
+            if let Some(eb) = else_block {
+                collect_value_copy_types_in_block(eb, type_table, copy_types);
+            }
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            collect_value_copy_types_in_block(block, type_table, copy_types);
+        }
+    }
+}
+
+/// Collect value copy types from an expression.
+fn collect_value_copy_types_in_expr(
+    expr: &TirExpr,
+    type_table: &TypeTable,
+    copy_types: &mut std::collections::HashSet<TypeId>,
+) {
+    match &expr.kind {
+        TirExprKind::Binary { left, right, .. } => {
+            collect_value_copy_types_in_expr(left, type_table, copy_types);
+            collect_value_copy_types_in_expr(right, type_table, copy_types);
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+        }
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::EffectCall { args, .. } => {
+            for arg in args {
+                collect_value_copy_types_in_expr(arg, type_table, copy_types);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            collect_value_copy_types_in_expr(receiver, type_table, copy_types);
+            for arg in args {
+                collect_value_copy_types_in_expr(arg, type_table, copy_types);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            collect_value_copy_types_in_expr(callee, type_table, copy_types);
+            for arg in args {
+                collect_value_copy_types_in_expr(arg, type_table, copy_types);
+            }
+        }
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            // Field access on a value type might trigger a copy of the whole struct
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+            collect_value_copy_types_in_expr(index, type_table, copy_types);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+        }
+        TirExprKind::Assign { target, value } => {
+            collect_value_copy_types_in_expr(target, type_table, copy_types);
+            // If assigning a value type, we might need to copy
+            if needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
+                copy_types.insert(value.type_id);
+            }
+            collect_value_copy_types_in_expr(value, type_table, copy_types);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                collect_value_copy_types_in_expr(&field.value, type_table, copy_types);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_value_copy_types_in_expr(elem, type_table, copy_types);
+            }
+        }
+        TirExprKind::OptionSome { value } => {
+            collect_value_copy_types_in_expr(value, type_table, copy_types);
+        }
+        TirExprKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_value_copy_types_in_expr(field, type_table, copy_types);
+            }
+        }
+        TirExprKind::Move { value } => {
+            collect_value_copy_types_in_expr(value, type_table, copy_types);
+        }
+        TirExprKind::Block(block) => {
+            collect_value_copy_types_in_block(block, type_table, copy_types);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_value_copy_types_in_expr(condition, type_table, copy_types);
+            collect_value_copy_types_in_block(then_branch, type_table, copy_types);
+            if let Some(eb) = else_branch {
+                collect_value_copy_types_in_block(eb, type_table, copy_types);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            collect_value_copy_types_in_expr(body, type_table, copy_types);
+        }
+        // Leaf nodes - no nested expressions
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::Match { .. } => {}
+    }
+}
+
+/// Collect value copy types for all functions in the project.
+/// This populates `needed_copy_types` which codegen uses to pre-allocate scratch locals.
+fn collect_value_copy_types(project: &mut Project) {
+    for module in project.tir_modules.values_mut() {
+        let type_table = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            // Collect into a temporary set first to avoid borrow conflicts
+            let mut copy_types = std::collections::HashSet::new();
+            if let Some(ref body) = func.body {
+                collect_value_copy_types_in_block(body, &type_table, &mut copy_types);
+            }
+            func.needed_copy_types.extend(copy_types);
+        }
+    }
+}
+
 /// Optimize a Project by analyzing and populating its usage fields.
 ///
 /// This is the main entry point for the optimizer. Based on the optimization
@@ -4360,6 +4679,10 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     // Insert move optimization for all optimization levels (after inlining)
     // This eliminates unnecessary copies for fresh values
     insert_moves(&mut project);
+
+    // Collect value copy types for all functions
+    // This populates needed_copy_types for codegen to pre-allocate scratch locals
+    collect_value_copy_types(&mut project);
 
     project
 }

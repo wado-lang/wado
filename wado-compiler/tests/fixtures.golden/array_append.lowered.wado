@@ -4,14 +4,110 @@
 
 fn run() with Stdout {
     let arr: Array<i32> = move [];
-    "Array<i32>::append"(&mut arr, 10);
-    "Array<i32>::append"(&mut arr, 20);
-    "Array<i32>::append"(&mut arr, 30);
+    __inline_Array_i32___append_0: {
+        let self: &mut Array<i32> = &mut arr;
+        let value: i32 = 10;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<i32>(self.repr, used, value);
+        self.used = (used + 1);
+    }
+    __inline_Array_i32___append_1: {
+        let self: &mut Array<i32> = &mut arr;
+        let value: i32 = 20;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<i32>(self.repr, used, value);
+        self.used = (used + 1);
+    }
+    __inline_Array_i32___append_2: {
+        let self: &mut Array<i32> = &mut arr;
+        let value: i32 = 30;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<i32>(self.repr, used, value);
+        self.used = (used + 1);
+    }
     core::cli::println(move core::internal::string_concat(move "len=", move "i32::to_string"("Array<i32>::len"(&arr))));
     core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 0)), move ","), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 1))), move ","), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 2))));
-    "Array<i32>::append"(&mut arr, 40);
-    "Array<i32>::append"(&mut arr, 50);
-    "Array<i32>::append"(&mut arr, 60);
+    __inline_Array_i32___append_3: {
+        let self: &mut Array<i32> = &mut arr;
+        let value: i32 = 40;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<i32>(self.repr, used, value);
+        self.used = (used + 1);
+    }
+    __inline_Array_i32___append_4: {
+        let self: &mut Array<i32> = &mut arr;
+        let value: i32 = 50;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<i32>(self.repr, used, value);
+        self.used = (used + 1);
+    }
+    __inline_Array_i32___append_5: {
+        let self: &mut Array<i32> = &mut arr;
+        let value: i32 = 60;
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
+        }
+        core::builtin::array_set::<i32>(self.repr, used, value);
+        self.used = (used + 1);
+    }
     core::cli::println(move core::internal::string_concat(move "after_growth_len=", move "i32::to_string"("Array<i32>::len"(&arr))));
     core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 3)), move ","), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 4))), move ","), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 5))));
 }
@@ -22,21 +118,5 @@ fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
 
 pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
     return self.used;
-}
-
-pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
-        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<i32>(self.repr, used, value);
-    self.used = (used + 1);
 }
 

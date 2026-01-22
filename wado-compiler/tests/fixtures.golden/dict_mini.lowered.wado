@@ -65,30 +65,29 @@ fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -
 
 fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: String, value: String) {
     let mut i: i32 = 0;
-    let _licm_entries: Array<[String, String]> = self.entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0, &key) {
-            "Array<Tuple<String,String>>^IndexAssign::index_assign"(&mut _licm_entries, i, move [key, value]);
+        if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&self.entries, i).0, &key) {
+            "Array<Tuple<String,String>>^IndexAssign::index_assign"(&mut self.entries, i, move [key, value]);
             return;
         }
     }
-    "Array<Tuple<String,String>>::append"(&mut self.entries, move [key, value]);
-}
-
-pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>, value: [String, String]) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
+    __inline_Array_Tuple_String_String____append_0: {
+        let self: &mut Array<[String, String]> = &mut self.entries;
+        let value: [String, String] = move [key, value];
+        let used: i32 = self.used;
+        let capacity: i32 = core::builtin::array_len(self.repr);
+        if core::builtin::unlikely((used >= capacity)) {
+            let mut new_capacity: i32 = (capacity * 2);
+            if (capacity == 0) {
+                new_capacity = 4;
+            }
+            let new_repr: builtin::array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
+            core::builtin::array_copy::<[String, String]>(new_repr, 0, self.repr, 0, used);
+            self.repr = new_repr;
         }
-        let new_repr: builtin::array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
-        core::builtin::array_copy::<[String, String]>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
+        core::builtin::array_set::<[String, String]>(self.repr, used, value);
+        self.used = (used + 1);
     }
-    core::builtin::array_set::<[String, String]>(self.repr, used, value);
-    self.used = (used + 1);
 }
 
 fn "Array<Tuple<String,String>>^IndexAssign::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) {
