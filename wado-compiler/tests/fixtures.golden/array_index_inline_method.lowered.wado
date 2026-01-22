@@ -20,15 +20,17 @@ fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32)
     let mut i: i32 = 0;
     let _licm_deleted: Array<bool> = self.deleted;
     for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
-        if !"Array<bool>^IndexValue::index_value"(&_licm_deleted, i) {
+        let mut __result_6: bool = false;
+        __inline_Array_bool__IndexValue__index_value_0: {
+            let self: &Array<bool> = &_licm_deleted;
+            let index: i32 = i;
+            __result_6 = core::builtin::array_get::<bool>(self.repr, index);
+        }
+        if !__result_6 {
             count = (count + 1);
         }
     }
     return (count >= max_keys);
-}
-
-fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 pub fn "Array<String>::len"(self: &Array<String>) -> i32 {

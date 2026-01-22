@@ -18,19 +18,22 @@ fn run() {
 }
 
 fn "Container<i32>::get"(self: &Container<i32>, index: i32) -> i32 {
-    return "Array<i32>^IndexValue::index_value"(&self.items, index);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    return core::builtin::array_get::<i32>(self.repr, index);
+    let mut __result_4: i32 = 0;
+    __inline_Array_i32__IndexValue__index_value_0: {
+        let self: &Array<i32> = &self.items;
+        let index: i32 = index;
+        __result_4 = core::builtin::array_get::<i32>(self.repr, index);
+    }
+    return __result_4;
 }
 
 fn "Container<i32>::len"(self: &Container<i32>) -> i32 {
-    return "Array<i32>::len"(&self.items);
-}
-
-pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
-    return self.used;
+    let mut __result_2: i32 = 0;
+    __inline_Array_i32___len_0: {
+        let self: &Array<i32> = &self.items;
+        __result_2 = self.used;
+    }
+    return __result_2;
 }
 
 fn "Container<i32>::add"(self: &mut Container<i32>, item: i32) {

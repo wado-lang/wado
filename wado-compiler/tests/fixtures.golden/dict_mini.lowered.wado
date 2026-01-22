@@ -30,7 +30,12 @@ fn run() with Stdout {
 }
 
 fn "MiniDict<String,String>::size"(self: &MiniDict<String,String>) -> i32 {
-    return "Array<Tuple<String,String>>::len"(&self.entries);
+    let mut __result_2: i32 = 0;
+    __inline_Array_Tuple_String_String____len_0: {
+        let self: &Array<[String, String]> = &self.entries;
+        __result_2 = self.used;
+    }
+    return __result_2;
 }
 
 pub fn "Array<Tuple<String,String>>::len"(self: &Array<[String, String]>) -> i32 {
@@ -67,11 +72,16 @@ fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: Strin
     let mut i: i32 = 0;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
         if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&self.entries, i).0, &key) {
-            "Array<Tuple<String,String>>^IndexAssign::index_assign"(&mut self.entries, i, move [key, value]);
+            __inline_Array_Tuple_String_String___IndexAssign__index_assign_0: {
+                let self: &mut Array<[String, String]> = &mut self.entries;
+                let index: i32 = i;
+                let value: [String, String] = move [key, value];
+                core::builtin::array_set::<[String, String]>(self.repr, index, value);
+            }
             return;
         }
     }
-    __inline_Array_Tuple_String_String____append_0: {
+    __inline_Array_Tuple_String_String____append_1: {
         let self: &mut Array<[String, String]> = &mut self.entries;
         let value: [String, String] = move [key, value];
         let used: i32 = self.used;
@@ -88,10 +98,6 @@ fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: Strin
         core::builtin::array_set::<[String, String]>(self.repr, used, value);
         self.used = (used + 1);
     }
-}
-
-fn "Array<Tuple<String,String>>^IndexAssign::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) {
-    core::builtin::array_set::<[String, String]>(self.repr, index, value);
 }
 
 fn "MiniDict<String,String>::new"() -> MiniDict<String,String> {

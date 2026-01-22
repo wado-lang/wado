@@ -7,23 +7,44 @@ fn run() with Stdout {
     let mut sum: i32 = 0;
     let mut i: i32 = 0;
     for ; (i < "Array<i32>::len"(&arr)); i = (i + 1) {
-        sum = (sum + "Array<i32>^IndexValue::index_value"(&arr, i));
+        let mut __result_7: i32 = 0;
+        __inline_Array_i32__IndexValue__index_value_0: {
+            let self: &Array<i32> = &arr;
+            let index: i32 = i;
+            __result_7 = core::builtin::array_get::<i32>(self.repr, index);
+        }
+        sum = (sum + __result_7);
     }
     core::cli::println(move core::internal::string_concat(move "sum: ", move "i32::to_string"(sum)));
     let mut arr2: Array<i32> = move [0, 0, 0];
     let mut i: i32 = 0;
     for ; (i < 3); i = (i + 1) {
-        "Array<i32>^IndexAssign::index_assign"(&mut arr2, i, (i * 10));
+        __inline_Array_i32__IndexAssign__index_assign_1: {
+            let self: &mut Array<i32> = &mut arr2;
+            let index: i32 = i;
+            let value: i32 = (i * 10);
+            core::builtin::array_set::<i32>(self.repr, index, value);
+        }
     }
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr2, 0)), move ", "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr2, 1))), move ", "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr2, 2))));
-}
-
-fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
-    core::builtin::array_set::<i32>(self.repr, index, value);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    return core::builtin::array_get::<i32>(self.repr, index);
+    let mut __result_13: i32 = 0;
+    __inline_Array_i32__IndexValue__index_value_2: {
+        let self: &Array<i32> = &arr2;
+        let index: i32 = 0;
+        __result_13 = core::builtin::array_get::<i32>(self.repr, index);
+    }
+    let mut __result_16: i32 = 0;
+    __inline_Array_i32__IndexValue__index_value_3: {
+        let self: &Array<i32> = &arr2;
+        let index: i32 = 1;
+        __result_16 = core::builtin::array_get::<i32>(self.repr, index);
+    }
+    let mut __result_19: i32 = 0;
+    __inline_Array_i32__IndexValue__index_value_4: {
+        let self: &Array<i32> = &arr2;
+        let index: i32 = 2;
+        __result_19 = core::builtin::array_get::<i32>(self.repr, index);
+    }
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"(__result_13), move ", "), move "i32::to_string"(__result_16)), move ", "), move "i32::to_string"(__result_19)));
 }
 
 pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {

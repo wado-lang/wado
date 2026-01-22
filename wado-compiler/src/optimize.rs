@@ -214,24 +214,22 @@ fn is_inline_eligible(
         return false;
     };
 
-    // Check if this is a monomorphized Array::append method
-    // These are special-cased because they provide significant performance benefits
-    let is_array_append = func.monomorph_info.is_some()
-        && func.method_info.as_ref().is_some_and(|info| {
-            info.struct_name.starts_with("Array") && info.method_name == "append"
-        });
+    // Check if this is a monomorphized Array method
+    let is_array_method = func.monomorph_info.is_some()
+        && func
+            .method_info
+            .as_ref()
+            .is_some_and(|info| info.struct_name.starts_with("Array"));
 
-    // Don't inline core library functions (they may be called by codegen or have
-    // complex type dependencies across modules)
-    // Exception: Array::append is allowed since it's in the entry module after monomorphization
-    if !module_path.is_empty() && module_path[0] == "core" && !is_array_append {
+    // Don't inline core library functions unless they're monomorphized
+    // (monomorphized functions are copied to the entry module)
+    if !module_path.is_empty() && module_path[0] == "core" && func.monomorph_info.is_none() {
         return false;
     }
 
-    // Don't inline functions with reference parameters
-    // Reference handling during inlining is complex (address-taken locals, box structs, etc.)
-    // Exception: Allow Array::append which has &mut self
-    if !is_array_append {
+    // Don't inline functions with reference parameters (unless they're Array methods)
+    // Reference handling during inlining can cause type issues with complex struct types
+    if !is_array_method {
         for param in &func.params {
             match type_table.get(param.type_id) {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
@@ -263,10 +261,13 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Don't inline functions that return references
+    // Don't inline functions that return non-primitive types (except Unit)
+    // We can't properly initialize result locals for reference types
     match type_table.get(func.return_type) {
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-        _ => {}
+        ResolvedType::Unit | ResolvedType::Primitive(_) => {}
+        // All other types (Struct, Array, Ref, MutRef, Option, etc.) can't be initialized
+        // with a simple default value for the result local pattern
+        _ => return false,
     }
 
     // Small enough
@@ -750,13 +751,36 @@ fn inline_calls_in_block(
                     )
                 });
 
-                if let Some((inlined_stmts, final_expr, inlined_key)) = inline_result {
+                if let Some((mut inlined_stmts, final_expr, inlined_key)) = inline_result {
                     // Track the inlined function
                     if !inlined_funcs.contains(&inlined_key) {
                         inlined_funcs.push(inlined_key);
                     }
-                    // Add the inlined statements
-                    new_stmts.extend(inlined_stmts);
+                    // Process inlined content - keep labeled blocks as-is
+                    // The result-local pattern means final_expr references a local declared
+                    // BEFORE the labeled block, so no flattening is needed
+                    for inlined_stmt in inlined_stmts.drain(..) {
+                        if let TirStmtKind::LabeledBlock { label, mut block } = inlined_stmt.kind {
+                            // Recursively process the inner block for nested inlining
+                            inline_calls_in_block(
+                                &mut block,
+                                candidates,
+                                current_module,
+                                local_count,
+                                local_types,
+                                type_table,
+                                inlined_funcs,
+                                inline_counter,
+                            );
+                            // Keep the labeled block intact
+                            new_stmts.push(TirStmt::new(
+                                TirStmtKind::LabeledBlock { label, block },
+                                inlined_stmt.span,
+                            ));
+                        } else {
+                            new_stmts.push(inlined_stmt);
+                        }
+                    }
                     // Create the let with the final expression
                     new_stmts.push(TirStmt::new(
                         TirStmtKind::Let {
@@ -781,6 +805,7 @@ fn inline_calls_in_block(
                         type_table,
                         &mut new_stmts,
                         inlined_funcs,
+                        inline_counter,
                     );
                     new_stmts.push(TirStmt::new(
                         TirStmtKind::Let {
@@ -818,14 +843,37 @@ fn inline_calls_in_block(
                     )
                 });
 
-                if let Some((inlined_stmts, final_expr, inlined_key)) = inline_result {
+                if let Some((mut inlined_stmts, final_expr, inlined_key)) = inline_result {
                     if !inlined_funcs.contains(&inlined_key) {
                         inlined_funcs.push(inlined_key);
                     }
-                    new_stmts.extend(inlined_stmts);
+                    let is_void = matches!(final_expr.kind, TirExprKind::Unit);
+                    // Process inlined content - keep labeled blocks as-is
+                    for inlined_stmt in inlined_stmts.drain(..) {
+                        if let TirStmtKind::LabeledBlock { label, mut block } = inlined_stmt.kind {
+                            // Recursively process the inner block for nested inlining
+                            inline_calls_in_block(
+                                &mut block,
+                                candidates,
+                                current_module,
+                                local_count,
+                                local_types,
+                                type_table,
+                                inlined_funcs,
+                                inline_counter,
+                            );
+                            // Keep the labeled block intact
+                            new_stmts.push(TirStmt::new(
+                                TirStmtKind::LabeledBlock { label, block },
+                                stmt.span,
+                            ));
+                        } else {
+                            new_stmts.push(inlined_stmt);
+                        }
+                    }
                     // For void methods (final_expr is Unit), don't add the Expr statement
                     // because Unit generates i32.const 0 which leaves a value on the stack
-                    if !matches!(final_expr.kind, TirExprKind::Unit) {
+                    if !is_void {
                         new_stmts.push(TirStmt::new(TirStmtKind::Expr(final_expr), stmt.span));
                     }
                 } else {
@@ -839,6 +887,7 @@ fn inline_calls_in_block(
                         type_table,
                         &mut new_stmts,
                         inlined_funcs,
+                        inline_counter,
                     );
                     new_stmts.push(TirStmt::new(TirStmtKind::Expr(new_expr), stmt.span));
                 }
@@ -866,11 +915,35 @@ fn inline_calls_in_block(
                         )
                     });
 
-                    if let Some((inlined_stmts, final_expr, inlined_key)) = inline_result {
+                    if let Some((mut inlined_stmts, final_expr, inlined_key)) = inline_result {
                         if !inlined_funcs.contains(&inlined_key) {
                             inlined_funcs.push(inlined_key);
                         }
-                        new_stmts.extend(inlined_stmts);
+                        // Process inlined content - keep labeled blocks as-is
+                        for inlined_stmt in inlined_stmts.drain(..) {
+                            if let TirStmtKind::LabeledBlock { label, mut block } =
+                                inlined_stmt.kind
+                            {
+                                // Recursively process the inner block for nested inlining
+                                inline_calls_in_block(
+                                    &mut block,
+                                    candidates,
+                                    current_module,
+                                    local_count,
+                                    local_types,
+                                    type_table,
+                                    inlined_funcs,
+                                    inline_counter,
+                                );
+                                // Keep the labeled block intact
+                                new_stmts.push(TirStmt::new(
+                                    TirStmtKind::LabeledBlock { label, block },
+                                    stmt.span,
+                                ));
+                            } else {
+                                new_stmts.push(inlined_stmt);
+                            }
+                        }
                         new_stmts.push(TirStmt::new(
                             TirStmtKind::Return {
                                 value: Some(final_expr),
@@ -888,6 +961,7 @@ fn inline_calls_in_block(
                             type_table,
                             &mut new_stmts,
                             inlined_funcs,
+                            inline_counter,
                         );
                         new_stmts.push(TirStmt::new(
                             TirStmtKind::Return {
@@ -914,6 +988,7 @@ fn inline_calls_in_block(
                     type_table,
                     &mut new_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
                 inline_calls_in_block(
                     &mut then_block,
@@ -948,19 +1023,13 @@ fn inline_calls_in_block(
                 ));
             }
             TirStmtKind::While {
-                mut condition,
+                condition,
                 mut body,
             } => {
-                inline_calls_in_expr(
-                    &mut condition,
-                    candidates,
-                    current_module,
-                    local_count,
-                    local_types,
-                    type_table,
-                    &mut new_stmts,
-                    inlined_funcs,
-                );
+                // NOTE: We intentionally do NOT inline calls in the while condition.
+                // The condition is evaluated on each iteration, so inlining would
+                // place the preparatory statements outside the loop, causing them
+                // to be evaluated only once instead of on each iteration.
                 inline_calls_in_block(
                     &mut body,
                     candidates,
@@ -981,19 +1050,10 @@ fn inline_calls_in_block(
                 mut body,
                 update,
             } => {
-                let new_condition = condition.map(|mut c| {
-                    inline_calls_in_expr(
-                        &mut c,
-                        candidates,
-                        current_module,
-                        local_count,
-                        local_types,
-                        type_table,
-                        &mut new_stmts,
-                        inlined_funcs,
-                    );
-                    c
-                });
+                // NOTE: We intentionally do NOT inline calls in the for condition or update.
+                // Both are evaluated on each iteration, so inlining would place the
+                // preparatory statements outside the loop, causing them to be evaluated
+                // only once instead of on each iteration.
                 inline_calls_in_block(
                     &mut body,
                     candidates,
@@ -1004,24 +1064,11 @@ fn inline_calls_in_block(
                     inlined_funcs,
                     inline_counter,
                 );
-                let new_update = update.map(|mut u| {
-                    inline_calls_in_expr(
-                        &mut u,
-                        candidates,
-                        current_module,
-                        local_count,
-                        local_types,
-                        type_table,
-                        &mut new_stmts,
-                        inlined_funcs,
-                    );
-                    u
-                });
                 new_stmts.push(TirStmt::new(
                     TirStmtKind::For {
-                        condition: new_condition,
+                        condition,
                         body,
-                        update: new_update,
+                        update,
                     },
                     stmt.span,
                 ));
@@ -1056,6 +1103,7 @@ fn inline_calls_in_block(
                     type_table,
                     &mut new_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
                 inline_calls_in_block(
                     &mut body,
@@ -1110,6 +1158,7 @@ fn inline_calls_in_block(
                     type_table,
                     &mut new_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
                 inline_calls_in_block(
                     &mut then_block,
@@ -1153,6 +1202,39 @@ fn inline_calls_in_block(
     block.stmts = new_stmts;
 }
 
+/// Create a type-appropriate default value expression for initializing result locals.
+/// This is used when inlining functions with return values - the result local is
+/// initialized with a default value that will be immediately overwritten.
+fn create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Span) -> TirExpr {
+    let kind = match type_table.get(type_id) {
+        ResolvedType::Primitive(prim) => match prim {
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::I128
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::U128 => TirExprKind::IntLiteral {
+                value: 0,
+                repr: "0".to_string(),
+            },
+            PrimitiveType::F32 | PrimitiveType::F64 => TirExprKind::FloatLiteral {
+                value: 0.0,
+                repr: "0.0".to_string(),
+            },
+            PrimitiveType::Bool => TirExprKind::BoolLiteral(false),
+            PrimitiveType::Char => TirExprKind::CharLiteral('\0'),
+        },
+        // For all reference types (structs, arrays, options, etc.), use Null
+        // The value will be immediately overwritten, so this is just a placeholder
+        _ => TirExprKind::Null,
+    };
+    TirExpr::new(kind, type_id, span)
+}
+
 /// Try to inline a call expression, returning the inlined statements, final expression,
 /// and the key of the inlined function (for tracking string literals)
 fn try_inline_call_expr(
@@ -1161,7 +1243,7 @@ fn try_inline_call_expr(
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
-    _type_table: &TypeTable,
+    type_table: &TypeTable,
     inline_counter: &mut u32,
 ) -> Option<(Vec<TirStmt>, TirExpr, (Vec<String>, String))> {
     let TirExprKind::Call {
@@ -1181,21 +1263,26 @@ fn try_inline_call_expr(
         return None;
     }
 
-    // Resolve the target module
+    // Try to find the candidate function
+    // First try the call site's module path, then fall back to entry module
+    // (monomorphized functions are placed in the entry module)
     let target_module = if module_path.is_empty() {
         current_module.to_vec()
     } else {
         module_path.clone()
     };
 
-    // Only inline functions from the same module
-    // Cross-module inlining requires careful local variable management
-    if target_module != current_module {
-        return None;
-    }
-
-    // Look up the candidate
-    let candidate = candidates.get(&(target_module.clone(), func_name.clone()))?;
+    // Look up the candidate - try direct module first, then entry module for monomorphized functions
+    let candidate = candidates
+        .get(&(target_module.clone(), func_name.clone()))
+        .or_else(|| {
+            // For monomorphized functions, also try looking in the entry module (empty path)
+            if target_module.is_empty() {
+                None
+            } else {
+                candidates.get(&(vec![], func_name.clone()))
+            }
+        })?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1204,7 +1291,13 @@ fn try_inline_call_expr(
     // Sanitize function name for use as label (replace non-alphanumeric with _)
     let sanitized_name: String = func_name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
     *inline_counter += 1;
@@ -1254,10 +1347,72 @@ fn try_inline_call_expr(
         }
     }
     *local_count += new_locals_needed;
+
     let (remapped_stmts, final_value) =
         remap_and_extract_return(body, &param_to_local, param_offset, callee_param_count);
 
     block_stmts.extend(remapped_stmts);
+
+    // For functions with return values, create a result local OUTSIDE the labeled block
+    // so the value is accessible after the block ends
+    let (final_expr, result_stmts) = if let Some(return_expr) = final_value {
+        // Create a result local outside the block
+        let result_local_index = *local_count;
+        local_types.push(return_expr.type_id);
+        *local_count += 1;
+
+        let result_name = format!("__result_{result_local_index}");
+
+        // Add assignment to result at the end of the block
+        block_stmts.push(TirStmt::new(
+            TirStmtKind::Expr(TirExpr::new(
+                TirExprKind::Assign {
+                    target: Box::new(TirExpr::new(
+                        TirExprKind::Local {
+                            index: result_local_index,
+                            name: result_name.clone(),
+                        },
+                        return_expr.type_id,
+                        expr.span,
+                    )),
+                    value: Box::new(return_expr.clone()),
+                },
+                return_expr.type_id,
+                expr.span,
+            )),
+            expr.span,
+        ));
+
+        // Create a let statement for the result local BEFORE the labeled block
+        let result_let = TirStmt::new(
+            TirStmtKind::Let {
+                name: result_name.clone(),
+                local_index: result_local_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: return_expr.type_id,
+                value: create_default_value(return_expr.type_id, type_table, expr.span),
+            },
+            expr.span,
+        );
+
+        // Final expression is just a reference to the result local
+        let final_local = TirExpr::new(
+            TirExprKind::Local {
+                index: result_local_index,
+                name: result_name,
+            },
+            return_expr.type_id,
+            expr.span,
+        );
+
+        (final_local, Some(result_let))
+    } else {
+        (
+            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+            None,
+        )
+    };
 
     // Wrap all inlined statements in a labeled block
     let labeled_block = TirStmt::new(
@@ -1271,13 +1426,16 @@ fn try_inline_call_expr(
         expr.span,
     );
 
-    // The final expression is either the return value or unit
-    let final_expr =
-        final_value.unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span));
+    // Build the result statements: optional result local declaration, then labeled block
+    let mut result = Vec::new();
+    if let Some(result_stmt) = result_stmts {
+        result.push(result_stmt);
+    }
+    result.push(labeled_block);
 
-    // Return the inlined function key for string literal tracking
+    // Return the inlined method key for string literal tracking
     let inlined_key = (target_module, func_name.clone());
-    Some((vec![labeled_block], final_expr, inlined_key))
+    Some((result, final_expr, inlined_key))
 }
 
 /// Try to inline a method call expression, returning the inlined statements, final expression,
@@ -1288,7 +1446,7 @@ fn try_inline_method_call_expr(
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
-    _type_table: &TypeTable,
+    type_table: &TypeTable,
     inline_counter: &mut u32,
 ) -> Option<(Vec<TirStmt>, TirExpr, (Vec<String>, String))> {
     let TirExprKind::MethodCall {
@@ -1309,21 +1467,26 @@ fn try_inline_method_call_expr(
         return None;
     }
 
-    // Resolve the target module
+    // Try to find the candidate function
+    // First try the call site's module path, then fall back to entry module
+    // (monomorphized functions are placed in the entry module)
     let target_module = if module_path.is_empty() {
         current_module.to_vec()
     } else {
         module_path.clone()
     };
 
-    // Only inline functions from the same module
-    // Cross-module inlining requires careful local variable management
-    if target_module != current_module {
-        return None;
-    }
-
-    // Look up the candidate
-    let candidate = candidates.get(&(target_module.clone(), func_name.clone()))?;
+    // Look up the candidate - try direct module first, then entry module for monomorphized functions
+    let candidate = candidates
+        .get(&(target_module.clone(), func_name.clone()))
+        .or_else(|| {
+            // For monomorphized functions, also try looking in the entry module (empty path)
+            if target_module.is_empty() {
+                None
+            } else {
+                candidates.get(&(vec![], func_name.clone()))
+            }
+        })?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1332,7 +1495,13 @@ fn try_inline_method_call_expr(
     // Sanitize function name for use as label (replace non-alphanumeric with _)
     let sanitized_name: String = func_name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
     *inline_counter += 1;
@@ -1407,6 +1576,67 @@ fn try_inline_method_call_expr(
 
     block_stmts.extend(remapped_stmts);
 
+    // For methods with return values, create a result local OUTSIDE the labeled block
+    // so the value is accessible after the block ends
+    let (final_expr, result_stmts) = if let Some(return_expr) = final_value {
+        // Create a result local outside the block
+        let result_local_index = *local_count;
+        local_types.push(return_expr.type_id);
+        *local_count += 1;
+
+        let result_name = format!("__result_{result_local_index}");
+
+        // Add assignment to result at the end of the block
+        block_stmts.push(TirStmt::new(
+            TirStmtKind::Expr(TirExpr::new(
+                TirExprKind::Assign {
+                    target: Box::new(TirExpr::new(
+                        TirExprKind::Local {
+                            index: result_local_index,
+                            name: result_name.clone(),
+                        },
+                        return_expr.type_id,
+                        expr.span,
+                    )),
+                    value: Box::new(return_expr.clone()),
+                },
+                return_expr.type_id,
+                expr.span,
+            )),
+            expr.span,
+        ));
+
+        // Create a let statement for the result local BEFORE the labeled block
+        let result_let = TirStmt::new(
+            TirStmtKind::Let {
+                name: result_name.clone(),
+                local_index: result_local_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: return_expr.type_id,
+                value: create_default_value(return_expr.type_id, type_table, expr.span),
+            },
+            expr.span,
+        );
+
+        // Final expression is just a reference to the result local
+        let final_local = TirExpr::new(
+            TirExprKind::Local {
+                index: result_local_index,
+                name: result_name,
+            },
+            return_expr.type_id,
+            expr.span,
+        );
+
+        (final_local, Some(result_let))
+    } else {
+        (
+            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+            None,
+        )
+    };
+
     // Wrap all inlined statements in a labeled block
     let labeled_block = TirStmt::new(
         TirStmtKind::LabeledBlock {
@@ -1419,12 +1649,16 @@ fn try_inline_method_call_expr(
         expr.span,
     );
 
-    // The final expression is either the return value or unit
-    let final_expr =
-        final_value.unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span));
+    // Build the result statements: optional result local declaration, then labeled block
+    let mut result = Vec::new();
+    if let Some(result_stmt) = result_stmts {
+        result.push(result_stmt);
+    }
+    result.push(labeled_block);
 
+    // Return the inlined method key for string literal tracking
     let inlined_key = (target_module, func_name.clone());
-    Some((vec![labeled_block], final_expr, inlined_key))
+    Some((result, final_expr, inlined_key))
 }
 
 /// Remap local indices and extract the return value from a block
@@ -1868,6 +2102,7 @@ fn inline_calls_in_expr(
     type_table: &TypeTable,
     pre_stmts: &mut Vec<TirStmt>,
     inlined_funcs: &mut Vec<(Vec<String>, String)>,
+    inline_counter: &mut u32,
 ) {
     match &mut expr.kind {
         TirExprKind::Binary { left, right, .. } => {
@@ -1880,6 +2115,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
             inline_calls_in_expr(
                 right,
@@ -1890,6 +2126,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         TirExprKind::Unary { expr: inner, .. } => {
@@ -1902,6 +2139,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         TirExprKind::Assign { target, value } => {
@@ -1914,6 +2152,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
             inline_calls_in_expr(
                 value,
@@ -1924,6 +2163,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         TirExprKind::Cast { expr: inner, .. } => {
@@ -1936,9 +2176,11 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         TirExprKind::Call { args, .. } => {
+            // First, recursively process arguments
             for arg in args {
                 inline_calls_in_expr(
                     arg,
@@ -1949,10 +2191,52 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
+            }
+            // Try to inline this call
+            if let Some((mut inlined_stmts, final_expr, inlined_key)) = try_inline_call_expr(
+                expr,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                inline_counter,
+            ) {
+                if !inlined_funcs.contains(&inlined_key) {
+                    inlined_funcs.push(inlined_key);
+                }
+                // Process inlined content - keep labeled blocks intact
+                // The result-local pattern means final_expr references a local declared
+                // BEFORE the labeled block, so no flattening is needed
+                for inlined_stmt in inlined_stmts.drain(..) {
+                    if let TirStmtKind::LabeledBlock { label, mut block } = inlined_stmt.kind {
+                        // Recursively process the inner block for nested inlining
+                        inline_calls_in_block(
+                            &mut block,
+                            candidates,
+                            current_module,
+                            local_count,
+                            local_types,
+                            type_table,
+                            inlined_funcs,
+                            inline_counter,
+                        );
+                        // Keep the labeled block intact
+                        pre_stmts.push(TirStmt::new(
+                            TirStmtKind::LabeledBlock { label, block },
+                            inlined_stmt.span,
+                        ));
+                    } else {
+                        pre_stmts.push(inlined_stmt);
+                    }
+                }
+                *expr = final_expr;
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
+            // First, recursively process subexpressions
             inline_calls_in_expr(
                 receiver,
                 candidates,
@@ -1962,6 +2246,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
             for arg in args {
                 inline_calls_in_expr(
@@ -1973,7 +2258,48 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
+            }
+            // Try to inline this method call
+            if let Some((mut inlined_stmts, final_expr, inlined_key)) = try_inline_method_call_expr(
+                expr,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                inline_counter,
+            ) {
+                if !inlined_funcs.contains(&inlined_key) {
+                    inlined_funcs.push(inlined_key);
+                }
+                // Process inlined content - keep labeled blocks intact
+                // The result-local pattern means final_expr references a local declared
+                // BEFORE the labeled block, so no flattening is needed
+                for inlined_stmt in inlined_stmts.drain(..) {
+                    if let TirStmtKind::LabeledBlock { label, mut block } = inlined_stmt.kind {
+                        // Recursively process the inner block for nested inlining
+                        inline_calls_in_block(
+                            &mut block,
+                            candidates,
+                            current_module,
+                            local_count,
+                            local_types,
+                            type_table,
+                            inlined_funcs,
+                            inline_counter,
+                        );
+                        // Keep the labeled block intact
+                        pre_stmts.push(TirStmt::new(
+                            TirStmtKind::LabeledBlock { label, block },
+                            inlined_stmt.span,
+                        ));
+                    } else {
+                        pre_stmts.push(inlined_stmt);
+                    }
+                }
+                *expr = final_expr;
             }
         }
         TirExprKind::StaticCall { args, .. } => {
@@ -1987,6 +2313,7 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
             }
         }
@@ -2001,6 +2328,7 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
             }
         }
@@ -2014,6 +2342,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         TirExprKind::Index { expr: inner, index } => {
@@ -2026,6 +2355,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
             inline_calls_in_expr(
                 index,
@@ -2036,6 +2366,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         TirExprKind::StructLiteral { fields, .. } => {
@@ -2049,6 +2380,7 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
             }
         }
@@ -2063,6 +2395,7 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
             }
         }
@@ -2076,6 +2409,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
             for arg in args {
                 inline_calls_in_expr(
@@ -2087,6 +2421,7 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
             }
         }
@@ -2100,6 +2435,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         TirExprKind::VariantConstruct { fields, .. } => {
@@ -2113,6 +2449,7 @@ fn inline_calls_in_expr(
                     type_table,
                     pre_stmts,
                     inlined_funcs,
+                    inline_counter,
                 );
             }
         }
@@ -2126,6 +2463,7 @@ fn inline_calls_in_expr(
                 type_table,
                 pre_stmts,
                 inlined_funcs,
+                inline_counter,
             );
         }
         // For block/if/match expressions, we don't inline recursively here

@@ -11,25 +11,17 @@ struct "Box<i32>" {
 }
 
 fn run() with Stdout {
-    __inline_make_box_i32__0: {
-        let value: i32 = 42;
-    }
-    let b1: Box<i32> = move "Box<i32>::new"(value);
+    let b1: Box<i32> = move "make_box<i32>"(42);
     core::cli::println(move core::internal::string_concat(move "make_box: ", move "i32::to_string"("Box<i32>::get"(&b1))));
-    __inline_unwrap_box_i32__1: {
+    let mut __result_5: i32 = 0;
+    __inline_unwrap_box_i32__0: {
         let b: Box<i32> = b1;
+        __result_5 = "Box<i32>::get"(&b);
     }
-    let v: i32 = "Box<i32>::get"(&b);
+    let v: i32 = __result_5;
     core::cli::println(move core::internal::string_concat(move "unwrap_box: ", move "i32::to_string"(v)));
-    __inline_make_box_i64__2: {
-        let value: i64 = 100 as i64;
-    }
-    let b2: Box<i64> = move "Box<i64>::new"(value);
-    __inline_transform_box_i64__3: {
-        let b: Box<i64> = b2;
-        let v: i64 = "Box<i64>::get"(&b);
-    }
-    let b3: Box<i64> = move "Box<i64>::new"(v);
+    let b2: Box<i64> = move "make_box<i64>"(100 as i64);
+    let b3: Box<i64> = move "transform_box<i64>"(b2);
     core::cli::println(move core::internal::string_concat(move "transform_box: ", move "i64::to_string"("Box<i64>::get"(&b3))));
 }
 
@@ -37,12 +29,25 @@ pub fn "Box<i64>::get"(self: &Box<i64>) -> i64 {
     return self.value;
 }
 
+fn "transform_box<i64>"(b: Box<i64>) -> Box<i64> {
+    let v: i64 = "Box<i64>::get"(&b);
+    return "Box<i64>::new"(v);
+}
+
 pub fn "Box<i64>::new"(value: i64) -> Box<i64> {
     return Box<i64> { value: value };
 }
 
+fn "make_box<i64>"(value: i64) -> Box<i64> {
+    return "Box<i64>::new"(value);
+}
+
 pub fn "Box<i32>::get"(self: &Box<i32>) -> i32 {
     return self.value;
+}
+
+fn "make_box<i32>"(value: i32) -> Box<i32> {
+    return "Box<i32>::new"(value);
 }
 
 pub fn "Box<i32>::new"(value: i32) -> Box<i32> {

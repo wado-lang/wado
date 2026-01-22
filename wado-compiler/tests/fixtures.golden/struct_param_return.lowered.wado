@@ -7,16 +7,18 @@ struct Point {
     y: i32,
 }
 
+fn create_point(x: i32, y: i32) -> Point {
+    return Point { x: x, y: y };
+}
+
 fn run() with Stdout {
-    __inline_create_point_0: {
-        let x: i32 = 17;
-        let y: i32 = 25;
-    }
-    let p: Point = move Point { x: x, y: y };
-    __inline_point_sum_1: {
+    let p: Point = move create_point(17, 25);
+    let mut __result_3: i32 = 0;
+    __inline_point_sum_0: {
         let p: Point = p;
+        __result_3 = (p.x + p.y);
     }
-    let sum: i32 = (p.x + p.y);
+    let sum: i32 = __result_3;
     core::cli::println(move core::internal::string_concat(move "sum: ", move "i32::to_string"(sum)));
 }
 

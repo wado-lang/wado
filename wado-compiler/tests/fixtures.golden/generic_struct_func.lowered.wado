@@ -6,15 +6,18 @@ struct "Box<i32>" {
     value: i32,
 }
 
+fn make_box(v: i32) -> Box<i32> {
+    return Box<i32> { value: v };
+}
+
 fn run() with Stdout {
-    __inline_make_box_0: {
-        let v: i32 = 42;
-    }
-    let b: Box<i32> = move Box<i32> { value: v };
-    __inline_get_value_1: {
+    let b: Box<i32> = move make_box(42);
+    let mut __result_3: i32 = 0;
+    __inline_get_value_0: {
         let b: Box<i32> = b;
+        __result_3 = b.value;
     }
-    let v: i32 = b.value;
+    let v: i32 = __result_3;
     core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"(v)));
 }
 

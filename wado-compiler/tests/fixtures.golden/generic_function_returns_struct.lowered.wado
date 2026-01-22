@@ -10,15 +10,17 @@ struct "Box<i32>" {
     value: i32,
 }
 
+fn make_box_i32(v: i32) -> Box<i32> {
+    return Box<i32> { value: v };
+}
+
+fn make_box_i64(v: i64) -> Box<i64> {
+    return Box<i64> { value: v };
+}
+
 fn run() with Stdout {
-    __inline_make_box_i32_0: {
-        let v: i32 = 42;
-    }
-    let b1: Box<i32> = move Box<i32> { value: v };
-    __inline_make_box_i64_1: {
-        let v: i64 = 100 as i64;
-    }
-    let b2: Box<i64> = move Box<i64> { value: v };
+    let b1: Box<i32> = move make_box_i32(42);
+    let b2: Box<i64> = move make_box_i64(100 as i64);
     core::cli::println(move core::internal::string_concat(move "b1: ", move "i32::to_string"(b1.value)));
     core::cli::println(move core::internal::string_concat(move "b2: ", move "i64::to_string"(b2.value)));
 }
