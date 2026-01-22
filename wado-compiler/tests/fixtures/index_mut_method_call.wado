@@ -1,0 +1,42 @@
+// Test: IndexMut desugaring for container[i].method() pattern
+use { println, Stdout } from "core:cli";
+
+// Element type with a mutating method
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+}
+
+// Container type that holds a Counter
+struct Container {
+    item: Counter,
+}
+
+// Implement IndexMut for Container
+impl IndexMut<i32> for Container {
+    type Output = Counter;
+
+    fn index_mut(&mut self, _index: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
+fn run() with Stdout {
+    let mut c = Container { item: Counter { value: 0 } };
+
+    // Use IndexMut desugaring: c[0].increment() -> c.index_mut(0).increment()
+    c[0].increment();
+    c[0].increment();
+    c[0].increment();
+
+    // Verify the counter was incremented
+    println(`Counter value: {c.item.value}`);
+}
+
+__DATA__
+{"stdout": "Counter value: 3\n"}

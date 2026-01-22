@@ -1,0 +1,47 @@
+// Test IndexValue trait with generic type parameter binding
+// This tests that `impl IndexValue<i32> for Container<T>` correctly binds T
+// when indexing into Container<i32>, Container<String>, etc.
+use { println, Stdout } from "core:cli";
+
+// A simple generic container with three slots
+struct Triple<T> {
+    first: T,
+    second: T,
+    third: T,
+}
+
+impl IndexValue<i32> for Triple<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index == 0 {
+            return self.first;
+        } else if index == 1 {
+            return self.second;
+        } else {
+            return self.third;
+        }
+    }
+}
+
+fn run() with Stdout {
+    // Test with i32
+    let nums = Triple { first: 10, second: 20, third: 30 };
+    let n0 = nums[0];
+    let n1 = nums[1];
+    let n2 = nums[2];
+    println(`nums: {n0}, {n1}, {n2}`);
+
+    // Test with i64
+    let longs: Triple<i64> = Triple { first: 100 as i64, second: 200 as i64, third: 300 as i64 };
+    let l0 = longs[0];
+    let l1 = longs[1];
+    println(`longs: {l0}, {l1}`);
+
+    // Test arithmetic on indexed values (verifies correct type)
+    let sum = nums[0] + nums[1] + nums[2];
+    println(`sum: {sum}`);
+}
+
+__DATA__
+{"stdout": "nums: 10, 20, 30\nlongs: 100, 200\nsum: 60\n"}

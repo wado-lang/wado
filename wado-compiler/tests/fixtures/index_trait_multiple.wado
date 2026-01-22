@@ -1,0 +1,53 @@
+// Test: Multiple containers with index traits
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn move_by(&mut self, dx: i32, dy: i32) {
+        self.x = self.x + dx;
+        self.y = self.y + dy;
+    }
+}
+
+struct PointHolder {
+    point: Point,
+}
+
+impl Index<i32> for PointHolder {
+    type Output = Point;
+
+    fn index(&self, _idx: i32) -> &Self::Output {
+        return &self.point;
+    }
+}
+
+impl IndexMut<i32> for PointHolder {
+    type Output = Point;
+
+    fn index_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.point;
+    }
+}
+
+fn run() with Stdout {
+    let mut h1 = PointHolder { point: Point { x: 0, y: 0 } };
+    let mut h2 = PointHolder { point: Point { x: 10, y: 10 } };
+
+    // Mutate both holders
+    h1[0].move_by(5, 5);
+    h2[0].move_by(-3, -3);
+
+    // Read from both
+    let p1 = h1[0];
+    let p2 = h2[0];
+
+    println(`h1: ({p1.x}, {p1.y})`);
+    println(`h2: ({p2.x}, {p2.y})`);
+}
+
+__DATA__
+{"stdout": "h1: (5, 5)\nh2: (7, 7)\n"}

@@ -1,0 +1,48 @@
+// Test: Chained index operations and reads
+use { println, Stdout } from "core:cli";
+
+struct Number {
+    n: i32,
+}
+
+impl Number {
+    fn add_and_get(&mut self, delta: i32) -> i32 {
+        self.n = self.n + delta;
+        return self.n;
+    }
+}
+
+struct NumHolder {
+    num: Number,
+}
+
+impl Index<i32> for NumHolder {
+    type Output = Number;
+
+    fn index(&self, _idx: i32) -> &Self::Output {
+        return &self.num;
+    }
+}
+
+impl IndexMut<i32> for NumHolder {
+    type Output = Number;
+
+    fn index_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.num;
+    }
+}
+
+fn run() with Stdout {
+    let mut h = NumHolder { num: Number { n: 0 } };
+
+    // Chained mutating calls
+    let r1 = h[0].add_and_get(10);
+    let r2 = h[0].add_and_get(5);
+    let r3 = h[0].add_and_get(3);
+
+    println(`Results: {r1}, {r2}, {r3}`);
+    println(`Final: {h.num.n}`);
+}
+
+__DATA__
+{"stdout": "Results: 10, 15, 18\nFinal: 18\n"}

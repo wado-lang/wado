@@ -558,6 +558,9 @@ pub struct StructLiteralExpr {
     /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
     pub name: Option<String>,
     pub fields: Vec<StructLiteralField>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    /// Multiline formatting is used when this is true.
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
@@ -713,6 +716,8 @@ pub struct CallExpr {
     /// Explicit type arguments for generic functions: `foo::<i32>(x)`
     pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
@@ -723,6 +728,8 @@ pub struct MethodCallExpr {
     /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
     pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
@@ -735,6 +742,8 @@ pub struct StaticMethodCallExpr {
     pub method: String,
     /// Arguments to the method
     pub args: Vec<Expr>,
+    /// Whether the original source had a trailing comma (for formatting purposes).
+    pub has_trailing_comma: bool,
     pub span: Span,
 }
 
@@ -970,12 +979,29 @@ pub struct TypeAlias {
     pub span: Span,
 }
 
-/// Trait declaration: `trait Foo { fn method(&self) -> T; }`
+/// Associated type declaration in a trait: `type Output;`
+#[derive(Debug, Clone)]
+pub struct AssociatedTypeDecl {
+    pub name: String,
+    pub span: Span,
+}
+
+/// Associated type binding in an impl block: `type Output = T;`
+#[derive(Debug, Clone)]
+pub struct AssociatedTypeBinding {
+    pub name: String,
+    pub ty: Type,
+    pub span: Span,
+}
+
+/// Trait declaration: `trait Foo { type Output; fn method(&self) -> Self::Output; }`
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
     pub name: String,
     pub is_pub: bool,
     pub type_params: Vec<GenericParam>,
+    /// Associated type declarations: `type Output;`
+    pub associated_types: Vec<AssociatedTypeDecl>,
     /// Trait methods. Body is None for required methods.
     pub methods: Vec<Function>,
     pub span: Span,
@@ -989,6 +1015,8 @@ pub struct ImplBlock {
     /// None for inherent impl blocks: `impl Type`
     pub trait_type: Option<Type>,
     pub ty: Type,
+    /// Associated type bindings: `type Output = T;`
+    pub associated_types: Vec<AssociatedTypeBinding>,
     pub methods: Vec<Function>,
     pub span: Span,
 }

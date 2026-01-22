@@ -1,0 +1,24 @@
+// Test: IndexAssign trait for [] assignment operator
+use { println, Stdout } from "core:cli";
+
+struct MutableBox {
+    value: i32,
+}
+
+impl IndexAssign<i32> for MutableBox {
+    type Input = i32;
+
+    fn index_assign(&mut self, _index: i32, value: Self::Input) {
+        self.value = value;
+    }
+}
+
+fn run() with Stdout {
+    let mut box = MutableBox { value: 0 };
+    // Use [] assignment operator which calls index_assign()
+    box[0] = 42;
+    println(`Value: {box.value}`);
+}
+
+__DATA__
+{"stdout": "Value: 42\n"}

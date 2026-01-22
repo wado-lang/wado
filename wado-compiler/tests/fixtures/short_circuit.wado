@@ -1,0 +1,70 @@
+// Test short-circuit evaluation for && and ||
+use { println, Stdout } from "core:cli";
+
+fn side_effect(msg: String, result: bool) -> bool with Stdout {
+    println(`side_effect called: {msg}`);
+    return result;
+}
+
+fn run() with Stdout {
+    // Test &&: right side should NOT be evaluated when left is false
+    println("=== Testing && ===");
+
+    if false && side_effect("should not print (&&)", true) {
+        println("branch taken");
+    } else {
+        println("branch not taken (correct)");
+    }
+
+    // Test &&: right side SHOULD be evaluated when left is true
+    if true && side_effect("should print (&&)", true) {
+        println("branch taken (correct)");
+    }
+
+    // Test ||: right side should NOT be evaluated when left is true
+    println("\n=== Testing || ===");
+
+    if true || side_effect("should not print (||)", false) {
+        println("branch taken (correct)");
+    }
+
+    // Test ||: right side SHOULD be evaluated when left is false
+    if false || side_effect("should print (||)", true) {
+        println("branch taken (correct)");
+    }
+
+    // Test short-circuit in while loop (the original bug case)
+    println("\n=== Testing while loop ===");
+    let arr: Array<i32> = [10, 20, 30];
+    let mut i = 0;
+
+    // This should NOT access arr[3] because i < arr.len() is false first
+    while i < arr.len() && arr[i] < 100 {
+        println(`arr[{i}] = {arr[i]}`);
+        i += 1;
+    }
+    println(`Loop ended at i = {i}`);
+
+    // Test nested short-circuit
+    println("\n=== Testing nested ===");
+    let a = true;
+    let b = false;
+
+    // (a && b) is false, so right side of || should be evaluated
+    if a && b || side_effect("nested: should print", true) {
+        println("nested branch taken (correct)");
+    }
+
+    // (a || b) is true, so right side of && might be evaluated
+    // but the overall && with false should short-circuit
+    if false && (a || side_effect("nested: should not print", true)) {
+        println("should not reach here");
+    } else {
+        println("nested && short-circuited (correct)");
+    }
+}
+
+__DATA__
+{
+    "stdout": "=== Testing && ===\nbranch not taken (correct)\nside_effect called: should print (&&)\nbranch taken (correct)\n\n=== Testing || ===\nbranch taken (correct)\nside_effect called: should print (||)\nbranch taken (correct)\n\n=== Testing while loop ===\narr[0] = 10\narr[1] = 20\narr[2] = 30\nLoop ended at i = 3\n\n=== Testing nested ===\nside_effect called: nested: should print\nnested branch taken (correct)\nnested && short-circuited (correct)\n"
+}

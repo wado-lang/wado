@@ -18,7 +18,11 @@ fn run() {
 }
 
 fn "Container<i32>::get"(self: &Container<i32>, index: i32) -> i32 {
-    return self.items[index];
+    return "Array<i32>^IndexValue::index_value"(&self.items, index);
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 fn "Container<i32>::len"(self: &Container<i32>) -> i32 {

@@ -1,0 +1,49 @@
+// Test IndexValue trait for value-returning indexing
+use { println, Stdout } from "core:cli";
+
+// Simple container that stores values and returns them by copy
+struct IntStore {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl IndexValue<i32> for IntStore {
+    type Output = i32;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index == 0 {
+            return self.a;
+        } else if index == 1 {
+            return self.b;
+        } else {
+            return self.c;
+        }
+    }
+}
+
+impl IntStore {
+    fn new(a: i32, b: i32, c: i32) -> IntStore {
+        return IntStore { a, b, c };
+    }
+}
+
+fn run() with Stdout {
+    let store = IntStore::new(10, 20, 30);
+
+    // Test IndexValue via [] operator
+    let first = store[0];
+    let second = store[1];
+    let third = store[2];
+
+    println(`first: {first}`);
+    println(`second: {second}`);
+    println(`third: {third}`);
+
+    // Test that we get a copy (value semantics)
+    let sum = store[0] + store[1] + store[2];
+    println(`sum: {sum}`);
+}
+
+__DATA__
+{"stdout": "first: 10\nsecond: 20\nthird: 30\nsum: 60\n"}

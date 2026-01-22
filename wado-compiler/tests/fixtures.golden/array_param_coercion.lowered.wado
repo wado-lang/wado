@@ -4,7 +4,11 @@
 
 fn run() with Stdout {
     let _inline_arr: Array<i32> = move [10, 20, 30];
-    let result: i32 = ((arr[0] + arr[1]) + arr[2]);
+    let result: i32 = (("Array<i32>^IndexValue::index_value"(&arr, 0) + "Array<i32>^IndexValue::index_value"(&arr, 1)) + "Array<i32>^IndexValue::index_value"(&arr, 2));
     core::cli::println(move "i32::to_string"(result));
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

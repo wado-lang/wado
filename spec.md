@@ -374,6 +374,45 @@ for let mut i = 0; i < 10; i = i + 1 {
 
 Both `break` and `continue` work with `while`, `for`, and `loop`.
 
+### Labeled Blocks
+
+Labeled blocks create a new scope for variable bindings. The label is required to avoid syntactic ambiguity with struct literals.
+
+```wado
+let x = 10;
+
+scope: {
+    let x = 20;  // shadows outer x
+    println(`x = {x}`);  // prints "x = 20"
+}
+
+println(`x = {x}`);  // prints "x = 10" (outer x unchanged)
+```
+
+**Syntax**: `LABEL: { ... }`
+
+- The label must be a valid identifier followed by a colon
+- The block creates a new variable scope
+- Variables declared inside are not accessible outside
+- Shadowing is allowed within the block
+
+**Nested Blocks**:
+
+```wado
+outer: {
+    let a = 1;
+    inner: {
+        let b = 2;
+        let sum = a + b;  // a is visible from outer scope
+        println(`{sum}`);
+    }
+    // b is not visible here
+    println(`{a}`);
+}
+```
+
+**Design Rationale**: The label is mandatory because `{ field: value }` without context could be either a block with a labeled statement or a struct literal. Requiring the label removes this ambiguity.
+
 ## Memory Model
 
 ### Core Principles
@@ -1284,11 +1323,59 @@ let r = Robot { id: 1 };
 r.greet();  // Returns "Beep boop" (inherent method wins)
 ```
 
+**Associated Types:**
+
+Traits can declare associated types - placeholder types that are specified by implementors:
+
+```wado
+trait Container {
+    type Item;  // Associated type declaration
+
+    fn get(&self) -> Self::Item;
+    fn set(&mut self, value: Self::Item);
+}
+
+struct IntBox {
+    value: i32,
+}
+
+impl Container for IntBox {
+    type Item = i32;  // Associated type binding
+
+    fn get(&self) -> Self::Item {
+        return self.value;
+    }
+
+    fn set(&mut self, value: Self::Item) {
+        self.value = value;
+    }
+}
+```
+
+Within trait methods and implementations, `Self::TypeName` refers to the associated type. The type is resolved at compile time based on the implementing type.
+
+**Standard Library Traits:**
+
+The prelude defines `Index` and `IndexAssign` traits using associated types:
+
+```wado
+pub trait Index<IndexType> {
+    type Output;
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+
+pub trait IndexAssign<IndexType> {
+    type Input;
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+```
+
+Note: `IndexAssign` takes a value parameter rather than returning `&mut T` (like Rust's `IndexMut`). This design reflects Wasm GC semantics where you cannot get a mutable reference to an array element - reading (`array.get`) and writing (`array.set`) are fundamentally different operations.
+
 **Not Yet Implemented:**
 
 - Trait bounds (`fn foo<T: Display>(x: T)`)
 - Default method implementations
-- Associated types
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
 

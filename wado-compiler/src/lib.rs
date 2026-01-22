@@ -109,6 +109,7 @@ pub use compiler_host::InMemoryCompilerHost;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
+pub use name::ModuleSource;
 pub use optimize::{CanonBuiltin, OptLevel, WasiEffect, optimize};
 pub use parser::{ParseError, Parser};
 pub use project::Project;
@@ -139,16 +140,16 @@ pub struct DumpResult {
     pub desugared_ast: ast::Module,
     /// Symbol table after analysis
     pub symbols: symbol::SymbolTable,
-    /// Loaded module paths
-    pub loaded_modules: Vec<Vec<String>>,
+    /// Loaded module sources
+    pub loaded_modules: Vec<ModuleSource>,
     /// Modules loaded implicitly by the compiler
-    pub implicit_modules: Vec<Vec<String>>,
-    /// Entry module path
-    pub entry_path: Vec<String>,
+    pub implicit_modules: Vec<ModuleSource>,
+    /// Entry module source
+    pub entry_module_source: ModuleSource,
     /// All TIR modules after resolution (in topological order)
-    pub tir_modules: Option<IndexMap<Vec<String>, tir::TirModule>>,
+    pub tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// All lowered TIR modules (in topological order)
-    pub lowered_tir_modules: Option<IndexMap<Vec<String>, tir::TirModule>>,
+    pub lowered_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// Optimized project (contains usage analysis results)
     pub optimized_project: Option<Project>,
     /// Comments for unparsing
@@ -224,13 +225,25 @@ pub async fn compile_with_host<H: CompilerHost>(
             })?
     };
 
+    // Convert ModuleSource keys to Vec<String> for analyzer/resolver compatibility
+    let modules_by_path: std::collections::HashMap<Vec<String>, ast::Module> = load_result
+        .modules
+        .iter()
+        .map(|(ms, m)| (ms.to_path(), m.clone()))
+        .collect();
+    let implicit_modules_by_path: std::collections::HashSet<Vec<String>> = load_result
+        .implicit_modules
+        .iter()
+        .map(ModuleSource::to_path)
+        .collect();
+
     // === Phase 5: Analyze all modules ===
     let mut analyzer = Analyzer::new();
     analyzer
         .analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_path,
-            load_result.implicit_modules.clone(),
+            &modules_by_path,
+            &load_result.entry_module_source.to_path(),
+            implicit_modules_by_path.clone(),
         )
         .map_err(|errors| {
             let msg = errors
@@ -257,9 +270,9 @@ pub async fn compile_with_host<H: CompilerHost>(
     // === Phase 6: Resolve all modules to Project ===
     let project = resolve_to_project(
         symbols,
-        &load_result.modules,
-        load_result.entry_path.clone(),
-        load_result.implicit_modules.clone(),
+        &modules_by_path,
+        load_result.entry_module_source.to_path(),
+        implicit_modules_by_path,
         module_name,
     )
     .map_err(|errors| {
@@ -369,13 +382,25 @@ pub async fn dump_with_host<H: CompilerHost>(
             })?
     };
 
+    // Convert ModuleSource keys to Vec<String> for analyzer/resolver compatibility
+    let modules_by_path: std::collections::HashMap<Vec<String>, ast::Module> = load_result
+        .modules
+        .iter()
+        .map(|(ms, m)| (ms.to_path(), m.clone()))
+        .collect();
+    let implicit_modules_by_path: std::collections::HashSet<Vec<String>> = load_result
+        .implicit_modules
+        .iter()
+        .map(ModuleSource::to_path)
+        .collect();
+
     // === Phase 6: Analyze all modules ===
     let mut analyzer = Analyzer::new();
     analyzer
         .analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_path,
-            load_result.implicit_modules.clone(),
+            &modules_by_path,
+            &load_result.entry_module_source.to_path(),
+            implicit_modules_by_path.clone(),
         )
         .map_err(|errors| {
             let msg = errors
@@ -392,31 +417,49 @@ pub async fn dump_with_host<H: CompilerHost>(
     let symbols = analyzer.into_symbols();
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(&symbols, &load_result.modules).ok();
+    let tir_modules = Resolver::resolve_all_modules(&symbols, &modules_by_path).ok();
+
+    // Convert TIR modules to ModuleSource keys for DumpResult
+    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        tir_modules.clone().map(|m| {
+            m.into_iter()
+                .map(|(path, tir)| (ModuleSource::from_path(&path), tir))
+                .collect()
+        });
 
     // === Phase 8: Lower all modules ===
     // Use lower_modules_indexed for cross-module generic function support
-    let lowered_tir_modules = tir_modules.clone().map(lower_modules_indexed);
+    // tir_modules_by_source already has ModuleSource keys
+    let lowered_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        tir_modules_by_source.clone().map(lower_modules_indexed);
 
     // === Phase 9: Optimize ===
     // Build a Project from lowered modules if available
-    let optimized_project = lowered_tir_modules.clone().map(|modules| {
-        let module_name = filename
-            .as_ref()
-            .and_then(|f| std::path::Path::new(f).file_stem())
-            .and_then(|s| s.to_str())
-            .unwrap_or("module")
-            .to_string();
+    let optimized_project = lowered_tir_modules_by_source
+        .clone()
+        .map(|modules_by_source| {
+            let module_name = filename
+                .as_ref()
+                .and_then(|f| std::path::Path::new(f).file_stem())
+                .and_then(|s| s.to_str())
+                .unwrap_or("module")
+                .to_string();
 
-        let project = Project::new(
-            load_result.entry_path.clone(),
-            modules,
-            symbols.clone(),
-            load_result.implicit_modules.clone(),
-            module_name,
-        );
-        optimize(project, opt_level)
-    });
+            let implicit_modules_by_source: std::collections::HashSet<ModuleSource> =
+                implicit_modules_by_path
+                    .iter()
+                    .map(|p| ModuleSource::from_path(p))
+                    .collect();
+
+            let project = Project::new(
+                load_result.entry_module_source.clone(),
+                modules_by_source,
+                symbols.clone(),
+                implicit_modules_by_source,
+                module_name,
+            );
+            optimize(project, opt_level)
+        });
 
     Ok(DumpResult {
         source: source.to_string(),
@@ -426,9 +469,9 @@ pub async fn dump_with_host<H: CompilerHost>(
         symbols,
         loaded_modules: load_result.modules.keys().cloned().collect(),
         implicit_modules: load_result.implicit_modules.into_iter().collect(),
-        entry_path: load_result.entry_path,
-        tir_modules,
-        lowered_tir_modules,
+        entry_module_source: load_result.entry_module_source,
+        tir_modules: tir_modules_by_source,
+        lowered_tir_modules: lowered_tir_modules_by_source,
         optimized_project,
         comments: comment_map,
     })

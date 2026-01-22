@@ -401,8 +401,8 @@ pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
     let base_ptr = builtin::memory_load32(outptr);
     let count = builtin::memory_load32(outptr + 4);
 
-    // Create raw GC array of strings (nullable elements)
-    let repr = builtin::array_new_string(count);
+    // Create Array<String> with capacity
+    let mut result = Array::<String>::with_capacity(count);
 
     // Convert each CM string to a GC string
     for (let mut i = 0; i < count; i += 1) {
@@ -416,11 +416,10 @@ pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
             s.set(j, byte);
         }
 
-        builtin::array_set_string(repr, i, s);
+        result.append(s);
     }
 
-    // Wrap raw array into Array struct with used = count
-    return builtin::array_wrap_string(repr, count);
+    return result;
 }
 
 /// Convert a Component Model option<string> to a GC Option<String>
@@ -450,19 +449,3 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
     return s;
 }
 
-/// Copy an Array<String> to a new array (deep copy of the array, shallow copy of strings)
-/// This is used by the compiler for tuple-to-array coercion and value semantics.
-pub fn array_copy_string(src: Array<String>) -> Array<String> {
-    let len = src.len();
-
-    if len == 0 {
-        return builtin::array_wrap_string(builtin::array_new_string(0), 0);
-    }
-
-    let repr = builtin::array_new_string(len);
-    for (let mut i = 0; i < len; i += 1) {
-        builtin::array_set_string(repr, i, src[i]);
-    }
-
-    return builtin::array_wrap_string(repr, len);
-}

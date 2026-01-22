@@ -1,0 +1,179 @@
+// Test: Struct with instance methods, static methods, and Index/IndexMut/IndexAssign traits
+use { println, Stdout } from "core:cli";
+
+// Inner struct with instance and static methods
+struct Value {
+    n: i32,
+    tag: String,
+}
+
+impl Value {
+    // Static method: constructor
+    fn new(n: i32, tag: String) -> Value {
+        return Value { n, tag };
+    }
+
+    // Static method: default
+    fn zero() -> Value {
+        return Value { n: 0, tag: "zero" };
+    }
+
+    // Instance method: immutable
+    fn describe(&self) -> String {
+        return `{self.tag}:{self.n}`;
+    }
+
+    // Instance method: mutable
+    fn increment(&mut self) {
+        self.n = self.n + 1;
+    }
+
+    // Instance method: mutable with param
+    fn add(&mut self, delta: i32) {
+        self.n = self.n + delta;
+    }
+
+    // Instance method: getter
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+}
+
+// Container with multiple Value fields (simulating indexed access)
+struct Container {
+    v0: Value,
+    v1: Value,
+    v2: Value,
+    read_count: i32,
+    write_count: i32,
+}
+
+impl Container {
+    // Static method: constructor
+    fn new() -> Container {
+        return Container {
+            v0: Value::zero(),
+            v1: Value::zero(),
+            v2: Value::zero(),
+            read_count: 0,
+            write_count: 0,
+        };
+    }
+
+    // Static method: with initial values
+    fn from_values(a: Value, b: Value, c: Value) -> Container {
+        return Container {
+            v0: a,
+            v1: b,
+            v2: c,
+            read_count: 0,
+            write_count: 0,
+        };
+    }
+
+    // Instance method: get stats
+    fn stats(&self) -> String {
+        return `reads={self.read_count}, writes={self.write_count}`;
+    }
+
+    // Instance method: reset stats
+    fn reset_stats(&mut self) {
+        self.read_count = 0;
+        self.write_count = 0;
+    }
+
+    // Instance method: total
+    fn total(&self) -> i32 {
+        return self.v0.n + self.v1.n + self.v2.n;
+    }
+}
+
+impl Index<i32> for Container {
+    type Output = Value;
+
+    fn index(&self, idx: i32) -> &Self::Output {
+        if idx == 0 {
+            return &self.v0;
+        } else if idx == 1 {
+            return &self.v1;
+        } else {
+            return &self.v2;
+        }
+    }
+}
+
+impl IndexMut<i32> for Container {
+    type Output = Value;
+
+    fn index_mut(&mut self, idx: i32) -> &mut Self::Output {
+        self.write_count = self.write_count + 1;
+        if idx == 0 {
+            return &mut self.v0;
+        } else if idx == 1 {
+            return &mut self.v1;
+        } else {
+            return &mut self.v2;
+        }
+    }
+}
+
+impl IndexAssign<i32> for Container {
+    type Input = Value;
+
+    fn index_assign(&mut self, idx: i32, value: Self::Input) {
+        self.write_count = self.write_count + 1;
+        if idx == 0 {
+            self.v0 = value;
+        } else if idx == 1 {
+            self.v1 = value;
+        } else {
+            self.v2 = value;
+        }
+    }
+}
+
+fn run() with Stdout {
+    // Use static constructor with initial values
+    let mut c = Container::from_values(
+        Value::new(10, "a"),
+        Value::new(20, "b"),
+        Value::new(30, "c"),
+    );
+
+
+    // Index read (uses Index trait)
+    let v0 = c[0];
+    println(`v0: {v0.describe()}`);
+    let v1 = c[1];
+    println(`v1: {v1.describe()}`);
+
+    // IndexMut (uses IndexMut trait) - call mutable methods on different indices
+    c[0].increment();  // write_count = 1
+    c[1].add(100);  // write_count = 2
+    c[2].add(200);  // write_count = 3
+
+    println(`After mutations:`);
+    println(`v0: {c.v0.describe()}`);
+    println(`v1: {c.v1.describe()}`);
+    println(`v2: {c.v2.describe()}`);
+
+    // IndexAssign (uses IndexAssign trait)
+    c[2] = Value::new(999, "replaced");  // write_count = 4
+    println(`After replace: {c.v2.describe()}`);
+
+    // Use instance methods on container
+    println(`Total: {c.total()}`);
+    println(`Stats: {c.stats()}`);
+
+    // Reset and verify
+    c.reset_stats();
+    println(`After reset: {c.stats()}`);
+
+    // More IndexMut operations
+    c[0].increment();  // write_count = 1
+    c[1].increment();  // write_count = 2
+    println(`Final stats: {c.stats()}`);
+}
+
+__DATA__
+{"stdout": "v0: a:10\nv1: b:20\nAfter mutations:\nv0: a:11\nv1: b:120\nv2: c:230\nAfter replace: replaced:999\nTotal: 1130\nStats: reads=0, writes=4\nAfter reset: reads=0, writes=0\nFinal stats: reads=0, writes=2\n"}

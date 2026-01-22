@@ -5,7 +5,7 @@
 //! - Usage analysis for conditional feature inclusion
 
 use crate::component_model::WasiRegistry;
-use crate::name::{FreeFunctionName, FunctionId, MethodName};
+use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
@@ -340,7 +340,7 @@ fn block_has_return(block: &TirBlock) -> bool {
 }
 
 /// Detect recursive functions using call graph analysis
-fn find_recursive_functions(modules: &IndexMap<Vec<String>, TirModule>) -> HashSet<String> {
+fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> HashSet<String> {
     let mut recursive = HashSet::new();
 
     // Build a simple call graph: function name -> called function names
@@ -593,13 +593,14 @@ fn inline_functions(project: &mut Project) {
     // Also collect function_strings for each candidate (to update caller's strings after inlining)
     let mut candidate_strings: HashMap<(Vec<String>, String), Vec<String>> = HashMap::new();
 
-    for (module_path, module) in &project.tir_modules {
+    for (module_source, module) in &project.tir_modules {
+        let module_path = module_source.to_path();
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if is_inline_eligible(
                 &func,
                 &recursive_functions,
-                module_path,
+                &module_path,
                 &module.type_table.borrow(),
             ) {
                 inline_candidates.insert((module_path.clone(), func.name.clone()), func.clone());
@@ -618,7 +619,7 @@ fn inline_functions(project: &mut Project) {
 
     // Inline at call sites in each module
     for module in project.tir_modules.values_mut() {
-        let module_path = module.path.clone();
+        let module_path = module.module_source.to_path();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
             let func_name = func.name.clone();
@@ -1906,8 +1907,8 @@ fn analyze_project(project: &mut Project) {
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
     // Find entry function (run in entry module)
-    let entry_func = FunctionId::Free(FreeFunctionName::from_path_and_name(
-        &project.entry_path,
+    let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
+        &project.entry_module_source,
         "run",
     ));
 
@@ -1949,11 +1950,20 @@ fn analyze_project(project: &mut Project) {
 
     // Add cm_list_string_to_array and helper if Environment effect functions are used
     // This conversion function is called from codegen, not Wado code
+    // We need to compute transitive closure to include all functions they call
     if used_wasi_functions.contains("Environment::get_arguments")
         || used_wasi_functions.contains("Environment::get_environment")
     {
-        reachable.insert(core_internal("cm_list_string_to_array"));
-        reachable.insert(core_internal("copy_string_from_linear"));
+        let cm_list_func = core_internal("cm_list_string_to_array");
+        let copy_string_func = core_internal("copy_string_from_linear");
+
+        // Compute reachable functions from these entry points
+        let cm_list_reachable = compute_reachable(&call_graph, &cm_list_func);
+        let copy_string_reachable = compute_reachable(&call_graph, &copy_string_func);
+
+        // Add all transitively reachable functions
+        reachable.extend(cm_list_reachable);
+        reachable.extend(copy_string_reachable);
     }
 
     // Note: array_copy_string is tracked via call graph analysis
@@ -2092,41 +2102,43 @@ fn analyze_project(project: &mut Project) {
 
     // Filter string literals in each module to only include strings from reachable functions
     for module in project.tir_modules.values_mut() {
-        let module_path = &module.path.clone();
+        let module_path = module.module_source.to_path();
         let mut reachable_strings: Vec<String> = Vec::new();
 
         for (func_name, strings) in &module.function_strings {
-            // Build function ID to check if it's reachable
-            let func_id = if func_name.contains("::") {
-                // Method name like "Point::sum" or "Point^Trait::method" - use MethodName
-                let parts: Vec<&str> = func_name.splitn(2, "::").collect();
-                if parts.len() == 2 {
-                    let prefix = parts[0];
-                    let method_name = parts[1];
-                    // Check for trait impl: "StructName^TraitName"
-                    let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
-                        (
-                            &prefix[..caret_pos],
-                            Some(prefix[caret_pos + 1..].to_string()),
-                        )
-                    } else {
-                        (prefix, None)
-                    };
-                    FunctionId::Method(MethodName::new(
-                        module_path.join("/"),
-                        struct_name.to_string(),
-                        trait_name,
-                        method_name.to_string(),
-                    ))
+            // Build function ID(s) to check if it's reachable
+            // Note: monomorphized methods are tracked as FunctionId::Free in the call graph
+            // but their names look like methods (e.g., "TreeMap<String,i32>^Index::index")
+            let is_reachable = if let Some(parsed) = LocalMethodName::parse(func_name) {
+                // Method name like "Point::sum" or "Point^Trait::method"
+                // Check as MethodName first (for non-monomorphized methods)
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_path.join("/"),
+                    parsed.struct_name.clone(),
+                    parsed.trait_name.clone(),
+                    parsed.method_name.clone(),
+                ));
+                if reachable.contains(&method_id) {
+                    true
                 } else {
-                    FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, func_name))
+                    // For monomorphized methods, also check as FreeFunctionName
+                    // Monomorphized methods have type args in the struct name (e.g., "TreeMap<String,i32>")
+                    let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                        &module_path,
+                        func_name,
+                    ));
+                    reachable.contains(&free_id)
                 }
             } else {
                 // Regular function
-                FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, func_name))
+                let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                    &module_path,
+                    func_name,
+                ));
+                reachable.contains(&func_id)
             };
 
-            if reachable.contains(&func_id) {
+            if is_reachable {
                 for s in strings {
                     if !reachable_strings.contains(s) {
                         reachable_strings.push(s.clone());
@@ -2165,32 +2177,22 @@ type BoxPrimitivesMap = HashMap<FunctionId, HashSet<PrimitiveType>>;
 /// Build call graph and effect usage from all TIR modules
 /// Returns (`call_graph`, `effect_usage`, `box_primitives_map`)
 fn build_analysis_graph(
-    modules: &IndexMap<Vec<String>, TirModule>,
+    modules: &IndexMap<ModuleSource, TirModule>,
 ) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap) {
     let mut call_graph: CallGraph = HashMap::new();
     let mut effect_usage: EffectUsageMap = HashMap::new();
     let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
 
-    for (path, module) in modules {
+    for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
+        let path = module_source.to_path();
 
         // Analyze functions (including methods stored as functions)
         for func_rc in &module.functions {
             let func = func_rc.borrow();
-            // Methods have names like "Point::sum", regular functions don't contain "::"
-            let func_id = if let Some(sep_pos) = func.name.find("::") {
+            // Use the TirFunction's is_method() to determine if this is a method
+            let func_id = if let Some(ref info) = func.method_info {
                 // This is a method - use MethodName or FreeFunctionName with monomorph info
-                let prefix = &func.name[..sep_pos];
-                let method_name = &func.name[sep_pos + 2..];
-                // Check for trait impl: "StructName^TraitName"
-                let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
-                    (
-                        &prefix[..caret_pos],
-                        Some(prefix[caret_pos + 1..].to_string()),
-                    )
-                } else {
-                    (prefix, None)
-                };
                 if let Some(monomorph_info) = &func.monomorph_info {
                     // Monomorphized method - use FreeFunctionName with metadata
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
@@ -2199,11 +2201,12 @@ fn build_analysis_graph(
                         monomorph_info.generic_name.clone(),
                     ))
                 } else {
+                    // Non-monomorphized method - use method_info
                     FunctionId::Method(MethodName::new(
                         path.join("/"),
-                        struct_name.to_string(),
-                        trait_name,
-                        method_name.to_string(),
+                        info.struct_name.clone(),
+                        info.trait_name.clone(),
+                        info.method_name.clone(),
                     ))
                 }
             } else {
@@ -2215,10 +2218,10 @@ fn build_analysis_graph(
                         monomorph_info.generic_name.clone(),
                     ))
                 } else {
-                    FunctionId::Free(FreeFunctionName::from_path_and_name(path, &func.name))
+                    FunctionId::Free(FreeFunctionName::from_path_and_name(&path, &func.name))
                 }
             };
-            let analysis = analyze_function(&func, path, type_table);
+            let analysis = analyze_function(&func, &path, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
                 effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -2243,7 +2246,7 @@ fn build_analysis_graph(
                     None,
                     method.name.clone(),
                 ));
-                let analysis = analyze_function(method, path, type_table);
+                let analysis = analyze_function(method, &path, type_table);
                 call_graph.insert(method_id.clone(), analysis.callees);
                 if !analysis.effect_calls.is_empty() {
                     effect_usage.insert(method_id.clone(), analysis.effect_calls);
@@ -2457,35 +2460,53 @@ fn analyze_expr(
                 }
                 let base_receiver_type = current_type.clone();
 
-                let method_name = func_name
-                    .rfind("::")
-                    .map(|pos| &func_name[pos + 2..])
-                    .unwrap_or(&func_name)
-                    .to_string();
-
-                // Check for trait impl: "StructName^TraitName::method"
-                let trait_name = {
-                    let prefix = func_name
-                        .find("::")
-                        .map(|pos| &func_name[..pos])
-                        .unwrap_or(&func_name);
-                    prefix
-                        .find('^')
-                        .map(|caret_pos| prefix[caret_pos + 1..].to_string())
+                // Extract method name and trait name from method_info
+                let (method_name, trait_name) = if let Some(info) = func.method_info() {
+                    (info.method_name.clone(), info.trait_name.clone())
+                } else {
+                    (func_name.clone(), None)
                 };
 
                 match base_receiver_type {
                     ResolvedType::Struct {
-                        name, module_path, ..
+                        name,
+                        module_source,
+                        ..
                     } => {
-                        // Struct method call - use FunctionId::Method
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_path.join("/"),
-                            name.clone(),
-                            trait_name.clone(),
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
+                        // Check if this is a monomorphized struct (name contains "<")
+                        // Monomorphized structs are registered as FunctionId::Free, not Method
+                        if name.contains('<') {
+                            // Monomorphized struct method call - use FunctionId::Free
+                            // Include trait name for trait methods
+                            let mangled_func_name = if let Some(ref trait_n) = trait_name {
+                                format!("{name}^{trait_n}::{method_name}")
+                            } else {
+                                format!("{name}::{method_name}")
+                            };
+                            // Extract base generic name (e.g., "TreeMap" from "TreeMap<String,i32>")
+                            let base_struct = name.split('<').next().unwrap_or(&name);
+                            let base_name = if let Some(ref trait_n) = trait_name {
+                                format!("{base_struct}^{trait_n}::{method_name}")
+                            } else {
+                                format!("{base_struct}::{method_name}")
+                            };
+                            let callee_id =
+                                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                                    module_source.to_path(),
+                                    mangled_func_name,
+                                    base_name,
+                                ));
+                            analysis.callees.insert(callee_id);
+                        } else {
+                            // Regular struct method call - use FunctionId::Method
+                            let method_id = FunctionId::Method(MethodName::new(
+                                module_source.to_path().join("/"),
+                                name.clone(),
+                                trait_name.clone(),
+                                method_name,
+                            ));
+                            analysis.callees.insert(method_id);
+                        }
                     }
                     ResolvedType::Primitive(_) => {
                         // Primitive method call (e.g., i32.to_string())
@@ -2497,16 +2518,28 @@ fn analyze_expr(
                     ResolvedType::GenericInstance {
                         name,
                         type_args,
-                        module_path: _,
+                        module_source: _,
                     } => {
                         // Generic instance method call (e.g., Box<i32>.get())
                         let type_arg_names: Vec<String> = type_args
                             .iter()
                             .map(|t| mangle_type_for_name(*t, type_table))
                             .collect();
-                        let mangled_func_name =
-                            format!("{}<{}>::{}", name, type_arg_names.join(","), method_name);
-                        let base_name = format!("{name}::{method_name}");
+                        // Include trait name for trait methods (e.g., TreeMap<String,i32>^Index::index)
+                        let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
+                            let mangled = format!(
+                                "{}<{}>^{trait_n}::{method_name}",
+                                name,
+                                type_arg_names.join(",")
+                            );
+                            let base = format!("{name}^{trait_n}::{method_name}");
+                            (mangled, base)
+                        } else {
+                            let mangled =
+                                format!("{}<{}>::{method_name}", name, type_arg_names.join(","));
+                            let base = format!("{name}::{method_name}");
+                            (mangled, base)
+                        };
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                             vec![],
                             mangled_func_name,
@@ -2517,8 +2550,16 @@ fn analyze_expr(
                     ResolvedType::BuiltinArray(elem_type) => {
                         // Array<T> method call (e.g., arr.len(), arr.append())
                         let elem_name = mangle_type_for_name(elem_type, type_table);
-                        let mangled_func_name = format!("Array<{elem_name}>::{method_name}");
-                        let base_name = format!("Array::{method_name}");
+                        // Include trait name for trait methods (e.g., Array<i32>^Index::index)
+                        let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
+                            let mangled = format!("Array<{elem_name}>^{trait_n}::{method_name}");
+                            let base = format!("Array^{trait_n}::{method_name}");
+                            (mangled, base)
+                        } else {
+                            let mangled = format!("Array<{elem_name}>::{method_name}");
+                            let base = format!("Array::{method_name}");
+                            (mangled, base)
+                        };
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                             vec![],
                             mangled_func_name,
@@ -2657,10 +2698,23 @@ fn analyze_expr(
         }
         TirExprKind::OptionSome { value } => {
             analyze_expr(value, current_module, type_table, analysis);
+            // Option<primitive> now uses box types for Some variant
+            if let ResolvedType::Primitive(prim) = type_table.get(value.type_id) {
+                analysis.used_box_primitives.insert(*prim);
+            }
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
+        TirExprKind::VariantConstruct {
+            case_name, fields, ..
+        } => {
             for field in fields {
                 analyze_expr(field, current_module, type_table, analysis);
+            }
+            // Option::Some with primitive value needs box type
+            if case_name == "Some"
+                && fields.len() == 1
+                && let ResolvedType::Primitive(prim) = type_table.get(fields[0].type_id)
+            {
+                analysis.used_box_primitives.insert(*prim);
             }
         }
         TirExprKind::Move { value } => {
@@ -2703,7 +2757,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
                     func_name,
                 )));
         }
-        ResolvedType::String => {
+        ResolvedType::Struct { name, .. } if name == "String" => {
             // String.to_string() is a no-op, no function call needed
         }
         _ => {}
@@ -2731,7 +2785,6 @@ fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
             PrimitiveType::Char => "char".to_string(),
         },
         ResolvedType::Unit => "unit".to_string(),
-        ResolvedType::String => "String".to_string(),
         ResolvedType::Struct { name, .. } => name.clone(),
         ResolvedType::GenericInstance {
             name, type_args, ..
@@ -2809,34 +2862,23 @@ fn remove_unreachable_functions(project: &mut Project) {
         return;
     }
 
-    for (module_path, module) in &mut project.tir_modules {
+    for (module_source, module) in &mut project.tir_modules {
+        let module_path = module_source.to_path();
         // Retain only reachable functions
         module.functions.retain(|func_rc| {
             let func = func_rc.borrow();
-            // Check if this is a method (name contains "::")
-            if let Some(sep_pos) = func.name.find("::") {
+            // Use TirFunction's method_info to check if this is a method
+            if let Some(ref info) = func.method_info {
                 // Could be either:
                 // - Instance method tracked as FunctionId::Method
                 // - Static method tracked as FunctionId::Free with mangled name
-                let prefix = &func.name[..sep_pos];
-                let method_name = &func.name[sep_pos + 2..];
-
-                // Check for trait impl: "StructName^TraitName::method"
-                let (struct_name, trait_name) = if let Some(caret_pos) = prefix.find('^') {
-                    (
-                        &prefix[..caret_pos],
-                        Some(prefix[caret_pos + 1..].to_string()),
-                    )
-                } else {
-                    (prefix, None)
-                };
-
+                // Use method_info to build the method ID
                 // Try as instance method (FunctionId::Method)
                 let method_id = FunctionId::Method(MethodName::new(
                     module_path.join("/"),
-                    struct_name.to_string(),
-                    trait_name,
-                    method_name.to_string(),
+                    info.struct_name.clone(),
+                    info.trait_name.clone(),
+                    info.method_name.clone(),
                 ));
                 if project.reachable_functions.contains(&method_id) {
                     return true;
@@ -2844,21 +2886,32 @@ fn remove_unreachable_functions(project: &mut Project) {
 
                 // Try as static method (FunctionId::Free with mangled name)
                 let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    module_path,
+                    &module_path,
                     &func.name,
                 ));
                 if project.reachable_functions.contains(&free_id) {
                     return true;
                 }
 
+                // For monomorphized methods, also check with empty module_path (entry module)
+                // Monomorphized functions are tracked in the call graph with module_path = []
+                // regardless of which module they were generated in
+                if func.monomorph_info.is_some() {
+                    let entry_module_free_id =
+                        FunctionId::Free(FreeFunctionName::from_path_and_name(&[], &func.name));
+                    if project.reachable_functions.contains(&entry_module_free_id) {
+                        return true;
+                    }
+                }
+
                 // For generic methods/static methods, check if any monomorphized version is reachable
                 // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
                 // Check if any function ID in reachable_functions matches this base name
-                is_generic_func_reachable(&project.reachable_functions, module_path, &func.name)
+                is_generic_func_reachable(&project.reachable_functions, &module_path, &func.name)
             } else {
                 // Regular function
                 let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    module_path,
+                    &module_path,
                     &func.name,
                 ));
                 project.reachable_functions.contains(&func_id)
@@ -3165,6 +3218,8 @@ fn is_loop_invariant(expr: &TirExpr, modified_vars: &HashSet<u32>) -> bool {
 struct HoistCandidate {
     /// The original expression pattern to match (field access on a local)
     local_index: u32,
+    /// The name of the local variable (for unparsing)
+    local_name: String,
     field_index: u32,
     field_name: String,
     /// The type of the field access result
@@ -3273,7 +3328,7 @@ fn find_hoist_candidates_in_expr(
             field_index,
             field_name,
         } => {
-            if let TirExprKind::Local { index, .. } = &inner.kind
+            if let TirExprKind::Local { index, name } = &inner.kind
                 && !modified_vars.contains(index)
             {
                 let key = (*index, *field_index);
@@ -3281,6 +3336,7 @@ fn find_hoist_candidates_in_expr(
                     seen.insert(key);
                     candidates.push(HoistCandidate {
                         local_index: *index,
+                        local_name: name.clone(),
                         field_index: *field_index,
                         field_name: field_name.clone(),
                         type_id: expr.type_id,
@@ -3645,7 +3701,7 @@ fn licm_loop(
                 expr: Box::new(TirExpr::new(
                     TirExprKind::Local {
                         index: candidate.local_index,
-                        name: String::new(), // Name is not critical here
+                        name: candidate.local_name.clone(),
                     },
                     local_type_id,
                     crate::token::Span::new(0, 0, 0, 0),
@@ -3840,9 +3896,7 @@ fn is_fresh_value(expr: &TirExpr) -> bool {
 /// Check if a type requires value copying (composite types with value semantics).
 fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
-        ResolvedType::Struct { .. }
-        | ResolvedType::GenericInstance { .. }
-        | ResolvedType::String => true,
+        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
         ResolvedType::Tuple(elements) => !elements.is_empty(),
         ResolvedType::Option(inner) => needs_value_copy(*inner, type_table),
         // References, primitives, etc. don't need copying

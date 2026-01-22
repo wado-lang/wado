@@ -1,0 +1,29 @@
+// Test: basic associated type usage
+use { println, Stdout } from "core:cli";
+
+trait Container {
+    type Item;
+
+    fn get(&self) -> Self::Item;
+}
+
+struct IntBox {
+    value: i32,
+}
+
+impl Container for IntBox {
+    type Item = i32;
+
+    fn get(&self) -> Self::Item {
+        return self.value;
+    }
+}
+
+fn run() with Stdout {
+    let box = IntBox { value: 42 };
+    let val = box.get();
+    println(`Value: {val}`);
+}
+
+__DATA__
+{"stdout": "Value: 42\n"}

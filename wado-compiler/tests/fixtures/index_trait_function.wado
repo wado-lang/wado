@@ -1,0 +1,51 @@
+// Test: Index traits with helper functions
+use { println, Stdout } from "core:cli";
+
+struct Data {
+    value: i32,
+}
+
+impl Data {
+    fn set_value(&mut self, v: i32) {
+        self.value = v;
+    }
+}
+
+struct Holder {
+    data: Data,
+}
+
+impl Index<i32> for Holder {
+    type Output = Data;
+
+    fn index(&self, _idx: i32) -> &Self::Output {
+        return &self.data;
+    }
+}
+
+impl IndexMut<i32> for Holder {
+    type Output = Data;
+
+    fn index_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.data;
+    }
+}
+
+// Helper function that uses IndexMut
+fn modify_holder(h: &mut Holder, new_value: i32) {
+    h[0].set_value(new_value);
+}
+
+fn run() with Stdout {
+    let mut h = Holder { data: Data { value: 0 } };
+
+    // Call helper function
+    modify_holder(&mut h, 42);
+
+    // Read result
+    let d = h[0];
+    println(`Value: {d.value}`);
+}
+
+__DATA__
+{"stdout": "Value: 42\n"}

@@ -274,9 +274,9 @@ async fn generate_output(opts: &DumpOptions, input: &str) -> Result<String, Stri
     // For golden fixtures (--optimize --unparse), extract only the entry module
     if opts.show_optimize && opts.unparse {
         if let Some(ref project) = result.optimized_project {
-            // Find the entry module (empty path)
-            for (module_path, module) in &project.tir_modules {
-                if module_path.is_empty() {
+            // Find the entry module (ModuleSource::EntryPoint)
+            for (module_source, module) in &project.tir_modules {
+                if matches!(module_source, wado_compiler::name::ModuleSource::EntryPoint) {
                     let name = path.file_stem().map_or_else(
                         || "unknown".to_string(),
                         |s| s.to_string_lossy().into_owned(),
@@ -392,9 +392,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // Modules section (Load phase)
     if opts.show_modules {
         println!("=== Loaded Modules (Load) ===");
-        for module_path in &result.loaded_modules {
-            let path_str: String = module_path.join("::");
-            let is_implicit = result.implicit_modules.contains(module_path);
+        for module_source in &result.loaded_modules {
+            let path_str = module_source.to_string();
+            let is_implicit = result.implicit_modules.contains(module_source);
             if is_implicit {
                 println!("  {path_str} (implicit)");
             } else {
@@ -404,8 +404,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         println!();
 
         println!("=== Implicit Modules ===");
-        for module_path in &result.implicit_modules {
-            let path_str: String = module_path.join("::");
+        for module_source in &result.implicit_modules {
+            let path_str = module_source.to_string();
             println!("  {path_str}");
         }
         println!();
@@ -496,7 +496,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             };
             println!(
                 "  [{}] {} :: {} = {}",
-                symbol.id, module_path, symbol.name, kind_str
+                symbol.id.0, module_path, symbol.name, kind_str
             );
         }
         println!();
@@ -507,16 +507,16 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         if let Some(ref tir_modules) = result.tir_modules {
             if opts.unparse {
                 println!("=== TIR (Resolve, unparsed) ===");
-                for (path, module) in tir_modules {
-                    let path_str: String = path.join("::");
+                for (module_source, module) in tir_modules {
+                    let path_str = module_source.to_string();
                     println!("// --- Module: {path_str} ---");
                     let unparsed = wado_compiler::unparse::unparse_tir(module);
                     println!("{unparsed}");
                 }
             } else {
                 println!("=== TIR (Resolve) ===");
-                for (path, module) in tir_modules {
-                    let path_str: String = path.join("::");
+                for (module_source, module) in tir_modules {
+                    let path_str = module_source.to_string();
                     println!("--- Module: {path_str} ---");
                     println!("{module:#?}");
                     println!();
@@ -534,16 +534,16 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         if let Some(ref lowered_modules) = result.lowered_tir_modules {
             if opts.unparse {
                 println!("=== Lowered TIR (Lower, unparsed) ===");
-                for (path, module) in lowered_modules {
-                    let path_str: String = path.join("::");
+                for (module_source, module) in lowered_modules {
+                    let path_str = module_source.to_string();
                     println!("// --- Module: {path_str} ---");
                     let unparsed = wado_compiler::unparse::unparse_tir(module);
                     println!("{unparsed}");
                 }
             } else {
                 println!("=== Lowered TIR (Lower) ===");
-                for (path, module) in lowered_modules {
-                    let path_str: String = path.join("::");
+                for (module_source, module) in lowered_modules {
+                    let path_str = module_source.to_string();
                     println!("--- Module: {path_str} ---");
                     println!("{module:#?}");
                     println!();
@@ -561,8 +561,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         if let Some(ref project) = result.optimized_project {
             if opts.unparse {
                 println!("=== Optimized TIR (Optimize, unparsed) ===");
-                for (path, module) in &project.tir_modules {
-                    let path_str: String = path.join("::");
+                for (module_source, module) in &project.tir_modules {
+                    let path_str = module_source.to_string();
                     println!("// --- Module: {path_str} ---");
                     let unparsed = wado_compiler::unparse::unparse_tir(module);
                     println!("{unparsed}");

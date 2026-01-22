@@ -1,0 +1,46 @@
+// Test: Index traits with conditional branches
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+
+    fn decrement(&mut self) {
+        self.value = self.value - 1;
+    }
+}
+
+struct Box {
+    item: Counter,
+}
+
+impl IndexMut<i32> for Box {
+    type Output = Counter;
+
+    fn index_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
+fn run() with Stdout {
+    let mut b = Box { item: Counter { value: 10 } };
+
+    // Index in different branches
+    let condition = true;
+    if condition {
+        b[0].increment();
+        b[0].increment();
+    } else {
+        b[0].decrement();
+    }
+
+    println(`Value: {b.item.value}`);
+}
+
+__DATA__
+{"stdout": "Value: 12\n"}

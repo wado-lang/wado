@@ -9,7 +9,11 @@ struct Point {
 
 fn run() with Stdout {
     let points: Array<Point> = move [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "points[0]: (", move "i32::to_string"(points[0].x)), move ", "), move "i32::to_string"(points[0].y)), move ")"));
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "points[1]: (", move "i32::to_string"(points[1].x)), move ", "), move "i32::to_string"(points[1].y)), move ")"));
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "points[0]: (", move "i32::to_string"("Array<Point>^IndexValue::index_value"(&points, 0).x)), move ", "), move "i32::to_string"("Array<Point>^IndexValue::index_value"(&points, 0).y)), move ")"));
+    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "points[1]: (", move "i32::to_string"("Array<Point>^IndexValue::index_value"(&points, 1).x)), move ", "), move "i32::to_string"("Array<Point>^IndexValue::index_value"(&points, 1).y)), move ")"));
+}
+
+fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
+    return core::builtin::array_get::<Point>(self.repr, index);
 }
 
