@@ -10,18 +10,16 @@ struct Dog {
     name: String,
 }
 
-fn "Cat^Describe::describe"(self: &Cat) -> String {
-    return core::internal::string_concat(move "A cat named ", self.name);
-}
-
-fn "Dog^Describe::describe"(self: &Dog) -> String {
-    return core::internal::string_concat(move "A dog named ", self.name);
-}
-
 fn run() with Stdout {
     let cat: Cat = move Cat { name: "Whiskers" };
     let dog: Dog = move Dog { name: "Buddy" };
-    core::cli::println(move "Cat^Describe::describe"(&cat));
-    core::cli::println(move "Dog^Describe::describe"(&dog));
+    core::cli::println(__inline_Cat_Describe__describe_0: {
+        let self: &Cat = &cat;
+        break __inline_Cat_Describe__describe_0: core::internal::string_concat(move "A cat named ", self.name);
+    });
+    core::cli::println(__inline_Dog_Describe__describe_1: {
+        let self: &Dog = &dog;
+        break __inline_Dog_Describe__describe_1: core::internal::string_concat(move "A dog named ", self.name);
+    });
 }
 

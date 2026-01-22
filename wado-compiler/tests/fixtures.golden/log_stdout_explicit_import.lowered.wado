@@ -9,7 +9,27 @@ fn run() {
         let rx: i32 = handles as i32;
         let tx: i32 = (handles >> 32) as i32;
         core::builtin::call_indirect_stdout_write_via_stream(rx);
-        core::internal::write_string_to_stream(tx, message, true);
+        __inline_write_string_to_stream_1: {
+            let tx: i32 = tx;
+            let message: String = message;
+            let add_newline: bool = true;
+            let len: i32 = "String::len"(&message);
+            let mut alloc_size: i32 = len;
+            if add_newline {
+                alloc_size = (len + 1);
+            }
+            let ptr: i32 = core::builtin::realloc(0, 0, 1, alloc_size);
+            let mut i: i32 = 0;
+            for ; (i < len); i = (i + 1) {
+                let byte: i32 = "String::get"(&message, i);
+                core::builtin::memory_store8((ptr + i), byte);
+            }
+            if add_newline {
+                core::builtin::memory_store8((ptr + len), '\n');
+            }
+            core::builtin::stream_write(tx, ptr, alloc_size);
+            core::builtin::stream_drop_writable(tx);
+        };
         core::builtin::effect_wait();
     };
 }

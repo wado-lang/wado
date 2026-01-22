@@ -5,7 +5,25 @@
 fn run() with Stdout {
     let mut i: i32 = 0;
     for ; (i < 10); i = (i + 1) {
-        core::cli::println(move core::internal::string_concat(move "i: ", move "i32::to_string"(i)));
+        core::cli::println(__inline_string_concat_0: {
+            let a: String = move "i: ";
+            let b: String = move "i32::to_string"(i);
+            let len_a: i32 = "String::len"(&a);
+            let len_b: i32 = "String::len"(&b);
+            let total: i32 = (len_a + len_b);
+            let result: String = move core::builtin::string_new(total);
+            let mut i: i32 = 0;
+            for ; (i < len_a); i = (i + 1) {
+                let byte: i32 = "String::get"(&a, i);
+                "String::set"(&mut result, i, byte);
+            }
+            let mut i: i32 = 0;
+            for ; (i < len_b); i = (i + 1) {
+                let byte: i32 = "String::get"(&b, i);
+                "String::set"(&mut result, (len_a + i), byte);
+            }
+            break __inline_string_concat_0: result;
+        });
         if (i >= 2) {
             break;
         }

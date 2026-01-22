@@ -7,16 +7,16 @@ struct Point {
     y: i32,
 }
 
-fn "Point^Describable::describe"(self: &Point) -> String {
-    let s: i32 = __inline_Point__sum_0: {
-        let self: &Point = self;
-        break __inline_Point__sum_0: (self.x + self.y);
-    };
-    return core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Point(", move "i32::to_string"(self.x)), move ", "), move "i32::to_string"(self.y)), move ") sum="), move "i32::to_string"(s));
+fn "Point::sum"(self: &Point) -> i32 {
+    return (self.x + self.y);
 }
 
 fn run() with Stdout {
     let p: Point = move Point { x: 3, y: 4 };
-    core::cli::println(move "Point^Describable::describe"(&p));
+    core::cli::println(__inline_Point_Describable__describe_0: {
+        let self: &Point = &p;
+        let s: i32 = "Point::sum"(self);
+        break __inline_Point_Describable__describe_0: core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Point(", move "i32::to_string"(self.x)), move ", "), move "i32::to_string"(self.y)), move ") sum="), move "i32::to_string"(s));
+    });
 }
 

@@ -53,13 +53,31 @@ fn is_inline_eligible(
         return false;
     };
 
-    // Don't inline functions with reference parameters
-    // Reference handling during inlining can cause type issues with complex struct types
+    // Don't inline functions that return Never (!)
+    // These are error/abort paths that are never hot, so no performance benefit to inlining
+    if matches!(type_table.get(func.return_type), ResolvedType::Never) {
+        return false;
+    }
+
+    // TODO: Don't inline functions with parameters that have complex nested generic types
+    // (like Array<&mut BTreeNode<K,V>>). These can have type normalization issues
+    // during monomorphization that cause type mismatches after inlining.
+    // Fix the underlying type normalization issues to allow inlining these functions.
     for param in &func.params {
-        match type_table.get(param.type_id) {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-            _ => {}
+        if type_table.has_nested_generics(param.type_id) {
+            return false;
         }
+    }
+    // Also check return type for nested generics
+    if type_table.has_nested_generics(func.return_type) {
+        return false;
+    }
+
+    // TODO: Check if any expression in the function body has complex nested generic types.
+    // This catches cases like methods on TreeMap that access fields with nested generics.
+    // Fix the underlying type normalization issues to allow inlining these functions.
+    if body_has_complex_generic_types(body, type_table) {
+        return false;
     }
 
     // No effects (pure functions only)
@@ -78,17 +96,14 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Don't inline functions that return non-primitive types (except Unit)
-    // We can't properly initialize result locals for reference types
-    match type_table.get(func.return_type) {
-        ResolvedType::Unit | ResolvedType::Primitive(_) => {}
-        // All other types (Struct, Array, Ref, MutRef, Option, etc.) can't be initialized
-        // with a simple default value for the result local pattern
-        _ => return false,
-    }
-
     // Small enough
     count_stmts(body) < INLINE_THRESHOLD
+}
+
+/// Check if a type has complex nested generics that could cause type normalization issues.
+/// Uses the TypeTable's type metadata to check for nested generic types.
+fn has_complex_nested_generic(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.has_nested_generics(type_id)
 }
 
 /// Check if a block has early returns (returns inside if/while blocks)
@@ -192,6 +207,175 @@ fn block_has_return(block: &TirBlock) -> bool {
         }
     }
     false
+}
+
+/// Check if any expression in the function body has a type with complex nested generics.
+/// This catches cases where the function accesses fields or creates values with deeply nested
+/// generic types that could cause type normalization issues during codegen.
+fn body_has_complex_generic_types(body: &TirBlock, type_table: &TypeTable) -> bool {
+    block_has_complex_generic_types(body, type_table)
+}
+
+fn block_has_complex_generic_types(block: &TirBlock, type_table: &TypeTable) -> bool {
+    for stmt in &block.stmts {
+        if stmt_has_complex_generic_types(stmt, type_table) {
+            return true;
+        }
+    }
+    false
+}
+
+fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Let { value, type_id, .. } => {
+            // Check the declared type
+            if has_complex_nested_generic(*type_id, type_table) {
+                return true;
+            }
+            expr_has_complex_generic_types(value, type_table)
+        }
+        TirStmtKind::Expr(expr) => expr_has_complex_generic_types(expr, type_table),
+        TirStmtKind::Return { value } => {
+            if let Some(expr) = value {
+                return expr_has_complex_generic_types(expr, type_table);
+            }
+            false
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            expr_has_complex_generic_types(condition, type_table)
+                || block_has_complex_generic_types(then_block, type_table)
+                || else_block
+                    .as_ref()
+                    .map_or(false, |b| block_has_complex_generic_types(b, type_table))
+        }
+        TirStmtKind::While { condition, body } => {
+            expr_has_complex_generic_types(condition, type_table)
+                || block_has_complex_generic_types(body, type_table)
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            block_has_complex_generic_types(body, type_table)
+        }
+        TirStmtKind::For {
+            condition,
+            body,
+            update,
+        } => {
+            condition
+                .as_ref()
+                .map_or(false, |e| expr_has_complex_generic_types(e, type_table))
+                || block_has_complex_generic_types(body, type_table)
+                || update
+                    .as_ref()
+                    .map_or(false, |e| expr_has_complex_generic_types(e, type_table))
+        }
+        TirStmtKind::ForOf {
+            iterable,
+            iterable_type,
+            body,
+            ..
+        } => {
+            has_complex_nested_generic(*iterable_type, type_table)
+                || expr_has_complex_generic_types(iterable, type_table)
+                || block_has_complex_generic_types(body, type_table)
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_has_complex_generic_types(scrutinee, type_table)
+                || block_has_complex_generic_types(then_block, type_table)
+                || else_block
+                    .as_ref()
+                    .map_or(false, |b| block_has_complex_generic_types(b, type_table))
+        }
+        TirStmtKind::Break { value, .. } => value
+            .as_ref()
+            .map_or(false, |e| expr_has_complex_generic_types(e, type_table)),
+        TirStmtKind::Continue => false,
+    }
+}
+
+fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    // Check the expression's own type
+    if has_complex_nested_generic(expr.type_id, type_table) {
+        return true;
+    }
+
+    // Recursively check subexpressions
+    match &expr.kind {
+        TirExprKind::Call { args, .. }
+        | TirExprKind::MethodCall { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::EffectCall { args, .. } => args
+            .iter()
+            .any(|a| expr_has_complex_generic_types(a, type_table)),
+        TirExprKind::IndirectCall { callee, args } => {
+            expr_has_complex_generic_types(callee, type_table)
+                || args
+                    .iter()
+                    .any(|a| expr_has_complex_generic_types(a, type_table))
+        }
+        TirExprKind::Binary { left, right, .. } | TirExprKind::Assign { target: left, value: right } => {
+            expr_has_complex_generic_types(left, type_table)
+                || expr_has_complex_generic_types(right, type_table)
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::OptionSome { value: inner }
+        | TirExprKind::Move { value: inner } => expr_has_complex_generic_types(inner, type_table),
+        TirExprKind::Index { expr: base, index } => {
+            expr_has_complex_generic_types(base, type_table)
+                || expr_has_complex_generic_types(index, type_table)
+        }
+        TirExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .any(|f| expr_has_complex_generic_types(&f.value, type_table)),
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .any(|e| expr_has_complex_generic_types(e, type_table)),
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expr_has_complex_generic_types(condition, type_table)
+                || block_has_complex_generic_types(then_branch, type_table)
+                || else_branch
+                    .as_ref()
+                    .map_or(false, |b| block_has_complex_generic_types(b, type_table))
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block_has_complex_generic_types(block, type_table)
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            expr_has_complex_generic_types(inner, type_table)
+                || arms
+                    .iter()
+                    .any(|arm| expr_has_complex_generic_types(&arm.body, type_table))
+        }
+        TirExprKind::Closure { body, .. } => expr_has_complex_generic_types(body, type_table),
+        TirExprKind::VariantConstruct { fields, .. } => fields
+            .iter()
+            .any(|f| expr_has_complex_generic_types(f, type_table)),
+        // Leaf nodes
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. } => false,
+    }
 }
 
 /// Detect recursive functions using call graph analysis
@@ -571,11 +755,23 @@ fn inline_calls_in_block(
                     )
                 });
 
-                if let Some((inlined_expr, inlined_key)) = inline_result {
+                if let Some((mut inlined_expr, inlined_key)) = inline_result {
                     // Track the inlined function
                     if !inlined_funcs.contains(&inlined_key) {
                         inlined_funcs.push(inlined_key);
                     }
+                    // Process the inlined expression for nested inlining opportunities
+                    inline_calls_in_expr(
+                        &mut inlined_expr,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        &mut new_stmts,
+                        inlined_funcs,
+                        inline_counter,
+                    );
                     // Create the let with the inlined labeled block expression
                     new_stmts.push(TirStmt::new(
                         TirStmtKind::Let {
@@ -638,18 +834,24 @@ fn inline_calls_in_block(
                     )
                 });
 
-                if let Some((inlined_expr, inlined_key)) = inline_result {
+                if let Some((mut inlined_expr, inlined_key)) = inline_result {
                     if !inlined_funcs.contains(&inlined_key) {
                         inlined_funcs.push(inlined_key);
                     }
-                    let is_void = matches!(inlined_expr.type_id, t if t == TypeTable::UNIT);
-                    // For void methods, don't add the Expr statement if it would leave a value
-                    if is_void {
-                        // For void functions, still emit the expression for side effects
-                        new_stmts.push(TirStmt::new(TirStmtKind::Expr(inlined_expr), stmt.span));
-                    } else {
-                        new_stmts.push(TirStmt::new(TirStmtKind::Expr(inlined_expr), stmt.span));
-                    }
+                    // Process the inlined expression for nested inlining opportunities
+                    inline_calls_in_expr(
+                        &mut inlined_expr,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        &mut new_stmts,
+                        inlined_funcs,
+                        inline_counter,
+                    );
+                    // For void functions, still emit the expression for side effects
+                    new_stmts.push(TirStmt::new(TirStmtKind::Expr(inlined_expr), stmt.span));
                 } else {
                     let mut new_expr = expr;
                     inline_calls_in_expr(
@@ -689,10 +891,22 @@ fn inline_calls_in_block(
                         )
                     });
 
-                    if let Some((inlined_expr, inlined_key)) = inline_result {
+                    if let Some((mut inlined_expr, inlined_key)) = inline_result {
                         if !inlined_funcs.contains(&inlined_key) {
                             inlined_funcs.push(inlined_key);
                         }
+                        // Process the inlined expression for nested inlining opportunities
+                        inline_calls_in_expr(
+                            &mut inlined_expr,
+                            candidates,
+                            current_module,
+                            local_count,
+                            local_types,
+                            type_table,
+                            &mut new_stmts,
+                            inlined_funcs,
+                            inline_counter,
+                        );
                         new_stmts.push(TirStmt::new(
                             TirStmtKind::Return {
                                 value: Some(inlined_expr),
@@ -1051,7 +1265,9 @@ fn try_inline_call_expr(
             } else {
                 candidates.get(&(vec![], func_name.clone()))
             }
-        })?;
+        });
+
+    let candidate = candidate?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1088,8 +1304,9 @@ fn try_inline_call_expr(
         let new_local_index = local_offset + i as u32;
         param_to_local.insert(param.local_index, new_local_index);
 
-        // Extend local_types for parameter
-        local_types.push(param.type_id);
+        // Extend local_types for parameter - use argument's type_id to match
+        // the actual value being assigned (handles monomorphization type variance)
+        local_types.push(arg.type_id);
         *local_count += 1;
 
         // Use original parameter name (not _inline_ prefix)
@@ -1099,7 +1316,7 @@ fn try_inline_call_expr(
                 local_index: new_local_index,
                 is_mut: false, // Parameters are immutable
                 is_reactive: false,
-                type_id: param.type_id,
+                type_id: arg.type_id,
                 value: arg.clone(),
             },
             expr.span,
@@ -1192,7 +1409,9 @@ fn try_inline_method_call_expr(
             } else {
                 candidates.get(&(vec![], func_name.clone()))
             }
-        })?;
+        });
+
+    let candidate = candidate?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1226,10 +1445,11 @@ fn try_inline_method_call_expr(
     let mut param_to_local: HashMap<u32, u32> = HashMap::new();
 
     // Bind receiver to first parameter (self)
+    // Use receiver's type_id to handle monomorphization type variance
     let first_param = &candidate.params[0];
     let self_local_index = local_offset;
     param_to_local.insert(first_param.local_index, self_local_index);
-    local_types.push(first_param.type_id);
+    local_types.push(receiver.type_id);
     *local_count += 1;
 
     // Use original parameter name (not _inline_ prefix)
@@ -1239,17 +1459,18 @@ fn try_inline_method_call_expr(
             local_index: self_local_index,
             is_mut: false,
             is_reactive: false,
-            type_id: first_param.type_id,
+            type_id: receiver.type_id,
             value: (**receiver).clone(),
         },
         expr.span,
     ));
 
     // Bind remaining args to remaining parameters
+    // Use argument's type_id to handle monomorphization type variance
     for (i, (param, arg)) in candidate.params.iter().skip(1).zip(args.iter()).enumerate() {
         let new_local_index = local_offset + 1 + i as u32;
         param_to_local.insert(param.local_index, new_local_index);
-        local_types.push(param.type_id);
+        local_types.push(arg.type_id);
         *local_count += 1;
 
         // Use original parameter name (not _inline_ prefix)
@@ -1259,7 +1480,7 @@ fn try_inline_method_call_expr(
                 local_index: new_local_index,
                 is_mut: false,
                 is_reactive: false,
-                type_id: param.type_id,
+                type_id: arg.type_id,
                 value: arg.clone(),
             },
             expr.span,
@@ -1302,6 +1523,7 @@ fn try_inline_method_call_expr(
 
     // Return the inlined method key for string literal tracking
     let inlined_key = (target_module, func_name.clone());
+
     Some((inlined_expr, inlined_key))
 }
 
@@ -2564,7 +2786,20 @@ fn inline_calls_in_expr(
                 inline_counter,
             );
         }
-        // For block/if/match expressions, we don't inline recursively here
+        TirExprKind::LabeledBlock { block, .. } => {
+            // Process the block for nested inlining opportunities
+            inline_calls_in_block(
+                block,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                inlined_funcs,
+                inline_counter,
+            );
+        }
+        // For if/match expressions, we don't inline recursively here
         // as they would need proper block handling
         _ => {}
     }

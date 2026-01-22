@@ -6,12 +6,11 @@ struct Person {
     name: String,
 }
 
-fn "Person^Greet::greet"(self: &Person) -> String {
-    return core::internal::string_concat(move core::internal::string_concat(move "Hello, ", self.name), move "!");
-}
-
 fn run() with Stdout {
     let p: Person = move Person { name: "Alice" };
-    core::cli::println(move "Person^Greet::greet"(&p));
+    core::cli::println(__inline_Person_Greet__greet_0: {
+        let self: &Person = &p;
+        break __inline_Person_Greet__greet_0: core::internal::string_concat(move core::internal::string_concat(move "Hello, ", self.name), move "!");
+    });
 }
 

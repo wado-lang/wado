@@ -6,16 +6,33 @@ struct "Box<i32>" {
     value: i32,
 }
 
-fn make_box(v: i32) -> Box<i32> {
-    return Box<i32> { value: v };
-}
-
 fn run() with Stdout {
-    let b: Box<i32> = move make_box(42);
-    let v: i32 = __inline_get_value_0: {
-        let b: Box<i32> = b;
-        break __inline_get_value_0: b.value;
+    let b: Box<i32> = __inline_make_box_0: {
+        let v: i32 = 42;
+        break __inline_make_box_0: Box<i32> { value: v };
     };
-    core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"(v)));
+    let v: i32 = __inline_get_value_1: {
+        let b: Box<i32> = b;
+        break __inline_get_value_1: b.value;
+    };
+    core::cli::println(__inline_string_concat_2: {
+        let a: String = move "value: ";
+        let b: String = move "i32::to_string"(v);
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_2: result;
+    });
 }
 

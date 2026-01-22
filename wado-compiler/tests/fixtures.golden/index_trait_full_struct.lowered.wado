@@ -19,16 +19,8 @@ fn "Value::new"(n: i32, tag: String) -> Value {
     return Value { n: n, tag: tag };
 }
 
-fn "Value::describe"(self: &Value) -> String {
-    return core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
-}
-
 fn "Container::from_values"(a: Value, b: Value, c: Value) -> Container {
     return Container { v0: a, v1: b, v2: c, read_count: 0, write_count: 0 };
-}
-
-fn "Container::stats"(self: &Container) -> String {
-    return core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "reads=", move "i32::to_string"(self.read_count)), move ", writes="), move "i32::to_string"(self.write_count));
 }
 
 fn "Container^Index::index"(self: &Container, idx: i32) -> &Value {
@@ -59,28 +51,133 @@ fn "Container^IndexMut::index_mut"(self: &mut Container, idx: i32) -> &mut Value
 fn run() with Stdout {
     let mut c: Container = move "Container::from_values"(move "Value::new"(10, move "a"), move "Value::new"(20, move "b"), move "Value::new"(30, move "c"));
     let v0: Value = *"Container^Index::index"(&c, 0);
-    core::cli::println(move core::internal::string_concat(move "v0: ", move "Value::describe"(&v0)));
+    core::cli::println(__inline_string_concat_1: {
+        let a: String = move "v0: ";
+        let b: String = __inline_Value__describe_0: {
+            let self: &Value = &v0;
+            break __inline_Value__describe_0: core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_1: result;
+    });
     let v1: Value = *"Container^Index::index"(&c, 1);
-    core::cli::println(move core::internal::string_concat(move "v1: ", move "Value::describe"(&v1)));
-    __inline_Value__increment_0: {
+    core::cli::println(__inline_string_concat_3: {
+        let a: String = move "v1: ";
+        let b: String = __inline_Value__describe_2: {
+            let self: &Value = &v1;
+            break __inline_Value__describe_2: core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_3: result;
+    });
+    __inline_Value__increment_4: {
         let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 0);
         self.n = (self.n + 1);
     };
-    __inline_Value__add_1: {
+    __inline_Value__add_5: {
         let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 1);
         let delta: i32 = 100;
         self.n = (self.n + delta);
     };
-    __inline_Value__add_2: {
+    __inline_Value__add_6: {
         let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 2);
         let delta: i32 = 200;
         self.n = (self.n + delta);
     };
     core::cli::println(move "After mutations:");
-    core::cli::println(move core::internal::string_concat(move "v0: ", move "Value::describe"(&c.v0)));
-    core::cli::println(move core::internal::string_concat(move "v1: ", move "Value::describe"(&c.v1)));
-    core::cli::println(move core::internal::string_concat(move "v2: ", move "Value::describe"(&c.v2)));
-    __inline_Container_IndexAssign__index_assign_3: {
+    core::cli::println(__inline_string_concat_8: {
+        let a: String = move "v0: ";
+        let b: String = __inline_Value__describe_7: {
+            let self: &Value = &c.v0;
+            break __inline_Value__describe_7: core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_8: result;
+    });
+    core::cli::println(__inline_string_concat_10: {
+        let a: String = move "v1: ";
+        let b: String = __inline_Value__describe_9: {
+            let self: &Value = &c.v1;
+            break __inline_Value__describe_9: core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_10: result;
+    });
+    core::cli::println(__inline_string_concat_12: {
+        let a: String = move "v2: ";
+        let b: String = __inline_Value__describe_11: {
+            let self: &Value = &c.v2;
+            break __inline_Value__describe_11: core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_12: result;
+    });
+    __inline_Container_IndexAssign__index_assign_13: {
         let self: &mut Container = &mut c;
         let idx: i32 = 2;
         let value: Value = move "Value::new"(999, move "replaced");
@@ -95,26 +192,128 @@ fn run() with Stdout {
             }
         }
     };
-    core::cli::println(move core::internal::string_concat(move "After replace: ", move "Value::describe"(&c.v2)));
-    core::cli::println(move core::internal::string_concat(move "Total: ", move "i32::to_string"(__inline_Container__total_4: {
-        let self: &Container = &c;
-        break __inline_Container__total_4: ((self.v0.n + self.v1.n) + self.v2.n);
-    })));
-    core::cli::println(move core::internal::string_concat(move "Stats: ", move "Container::stats"(&c)));
-    __inline_Container__reset_stats_5: {
+    core::cli::println(__inline_string_concat_15: {
+        let a: String = move "After replace: ";
+        let b: String = __inline_Value__describe_14: {
+            let self: &Value = &c.v2;
+            break __inline_Value__describe_14: core::internal::string_concat(move core::internal::string_concat(self.tag, move ":"), move "i32::to_string"(self.n));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_15: result;
+    });
+    core::cli::println(__inline_string_concat_17: {
+        let a: String = move "Total: ";
+        let b: String = move "i32::to_string"(__inline_Container__total_16: {
+            let self: &Container = &c;
+            break __inline_Container__total_16: ((self.v0.n + self.v1.n) + self.v2.n);
+        });
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_17: result;
+    });
+    core::cli::println(__inline_string_concat_19: {
+        let a: String = move "Stats: ";
+        let b: String = __inline_Container__stats_18: {
+            let self: &Container = &c;
+            break __inline_Container__stats_18: core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "reads=", move "i32::to_string"(self.read_count)), move ", writes="), move "i32::to_string"(self.write_count));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_19: result;
+    });
+    __inline_Container__reset_stats_20: {
         let self: &mut Container = &mut c;
         self.read_count = 0;
         self.write_count = 0;
     };
-    core::cli::println(move core::internal::string_concat(move "After reset: ", move "Container::stats"(&c)));
-    __inline_Value__increment_6: {
+    core::cli::println(__inline_string_concat_22: {
+        let a: String = move "After reset: ";
+        let b: String = __inline_Container__stats_21: {
+            let self: &Container = &c;
+            break __inline_Container__stats_21: core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "reads=", move "i32::to_string"(self.read_count)), move ", writes="), move "i32::to_string"(self.write_count));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_22: result;
+    });
+    __inline_Value__increment_23: {
         let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 0);
         self.n = (self.n + 1);
     };
-    __inline_Value__increment_7: {
+    __inline_Value__increment_24: {
         let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 1);
         self.n = (self.n + 1);
     };
-    core::cli::println(move core::internal::string_concat(move "Final stats: ", move "Container::stats"(&c)));
+    core::cli::println(__inline_string_concat_26: {
+        let a: String = move "Final stats: ";
+        let b: String = __inline_Container__stats_25: {
+            let self: &Container = &c;
+            break __inline_Container__stats_25: core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "reads=", move "i32::to_string"(self.read_count)), move ", writes="), move "i32::to_string"(self.write_count));
+        };
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        let mut i: i32 = 0;
+        for ; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        let mut i: i32 = 0;
+        for ; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_26: result;
+    });
 }
 
