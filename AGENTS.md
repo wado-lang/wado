@@ -256,6 +256,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Effect System and Randomness in Collections](./docs/wep-2026-01-20-effect-system-randomness.md)
 - [Associated Types in Traits](./docs/wep-2026-01-20-associated-types.md)
 - [Indexing Traits Design](./docs/wep-2026-01-20-indexing-traits.md)
+- [String Template Desugaring](./docs/wep-2026-01-20-string-template-desugaring.md)
 
 ### Structure
 
