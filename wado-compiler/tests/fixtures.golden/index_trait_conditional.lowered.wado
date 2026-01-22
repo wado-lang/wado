@@ -10,6 +10,14 @@ struct Box {
     item: Counter,
 }
 
+fn "Counter::increment"(self: &mut Counter) {
+    self.value = (self.value + 1);
+}
+
+fn "Counter::decrement"(self: &mut Counter) {
+    self.value = (self.value - 1);
+}
+
 fn "Box^IndexMut::index_mut"(self: &mut Box, _idx: i32) -> &mut Counter {
     return &mut self.item;
 }
@@ -18,13 +26,10 @@ fn run() with Stdout {
     let mut b: Box = move Box { item: Counter { value: 10 } };
     let condition: bool = true;
     if condition {
-        let _inline_self: &mut Counter = "Box^IndexMut::index_mut"(&mut b, 0);
-        self.value = (self.value + 1);
-        let _inline_self: &mut Counter = "Box^IndexMut::index_mut"(&mut b, 0);
-        self.value = (self.value + 1);
+        "Counter::increment"("Box^IndexMut::index_mut"(&mut b, 0));
+        "Counter::increment"("Box^IndexMut::index_mut"(&mut b, 0));
     } else {
-        let _inline_self: &mut Counter = "Box^IndexMut::index_mut"(&mut b, 0);
-        self.value = (self.value - 1);
+        "Counter::decrement"("Box^IndexMut::index_mut"(&mut b, 0));
     }
     core::cli::println(move core::internal::string_concat(move "Value: ", move "i32::to_string"(b.item.value)));
 }

@@ -18,19 +18,26 @@ fn run() {
 }
 
 fn "Container<i32>::get"(self: &Container<i32>, index: i32) -> i32 {
-    let _inline_self: &Array<i32> = &self.items;
-    let _inline_index: i32 = index;
+    return "Array<i32>^IndexValue::index_value"(&self.items, index);
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 fn "Container<i32>::len"(self: &Container<i32>) -> i32 {
-    let _inline_self: &Array<i32> = &self.items;
+    return "Array<i32>::len"(&self.items);
+}
+
+pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
     return self.used;
 }
 
 fn "Container<i32>::add"(self: &mut Container<i32>, item: i32) {
-    let _inline_self: &mut Array<i32> = &mut self.items;
-    let _inline_value: i32 = item;
+    "Array<i32>::append"(&mut self.items, item);
+}
+
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {

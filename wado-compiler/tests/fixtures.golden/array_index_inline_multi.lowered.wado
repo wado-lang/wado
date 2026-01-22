@@ -41,14 +41,14 @@ pub fn "Array<bool>::len"(self: &Array<bool>) -> i32 {
 }
 
 fn "Container<String>::is_flagged"(self: &Container<String>, i: i32) -> bool {
-    let _inline_self: &Array<bool> = &self.flags;
-    let _inline_index: i32 = i;
-    return core::builtin::array_get::<bool>(self.repr, index);
+    return "Array<bool>^IndexValue::index_value"(&self.flags, i);
 }
 
 fn "Container<String>::get_item"(self: &Container<String>, i: i32) -> String {
-    let _inline_self: &Array<String> = &self.items;
-    let _inline_index: i32 = i;
+    return "Array<String>^IndexValue::index_value"(&self.items, i);
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     return core::builtin::array_get::<String>(self.repr, index);
 }
 

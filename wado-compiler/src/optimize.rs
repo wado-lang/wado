@@ -202,286 +202,6 @@ fn count_stmts(block: &TirBlock) -> usize {
         .sum()
 }
 
-/// Check if a monomorphized function is safe to inline.
-/// Only allow known-safe trait methods on simple element types.
-/// Complex monomorphized functions (especially on recursive types) can cause type mismatches.
-fn is_safe_monomorphized_method(func: &TirFunction) -> bool {
-    let name = &func.name;
-
-    // Only allow arrays with simple element types.
-    // Exclude arrays containing complex struct types (especially recursive ones like BTreeNode)
-    // which can cause type mismatches during inlining.
-    // Safe patterns: Array<bool>, Array<i32>, Array<String>, etc.
-    // Unsafe patterns: Array<BTreeNode<...>>, Array<Node<...>>, etc.
-    if name.contains("Array<") {
-        let is_simple_element = name.contains("Array<bool>")
-            || name.contains("Array<i8>")
-            || name.contains("Array<i16>")
-            || name.contains("Array<i32>")
-            || name.contains("Array<i64>")
-            || name.contains("Array<u8>")
-            || name.contains("Array<u16>")
-            || name.contains("Array<u32>")
-            || name.contains("Array<u64>")
-            || name.contains("Array<f32>")
-            || name.contains("Array<f64>")
-            || name.contains("Array<char>")
-            || name.contains("Array<String>");
-
-        if !is_simple_element {
-            return false;
-        }
-    }
-
-    // IndexValue::index_value - array read access
-    if name.contains("IndexValue::index_value") {
-        return true;
-    }
-    // IndexAssign::index_assign - array write access
-    if name.contains("IndexAssign::index_assign") {
-        return true;
-    }
-    // Array::len - get array length
-    if name.ends_with("::len") && name.contains("Array") {
-        return true;
-    }
-    // Array::append - add to array
-    if name.ends_with("::append") && name.contains("Array") {
-        return true;
-    }
-    false
-}
-
-/// Check if a function is a simple self-method that only uses `self` for field access.
-/// These methods are safe to inline even though they have reference parameters.
-fn is_simple_self_method(func: &TirFunction, type_table: &TypeTable) -> bool {
-    // Must be a method (has `::` in the name, e.g., `Type::method` or `Type^Trait::method`)
-    // Standalone functions like `get_value(o: &Outer)` are NOT allowed
-    if !func.name.contains("::") {
-        return false;
-    }
-
-    // Must have at least one parameter
-    if func.params.is_empty() {
-        return false;
-    }
-
-    let first_param = &func.params[0];
-
-    // First parameter must be a reference type
-    if !matches!(
-        type_table.get(first_param.type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    ) {
-        return false;
-    }
-
-    // Check that all other parameters are non-reference
-    for param in func.params.iter().skip(1) {
-        if matches!(
-            type_table.get(param.type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
-            return false;
-        }
-    }
-
-    // Check that self (first_param.local_index) is only used for field access in the body
-    let Some(body) = &func.body else {
-        return false;
-    };
-
-    self_only_used_for_field_access(body, first_param.local_index)
-}
-
-/// Check if a local variable is only used for field access throughout a block.
-fn self_only_used_for_field_access(block: &TirBlock, self_local: u32) -> bool {
-    for stmt in &block.stmts {
-        if !stmt_self_only_field_access(&stmt.kind, self_local) {
-            return false;
-        }
-    }
-    true
-}
-
-/// Check a statement for safe self usage
-fn stmt_self_only_field_access(kind: &TirStmtKind, self_local: u32) -> bool {
-    match kind {
-        TirStmtKind::Let { value, .. } => expr_self_only_field_access(value, self_local),
-        TirStmtKind::Expr(expr) => expr_self_only_field_access(expr, self_local),
-        TirStmtKind::Return { value } => value
-            .as_ref()
-            .is_none_or(|e| expr_self_only_field_access(e, self_local)),
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            expr_self_only_field_access(condition, self_local)
-                && self_only_used_for_field_access(then_block, self_local)
-                && else_block
-                    .as_ref()
-                    .is_none_or(|b| self_only_used_for_field_access(b, self_local))
-        }
-        TirStmtKind::While { condition, body } => {
-            expr_self_only_field_access(condition, self_local)
-                && self_only_used_for_field_access(body, self_local)
-        }
-        TirStmtKind::For {
-            condition,
-            body,
-            update,
-        } => {
-            condition
-                .as_ref()
-                .is_none_or(|c| expr_self_only_field_access(c, self_local))
-                && self_only_used_for_field_access(body, self_local)
-                && update
-                    .as_ref()
-                    .is_none_or(|u| expr_self_only_field_access(u, self_local))
-        }
-        TirStmtKind::Loop { body } => self_only_used_for_field_access(body, self_local),
-        TirStmtKind::ForOf { iterable, body, .. } => {
-            expr_self_only_field_access(iterable, self_local)
-                && self_only_used_for_field_access(body, self_local)
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            self_only_used_for_field_access(block, self_local)
-        }
-        TirStmtKind::IfPattern {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_self_only_field_access(scrutinee, self_local)
-                && self_only_used_for_field_access(then_block, self_local)
-                && else_block
-                    .as_ref()
-                    .is_none_or(|b| self_only_used_for_field_access(b, self_local))
-        }
-        TirStmtKind::Break | TirStmtKind::Continue => true,
-    }
-}
-
-/// Check an expression for safe self usage
-fn expr_self_only_field_access(expr: &TirExpr, self_local: u32) -> bool {
-    match &expr.kind {
-        // Direct use of self (local index) is NOT ok unless it's for field access
-        TirExprKind::Local { index, .. } => *index != self_local,
-
-        // Field access on self is OK - this is the allowed pattern
-        TirExprKind::FieldAccess { expr: inner, .. } => {
-            // If accessing field on self, that's OK
-            if let TirExprKind::Local { index, .. } = &inner.kind
-                && *index == self_local
-            {
-                return true;
-            }
-            // Otherwise, check the object recursively
-            expr_self_only_field_access(inner, self_local)
-        }
-
-        // Index expression - check both the array expression and the index
-        TirExprKind::Index { expr: inner, index } => {
-            expr_self_only_field_access(inner, self_local)
-                && expr_self_only_field_access(index, self_local)
-        }
-
-        // For all other expressions, recursively check sub-expressions
-        TirExprKind::Binary { left, right, .. } => {
-            expr_self_only_field_access(left, self_local)
-                && expr_self_only_field_access(right, self_local)
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Move { value: inner } => expr_self_only_field_access(inner, self_local),
-
-        TirExprKind::Assign { target, value } => {
-            expr_self_only_field_access(target, self_local)
-                && expr_self_only_field_access(value, self_local)
-        }
-
-        TirExprKind::Call { args, .. }
-        | TirExprKind::EffectCall { args, .. }
-        | TirExprKind::StaticCall { args, .. } => args
-            .iter()
-            .all(|a| expr_self_only_field_access(a, self_local)),
-
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            expr_self_only_field_access(receiver, self_local)
-                && args
-                    .iter()
-                    .all(|a| expr_self_only_field_access(a, self_local))
-        }
-
-        // Indirect call - check callee and all args
-        TirExprKind::IndirectCall { callee, args } => {
-            expr_self_only_field_access(callee, self_local)
-                && args
-                    .iter()
-                    .all(|a| expr_self_only_field_access(a, self_local))
-        }
-
-        // Block - check all statements in the block
-        TirExprKind::Block(block) => self_only_used_for_field_access(block, self_local),
-
-        // If expression - check condition, then branch, and else branch
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            expr_self_only_field_access(condition, self_local)
-                && self_only_used_for_field_access(then_branch, self_local)
-                && else_branch
-                    .as_ref()
-                    .is_none_or(|b| self_only_used_for_field_access(b, self_local))
-        }
-
-        // Match expression - check scrutinee and all arms
-        TirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } => {
-            expr_self_only_field_access(scrutinee, self_local)
-                && arms
-                    .iter()
-                    .all(|arm| expr_self_only_field_access(&arm.body, self_local))
-        }
-
-        // Struct literal - check all field values
-        TirExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .all(|f| expr_self_only_field_access(&f.value, self_local)),
-
-        // Array/Tuple literal - check all elements
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => elements
-            .iter()
-            .all(|e| expr_self_only_field_access(e, self_local)),
-
-        // Closure - check body
-        TirExprKind::Closure { body, .. } => expr_self_only_field_access(body, self_local),
-
-        // Option/Variant construction - check values
-        TirExprKind::OptionSome { value } => expr_self_only_field_access(value, self_local),
-        TirExprKind::VariantConstruct { fields, .. } => fields
-            .iter()
-            .all(|f| expr_self_only_field_access(f, self_local)),
-
-        // Leaf nodes - no locals to check
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => true,
-    }
-}
-
 /// Check if a function is eligible for inlining
 fn is_inline_eligible(
     func: &TirFunction,
@@ -500,20 +220,24 @@ fn is_inline_eligible(
         return false;
     }
 
+    // Don't inline functions with reference parameters
+    // Reference handling during inlining is complex (address-taken locals, box structs, etc.)
+    for param in &func.params {
+        match type_table.get(param.type_id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
+            _ => {}
+        }
+    }
+
     // No effects (pure functions only)
     if !func.effects.is_empty() {
         return false;
     }
 
     // Not generic (for now - generic inlining is complex)
+    // Note: Monomorphized generics (with monomorph_info) ARE eligible since
+    // TypeIds are global and type relationships are resolved.
     if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-        return false;
-    }
-
-    // For monomorphized generic functions, only allow known-safe methods
-    // (e.g., IndexValue::index_value, IndexAssign::index_assign on simple types).
-    // Complex monomorphized functions can cause type mismatches during inlining.
-    if func.monomorph_info.is_some() && !is_safe_monomorphized_method(func) {
         return false;
     }
 
@@ -525,20 +249,6 @@ fn is_inline_eligible(
     // Only inline functions with a single return at the end
     // Functions with early returns (inside if/while) are too complex to inline
     if has_early_return(body) {
-        return false;
-    }
-
-    // Check reference parameters
-    // Reference handling during inlining is complex, but we allow "simple self-methods"
-    // where the first parameter is a reference that's only used for field access.
-    let has_ref_param = func.params.iter().any(|p| {
-        matches!(
-            type_table.get(p.type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
-    });
-
-    if has_ref_param && !is_simple_self_method(func, type_table) {
         return false;
     }
 
@@ -581,8 +291,23 @@ fn has_early_return(block: &TirBlock) -> bool {
             TirStmtKind::While { body, .. }
             | TirStmtKind::Loop { body }
             | TirStmtKind::For { body, .. }
-            | TirStmtKind::ForOf { body, .. } => {
+            | TirStmtKind::ForOf { body, .. }
+            | TirStmtKind::LabeledBlock { block: body, .. } => {
                 if block_has_return(body) {
+                    return true;
+                }
+            }
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if block_has_return(then_block) {
+                    return true;
+                }
+                if let Some(else_blk) = else_block
+                    && block_has_return(else_blk)
+                {
                     return true;
                 }
             }
@@ -614,8 +339,23 @@ fn block_has_return(block: &TirBlock) -> bool {
             TirStmtKind::While { body, .. }
             | TirStmtKind::Loop { body }
             | TirStmtKind::For { body, .. }
-            | TirStmtKind::ForOf { body, .. } => {
+            | TirStmtKind::ForOf { body, .. }
+            | TirStmtKind::LabeledBlock { block: body, .. } => {
                 if block_has_return(body) {
+                    return true;
+                }
+            }
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if block_has_return(then_block) {
+                    return true;
+                }
+                if let Some(else_blk) = else_block
+                    && block_has_return(else_blk)
+                {
                     return true;
                 }
             }
@@ -898,6 +638,7 @@ fn inline_functions(project: &mut Project) {
             }
         }
     }
+
     if inline_candidates.is_empty() {
         return;
     }
@@ -1085,7 +826,6 @@ fn inline_calls_in_block(
             }
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    // Try to inline the return value if it's a call or method call
                     let inline_result = try_inline_call_expr(
                         &expr,
                         candidates,
@@ -1418,7 +1158,7 @@ fn try_inline_call_expr(
     };
 
     // Only inline functions from the same module
-    // Cross-module inlining requires TypeId translation which is complex
+    // Cross-module inlining requires careful local variable management
     if target_module != current_module {
         return None;
     }
@@ -1487,9 +1227,8 @@ fn try_inline_call_expr(
     Some((inlined_stmts, final_expr, inlined_key))
 }
 
-/// Try to inline a method call expression
-/// This handles `TirExprKind::MethodCall` which includes array index operations.
-/// For `MethodCall`: receiver is the first param (self), args are remaining params.
+/// Try to inline a method call expression, returning the inlined statements, final expression,
+/// and the key of the inlined function (for tracking string literals)
 fn try_inline_method_call_expr(
     expr: &TirExpr,
     candidates: &HashMap<(Vec<String>, String), TirFunction>,
@@ -1524,7 +1263,7 @@ fn try_inline_method_call_expr(
     };
 
     // Only inline functions from the same module
-    // Cross-module inlining requires TypeId translation which is complex
+    // Cross-module inlining requires careful local variable management
     if target_module != current_module {
         return None;
     }
@@ -1535,12 +1274,6 @@ fn try_inline_method_call_expr(
     // Get the function body
     let body = candidate.body.as_ref()?;
 
-    // For method calls, params[0] is self (bound to receiver), params[1..] are bound to args
-    // Verify we have the right number of arguments
-    if candidate.params.len() != args.len() + 1 {
-        return None;
-    }
-
     // Calculate local index offset for remapping
     let local_offset = *local_count;
 
@@ -1548,19 +1281,15 @@ fn try_inline_method_call_expr(
     let callee_local_count = candidate.local_count;
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
+    // Create argument bindings as let statements
+    // IMPORTANT: Push param types first to match index assignment order
+    // For methods, first param is `self` (receiver), then the rest are args
     let mut inlined_stmts = Vec::new();
     let mut param_to_local: HashMap<u32, u32> = HashMap::new();
 
     // Bind receiver to first parameter (self)
     let first_param = &candidate.params[0];
     let self_local_index = local_offset;
-    // DEBUG: Check param local indices
-    if first_param.local_index != 0 {
-        eprintln!(
-            "DEBUG: first_param.local_index={} (expected 0) for {}",
-            first_param.local_index, func_name
-        );
-    }
     param_to_local.insert(first_param.local_index, self_local_index);
     local_types.push(first_param.type_id);
     *local_count += 1;
@@ -1580,17 +1309,6 @@ fn try_inline_method_call_expr(
     // Bind remaining args to remaining parameters
     for (i, (param, arg)) in candidate.params.iter().skip(1).zip(args.iter()).enumerate() {
         let new_local_index = local_offset + 1 + i as u32;
-        // DEBUG: Check param local indices
-        let expected_local_index = (i + 1) as u32;
-        if param.local_index != expected_local_index {
-            eprintln!(
-                "DEBUG: param[{}].local_index={} (expected {}) for {}",
-                i + 1,
-                param.local_index,
-                expected_local_index,
-                func_name
-            );
-        }
         param_to_local.insert(param.local_index, new_local_index);
         local_types.push(param.type_id);
         *local_count += 1;
@@ -1611,23 +1329,10 @@ fn try_inline_method_call_expr(
     // param_offset marks where non-param locals start (after all params)
     let param_offset = local_offset + candidate.params.len() as u32;
 
-    // Extend local_types for non-parameter locals
-    // DEBUG: check if local_types has expected structure
-    if candidate.local_types.len() != callee_local_count as usize {
-        eprintln!(
-            "DEBUG: local_types mismatch for {}: local_types.len()={}, callee_local_count={}",
-            func_name,
-            candidate.local_types.len(),
-            callee_local_count
-        );
-    }
+    // Now extend local_types for the non-parameter locals
     for i in callee_param_count..callee_local_count {
         if let Some(&type_id) = candidate.local_types.get(i as usize) {
             local_types.push(type_id);
-        } else {
-            eprintln!(
-                "DEBUG: missing local_types[{i}] for {func_name} (callee_param_count={callee_param_count}, callee_local_count={callee_local_count})"
-            );
         }
     }
     *local_count += new_locals_needed;
@@ -1865,9 +1570,15 @@ fn remap_expr(
     let kind = match &expr.kind {
         TirExprKind::Local { index, name } => {
             let new_index = remap_local_index(*index, param_to_local, local_offset, param_count);
+            // If this was a parameter, update the name to match the inlined local binding
+            let new_name = if *index < param_count {
+                format!("_inline_{name}")
+            } else {
+                name.clone()
+            };
             TirExprKind::Local {
                 index: new_index,
-                name: name.clone(),
+                name: new_name,
             }
         }
         TirExprKind::Binary { left, op, right } => TirExprKind::Binary {
@@ -4650,198 +4361,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     // This eliminates unnecessary copies for fresh values
     insert_moves(&mut project);
 
-    // Collect value copy types for all functions (after all TIR transformations)
-    populate_copy_types(&mut project);
-
     project
-}
-
-/// Populate `needed_copy_types` for all functions in the project.
-/// This must be called after all TIR transformations (inlining, LICM, etc.)
-/// so that codegen doesn't need to scan the TIR.
-fn populate_copy_types(project: &mut Project) {
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_cell in &module.functions {
-            let mut func = func_cell.borrow_mut();
-            if let Some(body) = &func.body {
-                let mut needed_types = HashSet::new();
-                collect_copy_types(body, &type_table, &mut needed_types);
-                func.needed_copy_types = needed_types;
-            }
-        }
-    }
-}
-
-/// Collect all types that need value copy from a block
-fn collect_copy_types(
-    block: &TirBlock,
-    type_table: &TypeTable,
-    needed_types: &mut HashSet<TypeId>,
-) {
-    for stmt in &block.stmts {
-        collect_copy_types_from_stmt(stmt, type_table, needed_types);
-    }
-}
-
-/// Collect copy types from a statement
-fn collect_copy_types_from_stmt(
-    stmt: &TirStmt,
-    type_table: &TypeTable,
-    needed_types: &mut HashSet<TypeId>,
-) {
-    match &stmt.kind {
-        TirStmtKind::Let { value, .. } => {
-            collect_copy_types_from_expr(value, type_table, needed_types);
-            if needs_value_copy(value.type_id, type_table) {
-                needed_types.insert(value.type_id);
-            }
-        }
-        TirStmtKind::Expr(expr) => {
-            collect_copy_types_from_expr(expr, type_table, needed_types);
-        }
-        TirStmtKind::While { condition, body } => {
-            collect_copy_types_from_expr(condition, type_table, needed_types);
-            collect_copy_types(body, type_table, needed_types);
-        }
-        TirStmtKind::For {
-            condition,
-            update,
-            body,
-        } => {
-            if let Some(e) = condition {
-                collect_copy_types_from_expr(e, type_table, needed_types);
-            }
-            if let Some(e) = update {
-                collect_copy_types_from_expr(e, type_table, needed_types);
-            }
-            collect_copy_types(body, type_table, needed_types);
-        }
-        TirStmtKind::ForOf { iterable, body, .. } => {
-            collect_copy_types_from_expr(iterable, type_table, needed_types);
-            collect_copy_types(body, type_table, needed_types);
-        }
-        TirStmtKind::Loop { body } => {
-            collect_copy_types(body, type_table, needed_types);
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_copy_types_from_expr(condition, type_table, needed_types);
-            collect_copy_types(then_block, type_table, needed_types);
-            if let Some(e) = else_block {
-                collect_copy_types(e, type_table, needed_types);
-            }
-        }
-        TirStmtKind::Return { value: Some(expr) } => {
-            collect_copy_types_from_expr(expr, type_table, needed_types);
-        }
-        TirStmtKind::IfPattern {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_copy_types_from_expr(scrutinee, type_table, needed_types);
-            collect_copy_types(then_block, type_table, needed_types);
-            if let Some(e) = else_block {
-                collect_copy_types(e, type_table, needed_types);
-            }
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            collect_copy_types(block, type_table, needed_types);
-        }
-        _ => {}
-    }
-}
-
-/// Collect copy types from an expression
-fn collect_copy_types_from_expr(
-    expr: &TirExpr,
-    type_table: &TypeTable,
-    needed_types: &mut HashSet<TypeId>,
-) {
-    match &expr.kind {
-        TirExprKind::Assign { target, value } => {
-            collect_copy_types_from_expr(target, type_table, needed_types);
-            collect_copy_types_from_expr(value, type_table, needed_types);
-            // Check if assigning to a local variable with value type
-            if matches!(target.kind, TirExprKind::Local { .. })
-                && needs_value_copy(value.type_id, type_table)
-            {
-                needed_types.insert(value.type_id);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            collect_copy_types_from_expr(left, type_table, needed_types);
-            collect_copy_types_from_expr(right, type_table, needed_types);
-        }
-        TirExprKind::Unary { expr, .. } => {
-            collect_copy_types_from_expr(expr, type_table, needed_types);
-        }
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
-            for arg in args {
-                collect_copy_types_from_expr(arg, type_table, needed_types);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_copy_types_from_expr(receiver, type_table, needed_types);
-            for arg in args {
-                collect_copy_types_from_expr(arg, type_table, needed_types);
-            }
-        }
-        TirExprKind::FieldAccess { expr, .. } => {
-            collect_copy_types_from_expr(expr, type_table, needed_types);
-        }
-        TirExprKind::Index { expr, index } => {
-            collect_copy_types_from_expr(expr, type_table, needed_types);
-            collect_copy_types_from_expr(index, type_table, needed_types);
-        }
-        TirExprKind::ArrayLiteral { elements } => {
-            for e in elements {
-                collect_copy_types_from_expr(e, type_table, needed_types);
-            }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_copy_types_from_expr(&field.value, type_table, needed_types);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for e in elements {
-                collect_copy_types_from_expr(e, type_table, needed_types);
-            }
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_copy_types_from_expr(condition, type_table, needed_types);
-            collect_copy_types(then_branch, type_table, needed_types);
-            if let Some(e) = else_branch {
-                collect_copy_types(e, type_table, needed_types);
-            }
-        }
-        TirExprKind::Block(block) => {
-            collect_copy_types(block, type_table, needed_types);
-        }
-        TirExprKind::Match { expr, arms } => {
-            collect_copy_types_from_expr(expr, type_table, needed_types);
-            for arm in arms {
-                collect_copy_types_from_expr(&arm.body, type_table, needed_types);
-            }
-        }
-        TirExprKind::Cast { expr, .. } => {
-            collect_copy_types_from_expr(expr, type_table, needed_types);
-        }
-        TirExprKind::Move { value } => {
-            collect_copy_types_from_expr(value, type_table, needed_types);
-        }
-        _ => {}
-    }
 }
 
 #[cfg(test)]

@@ -13,12 +13,13 @@ fn run() with Stdout {
     let mut arr2: Array<i32> = move [0, 0, 0];
     let mut i: i32 = 0;
     for ; (i < 3); i = (i + 1) {
-        let _inline_self: &mut Array<i32> = &mut arr2;
-        let _inline_index: i32 = i;
-        let _inline_value: i32 = (i * 10);
-        core::builtin::array_set::<i32>(self.repr, index, value);
+        "Array<i32>^IndexAssign::index_assign"(&mut arr2, i, (i * 10));
     }
     core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr2, 0)), move ", "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr2, 1))), move ", "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr2, 2))));
+}
+
+fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
+    core::builtin::array_set::<i32>(self.repr, index, value);
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
