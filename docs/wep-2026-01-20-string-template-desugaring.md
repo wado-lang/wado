@@ -10,6 +10,7 @@ String templates (`` `Hello, {name}!` ``) are currently lowered in the resolver 
 4. Inefficient for templates with many interpolations
 
 We need a unified desugaring strategy that:
+
 - Supports tagged templates like JavaScript
 - Provides both cooked and raw string literals
 - Enables `String::raw` and `String::base64` as regular functions
@@ -101,6 +102,7 @@ impl String {
 ```
 
 Usage:
+
 ```wado
 String::raw`Hello\nWorld`     // → "Hello\\nWorld" (12 chars, not 11)
 String::raw`Path: {path}\n`   // → "Path: " + to_string(path) + "\\n"
@@ -121,6 +123,7 @@ impl String {
 ```
 
 Usage:
+
 ```wado
 let bytes = String::base64`SGVsbG8=`;  // → [72, 101, 108, 108, 111]
 ```
@@ -181,6 +184,7 @@ for let [i, v] of tuple.entries() { }  // [index, value]
 ```
 
 Key difference:
+
 - **Array `.entries()`**: Runtime method, returns `Iterator<[i32, T]>`
 - **Tuple `.entries()`**: Compile-time method, triggers loop unrolling with `[i, v]` pairs
 
@@ -222,6 +226,7 @@ for let v of tuple {
 ```
 
 Constraints:
+
 - Tuple `for-of` and `.entries()` are compile-time unrolled
 - Loop body must be valid for each element type (checked after expansion)
 - `break` and `continue` are not allowed in tuple iteration (compile error)
@@ -229,15 +234,15 @@ Constraints:
 
 ### Edge Cases
 
-| Case | Input | Output |
-|------|-------|--------|
-| Empty template | `` ` ` `` | `""` |
-| No interpolation | `` `hello` `` | `"hello"` |
-| Only interpolation | `` `{x}` `` | `to_string(x)` |
-| Adjacent interpolations | `` `{a}{b}` `` | `strings = ["", "", ""]` |
-| Escaped braces | `` `{{x}}` `` | `"{x}"` (literal) |
-| Nested template | `` `outer {`inner`}` `` | Inner template evaluated first |
-| Multiline | Preserved | Newlines in cooked/raw |
+| Case                    | Input                   | Output                         |
+| ----------------------- | ----------------------- | ------------------------------ |
+| Empty template          | `` ` ` ``               | `""`                           |
+| No interpolation        | `` `hello` ``           | `"hello"`                      |
+| Only interpolation      | `` `{x}` ``             | `to_string(x)`                 |
+| Adjacent interpolations | `` `{a}{b}` ``          | `strings = ["", "", ""]`       |
+| Escaped braces          | `` `{{x}}` ``           | `"{x}"` (literal)              |
+| Nested template         | `` `outer {`inner`}` `` | Inner template evaluated first |
+| Multiline               | Preserved               | Newlines in cooked/raw         |
 
 ## Implementation Plan
 
