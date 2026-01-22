@@ -12,12 +12,10 @@ fn make_box(v: i32) -> Box<i32> {
 
 fn run() with Stdout {
     let b: Box<i32> = move make_box(42);
-    let mut __result_3: i32 = 0;
-    __inline_get_value_0: {
+    let v: i32 = __inline_get_value_0: {
         let b: Box<i32> = b;
-        __result_3 = b.value;
-    }
-    let v: i32 = __result_3;
+        break __inline_get_value_0: b.value;
+    };
     core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"(v)));
 }
 

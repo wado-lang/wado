@@ -212,12 +212,17 @@ struct FunctionContext {
     branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
-    /// Stack of (`extra_depth`, `break_offset`) for each loop level.
-    /// `extra_depth`: incremented by if statements inside the loop
-    /// `break_offset`: 1 for while/loop, 2 for for loops (because for loops have an extra body block)
-    /// For break: use `break_offset` + `extra_depth`
-    /// For continue: use `extra_depth`
-    loop_info: Vec<(u32, u32)>,
+    /// Stack of break targets for loops and labeled blocks.
+    /// Each entry contains: (label, `extra_depth`, `break_offset`, `is_loop`, `result_type`)
+    /// - `label`: None for anonymous loop, Some(name) for labeled blocks/loops
+    /// - `extra_depth`: incremented by if statements inside the block
+    /// - `break_offset`: 1 for while/loop/labeled block, 2 for for loops
+    /// - `is_loop`: true for loops, false for labeled blocks
+    /// - `result_type`: `Some(type_id)` for labeled block expressions that return a value
+    ///
+    /// For break: use `break_offset` + `extra_depth`.
+    /// For continue: use `extra_depth` (only valid for loops).
+    loop_info: Vec<(Option<String>, u32, u32, bool, Option<TypeId>)>,
     /// Counter for generating unique for-of local names (to support nested for-of loops)
     for_of_counter: u32,
     /// Local indices that have their address taken (&x or &mut x).
@@ -4119,7 +4124,9 @@ impl Codegen {
                     Self::collect_closures_from_block(else_blk, closures);
                 }
             }
-            TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => {}
         }
     }
 
@@ -4229,6 +4236,9 @@ impl Codegen {
             }
             TirExprKind::Move { value } => {
                 Self::collect_closures_from_expr(value, closures);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::collect_closures_from_block(block, closures);
             }
             // Leaf nodes - no nested expressions
             TirExprKind::IntLiteral { .. }
@@ -4378,7 +4388,9 @@ impl Codegen {
                     Self::find_closure_locals_in_block(else_blk, result, closure_counter);
                 }
             }
-            TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => {}
         }
     }
 
@@ -4470,6 +4482,9 @@ impl Codegen {
             }
             TirExprKind::Move { value } => {
                 Self::find_closure_locals_in_expr(value, result, closure_counter);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::find_closure_locals_in_block(block, result, closure_counter);
             }
             // Terminals - no closures inside
             TirExprKind::IntLiteral { .. }
@@ -6652,6 +6667,32 @@ impl Codegen {
                 // Call via call_ref with the function type
                 func.instruction(&Instruction::CallRef(fn_type_idx));
             }
+
+            // === Labeled Block Expression ===
+            TirExprKind::LabeledBlock {
+                label,
+                block,
+                result_type,
+            } => {
+                // Labeled block expression: produces a value via `break label: expr;`
+                // Track the label so break statements can find it
+                ctx.loop_info
+                    .push((Some(label.clone()), 0, 0, false, Some(*result_type)));
+
+                // Generate block with result type
+                let block_type = if *result_type == TypeTable::UNIT {
+                    wasm_encoder::BlockType::Empty
+                } else {
+                    let valtype = self.type_id_to_valtype(type_table, *result_type);
+                    wasm_encoder::BlockType::Result(valtype)
+                };
+
+                func.instruction(&Instruction::Block(block_type));
+                self.generate_block(func, block, type_table, ctx, builder);
+                func.instruction(&Instruction::End);
+
+                ctx.loop_info.pop();
+            }
         }
     }
 
@@ -7351,7 +7392,7 @@ impl Codegen {
                 ctx.consume_branch_hint(func.byte_len() as u32);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 // If creates a block level - increment extra depth if we're inside a loop
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
                 self.generate_block(func, then_block, type_table, ctx, builder);
@@ -7360,22 +7401,22 @@ impl Codegen {
                     // Else branch is at the same depth as then branch
                     self.generate_block(func, else_blk, type_table, ctx, builder);
                 }
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra -= 1;
                 }
                 func.instruction(&Instruction::End);
             }
 
             TirStmtKind::While { condition, body } => {
-                // Push new loop context: (extra_depth=0, break_offset=1)
-                ctx.loop_info.push((0, 1));
+                // Push new loop context: (extra_depth=0, break_offset=1, no result type)
+                ctx.loop_info.push((None, 0, 1, true, None));
 
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
 
                 // Check condition, break if false
                 // Try to generate inverted condition directly to avoid i32.eqz
-                let (extra, break_offset) = *ctx.loop_info.last().unwrap();
+                let (_, extra, break_offset, _, _) = *ctx.loop_info.last().unwrap();
                 if !self.try_generate_inverted_condition(func, condition, type_table, ctx, builder)
                 {
                     // Fallback: generate condition and negate
@@ -7388,7 +7429,7 @@ impl Codegen {
                 self.generate_block(func, body, type_table, ctx, builder);
 
                 // Continue loop
-                let (extra, _) = *ctx.loop_info.last().unwrap();
+                let (_, extra, _, _, _) = *ctx.loop_info.last().unwrap();
                 func.instruction(&Instruction::Br(extra));
 
                 func.instruction(&Instruction::End); // End loop
@@ -7398,8 +7439,8 @@ impl Codegen {
             }
 
             TirStmtKind::Loop { body } => {
-                // Push new loop context: (extra_depth=0, break_offset=1)
-                ctx.loop_info.push((0, 1));
+                // Push new loop context: (extra_depth=0, break_offset=1, no result type)
+                ctx.loop_info.push((None, 0, 1, true, None));
 
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
@@ -7407,7 +7448,7 @@ impl Codegen {
                 self.generate_block(func, body, type_table, ctx, builder);
 
                 // Continue loop
-                let (extra, _) = *ctx.loop_info.last().unwrap();
+                let (_, extra, _, _, _) = *ctx.loop_info.last().unwrap();
                 func.instruction(&Instruction::Br(extra));
 
                 func.instruction(&Instruction::End); // End loop
@@ -7437,9 +7478,9 @@ impl Codegen {
                 // - continue: br 0 (to end of $body, then update executes, then br $loop)
                 // - break: br 2 (to $exit)
 
-                // Push new loop context: (extra_depth=0, break_offset=2)
+                // Push new loop context: (extra_depth=0, break_offset=2, no result type)
                 // break_offset=2 because break needs to skip body block + loop
-                ctx.loop_info.push((0, 2));
+                ctx.loop_info.push((None, 0, 2, true, None));
 
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
@@ -7539,8 +7580,8 @@ impl Codegen {
                 func.instruction(&Instruction::I32Const(0));
                 func.instruction(&Instruction::LocalSet(counter_local));
 
-                // Push loop context: break_offset=2 (same as For)
-                ctx.loop_info.push((0, 2));
+                // Push loop context: break_offset=2 (same as For), no result type
+                ctx.loop_info.push((None, 0, 2, true, None));
 
                 // block $exit
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
@@ -7596,30 +7637,98 @@ impl Codegen {
                 ctx.loop_info.pop();
             }
 
-            TirStmtKind::Break => {
-                if let Some((extra, break_offset)) = ctx.loop_info.last() {
-                    // Break to outer block: break_offset + extra_depth
-                    func.instruction(&Instruction::Br(break_offset + extra));
+            TirStmtKind::Break { label, value } => {
+                // Find the target in loop_info
+                if let Some(target_label) = label {
+                    // Find the labeled block/loop with this label
+                    let mut found = false;
+                    let mut depth: u32 = 0;
+                    let mut blocks_passed: u32 = 0; // Total wasm blocks passed over
+
+                    for (i, (lbl, _extra, break_offset, _is_loop, _result_type)) in
+                        ctx.loop_info.iter().rev().enumerate()
+                    {
+                        if lbl.as_ref() == Some(target_label) {
+                            // Found the target
+                            // Depth is: blocks from entries we passed + target's break_offset + total_extra
+                            // Each construct creates (break_offset + 1) wasm blocks total
+                            let mut total_extra: u32 = 0;
+                            for (j, (_, e, _, _, _)) in ctx.loop_info.iter().rev().enumerate() {
+                                if j > i {
+                                    break;
+                                }
+                                total_extra += *e;
+                            }
+                            depth = blocks_passed + *break_offset + total_extra;
+                            found = true;
+                            break;
+                        }
+                        // Add this entry's total block count (break_offset + 1)
+                        // - while/loop: break_offset=1 -> 2 blocks (exit + loop)
+                        // - for/for-of: break_offset=2 -> 3 blocks (exit + loop + body)
+                        // - labeled block: break_offset=0 -> 1 block
+                        blocks_passed += *break_offset + 1;
+                    }
+                    assert!(found, "labeled break target not found: {target_label}");
+
+                    // If breaking with a value, generate the value expression first
+                    if let Some(val) = value {
+                        self.generate_expr(func, val, type_table, ctx, builder);
+                    }
+
+                    func.instruction(&Instruction::Br(depth));
                 } else {
-                    // No enclosing loop - this should have been caught earlier
-                    panic!("break outside of loop");
+                    // Unlabeled break - find the innermost loop
+                    if let Some((_, extra, break_offset, is_loop, _)) = ctx.loop_info.last() {
+                        assert!(
+                            *is_loop,
+                            "unlabeled break inside labeled block but not in a loop"
+                        );
+                        // Break to outer block: break_offset + extra_depth
+                        func.instruction(&Instruction::Br(break_offset + extra));
+                    } else {
+                        // No enclosing loop - this should have been caught earlier
+                        panic!("break outside of loop");
+                    }
                 }
             }
 
             TirStmtKind::Continue => {
-                if let Some((extra, _)) = ctx.loop_info.last() {
-                    // Continue to loop/body block: extra_depth
+                // Find the innermost loop (not just labeled block)
+                let mut found = false;
+                let mut depth: u32 = 0;
+                let mut extra_from_nested: u32 = 0;
+                for (_lbl, extra, _break_offset, is_loop, _) in ctx.loop_info.iter().rev() {
+                    extra_from_nested += *extra;
+                    if *is_loop {
+                        // Found a loop - continue to it
+                        // For continue, we jump to the loop header (extra_depth from nested blocks)
+                        depth = extra_from_nested - *extra + *extra; // Just the extra of all nested
+                        found = true;
+                        break;
+                    }
+                    // Not a loop, add its block depth (1 for the block itself)
+                    extra_from_nested += 1;
+                }
+                if found {
+                    func.instruction(&Instruction::Br(depth));
+                } else if let Some((_, extra, _, _, _)) = ctx.loop_info.last() {
+                    // Fallback to old behavior
                     func.instruction(&Instruction::Br(*extra));
                 } else {
-                    // No enclosing loop - this should have been caught earlier
                     panic!("continue outside of loop");
                 }
             }
 
-            TirStmtKind::LabeledBlock { block, .. } => {
-                // Generate a simple block - the label is for future use (break/continue)
-                // For now, just generate the block contents in sequence
+            TirStmtKind::LabeledBlock { label, block } => {
+                // Generate a wasm block with the label tracked
+                // break_offset is 0 because br 0 goes to this block's exit
+                // No result type since this is a statement (not expression)
+                ctx.loop_info.push((Some(label.clone()), 0, 0, false, None));
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 self.generate_block(func, block, type_table, ctx, builder);
+                func.instruction(&Instruction::End);
+                ctx.loop_info.pop();
             }
 
             TirStmtKind::IfPattern {
@@ -7676,7 +7785,7 @@ impl Codegen {
                 func.instruction(&Instruction::I32Eqz); // NOT: true if NOT null (Some)
 
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
 
@@ -7717,7 +7826,7 @@ impl Codegen {
                 }
 
                 func.instruction(&Instruction::End);
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra -= 1;
                 }
             }
@@ -7731,7 +7840,7 @@ impl Codegen {
                 func.instruction(&Instruction::RefIsNull); // true if null (None)
 
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
 
@@ -7745,7 +7854,7 @@ impl Codegen {
                 }
 
                 func.instruction(&Instruction::End);
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra -= 1;
                 }
             }
@@ -7884,6 +7993,11 @@ impl Codegen {
         // Pre-allocate locals for IfPattern statements
         if let Some(body) = &tir_func.body {
             self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
         }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
@@ -8103,6 +8217,11 @@ impl Codegen {
         // Pre-allocate locals for IfPattern statements
         if let Some(body) = &tir_func.body {
             self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
         }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
@@ -8819,6 +8938,8 @@ impl Codegen {
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::expr_needs_async_scratch_locals(expr)
             }
+            TirStmtKind::LabeledBlock { block, .. } => Self::needs_async_scratch_locals(block),
+            TirStmtKind::Break { value: Some(v), .. } => Self::expr_needs_async_scratch_locals(v),
             _ => false,
         }
     }
@@ -8920,6 +9041,7 @@ impl Codegen {
                 fields.iter().any(Self::expr_needs_async_scratch_locals)
             }
             TirExprKind::Move { value } => Self::expr_needs_async_scratch_locals(value),
+            TirExprKind::LabeledBlock { block, .. } => Self::needs_async_scratch_locals(block),
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -9244,6 +9366,9 @@ impl Codegen {
                     Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
                 }
             }
+            TirStmtKind::Break { value: Some(v), .. } => {
+                Self::count_indirect_calls_in_expr(v, type_table, codegen, counts);
+            }
             _ => {}
         }
     }
@@ -9338,6 +9463,9 @@ impl Codegen {
             }
             TirExprKind::Move { value } => {
                 Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::count_indirect_calls_in_block(block, type_table, codegen, counts);
             }
             _ => {}
         }
@@ -9566,39 +9694,168 @@ impl Codegen {
             TirStmtKind::Let {
                 local_index,
                 type_id,
+                value,
                 ..
             } => {
                 let local_type = self.type_id_to_valtype(type_table, *type_id);
                 let local_name = format!("_local_{local_index}");
                 ctx.alloc_local(&local_name, local_type);
+                // Recurse into value expression to find labeled block expressions
+                self.preallocate_locals_from_expr(value, type_table, ctx);
             }
             TirStmtKind::If {
+                condition,
                 then_block,
                 else_block,
                 ..
             } => {
+                self.preallocate_locals_from_expr(condition, type_table, ctx);
                 self.preallocate_locals_from_block(then_block, type_table, ctx);
                 if let Some(else_blk) = else_block {
                     self.preallocate_locals_from_block(else_blk, type_table, ctx);
                 }
             }
-            TirStmtKind::While { body, .. }
-            | TirStmtKind::For { body, .. }
-            | TirStmtKind::ForOf { body, .. }
-            | TirStmtKind::Loop { body }
-            | TirStmtKind::LabeledBlock { block: body, .. } => {
+            TirStmtKind::While { condition, body } => {
+                self.preallocate_locals_from_expr(condition, type_table, ctx);
+                self.preallocate_locals_from_block(body, type_table, ctx);
+            }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+                ..
+            } => {
+                if let Some(cond) = condition {
+                    self.preallocate_locals_from_expr(cond, type_table, ctx);
+                }
+                if let Some(upd) = update {
+                    self.preallocate_locals_from_expr(upd, type_table, ctx);
+                }
+                self.preallocate_locals_from_block(body, type_table, ctx);
+            }
+            TirStmtKind::ForOf {
+                iterable,
+                iterable_type,
+                body,
+                ..
+            } => {
+                self.preallocate_locals_from_expr(iterable, type_table, ctx);
+                // Pre-allocate temp locals for for-of loop
+                let array_valtype = self.type_id_to_valtype(type_table, *iterable_type);
+                let for_of_id = ctx.next_for_of_id();
+                ctx.alloc_local(&format!("__for_of_array_{for_of_id}"), array_valtype);
+                ctx.alloc_local(&format!("__for_of_counter_{for_of_id}"), ValType::I32);
+                self.preallocate_locals_from_block(body, type_table, ctx);
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.preallocate_locals_from_block(body, type_table, ctx);
             }
             TirStmtKind::IfPattern {
+                scrutinee,
                 then_block,
                 else_block,
                 ..
             } => {
+                self.preallocate_locals_from_expr(scrutinee, type_table, ctx);
                 self.preallocate_locals_from_block(then_block, type_table, ctx);
                 if let Some(else_blk) = else_block {
                     self.preallocate_locals_from_block(else_blk, type_table, ctx);
                 }
             }
+            TirStmtKind::Expr(expr) => {
+                self.preallocate_locals_from_expr(expr, type_table, ctx);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                self.preallocate_locals_from_expr(expr, type_table, ctx);
+            }
+            TirStmtKind::Break {
+                value: Some(expr), ..
+            } => {
+                self.preallocate_locals_from_expr(expr, type_table, ctx);
+            }
+            _ => {}
+        }
+    }
+
+    /// Recurse into expressions to find labeled block expressions that contain statements
+    fn preallocate_locals_from_expr(
+        &self,
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { block, .. } => {
+                // Labeled block expression contains a block that may have for-of loops
+                self.preallocate_locals_from_block(block, type_table, ctx);
+            }
+            TirExprKind::Block(block) => {
+                self.preallocate_locals_from_block(block, type_table, ctx);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.preallocate_locals_from_expr(condition, type_table, ctx);
+                self.preallocate_locals_from_block(then_branch, type_table, ctx);
+                if let Some(else_blk) = else_branch {
+                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.preallocate_locals_from_expr(left, type_table, ctx);
+                self.preallocate_locals_from_expr(right, type_table, ctx);
+            }
+            TirExprKind::Unary { expr: inner, .. } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::IndirectCall { args, .. } => {
+                for arg in args {
+                    self.preallocate_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.preallocate_locals_from_expr(receiver, type_table, ctx);
+                for arg in args {
+                    self.preallocate_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::Index { expr: inner, index } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+                self.preallocate_locals_from_expr(index, type_table, ctx);
+            }
+            TirExprKind::Assign { value, .. } | TirExprKind::Move { value } => {
+                self.preallocate_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.preallocate_locals_from_expr(&field.value, type_table, ctx);
+                }
+            }
+            TirExprKind::VariantConstruct { fields, .. } => {
+                for field in fields {
+                    self.preallocate_locals_from_expr(field, type_table, ctx);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements, .. } => {
+                for elem in elements {
+                    self.preallocate_locals_from_expr(elem, type_table, ctx);
+                }
+            }
+            TirExprKind::Cast { expr: inner, .. } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::OptionSome { value } => {
+                self.preallocate_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.preallocate_locals_from_expr(body, type_table, ctx);
+            }
+            // Leaf nodes - no nested expressions containing blocks
             _ => {}
         }
     }

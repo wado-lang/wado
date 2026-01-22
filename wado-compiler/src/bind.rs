@@ -460,6 +460,13 @@ impl Binder {
                 }
             }
 
+            Expr::LabeledBlock(lb) => {
+                // Labeled block expression creates a new scope for its block
+                self.enter_scope();
+                self.bind_block(&lb.block);
+                self.exit_scope();
+            }
+
             // Literals don't reference variables
             Expr::Literal(_) => {}
         }

@@ -931,6 +931,15 @@ pub enum TirExprKind {
     Move {
         value: Box<TirExpr>,
     },
+
+    /// Labeled block expression: `label: { ... }` that produces a value
+    /// The value must be returned via `break label: expr;`
+    LabeledBlock {
+        label: String,
+        block: TirBlock,
+        /// The type of value this block produces (from break expressions)
+        result_type: TypeId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1093,7 +1102,13 @@ pub enum TirStmtKind {
         iterable_type: TypeId,
         body: TirBlock,
     },
-    Break,
+    /// Break statement: `break;`, `break label;`, or `break label: expr;`
+    Break {
+        /// Optional label to break to (for labeled blocks)
+        label: Option<String>,
+        /// Optional value to return from the labeled block
+        value: Option<TirExpr>,
+    },
     Continue,
     /// Labeled block: `LABEL: { ... }` - creates a new scope with local bindings
     LabeledBlock {

@@ -179,7 +179,11 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             body: desugar_block(&l.body, ctx),
             span: l.span,
         }),
-        Stmt::Break(b) => Stmt::Break(BreakStmt { span: b.span }),
+        Stmt::Break(b) => Stmt::Break(BreakStmt {
+            label: b.label.clone(),
+            value: b.value.as_ref().map(|v| Box::new(desugar_expr(v))),
+            span: b.span,
+        }),
         Stmt::Continue(c) => Stmt::Continue(ContinueStmt { span: c.span }),
         Stmt::LabeledBlock(lb) => Stmt::LabeledBlock(LabeledBlockStmt {
             label: lb.label.clone(),
@@ -345,6 +349,23 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             elements: t.elements.iter().map(desugar_expr).collect(),
             span: t.span,
         })),
+        Expr::LabeledBlock(lb) => {
+            // Labeled block expressions can contain statements including asserts
+            if let Some(ctx) = ctx {
+                Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                    label: lb.label.clone(),
+                    block: desugar_block(&lb.block, ctx),
+                    span: lb.span,
+                }))
+            } else {
+                let mut ctx = DesugarContext { assert_counter: 0 };
+                Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                    label: lb.label.clone(),
+                    block: desugar_block(&lb.block, &mut ctx),
+                    span: lb.span,
+                }))
+            }
+        }
     }
 }
 

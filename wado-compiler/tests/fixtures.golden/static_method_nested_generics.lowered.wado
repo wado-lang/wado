@@ -18,27 +18,22 @@ fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3];
     let boxed_arr: Box<Array<i32>> = move "Box<Array<i32>>::new"(arr);
     let inner: Array<i32> = move "Box<Array<i32>>::get"(&boxed_arr);
-    let mut __result_7: i32 = 0;
-    __inline_Array_i32___len_0: {
+    core::cli::println(move core::internal::string_concat(move "inner len: ", move "i32::to_string"(__inline_Array_i32___len_0: {
         let self: &Array<i32> = &inner;
-        __result_7 = self.used;
-    }
-    core::cli::println(move core::internal::string_concat(move "inner len: ", move "i32::to_string"(__result_7)));
-    let mut __result_10: i32 = 0;
-    __inline_Array_i32__IndexValue__index_value_1: {
+        break __inline_Array_i32___len_0: self.used;
+    })));
+    core::cli::println(move core::internal::string_concat(move "inner[0]: ", move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_1: {
         let self: &Array<i32> = &inner;
         let index: i32 = 0;
-        __result_10 = core::builtin::array_get::<i32>(self.repr, index);
-    }
-    core::cli::println(move core::internal::string_concat(move "inner[0]: ", move "i32::to_string"(__result_10)));
+        break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(self.repr, index);
+    })));
     let inner_box: Box<i32> = move "Box<i32>::new"(42);
     let outer_box: Box<Box<i32>> = move "Box<Box<i32>>::new"(inner_box);
     let unwrapped: Box<i32> = move "Box<Box<i32>>::get"(&outer_box);
-    core::cli::println(move core::internal::string_concat(move "unwrapped value: ", move "i32::to_string"("Box<i32>::get"(&unwrapped))));
-}
-
-pub fn "Box<i32>::get"(self: &Box<i32>) -> i32 {
-    return self.value;
+    core::cli::println(move core::internal::string_concat(move "unwrapped value: ", move "i32::to_string"(__inline_Box_i32___get_2: {
+        let self: &Box<i32> = &unwrapped;
+        break __inline_Box_i32___get_2: self.value;
+    })));
 }
 
 pub fn "Box<Box<i32>>::get"(self: &Box<Box<i32>>) -> Box<i32> {

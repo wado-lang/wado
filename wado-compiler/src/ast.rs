@@ -392,9 +392,13 @@ pub struct LoopStmt {
     pub span: Span,
 }
 
-/// Break statement: `break;`
+/// Break statement: `break;`, `break label;`, or `break label: expr;`
 #[derive(Debug, Clone)]
 pub struct BreakStmt {
+    /// Optional label to break to (for labeled blocks)
+    pub label: Option<String>,
+    /// Optional value to return from the labeled block
+    pub value: Option<Box<Expr>>,
     pub span: Span,
 }
 
@@ -426,6 +430,17 @@ pub enum Expr {
     Cast(Box<CastExpr>),
     StructLiteral(Box<StructLiteralExpr>),
     TupleLiteral(Box<TupleLiteralExpr>),
+    /// Labeled block expression: `label: { ... }` where the last expression is the value
+    LabeledBlock(Box<LabeledBlockExpr>),
+}
+
+/// Labeled block expression: `label: { ... }` that produces a value
+/// The value is the last expression in the block (if any).
+#[derive(Debug, Clone)]
+pub struct LabeledBlockExpr {
+    pub label: String,
+    pub block: Block,
+    pub span: Span,
 }
 
 impl Expr {
@@ -452,6 +467,7 @@ impl Expr {
             Expr::Cast(e) => e.span,
             Expr::StructLiteral(e) => e.span,
             Expr::TupleLiteral(e) => e.span,
+            Expr::LabeledBlock(e) => e.span,
         }
     }
 
@@ -538,6 +554,10 @@ impl Expr {
             Expr::TupleLiteral(mut e) => {
                 e.span = new_span;
                 Expr::TupleLiteral(e)
+            }
+            Expr::LabeledBlock(mut e) => {
+                e.span = new_span;
+                Expr::LabeledBlock(e)
             }
         }
     }

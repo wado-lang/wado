@@ -15,26 +15,25 @@ struct "Box<i32>" {
     value: i32,
 }
 
-fn "Point::sum"(self: &Point) -> i32 {
-    return (self.x + self.y);
-}
-
-fn "Point::scale"(self: &Point, factor: i32) -> i32 {
-    return ((self.x + self.y) * factor);
-}
-
 fn run() with Stdout {
     let p: Point = move Point { x: 10, y: 20 };
     let p_ref: &Point = &p;
     __assert_0: {
-        let __v0: i32 = "Point::sum"(p_ref);
+        let __v0: i32 = __inline_Point__sum_0: {
+            let self: &Point = p_ref;
+            break __inline_Point__sum_0: (self.x + self.y);
+        };
         let __cond: bool = (__v0 == 30);
         if !__cond {
             core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.sum() == 30\n", move "p_ref.sum(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
     __assert_1: {
-        let __v0: i32 = "Point::scale"(p_ref, 2);
+        let __v0: i32 = __inline_Point__scale_1: {
+            let self: &Point = p_ref;
+            let factor: i32 = 2;
+            break __inline_Point__scale_1: ((self.x + self.y) * factor);
+        };
         let __cond: bool = (__v0 == 60);
         if !__cond {
             core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.scale(2) == 60\n", move "p_ref.scale(2): "), move "i32::to_string"(__v0)), move "\n"));
@@ -42,7 +41,10 @@ fn run() with Stdout {
     }
     let p_ref2: &&Point = &p_ref;
     __assert_2: {
-        let __v0: i32 = "Point::sum"(p_ref2);
+        let __v0: i32 = __inline_Point__sum_2: {
+            let self: &Point = p_ref2;
+            break __inline_Point__sum_2: (self.x + self.y);
+        };
         let __cond: bool = (__v0 == 30);
         if !__cond {
             core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref2.sum() == 30\n", move "p_ref2.sum(): "), move "i32::to_string"(__v0)), move "\n"));
@@ -51,7 +53,10 @@ fn run() with Stdout {
     let box_i32: Box<i32> = move Box<i32> { value: 42 };
     let box_ref: &Box<i32> = &box_i32;
     __assert_3: {
-        let __v0: i32 = "Box<i32>::get"(box_ref);
+        let __v0: i32 = __inline_Box_i32___get_3: {
+            let self: &Box<i32> = box_ref;
+            break __inline_Box_i32___get_3: self.value;
+        };
         let __cond: bool = (__v0 == 42);
         if !__cond {
             core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: box_ref.get() == 42\n", move "box_ref.get(): "), move "i32::to_string"(__v0)), move "\n"));
@@ -86,7 +91,10 @@ fn run() with Stdout {
     let mut p2: Point = move Point { x: 5, y: 10 };
     let p2_mut_ref: &mut Point = &mut p2;
     __assert_7: {
-        let __v0: i32 = "Point::sum"(p2_mut_ref);
+        let __v0: i32 = __inline_Point__sum_4: {
+            let self: &Point = p2_mut_ref;
+            break __inline_Point__sum_4: (self.x + self.y);
+        };
         let __cond: bool = (__v0 == 15);
         if !__cond {
             core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p2_mut_ref.sum() == 15\n", move "p2_mut_ref.sum(): "), move "i32::to_string"(__v0)), move "\n"));
@@ -94,7 +102,10 @@ fn run() with Stdout {
     }
     let p_ref3: &&&Point = &p_ref2;
     __assert_8: {
-        let __v0: i32 = "Point::sum"(p_ref3);
+        let __v0: i32 = __inline_Point__sum_5: {
+            let self: &Point = p_ref3;
+            break __inline_Point__sum_5: (self.x + self.y);
+        };
         let __cond: bool = (__v0 == 30);
         if !__cond {
             core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref3.sum() == 30\n", move "p_ref3.sum(): "), move "i32::to_string"(__v0)), move "\n"));
@@ -104,10 +115,6 @@ fn run() with Stdout {
 }
 
 fn "Box<String>::get"(self: &Box<String>) -> String {
-    return self.value;
-}
-
-fn "Box<i32>::get"(self: &Box<i32>) -> i32 {
     return self.value;
 }
 

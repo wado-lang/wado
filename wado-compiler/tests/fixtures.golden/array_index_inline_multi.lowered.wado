@@ -12,44 +12,38 @@ fn run() with Stdout {
     let item0: String = move "Container<String>::get_item"(&c, 0);
     let item1: String = move "Container<String>::get_item"(&c, 1);
     let item2: String = move "Container<String>::get_item"(&c, 2);
-    let flag0: bool = "Container<String>::is_flagged"(&c, 0);
-    let flag1: bool = "Container<String>::is_flagged"(&c, 1);
-    let count: i32 = "Container<String>::count_flagged"(&c);
+    let flag0: bool = __inline_Container_String___is_flagged_0: {
+        let self: &Container<String> = &c;
+        let i: i32 = 0;
+        break __inline_Container_String___is_flagged_0: "Array<bool>^IndexValue::index_value"(&self.flags, i);
+    };
+    let flag1: bool = __inline_Container_String___is_flagged_1: {
+        let self: &Container<String> = &c;
+        let i: i32 = 1;
+        break __inline_Container_String___is_flagged_1: "Array<bool>^IndexValue::index_value"(&self.flags, i);
+    };
+    let count: i32 = __inline_Container_String___count_flagged_2: {
+        let self: &Container<String> = &c;
+        let mut count: i32 = 0;
+        let mut i: i32 = 0;
+        for ; (i < "Array<bool>::len"(&self.flags)); i = (i + 1) {
+            if "Array<bool>^IndexValue::index_value"(&self.flags, i) {
+                count = (count + 1);
+            }
+        }
+        break __inline_Container_String___count_flagged_2: count;
+    };
     core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "items: ", item0), move ", "), item1), move ", "), item2));
     core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "flags: ", move "bool::to_string"(flag0)), move ", "), move "bool::to_string"(flag1)));
     core::cli::println(move core::internal::string_concat(move "count: ", move "i32::to_string"(count)));
 }
 
-fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
-    let mut count: i32 = 0;
-    let mut i: i32 = 0;
-    let _licm_flags: Array<bool> = self.flags;
-    for ; (i < "Array<bool>::len"(&self.flags)); i = (i + 1) {
-        let mut __result_5: bool = false;
-        __inline_Array_bool__IndexValue__index_value_0: {
-            let self: &Array<bool> = &_licm_flags;
-            let index: i32 = i;
-            __result_5 = core::builtin::array_get::<bool>(self.repr, index);
-        }
-        if __result_5 {
-            count = (count + 1);
-        }
-    }
-    return count;
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 pub fn "Array<bool>::len"(self: &Array<bool>) -> i32 {
     return self.used;
-}
-
-fn "Container<String>::is_flagged"(self: &Container<String>, i: i32) -> bool {
-    let mut __result_4: bool = false;
-    __inline_Array_bool__IndexValue__index_value_0: {
-        let self: &Array<bool> = &self.flags;
-        let index: i32 = i;
-        __result_4 = core::builtin::array_get::<bool>(self.repr, index);
-    }
-    return __result_4;
 }
 
 fn "Container<String>::get_item"(self: &Container<String>, i: i32) -> String {

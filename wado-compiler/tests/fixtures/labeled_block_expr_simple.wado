@@ -1,0 +1,19 @@
+// Test simple labeled block expression with break value
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let result = compute: {
+        let a = 10;
+        let b = 20;
+        if a < b {
+            break compute: a + b;
+        }
+        break compute: 0;
+    };
+    assert result == 30;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

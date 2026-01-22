@@ -10,18 +10,20 @@ struct Outer {
     inner: Inner,
 }
 
-fn get_inner_value(o: &Outer) -> i32 {
-    return o.inner.value;
-}
-
-fn set_inner_value(o: &mut Outer, v: i32) {
-    o.inner.value = v;
-}
-
 fn run() with Stdout {
     let mut o: Outer = move Outer { inner: Inner { value: 42 } };
-    core::cli::println(move "i32::to_string"(get_inner_value(&o)));
-    set_inner_value(&mut o, 100);
-    core::cli::println(move "i32::to_string"(get_inner_value(&o)));
+    core::cli::println(move "i32::to_string"(__inline_get_inner_value_0: {
+        let o: &Outer = &o;
+        break __inline_get_inner_value_0: o.inner.value;
+    }));
+    __inline_set_inner_value_1: {
+        let o: &mut Outer = &mut o;
+        let v: i32 = 100;
+        o.inner.value = v;
+    };
+    core::cli::println(move "i32::to_string"(__inline_get_inner_value_2: {
+        let o: &Outer = &o;
+        break __inline_get_inner_value_2: o.inner.value;
+    }));
 }
 

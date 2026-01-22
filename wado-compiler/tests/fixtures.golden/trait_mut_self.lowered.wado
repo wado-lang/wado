@@ -6,18 +6,19 @@ struct Counter {
     count: i32,
 }
 
-fn "Counter^Resettable::reset"(self: &mut Counter) {
-    self.count = 0;
-}
-
-fn "Counter^Resettable::value"(self: &Counter) -> i32 {
-    return self.count;
-}
-
 fn run() with Stdout {
     let mut c: Counter = move Counter { count: 42 };
-    core::cli::println(move core::internal::string_concat(move "Before: ", move "i32::to_string"("Counter^Resettable::value"(&c))));
-    "Counter^Resettable::reset"(&mut c);
-    core::cli::println(move core::internal::string_concat(move "After: ", move "i32::to_string"("Counter^Resettable::value"(&c))));
+    core::cli::println(move core::internal::string_concat(move "Before: ", move "i32::to_string"(__inline_Counter_Resettable__value_0: {
+        let self: &Counter = &c;
+        break __inline_Counter_Resettable__value_0: self.count;
+    })));
+    __inline_Counter_Resettable__reset_1: {
+        let self: &mut Counter = &mut c;
+        self.count = 0;
+    };
+    core::cli::println(move core::internal::string_concat(move "After: ", move "i32::to_string"(__inline_Counter_Resettable__value_2: {
+        let self: &Counter = &c;
+        break __inline_Counter_Resettable__value_2: self.count;
+    })));
 }
 

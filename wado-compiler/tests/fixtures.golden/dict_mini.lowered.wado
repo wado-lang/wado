@@ -23,19 +23,13 @@ fn run() with Stdout {
     }
     core::cli::println(move core::internal::string_concat(move "has 'target': ", move "bool::to_string"("MiniDict<String,String>::has"(&dict, move "target"))));
     core::cli::println(move core::internal::string_concat(move "has 'version': ", move "bool::to_string"("MiniDict<String,String>::has"(&dict, move "version"))));
-    core::cli::println(move core::internal::string_concat(move "size: ", move "i32::to_string"("MiniDict<String,String>::size"(&dict))));
+    core::cli::println(move core::internal::string_concat(move "size: ", move "i32::to_string"(__inline_MiniDict_String_String___size_0: {
+        let self: &MiniDict<String,String> = &dict;
+        break __inline_MiniDict_String_String___size_0: "Array<Tuple<String,String>>::len"(&self.entries);
+    })));
     if None = "MiniDict<String,String>::get"(&dict, move "missing") {
         core::cli::println(move "missing key returned None");
     }
-}
-
-fn "MiniDict<String,String>::size"(self: &MiniDict<String,String>) -> i32 {
-    let mut __result_2: i32 = 0;
-    __inline_Array_Tuple_String_String____len_0: {
-        let self: &Array<[String, String]> = &self.entries;
-        __result_2 = self.used;
-    }
-    return __result_2;
 }
 
 pub fn "Array<Tuple<String,String>>::len"(self: &Array<[String, String]>) -> i32 {
@@ -70,14 +64,15 @@ fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -
 
 fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: String, value: String) {
     let mut i: i32 = 0;
+    let _licm_entries: Array<[String, String]> = self.entries;
     for ; (i < "Array<Tuple<String,String>>::len"(&self.entries)); i = (i + 1) {
-        if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&self.entries, i).0, &key) {
+        if "String^Eq::eq"(&"Array<Tuple<String,String>>^IndexValue::index_value"(&_licm_entries, i).0, &key) {
             __inline_Array_Tuple_String_String___IndexAssign__index_assign_0: {
                 let self: &mut Array<[String, String]> = &mut self.entries;
                 let index: i32 = i;
                 let value: [String, String] = move [key, value];
                 core::builtin::array_set::<[String, String]>(self.repr, index, value);
-            }
+            };
             return;
         }
     }
@@ -97,7 +92,7 @@ fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: Strin
         }
         core::builtin::array_set::<[String, String]>(self.repr, used, value);
         self.used = (used + 1);
-    }
+    };
 }
 
 fn "MiniDict<String,String>::new"() -> MiniDict<String,String> {

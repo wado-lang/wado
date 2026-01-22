@@ -7,27 +7,23 @@ struct Counter {
     step: i32,
 }
 
-pub fn "Counter::get"(self: &Counter) -> i32 {
-    return self.value;
-}
-
-pub fn "Counter::get_step"(self: &Counter) -> i32 {
-    return self.step;
-}
-
-pub fn "Counter::double"(self: &Counter) -> i32 {
-    return (self.value * 2);
-}
-
-pub fn "Counter::add_step"(self: &Counter) -> i32 {
-    return (self.value + self.step);
-}
-
 fn run() with Stdout {
     let c: Counter = move Counter { value: 10, step: 3 };
-    core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"("Counter::get"(&c))));
-    core::cli::println(move core::internal::string_concat(move "step: ", move "i32::to_string"("Counter::get_step"(&c))));
-    core::cli::println(move core::internal::string_concat(move "double: ", move "i32::to_string"("Counter::double"(&c))));
-    core::cli::println(move core::internal::string_concat(move "add_step: ", move "i32::to_string"("Counter::add_step"(&c))));
+    core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"(__inline_Counter__get_0: {
+        let self: &Counter = &c;
+        break __inline_Counter__get_0: self.value;
+    })));
+    core::cli::println(move core::internal::string_concat(move "step: ", move "i32::to_string"(__inline_Counter__get_step_1: {
+        let self: &Counter = &c;
+        break __inline_Counter__get_step_1: self.step;
+    })));
+    core::cli::println(move core::internal::string_concat(move "double: ", move "i32::to_string"(__inline_Counter__double_2: {
+        let self: &Counter = &c;
+        break __inline_Counter__double_2: (self.value * 2);
+    })));
+    core::cli::println(move core::internal::string_concat(move "add_step: ", move "i32::to_string"(__inline_Counter__add_step_3: {
+        let self: &Counter = &c;
+        break __inline_Counter__add_step_3: (self.value + self.step);
+    })));
 }
 

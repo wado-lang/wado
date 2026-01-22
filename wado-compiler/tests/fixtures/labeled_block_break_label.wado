@@ -1,0 +1,20 @@
+// Test break with label from a labeled block
+// break label; should exit the labeled block early
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let mut count = 0;
+    outer: {
+        count = 1;
+        if count == 1 {
+            break outer;
+        }
+        count = 2; // Should not reach here
+    }
+    assert count == 1;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

@@ -1088,7 +1088,20 @@ impl<'a> Unparser<'a> {
             Expr::Cast(c) => self.unparse_cast(c),
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
             Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
+            Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
         }
+    }
+
+    fn unparse_labeled_block_expr(&mut self, lb: &crate::ast::LabeledBlockExpr) {
+        self.output.push_str(&lb.label);
+        self.output.push_str(": {\n");
+        self.indent_level += 1;
+        for stmt in &lb.block.stmts {
+            self.unparse_stmt(stmt);
+        }
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
     }
 
     fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
@@ -2162,9 +2175,18 @@ impl<'a> TirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            TirStmtKind::Break => {
+            TirStmtKind::Break { label, value } => {
                 self.write_indent();
-                self.output.push_str("break;\n");
+                self.output.push_str("break");
+                if let Some(lbl) = label {
+                    self.output.push(' ');
+                    self.output.push_str(lbl);
+                    if let Some(val) = value {
+                        self.output.push_str(": ");
+                        self.unparse_expr(val);
+                    }
+                }
+                self.output.push_str(";\n");
             }
             TirStmtKind::Continue => {
                 self.write_indent();
@@ -2599,6 +2621,15 @@ impl<'a> TirUnparser<'a> {
                     self.unparse_expr(arg);
                 }
                 self.output.push(')');
+            }
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                self.output.push_str(label);
+                self.output.push_str(": {\n");
+                self.indent_level += 1;
+                self.unparse_block(block);
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
             }
         }
     }

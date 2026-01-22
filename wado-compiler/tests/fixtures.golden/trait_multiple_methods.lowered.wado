@@ -7,14 +7,6 @@ struct Rectangle {
     height: f64,
 }
 
-fn "Rectangle^Shape::area"(self: &Rectangle) -> f64 {
-    return (self.width * self.height);
-}
-
-fn "Rectangle^Shape::perimeter"(self: &Rectangle) -> f64 {
-    return (2.0 * (self.width + self.height));
-}
-
 fn "Rectangle^Shape::name"(self: &Rectangle) -> String {
     return "Rectangle";
 }
@@ -22,7 +14,13 @@ fn "Rectangle^Shape::name"(self: &Rectangle) -> String {
 fn run() with Stdout {
     let r: Rectangle = move Rectangle { width: 3.0, height: 4.0 };
     core::cli::println(move "Rectangle^Shape::name"(&r));
-    core::cli::println(move core::internal::string_concat(move "Area: ", move "f64::to_string"("Rectangle^Shape::area"(&r))));
-    core::cli::println(move core::internal::string_concat(move "Perimeter: ", move "f64::to_string"("Rectangle^Shape::perimeter"(&r))));
+    core::cli::println(move core::internal::string_concat(move "Area: ", move "f64::to_string"(__inline_Rectangle_Shape__area_0: {
+        let self: &Rectangle = &r;
+        break __inline_Rectangle_Shape__area_0: (self.width * self.height);
+    })));
+    core::cli::println(move core::internal::string_concat(move "Perimeter: ", move "f64::to_string"(__inline_Rectangle_Shape__perimeter_1: {
+        let self: &Rectangle = &r;
+        break __inline_Rectangle_Shape__perimeter_1: (2.0 * (self.width + self.height));
+    })));
 }
 

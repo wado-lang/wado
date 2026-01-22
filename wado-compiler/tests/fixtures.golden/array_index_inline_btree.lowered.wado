@@ -19,21 +19,42 @@ fn run() with Stdout {
 }
 
 fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
-    let active: i32 = "Node<String>::count_active"(&self.root);
-    let full: bool = "Node<String>::is_full"(&self.root, self.max_keys);
-    let idx: i32 = "Node<String>::find_index"(&self.root, &"cherry");
+    let active: i32 = __inline_Node_String___count_active_0: {
+        let self: &Node<String> = &self.root;
+        let mut count: i32 = 0;
+        let mut i: i32 = 0;
+        for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
+            if !"Array<bool>^IndexValue::index_value"(&self.deleted, i) {
+                count = (count + 1);
+            }
+        }
+        break __inline_Node_String___count_active_0: count;
+    };
+    let full: bool = __inline_Node_String___is_full_1: {
+        let self: &Node<String> = &self.root;
+        let max_keys: i32 = self.max_keys;
+        let mut count: i32 = 0;
+        let mut i: i32 = 0;
+        for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
+            if !"Array<bool>^IndexValue::index_value"(&self.deleted, i) {
+                count = (count + 1);
+            }
+        }
+        break __inline_Node_String___is_full_1: (count >= max_keys);
+    };
+    let idx: i32 = __inline_Node_String___find_index_2: {
+        let self: &Node<String> = &self.root;
+        let key: &String = &"cherry";
+        let mut i: i32 = 0;
+        while ((i < "Array<String>::len"(&self.keys)) && "String^Ord::lt"(&"Array<String>^IndexValue::index_value"(&self.keys, i), &*key)) {
+            i = (i + 1);
+        }
+        break __inline_Node_String___find_index_2: i;
+    };
     if full {
         return (active + 100);
     }
     return (active + idx);
-}
-
-fn "Node<String>::find_index"(self: &Node<String>, key: &String) -> i32 {
-    let mut i: i32 = 0;
-    while ((i < "Array<String>::len"(&self.keys)) && "String^Ord::lt"(&"Array<String>^IndexValue::index_value"(&self.keys, i), &*key)) {
-        i = (i + 1);
-    }
-    return i;
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
@@ -44,39 +65,7 @@ pub fn "Array<String>::len"(self: &Array<String>) -> i32 {
     return self.used;
 }
 
-fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
-    let mut count: i32 = 0;
-    let mut i: i32 = 0;
-    let _licm_deleted: Array<bool> = self.deleted;
-    for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
-        let mut __result_6: bool = false;
-        __inline_Array_bool__IndexValue__index_value_0: {
-            let self: &Array<bool> = &_licm_deleted;
-            let index: i32 = i;
-            __result_6 = core::builtin::array_get::<bool>(self.repr, index);
-        }
-        if !__result_6 {
-            count = (count + 1);
-        }
-    }
-    return (count >= max_keys);
-}
-
-fn "Node<String>::count_active"(self: &Node<String>) -> i32 {
-    let mut count: i32 = 0;
-    let mut i: i32 = 0;
-    let _licm_deleted: Array<bool> = self.deleted;
-    for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
-        let mut __result_5: bool = false;
-        __inline_Array_bool__IndexValue__index_value_0: {
-            let self: &Array<bool> = &_licm_deleted;
-            let index: i32 = i;
-            __result_5 = core::builtin::array_get::<bool>(self.repr, index);
-        }
-        if !__result_5 {
-            count = (count + 1);
-        }
-    }
-    return count;
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    return core::builtin::array_get::<bool>(self.repr, index);
 }
 

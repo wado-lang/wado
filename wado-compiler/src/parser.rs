@@ -996,13 +996,35 @@ impl Parser {
         Ok(Stmt::Loop(LoopStmt { body, span }))
     }
 
-    /// Parse break statement: `break;`
+    /// Parse break statement: `break;`, `break label;`, or `break label: expr;`
     fn parse_break_stmt(&mut self) -> ParseResult<Stmt> {
-        let span = self.peek().span;
+        let start_span = self.peek().span;
         self.expect(&TokenKind::Break)?;
+
+        // Check for optional label
+        let (label, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            self.advance();
+            // Check for colon followed by expression (break with value)
+            if self.check(&TokenKind::Colon) {
+                self.advance(); // consume ':'
+                let expr = self.parse_expr()?;
+                (Some(name), Some(Box::new(expr)))
+            } else {
+                // Just a label, no value
+                (Some(name), None)
+            }
+        } else {
+            // No label, no value
+            (None, None)
+        };
+
         self.expect(&TokenKind::Semicolon)?;
 
-        Ok(Stmt::Break(BreakStmt { span }))
+        Ok(Stmt::Break(BreakStmt {
+            label,
+            value,
+            span: start_span,
+        }))
     }
 
     /// Parse continue statement: `continue;`
@@ -1719,6 +1741,18 @@ impl Parser {
                             span: start_span,
                         }))
                     }
+                } else if self.check(&TokenKind::Colon)
+                    && self.peek_nth(1).kind == TokenKind::LBrace
+                {
+                    // Labeled block expression: `label: { ... }`
+                    self.advance(); // consume ':'
+                    let block = self.parse_block()?;
+                    let end_span = block.span;
+                    Ok(Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                        label: name,
+                        block,
+                        span: start_span.merge(&end_span),
+                    })))
                 } else if self.check(&TokenKind::LBrace) && is_type_name {
                     // Struct literal: `Point { x: 10, y: 20 }`
                     // Only parse as struct literal if name starts with uppercase

@@ -556,7 +556,7 @@ impl Monomorphizer {
                 self.rewrite_types_in_expr(iterable, type_table);
                 self.rewrite_types_in_block(body, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
             }
@@ -733,6 +733,9 @@ impl Monomorphizer {
                 for arg in args {
                     self.rewrite_types_in_expr(arg, type_table);
                 }
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.rewrite_types_in_block(block, type_table);
             }
         }
     }
@@ -1238,7 +1241,7 @@ impl Monomorphizer {
                 );
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_func_instantiation_sites_in_block(
                     block,
@@ -1722,6 +1725,13 @@ impl Monomorphizer {
             TirExprKind::Move { value } => {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.collect_func_instantiation_sites_in_block(
+                    block,
+                    generic_functions,
+                    type_table,
+                );
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2055,7 +2065,7 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(iterable, substitution, type_table);
                 self.substitute_types_in_block(body, substitution, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
@@ -2416,6 +2426,9 @@ impl Monomorphizer {
             TirExprKind::Move { value } => {
                 self.substitute_types_in_expr(value, substitution, type_table);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.substitute_types_in_block(block, substitution, type_table);
+            }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2679,7 +2692,7 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(iterable, type_table);
                 self.rewrite_function_calls_in_block(body, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }
@@ -2951,6 +2964,9 @@ impl Monomorphizer {
             TirExprKind::Move { value } => {
                 self.rewrite_function_calls_in_expr(value, type_table);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.rewrite_function_calls_in_block(block, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -3189,7 +3205,7 @@ impl StringCollector {
                 self.collect_expr(iterable);
                 self.collect_block(body);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);
             }
@@ -3299,6 +3315,9 @@ impl StringCollector {
             }
             TirExprKind::Move { value } => {
                 self.collect_expr(value);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.collect_block(block);
             }
             // Literals and simple expressions don't contain strings
             TirExprKind::IntLiteral { .. }

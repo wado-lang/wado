@@ -22,13 +22,13 @@ fn "Holder^IndexMut::index_mut"(self: &mut Holder, _idx: i32) -> &mut Data {
     return &mut self.data;
 }
 
-fn modify_holder(h: &mut Holder, new_value: i32) {
-    "Data::set_value"("Holder^IndexMut::index_mut"(h, 0), new_value);
-}
-
 fn run() with Stdout {
     let mut h: Holder = move Holder { data: Data { value: 0 } };
-    modify_holder(&mut h, 42);
+    __inline_modify_holder_0: {
+        let h: &mut Holder = &mut h;
+        let new_value: i32 = 42;
+        "Data::set_value"("Holder^IndexMut::index_mut"(h, 0), new_value);
+    };
     let d: Data = *"Holder^Index::index"(&h, 0);
     core::cli::println(move core::internal::string_concat(move "Value: ", move "i32::to_string"(d.value)));
 }

@@ -12,23 +12,17 @@ fn run() with Stdout {
     let node: Node<String,i32> = move Node<String,i32> { keys: ["apple", "banana", "cherry"], values: [10, 20, 30], deleted: [false, true, false] };
     let mut sum: i32 = 0;
     let mut i: i32 = 0;
-    let _licm_deleted: Array<bool> = node.deleted;
-    let _licm_values: Array<i32> = node.values;
     for ; (i < "Array<String>::len"(&node.keys)); i = (i + 1) {
-        let mut __result_5: bool = false;
-        __inline_Array_bool__IndexValue__index_value_0: {
-            let self: &Array<bool> = &_licm_deleted;
+        if !__inline_Array_bool__IndexValue__index_value_0: {
+            let self: &Array<bool> = &node.deleted;
             let index: i32 = i;
-            __result_5 = core::builtin::array_get::<bool>(self.repr, index);
-        }
-        if !__result_5 {
-            let mut __result_8: i32 = 0;
-            __inline_Array_i32__IndexValue__index_value_1: {
-                let self: &Array<i32> = &_licm_values;
+            break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(self.repr, index);
+        } {
+            sum = (sum + __inline_Array_i32__IndexValue__index_value_1: {
+                let self: &Array<i32> = &node.values;
                 let index: i32 = i;
-                __result_8 = core::builtin::array_get::<i32>(self.repr, index);
-            }
-            sum = (sum + __result_8);
+                break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(self.repr, index);
+            });
         }
     }
     core::cli::println(move core::internal::string_concat(move "sum (excluding deleted): ", move "i32::to_string"(sum)));

@@ -10,19 +10,24 @@ struct Container {
     item: Counter,
 }
 
-fn "Counter::increment"(self: &mut Counter) {
-    self.value = (self.value + 1);
-}
-
 fn "Container^IndexMut::index_mut"(self: &mut Container, _index: i32) -> &mut Counter {
     return &mut self.item;
 }
 
 fn run() with Stdout {
     let mut c: Container = move Container { item: Counter { value: 0 } };
-    "Counter::increment"("Container^IndexMut::index_mut"(&mut c, 0));
-    "Counter::increment"("Container^IndexMut::index_mut"(&mut c, 0));
-    "Counter::increment"("Container^IndexMut::index_mut"(&mut c, 0));
+    __inline_Counter__increment_0: {
+        let self: &mut Counter = "Container^IndexMut::index_mut"(&mut c, 0);
+        self.value = (self.value + 1);
+    };
+    __inline_Counter__increment_1: {
+        let self: &mut Counter = "Container^IndexMut::index_mut"(&mut c, 0);
+        self.value = (self.value + 1);
+    };
+    __inline_Counter__increment_2: {
+        let self: &mut Counter = "Container^IndexMut::index_mut"(&mut c, 0);
+        self.value = (self.value + 1);
+    };
     core::cli::println(move core::internal::string_concat(move "Counter value: ", move "i32::to_string"(c.item.value)));
 }
 

@@ -8,52 +8,64 @@ struct "Container<i32>" {
 
 fn run() {
     let mut container: Container<i32> = move "Container<i32>::new"();
-    "Container<i32>::add"(&mut container, 10);
-    "Container<i32>::add"(&mut container, 20);
-    "Container<i32>::add"(&mut container, 30);
-    core::cli::println(move core::internal::string_concat(move "Length: ", move "i32::to_string"("Container<i32>::len"(&container))));
-    core::cli::println(move core::internal::string_concat(move "First: ", move "i32::to_string"("Container<i32>::get"(&container, 0))));
-    core::cli::println(move core::internal::string_concat(move "Second: ", move "i32::to_string"("Container<i32>::get"(&container, 1))));
-    core::cli::println(move core::internal::string_concat(move "Third: ", move "i32::to_string"("Container<i32>::get"(&container, 2))));
+    __inline_Container_i32___add_0: {
+        let self: &mut Container<i32> = &mut container;
+        let item: i32 = 10;
+        "Array<i32>::append"(&mut self.items, item);
+    };
+    __inline_Container_i32___add_1: {
+        let self: &mut Container<i32> = &mut container;
+        let item: i32 = 20;
+        "Array<i32>::append"(&mut self.items, item);
+    };
+    __inline_Container_i32___add_2: {
+        let self: &mut Container<i32> = &mut container;
+        let item: i32 = 30;
+        "Array<i32>::append"(&mut self.items, item);
+    };
+    core::cli::println(move core::internal::string_concat(move "Length: ", move "i32::to_string"(__inline_Container_i32___len_3: {
+        let self: &Container<i32> = &container;
+        break __inline_Container_i32___len_3: "Array<i32>::len"(&self.items);
+    })));
+    core::cli::println(move core::internal::string_concat(move "First: ", move "i32::to_string"(__inline_Container_i32___get_4: {
+        let self: &Container<i32> = &container;
+        let index: i32 = 0;
+        break __inline_Container_i32___get_4: "Array<i32>^IndexValue::index_value"(&self.items, index);
+    })));
+    core::cli::println(move core::internal::string_concat(move "Second: ", move "i32::to_string"(__inline_Container_i32___get_5: {
+        let self: &Container<i32> = &container;
+        let index: i32 = 1;
+        break __inline_Container_i32___get_5: "Array<i32>^IndexValue::index_value"(&self.items, index);
+    })));
+    core::cli::println(move core::internal::string_concat(move "Third: ", move "i32::to_string"(__inline_Container_i32___get_6: {
+        let self: &Container<i32> = &container;
+        let index: i32 = 2;
+        break __inline_Container_i32___get_6: "Array<i32>^IndexValue::index_value"(&self.items, index);
+    })));
 }
 
-fn "Container<i32>::get"(self: &Container<i32>, index: i32) -> i32 {
-    let mut __result_4: i32 = 0;
-    __inline_Array_i32__IndexValue__index_value_0: {
-        let self: &Array<i32> = &self.items;
-        let index: i32 = index;
-        __result_4 = core::builtin::array_get::<i32>(self.repr, index);
-    }
-    return __result_4;
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
-fn "Container<i32>::len"(self: &Container<i32>) -> i32 {
-    let mut __result_2: i32 = 0;
-    __inline_Array_i32___len_0: {
-        let self: &Array<i32> = &self.items;
-        __result_2 = self.used;
-    }
-    return __result_2;
+pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
+    return self.used;
 }
 
-fn "Container<i32>::add"(self: &mut Container<i32>, item: i32) {
-    __inline_Array_i32___append_0: {
-        let self: &mut Array<i32> = &mut self.items;
-        let value: i32 = item;
-        let used: i32 = self.used;
-        let capacity: i32 = core::builtin::array_len(self.repr);
-        if core::builtin::unlikely((used >= capacity)) {
-            let mut new_capacity: i32 = (capacity * 2);
-            if (capacity == 0) {
-                new_capacity = 4;
-            }
-            let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
-            core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
-            self.repr = new_repr;
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
         }
-        core::builtin::array_set::<i32>(self.repr, used, value);
-        self.used = (used + 1);
+        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
     }
+    core::builtin::array_set::<i32>(self.repr, used, value);
+    self.used = (used + 1);
 }
 
 fn "Container<i32>::new"() -> Container<i32> {

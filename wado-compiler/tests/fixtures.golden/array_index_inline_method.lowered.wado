@@ -10,39 +10,36 @@ struct "Container<String,i32>" {
 
 fn run() with Stdout {
     let c: Container<String,i32> = move Container<String,i32> { keys: ["apple", "banana", "cherry"], values: [10, 20, 30], deleted: [false, true, false] };
-    let idx: i32 = "Container<String,i32>::find_key_index"(&c, &"cherry");
-    let full: bool = "Container<String,i32>::is_full"(&c, 5);
+    let idx: i32 = __inline_Container_String_i32___find_key_index_0: {
+        let self: &Container<String,i32> = &c;
+        let key: &String = &"cherry";
+        let mut i: i32 = 0;
+        while ((i < "Array<String>::len"(&self.keys)) && "String^Ord::lt"(&"Array<String>^IndexValue::index_value"(&self.keys, i), &*key)) {
+            i = (i + 1);
+        }
+        break __inline_Container_String_i32___find_key_index_0: i;
+    };
+    let full: bool = __inline_Container_String_i32___is_full_1: {
+        let self: &Container<String,i32> = &c;
+        let max_keys: i32 = 5;
+        let mut count: i32 = 0;
+        let mut i: i32 = 0;
+        for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
+            if !"Array<bool>^IndexValue::index_value"(&self.deleted, i) {
+                count = (count + 1);
+            }
+        }
+        break __inline_Container_String_i32___is_full_1: (count >= max_keys);
+    };
     core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "index: ", move "i32::to_string"(idx)), move ", full: "), move "bool::to_string"(full)));
 }
 
-fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32) -> bool {
-    let mut count: i32 = 0;
-    let mut i: i32 = 0;
-    let _licm_deleted: Array<bool> = self.deleted;
-    for ; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
-        let mut __result_6: bool = false;
-        __inline_Array_bool__IndexValue__index_value_0: {
-            let self: &Array<bool> = &_licm_deleted;
-            let index: i32 = i;
-            __result_6 = core::builtin::array_get::<bool>(self.repr, index);
-        }
-        if !__result_6 {
-            count = (count + 1);
-        }
-    }
-    return (count >= max_keys);
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 pub fn "Array<String>::len"(self: &Array<String>) -> i32 {
     return self.used;
-}
-
-fn "Container<String,i32>::find_key_index"(self: &Container<String,i32>, key: &String) -> i32 {
-    let mut i: i32 = 0;
-    while ((i < "Array<String>::len"(&self.keys)) && "String^Ord::lt"(&"Array<String>^IndexValue::index_value"(&self.keys, i), &*key)) {
-        i = (i + 1);
-    }
-    return i;
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

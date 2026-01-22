@@ -1,0 +1,25 @@
+// Test labeled block inside a loop
+// Labeled break from within a loop should exit the labeled block, not the loop
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let mut sum = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        search: {
+            if i == 1 {
+                break search; // Skip this iteration's search block
+            }
+            sum += i * 10;
+        }
+        sum += 1;
+    }
+    // i=0: sum = 0 + 0*10 + 1 = 1
+    // i=1: sum = 1 + 1 = 2 (search block skipped)
+    // i=2: sum = 2 + 2*10 + 1 = 23
+    assert sum == 23;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
