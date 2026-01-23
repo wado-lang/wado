@@ -6,10 +6,10 @@ use crate::ast::{
     BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt, EffectDecl,
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, FloatLiteral, ForOfStmt,
-    ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr, IfCondition, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item, LabeledBlockStmt, LetStmt, Literal,
-    LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType, NamespacedGenericType, Param,
-    Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr, IfCondition, IfExpr,
+    IfStmt, ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item, LabeledBlockStmt, LetStmt,
+    Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType, NamespacedGenericType,
+    Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
     StructField, StructLiteralExpr, StructLiteralField, TraitDecl, TupleLiteralExpr, Type,
     TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
     WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
@@ -604,7 +604,9 @@ impl Parser {
         let mut stmts = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            stmts.push(self.parse_stmt()?);
+            // Try to parse a statement, allowing optional trailing semicolon for final expression
+            let stmt = self.parse_stmt_in_block()?;
+            stmts.push(stmt);
         }
 
         let end_span = self.expect(&TokenKind::RBrace)?.span;
@@ -615,7 +617,8 @@ impl Parser {
         })
     }
 
-    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
+    /// Parse a statement inside a block, allowing optional semicolon for the final expression
+    fn parse_stmt_in_block(&mut self) -> ParseResult<Stmt> {
         // Check for labeled block: `LABEL: { ... }`
         if let TokenKind::Ident(_) = self.peek_kind()
             && matches!(self.peek_nth(1).kind, TokenKind::Colon)
@@ -634,8 +637,29 @@ impl Parser {
             TokenKind::Break => self.parse_break_stmt(),
             TokenKind::Continue => self.parse_continue_stmt(),
             TokenKind::Assert => self.parse_assert_stmt(),
-            _ => self.parse_expr_stmt(),
+            _ => self.parse_expr_stmt_in_block(),
         }
+    }
+
+    /// Parse an expression statement in a block, with optional trailing semicolon
+    fn parse_expr_stmt_in_block(&mut self) -> ParseResult<Stmt> {
+        let start_span = self.peek().span;
+        let expr = self.parse_expr()?;
+
+        // Semicolon is optional if followed by `}` (end of block)
+        if self.check(&TokenKind::Semicolon) {
+            self.advance();
+        } else if !self.check(&TokenKind::RBrace) {
+            return Err(ParseError {
+                message: format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
+                span: self.peek().span,
+            });
+        }
+
+        Ok(Stmt::Expr(ExprStmt {
+            expr,
+            span: start_span,
+        }))
     }
 
     fn parse_labeled_block_stmt(&mut self) -> ParseResult<Stmt> {
@@ -1098,17 +1122,6 @@ impl Parser {
                 span: self.peek().span,
             })
         }
-    }
-
-    fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {
-        let start_span = self.peek().span;
-        let expr = self.parse_expr()?;
-        self.expect(&TokenKind::Semicolon)?;
-
-        Ok(Stmt::Expr(ExprStmt {
-            expr,
-            span: start_span,
-        }))
     }
 
     // Expression parsing with precedence climbing
@@ -1870,11 +1883,84 @@ impl Parser {
                     span: start_span,
                 })
             }
+            TokenKind::If => self.parse_if_expr(),
             _ => Err(ParseError {
                 message: format!("expected expression, found {:?}", self.peek_kind()),
                 span: start_span,
             }),
         }
+    }
+
+    /// Parse if expression: `if condition { expr } else { expr }`
+    fn parse_if_expr(&mut self) -> ParseResult<Expr> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::If)?;
+
+        let mut init = None;
+        let condition;
+
+        // Check for if-let: either Rust-style pattern matching or Go-style init
+        if self.check(&TokenKind::Let) {
+            self.advance(); // consume 'let'
+
+            // Check if this is Rust-style pattern matching (uppercase identifier = pattern start)
+            if self.is_pattern_start() {
+                // Rust-style: `if let Some(x) = expr { ... }` or `if let None = expr { ... }`
+                let pattern_span = self.peek().span;
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::Eq)?;
+                let expr = self.parse_expr()?;
+                let span = pattern_span.merge(&expr.span());
+                condition = IfCondition::Pattern {
+                    pattern,
+                    expr,
+                    span,
+                };
+            } else {
+                // Go-style: `if let x = expr; condition { ... }`
+                // We already consumed 'let', need to parse variable declaration
+                let let_stmt = self.parse_let_stmt_after_let()?;
+                self.expect(&TokenKind::Semicolon)?;
+                init = Some(Box::new(let_stmt));
+                condition = IfCondition::Expr(self.parse_expr()?);
+            }
+        } else {
+            // No 'let', just a regular condition expression
+            condition = IfCondition::Expr(self.parse_expr()?);
+        }
+
+        let then_block = self.parse_block()?;
+
+        let else_block = if self.check(&TokenKind::Else) {
+            self.advance();
+            if self.check(&TokenKind::If) {
+                // `else if` - parse as nested if expression wrapped in a block
+                let if_expr = self.parse_if_expr()?;
+                let span = if_expr.span();
+                Some(Block {
+                    stmts: vec![Stmt::Expr(ExprStmt {
+                        expr: if_expr,
+                        span,
+                    })],
+                    span,
+                })
+            } else {
+                Some(self.parse_block()?)
+            }
+        } else {
+            None
+        };
+
+        let end_span = else_block.as_ref().map_or(&then_block.span, |b| &b.span);
+        let span = start_span.merge(end_span);
+
+        Ok(Expr::If(Box::new(IfExpr {
+            init,
+            condition,
+            then_block,
+            else_block,
+            span,
+        })))
     }
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`

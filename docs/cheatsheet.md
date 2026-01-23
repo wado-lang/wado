@@ -319,7 +319,7 @@ Associated types allow traits to declare placeholder types that are specified by
 ## Control Flow
 
 ```wado
-// If
+// If statement
 if x > 0 {
     println("positive");
 } else if x < 0 {
@@ -327,6 +327,22 @@ if x > 0 {
 } else {
     println("zero");
 }
+
+// If expression (produces a value)
+let abs = if x < 0 { -x } else { x };
+
+// If expression with else-if
+let grade = if score >= 90 {
+    "A"
+} else if score >= 80 {
+    "B"
+} else {
+    "C"
+};
+
+// Trailing semicolon is optional in blocks (like trailing commas)
+let y = if cond { 42 } else { 0 };     // no trailing semicolon
+let z = if cond { 42; } else { 0; };   // trailing semicolon (same result)
 
 // If with init (Go-style)
 if let x = get_value(); x > 0 {

@@ -104,10 +104,7 @@ pub fn i32_to_string(value: i32) -> String {
 
     // Determine sign and work with absolute value
     let is_negative = value < 0;
-    let mut abs_value = value;
-    if is_negative {
-        abs_value = 0 - value;
-    }
+    let abs_value = if is_negative { 0 - value } else { value };
 
     // Allocate buffer in linear memory (12 bytes max: sign + 10 digits + safety)
     let ptr = builtin::realloc(0, 0, 1, 12);
@@ -149,10 +146,11 @@ pub fn u32_to_string(value: i32) -> String {
     // Convert to i64 for unsigned arithmetic
     // If value is negative as i32, it means the u32 value is >= 2^31
     // We need to interpret it as unsigned by adding 2^32
-    let mut unsigned_val: i64 = value as i64;
-    if value < 0 {
-        unsigned_val = (value as i64) + 4294967296 as i64;
-    }
+    let unsigned_val: i64 = if value < 0 {
+        (value as i64) + 4294967296 as i64
+    } else {
+        value as i64
+    };
 
     // Allocate buffer in linear memory (11 bytes max: 10 digits + safety)
     let ptr = builtin::realloc(0, 0, 1, 11);
@@ -199,10 +197,7 @@ pub fn i64_to_string(value: i64) -> String {
 
     // Determine sign and work with absolute value
     let is_negative = value < zero_i64;
-    let mut abs_value: i64 = value;
-    if is_negative {
-        abs_value = zero_i64 - value;
-    }
+    let abs_value: i64 = if is_negative { zero_i64 - value } else { value };
 
     // Allocate buffer in linear memory (21 bytes max: sign + 19 digits + safety)
     let ptr: i32 = builtin::realloc(0, 0, 1, 21);
@@ -302,10 +297,7 @@ pub fn u64_to_string(value: i64) -> String {
 
 /// Convert bool to String ("true" or "false")
 pub fn bool_to_string(value: bool) -> String {
-    if value {
-        return "true";
-    }
-    return "false";
+    return if value { "true" } else { "false" };
 }
 
 /// Convert char to String (single character)
@@ -350,10 +342,7 @@ pub fn char_to_string(value: char) -> String {
 /// Internal helper for log_stdout and log_stderr.
 pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
     let len = message.len();
-    let mut alloc_size = len;
-    if add_newline {
-        alloc_size = len + 1;
-    }
+    let alloc_size = if add_newline { len + 1 } else { len };
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
     for (let mut i = 0; i < len; i += 1) {
         let byte = message.get(i);
