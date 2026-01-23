@@ -10,59 +10,41 @@ struct "Container<String>" {
 fn run() with Stdout {
     let c: Container<String> = move Container<String> { items: ["apple", "banana", "cherry"], flags: [true, false, true] };
     let item0: String = __inline_Container_String___get_item_0: {
-        let self: &Container<String> = &c;
-        let i: i32 = 0;
         break __inline_Container_String___get_item_0: __inline_Array_String__IndexValue__index_value_1: {
-            let self: &Array<String> = &self.items;
-            let index: i32 = i;
-            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, index);
+            let self: &Array<String> = &c.items;
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, 0);
         };
     };
     let item1: String = __inline_Container_String___get_item_2: {
-        let self: &Container<String> = &c;
-        let i: i32 = 1;
         break __inline_Container_String___get_item_2: __inline_Array_String__IndexValue__index_value_3: {
-            let self: &Array<String> = &self.items;
-            let index: i32 = i;
-            break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, index);
+            let self: &Array<String> = &c.items;
+            break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, 1);
         };
     };
     let item2: String = __inline_Container_String___get_item_4: {
-        let self: &Container<String> = &c;
-        let i: i32 = 2;
         break __inline_Container_String___get_item_4: __inline_Array_String__IndexValue__index_value_5: {
-            let self: &Array<String> = &self.items;
-            let index: i32 = i;
-            break __inline_Array_String__IndexValue__index_value_5: core::builtin::array_get::<String>(self.repr, index);
+            let self: &Array<String> = &c.items;
+            break __inline_Array_String__IndexValue__index_value_5: core::builtin::array_get::<String>(self.repr, 2);
         };
     };
     let flag0: bool = __inline_Container_String___is_flagged_6: {
-        let self: &Container<String> = &c;
-        let i: i32 = 0;
         break __inline_Container_String___is_flagged_6: __inline_Array_bool__IndexValue__index_value_7: {
-            let self: &Array<bool> = &self.flags;
-            let index: i32 = i;
-            break __inline_Array_bool__IndexValue__index_value_7: core::builtin::array_get::<bool>(self.repr, index);
+            let self: &Array<bool> = &c.flags;
+            break __inline_Array_bool__IndexValue__index_value_7: core::builtin::array_get::<bool>(self.repr, 0);
         };
     };
     let flag1: bool = __inline_Container_String___is_flagged_8: {
-        let self: &Container<String> = &c;
-        let i: i32 = 1;
         break __inline_Container_String___is_flagged_8: __inline_Array_bool__IndexValue__index_value_9: {
-            let self: &Array<bool> = &self.flags;
-            let index: i32 = i;
-            break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(self.repr, index);
+            let self: &Array<bool> = &c.flags;
+            break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(self.repr, 1);
         };
     };
     let count: i32 = __inline_Container_String___count_flagged_10: {
-        let self: &Container<String> = &c;
         let mut count: i32 = 0;
-        let mut i: i32 = 0;
-        for ; (i < "Array<bool>::len"(&self.flags)); i = (i + 1) {
+        for let mut i: i32 = 0; (i < "Array<bool>::len"(&c.flags)); i = (i + 1) {
             if __inline_Array_bool__IndexValue__index_value_11: {
-                let self: &Array<bool> = &self.flags;
-                let index: i32 = i;
-                break __inline_Array_bool__IndexValue__index_value_11: core::builtin::array_get::<bool>(self.repr, index);
+                let self: &Array<bool> = &c.flags;
+                break __inline_Array_bool__IndexValue__index_value_11: core::builtin::array_get::<bool>(self.repr, i);
             } {
                 count = (count + 1);
             }
@@ -80,13 +62,11 @@ fn run() with Stdout {
                         let len_b: i32 = "String::len"(&b);
                         let total: i32 = (len_a + len_b);
                         let result: String = move core::builtin::string_new(total);
-                        let mut i: i32 = 0;
-                        for ; (i < len_a); i = (i + 1) {
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
                             let byte: i32 = "String::get"(&a, i);
                             "String::set"(&mut result, i, byte);
                         }
-                        let mut i: i32 = 0;
-                        for ; (i < len_b); i = (i + 1) {
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
                             let byte: i32 = "String::get"(&b, i);
                             "String::set"(&mut result, (len_a + i), byte);
                         }
@@ -97,13 +77,11 @@ fn run() with Stdout {
                     let len_b: i32 = "String::len"(&b);
                     let total: i32 = (len_a + len_b);
                     let result: String = move core::builtin::string_new(total);
-                    let mut i: i32 = 0;
-                    for ; (i < len_a); i = (i + 1) {
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
                         let byte: i32 = "String::get"(&a, i);
                         "String::set"(&mut result, i, byte);
                     }
-                    let mut i: i32 = 0;
-                    for ; (i < len_b); i = (i + 1) {
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
                         let byte: i32 = "String::get"(&b, i);
                         "String::set"(&mut result, (len_a + i), byte);
                     }
@@ -114,13 +92,11 @@ fn run() with Stdout {
                 let len_b: i32 = "String::len"(&b);
                 let total: i32 = (len_a + len_b);
                 let result: String = move core::builtin::string_new(total);
-                let mut i: i32 = 0;
-                for ; (i < len_a); i = (i + 1) {
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
                     let byte: i32 = "String::get"(&a, i);
                     "String::set"(&mut result, i, byte);
                 }
-                let mut i: i32 = 0;
-                for ; (i < len_b); i = (i + 1) {
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
                     let byte: i32 = "String::get"(&b, i);
                     "String::set"(&mut result, (len_a + i), byte);
                 }
@@ -131,13 +107,11 @@ fn run() with Stdout {
             let len_b: i32 = "String::len"(&b);
             let total: i32 = (len_a + len_b);
             let result: String = move core::builtin::string_new(total);
-            let mut i: i32 = 0;
-            for ; (i < len_a); i = (i + 1) {
+            for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
                 let byte: i32 = "String::get"(&a, i);
                 "String::set"(&mut result, i, byte);
             }
-            let mut i: i32 = 0;
-            for ; (i < len_b); i = (i + 1) {
+            for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
                 let byte: i32 = "String::get"(&b, i);
                 "String::set"(&mut result, (len_a + i), byte);
             }
@@ -148,13 +122,11 @@ fn run() with Stdout {
         let len_b: i32 = "String::len"(&b);
         let total: i32 = (len_a + len_b);
         let result: String = move core::builtin::string_new(total);
-        let mut i: i32 = 0;
-        for ; (i < len_a); i = (i + 1) {
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
             let byte: i32 = "String::get"(&a, i);
             "String::set"(&mut result, i, byte);
         }
-        let mut i: i32 = 0;
-        for ; (i < len_b); i = (i + 1) {
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
             let byte: i32 = "String::get"(&b, i);
             "String::set"(&mut result, (len_a + i), byte);
         }
@@ -169,13 +141,11 @@ fn run() with Stdout {
                 let len_b: i32 = "String::len"(&b);
                 let total: i32 = (len_a + len_b);
                 let result: String = move core::builtin::string_new(total);
-                let mut i: i32 = 0;
-                for ; (i < len_a); i = (i + 1) {
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
                     let byte: i32 = "String::get"(&a, i);
                     "String::set"(&mut result, i, byte);
                 }
-                let mut i: i32 = 0;
-                for ; (i < len_b); i = (i + 1) {
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
                     let byte: i32 = "String::get"(&b, i);
                     "String::set"(&mut result, (len_a + i), byte);
                 }
@@ -186,13 +156,11 @@ fn run() with Stdout {
             let len_b: i32 = "String::len"(&b);
             let total: i32 = (len_a + len_b);
             let result: String = move core::builtin::string_new(total);
-            let mut i: i32 = 0;
-            for ; (i < len_a); i = (i + 1) {
+            for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
                 let byte: i32 = "String::get"(&a, i);
                 "String::set"(&mut result, i, byte);
             }
-            let mut i: i32 = 0;
-            for ; (i < len_b); i = (i + 1) {
+            for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
                 let byte: i32 = "String::get"(&b, i);
                 "String::set"(&mut result, (len_a + i), byte);
             }
@@ -203,13 +171,11 @@ fn run() with Stdout {
         let len_b: i32 = "String::len"(&b);
         let total: i32 = (len_a + len_b);
         let result: String = move core::builtin::string_new(total);
-        let mut i: i32 = 0;
-        for ; (i < len_a); i = (i + 1) {
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
             let byte: i32 = "String::get"(&a, i);
             "String::set"(&mut result, i, byte);
         }
-        let mut i: i32 = 0;
-        for ; (i < len_b); i = (i + 1) {
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
             let byte: i32 = "String::get"(&b, i);
             "String::set"(&mut result, (len_a + i), byte);
         }
@@ -222,13 +188,11 @@ fn run() with Stdout {
         let len_b: i32 = "String::len"(&b);
         let total: i32 = (len_a + len_b);
         let result: String = move core::builtin::string_new(total);
-        let mut i: i32 = 0;
-        for ; (i < len_a); i = (i + 1) {
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
             let byte: i32 = "String::get"(&a, i);
             "String::set"(&mut result, i, byte);
         }
-        let mut i: i32 = 0;
-        for ; (i < len_b); i = (i + 1) {
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
             let byte: i32 = "String::get"(&b, i);
             "String::set"(&mut result, (len_a + i), byte);
         }

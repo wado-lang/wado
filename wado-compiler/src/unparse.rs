@@ -2060,6 +2060,41 @@ impl<'a> TirUnparser<'a> {
         }
     }
 
+    /// Unparse a statement inline (no indent, no trailing newline/semicolon)
+    /// Used for for-loop init statements
+    fn unparse_stmt_inline(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                name,
+                is_mut,
+                is_reactive,
+                type_id,
+                value,
+                ..
+            } => {
+                self.output.push_str("let ");
+                if *is_reactive {
+                    self.output.push_str("reactive ");
+                }
+                if *is_mut {
+                    self.output.push_str("mut ");
+                }
+                self.output.push_str(name);
+                self.output.push_str(": ");
+                self.output.push_str(&self.type_table.type_name(*type_id));
+                self.output.push_str(" = ");
+                self.unparse_expr(value);
+            }
+            TirStmtKind::Expr(expr) => {
+                self.unparse_expr(expr);
+            }
+            _ => {
+                // Fallback for other statement types - shouldn't happen in for-loop init
+                self.output.push_str("/* unsupported inline stmt */");
+            }
+        }
+    }
+
     fn unparse_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
@@ -2135,12 +2170,21 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("}\n");
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
                 self.write_indent();
-                self.output.push_str("for ; ");
+                self.output.push_str("for ");
+                // Unparse init statements inline (typically a single Let)
+                for (i, init_stmt) in init.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_stmt_inline(init_stmt);
+                }
+                self.output.push_str("; ");
                 if let Some(cond) = condition {
                     self.unparse_expr(cond);
                 }

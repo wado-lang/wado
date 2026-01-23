@@ -4,11 +4,9 @@
 
 fn run() with Stdout {
     let x: i32 = __inline_test_0: {
-        let n: i32 = 10;
-        let arr: Array<i32> = move "Array<i32>::with_capacity"(n);
+        let arr: Array<i32> = move "Array<i32>::with_capacity"(10);
         break __inline_test_0: __inline_Array_i32___len_1: {
-            let self: &Array<i32> = &arr;
-            break __inline_Array_i32___len_1: self.used;
+            break __inline_Array_i32___len_1: arr.used;
         };
     };
     core::cli::println(move "i32::to_string"(x));

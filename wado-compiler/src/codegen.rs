@@ -4075,10 +4075,14 @@ impl Codegen {
                 Self::collect_closures_from_block(body, closures);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
+                for stmt in init {
+                    Self::collect_closures_from_stmt(stmt, closures);
+                }
                 if let Some(cond) = condition {
                     Self::collect_closures_from_expr(cond, closures);
                 }
@@ -4339,10 +4343,14 @@ impl Codegen {
                 Self::find_closure_locals_in_block(body, result, closure_counter);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
+                for stmt in init {
+                    Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
+                }
                 if let Some(cond) = condition {
                     Self::find_closure_locals_in_expr(cond, result, closure_counter);
                 }
@@ -7458,10 +7466,16 @@ impl Codegen {
             }
 
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                // Generate init statements first (e.g., let i = 0)
+                for init_stmt in init {
+                    self.generate_stmt(func, init_stmt, type_table, ctx, builder);
+                }
+
                 // For loop structure:
                 // block $exit        ; break target
                 //   loop $loop       ; for loop header
@@ -8780,13 +8794,15 @@ impl Codegen {
                     || Self::needs_environment_scratch_locals(body)
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
-                condition
-                    .as_ref()
-                    .is_some_and(Self::expr_needs_environment_scratch_locals)
+                init.iter().any(Self::stmt_needs_environment_scratch_locals)
+                    || condition
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_environment_scratch_locals)
                     || update
                         .as_ref()
                         .is_some_and(Self::expr_needs_environment_scratch_locals)
@@ -8918,13 +8934,15 @@ impl Codegen {
                     || Self::needs_async_scratch_locals(body)
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
-                condition
-                    .as_ref()
-                    .is_some_and(Self::expr_needs_async_scratch_locals)
+                init.iter().any(Self::stmt_needs_async_scratch_locals)
+                    || condition
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_async_scratch_locals)
                     || update
                         .as_ref()
                         .is_some_and(Self::expr_needs_async_scratch_locals)
@@ -9545,10 +9563,14 @@ impl Codegen {
                 Self::collect_array_append_types(body, type_table, result);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
+                for stmt in init {
+                    Self::collect_array_append_types_from_stmt(stmt, type_table, result);
+                }
                 if let Some(cond) = condition {
                     Self::collect_array_append_types_from_expr(cond, type_table, result);
                 }

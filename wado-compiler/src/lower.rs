@@ -537,10 +537,14 @@ impl Monomorphizer {
                 self.rewrite_types_in_block(body, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.rewrite_types_in_stmt(s, type_table);
+                }
                 if let Some(cond) = condition {
                     self.rewrite_types_in_expr(cond, type_table);
                 }
@@ -1210,10 +1214,14 @@ impl Monomorphizer {
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.collect_func_instantiation_sites_in_stmt(s, generic_functions, type_table);
+                }
                 if let Some(cond) = condition {
                     self.collect_func_instantiation_sites_in_expr(
                         cond,
@@ -2040,10 +2048,14 @@ impl Monomorphizer {
                 self.substitute_types_in_block(body, substitution, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.substitute_types_in_stmt(s, substitution, type_table);
+                }
                 if let Some(cond) = condition {
                     self.substitute_types_in_expr(cond, substitution, type_table);
                 }
@@ -2528,10 +2540,14 @@ impl Monomorphizer {
                 Self::update_local_expr_types(body, local_types);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    Self::update_local_expr_types_in_stmt(s, local_types);
+                }
                 if let Some(expr) = condition {
                     Self::update_local_expr_types_in_expr(expr, local_types);
                 }
@@ -2673,10 +2689,14 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_block(body, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.rewrite_function_calls_in_stmt(s, type_table);
+                }
                 if let Some(cond) = condition {
                     self.rewrite_function_calls_in_expr(cond, type_table);
                 }
@@ -3186,10 +3206,14 @@ impl StringCollector {
                 self.collect_block(body);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.collect_stmt(s);
+                }
                 if let Some(cond) = condition {
                     self.collect_expr(cond);
                 }

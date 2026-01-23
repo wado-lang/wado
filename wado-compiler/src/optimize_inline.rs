@@ -101,7 +101,7 @@ fn is_inline_eligible(
 }
 
 /// Check if a type has complex nested generics that could cause type normalization issues.
-/// Uses the TypeTable's type metadata to check for nested generic types.
+/// Uses the `TypeTable`'s type metadata to check for nested generic types.
 fn has_complex_nested_generic(type_id: TypeId, type_table: &TypeTable) -> bool {
     type_table.has_nested_generics(type_id)
 }
@@ -250,7 +250,7 @@ fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> boo
                 || block_has_complex_generic_types(then_block, type_table)
                 || else_block
                     .as_ref()
-                    .map_or(false, |b| block_has_complex_generic_types(b, type_table))
+                    .is_some_and(|b| block_has_complex_generic_types(b, type_table))
         }
         TirStmtKind::While { condition, body } => {
             expr_has_complex_generic_types(condition, type_table)
@@ -260,17 +260,20 @@ fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> boo
             block_has_complex_generic_types(body, type_table)
         }
         TirStmtKind::For {
+            init,
             condition,
             body,
             update,
         } => {
-            condition
-                .as_ref()
-                .map_or(false, |e| expr_has_complex_generic_types(e, type_table))
+            init.iter()
+                .any(|s| stmt_has_complex_generic_types(s, type_table))
+                || condition
+                    .as_ref()
+                    .is_some_and(|e| expr_has_complex_generic_types(e, type_table))
                 || block_has_complex_generic_types(body, type_table)
                 || update
                     .as_ref()
-                    .map_or(false, |e| expr_has_complex_generic_types(e, type_table))
+                    .is_some_and(|e| expr_has_complex_generic_types(e, type_table))
         }
         TirStmtKind::ForOf {
             iterable,
@@ -292,11 +295,11 @@ fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> boo
                 || block_has_complex_generic_types(then_block, type_table)
                 || else_block
                     .as_ref()
-                    .map_or(false, |b| block_has_complex_generic_types(b, type_table))
+                    .is_some_and(|b| block_has_complex_generic_types(b, type_table))
         }
         TirStmtKind::Break { value, .. } => value
             .as_ref()
-            .map_or(false, |e| expr_has_complex_generic_types(e, type_table)),
+            .is_some_and(|e| expr_has_complex_generic_types(e, type_table)),
         TirStmtKind::Continue => false,
     }
 }
@@ -321,7 +324,11 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
                     .iter()
                     .any(|a| expr_has_complex_generic_types(a, type_table))
         }
-        TirExprKind::Binary { left, right, .. } | TirExprKind::Assign { target: left, value: right } => {
+        TirExprKind::Binary { left, right, .. }
+        | TirExprKind::Assign {
+            target: left,
+            value: right,
+        } => {
             expr_has_complex_generic_types(left, type_table)
                 || expr_has_complex_generic_types(right, type_table)
         }
@@ -349,7 +356,7 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
                 || block_has_complex_generic_types(then_branch, type_table)
                 || else_branch
                     .as_ref()
-                    .map_or(false, |b| block_has_complex_generic_types(b, type_table))
+                    .is_some_and(|b| block_has_complex_generic_types(b, type_table))
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
             block_has_complex_generic_types(block, type_table)
@@ -444,10 +451,14 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
             collect_callees_from_block(body, callees);
         }
         TirStmtKind::For {
+            init,
             condition,
             body,
             update,
         } => {
+            for s in init {
+                collect_callees_from_stmt(s, callees);
+            }
             if let Some(cond) = condition {
                 collect_callees_from_expr(cond, callees);
             }
@@ -1009,6 +1020,7 @@ fn inline_calls_in_block(
                 ));
             }
             TirStmtKind::For {
+                init,
                 condition,
                 mut body,
                 update,
@@ -1029,6 +1041,7 @@ fn inline_calls_in_block(
                 );
                 new_stmts.push(TirStmt::new(
                     TirStmtKind::For {
+                        init,
                         condition,
                         body,
                         update,
@@ -1669,10 +1682,24 @@ fn remap_stmt_with_label(
             ),
         },
         TirStmtKind::For {
+            init,
             condition,
             body,
             update,
         } => TirStmtKind::For {
+            init: init
+                .iter()
+                .map(|s| {
+                    remap_stmt_with_label(
+                        s,
+                        param_to_local,
+                        local_offset,
+                        param_count,
+                        label,
+                        source_module,
+                    )
+                })
+                .collect(),
             condition: condition
                 .as_ref()
                 .map(|c| remap_expr(c, param_to_local, local_offset, param_count, source_module)),
@@ -2356,10 +2383,15 @@ fn remap_stmt(
             ),
         },
         TirStmtKind::For {
+            init,
             condition,
             body,
             update,
         } => TirStmtKind::For {
+            init: init
+                .iter()
+                .map(|s| remap_stmt(s, param_to_local, local_offset, param_count, source_module))
+                .collect(),
             condition: condition
                 .as_ref()
                 .map(|c| remap_expr(c, param_to_local, local_offset, param_count, source_module)),

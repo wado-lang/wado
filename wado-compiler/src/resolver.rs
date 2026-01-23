@@ -2022,19 +2022,19 @@ impl<'a> Resolver<'a> {
         TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
     }
 
-    /// Resolve a for statement - generates init + For node wrapped in a scope
+    /// Resolve a for statement - generates a For node with init statements included
     /// The For node handles continue correctly (executes update before next iteration)
     /// The init variable is scoped to the for loop and not visible after it
     fn resolve_for(&mut self, for_stmt: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         // Enter scope for the for loop's init variable
         ctx.enter_scope();
 
-        let mut result = Vec::new();
-
-        // Add init statement if present (e.g., let i = 0)
-        if let Some(init_stmt) = &for_stmt.init {
-            result.extend(self.resolve_stmt(init_stmt, ctx));
-        }
+        // Resolve init statement if present (e.g., let i = 0)
+        let init = if let Some(init_stmt) = &for_stmt.init {
+            self.resolve_stmt(init_stmt, ctx)
+        } else {
+            Vec::new()
+        };
 
         // Resolve the body (note: resolve_block enters its own scope for body variables)
         let body = self.resolve_block(&for_stmt.body, ctx);
@@ -2048,21 +2048,21 @@ impl<'a> Resolver<'a> {
         // Resolve update expression
         let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
 
-        // Create For statement
+        // Create For statement with init included
         let for_tir = TirStmt::new(
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             },
             for_stmt.span,
         );
-        result.push(for_tir);
 
         // Exit the for loop's scope
         ctx.exit_scope();
 
-        result
+        vec![for_tir]
     }
 
     /// Resolve a for-of statement: `for let item of array { ... }`

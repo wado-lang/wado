@@ -595,7 +595,7 @@ impl TypeTable {
     }
 
     /// Check if a type is a generic/parameterized type (has type arguments).
-    /// This includes GenericInstance, Option, Result, Tuple with generics, etc.
+    /// This includes `GenericInstance`, Option, Result, Tuple with generics, etc.
     /// Also includes monomorphized structs (whose names contain type parameters).
     fn is_generic_type(&self, id: TypeId) -> bool {
         match self.get(id) {
@@ -1152,6 +1152,8 @@ pub enum TirStmtKind {
     },
     /// C-style for loop: continue executes update, break exits loop
     For {
+        /// Init statements (e.g., `let mut i = 0`)
+        init: Vec<TirStmt>,
         condition: Option<TirExpr>,
         body: TirBlock,
         update: Option<TirExpr>,
