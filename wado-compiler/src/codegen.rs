@@ -7372,7 +7372,7 @@ impl Codegen {
         assert!(
             !(block.stmts.is_empty() && result_type != TypeTable::UNIT),
             "Empty block cannot produce non-unit value"
-        )
+        );
     }
 
     /// Generate code for a TIR statement
