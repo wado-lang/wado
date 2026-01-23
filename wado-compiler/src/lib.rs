@@ -218,7 +218,7 @@ pub async fn compile_with_host<H: CompilerHost>(
     let load_result = {
         let module_loader = loader::ModuleLoader::new();
         module_loader
-            .load_all(source, host)
+            .load_all(source, filename.as_deref(), host)
             .await
             .map_err(|e| CompileError::Analyzer {
                 message: e.to_string(),
@@ -272,7 +272,7 @@ pub async fn compile_with_host<H: CompilerHost>(
     let project = resolve_to_project(
         symbols,
         &modules_by_path,
-        load_result.entry_module_source.to_path(),
+        load_result.entry_module_source.clone(),
         implicit_modules_by_path,
         module_name,
     )
@@ -375,7 +375,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     let load_result = {
         let module_loader = loader::ModuleLoader::new();
         module_loader
-            .load_all(source, host)
+            .load_all(source, filename.as_deref(), host)
             .await
             .map_err(|e| CompileError::Analyzer {
                 message: e.to_string(),
@@ -418,7 +418,12 @@ pub async fn dump_with_host<H: CompilerHost>(
     let symbols = analyzer.into_symbols();
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(&symbols, &modules_by_path).ok();
+    let tir_modules = Resolver::resolve_all_modules(
+        &symbols,
+        &modules_by_path,
+        load_result.entry_module_source.clone(),
+    )
+    .ok();
 
     // Convert TIR modules to ModuleSource keys for DumpResult
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =

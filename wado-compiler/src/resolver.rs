@@ -226,10 +226,12 @@ struct FunctionContext {
     captured_vars: HashMap<String, u32>,
     /// Stack of labeled block expression targets for tracking break types
     labeled_block_targets: Vec<LabeledBlockTarget>,
+    /// Current function name for `#function` compile-time literal
+    function_name: String,
 }
 
 impl FunctionContext {
-    fn new(return_type: TypeId) -> Self {
+    fn new(return_type: TypeId, function_name: String) -> Self {
         Self {
             scopes: vec![HashMap::new()], // Start with one scope for function parameters
             next_local: 0,
@@ -239,6 +241,7 @@ impl FunctionContext {
             outer_locals: HashMap::new(),
             captured_vars: HashMap::new(),
             labeled_block_targets: Vec::new(),
+            function_name,
         }
     }
 
@@ -252,6 +255,9 @@ impl FunctionContext {
             }
         }
 
+        // Closure function name is parent::{closure}
+        let function_name = format!("{}::{{closure}}", outer_ctx.function_name);
+
         Self {
             scopes: vec![HashMap::new()],
             next_local: 0,
@@ -261,6 +267,7 @@ impl FunctionContext {
             outer_locals,
             captured_vars: HashMap::new(),
             labeled_block_targets: Vec::new(),
+            function_name,
         }
     }
 
@@ -468,7 +475,7 @@ impl<'a> Resolver<'a> {
             function_return_types: HashMap::new(),
             imported_functions: HashSet::new(),
             errors: Vec::new(),
-            current_module_source: ModuleSource::EntryPoint,
+            current_module_source: ModuleSource::entry_point(),
             current_module_items: Vec::new(),
             current_type_params: HashMap::new(),
             generic_struct_names: HashSet::new(),
@@ -609,6 +616,7 @@ impl<'a> Resolver<'a> {
     pub fn resolve_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a HashMap<Vec<String>, Module>,
+        entry_module_source: ModuleSource,
     ) -> Result<IndexMap<Vec<String>, TirModule>, Vec<TypeError>> {
         let mut result = IndexMap::new();
         let mut all_errors = Vec::new();
@@ -621,7 +629,13 @@ impl<'a> Resolver<'a> {
 
         // First pass: collect struct and variant names from all modules (for forward references)
         for (path, module) in modules {
-            let module_source = ModuleSource::from_path(path);
+            // Use the provided entry_module_source for the entry module (empty path)
+            // to preserve filename information
+            let module_source = if path.is_empty() {
+                entry_module_source.clone()
+            } else {
+                ModuleSource::from_path(path)
+            };
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -657,7 +671,12 @@ impl<'a> Resolver<'a> {
 
         // Second sub-pass: resolve struct fields and type aliases
         for (path, module) in modules {
-            let module_source = ModuleSource::from_path(path);
+            // Use the provided entry_module_source for the entry module (empty path)
+            let module_source = if path.is_empty() {
+                entry_module_source.clone()
+            } else {
+                ModuleSource::from_path(path)
+            };
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -796,7 +815,7 @@ impl<'a> Resolver<'a> {
                 function_return_types,
                 imported_functions,
                 errors: Vec::new(),
-                current_module_source: ModuleSource::EntryPoint, // Set in resolve_module
+                current_module_source: ModuleSource::entry_point(), // Set in resolve_module
                 current_module_items: Vec::new(),                // Set in resolve_module
                 current_type_params: HashMap::new(),
                 generic_struct_names: HashSet::new(),
@@ -806,7 +825,14 @@ impl<'a> Resolver<'a> {
                 current_self_type: None,
             };
 
-            match resolver.resolve_module(module, ModuleSource::from_path(path)) {
+            // Use the provided entry_module_source for the entry module (empty path)
+            // to preserve filename information
+            let module_source = if path.is_empty() {
+                entry_module_source.clone()
+            } else {
+                ModuleSource::from_path(path)
+            };
+            match resolver.resolve_module(module, module_source) {
                 Ok(tir_module) => {
                     // TypeTable is already shared via Rc, no need to merge
                     result.insert(path.clone(), tir_module);
@@ -1383,7 +1409,7 @@ impl<'a> Resolver<'a> {
         self.function_return_types
             .insert(func.name.clone(), return_type);
 
-        let mut ctx = FunctionContext::new(return_type);
+        let mut ctx = FunctionContext::new(return_type, func.name.clone());
 
         // Resolve parameters
         let mut params = Vec::new();
@@ -1507,7 +1533,9 @@ impl<'a> Resolver<'a> {
         self.function_return_types
             .insert(mangled_name.clone(), return_type);
 
-        let mut ctx = FunctionContext::new(return_type);
+        // Display name for #function: StructName::method_name
+        let display_name = format!("{}::{}", struct_name, func.name);
+        let mut ctx = FunctionContext::new(return_type, display_name);
 
         // Resolve parameters (including &self)
         let mut params = Vec::new();
@@ -2151,7 +2179,7 @@ impl<'a> Resolver<'a> {
     /// Resolve an expression
     fn resolve_expr(&mut self, expr: &Expr, ctx: &mut FunctionContext) -> TirExpr {
         match expr {
-            Expr::Literal(lit) => self.resolve_literal(lit),
+            Expr::Literal(lit) => self.resolve_literal(lit, ctx),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx),
             Expr::Binary(binary) => self.resolve_binary(binary, ctx),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx),
@@ -2253,7 +2281,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a literal expression
-    fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TirExpr {
+    fn resolve_literal(&mut self, lit: &ast::LiteralExpr, ctx: &FunctionContext) -> TirExpr {
         let (kind, type_id) = match &lit.value {
             Literal::Int(int_lit) => {
                 match Self::parse_int_literal(&int_lit.repr) {
@@ -2317,6 +2345,31 @@ impl<'a> Resolver<'a> {
                 (TirExprKind::Null, option_unknown)
             }
             Literal::Unit => (TirExprKind::Unit, TypeTable::UNIT),
+            Literal::LocationFile => {
+                // #file - returns the current module source as a string
+                let file_path = self.current_module_source.to_string();
+                let string_type = self.get_string_struct_type();
+                (TirExprKind::StringLiteral(file_path), string_type)
+            }
+            Literal::LocationLine => {
+                // #line - returns the line number (1-indexed)
+                let line = lit.span.line as u64;
+                (
+                    TirExprKind::IntLiteral {
+                        value: line,
+                        repr: line.to_string(),
+                    },
+                    TypeTable::I32,
+                )
+            }
+            Literal::LocationFunction => {
+                // #function - returns the current function name
+                let string_type = self.get_string_struct_type();
+                (
+                    TirExprKind::StringLiteral(ctx.function_name.clone()),
+                    string_type,
+                )
+            }
         };
         TirExpr::new(kind, type_id, lit.span)
     }
@@ -2396,7 +2449,7 @@ impl<'a> Resolver<'a> {
         // For now, return Unknown type - will be resolved by looking up in symbol table
         TirExpr::new(
             TirExprKind::Global {
-                module_source: ModuleSource::EntryPoint,
+                module_source: ModuleSource::entry_point(),
                 name: ident.name.clone(),
             },
             TypeTable::UNKNOWN,
@@ -6209,16 +6262,26 @@ pub fn resolve_module(
 pub fn resolve_to_project(
     symbols: SymbolTable,
     modules: &HashMap<Vec<String>, Module>,
-    entry_path: Vec<String>,
+    entry_module_source: ModuleSource,
     implicit_modules: HashSet<Vec<String>>,
     module_name: String,
 ) -> Result<Project, Vec<TypeError>> {
-    let tir_modules = Resolver::resolve_all_modules(&symbols, modules)?;
+    let tir_modules =
+        Resolver::resolve_all_modules(&symbols, modules, entry_module_source.clone())?;
 
     // Convert Vec<String> to ModuleSource at the boundary
+    // Use the provided entry_module_source for the entry module (empty path)
+    // to preserve filename information
     let tir_modules_by_source: IndexMap<ModuleSource, TirModule> = tir_modules
         .into_iter()
-        .map(|(path, tir)| (ModuleSource::from_path(&path), tir))
+        .map(|(path, tir)| {
+            let module_source = if path.is_empty() {
+                entry_module_source.clone()
+            } else {
+                ModuleSource::from_path(&path)
+            };
+            (module_source, tir)
+        })
         .collect();
     let implicit_modules_by_source: HashSet<ModuleSource> = implicit_modules
         .into_iter()
@@ -6226,7 +6289,7 @@ pub fn resolve_to_project(
         .collect();
 
     Ok(Project::new(
-        ModuleSource::from_path(&entry_path),
+        entry_module_source,
         tir_modules_by_source,
         symbols,
         implicit_modules_by_source,

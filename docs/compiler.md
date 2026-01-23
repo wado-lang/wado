@@ -725,6 +725,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Null literal (`null`)
 - [x] Unit `()`
 - [x] Template string interpolation (`` `Hello, {name}!` ``)
+- [x] Compile-time location literals (`#file`, `#line`, `#function`)
 - [x] Binary operators (arithmetic, comparison, logical, bitwise)
 - [x] Comparison chaining (`a < b < c` → `a < b && b < c`)
 - [x] Unary operators (`-`, `!`, `~`, `&`, `*`)

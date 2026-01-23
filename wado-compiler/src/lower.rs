@@ -974,7 +974,7 @@ impl Monomorphizer {
         };
 
         // Register the concrete struct type in the type table
-        let concrete_type_id = type_table.make_struct(mangled_name, ModuleSource::EntryPoint);
+        let concrete_type_id = type_table.make_struct(mangled_name, ModuleSource::entry_point());
 
         // Find the GenericInstance TypeId and record the substitution
         for id in type_table.iter_type_ids() {

@@ -651,6 +651,12 @@ pub enum Literal {
     Bool(bool),
     Null,
     Unit,
+    /// Compile-time location literal: `#file`
+    LocationFile,
+    /// Compile-time location literal: `#line`
+    LocationLine,
+    /// Compile-time location literal: `#function`
+    LocationFunction,
 }
 
 /// Integer literal with original representation (e.g., "0b1100", "0xFF", "42")

@@ -9,10 +9,10 @@ use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
     EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function, IdentExpr,
-    IfCondition, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, LoopStmt,
-    MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt, StaticMethodCallExpr, Stmt,
-    StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart, TemplateStringExpr, TraitDecl,
-    TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
+    IfCondition, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal,
+    LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt,
+    StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart,
+    TemplateStringExpr, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -531,21 +531,49 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     let condition_source = unparse_expr_simple(&assert_stmt.condition);
     let mut template_parts: Vec<TemplatePart> = Vec::new();
 
-    // If there's a custom message, put it right after "Assertion failed:"
+    // Helper to create #function literal expression
+    let function_expr = Expr::Literal(LiteralExpr {
+        value: Literal::LocationFunction,
+        span,
+    });
+    // Helper to create #file literal expression
+    let file_expr = Expr::Literal(LiteralExpr {
+        value: Literal::LocationFile,
+        span,
+    });
+    // Helper to create #line literal expression
+    let line_expr = Expr::Literal(LiteralExpr {
+        value: Literal::LocationLine,
+        span,
+    });
+
+    // Format: "Assertion failed in <function> at <file>:<line>: <message (if any)>"
+    // All on one line for Sentry issue title compatibility
+    template_parts.push(TemplatePart::String("Assertion failed in ".to_string()));
+    template_parts.push(TemplatePart::Interpolation {
+        expr: Box::new(function_expr),
+        format: None,
+    });
+    template_parts.push(TemplatePart::String(" at ".to_string()));
+    template_parts.push(TemplatePart::Interpolation {
+        expr: Box::new(file_expr),
+        format: None,
+    });
+    template_parts.push(TemplatePart::String(":".to_string()));
+    template_parts.push(TemplatePart::Interpolation {
+        expr: Box::new(line_expr),
+        format: None,
+    });
     if let Some(msg) = &assert_stmt.message {
-        template_parts.push(TemplatePart::String("Assertion failed: ".to_string()));
+        template_parts.push(TemplatePart::String(": ".to_string()));
         template_parts.push(TemplatePart::Interpolation {
             expr: Box::new(desugar_expr(msg)),
             format: None,
         });
-        template_parts.push(TemplatePart::String(format!(
-            "\ncondition: {condition_source}\n"
-        )));
-    } else {
-        template_parts.push(TemplatePart::String(format!(
-            "Assertion failed:\ncondition: {condition_source}\n"
-        )));
     }
+    template_parts.push(TemplatePart::String(format!(
+        "\ncondition: {condition_source}\n"
+    )));
 
     // Add each intermediate value
     for (var_name, source, _) in &intermediates {

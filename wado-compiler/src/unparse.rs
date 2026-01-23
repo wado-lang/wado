@@ -1132,6 +1132,9 @@ impl<'a> Unparser<'a> {
             Literal::Bool(b) => self.output.push_str(if *b { "true" } else { "false" }),
             Literal::Null => self.output.push_str("null"),
             Literal::Unit => self.output.push_str("()"),
+            Literal::LocationFile => self.output.push_str("#file"),
+            Literal::LocationLine => self.output.push_str("#line"),
+            Literal::LocationFunction => self.output.push_str("#function"),
         }
     }
 
@@ -1862,6 +1865,9 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
         Literal::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
         Literal::Null => output.push_str("null"),
         Literal::Unit => output.push_str("()"),
+        Literal::LocationFile => output.push_str("#file"),
+        Literal::LocationLine => output.push_str("#line"),
+        Literal::LocationFunction => output.push_str("#function"),
     }
 }
 

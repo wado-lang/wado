@@ -1026,6 +1026,34 @@ let len = arr.len(); // Get length
 - Index must be within bounds (runtime check, traps if out of bounds)
 - Works with arrays of any element type
 
+### Compile-Time Location Literals
+
+Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.
+
+| Literal     | Type     | Value                           |
+| ----------- | -------- | ------------------------------- |
+| `#file`     | `String` | Current source file path        |
+| `#line`     | `i32`    | Current line number (1-indexed) |
+| `#function` | `String` | Fully specialized function name |
+
+```wado
+fn example() {
+    println(`Error at {#file}:{#line}`);
+    println(`In function: {#function}`);
+}
+```
+
+**`#function` Format:**
+
+Returns the fully specialized name without signature:
+
+| Context        | `#function` value            |
+| -------------- | ---------------------------- |
+| Free function  | `my_function`                |
+| Method         | `Point::distance`            |
+| Generic method | `Array<String>::len`         |
+| Closure        | `parent_function::{closure}` |
+
 ### Closures
 
 Closures are anonymous function expressions with `|params| body` syntax.

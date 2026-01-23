@@ -959,7 +959,7 @@ impl Codegen {
                         StructName::new(module_source.clone(), struct_name.to_string())
                     } else {
                         // No collision - use simple StructName (entry point)
-                        StructName::new(ModuleSource::EntryPoint, struct_name.to_string())
+                        StructName::new(ModuleSource::entry_point(), struct_name.to_string())
                     };
                     // Use the same fully mangled name for registration
                     // This ensures consistency between DCE tracking and codegen
@@ -978,7 +978,7 @@ impl Codegen {
         // Build import name → qualified name lookup table for call resolution
         let mut _import_lookup: HashMap<String, String> = HashMap::new();
         for (module_source, tir_func_rc, _, qualified_name) in &loaded_funcs {
-            if *module_source != ModuleSource::EntryPoint {
+            if *module_source != ModuleSource::entry_point() {
                 _import_lookup.insert(tir_func_rc.borrow().name.clone(), qualified_name.clone());
             }
         }
@@ -1058,7 +1058,7 @@ impl Codegen {
                     StructName::new(module_source.clone(), tir_struct.name.clone())
                 } else {
                     // No collision - use simple name (entry point)
-                    StructName::new(ModuleSource::EntryPoint, tir_struct.name.clone())
+                    StructName::new(ModuleSource::entry_point(), tir_struct.name.clone())
                 };
                 self.register_struct_type(
                     struct_name,
@@ -1084,13 +1084,13 @@ impl Codegen {
             .collect();
         let sorted_non_mono = Self::sort_structs_topologically(&non_mono_structs, type_table);
         for tir_struct in sorted_non_mono {
-            let struct_name = StructName::new(ModuleSource::EntryPoint, tir_struct.name.clone());
+            let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
             self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
         }
 
         // Register struct type aliases (e.g., `Point as OtherPoint`)
         for (alias_name, alias_module_path, original_name) in symbols.get_struct_aliases() {
-            let alias_struct_name = StructName::new(ModuleSource::EntryPoint, alias_name.clone());
+            let alias_struct_name = StructName::new(ModuleSource::entry_point(), alias_name.clone());
             // Check if there's a collision (main module has same-named struct)
             if main_module_struct_names.contains(&original_name) && !alias_module_path.is_empty() {
                 // Collision case - use qualified name from the alias's module
@@ -1102,7 +1102,7 @@ impl Codegen {
             } else {
                 // No collision - use simple name (empty module path)
                 let original_struct_name =
-                    StructName::new(ModuleSource::EntryPoint, original_name.clone());
+                    StructName::new(ModuleSource::entry_point(), original_name.clone());
                 if let Some(info) = self.struct_types.get(&original_struct_name).cloned() {
                     self.struct_types.insert(alias_struct_name, info);
                 }
@@ -1155,7 +1155,7 @@ impl Codegen {
                     continue;
                 }
                 let struct_name =
-                    StructName::new(ModuleSource::EntryPoint, tir_struct.name.clone());
+                    StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
                 // Check for self-referential structs
                 let lib_type_table = tir_mod.type_table.borrow();
                 let base_name = tir_struct
@@ -1201,7 +1201,7 @@ impl Codegen {
             .collect();
         let sorted_mono = Self::sort_structs_topologically(&mono_structs, type_table);
         for tir_struct in sorted_mono {
-            let struct_name = StructName::new(ModuleSource::EntryPoint, tir_struct.name.clone());
+            let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
             // For monomorphized structs, check against both the mangled name and base name
             let base_name = tir_struct
@@ -3301,7 +3301,7 @@ impl Codegen {
                 // For other generic instances, use the mangled name lookup
                 let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
                 if let Some(info) =
-                    self.lookup_struct_type(&mangled_name, &ModuleSource::EntryPoint)
+                    self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
                 {
                     info.type_idx
                 } else {
@@ -4995,7 +4995,7 @@ impl Codegen {
             ResolvedType::GenericInstance { .. } => {
                 let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
                 if let Some(struct_info) =
-                    self.lookup_struct_type(&mangled_name, &ModuleSource::EntryPoint)
+                    self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
                 {
                     ValType::Ref(RefType {
                         nullable: false,
@@ -6458,7 +6458,7 @@ impl Codegen {
                             return;
                         } else {
                             // Fall back to simple name lookup
-                            self.lookup_struct_type(struct_name, &ModuleSource::EntryPoint)
+                            self.lookup_struct_type(struct_name, &ModuleSource::entry_point())
                         }
                     }
                     ResolvedType::GenericInstance {
@@ -6476,7 +6476,7 @@ impl Codegen {
                     }
                     _ => {
                         // Fall back to simple name lookup using struct_name
-                        self.lookup_struct_type(struct_name, &ModuleSource::EntryPoint)
+                        self.lookup_struct_type(struct_name, &ModuleSource::entry_point())
                     }
                 };
 
