@@ -6390,14 +6390,29 @@ impl Codegen {
                 else_branch,
             } => {
                 self.generate_expr(func, condition, type_table, ctx, builder);
-                let result_type = self.type_id_to_valtype(type_table, expr.type_id);
+                let result_type_id = expr.type_id;
+                let result_type = self.type_id_to_valtype(type_table, result_type_id);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
                     result_type,
                 )));
-                self.generate_block(func, then_branch, type_table, ctx, builder);
+                self.generate_block_as_expr(
+                    func,
+                    then_branch,
+                    result_type_id,
+                    type_table,
+                    ctx,
+                    builder,
+                );
                 if let Some(else_block) = else_branch {
                     func.instruction(&Instruction::Else);
-                    self.generate_block(func, else_block, type_table, ctx, builder);
+                    self.generate_block_as_expr(
+                        func,
+                        else_block,
+                        result_type_id,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
                 }
                 func.instruction(&Instruction::End);
             }
@@ -7322,6 +7337,42 @@ impl Codegen {
         for stmt in &block.stmts {
             self.generate_stmt(func, stmt, type_table, ctx, builder);
         }
+    }
+
+    /// Generate code for a TIR block as an expression (keeps last expression value on stack)
+    fn generate_block_as_expr(
+        &self,
+        func: &mut Function,
+        block: &TirBlock,
+        result_type: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        let len = block.stmts.len();
+        for (i, stmt) in block.stmts.iter().enumerate() {
+            let is_last = i == len - 1;
+            if is_last && result_type != TypeTable::UNIT {
+                // For the last statement in an expression block, keep the value on stack
+                if let TirStmtKind::Expr(expr) = &stmt.kind {
+                    self.generate_expr(func, expr, type_table, ctx, builder);
+                } else {
+                    // Not an expression statement - generate normally
+                    self.generate_stmt(func, stmt, type_table, ctx, builder);
+                    // Block expects a value but last stmt isn't an expression,
+                    // this is a type error that should've been caught by the resolver
+                }
+            } else {
+                self.generate_stmt(func, stmt, type_table, ctx, builder);
+            }
+        }
+
+        // If block is empty and we need a result, push unit (unreachable in practice)
+        // Push a default value for the expected type (shouldn't happen with valid code)
+        assert!(
+            !(block.stmts.is_empty() && result_type != TypeTable::UNIT),
+            "Empty block cannot produce non-unit value"
+        );
     }
 
     /// Generate code for a TIR statement

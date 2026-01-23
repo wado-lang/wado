@@ -5139,6 +5139,18 @@ impl<'a> Resolver<'a> {
         TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span)
     }
 
+    /// Extract the result type from a block (the type of its last expression, or Unit)
+    fn block_result_type(block: &TirBlock) -> TypeId {
+        block
+            .stmts
+            .last()
+            .and_then(|s| match &s.kind {
+                TirStmtKind::Expr(e) => Some(e.type_id),
+                _ => None,
+            })
+            .unwrap_or(TypeTable::UNIT)
+    }
+
     /// Resolve an if expression
     fn resolve_if_expr(&mut self, if_expr: &IfExpr, ctx: &mut FunctionContext) -> TirExpr {
         // Handle optional init binding (scoped to this if expression)
@@ -5174,15 +5186,51 @@ impl<'a> Resolver<'a> {
             .as_ref()
             .map(|b| self.resolve_block(b, ctx));
 
-        // If expression type is the type of the branches
-        let type_id = then_block
-            .stmts
-            .last()
-            .and_then(|s| match &s.kind {
-                TirStmtKind::Expr(e) => Some(e.type_id),
-                _ => None,
-            })
-            .unwrap_or(TypeTable::UNIT);
+        // Extract types from both branches
+        let then_type = Self::block_result_type(&then_block);
+        let else_type = else_block
+            .as_ref()
+            .map_or(TypeTable::UNIT, Self::block_result_type);
+
+        // Determine the result type
+        let type_id = if then_type == else_type {
+            // Types match exactly
+            then_type
+        } else if then_type == TypeTable::UNIT || else_type == TypeTable::UNIT {
+            // If one branch is unit and else is missing, that's allowed for unit-typed if expressions
+            if else_block.is_none() {
+                // No else branch - require then branch to be unit
+                if then_type != TypeTable::UNIT {
+                    let type_name = self.type_table.borrow().type_name(then_type);
+                    self.errors.push(TypeError::TypeMismatch {
+                        expected: "()".to_string(),
+                        found: type_name,
+                        span: if_expr.then_block.span,
+                    });
+                }
+                TypeTable::UNIT
+            } else {
+                // Both branches exist but types don't match - report error
+                let then_name = self.type_table.borrow().type_name(then_type);
+                let else_name = self.type_table.borrow().type_name(else_type);
+                self.errors.push(TypeError::TypeMismatch {
+                    expected: then_name,
+                    found: else_name,
+                    span: if_expr.else_block.as_ref().unwrap().span,
+                });
+                then_type
+            }
+        } else {
+            // Types don't match
+            let then_name = self.type_table.borrow().type_name(then_type);
+            let else_name = self.type_table.borrow().type_name(else_type);
+            self.errors.push(TypeError::TypeMismatch {
+                expected: then_name,
+                found: else_name,
+                span: if_expr.else_block.as_ref().unwrap().span,
+            });
+            then_type
+        };
 
         let result = TirExpr::new(
             TirExprKind::If {

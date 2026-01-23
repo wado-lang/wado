@@ -52,10 +52,7 @@ impl Ord for String {
     pub fn lt(&self, other: &Self) -> bool {
         let len_a = self.len();
         let len_b = other.len();
-        let mut min_len = len_a;
-        if len_b < min_len {
-            min_len = len_b;
-        }
+        let min_len = if len_b < len_a { len_b } else { len_a };
 
         for let mut i = 0; i < min_len; i += 1 {
             let a_byte = self.get(i);

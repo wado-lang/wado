@@ -1345,6 +1345,18 @@ impl<'a> Unparser<'a> {
         self.output.push('}');
 
         if let Some(else_block) = &i.else_block {
+            // Check for else-if: block contains single if expression statement
+            if else_block.stmts.len() == 1
+                && let Stmt::Expr(ExprStmt {
+                    expr: Expr::If(nested_if),
+                    ..
+                }) = &else_block.stmts[0]
+            {
+                // Output as `else if` instead of `else { if ... }`
+                self.output.push_str(" else ");
+                self.unparse_if_expr(nested_if);
+                return;
+            }
             self.output.push_str(" else {\n");
             self.indent_level += 1;
             self.unparse_block(else_block);
