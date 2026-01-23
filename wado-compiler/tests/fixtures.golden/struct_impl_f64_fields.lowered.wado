@@ -11,28 +11,84 @@ struct Vector2D {
     y: f64,
 }
 
-pub fn "Circle::diameter"(self: &Circle) -> f64 {
-    return (self.radius * 2.0);
-}
-
-pub fn "Circle::circumference"(self: &Circle) -> f64 {
-    return ((2.0 * 3.14159) * self.radius);
-}
-
-pub fn "Vector2D::length_squared"(self: &Vector2D) -> f64 {
-    return ((self.x * self.x) + (self.y * self.y));
-}
-
-pub fn "Vector2D::dot"(self: &Vector2D, other_x: f64, other_y: f64) -> f64 {
-    return ((self.x * other_x) + (self.y * other_y));
-}
-
 fn run() with Stdout {
     let c: Circle = move Circle { radius: 5.0 };
-    core::cli::println(move core::internal::string_concat(move "diameter: ", move "f64::to_string"("Circle::diameter"(&c))));
-    core::cli::println(move core::internal::string_concat(move "circumference: ", move "f64::to_string"("Circle::circumference"(&c))));
+    core::cli::println(__inline_string_concat_1: {
+        let a: String = move "diameter: ";
+        let b: String = move "f64::to_string"(__inline_Circle__diameter_0: {
+            break __inline_Circle__diameter_0: (c.radius * 2.0);
+        });
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_1: result;
+    });
+    core::cli::println(__inline_string_concat_3: {
+        let a: String = move "circumference: ";
+        let b: String = move "f64::to_string"(__inline_Circle__circumference_2: {
+            break __inline_Circle__circumference_2: ((2.0 * 3.14159) * c.radius);
+        });
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_3: result;
+    });
     let v: Vector2D = move Vector2D { x: 3.0, y: 4.0 };
-    core::cli::println(move core::internal::string_concat(move "length_squared: ", move "f64::to_string"("Vector2D::length_squared"(&v))));
-    core::cli::println(move core::internal::string_concat(move "dot(1,2): ", move "f64::to_string"("Vector2D::dot"(&v, 1.0, 2.0))));
+    core::cli::println(__inline_string_concat_5: {
+        let a: String = move "length_squared: ";
+        let b: String = move "f64::to_string"(__inline_Vector2D__length_squared_4: {
+            break __inline_Vector2D__length_squared_4: ((v.x * v.x) + (v.y * v.y));
+        });
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_5: result;
+    });
+    core::cli::println(__inline_string_concat_7: {
+        let a: String = move "dot(1,2): ";
+        let b: String = move "f64::to_string"(__inline_Vector2D__dot_6: {
+            break __inline_Vector2D__dot_6: ((v.x * 1.0) + (v.y * 2.0));
+        });
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_7: result;
+    });
 }
 

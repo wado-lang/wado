@@ -212,12 +212,17 @@ struct FunctionContext {
     branch_hints: Vec<(u32, bool)>,
     /// Module path of the current function (for access control checks)
     current_module_path: Vec<String>,
-    /// Stack of (`extra_depth`, `break_offset`) for each loop level.
-    /// `extra_depth`: incremented by if statements inside the loop
-    /// `break_offset`: 1 for while/loop, 2 for for loops (because for loops have an extra body block)
-    /// For break: use `break_offset` + `extra_depth`
-    /// For continue: use `extra_depth`
-    loop_info: Vec<(u32, u32)>,
+    /// Stack of break targets for loops and labeled blocks.
+    /// Each entry contains: (label, `extra_depth`, `break_offset`, `is_loop`, `result_type`)
+    /// - `label`: None for anonymous loop, Some(name) for labeled blocks/loops
+    /// - `extra_depth`: incremented by if statements inside the block
+    /// - `break_offset`: 1 for while/loop/labeled block, 2 for for loops
+    /// - `is_loop`: true for loops, false for labeled blocks
+    /// - `result_type`: `Some(type_id)` for labeled block expressions that return a value
+    ///
+    /// For break: use `break_offset` + `extra_depth`.
+    /// For continue: use `extra_depth` (only valid for loops).
+    loop_info: Vec<(Option<String>, u32, u32, bool, Option<TypeId>)>,
     /// Counter for generating unique for-of local names (to support nested for-of loops)
     for_of_counter: u32,
     /// Local indices that have their address taken (&x or &mut x).
@@ -1296,25 +1301,6 @@ impl Codegen {
                     .iter()
                     .any(|p| type_table.contains_type_param(p.type_id));
             if has_type_params {
-                // Debug: show which function is being skipped and why
-                if tir_func.name.contains("TreeMap") && tir_func.name.contains("get") {
-                    let ret_has_param = type_table.contains_type_param(tir_func.return_type);
-                    let params_have_param: Vec<_> = tir_func
-                        .params
-                        .iter()
-                        .map(|p| {
-                            (
-                                p.name.clone(),
-                                p.type_id,
-                                type_table.contains_type_param(p.type_id),
-                            )
-                        })
-                        .collect();
-                    eprintln!(
-                        "DEBUG: Skipping function {} due to type params. return_has_param={}, params_have_param={:?}",
-                        tir_func.name, ret_has_param, params_have_param
-                    );
-                }
                 continue;
             }
             let param_types: Vec<ValType> = tir_func
@@ -3393,13 +3379,18 @@ impl Codegen {
                         .expect("Array struct type should be registered");
                     // Array is now a struct with (repr, used) fields
                     // 1. Store the source struct
-                    let source_struct_local = ctx.alloc_local(
-                        &format!("__copy_array_struct_source_{raw_array_type_idx}"),
-                        ValType::Ref(RefType {
-                            nullable: true,
-                            heap_type: HeapType::Concrete(array_struct_type_idx),
-                        }),
-                    );
+                    let source_struct_name =
+                        format!("__copy_array_struct_source_{raw_array_type_idx}");
+                    let source_struct_local =
+                        ctx.get_local(&source_struct_name).unwrap_or_else(|| {
+                            ctx.alloc_local(
+                                &source_struct_name,
+                                ValType::Ref(RefType {
+                                    nullable: true,
+                                    heap_type: HeapType::Concrete(array_struct_type_idx),
+                                }),
+                            )
+                        });
                     func.instruction(&Instruction::LocalSet(source_struct_local));
 
                     // 2. Get the repr field (raw array)
@@ -3451,13 +3442,21 @@ impl Codegen {
         ctx: &mut FunctionContext,
     ) {
         // Use pre-allocated temp local for the source struct reference
-        let source_local = ctx.alloc_local(
-            &format!("__copy_source_{type_idx}"),
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(type_idx),
-            }),
-        );
+        let local_name = format!("__copy_source_{type_idx}");
+        let source_local = ctx.get_local(&local_name).unwrap_or_else(|| {
+            // Fallback: allocate if not pre-allocated (shouldn't happen normally)
+            eprintln!(
+                "WARNING: struct copy local {} not pre-allocated, allocating now (next_local={})",
+                local_name, ctx.next_local
+            );
+            ctx.alloc_local(
+                &local_name,
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(type_idx),
+                }),
+            )
+        });
 
         // Store source to temp local (stack is now empty)
         func.instruction(&Instruction::LocalSet(source_local));
@@ -3487,26 +3486,34 @@ impl Codegen {
         ctx: &mut FunctionContext,
     ) {
         // Use pre-allocated temp locals for the array copy
-        let source_local = ctx.alloc_local(
-            &format!("__copy_array_source_{array_type_idx}"),
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(array_type_idx),
-            }),
-        );
-        let counter_local = ctx.alloc_local(
-            &format!("__copy_array_counter_{array_type_idx}"),
-            ValType::I32,
-        );
-        let dest_local = ctx.alloc_local(
-            &format!("__copy_array_dest_{array_type_idx}"),
-            ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(array_type_idx),
-            }),
-        );
-        let len_local =
-            ctx.alloc_local(&format!("__copy_array_len_{array_type_idx}"), ValType::I32);
+        let source_name = format!("__copy_array_source_{array_type_idx}");
+        let source_local = ctx.get_local(&source_name).unwrap_or_else(|| {
+            ctx.alloc_local(
+                &source_name,
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(array_type_idx),
+                }),
+            )
+        });
+        let counter_name = format!("__copy_array_counter_{array_type_idx}");
+        let counter_local = ctx
+            .get_local(&counter_name)
+            .unwrap_or_else(|| ctx.alloc_local(&counter_name, ValType::I32));
+        let dest_name = format!("__copy_array_dest_{array_type_idx}");
+        let dest_local = ctx.get_local(&dest_name).unwrap_or_else(|| {
+            ctx.alloc_local(
+                &dest_name,
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(array_type_idx),
+                }),
+            )
+        });
+        let len_name = format!("__copy_array_len_{array_type_idx}");
+        let len_local = ctx
+            .get_local(&len_name)
+            .unwrap_or_else(|| ctx.alloc_local(&len_name, ValType::I32));
 
         // Store source to temp local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -3643,8 +3650,10 @@ impl Codegen {
             }
         };
 
-        // Allocate temp local
-        let source_local = ctx.alloc_local("__copy_option_source", option_valtype);
+        // Use pre-allocated temp local or allocate if not found
+        let source_local = ctx
+            .get_local("__copy_option_source")
+            .unwrap_or_else(|| ctx.alloc_local("__copy_option_source", option_valtype));
 
         // Store source to local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -4066,10 +4075,14 @@ impl Codegen {
                 Self::collect_closures_from_block(body, closures);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
+                for stmt in init {
+                    Self::collect_closures_from_stmt(stmt, closures);
+                }
                 if let Some(cond) = condition {
                     Self::collect_closures_from_expr(cond, closures);
                 }
@@ -4115,7 +4128,9 @@ impl Codegen {
                     Self::collect_closures_from_block(else_blk, closures);
                 }
             }
-            TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => {}
         }
     }
 
@@ -4226,6 +4241,9 @@ impl Codegen {
             TirExprKind::Move { value } => {
                 Self::collect_closures_from_expr(value, closures);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::collect_closures_from_block(block, closures);
+            }
             // Leaf nodes - no nested expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -4325,10 +4343,14 @@ impl Codegen {
                 Self::find_closure_locals_in_block(body, result, closure_counter);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
+                for stmt in init {
+                    Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
+                }
                 if let Some(cond) = condition {
                     Self::find_closure_locals_in_expr(cond, result, closure_counter);
                 }
@@ -4374,7 +4396,9 @@ impl Codegen {
                     Self::find_closure_locals_in_block(else_blk, result, closure_counter);
                 }
             }
-            TirStmtKind::Return { value: None } | TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => {}
         }
     }
 
@@ -4466,6 +4490,9 @@ impl Codegen {
             }
             TirExprKind::Move { value } => {
                 Self::find_closure_locals_in_expr(value, result, closure_counter);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::find_closure_locals_in_block(block, result, closure_counter);
             }
             // Terminals - no closures inside
             TirExprKind::IntLiteral { .. }
@@ -6648,6 +6675,32 @@ impl Codegen {
                 // Call via call_ref with the function type
                 func.instruction(&Instruction::CallRef(fn_type_idx));
             }
+
+            // === Labeled Block Expression ===
+            TirExprKind::LabeledBlock {
+                label,
+                block,
+                result_type,
+            } => {
+                // Labeled block expression: produces a value via `break label: expr;`
+                // Track the label so break statements can find it
+                ctx.loop_info
+                    .push((Some(label.clone()), 0, 0, false, Some(*result_type)));
+
+                // Generate block with result type
+                let block_type = if *result_type == TypeTable::UNIT {
+                    wasm_encoder::BlockType::Empty
+                } else {
+                    let valtype = self.type_id_to_valtype(type_table, *result_type);
+                    wasm_encoder::BlockType::Result(valtype)
+                };
+
+                func.instruction(&Instruction::Block(block_type));
+                self.generate_block(func, block, type_table, ctx, builder);
+                func.instruction(&Instruction::End);
+
+                ctx.loop_info.pop();
+            }
         }
     }
 
@@ -7347,7 +7400,7 @@ impl Codegen {
                 ctx.consume_branch_hint(func.byte_len() as u32);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 // If creates a block level - increment extra depth if we're inside a loop
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
                 self.generate_block(func, then_block, type_table, ctx, builder);
@@ -7356,22 +7409,22 @@ impl Codegen {
                     // Else branch is at the same depth as then branch
                     self.generate_block(func, else_blk, type_table, ctx, builder);
                 }
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra -= 1;
                 }
                 func.instruction(&Instruction::End);
             }
 
             TirStmtKind::While { condition, body } => {
-                // Push new loop context: (extra_depth=0, break_offset=1)
-                ctx.loop_info.push((0, 1));
+                // Push new loop context: (extra_depth=0, break_offset=1, no result type)
+                ctx.loop_info.push((None, 0, 1, true, None));
 
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
 
                 // Check condition, break if false
                 // Try to generate inverted condition directly to avoid i32.eqz
-                let (extra, break_offset) = *ctx.loop_info.last().unwrap();
+                let (_, extra, break_offset, _, _) = *ctx.loop_info.last().unwrap();
                 if !self.try_generate_inverted_condition(func, condition, type_table, ctx, builder)
                 {
                     // Fallback: generate condition and negate
@@ -7384,7 +7437,7 @@ impl Codegen {
                 self.generate_block(func, body, type_table, ctx, builder);
 
                 // Continue loop
-                let (extra, _) = *ctx.loop_info.last().unwrap();
+                let (_, extra, _, _, _) = *ctx.loop_info.last().unwrap();
                 func.instruction(&Instruction::Br(extra));
 
                 func.instruction(&Instruction::End); // End loop
@@ -7394,8 +7447,8 @@ impl Codegen {
             }
 
             TirStmtKind::Loop { body } => {
-                // Push new loop context: (extra_depth=0, break_offset=1)
-                ctx.loop_info.push((0, 1));
+                // Push new loop context: (extra_depth=0, break_offset=1, no result type)
+                ctx.loop_info.push((None, 0, 1, true, None));
 
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
@@ -7403,7 +7456,7 @@ impl Codegen {
                 self.generate_block(func, body, type_table, ctx, builder);
 
                 // Continue loop
-                let (extra, _) = *ctx.loop_info.last().unwrap();
+                let (_, extra, _, _, _) = *ctx.loop_info.last().unwrap();
                 func.instruction(&Instruction::Br(extra));
 
                 func.instruction(&Instruction::End); // End loop
@@ -7413,10 +7466,16 @@ impl Codegen {
             }
 
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                // Generate init statements first (e.g., let i = 0)
+                for init_stmt in init {
+                    self.generate_stmt(func, init_stmt, type_table, ctx, builder);
+                }
+
                 // For loop structure:
                 // block $exit        ; break target
                 //   loop $loop       ; for loop header
@@ -7433,9 +7492,9 @@ impl Codegen {
                 // - continue: br 0 (to end of $body, then update executes, then br $loop)
                 // - break: br 2 (to $exit)
 
-                // Push new loop context: (extra_depth=0, break_offset=2)
+                // Push new loop context: (extra_depth=0, break_offset=2, no result type)
                 // break_offset=2 because break needs to skip body block + loop
-                ctx.loop_info.push((0, 2));
+                ctx.loop_info.push((None, 0, 2, true, None));
 
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
@@ -7535,8 +7594,8 @@ impl Codegen {
                 func.instruction(&Instruction::I32Const(0));
                 func.instruction(&Instruction::LocalSet(counter_local));
 
-                // Push loop context: break_offset=2 (same as For)
-                ctx.loop_info.push((0, 2));
+                // Push loop context: break_offset=2 (same as For), no result type
+                ctx.loop_info.push((None, 0, 2, true, None));
 
                 // block $exit
                 func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
@@ -7592,30 +7651,98 @@ impl Codegen {
                 ctx.loop_info.pop();
             }
 
-            TirStmtKind::Break => {
-                if let Some((extra, break_offset)) = ctx.loop_info.last() {
-                    // Break to outer block: break_offset + extra_depth
-                    func.instruction(&Instruction::Br(break_offset + extra));
+            TirStmtKind::Break { label, value } => {
+                // Find the target in loop_info
+                if let Some(target_label) = label {
+                    // Find the labeled block/loop with this label
+                    let mut found = false;
+                    let mut depth: u32 = 0;
+                    let mut blocks_passed: u32 = 0; // Total wasm blocks passed over
+
+                    for (i, (lbl, _extra, break_offset, _is_loop, _result_type)) in
+                        ctx.loop_info.iter().rev().enumerate()
+                    {
+                        if lbl.as_ref() == Some(target_label) {
+                            // Found the target
+                            // Depth is: blocks from entries we passed + target's break_offset + total_extra
+                            // Each construct creates (break_offset + 1) wasm blocks total
+                            let mut total_extra: u32 = 0;
+                            for (j, (_, e, _, _, _)) in ctx.loop_info.iter().rev().enumerate() {
+                                if j > i {
+                                    break;
+                                }
+                                total_extra += *e;
+                            }
+                            depth = blocks_passed + *break_offset + total_extra;
+                            found = true;
+                            break;
+                        }
+                        // Add this entry's total block count (break_offset + 1)
+                        // - while/loop: break_offset=1 -> 2 blocks (exit + loop)
+                        // - for/for-of: break_offset=2 -> 3 blocks (exit + loop + body)
+                        // - labeled block: break_offset=0 -> 1 block
+                        blocks_passed += *break_offset + 1;
+                    }
+                    assert!(found, "labeled break target not found: {target_label}");
+
+                    // If breaking with a value, generate the value expression first
+                    if let Some(val) = value {
+                        self.generate_expr(func, val, type_table, ctx, builder);
+                    }
+
+                    func.instruction(&Instruction::Br(depth));
                 } else {
-                    // No enclosing loop - this should have been caught earlier
-                    panic!("break outside of loop");
+                    // Unlabeled break - find the innermost loop
+                    if let Some((_, extra, break_offset, is_loop, _)) = ctx.loop_info.last() {
+                        assert!(
+                            *is_loop,
+                            "unlabeled break inside labeled block but not in a loop"
+                        );
+                        // Break to outer block: break_offset + extra_depth
+                        func.instruction(&Instruction::Br(break_offset + extra));
+                    } else {
+                        // No enclosing loop - this should have been caught earlier
+                        panic!("break outside of loop");
+                    }
                 }
             }
 
             TirStmtKind::Continue => {
-                if let Some((extra, _)) = ctx.loop_info.last() {
-                    // Continue to loop/body block: extra_depth
+                // Find the innermost loop (not just labeled block)
+                let mut found = false;
+                let mut depth: u32 = 0;
+                let mut extra_from_nested: u32 = 0;
+                for (_lbl, extra, _break_offset, is_loop, _) in ctx.loop_info.iter().rev() {
+                    extra_from_nested += *extra;
+                    if *is_loop {
+                        // Found a loop - continue to it
+                        // For continue, we jump to the loop header (extra_depth from nested blocks)
+                        depth = extra_from_nested - *extra + *extra; // Just the extra of all nested
+                        found = true;
+                        break;
+                    }
+                    // Not a loop, add its block depth (1 for the block itself)
+                    extra_from_nested += 1;
+                }
+                if found {
+                    func.instruction(&Instruction::Br(depth));
+                } else if let Some((_, extra, _, _, _)) = ctx.loop_info.last() {
+                    // Fallback to old behavior
                     func.instruction(&Instruction::Br(*extra));
                 } else {
-                    // No enclosing loop - this should have been caught earlier
                     panic!("continue outside of loop");
                 }
             }
 
-            TirStmtKind::LabeledBlock { block, .. } => {
-                // Generate a simple block - the label is for future use (break/continue)
-                // For now, just generate the block contents in sequence
+            TirStmtKind::LabeledBlock { label, block } => {
+                // Generate a wasm block with the label tracked
+                // break_offset is 0 because br 0 goes to this block's exit
+                // No result type since this is a statement (not expression)
+                ctx.loop_info.push((Some(label.clone()), 0, 0, false, None));
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
                 self.generate_block(func, block, type_table, ctx, builder);
+                func.instruction(&Instruction::End);
+                ctx.loop_info.pop();
             }
 
             TirStmtKind::IfPattern {
@@ -7672,7 +7799,7 @@ impl Codegen {
                 func.instruction(&Instruction::I32Eqz); // NOT: true if NOT null (Some)
 
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
 
@@ -7713,7 +7840,7 @@ impl Codegen {
                 }
 
                 func.instruction(&Instruction::End);
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra -= 1;
                 }
             }
@@ -7727,7 +7854,7 @@ impl Codegen {
                 func.instruction(&Instruction::RefIsNull); // true if null (None)
 
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
 
@@ -7741,7 +7868,7 @@ impl Codegen {
                 }
 
                 func.instruction(&Instruction::End);
-                if let Some((extra, _)) = ctx.loop_info.last_mut() {
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra -= 1;
                 }
             }
@@ -7845,8 +7972,12 @@ impl Codegen {
         }
 
         // Pre-allocate locals for value copy operations (struct, array, tuple)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
+        if !tir_func.needed_copy_types.is_empty() {
+            self.preallocate_value_copy_locals(
+                &tir_func.needed_copy_types,
+                type_table,
+                &mut func_ctx,
+            );
         }
 
         // Pre-allocate scratch locals for async effect handling (only if needed)
@@ -7876,6 +8007,11 @@ impl Codegen {
         // Pre-allocate locals for IfPattern statements
         if let Some(body) = &tir_func.body {
             self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
         }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
@@ -8060,8 +8196,12 @@ impl Codegen {
         }
 
         // Pre-allocate locals for value copy operations (struct, array, tuple)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_value_copy_locals(body, type_table, &mut func_ctx);
+        if !tir_func.needed_copy_types.is_empty() {
+            self.preallocate_value_copy_locals(
+                &tir_func.needed_copy_types,
+                type_table,
+                &mut func_ctx,
+            );
         }
 
         // Pre-allocate scratch locals for async effect handling (only if needed)
@@ -8091,6 +8231,11 @@ impl Codegen {
         // Pre-allocate locals for IfPattern statements
         if let Some(body) = &tir_func.body {
             self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
+        }
+
+        // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
         }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
@@ -8649,13 +8794,15 @@ impl Codegen {
                     || Self::needs_environment_scratch_locals(body)
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
-                condition
-                    .as_ref()
-                    .is_some_and(Self::expr_needs_environment_scratch_locals)
+                init.iter().any(Self::stmt_needs_environment_scratch_locals)
+                    || condition
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_environment_scratch_locals)
                     || update
                         .as_ref()
                         .is_some_and(Self::expr_needs_environment_scratch_locals)
@@ -8787,13 +8934,15 @@ impl Codegen {
                     || Self::needs_async_scratch_locals(body)
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
-                condition
-                    .as_ref()
-                    .is_some_and(Self::expr_needs_async_scratch_locals)
+                init.iter().any(Self::stmt_needs_async_scratch_locals)
+                    || condition
+                        .as_ref()
+                        .is_some_and(Self::expr_needs_async_scratch_locals)
                     || update
                         .as_ref()
                         .is_some_and(Self::expr_needs_async_scratch_locals)
@@ -8807,6 +8956,8 @@ impl Codegen {
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::expr_needs_async_scratch_locals(expr)
             }
+            TirStmtKind::LabeledBlock { block, .. } => Self::needs_async_scratch_locals(block),
+            TirStmtKind::Break { value: Some(v), .. } => Self::expr_needs_async_scratch_locals(v),
             _ => false,
         }
     }
@@ -8908,6 +9059,7 @@ impl Codegen {
                 fields.iter().any(Self::expr_needs_async_scratch_locals)
             }
             TirExprKind::Move { value } => Self::expr_needs_async_scratch_locals(value),
+            TirExprKind::LabeledBlock { block, .. } => Self::needs_async_scratch_locals(block),
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -8923,25 +9075,22 @@ impl Codegen {
     }
 
     /// Pre-allocate locals for value copy operations (struct, array, tuple).
-    /// This must be called before code generation to ensure copy locals are available.
     fn preallocate_value_copy_locals(
         &self,
-        block: &TirBlock,
+        needed_types: &std::collections::HashSet<TypeId>,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
     ) {
-        let mut needed_types: std::collections::HashSet<TypeId> = std::collections::HashSet::new();
-        self.collect_copy_types(block, type_table, &mut needed_types);
-
-        for type_id in needed_types {
+        for &type_id in needed_types {
             match type_table.get(type_id) {
                 ResolvedType::Struct {
                     name,
                     module_source,
                 } => {
                     if let Some(info) = self.lookup_struct_type(name, module_source) {
+                        let local_name = format!("__copy_source_{}", info.type_idx);
                         ctx.alloc_local(
-                            &format!("__copy_source_{}", info.type_idx),
+                            &local_name,
                             ValType::Ref(RefType {
                                 nullable: true,
                                 heap_type: HeapType::Concrete(info.type_idx),
@@ -9007,165 +9156,6 @@ impl Codegen {
         }
     }
 
-    /// Collect all types that need value copy from a block
-    fn collect_copy_types(
-        &self,
-        block: &TirBlock,
-        type_table: &TypeTable,
-        needed_types: &mut std::collections::HashSet<TypeId>,
-    ) {
-        for stmt in &block.stmts {
-            self.collect_copy_types_from_stmt(stmt, type_table, needed_types);
-        }
-    }
-
-    /// Collect copy types from a statement
-    fn collect_copy_types_from_stmt(
-        &self,
-        stmt: &TirStmt,
-        type_table: &TypeTable,
-        needed_types: &mut std::collections::HashSet<TypeId>,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.collect_copy_types_from_expr(value, type_table, needed_types);
-                if self.needs_value_copy(value.type_id, type_table) {
-                    needed_types.insert(value.type_id);
-                }
-            }
-            TirStmtKind::Expr(expr) => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirStmtKind::While { condition, body } => {
-                self.collect_copy_types_from_expr(condition, type_table, needed_types);
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::For {
-                condition,
-                update,
-                body,
-            } => {
-                if let Some(e) = condition {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-                if let Some(e) = update {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.collect_copy_types_from_expr(iterable, type_table, needed_types);
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::Loop { body } => {
-                self.collect_copy_types(body, type_table, needed_types);
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.collect_copy_types_from_expr(condition, type_table, needed_types);
-                self.collect_copy_types(then_block, type_table, needed_types);
-                if let Some(e) = else_block {
-                    self.collect_copy_types(e, type_table, needed_types);
-                }
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            _ => {}
-        }
-    }
-
-    /// Collect copy types from an expression
-    fn collect_copy_types_from_expr(
-        &self,
-        expr: &TirExpr,
-        type_table: &TypeTable,
-        needed_types: &mut std::collections::HashSet<TypeId>,
-    ) {
-        match &expr.kind {
-            TirExprKind::Assign { target, value } => {
-                self.collect_copy_types_from_expr(target, type_table, needed_types);
-                self.collect_copy_types_from_expr(value, type_table, needed_types);
-                // Check if assigning to a local variable with value type
-                if matches!(target.kind, TirExprKind::Local { .. })
-                    && self.needs_value_copy(value.type_id, type_table)
-                {
-                    needed_types.insert(value.type_id);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.collect_copy_types_from_expr(left, type_table, needed_types);
-                self.collect_copy_types_from_expr(right, type_table, needed_types);
-            }
-            TirExprKind::Unary { expr, .. } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    self.collect_copy_types_from_expr(arg, type_table, needed_types);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.collect_copy_types_from_expr(receiver, type_table, needed_types);
-                for arg in args {
-                    self.collect_copy_types_from_expr(arg, type_table, needed_types);
-                }
-            }
-            TirExprKind::FieldAccess { expr, .. } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirExprKind::Index { expr, index } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-                self.collect_copy_types_from_expr(index, type_table, needed_types);
-            }
-            TirExprKind::ArrayLiteral { elements } => {
-                for e in elements {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.collect_copy_types_from_expr(&field.value, type_table, needed_types);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for e in elements {
-                    self.collect_copy_types_from_expr(e, type_table, needed_types);
-                }
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.collect_copy_types_from_expr(condition, type_table, needed_types);
-                self.collect_copy_types(then_branch, type_table, needed_types);
-                if let Some(e) = else_branch {
-                    self.collect_copy_types(e, type_table, needed_types);
-                }
-            }
-            TirExprKind::Block(block) => {
-                self.collect_copy_types(block, type_table, needed_types);
-            }
-            TirExprKind::Match { expr, arms } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-                for arm in arms {
-                    self.collect_copy_types_from_expr(&arm.body, type_table, needed_types);
-                }
-            }
-            TirExprKind::Cast { expr, .. } => {
-                self.collect_copy_types_from_expr(expr, type_table, needed_types);
-            }
-            TirExprKind::Move { value } => {
-                self.collect_copy_types_from_expr(value, type_table, needed_types);
-            }
-            _ => {}
-        }
-    }
-
     /// Pre-allocate locals for TIR assert statements in a block
     fn preallocate_assert_locals(
         &self,
@@ -9207,7 +9197,7 @@ impl Codegen {
                 // Recursively handle body
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
-            TirStmtKind::Loop { body } => {
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
             }
             TirStmtKind::If {
@@ -9376,11 +9366,26 @@ impl Codegen {
                 Self::count_indirect_calls_in_expr(iterable, type_table, codegen, counts);
                 Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
             }
-            TirStmtKind::Loop { body } => {
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
             }
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::count_indirect_calls_in_expr(scrutinee, type_table, codegen, counts);
+                Self::count_indirect_calls_in_block(then_block, type_table, codegen, counts);
+                if let Some(else_blk) = else_block {
+                    Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
+                }
+            }
+            TirStmtKind::Break { value: Some(v), .. } => {
+                Self::count_indirect_calls_in_expr(v, type_table, codegen, counts);
             }
             _ => {}
         }
@@ -9477,6 +9482,9 @@ impl Codegen {
             TirExprKind::Move { value } => {
                 Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::count_indirect_calls_in_block(block, type_table, codegen, counts);
+            }
             _ => {}
         }
     }
@@ -9555,10 +9563,14 @@ impl Codegen {
                 Self::collect_array_append_types(body, type_table, result);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 update,
                 body,
             } => {
+                for stmt in init {
+                    Self::collect_array_append_types_from_stmt(stmt, type_table, result);
+                }
                 if let Some(cond) = condition {
                     Self::collect_array_append_types_from_expr(cond, type_table, result);
                 }
@@ -9571,11 +9583,23 @@ impl Codegen {
                 Self::collect_array_append_types_from_expr(iterable, type_table, result);
                 Self::collect_array_append_types(body, type_table, result);
             }
-            TirStmtKind::Loop { body } => {
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::collect_array_append_types(body, type_table, result);
             }
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::collect_array_append_types_from_expr(expr, type_table, result);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::collect_array_append_types_from_expr(scrutinee, type_table, result);
+                Self::collect_array_append_types(then_block, type_table, result);
+                if let Some(else_blk) = else_block {
+                    Self::collect_array_append_types(else_blk, type_table, result);
+                }
             }
             _ => {}
         }
@@ -9692,28 +9716,168 @@ impl Codegen {
             TirStmtKind::Let {
                 local_index,
                 type_id,
+                value,
                 ..
             } => {
                 let local_type = self.type_id_to_valtype(type_table, *type_id);
                 let local_name = format!("_local_{local_index}");
                 ctx.alloc_local(&local_name, local_type);
+                // Recurse into value expression to find labeled block expressions
+                self.preallocate_locals_from_expr(value, type_table, ctx);
             }
             TirStmtKind::If {
+                condition,
                 then_block,
                 else_block,
                 ..
             } => {
+                self.preallocate_locals_from_expr(condition, type_table, ctx);
                 self.preallocate_locals_from_block(then_block, type_table, ctx);
                 if let Some(else_blk) = else_block {
                     self.preallocate_locals_from_block(else_blk, type_table, ctx);
                 }
             }
-            TirStmtKind::While { body, .. }
-            | TirStmtKind::For { body, .. }
-            | TirStmtKind::ForOf { body, .. }
-            | TirStmtKind::Loop { body } => {
+            TirStmtKind::While { condition, body } => {
+                self.preallocate_locals_from_expr(condition, type_table, ctx);
                 self.preallocate_locals_from_block(body, type_table, ctx);
             }
+            TirStmtKind::For {
+                condition,
+                update,
+                body,
+                ..
+            } => {
+                if let Some(cond) = condition {
+                    self.preallocate_locals_from_expr(cond, type_table, ctx);
+                }
+                if let Some(upd) = update {
+                    self.preallocate_locals_from_expr(upd, type_table, ctx);
+                }
+                self.preallocate_locals_from_block(body, type_table, ctx);
+            }
+            TirStmtKind::ForOf {
+                iterable,
+                iterable_type,
+                body,
+                ..
+            } => {
+                self.preallocate_locals_from_expr(iterable, type_table, ctx);
+                // Pre-allocate temp locals for for-of loop
+                let array_valtype = self.type_id_to_valtype(type_table, *iterable_type);
+                let for_of_id = ctx.next_for_of_id();
+                ctx.alloc_local(&format!("__for_of_array_{for_of_id}"), array_valtype);
+                ctx.alloc_local(&format!("__for_of_counter_{for_of_id}"), ValType::I32);
+                self.preallocate_locals_from_block(body, type_table, ctx);
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                self.preallocate_locals_from_block(body, type_table, ctx);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.preallocate_locals_from_expr(scrutinee, type_table, ctx);
+                self.preallocate_locals_from_block(then_block, type_table, ctx);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
+                }
+            }
+            TirStmtKind::Expr(expr) => {
+                self.preallocate_locals_from_expr(expr, type_table, ctx);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                self.preallocate_locals_from_expr(expr, type_table, ctx);
+            }
+            TirStmtKind::Break {
+                value: Some(expr), ..
+            } => {
+                self.preallocate_locals_from_expr(expr, type_table, ctx);
+            }
+            _ => {}
+        }
+    }
+
+    /// Recurse into expressions to find labeled block expressions that contain statements
+    fn preallocate_locals_from_expr(
+        &self,
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { block, .. } => {
+                // Labeled block expression contains a block that may have for-of loops
+                self.preallocate_locals_from_block(block, type_table, ctx);
+            }
+            TirExprKind::Block(block) => {
+                self.preallocate_locals_from_block(block, type_table, ctx);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.preallocate_locals_from_expr(condition, type_table, ctx);
+                self.preallocate_locals_from_block(then_branch, type_table, ctx);
+                if let Some(else_blk) = else_branch {
+                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.preallocate_locals_from_expr(left, type_table, ctx);
+                self.preallocate_locals_from_expr(right, type_table, ctx);
+            }
+            TirExprKind::Unary { expr: inner, .. } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::IndirectCall { args, .. } => {
+                for arg in args {
+                    self.preallocate_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.preallocate_locals_from_expr(receiver, type_table, ctx);
+                for arg in args {
+                    self.preallocate_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::Index { expr: inner, index } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+                self.preallocate_locals_from_expr(index, type_table, ctx);
+            }
+            TirExprKind::Assign { value, .. } | TirExprKind::Move { value } => {
+                self.preallocate_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.preallocate_locals_from_expr(&field.value, type_table, ctx);
+                }
+            }
+            TirExprKind::VariantConstruct { fields, .. } => {
+                for field in fields {
+                    self.preallocate_locals_from_expr(field, type_table, ctx);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements, .. } => {
+                for elem in elements {
+                    self.preallocate_locals_from_expr(elem, type_table, ctx);
+                }
+            }
+            TirExprKind::Cast { expr: inner, .. } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::OptionSome { value } => {
+                self.preallocate_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.preallocate_locals_from_expr(body, type_table, ctx);
+            }
+            // Leaf nodes - no nested expressions containing blocks
             _ => {}
         }
     }

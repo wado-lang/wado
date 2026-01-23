@@ -15,56 +15,298 @@ struct "Box<i32>" {
     value: i32,
 }
 
-fn "Point::sum"(self: &Point) -> i32 {
-    return (self.x + self.y);
-}
-
-fn "Point::scale"(self: &Point, factor: i32) -> i32 {
-    return ((self.x + self.y) * factor);
-}
-
 fn run() with Stdout {
     let p: Point = move Point { x: 10, y: 20 };
     let p_ref: &Point = &p;
     __assert_0: {
-        let __v0: i32 = "Point::sum"(p_ref);
+        let __v0: i32 = __inline_Point__sum_0: {
+            break __inline_Point__sum_0: (p_ref.x + p_ref.y);
+        };
         let __cond: bool = (__v0 == 30);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.sum() == 30\n", move "p_ref.sum(): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_3: {
+                let a: String = __inline_string_concat_2: {
+                    let a: String = __inline_string_concat_1: {
+                        let a: String = move "Assertion failed:\ncondition: p_ref.sum() == 30\n";
+                        let b: String = move "p_ref.sum(): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_1: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_2: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_3: result;
+            });
         }
     }
     __assert_1: {
-        let __v0: i32 = "Point::scale"(p_ref, 2);
+        let __v0: i32 = __inline_Point__scale_4: {
+            break __inline_Point__scale_4: ((p_ref.x + p_ref.y) * 2);
+        };
         let __cond: bool = (__v0 == 60);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref.scale(2) == 60\n", move "p_ref.scale(2): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_7: {
+                let a: String = __inline_string_concat_6: {
+                    let a: String = __inline_string_concat_5: {
+                        let a: String = move "Assertion failed:\ncondition: p_ref.scale(2) == 60\n";
+                        let b: String = move "p_ref.scale(2): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_5: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_6: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_7: result;
+            });
         }
     }
     let p_ref2: &&Point = &p_ref;
     __assert_2: {
-        let __v0: i32 = "Point::sum"(p_ref2);
+        let __v0: i32 = __inline_Point__sum_8: {
+            break __inline_Point__sum_8: (p_ref2.x + p_ref2.y);
+        };
         let __cond: bool = (__v0 == 30);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref2.sum() == 30\n", move "p_ref2.sum(): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_11: {
+                let a: String = __inline_string_concat_10: {
+                    let a: String = __inline_string_concat_9: {
+                        let a: String = move "Assertion failed:\ncondition: p_ref2.sum() == 30\n";
+                        let b: String = move "p_ref2.sum(): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_9: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_10: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_11: result;
+            });
         }
     }
     let box_i32: Box<i32> = move Box<i32> { value: 42 };
     let box_ref: &Box<i32> = &box_i32;
     __assert_3: {
-        let __v0: i32 = "Box<i32>::get"(box_ref);
+        let __v0: i32 = __inline_Box_i32___get_12: {
+            break __inline_Box_i32___get_12: box_ref.value;
+        };
         let __cond: bool = (__v0 == 42);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: box_ref.get() == 42\n", move "box_ref.get(): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_15: {
+                let a: String = __inline_string_concat_14: {
+                    let a: String = __inline_string_concat_13: {
+                        let a: String = move "Assertion failed:\ncondition: box_ref.get() == 42\n";
+                        let b: String = move "box_ref.get(): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_13: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_14: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_15: result;
+            });
         }
     }
     let box_str: Box<String> = move Box<String> { value: "hello" };
     let box_str_ref: &Box<String> = &box_str;
-    let inner: String = move "Box<String>::get"(box_str_ref);
+    let inner: String = __inline_Box_String___get_16: {
+        break __inline_Box_String___get_16: box_str_ref.value;
+    };
     __assert_4: {
         let __v0: i32 = "String::len"(&inner);
         let __cond: bool = (__v0 == 5);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: inner.len() == 5\n", move "inner.len(): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_19: {
+                let a: String = __inline_string_concat_18: {
+                    let a: String = __inline_string_concat_17: {
+                        let a: String = move "Assertion failed:\ncondition: inner.len() == 5\n";
+                        let b: String = move "inner.len(): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_17: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_18: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_19: result;
+            });
         }
     }
     let s: String = move "hello";
@@ -73,41 +315,229 @@ fn run() with Stdout {
         let __v0: i32 = "String::len"(s_ref);
         let __cond: bool = (__v0 == 5);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: s_ref.len() == 5\n", move "s_ref.len(): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_22: {
+                let a: String = __inline_string_concat_21: {
+                    let a: String = __inline_string_concat_20: {
+                        let a: String = move "Assertion failed:\ncondition: s_ref.len() == 5\n";
+                        let b: String = move "s_ref.len(): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_20: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_21: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_22: result;
+            });
         }
     }
     __assert_6: {
         let __v0: i32 = "String::get"(s_ref, 0);
         let __cond: bool = (__v0 == 'h' as i32);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: s_ref.get(0) == 'h' as Named(NamedType { name: \"i32\", span: Span { start: 1204, end: 1207, line: 56, column: 35, end_line: 56 } })\n", move "s_ref.get(0): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_25: {
+                let a: String = __inline_string_concat_24: {
+                    let a: String = __inline_string_concat_23: {
+                        let a: String = move "Assertion failed:\ncondition: s_ref.get(0) == 'h' as Named(NamedType { name: \"i32\", span: Span { start: 1204, end: 1207, line: 56, column: 35, end_line: 56 } })\n";
+                        let b: String = move "s_ref.get(0): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_23: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_24: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_25: result;
+            });
         }
     }
     let mut p2: Point = move Point { x: 5, y: 10 };
     let p2_mut_ref: &mut Point = &mut p2;
     __assert_7: {
-        let __v0: i32 = "Point::sum"(p2_mut_ref);
+        let __v0: i32 = __inline_Point__sum_26: {
+            break __inline_Point__sum_26: (p2_mut_ref.x + p2_mut_ref.y);
+        };
         let __cond: bool = (__v0 == 15);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p2_mut_ref.sum() == 15\n", move "p2_mut_ref.sum(): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_29: {
+                let a: String = __inline_string_concat_28: {
+                    let a: String = __inline_string_concat_27: {
+                        let a: String = move "Assertion failed:\ncondition: p2_mut_ref.sum() == 15\n";
+                        let b: String = move "p2_mut_ref.sum(): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_27: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_28: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_29: result;
+            });
         }
     }
     let p_ref3: &&&Point = &p_ref2;
     __assert_8: {
-        let __v0: i32 = "Point::sum"(p_ref3);
+        let __v0: i32 = __inline_Point__sum_30: {
+            break __inline_Point__sum_30: (p_ref3.x + p_ref3.y);
+        };
         let __cond: bool = (__v0 == 30);
         if !__cond {
-            core::prelude::panic(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "Assertion failed:\ncondition: p_ref3.sum() == 30\n", move "p_ref3.sum(): "), move "i32::to_string"(__v0)), move "\n"));
+            core::prelude::panic(__inline_string_concat_33: {
+                let a: String = __inline_string_concat_32: {
+                    let a: String = __inline_string_concat_31: {
+                        let a: String = move "Assertion failed:\ncondition: p_ref3.sum() == 30\n";
+                        let b: String = move "p_ref3.sum(): ";
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_31: result;
+                    };
+                    let b: String = move "i32::to_string"(__v0);
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_32: result;
+                };
+                let b: String = move "\n";
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_33: result;
+            });
         }
     }
     core::cli::println(move "all auto-deref tests passed");
-}
-
-fn "Box<String>::get"(self: &Box<String>) -> String {
-    return self.value;
-}
-
-fn "Box<i32>::get"(self: &Box<i32>) -> i32 {
-    return self.value;
 }
 

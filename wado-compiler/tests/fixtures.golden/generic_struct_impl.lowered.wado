@@ -8,11 +8,9 @@ struct "Box<i32>" {
 
 fn run() with Stdout {
     let b: Box<i32> = move Box<i32> { value: 42 };
-    let v: i32 = "Box<i32>::get"(&b);
+    let v: i32 = __inline_Box_i32___get_0: {
+        break __inline_Box_i32___get_0: b.value;
+    };
     core::cli::println(move "i32::to_string"(v));
-}
-
-fn "Box<i32>::get"(self: &Box<i32>) -> i32 {
-    return self.value;
 }
 

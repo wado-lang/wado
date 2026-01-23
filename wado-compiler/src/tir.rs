@@ -549,6 +549,77 @@ impl TypeTable {
         }
     }
 
+    /// Check if a type has nested generic types.
+    /// Returns true if the type is parameterized and any of its type arguments
+    /// is also a parameterized type (e.g., `Option<BTreeNode<K,V>>`).
+    ///
+    /// TODO: This is used to detect types that may have monomorphization issues during inlining.
+    /// Currently we skip inlining functions with such types. In the future, we should fix
+    /// the underlying type normalization issues to allow inlining these functions.
+    pub fn has_nested_generics(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            // For Ref/MutRef, just check if the inner type has nested generics
+            // (references themselves don't add nesting)
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.has_nested_generics(*inner)
+            }
+            // For Option, Stream, Future, etc., the inner type is a type argument
+            // Check if that type argument is itself generic (i.e., nested)
+            ResolvedType::Option(inner)
+            | ResolvedType::Stream(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Reactive(inner)
+            | ResolvedType::BuiltinArray(inner) => self.is_generic_type(*inner),
+            // For Result, check both type args
+            ResolvedType::Result { ok, err } => {
+                self.is_generic_type(*ok) || self.is_generic_type(*err)
+            }
+            // For Tuple, check all elements
+            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.is_generic_type(*e)),
+            // For GenericInstance, check if any type argument is itself generic
+            ResolvedType::GenericInstance { type_args, .. } => {
+                type_args.iter().any(|t| self.is_generic_type(*t))
+            }
+            // For Function types, check params and return type
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.is_generic_type(*p))
+                    || self.is_generic_type(*return_type)
+            }
+            // Non-parameterized types don't have nested generics
+            _ => false,
+        }
+    }
+
+    /// Check if a type is a generic/parameterized type (has type arguments).
+    /// This includes `GenericInstance`, Option, Result, Tuple with generics, etc.
+    /// Also includes monomorphized structs (whose names contain type parameters).
+    fn is_generic_type(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::GenericInstance { .. }
+            | ResolvedType::Option(_)
+            | ResolvedType::Result { .. }
+            | ResolvedType::Stream(_)
+            | ResolvedType::Future(_)
+            | ResolvedType::BuiltinArray(_) => true,
+            // TODO: Monomorphized structs have their type args baked into the name (e.g., "BTreeNode<String,i32>")
+            // These are effectively generic types that were instantiated with concrete type arguments.
+            // This string check should be replaced with proper type metadata once we track
+            // whether a struct is a monomorphized generic.
+            ResolvedType::Struct { name, .. } => name.contains('<'),
+            // References are generic if inner is generic
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.is_generic_type(*inner),
+            // Tuples are generic if they contain generic types
+            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.is_generic_type(*e)),
+            // Reactive wrapping a generic type
+            ResolvedType::Reactive(inner) => self.is_generic_type(*inner),
+            _ => false,
+        }
+    }
+
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
         match self.get(id) {
@@ -931,6 +1002,15 @@ pub enum TirExprKind {
     Move {
         value: Box<TirExpr>,
     },
+
+    /// Labeled block expression: `label: { ... }` that produces a value
+    /// The value must be returned via `break label: expr;`
+    LabeledBlock {
+        label: String,
+        block: TirBlock,
+        /// The type of value this block produces (from break expressions)
+        result_type: TypeId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1072,6 +1152,8 @@ pub enum TirStmtKind {
     },
     /// C-style for loop: continue executes update, break exits loop
     For {
+        /// Init statements (e.g., `let mut i = 0`)
+        init: Vec<TirStmt>,
         condition: Option<TirExpr>,
         body: TirBlock,
         update: Option<TirExpr>,
@@ -1093,7 +1175,13 @@ pub enum TirStmtKind {
         iterable_type: TypeId,
         body: TirBlock,
     },
-    Break,
+    /// Break statement: `break;`, `break label;`, or `break label: expr;`
+    Break {
+        /// Optional label to break to (for labeled blocks)
+        label: Option<String>,
+        /// Optional value to return from the labeled block
+        value: Option<TirExpr>,
+    },
     Continue,
     /// Labeled block: `LABEL: { ... }` - creates a new scope with local bindings
     LabeledBlock {
@@ -1158,6 +1246,9 @@ pub struct TirFunction {
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: std::collections::HashSet<u32>,
+    /// Types that need value copy operations in this function.
+    /// Populated by the optimizer after all transformations.
+    pub needed_copy_types: std::collections::HashSet<TypeId>,
 }
 
 impl TirFunction {

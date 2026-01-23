@@ -12,46 +12,115 @@ struct "Container<i32>" {
 
 fn run() with Stdout {
     let c: Container<i32> = move "Container<i32>::new"(42);
-    core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"("Container<i32>::get"(&c))));
-    let result: i32 = "Container<i32>::transform<i32>"(&c, 100);
-    core::cli::println(move core::internal::string_concat(move "transform: ", move "i32::to_string"(result)));
-    let combined_same: i32 = "Container<i32>::combine<i32,i32>"(&c, 200, 300);
-    core::cli::println(move core::internal::string_concat(move "combine same: ", move "i32::to_string"(combined_same)));
-    let combined_mixed: i32 = "Container<i32>::combine<i32,i64>"(&c, 400, 500 as i64);
-    core::cli::println(move core::internal::string_concat(move "combine mixed: ", move "i32::to_string"(combined_mixed)));
+    core::cli::println(__inline_string_concat_1: {
+        let a: String = move "value: ";
+        let b: String = move "i32::to_string"(__inline_Container_i32___get_0: {
+            break __inline_Container_i32___get_0: c.value;
+        });
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_1: result;
+    });
+    let result: i32 = __inline_Container_i32___transform_i32__2: {
+        let _: i32 = c.value;
+        break __inline_Container_i32___transform_i32__2: 100;
+    };
+    core::cli::println(__inline_string_concat_3: {
+        let a: String = move "transform: ";
+        let b: String = move "i32::to_string"(result);
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_3: result;
+    });
+    let combined_same: i32 = __inline_Container_i32___combine_i32_i32__4: {
+        let _v: i32 = c.value;
+        break __inline_Container_i32___combine_i32_i32__4: 200;
+    };
+    core::cli::println(__inline_string_concat_5: {
+        let a: String = move "combine same: ";
+        let b: String = move "i32::to_string"(combined_same);
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_5: result;
+    });
+    let combined_mixed: i32 = __inline_Container_i32___combine_i32_i64__6: {
+        let v: i64 = 500 as i64;
+        let _v: i32 = c.value;
+        break __inline_Container_i32___combine_i32_i64__6: 400;
+    };
+    core::cli::println(__inline_string_concat_7: {
+        let a: String = move "combine mixed: ";
+        let b: String = move "i32::to_string"(combined_mixed);
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_7: result;
+    });
     let c2: Container<i64> = move "Container<i64>::new"(1000 as i64);
-    let result2: i32 = "Container<i64>::transform<i32>"(&c2, 99);
-    core::cli::println(move core::internal::string_concat(move "c2 transform: ", move "i32::to_string"(result2)));
-}
-
-pub fn "Container<i64>::transform<i32>"(self: &Container<i64>, f_result: i32) -> i32 {
-    let _: i64 = self.value;
-    return f_result;
+    let result2: i32 = __inline_Container_i64___transform_i32__8: {
+        let _: i64 = c2.value;
+        break __inline_Container_i64___transform_i32__8: 99;
+    };
+    core::cli::println(__inline_string_concat_9: {
+        let a: String = move "c2 transform: ";
+        let b: String = move "i32::to_string"(result2);
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_9: result;
+    });
 }
 
 pub fn "Container<i64>::new"(value: i64) -> Container<i64> {
     return Container<i64> { value: value };
-}
-
-pub fn "Container<i32>::combine<i32,i64>"(self: &Container<i32>, u: i32, v: i64) -> i32 {
-    let _v: i32 = self.value;
-    let _w: i64 = v;
-    return u;
-}
-
-pub fn "Container<i32>::combine<i32,i32>"(self: &Container<i32>, u: i32, v: i32) -> i32 {
-    let _v: i32 = self.value;
-    let _w: i32 = v;
-    return u;
-}
-
-pub fn "Container<i32>::transform<i32>"(self: &Container<i32>, f_result: i32) -> i32 {
-    let _: i32 = self.value;
-    return f_result;
-}
-
-pub fn "Container<i32>::get"(self: &Container<i32>) -> i32 {
-    return self.value;
 }
 
 pub fn "Container<i32>::new"(value: i32) -> Container<i32> {

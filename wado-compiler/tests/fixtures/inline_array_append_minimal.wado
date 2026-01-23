@@ -1,0 +1,18 @@
+// Minimal test for Array::append inlining issue
+// This test should trigger the "unknown local" error when Array::append is inlined
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let mut arr: Array<i32> = [];
+
+    // Simple loop with append - this might trigger the issue
+    for let mut i = 0; i < 3; i += 1 {
+        arr.append(i);
+    }
+
+    println(`len={arr.len()}`);
+}
+
+__DATA__
+{"stdout": "len=3\n"}

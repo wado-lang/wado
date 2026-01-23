@@ -6,14 +6,28 @@ struct MyContainer {
     data: i32,
 }
 
-fn "MyContainer^Index::index"(self: &MyContainer, _index: i32) -> &i32 {
-    return &self.data;
-}
-
 fn run() with Stdout {
     let container: MyContainer = move MyContainer { data: 42 };
-    let val_ref: &i32 = "MyContainer^Index::index"(&container, 0);
+    let val_ref: &i32 = __inline_MyContainer_Index__index_0: {
+        break __inline_MyContainer_Index__index_0: &container.data;
+    };
     let val: i32 = *val_ref;
-    core::cli::println(move core::internal::string_concat(move "Value: ", move "i32::to_string"(val)));
+    core::cli::println(__inline_string_concat_1: {
+        let a: String = move "Value: ";
+        let b: String = move "i32::to_string"(val);
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_1: result;
+    });
 }
 

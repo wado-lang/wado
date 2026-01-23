@@ -1,0 +1,46 @@
+// Test for array indexing inside struct methods
+// This mimics the treemap method pattern
+
+use { println, Stdout } from "core:cli";
+
+struct Container<K, V> {
+    keys: Array<K>,
+    values: Array<V>,
+    deleted: Array<bool>,
+}
+
+impl Container<K, V> {
+    fn find_key_index(&self, key: &K) -> i32 {
+        let mut i = 0;
+        while i < self.keys.len() && self.keys[i] < *key {
+            i += 1;
+        }
+        return i;
+    }
+
+    fn is_full(&self, max_keys: i32) -> bool {
+        let mut count = 0;
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                count += 1;
+            }
+        }
+        return count >= max_keys;
+    }
+}
+
+fn run() with Stdout {
+    let c: Container<String, i32> = Container {
+        keys: ["apple", "banana", "cherry"],
+        values: [10, 20, 30],
+        deleted: [false, true, false],
+    };
+
+    let idx = c.find_key_index(&"cherry");
+    let full = c.is_full(5);
+
+    println(`index: {idx}, full: {full}`);
+}
+
+__DATA__
+{"stdout": "index: 2, full: false\n"}

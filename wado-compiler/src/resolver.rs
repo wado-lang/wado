@@ -196,6 +196,15 @@ struct MethodInfo {
     self_kind: ast::SelfKind,
 }
 
+/// Labeled block expression target for tracking break types
+#[derive(Debug, Clone)]
+struct LabeledBlockTarget {
+    /// The label name
+    label: String,
+    /// Types collected from `break label: expr;` statements
+    break_types: Vec<TypeId>,
+}
+
 /// Function context during resolution with scope tracking
 struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
@@ -215,6 +224,8 @@ struct FunctionContext {
     /// Captured variables detected during resolution (name -> capture index)
     /// Only used for closure contexts
     captured_vars: HashMap<String, u32>,
+    /// Stack of labeled block expression targets for tracking break types
+    labeled_block_targets: Vec<LabeledBlockTarget>,
 }
 
 impl FunctionContext {
@@ -227,6 +238,7 @@ impl FunctionContext {
             address_taken_locals: HashSet::new(),
             outer_locals: HashMap::new(),
             captured_vars: HashMap::new(),
+            labeled_block_targets: Vec::new(),
         }
     }
 
@@ -248,6 +260,7 @@ impl FunctionContext {
             address_taken_locals: HashSet::new(),
             outer_locals,
             captured_vars: HashMap::new(),
+            labeled_block_targets: Vec::new(),
         }
     }
 
@@ -1418,6 +1431,7 @@ impl<'a> Resolver<'a> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
+            needed_copy_types: std::collections::HashSet::new(),
         })
     }
 
@@ -1570,6 +1584,7 @@ impl<'a> Resolver<'a> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
+            needed_copy_types: std::collections::HashSet::new(),
         })
     }
 
@@ -1607,7 +1622,7 @@ impl<'a> Resolver<'a> {
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
             Stmt::ForOf(for_of_stmt) => vec![self.resolve_for_of(for_of_stmt, ctx)],
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
-            Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt)],
+            Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
             Stmt::Assert(_) => {
                 // Assert statements are desugared in the desugar phase before resolution
@@ -2007,19 +2022,19 @@ impl<'a> Resolver<'a> {
         TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
     }
 
-    /// Resolve a for statement - generates init + For node wrapped in a scope
+    /// Resolve a for statement - generates a For node with init statements included
     /// The For node handles continue correctly (executes update before next iteration)
     /// The init variable is scoped to the for loop and not visible after it
     fn resolve_for(&mut self, for_stmt: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         // Enter scope for the for loop's init variable
         ctx.enter_scope();
 
-        let mut result = Vec::new();
-
-        // Add init statement if present (e.g., let i = 0)
-        if let Some(init_stmt) = &for_stmt.init {
-            result.extend(self.resolve_stmt(init_stmt, ctx));
-        }
+        // Resolve init statement if present (e.g., let i = 0)
+        let init = if let Some(init_stmt) = &for_stmt.init {
+            self.resolve_stmt(init_stmt, ctx)
+        } else {
+            Vec::new()
+        };
 
         // Resolve the body (note: resolve_block enters its own scope for body variables)
         let body = self.resolve_block(&for_stmt.body, ctx);
@@ -2033,21 +2048,21 @@ impl<'a> Resolver<'a> {
         // Resolve update expression
         let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
 
-        // Create For statement
+        // Create For statement with init included
         let for_tir = TirStmt::new(
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             },
             for_stmt.span,
         );
-        result.push(for_tir);
 
         // Exit the for loop's scope
         ctx.exit_scope();
 
-        result
+        vec![for_tir]
     }
 
     /// Resolve a for-of statement: `for let item of array { ... }`
@@ -2105,8 +2120,27 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a break statement
-    fn resolve_break(&mut self, break_stmt: &BreakStmt) -> TirStmt {
-        TirStmt::new(TirStmtKind::Break, break_stmt.span)
+    fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) -> TirStmt {
+        let value = break_stmt.value.as_ref().map(|v| self.resolve_expr(v, ctx));
+
+        // If breaking with a value to a labeled block expression, record the type
+        if let (Some(label), Some(val)) = (&break_stmt.label, &value) {
+            // Find the labeled block target with this label
+            for target in &mut ctx.labeled_block_targets {
+                if &target.label == label {
+                    target.break_types.push(val.type_id);
+                    break;
+                }
+            }
+        }
+
+        TirStmt::new(
+            TirStmtKind::Break {
+                label: break_stmt.label.clone(),
+                value,
+            },
+            break_stmt.span,
+        )
     }
 
     /// Resolve a continue statement
@@ -2151,6 +2185,41 @@ impl<'a> Resolver<'a> {
             Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
             Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
             Expr::TupleLiteral(tuple_lit) => self.resolve_tuple_literal(tuple_lit, ctx),
+            Expr::LabeledBlock(lb) => {
+                // Labeled block expression: type is determined by `break label: expr;` statements
+                // Push a target to track break types
+                ctx.labeled_block_targets.push(LabeledBlockTarget {
+                    label: lb.label.clone(),
+                    break_types: Vec::new(),
+                });
+
+                ctx.enter_scope();
+                let tir_block = self.resolve_block(&lb.block, ctx);
+                ctx.exit_scope();
+
+                // Pop the target and determine the result type from break statements
+                let target = ctx.labeled_block_targets.pop().unwrap();
+
+                // The result type is determined by the break expressions
+                // All break values must have the same type (or be unifiable)
+                let result_type = if target.break_types.is_empty() {
+                    // No break with value - block produces Unit
+                    TypeTable::UNIT
+                } else {
+                    // Use the first break type (TODO: type unification for multiple breaks)
+                    target.break_types[0]
+                };
+
+                TirExpr::new(
+                    TirExprKind::LabeledBlock {
+                        label: lb.label.clone(),
+                        block: tir_block,
+                        result_type,
+                    },
+                    result_type,
+                    lb.span,
+                )
+            }
         }
     }
 

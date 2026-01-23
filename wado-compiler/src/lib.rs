@@ -84,6 +84,7 @@ pub mod lower;
 pub mod module_loader;
 pub mod name;
 pub mod optimize;
+pub mod optimize_inline;
 pub mod parser;
 pub mod project;
 pub mod resolver;

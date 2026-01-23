@@ -1,0 +1,18 @@
+// Test nested labeled block expressions with break values
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let result = outer: {
+        let x = inner: {
+            break inner: 10;
+        };
+        // x is 10, now break outer with x * 2
+        break outer: x * 2;
+    };
+    assert result == 20;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

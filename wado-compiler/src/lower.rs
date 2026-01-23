@@ -537,10 +537,14 @@ impl Monomorphizer {
                 self.rewrite_types_in_block(body, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.rewrite_types_in_stmt(s, type_table);
+                }
                 if let Some(cond) = condition {
                     self.rewrite_types_in_expr(cond, type_table);
                 }
@@ -556,7 +560,7 @@ impl Monomorphizer {
                 self.rewrite_types_in_expr(iterable, type_table);
                 self.rewrite_types_in_block(body, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
             }
@@ -733,6 +737,9 @@ impl Monomorphizer {
                 for arg in args {
                     self.rewrite_types_in_expr(arg, type_table);
                 }
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.rewrite_types_in_block(block, type_table);
             }
         }
     }
@@ -1207,10 +1214,14 @@ impl Monomorphizer {
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.collect_func_instantiation_sites_in_stmt(s, generic_functions, type_table);
+                }
                 if let Some(cond) = condition {
                     self.collect_func_instantiation_sites_in_expr(
                         cond,
@@ -1238,7 +1249,7 @@ impl Monomorphizer {
                 );
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_func_instantiation_sites_in_block(
                     block,
@@ -1722,6 +1733,13 @@ impl Monomorphizer {
             TirExprKind::Move { value } => {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.collect_func_instantiation_sites_in_block(
+                    block,
+                    generic_functions,
+                    type_table,
+                );
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1979,6 +1997,7 @@ impl Monomorphizer {
             local_count: generic.local_count,
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
+            needed_copy_types: std::collections::HashSet::new(),
         })
     }
 
@@ -2029,10 +2048,14 @@ impl Monomorphizer {
                 self.substitute_types_in_block(body, substitution, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.substitute_types_in_stmt(s, substitution, type_table);
+                }
                 if let Some(cond) = condition {
                     self.substitute_types_in_expr(cond, substitution, type_table);
                 }
@@ -2054,7 +2077,7 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(iterable, substitution, type_table);
                 self.substitute_types_in_block(body, substitution, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
@@ -2415,6 +2438,9 @@ impl Monomorphizer {
             TirExprKind::Move { value } => {
                 self.substitute_types_in_expr(value, substitution, type_table);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.substitute_types_in_block(block, substitution, type_table);
+            }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2514,10 +2540,14 @@ impl Monomorphizer {
                 Self::update_local_expr_types(body, local_types);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    Self::update_local_expr_types_in_stmt(s, local_types);
+                }
                 if let Some(expr) = condition {
                     Self::update_local_expr_types_in_expr(expr, local_types);
                 }
@@ -2659,10 +2689,14 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_block(body, type_table);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.rewrite_function_calls_in_stmt(s, type_table);
+                }
                 if let Some(cond) = condition {
                     self.rewrite_function_calls_in_expr(cond, type_table);
                 }
@@ -2678,7 +2712,7 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(iterable, type_table);
                 self.rewrite_function_calls_in_block(body, type_table);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }
@@ -2950,6 +2984,9 @@ impl Monomorphizer {
             TirExprKind::Move { value } => {
                 self.rewrite_function_calls_in_expr(value, type_table);
             }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.rewrite_function_calls_in_block(block, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -3169,10 +3206,14 @@ impl StringCollector {
                 self.collect_block(body);
             }
             TirStmtKind::For {
+                init,
                 condition,
                 body,
                 update,
             } => {
+                for s in init {
+                    self.collect_stmt(s);
+                }
                 if let Some(cond) = condition {
                     self.collect_expr(cond);
                 }
@@ -3188,7 +3229,7 @@ impl StringCollector {
                 self.collect_expr(iterable);
                 self.collect_block(body);
             }
-            TirStmtKind::Break | TirStmtKind::Continue => {}
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);
             }
@@ -3298,6 +3339,9 @@ impl StringCollector {
             }
             TirExprKind::Move { value } => {
                 self.collect_expr(value);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.collect_block(block);
             }
             // Literals and simple expressions don't contain strings
             TirExprKind::IntLiteral { .. }

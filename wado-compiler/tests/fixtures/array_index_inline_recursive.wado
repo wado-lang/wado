@@ -1,0 +1,50 @@
+// Test for array indexing with recursive struct references
+// This mimics the treemap children pattern
+
+use { println, Stdout } from "core:cli";
+
+struct Node<K> {
+    keys: Array<K>,
+    children: Array<&mut Node<K>>,
+    is_leaf: bool,
+}
+
+impl Node<K> {
+    fn traverse(&self, depth: i32) {
+        // Print depth
+        println(`depth: {depth}`);
+
+        // Access children if not a leaf
+        if !self.is_leaf {
+            for let mut i = 0; i < self.children.len(); i += 1 {
+                self.children[i].traverse(depth + 1);
+            }
+        }
+    }
+}
+
+fn run() with Stdout {
+    // Create leaf nodes
+    let mut leaf1: Node<String> = Node {
+        keys: ["a", "b"],
+        children: [],
+        is_leaf: true,
+    };
+    let mut leaf2: Node<String> = Node {
+        keys: ["d", "e"],
+        children: [],
+        is_leaf: true,
+    };
+
+    // Create root node with children
+    let root: Node<String> = Node {
+        keys: ["c"],
+        children: [&mut leaf1, &mut leaf2],
+        is_leaf: false,
+    };
+
+    root.traverse(0);
+}
+
+__DATA__
+{"TODO": true, "stdout": "depth: 0\ndepth: 1\ndepth: 1\n"}

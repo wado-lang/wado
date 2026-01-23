@@ -4,23 +4,135 @@
 
 fn run() with Stdout {
     let mut arr: Array<i32> = move [0, 0, 0, 0];
-    "Array<i32>^IndexAssign::index_assign"(&mut arr, 0, (10 + (20 * 3)));
-    "Array<i32>^IndexAssign::index_assign"(&mut arr, 1, compute(5));
+    __inline_Array_i32__IndexAssign__index_assign_0: {
+        let value: i32 = (10 + (20 * 3));
+        core::builtin::array_set::<i32>(arr.repr, 0, value);
+    };
+    __inline_Array_i32__IndexAssign__index_assign_1: {
+        let value: i32 = __inline_compute_2: {
+            break __inline_compute_2: (5 * 5);
+        };
+        core::builtin::array_set::<i32>(arr.repr, 1, value);
+    };
     let other: Array<i32> = move [100];
-    "Array<i32>^IndexAssign::index_assign"(&mut arr, 2, ("Array<i32>^IndexValue::index_value"(&other, 0) + 50));
-    "Array<i32>^IndexAssign::index_assign"(&mut arr, 3, (("Array<i32>^IndexValue::index_value"(&arr, 0) + "Array<i32>^IndexValue::index_value"(&arr, 1)) / 2));
-    core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 0)), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 1))), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 2))), move " "), move "i32::to_string"("Array<i32>^IndexValue::index_value"(&arr, 3))));
-}
-
-fn compute(x: i32) -> i32 {
-    return (x * x);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    return core::builtin::array_get::<i32>(self.repr, index);
-}
-
-fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
-    core::builtin::array_set::<i32>(self.repr, index, value);
+    __inline_Array_i32__IndexAssign__index_assign_3: {
+        let value: i32 = (__inline_Array_i32__IndexValue__index_value_4: {
+            break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(other.repr, 0);
+        } + 50);
+        core::builtin::array_set::<i32>(arr.repr, 2, value);
+    };
+    __inline_Array_i32__IndexAssign__index_assign_5: {
+        let value: i32 = ((__inline_Array_i32__IndexValue__index_value_6: {
+            break __inline_Array_i32__IndexValue__index_value_6: core::builtin::array_get::<i32>(arr.repr, 0);
+        } + __inline_Array_i32__IndexValue__index_value_7: {
+            break __inline_Array_i32__IndexValue__index_value_7: core::builtin::array_get::<i32>(arr.repr, 1);
+        }) / 2);
+        core::builtin::array_set::<i32>(arr.repr, 3, value);
+    };
+    core::cli::println(__inline_string_concat_17: {
+        let a: String = __inline_string_concat_15: {
+            let a: String = __inline_string_concat_14: {
+                let a: String = __inline_string_concat_12: {
+                    let a: String = __inline_string_concat_11: {
+                        let a: String = __inline_string_concat_9: {
+                            let a: String = move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_8: {
+                                break __inline_Array_i32__IndexValue__index_value_8: core::builtin::array_get::<i32>(arr.repr, 0);
+                            });
+                            let b: String = move " ";
+                            let len_a: i32 = "String::len"(&a);
+                            let len_b: i32 = "String::len"(&b);
+                            let total: i32 = (len_a + len_b);
+                            let result: String = move core::builtin::string_new(total);
+                            for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                                let byte: i32 = "String::get"(&a, i);
+                                "String::set"(&mut result, i, byte);
+                            }
+                            for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                                let byte: i32 = "String::get"(&b, i);
+                                "String::set"(&mut result, (len_a + i), byte);
+                            }
+                            break __inline_string_concat_9: result;
+                        };
+                        let b: String = move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_10: {
+                            break __inline_Array_i32__IndexValue__index_value_10: core::builtin::array_get::<i32>(arr.repr, 1);
+                        });
+                        let len_a: i32 = "String::len"(&a);
+                        let len_b: i32 = "String::len"(&b);
+                        let total: i32 = (len_a + len_b);
+                        let result: String = move core::builtin::string_new(total);
+                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                            let byte: i32 = "String::get"(&a, i);
+                            "String::set"(&mut result, i, byte);
+                        }
+                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                            let byte: i32 = "String::get"(&b, i);
+                            "String::set"(&mut result, (len_a + i), byte);
+                        }
+                        break __inline_string_concat_11: result;
+                    };
+                    let b: String = move " ";
+                    let len_a: i32 = "String::len"(&a);
+                    let len_b: i32 = "String::len"(&b);
+                    let total: i32 = (len_a + len_b);
+                    let result: String = move core::builtin::string_new(total);
+                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                        let byte: i32 = "String::get"(&a, i);
+                        "String::set"(&mut result, i, byte);
+                    }
+                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                        let byte: i32 = "String::get"(&b, i);
+                        "String::set"(&mut result, (len_a + i), byte);
+                    }
+                    break __inline_string_concat_12: result;
+                };
+                let b: String = move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_13: {
+                    break __inline_Array_i32__IndexValue__index_value_13: core::builtin::array_get::<i32>(arr.repr, 2);
+                });
+                let len_a: i32 = "String::len"(&a);
+                let len_b: i32 = "String::len"(&b);
+                let total: i32 = (len_a + len_b);
+                let result: String = move core::builtin::string_new(total);
+                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                    let byte: i32 = "String::get"(&a, i);
+                    "String::set"(&mut result, i, byte);
+                }
+                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                    let byte: i32 = "String::get"(&b, i);
+                    "String::set"(&mut result, (len_a + i), byte);
+                }
+                break __inline_string_concat_14: result;
+            };
+            let b: String = move " ";
+            let len_a: i32 = "String::len"(&a);
+            let len_b: i32 = "String::len"(&b);
+            let total: i32 = (len_a + len_b);
+            let result: String = move core::builtin::string_new(total);
+            for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+                let byte: i32 = "String::get"(&a, i);
+                "String::set"(&mut result, i, byte);
+            }
+            for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+                let byte: i32 = "String::get"(&b, i);
+                "String::set"(&mut result, (len_a + i), byte);
+            }
+            break __inline_string_concat_15: result;
+        };
+        let b: String = move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_16: {
+            break __inline_Array_i32__IndexValue__index_value_16: core::builtin::array_get::<i32>(arr.repr, 3);
+        });
+        let len_a: i32 = "String::len"(&a);
+        let len_b: i32 = "String::len"(&b);
+        let total: i32 = (len_a + len_b);
+        let result: String = move core::builtin::string_new(total);
+        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
+            let byte: i32 = "String::get"(&a, i);
+            "String::set"(&mut result, i, byte);
+        }
+        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
+            let byte: i32 = "String::get"(&b, i);
+            "String::set"(&mut result, (len_a + i), byte);
+        }
+        break __inline_string_concat_17: result;
+    });
 }
 

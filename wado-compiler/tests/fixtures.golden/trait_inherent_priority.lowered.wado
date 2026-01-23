@@ -6,12 +6,10 @@ struct Robot {
     id: i32,
 }
 
-fn "Robot::greet"(self: &Robot) -> String {
-    return core::internal::string_concat(move "Beep boop, I am Robot #", move "i32::to_string"(self.id));
-}
-
 fn run() with Stdout {
     let r: Robot = move Robot { id: 42 };
-    core::cli::println(move "Robot::greet"(&r));
+    core::cli::println(__inline_Robot__greet_0: {
+        break __inline_Robot__greet_0: core::internal::string_concat(move "Beep boop, I am Robot #", move "i32::to_string"(r.id));
+    });
 }
 
