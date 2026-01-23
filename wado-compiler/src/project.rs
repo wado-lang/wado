@@ -9,7 +9,7 @@
 //! 3. Codegen takes Project and generates Wasm
 
 use crate::name::{FunctionId, ModuleSource};
-use crate::optimize::{CanonBuiltin, WasiEffect};
+use crate::optimize::CanonBuiltin;
 use crate::symbol::SymbolTable;
 use crate::tir::{PrimitiveType, TirModule};
 use indexmap::IndexMap;
@@ -43,8 +43,6 @@ pub struct Project {
     pub reachable_functions: HashSet<FunctionId>,
     /// When true, all functions are considered reachable (DCE disabled)
     pub all_reachable: bool,
-    /// Set of used WASI effects
-    pub used_effects: HashSet<WasiEffect>,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: HashSet<String>,
     /// Set of used builtin functions
@@ -77,7 +75,6 @@ impl Project {
             // Usage analysis fields default to empty/false
             reachable_functions: HashSet::new(),
             all_reachable: false,
-            used_effects: HashSet::new(),
             used_wasi_functions: HashSet::new(),
             used_builtins: HashSet::new(),
             used_box_primitives: HashSet::new(),
@@ -102,5 +99,14 @@ impl Project {
     pub fn needs_float_to_string(&self) -> bool {
         self.used_builtins.contains(&CanonBuiltin::F64ToBuffer)
             || self.used_builtins.contains(&CanonBuiltin::F32ToBuffer)
+    }
+
+    /// Check if any function from the given WASI effect is used.
+    /// Effect names are like "Stdout", "Stderr", "Environment", etc.
+    pub fn has_effect(&self, effect_name: &str) -> bool {
+        let prefix = format!("{effect_name}::");
+        self.used_wasi_functions
+            .iter()
+            .any(|f| f.starts_with(&prefix))
     }
 }

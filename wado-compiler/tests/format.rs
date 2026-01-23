@@ -882,3 +882,89 @@ fn test_format_idempotent_all_fixtures() {
         );
     }
 }
+
+// ============================================================================
+// Labeled Block Tests - Break with Label and Value
+// ============================================================================
+
+#[test]
+fn test_format_break_with_label() {
+    let source = r#"fn run() {
+    outer: {
+        break outer;
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("break outer;"),
+        "break with label should be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_break_with_label_and_value() {
+    let source = r#"fn run() {
+    let x = foo: {
+        break foo: 42;
+    };
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("break foo: 42;"),
+        "break with label and value should be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_break_with_label_and_expression() {
+    let source = r#"fn run() {
+    let result = compute: {
+        let a = 10;
+        let b = 20;
+        break compute: a + b;
+    };
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("break compute: a + b;"),
+        "break with label and expression should be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_nested_labeled_blocks() {
+    let source = r#"fn run() {
+    let result = outer: {
+        let x = inner: {
+            break inner: 10;
+        };
+        break outer: x * 2;
+    };
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("break inner: 10;"),
+        "break inner with value should be preserved: {}",
+        formatted
+    );
+    assert!(
+        formatted.contains("break outer: x * 2;"),
+        "break outer with expression should be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}

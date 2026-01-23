@@ -14,6 +14,7 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
+use crate::component_model::WasiRegistry;
 use crate::name::{LocalMethodName, ModuleSource, strip_type_params};
 
 use crate::ast::{
@@ -412,6 +413,8 @@ pub struct Resolver<'a> {
     current_associated_type_bindings: HashMap<String, TypeId>,
     /// Current `Self` type in scope (the type being implemented in an impl block)
     current_self_type: Option<TypeId>,
+    /// WASI registry for looking up effect return types
+    wasi_registry: WasiRegistry,
 }
 
 /// Info about an Index trait implementation
@@ -465,6 +468,7 @@ struct ComparisonTraitInfo {
 impl<'a> Resolver<'a> {
     /// Create a new resolver
     pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
+        let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         Self {
             type_table: Rc::new(RefCell::new(TypeTable::new())),
             symbols,
@@ -483,6 +487,7 @@ impl<'a> Resolver<'a> {
             generic_method_params: HashMap::new(),
             current_associated_type_bindings: HashMap::new(),
             current_self_type: None,
+            wasi_registry,
         }
     }
 
@@ -805,6 +810,7 @@ impl<'a> Resolver<'a> {
                 }
             }
 
+            let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
             let mut resolver = Resolver {
                 type_table: Rc::clone(&type_table), // Share the same TypeTable via Rc::clone
                 symbols,
@@ -823,6 +829,7 @@ impl<'a> Resolver<'a> {
                 generic_method_params: HashMap::new(),
                 current_associated_type_bindings: HashMap::new(),
                 current_self_type: None,
+                wasi_registry,
             };
 
             // Use the provided entry_module_source for the entry module (empty path)
@@ -3096,28 +3103,70 @@ impl<'a> Resolver<'a> {
         TypeTable::UNIT
     }
 
-    /// Get the return type of a WASI effect operation
+    /// Get the return type of a WASI effect operation from the registry
     fn get_wasi_effect_return_type(&mut self, effect: &str, operation: &str) -> Option<TypeId> {
-        let string_type = self.get_string_struct_type();
-        match (effect, operation) {
-            // Environment effect operations
-            ("Environment", "get_arguments") => {
-                Some(self.type_table.borrow_mut().make_array(string_type))
-            }
-            ("Environment", "get_environment") => {
-                // Returns Array<[String, String]> - array of key-value tuple pairs
-                let tuple_type = self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Tuple(vec![string_type, string_type]));
-                Some(self.type_table.borrow_mut().make_array(tuple_type))
-            }
-            ("Environment", "get_initial_cwd") => Some(
+        // Look up the function in the WASI registry and clone the return type
+        // to avoid borrow checker issues
+        let func_key = format!("{effect}::{operation}");
+        let return_type = self
+            .wasi_registry
+            .get_function(&func_key)?
+            .return_type
+            .clone()?;
+
+        // Resolve the AST type to a TypeId
+        Some(self.resolve_wasi_type(&return_type))
+    }
+
+    /// Resolve a WASI AST type to a TypeId
+    fn resolve_wasi_type(&mut self, ty: &Type) -> TypeId {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "String" => self.get_string_struct_type(),
+                "i8" => TypeTable::I8,
+                "i16" => TypeTable::I16,
+                "i32" => TypeTable::I32,
+                "i64" => TypeTable::I64,
+                "u8" => TypeTable::U8,
+                "u16" => TypeTable::U16,
+                "u32" => TypeTable::U32,
+                "u64" => TypeTable::U64,
+                "f32" => TypeTable::F32,
+                "f64" => TypeTable::F64,
+                "bool" => TypeTable::BOOL,
+                // Type aliases from WASI (e.g., Instant, Duration)
+                _ => {
+                    // Clone to avoid borrow checker issues
+                    let aliased = self.wasi_registry.get_type_alias(&named.name).cloned();
+                    if let Some(aliased) = aliased {
+                        self.resolve_wasi_type(&aliased)
+                    } else {
+                        // Resource types are represented as i32 handles
+                        TypeTable::I32
+                    }
+                }
+            },
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Array" if generic.args.len() == 1 => {
+                    let elem_type = self.resolve_wasi_type(&generic.args[0]);
+                    self.type_table.borrow_mut().make_array(elem_type)
+                }
+                "Option" if generic.args.len() == 1 => {
+                    let inner_type = self.resolve_wasi_type(&generic.args[0]);
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Option(inner_type))
+                }
+                _ => TypeTable::UNIT,
+            },
+            Type::Tuple(types) => {
+                let resolved: Vec<TypeId> =
+                    types.iter().map(|t| self.resolve_wasi_type(t)).collect();
                 self.type_table
                     .borrow_mut()
-                    .intern(ResolvedType::Option(string_type)),
-            ),
-            _ => None,
+                    .intern(ResolvedType::Tuple(resolved))
+            }
+            _ => TypeTable::UNIT,
         }
     }
 

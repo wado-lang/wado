@@ -5,6 +5,7 @@
 //! - Usage analysis for conditional feature inclusion
 //! - Function inlining (via `optimize_inline` module)
 
+use crate::ast::Type;
 use crate::component_model::WasiRegistry;
 use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, MethodName, ModuleSource};
 use crate::optimize_inline::inline_functions;
@@ -15,49 +16,6 @@ use crate::tir::{
 };
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
-
-/// WASI effects that can be used in Wado programs
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum WasiEffect {
-    Stdout,
-    Stderr,
-    Environment,
-    MonotonicClock,
-    Exit,
-}
-
-impl WasiEffect {
-    /// Parse effect name from string
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "Stdout" => Some(Self::Stdout),
-            "Stderr" => Some(Self::Stderr),
-            "Environment" => Some(Self::Environment),
-            "MonotonicClock" => Some(Self::MonotonicClock),
-            "Exit" => Some(Self::Exit),
-            _ => None,
-        }
-    }
-
-    /// Get the effect name as a string (for WASI interface names)
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Stdout => "Stdout",
-            Self::Stderr => "Stderr",
-            Self::Environment => "Environment",
-            Self::MonotonicClock => "MonotonicClock",
-            Self::Exit => "Exit",
-        }
-    }
-
-    /// Standard effects (all except Exit which requires explicit usage)
-    pub const STANDARD: &'static [WasiEffect] = &[
-        WasiEffect::Stdout,
-        WasiEffect::Stderr,
-        WasiEffect::Environment,
-        WasiEffect::MonotonicClock,
-    ];
-}
 
 /// Canonical builtin functions imported from wasi or env namespace
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -217,7 +175,7 @@ struct FunctionAnalysis {
 /// Analyze the project and populate its usage fields with DCE analysis results.
 ///
 /// This performs dead code elimination analysis starting from the entry point
-/// and populates the project's `reachable_functions`, `used_effects`,
+/// and populates the project's `reachable_functions`, `used_wasi_functions`,
 /// `used_builtins`, etc. fields.
 fn analyze_project(project: &mut Project) {
     // Build call graph, effect usage, and box primitives from all modules
@@ -232,16 +190,12 @@ fn analyze_project(project: &mut Project) {
     // Compute reachable functions from entry point
     let mut reachable = compute_reachable(&call_graph, &entry_func);
 
-    // Collect used effects and box primitives from reachable functions
-    let mut used_effects: HashSet<WasiEffect> = HashSet::new();
+    // Collect used WASI functions and box primitives from reachable functions
     let mut used_wasi_functions: HashSet<String> = HashSet::new();
     let mut used_box_primitives: HashSet<PrimitiveType> = HashSet::new();
     for func_id in &reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
-                if let Some(effect) = WasiEffect::from_str(effect_name) {
-                    used_effects.insert(effect);
-                }
                 used_wasi_functions.insert(format!("{effect_name}::{op_name}"));
             }
         }
@@ -265,22 +219,58 @@ fn analyze_project(project: &mut Project) {
     let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
     let needs_f32_to_buffer = reachable.contains(&core_internal("f32_to_string"));
 
-    // Add cm_list_string_to_array and helper if Environment effect functions are used
-    // This conversion function is called from codegen, not Wado code
+    // Add CM converter functions based on WASI function return types
+    // These conversion functions are called from codegen, not Wado code
     // We need to compute transitive closure to include all functions they call
-    if used_wasi_functions.contains("Environment::get_arguments")
-        || used_wasi_functions.contains("Environment::get_environment")
-    {
+    let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
+    let mut needs_list_string_converter = false;
+    let mut needs_list_tuple_string_converter = false;
+    let mut needs_option_string_converter = false;
+
+    for func_name in &used_wasi_functions {
+        if let Some(func_info) = wasi_registry.get_function(func_name)
+            && let Some(return_type) = &func_info.return_type
+        {
+            match return_type {
+                // Array<String> -> cm_list_string_to_array
+                Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+                    if matches!(&g.args[0], Type::Named(n) if n.name == "String") {
+                        needs_list_string_converter = true;
+                    }
+                    // Array<[String, String]> -> cm_list_tuple_string_string_to_array
+                    if let Type::Tuple(tuple_types) = &g.args[0]
+                        && tuple_types.len() == 2
+                        && matches!(&tuple_types[0], Type::Named(n) if n.name == "String")
+                        && matches!(&tuple_types[1], Type::Named(n) if n.name == "String")
+                    {
+                        needs_list_tuple_string_converter = true;
+                    }
+                }
+                // Option<String> -> cm_option_string_to_option + copy_string_from_linear
+                Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+                    if matches!(&g.args[0], Type::Named(n) if n.name == "String") {
+                        needs_option_string_converter = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Add converter functions and their transitive dependencies
+    if needs_list_string_converter {
         let cm_list_func = core_internal("cm_list_string_to_array");
+        reachable.extend(compute_reachable(&call_graph, &cm_list_func));
+    }
+    if needs_list_tuple_string_converter {
+        let cm_list_func = core_internal("cm_list_tuple_string_string_to_array");
+        reachable.extend(compute_reachable(&call_graph, &cm_list_func));
+    }
+    if needs_option_string_converter {
+        let cm_option_func = core_internal("cm_option_string_to_option");
         let copy_string_func = core_internal("copy_string_from_linear");
-
-        // Compute reachable functions from these entry points
-        let cm_list_reachable = compute_reachable(&call_graph, &cm_list_func);
-        let copy_string_reachable = compute_reachable(&call_graph, &copy_string_func);
-
-        // Add all transitively reachable functions
-        reachable.extend(cm_list_reachable);
-        reachable.extend(copy_string_reachable);
+        reachable.extend(compute_reachable(&call_graph, &cm_option_func));
+        reachable.extend(compute_reachable(&call_graph, &copy_string_func));
     }
 
     // Note: array_copy_string is tracked via call graph analysis
@@ -331,19 +321,17 @@ fn analyze_project(project: &mut Project) {
         }
     });
 
-    // Also mark effects as used if indirect calls are present (for ambient logging)
+    // Also mark WASI functions as used if indirect calls are present (for ambient logging)
     if reachable
         .iter()
         .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stdout(f)))
     {
-        used_effects.insert(WasiEffect::Stdout);
         used_wasi_functions.insert("Stdout::write_via_stream".to_string());
     }
     if reachable
         .iter()
         .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stderr(f)))
     {
-        used_effects.insert(WasiEffect::Stderr);
         used_wasi_functions.insert("Stderr::write_via_stream".to_string());
     }
 
@@ -395,7 +383,7 @@ fn analyze_project(project: &mut Project) {
 
     // Effect usage requires TaskReturn for async entry point
     // But waitable-set builtins are only needed when effect_wait is actually called
-    if !used_effects.is_empty() || uses_stream_builtins {
+    if !used_wasi_functions.is_empty() || uses_stream_builtins {
         // TaskReturn is always needed for async exports
         used_builtins.insert(CanonBuiltin::TaskReturn);
 
@@ -412,7 +400,6 @@ fn analyze_project(project: &mut Project) {
     // Apply results to project
     project.reachable_functions = reachable.clone();
     project.all_reachable = false;
-    project.used_effects = used_effects;
     project.used_wasi_functions = used_wasi_functions;
     project.used_builtins = used_builtins;
     project.used_box_primitives = used_box_primitives;
@@ -474,12 +461,10 @@ fn populate_all_features(project: &mut Project) {
 
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;
-    // Standard effects (all except Exit which requires explicit usage)
-    project.used_effects = WasiEffect::STANDARD.iter().copied().collect();
     // Standard WASI functions from the stdlib registry
     let (wasi_registry, _world_registry) = WasiRegistry::build_from_stdlib();
     project.used_wasi_functions = wasi_registry
-        .all_function_names()
+        .standard_function_names()
         .map(std::string::ToString::to_string)
         .collect();
     // All importable builtins when DCE is disabled
@@ -740,6 +725,18 @@ fn analyze_expr(
                     analysis
                         .effect_calls
                         .insert((potential_effect.clone(), func_name.clone()));
+
+                    // Terminal effects return Option<i32> which needs box_i32 for Some case
+                    if (potential_effect == "TerminalStdin"
+                        || potential_effect == "TerminalStdout"
+                        || potential_effect == "TerminalStderr")
+                        && matches!(
+                            func_name.as_str(),
+                            "get_terminal_stdin" | "get_terminal_stdout" | "get_terminal_stderr"
+                        )
+                    {
+                        analysis.used_box_primitives.insert(PrimitiveType::I32);
+                    }
                 }
             }
 

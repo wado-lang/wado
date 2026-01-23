@@ -15,7 +15,7 @@ use crate::component_model::{
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
 };
-use crate::optimize::{CanonBuiltin, WasiEffect};
+use crate::optimize::CanonBuiltin;
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
@@ -205,6 +205,9 @@ struct FunctionContext {
     local_types: Vec<ValType>,
     /// Return type of the function (for `ref.as_non_null` handling)
     return_type: Option<ValType>,
+    /// When true, skip `ref.as_non_null` in local variable reads
+    /// Set when generating return expressions for functions with nullable return types
+    skip_ref_as_non_null: bool,
     /// Pending branch hint from `builtin::likely()` or `builtin::unlikely()`
     /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
     pending_branch_hint: Option<bool>,
@@ -251,6 +254,7 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
+            skip_ref_as_non_null: false,
             pending_branch_hint: None,
             branch_hints: Vec::new(),
             current_module_path: Vec::new(),
@@ -274,6 +278,7 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
+            skip_ref_as_non_null: false,
             pending_branch_hint: None,
             branch_hints: Vec::new(),
             current_module_path: module_path,
@@ -839,7 +844,7 @@ impl Codegen {
                 // Supported effects: Stdout, Stderr, MonotonicClock, Environment
                 // Exit is only supported if explicitly used (runtime may not support it)
                 if !tir_func.effects.is_empty() {
-                    let exit_available = project.used_effects.contains(&WasiEffect::Exit);
+                    let exit_available = project.has_effect("Exit");
                     let has_unsupported_effects = tir_func.effects.iter().any(|e| {
                         let effect_name = e.as_str();
                         // Exit effect requires explicit usage tracking
@@ -1978,6 +1983,121 @@ impl Codegen {
             );
         }
 
+        // Lower Random functions (if available)
+        // get_random_u64: sync func() -> u64
+        let random_u64_name = build_local_alias_name("random", "Random", "get_random_u64");
+        if ctx.has_comp_func(&random_u64_name) {
+            ctx.register_core_func(&random_u64_name);
+            builder.lower_func(
+                Some(&random_u64_name),
+                ctx.comp_func_idx(&random_u64_name),
+                [],
+            );
+        }
+
+        // get_random_bytes: sync func(len: u64) -> list<u8>, needs memory/realloc
+        let random_bytes_name = build_local_alias_name("random", "Random", "get_random_bytes");
+        if ctx.has_comp_func(&random_bytes_name) {
+            ctx.register_core_func(&random_bytes_name);
+            builder.lower_func(
+                Some(&random_bytes_name),
+                ctx.comp_func_idx(&random_bytes_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        // Lower Insecure functions (if available)
+        // get_insecure_random_u64: sync func() -> u64
+        let insecure_u64_name =
+            build_local_alias_name("random", "Insecure", "get_insecure_random_u64");
+        if ctx.has_comp_func(&insecure_u64_name) {
+            ctx.register_core_func(&insecure_u64_name);
+            builder.lower_func(
+                Some(&insecure_u64_name),
+                ctx.comp_func_idx(&insecure_u64_name),
+                [],
+            );
+        }
+
+        // get_insecure_random_bytes: sync func(len: u64) -> list<u8>, needs memory/realloc
+        let insecure_bytes_name =
+            build_local_alias_name("random", "Insecure", "get_insecure_random_bytes");
+        if ctx.has_comp_func(&insecure_bytes_name) {
+            ctx.register_core_func(&insecure_bytes_name);
+            builder.lower_func(
+                Some(&insecure_bytes_name),
+                ctx.comp_func_idx(&insecure_bytes_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        // Lower InsecureSeed functions (if available)
+        // get_insecure_seed: sync func() -> tuple<u64, u64>, needs memory for tuple return
+        let insecure_seed_name =
+            build_local_alias_name("random", "InsecureSeed", "get_insecure_seed");
+        if ctx.has_comp_func(&insecure_seed_name) {
+            ctx.register_core_func(&insecure_seed_name);
+            builder.lower_func(
+                Some(&insecure_seed_name),
+                ctx.comp_func_idx(&insecure_seed_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        // Lower Terminal functions (if available)
+        // These return Option<TerminalInput/Output> - option of own<resource>
+        // In CM ABI, option<own<T>> uses the outptr convention, requiring Memory and Realloc
+        let terminal_stdin_name =
+            build_local_alias_name("cli", "TerminalStdin", "get_terminal_stdin");
+        if ctx.has_comp_func(&terminal_stdin_name) {
+            ctx.register_core_func(&terminal_stdin_name);
+            builder.lower_func(
+                Some(&terminal_stdin_name),
+                ctx.comp_func_idx(&terminal_stdin_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        let terminal_stdout_name =
+            build_local_alias_name("cli", "TerminalStdout", "get_terminal_stdout");
+        if ctx.has_comp_func(&terminal_stdout_name) {
+            ctx.register_core_func(&terminal_stdout_name);
+            builder.lower_func(
+                Some(&terminal_stdout_name),
+                ctx.comp_func_idx(&terminal_stdout_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        let terminal_stderr_name =
+            build_local_alias_name("cli", "TerminalStderr", "get_terminal_stderr");
+        if ctx.has_comp_func(&terminal_stderr_name) {
+            ctx.register_core_func(&terminal_stderr_name);
+            builder.lower_func(
+                Some(&terminal_stderr_name),
+                ctx.comp_func_idx(&terminal_stderr_name),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
         // Async intrinsics - DCE: only generate if used
         if project.used_builtins.contains(&CanonBuiltin::TaskReturn) {
             ctx.register_core_func("task-return");
@@ -2239,10 +2359,7 @@ impl Codegen {
             // Get effect name from first function (all functions in an interface share the same effect)
             if let Some(first_func) = interface_info.functions.first() {
                 let effect_name = &first_func.effect_name;
-                // Convert string effect name to WasiEffect
-                let effect_is_used = WasiEffect::from_str(effect_name)
-                    .is_some_and(|e| project.used_effects.contains(&e));
-                if !effect_is_used {
+                if !project.has_effect(effect_name) {
                     continue;
                 }
             }
@@ -2334,12 +2451,22 @@ impl Codegen {
                             let element_type = &g.args[0];
                             // Check if element is a tuple type that needs definition
                             let element_val_type = match element_type {
+                                // Handle Tuple<T, U> syntax (Type::Generic)
                                 Type::Generic(elem_g)
                                     if elem_g.name == "Tuple" && !elem_g.args.is_empty() =>
                                 {
                                     // Define tuple type first
                                     let tuple_types: Vec<ComponentValType> =
                                         elem_g.args.iter().map(wado_type_to_cm_primitive).collect();
+                                    instance_type.ty().defined_type().tuple(tuple_types);
+                                    let tuple_idx = local_type_idx;
+                                    local_type_idx += 1;
+                                    ComponentValType::Type(tuple_idx)
+                                }
+                                // Handle [T, U] syntax (Type::Tuple)
+                                Type::Tuple(elems) if !elems.is_empty() => {
+                                    let tuple_types: Vec<ComponentValType> =
+                                        elems.iter().map(wado_type_to_cm_primitive).collect();
                                     instance_type.ty().defined_type().tuple(tuple_types);
                                     let tuple_idx = local_type_idx;
                                     local_type_idx += 1;
@@ -2365,6 +2492,34 @@ impl Codegen {
                             let element_type = &g.args[0];
                             let element_val_type = wado_type_to_cm_primitive(element_type);
                             instance_type.ty().defined_type().option(element_val_type);
+                            let idx = local_type_idx;
+                            local_type_idx += 1;
+                            Some(idx)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Tuple type (CM tuple type) - for [T, U, ...] syntax
+                    let tuple_type_idx = if let Some(Type::Tuple(elems)) = &func.return_type {
+                        if elems.is_empty() {
+                            None
+                        } else {
+                            let tuple_types: Vec<ComponentValType> =
+                                elems.iter().map(wado_type_to_cm_primitive).collect();
+                            instance_type.ty().defined_type().tuple(tuple_types);
+                            let idx = local_type_idx;
+                            local_type_idx += 1;
+                            Some(idx)
+                        }
+                    } else if let Some(Type::Generic(g)) = &func.return_type {
+                        // Also handle Tuple<T, U> syntax
+                        if g.name == "Tuple" && !g.args.is_empty() {
+                            let tuple_types: Vec<ComponentValType> =
+                                g.args.iter().map(wado_type_to_cm_primitive).collect();
+                            instance_type.ty().defined_type().tuple(tuple_types);
                             let idx = local_type_idx;
                             local_type_idx += 1;
                             Some(idx)
@@ -2403,6 +2558,7 @@ impl Codegen {
                             result_type_idx,
                             array_type_idx,
                             option_type_idx,
+                            tuple_type_idx,
                         )
                     });
 
@@ -2462,6 +2618,11 @@ impl Codegen {
 
         // Import exit interface if needed
         self.ensure_exit_imported(builder, ctx, cli_version, project);
+
+        // Import terminal interfaces if needed
+        self.ensure_terminal_stdin_imported(builder, ctx, cli_version, project);
+        self.ensure_terminal_stdout_imported(builder, ctx, cli_version, project);
+        self.ensure_terminal_stderr_imported(builder, ctx, cli_version, project);
     }
 
     /// Ensure stdout and stderr are imported if they're used.
@@ -2478,9 +2639,7 @@ impl Codegen {
     ) {
         // Import stdout if used but not already imported
         let stdout_local_name = build_local_alias_name("cli", "Stdout", "write_via_stream");
-        if project.used_effects.contains(&WasiEffect::Stdout)
-            && !ctx.has_comp_func(&stdout_local_name)
-        {
+        if project.has_effect("Stdout") && !ctx.has_comp_func(&stdout_local_name) {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stdout_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -2535,9 +2694,7 @@ impl Codegen {
 
         // Import stderr if used but not already imported
         let stderr_local_name = build_local_alias_name("cli", "Stderr", "write_via_stream");
-        if project.used_effects.contains(&WasiEffect::Stderr)
-            && !ctx.has_comp_func(&stderr_local_name)
-        {
+        if project.has_effect("Stderr") && !ctx.has_comp_func(&stderr_local_name) {
             // Try to get function info from registry for dynamic signature
             let func_info = self.wasi_registry.get_stderr_write_via_stream();
             let is_async = func_info.map(|f| f.is_async).unwrap_or(true);
@@ -2609,7 +2766,7 @@ impl Codegen {
         let get_cwd_local = build_local_alias_name("cli", "Environment", "get_initial_cwd");
 
         // Check if any Environment function is used
-        let needs_environment = project.used_effects.contains(&WasiEffect::Environment)
+        let needs_environment = project.has_effect("Environment")
             && (!ctx.has_comp_func(&get_args_local)
                 || !ctx.has_comp_func(&get_env_local)
                 || !ctx.has_comp_func(&get_cwd_local));
@@ -2724,7 +2881,7 @@ impl Codegen {
         // Check if any Exit function is used
         // Note: Exit interface may not be supported by all runtimes,
         // so we only import it when explicitly called.
-        let needs_exit = project.used_effects.contains(&WasiEffect::Exit)
+        let needs_exit = project.has_effect("Exit")
             && (!ctx.has_comp_func(&exit_local) || !ctx.has_comp_func(&exit_code_local));
 
         if !needs_exit {
@@ -2782,6 +2939,217 @@ impl Codegen {
         }
     }
 
+    fn ensure_terminal_stdin_imported(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+        cli_version: &str,
+        project: &Project,
+    ) {
+        let local_name = build_local_alias_name("cli", "TerminalStdin", "get_terminal_stdin");
+
+        // Check if terminal-stdin is used
+        let needs_terminal_stdin =
+            project.has_effect("TerminalStdin") && !ctx.has_comp_func(&local_name);
+
+        if !needs_terminal_stdin {
+            return;
+        }
+
+        // Import the terminal-stdin interface
+        // The interface defines: get-terminal-stdin: func() -> option<terminal-input>
+        // Where terminal-input is a resource type. At the CM level, option<own<resource>>
+        // becomes i32 (0 = none, non-zero = handle).
+        let instance_type_idx = ctx.register_type("terminal-stdin-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("terminal-stdin-instance-type"));
+            let mut instance_type = InstanceType::new();
+
+            // Type 0: resource terminal-input (SubResource for imported resource)
+            // Use SubResource to declare this is a fresh imported resource type
+            instance_type.export(
+                "terminal-input",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+
+            // Type 1: own<terminal-input>
+            instance_type.ty().defined_type().own(0);
+
+            // Type 2: option<own<terminal-input>>
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Type(1));
+
+            // Type 3: func() -> option<own<terminal-input>>
+            instance_type
+                .ty()
+                .function()
+                .params::<[(&str, ComponentValType); 0], _>([])
+                .result(Some(ComponentValType::Type(2)));
+
+            instance_type.export(
+                "get-terminal-stdin",
+                wasm_encoder::ComponentTypeRef::Func(3),
+            );
+
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("terminal-stdin");
+        let import_path = format!("wasi:cli/terminal-stdin@{cli_version}");
+        builder.import(
+            &import_path,
+            wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+        );
+
+        // Export get-terminal-stdin
+        ctx.register_comp_func(&local_name);
+        builder.alias_export(
+            ctx.instance_idx("terminal-stdin"),
+            "get-terminal-stdin",
+            ComponentExportKind::Func,
+        );
+    }
+
+    fn ensure_terminal_stdout_imported(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+        cli_version: &str,
+        project: &Project,
+    ) {
+        let local_name = build_local_alias_name("cli", "TerminalStdout", "get_terminal_stdout");
+
+        // Check if terminal-stdout is used
+        let needs_terminal_stdout =
+            project.has_effect("TerminalStdout") && !ctx.has_comp_func(&local_name);
+
+        if !needs_terminal_stdout {
+            return;
+        }
+
+        // Import the terminal-stdout interface
+        let instance_type_idx = ctx.register_type("terminal-stdout-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("terminal-stdout-instance-type"));
+            let mut instance_type = InstanceType::new();
+
+            // Type 0: resource terminal-output (SubResource for imported resource)
+            instance_type.export(
+                "terminal-output",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+
+            // Type 1: own<terminal-output>
+            instance_type.ty().defined_type().own(0);
+
+            // Type 2: option<own<terminal-output>>
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Type(1));
+
+            // Type 3: func() -> option<own<terminal-output>>
+            instance_type
+                .ty()
+                .function()
+                .params::<[(&str, ComponentValType); 0], _>([])
+                .result(Some(ComponentValType::Type(2)));
+
+            instance_type.export(
+                "get-terminal-stdout",
+                wasm_encoder::ComponentTypeRef::Func(3),
+            );
+
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("terminal-stdout");
+        let import_path = format!("wasi:cli/terminal-stdout@{cli_version}");
+        builder.import(
+            &import_path,
+            wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+        );
+
+        // Export get-terminal-stdout
+        ctx.register_comp_func(&local_name);
+        builder.alias_export(
+            ctx.instance_idx("terminal-stdout"),
+            "get-terminal-stdout",
+            ComponentExportKind::Func,
+        );
+    }
+
+    fn ensure_terminal_stderr_imported(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+        cli_version: &str,
+        project: &Project,
+    ) {
+        let local_name = build_local_alias_name("cli", "TerminalStderr", "get_terminal_stderr");
+
+        // Check if terminal-stderr is used
+        let needs_terminal_stderr =
+            project.has_effect("TerminalStderr") && !ctx.has_comp_func(&local_name);
+
+        if !needs_terminal_stderr {
+            return;
+        }
+
+        // Import the terminal-stderr interface
+        let instance_type_idx = ctx.register_type("terminal-stderr-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("terminal-stderr-instance-type"));
+            let mut instance_type = InstanceType::new();
+
+            // Type 0: resource terminal-output (SubResource for imported resource)
+            instance_type.export(
+                "terminal-output",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+
+            // Type 1: own<terminal-output>
+            instance_type.ty().defined_type().own(0);
+
+            // Type 2: option<own<terminal-output>>
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Type(1));
+
+            // Type 3: func() -> option<own<terminal-output>>
+            instance_type
+                .ty()
+                .function()
+                .params::<[(&str, ComponentValType); 0], _>([])
+                .result(Some(ComponentValType::Type(2)));
+
+            instance_type.export(
+                "get-terminal-stderr",
+                wasm_encoder::ComponentTypeRef::Func(3),
+            );
+
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("terminal-stderr");
+        let import_path = format!("wasi:cli/terminal-stderr@{cli_version}");
+        builder.import(
+            &import_path,
+            wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+        );
+
+        // Export get-terminal-stderr
+        ctx.register_comp_func(&local_name);
+        builder.alias_export(
+            ctx.instance_idx("terminal-stderr"),
+            "get-terminal-stderr",
+            ComponentExportKind::Func,
+        );
+    }
+
     /// Convert a Wado type to a Component Model value type
     ///
     /// Panics if the type is not supported - callers must validate with
@@ -2835,6 +3203,7 @@ impl Codegen {
         result_type_idx: Option<u32>,
         array_type_idx: Option<u32>,
         option_type_idx: Option<u32>,
+        tuple_type_idx: Option<u32>,
     ) -> ComponentValType {
         match ty {
             Type::Named(named) => match named.name.as_str() {
@@ -2864,8 +3233,16 @@ impl Codegen {
                     // Use the pre-defined option type index
                     ComponentValType::Type(option_type_idx.expect("option type not defined"))
                 }
+                "Tuple" => {
+                    // Use the pre-defined tuple type index (Tuple<...> syntax)
+                    ComponentValType::Type(tuple_type_idx.expect("tuple type not defined"))
+                }
                 _ => panic!("unsupported generic return type for CM: {}", generic.name),
             },
+            // Handle [...] tuple syntax
+            Type::Tuple(_) => {
+                ComponentValType::Type(tuple_type_idx.expect("tuple type not defined"))
+            }
             _ => panic!("unsupported Wado return type for CM: {ty:?}"),
         }
     }
@@ -5286,9 +5663,10 @@ impl Codegen {
                         struct_type_index: box_type_idx,
                         field_index: 0,
                     });
-                } else {
+                } else if !ctx.skip_ref_as_non_null {
                     // For reference types, locals are nullable but we may need non-nullable
                     // Check if this is a reference type and add RefAsNonNull
+                    // Skip this when in nullable context (e.g., return from Option-returning function)
                     let val_type = self.type_id_to_valtype(type_table, expr.type_id);
                     if matches!(val_type, ValType::Ref(rt) if !rt.nullable) {
                         func.instruction(&Instruction::RefAsNonNull);
@@ -5714,12 +6092,10 @@ impl Codegen {
                         "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
                     );
                     func.instruction(&Instruction::LocalSet(subtask_local));
-                } else if module_path == ["Environment"]
-                    && matches!(func_name.as_str(), "get_arguments" | "get_environment")
-                {
-                    // Environment operations that return list<string> or list<tuple<string, string>>
+                } else if module_path == ["Environment"] && func_name.as_str() == "get_arguments" {
+                    // Environment::get_arguments returns list<string>
                     // CM ABI: function takes outptr, writes (base_ptr, count) to it
-                    // We need to convert to GC array
+                    // We need to convert to GC Array<String>
 
                     // Allocate outptr for CM result (8 bytes: ptr + count)
                     func.instruction(&Instruction::I32Const(0)); // old_ptr
@@ -5743,6 +6119,36 @@ impl Codegen {
                     // Load outptr and call conversion function
                     func.instruction(&Instruction::LocalGet(outptr_local));
                     let conv_idx = builder.func_idx("core/internal/cm_list_string_to_array");
+                    func.instruction(&Instruction::Call(conv_idx));
+                } else if module_path == ["Environment"] && func_name.as_str() == "get_environment"
+                {
+                    // Environment::get_environment returns list<tuple<string, string>>
+                    // CM ABI: function takes outptr, writes (base_ptr, count) to it
+                    // We need to convert to GC Array<[String, String]>
+
+                    // Allocate outptr for CM result (8 bytes: ptr + count)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(8)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("cli", "Environment", &func_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Load outptr and call conversion function
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    let conv_idx =
+                        builder.func_idx("core/internal/cm_list_tuple_string_string_to_array");
                     func.instruction(&Instruction::Call(conv_idx));
                 } else if module_path == ["Environment"] && func_name.as_str() == "get_initial_cwd"
                 {
@@ -5774,6 +6180,123 @@ impl Codegen {
                     func.instruction(&Instruction::LocalGet(outptr_local));
                     let conv_idx = builder.func_idx("core/internal/cm_option_string_to_option");
                     func.instruction(&Instruction::Call(conv_idx));
+                } else if module_path == ["InsecureSeed"]
+                    && func_name.as_str() == "get_insecure_seed"
+                {
+                    // get_insecure_seed returns tuple<u64, u64>
+                    // CM ABI: function takes outptr, writes tuple (16 bytes: two u64 values) to it
+
+                    // Allocate outptr for CM result (16 bytes for two u64)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(8)); // align (u64 alignment)
+                    func.instruction(&Instruction::I32Const(16)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with InsecureSeed calls",
+                    );
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("random", "InsecureSeed", &func_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Read the two u64 values from memory and create a tuple struct
+                    // Load first u64 (offset 0)
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I64Load(MemArg {
+                        offset: 0,
+                        align: 3, // 2^3 = 8 byte alignment
+                        memory_index: 0,
+                    }));
+                    // Load second u64 (offset 8)
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I64Load(MemArg {
+                        offset: 8,
+                        align: 3, // 2^3 = 8 byte alignment
+                        memory_index: 0,
+                    }));
+
+                    // Create tuple struct from the two values on stack
+                    // Get tuple type for [u64, u64]
+                    let tuple_elements = vec![TypeTable::U64, TypeTable::U64];
+                    if let Some(type_idx) = self.get_tuple_type_idx(&tuple_elements) {
+                        func.instruction(&Instruction::StructNew(type_idx));
+                    } else {
+                        panic!(
+                            "tuple type [u64, u64] not registered for InsecureSeed::get_insecure_seed"
+                        );
+                    }
+                } else if (module_path == ["TerminalStdin"]
+                    || module_path == ["TerminalStdout"]
+                    || module_path == ["TerminalStderr"])
+                    && matches!(
+                        func_name.as_str(),
+                        "get_terminal_stdin" | "get_terminal_stdout" | "get_terminal_stderr"
+                    )
+                {
+                    // Terminal functions return Option<TerminalInput/Output>
+                    // CM ABI: option<own<resource>> uses outptr model
+                    // The function takes an i32 outptr and writes the result there
+                    // Layout: i32 at offset 0 (0 = none, non-zero = handle)
+
+                    // Allocate outptr for CM result (4 bytes for option discriminant/handle)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(4)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Terminal calls",
+                    );
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let effect_name = &module_path[0];
+                    let local_name = build_local_alias_name("cli", effect_name, &func_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Read the result from outptr (i32: 0 = none, non-zero = handle)
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I32Load(MemArg {
+                        offset: 0,
+                        align: 2, // 2^2 = 4 byte alignment
+                        memory_index: 0,
+                    }));
+
+                    // Store in a local for conditional
+                    let result_local = ctx
+                        .get_local("__cm_i32_result")
+                        .expect("__cm_i32_result should be pre-allocated for Terminal calls");
+                    func.instruction(&Instruction::LocalTee(result_local));
+
+                    // If result == 0: ref.null (Option::None)
+                    // Else: box the i32 handle as Option::Some
+                    // Get the box type index first to use in block type declaration
+                    let box_idx = self.get_box_type_idx(ValType::I32).expect(
+                        "Box type not registered for i32. Make sure box types are initialized.",
+                    );
+
+                    func.instruction(&Instruction::I32Eqz);
+                    func.instruction(&Instruction::If(BlockType::Result(ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(box_idx),
+                    }))));
+                    // Then: return null for None
+                    func.instruction(&Instruction::RefNull(HeapType::Concrete(box_idx)));
+                    func.instruction(&Instruction::Else);
+                    // Else: box the i32 as Option::Some
+                    func.instruction(&Instruction::LocalGet(result_local));
+                    func.instruction(&Instruction::StructNew(box_idx));
+                    func.instruction(&Instruction::End);
                 } else {
                     // Generate arguments first
                     for arg in args {
@@ -5819,12 +6342,10 @@ impl Codegen {
                         "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
                     );
                     func.instruction(&Instruction::LocalSet(subtask_local));
-                } else if effect_name == "Environment"
-                    && matches!(op_name.as_str(), "get_arguments" | "get_environment")
-                {
-                    // Environment operations that return list<string> or list<tuple<string, string>>
+                } else if effect_name == "Environment" && op_name == "get_arguments" {
+                    // Environment::get_arguments returns list<string>
                     // CM ABI: function takes outptr, writes (base_ptr, count) to it
-                    // We need to convert to GC array
+                    // We need to convert to GC Array<String>
 
                     // Allocate outptr for CM result (8 bytes: ptr + count)
                     func.instruction(&Instruction::I32Const(0)); // old_ptr
@@ -5848,6 +6369,35 @@ impl Codegen {
                     // Load outptr and call conversion function
                     func.instruction(&Instruction::LocalGet(outptr_local));
                     let conv_idx = builder.func_idx("core/internal/cm_list_string_to_array");
+                    func.instruction(&Instruction::Call(conv_idx));
+                } else if effect_name == "Environment" && op_name == "get_environment" {
+                    // Environment::get_environment returns list<tuple<string, string>>
+                    // CM ABI: function takes outptr, writes (base_ptr, count) to it
+                    // We need to convert to GC Array<[String, String]>
+
+                    // Allocate outptr for CM result (8 bytes: ptr + count)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(8)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Environment calls",
+                    );
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("cli", effect_name, op_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Load outptr and call conversion function
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    let conv_idx =
+                        builder.func_idx("core/internal/cm_list_tuple_string_string_to_array");
                     func.instruction(&Instruction::Call(conv_idx));
                 } else if effect_name == "Environment" && op_name == "get_initial_cwd" {
                     // get_initial_cwd returns Option<String>
@@ -5878,6 +6428,120 @@ impl Codegen {
                     func.instruction(&Instruction::LocalGet(outptr_local));
                     let conv_idx = builder.func_idx("core/internal/cm_option_string_to_option");
                     func.instruction(&Instruction::Call(conv_idx));
+                } else if effect_name == "InsecureSeed" && op_name == "get_insecure_seed" {
+                    // get_insecure_seed returns tuple<u64, u64>
+                    // CM ABI: function takes outptr, writes tuple (16 bytes: two u64 values) to it
+
+                    // Allocate outptr for CM result (16 bytes for two u64)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(8)); // align (u64 alignment)
+                    func.instruction(&Instruction::I32Const(16)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with InsecureSeed calls",
+                    );
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("random", effect_name, op_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Read the two u64 values from memory and create a tuple struct
+                    // Load first u64 (offset 0)
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I64Load(MemArg {
+                        offset: 0,
+                        align: 3, // 2^3 = 8 byte alignment
+                        memory_index: 0,
+                    }));
+                    // Load second u64 (offset 8)
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I64Load(MemArg {
+                        offset: 8,
+                        align: 3, // 2^3 = 8 byte alignment
+                        memory_index: 0,
+                    }));
+
+                    // Create tuple struct from the two values on stack
+                    // Get tuple type for [u64, u64]
+                    let tuple_elements = vec![TypeTable::U64, TypeTable::U64];
+                    if let Some(type_idx) = self.get_tuple_type_idx(&tuple_elements) {
+                        func.instruction(&Instruction::StructNew(type_idx));
+                    } else {
+                        panic!(
+                            "tuple type [u64, u64] not registered for InsecureSeed::get_insecure_seed"
+                        );
+                    }
+                } else if (effect_name == "TerminalStdin"
+                    || effect_name == "TerminalStdout"
+                    || effect_name == "TerminalStderr")
+                    && matches!(
+                        op_name.as_str(),
+                        "get_terminal_stdin" | "get_terminal_stdout" | "get_terminal_stderr"
+                    )
+                {
+                    // Terminal functions return Option<TerminalInput/Output>
+                    // CM ABI: option<own<resource>> uses outptr model
+                    // The function takes an i32 outptr and writes the result there
+                    // Layout: i32 at offset 0 (0 = none, non-zero = handle)
+
+                    // Allocate outptr for CM result (4 bytes for option discriminant/handle)
+                    func.instruction(&Instruction::I32Const(0)); // old_ptr
+                    func.instruction(&Instruction::I32Const(0)); // old_size
+                    func.instruction(&Instruction::I32Const(4)); // align
+                    func.instruction(&Instruction::I32Const(4)); // new_size
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+
+                    // Store outptr in a local for later use
+                    let outptr_local = ctx.get_local("__cm_outptr").expect(
+                        "__cm_outptr should be pre-allocated for functions with Terminal calls",
+                    );
+                    func.instruction(&Instruction::LocalTee(outptr_local));
+
+                    // Call the WASI function with outptr
+                    let local_name = build_local_alias_name("cli", effect_name, op_name);
+                    let func_idx = builder.func_idx(&local_name);
+                    func.instruction(&Instruction::Call(func_idx));
+
+                    // Read the result from outptr (i32: 0 = none, non-zero = handle)
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I32Load(MemArg {
+                        offset: 0,
+                        align: 2, // 2^2 = 4 byte alignment
+                        memory_index: 0,
+                    }));
+
+                    // Store in a local for conditional
+                    let result_local = ctx
+                        .get_local("__cm_i32_result")
+                        .expect("__cm_i32_result should be pre-allocated for Terminal calls");
+                    func.instruction(&Instruction::LocalTee(result_local));
+
+                    // If result == 0: ref.null (Option::None)
+                    // Else: box the i32 handle as Option::Some
+                    // Get the box type index first to use in block type declaration
+                    let box_idx = self.get_box_type_idx(ValType::I32).expect(
+                        "Box type not registered for i32. Make sure box types are initialized.",
+                    );
+
+                    func.instruction(&Instruction::I32Eqz);
+                    func.instruction(&Instruction::If(BlockType::Result(ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(box_idx),
+                    }))));
+                    // Then: return null for None
+                    func.instruction(&Instruction::RefNull(HeapType::Concrete(box_idx)));
+                    func.instruction(&Instruction::Else);
+                    // Else: box the i32 as Option::Some
+                    func.instruction(&Instruction::LocalGet(result_local));
+                    func.instruction(&Instruction::StructNew(box_idx));
+                    func.instruction(&Instruction::End);
                 } else {
                     // Regular effect call
                     for arg in args {
@@ -7437,7 +8101,16 @@ impl Codegen {
 
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
+                    // If return type is nullable reference, skip ref.as_non_null conversion
+                    let is_nullable_return =
+                        matches!(ctx.return_type, Some(ValType::Ref(rt)) if rt.nullable);
+                    if is_nullable_return {
+                        ctx.skip_ref_as_non_null = true;
+                    }
                     self.generate_expr(func, expr, type_table, ctx, builder);
+                    if is_nullable_return {
+                        ctx.skip_ref_as_non_null = false;
+                    }
                 }
                 func.instruction(&Instruction::Return);
             }
@@ -8810,8 +9483,10 @@ impl Codegen {
     ///
     /// Environment calls (`get_arguments`, `get_environment`, `get_initial_cwd`) need
     /// a local to hold the outptr for CM ABI conversion.
+    /// Terminal effects need a local for the i32 result.
     fn preallocate_environment_scratch_locals(ctx: &mut FunctionContext) {
         ctx.alloc_local("__cm_outptr", ValType::I32);
+        ctx.alloc_local("__cm_i32_result", ValType::I32);
     }
 
     /// Check if a function body uses Environment calls that need scratch locals.
@@ -8887,6 +9562,25 @@ impl Codegen {
                 {
                     return true;
                 }
+                // Check for InsecureSeed calls that need scratch locals
+                if module_path.len() == 1
+                    && module_path[0] == "InsecureSeed"
+                    && func_name == "get_insecure_seed"
+                {
+                    return true;
+                }
+                // Check for Terminal calls that need scratch locals
+                if module_path.len() == 1
+                    && (module_path[0] == "TerminalStdin"
+                        || module_path[0] == "TerminalStdout"
+                        || module_path[0] == "TerminalStderr")
+                    && matches!(
+                        func_name.as_str(),
+                        "get_terminal_stdin" | "get_terminal_stdout" | "get_terminal_stderr"
+                    )
+                {
+                    return true;
+                }
                 args.iter().any(Self::expr_needs_environment_scratch_locals)
             }
             TirExprKind::MethodCall { receiver, args, .. } => {
@@ -8903,7 +9597,29 @@ impl Codegen {
                     || Self::expr_needs_environment_scratch_locals(value)
             }
             TirExprKind::Cast { expr, .. } => Self::expr_needs_environment_scratch_locals(expr),
-            TirExprKind::EffectCall { args, .. } | TirExprKind::StaticCall { args, .. } => {
+            TirExprKind::EffectCall {
+                effect_name,
+                op_name,
+                args,
+            } => {
+                // InsecureSeed::get_insecure_seed needs scratch locals for outptr
+                if effect_name == "InsecureSeed" && op_name == "get_insecure_seed" {
+                    return true;
+                }
+                // Terminal effects need scratch local for i32 result
+                if (effect_name == "TerminalStdin"
+                    || effect_name == "TerminalStdout"
+                    || effect_name == "TerminalStderr")
+                    && matches!(
+                        op_name.as_str(),
+                        "get_terminal_stdin" | "get_terminal_stdout" | "get_terminal_stderr"
+                    )
+                {
+                    return true;
+                }
+                args.iter().any(Self::expr_needs_environment_scratch_locals)
+            }
+            TirExprKind::StaticCall { args, .. } => {
                 args.iter().any(Self::expr_needs_environment_scratch_locals)
             }
             TirExprKind::FieldAccess { expr, .. } => {
@@ -8944,6 +9660,7 @@ impl Codegen {
                         .iter()
                         .any(|arm| Self::expr_needs_environment_scratch_locals(&arm.body))
             }
+            TirExprKind::Move { value } => Self::expr_needs_environment_scratch_locals(value),
             // Leaf nodes
             _ => false,
         }

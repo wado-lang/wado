@@ -133,6 +133,13 @@ impl WasiRegistry {
         let wasi_clocks = parse_module(stdlib::WASI_CLOCKS);
         registry.register_module(&wasi_clocks, &mut world_registry);
 
+        // Parse and register wasi:random
+        let wasi_random = parse_module(stdlib::WASI_RANDOM);
+        registry.register_module(&wasi_random, &mut world_registry);
+
+        // Note: wasi:filesystem uses `flags` syntax which isn't supported yet
+        // TODO: Add wasi:filesystem registration when `flags` parsing is implemented
+
         (registry, world_registry)
     }
 
@@ -419,6 +426,22 @@ impl WasiRegistry {
         self.effect_to_func.keys().map(std::string::String::as_str)
     }
 
+    /// Get standard WASI function names (excluding effects that require explicit usage)
+    ///
+    /// Some effects are not included by default because:
+    /// - Exit: May not be supported by all runtimes
+    /// - Terminal*: May not be available in non-terminal environments
+    ///
+    /// These effects are only included when explicitly used in the program.
+    pub fn standard_function_names(&self) -> impl Iterator<Item = &str> {
+        self.all_function_names().filter(|name| {
+            !name.starts_with("Exit::")
+                && !name.starts_with("TerminalStdin::")
+                && !name.starts_with("TerminalStdout::")
+                && !name.starts_with("TerminalStderr::")
+        })
+    }
+
     // ============================================================================
     // Type Conversion (AST types to Wasm types)
     // ============================================================================
@@ -581,11 +604,13 @@ pub fn is_return_type_supported(ty: &Type) -> bool {
                 generic.args.iter().all(is_primitive_type_supported)
             }
             "Tuple" => {
-                // All tuple elements must be supported primitives
+                // All tuple elements must be supported primitives (Tuple<...> syntax)
                 generic.args.iter().all(is_primitive_type_supported)
             }
             _ => false,
         },
+        // Handle [...] tuple syntax
+        Type::Tuple(elements) => elements.iter().all(is_primitive_type_supported),
         _ => false,
     }
 }
@@ -607,10 +632,13 @@ fn is_primitive_type_supported(ty: &Type) -> bool {
                 | "char"
                 | "String"
         ),
+        // Handle Tuple<...> syntax
         Type::Generic(generic) if generic.name == "Tuple" => {
             // Tuples are allowed if all elements are primitives
             generic.args.iter().all(is_primitive_type_supported)
         }
+        // Handle [...] tuple syntax
+        Type::Tuple(elements) => elements.iter().all(is_primitive_type_supported),
         _ => false,
     }
 }
@@ -650,6 +678,8 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
             generic.name.as_str(),
             "Array" | "Option" | "Result" | "Tuple"
         ),
+        // Tuple types [...] require outptr (non-empty tuples only)
+        Type::Tuple(elems) => !elems.is_empty(),
         _ => false,
     }
 }
@@ -868,6 +898,43 @@ mod tests {
         assert!(
             is_return_type_supported(&option_string),
             "Option<String> should be supported"
+        );
+    }
+
+    #[test]
+    fn test_random_functions_registered() {
+        let (registry, _) = WasiRegistry::build_from_stdlib();
+
+        // Check that Random functions are registered
+        assert!(
+            registry.resolve("Random::get_random_u64").is_some(),
+            "Random::get_random_u64 should be resolved"
+        );
+        assert!(
+            registry.resolve("Random::get_random_bytes").is_some(),
+            "Random::get_random_bytes should be resolved"
+        );
+        assert!(
+            registry
+                .resolve("Insecure::get_insecure_random_u64")
+                .is_some(),
+            "Insecure::get_insecure_random_u64 should be resolved"
+        );
+        assert!(
+            registry
+                .resolve("Insecure::get_insecure_random_bytes")
+                .is_some(),
+            "Insecure::get_insecure_random_bytes should be resolved"
+        );
+
+        // Check that the random interface is included
+        let interfaces: Vec<_> = registry.interfaces().collect();
+        let random_interface = interfaces
+            .iter()
+            .find(|i| i.interface == "random" && i.package == "random");
+        assert!(
+            random_interface.is_some(),
+            "wasi:random/random interface should be registered"
         );
     }
 }

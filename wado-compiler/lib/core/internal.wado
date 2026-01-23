@@ -438,3 +438,47 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
     return s;
 }
 
+/// Convert a Component Model list<tuple<string, string>> to a GC Array<[String, String]>
+/// The outptr points to the CM list representation in linear memory:
+///   outptr[0..4]: base_ptr - pointer to array of tuples
+///   outptr[4..8]: count - number of tuples
+/// Each tuple is 16 bytes:
+///   base_ptr[i*16+0..i*16+4]: str1_ptr
+///   base_ptr[i*16+4..i*16+8]: str1_len
+///   base_ptr[i*16+8..i*16+12]: str2_ptr
+///   base_ptr[i*16+12..i*16+16]: str2_len
+pub fn cm_list_tuple_string_string_to_array(outptr: i32) -> Array<[String, String]> {
+    let base_ptr = builtin::memory_load32(outptr);
+    let count = builtin::memory_load32(outptr + 4);
+
+    // Create Array<[String, String]> with capacity
+    let mut result = Array::<[String, String]>::with_capacity(count);
+
+    // Convert each CM tuple to a GC tuple
+    for (let mut i = 0; i < count; i += 1) {
+        let tuple_offset = base_ptr + i * 16;
+
+        // Read first string
+        let str1_ptr = builtin::memory_load32(tuple_offset);
+        let str1_len = builtin::memory_load32(tuple_offset + 4);
+        let s1 = builtin::string_new(str1_len);
+        for (let mut j = 0; j < str1_len; j += 1) {
+            let byte = builtin::memory_load8_u(str1_ptr + j);
+            s1.set(j, byte);
+        }
+
+        // Read second string
+        let str2_ptr = builtin::memory_load32(tuple_offset + 8);
+        let str2_len = builtin::memory_load32(tuple_offset + 12);
+        let s2 = builtin::string_new(str2_len);
+        for (let mut j = 0; j < str2_len; j += 1) {
+            let byte = builtin::memory_load8_u(str2_ptr + j);
+            s2.set(j, byte);
+        }
+
+        result.append([s1, s2]);
+    }
+
+    return result;
+}
+
