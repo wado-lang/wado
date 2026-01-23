@@ -30,6 +30,7 @@ pub enum TokenKind {
     Struct,
     Enum,
     Variant,
+    Flags,
     Type,
     Impl,
     Trait,
@@ -98,6 +99,57 @@ pub enum TokenKind {
 
     // Special
     Eof,
+}
+
+impl TokenKind {
+    /// Returns the keyword as a string if this token is a keyword.
+    /// Used for allowing keywords as field names.
+    #[must_use]
+    pub fn as_keyword_str(&self) -> Option<&'static str> {
+        match self {
+            Self::Use => Some("use"),
+            Self::From => Some("from"),
+            Self::As => Some("as"),
+            Self::Fn => Some("fn"),
+            Self::With => Some("with"),
+            Self::Let => Some("let"),
+            Self::Mut => Some("mut"),
+            Self::Return => Some("return"),
+            Self::If => Some("if"),
+            Self::Else => Some("else"),
+            Self::Match => Some("match"),
+            Self::For => Some("for"),
+            Self::While => Some("while"),
+            Self::Loop => Some("loop"),
+            Self::Break => Some("break"),
+            Self::Continue => Some("continue"),
+            Self::In => Some("in"),
+            Self::Of => Some("of"),
+            Self::Pub => Some("pub"),
+            Self::Effect => Some("effect"),
+            Self::Handler => Some("handler"),
+            Self::Reactive => Some("reactive"),
+            Self::Move => Some("move"),
+            Self::Unique => Some("unique"),
+            Self::Struct => Some("struct"),
+            Self::Enum => Some("enum"),
+            Self::Variant => Some("variant"),
+            Self::Flags => Some("flags"),
+            Self::Type => Some("type"),
+            Self::Impl => Some("impl"),
+            Self::Trait => Some("trait"),
+            Self::Resource => Some("resource"),
+            Self::World => Some("world"),
+            Self::Async => Some("async"),
+            Self::Import => Some("import"),
+            Self::Export => Some("export"),
+            Self::Assert => Some("assert"),
+            Self::True => Some("true"),
+            Self::False => Some("false"),
+            Self::Null => Some("null"),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

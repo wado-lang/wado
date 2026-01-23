@@ -107,7 +107,7 @@ pub type LinkCount = u64;
 #[wasi("wasi:filesystem/types@0.3.0-rc-2025-09-16#descriptor-stat")]
 pub struct DescriptorStat {
     /// File type.
-    %type: DescriptorType,
+    type: DescriptorType,
     /// Number of hard links to the file.
     link_count: LinkCount,
     /// For regular files, the file size in bytes. For symbolic links, the
@@ -146,7 +146,7 @@ pub variant NewTimestamp {
 #[wasi("wasi:filesystem/types@0.3.0-rc-2025-09-16#directory-entry")]
 pub struct DirectoryEntry {
     /// The type of the file referred to by this directory entry.
-    %type: DescriptorType,
+    type: DescriptorType,
     /// The name of the object.
     name: String,
 }
@@ -287,14 +287,14 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `pread` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2025-09-16#[method]descriptor.[method]descriptor.read-via-stream")]
-    fn method_descriptor_read_via_stream(self: &Descriptor, offset: Filesize) -> Tuple<Stream<u8>, Future<Result<(), ErrorCode>>>;
+    fn method_descriptor_read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
 }
 
 #[wasi("wasi:filesystem/preopens@0.3.0-rc-2025-09-16")]
 pub effect Preopens {
     /// Return the set of preopened directories, and their paths.
     #[wasi("wasi:filesystem/preopens@0.3.0-rc-2025-09-16#get-directories")]
-    fn get_directories() -> Array<Tuple<Descriptor, String>>;
+    fn get_directories() -> Array<[Descriptor, String]>;
 }
 
 pub world Imports {

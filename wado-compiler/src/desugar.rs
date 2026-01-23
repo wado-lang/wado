@@ -44,6 +44,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Struct(s) => Item::Struct(desugar_struct(s)),
         Item::Enum(e) => Item::Enum(desugar_enum(e)),
         Item::Variant(v) => Item::Variant(v.clone()),
+        Item::Flags(f) => Item::Flags(f.clone()),
         Item::Type(t) => Item::Type(desugar_type_alias(t)),
         Item::Effect(e) => Item::Effect(desugar_effect(e)),
         Item::Use(u) => Item::Use(u.clone()),

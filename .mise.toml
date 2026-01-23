@@ -23,3 +23,10 @@ auto_install = true
 
 # Use verbose output for debugging (can be set to false for quieter operation)
 verbose = false
+
+[tasks.list-todo]
+description = "List E2E test fixtures marked with TODO: true"
+run = """
+grep -l '"TODO": true' wado-compiler/tests/fixtures/*.wado 2>/dev/null | \
+  sort
+"""

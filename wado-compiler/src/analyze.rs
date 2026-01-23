@@ -440,6 +440,11 @@ impl Analyzer {
                 Item::Impl(_) => {
                     // Impl blocks are handled later
                 }
+
+                Item::Flags(_) => {
+                    // Flags are currently parsed but not used directly
+                    // They are handled by the WASI registry
+                }
             }
         }
     }

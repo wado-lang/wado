@@ -302,7 +302,7 @@ impl WadoCodeGenerator {
                         .map(Self::format_type)
                         .collect::<Vec<_>>()
                         .join(", ");
-                    format!("Tuple<{inner}>")
+                    format!("[{inner}]")
                 }
             }
             WadoType::Stream(inner) => format!("Stream<{}>", Self::format_type(inner)),

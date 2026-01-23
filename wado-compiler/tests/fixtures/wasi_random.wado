@@ -1,0 +1,62 @@
+// Comprehensive test for wasi:random module features
+// Tests: Random, Insecure, InsecureSeed effects
+
+use { println, Stdout } from "core:cli";
+use { Random, Insecure, InsecureSeed } from "wasi:random";
+
+fn run() with Stdout, Random, Insecure, InsecureSeed {
+    // Test Random::get_random_u64()
+    let r1 = Random::get_random_u64();
+    let r2 = Random::get_random_u64();
+    // Random values should exist (very unlikely to be 0 twice)
+    // We just verify the function returns successfully
+    println("test: random u64 works");
+
+    // If both are 0, it's technically possible but extremely unlikely
+    // Just verify at least one is likely non-zero (probabilistic test)
+    if r1 != 0 || r2 != 0 {
+        println("test: random u64 produces non-zero values");
+    } else {
+        // Both being 0 is technically possible, just unlikely
+        println("test: random u64 produced two zeros (unlikely but valid)");
+    }
+
+    // Verify two random values are likely different
+    if r1 != r2 {
+        println("test: random u64 values differ");
+    } else {
+        println("test: random u64 values same (unlikely but valid)");
+    }
+
+    // Test Insecure::get_insecure_random_u64()
+    let ir1 = Insecure::get_insecure_random_u64();
+    let ir2 = Insecure::get_insecure_random_u64();
+    println("test: insecure random u64 works");
+
+    // Verify insecure random values are likely different
+    if ir1 != ir2 {
+        println("test: insecure random u64 values differ");
+    } else {
+        println("test: insecure random u64 values same (unlikely but valid)");
+    }
+
+    // Test InsecureSeed::get_insecure_seed()
+    // Returns a tuple [u64, u64] for hash-map DoS resistance seeding
+    let seed = InsecureSeed::get_insecure_seed();
+    let seed_low = seed.0;
+    let seed_high = seed.1;
+    println("test: insecure seed works");
+
+    // The seed should be a 128-bit value (two u64s)
+    // At least one part should likely be non-zero
+    if seed_low != 0 || seed_high != 0 {
+        println("test: insecure seed produces non-zero value");
+    } else {
+        println("test: insecure seed produced zeros (unlikely but valid)");
+    }
+
+    println("all random tests passed");
+}
+
+__DATA__
+{"stdout_contains": ["test: random u64 works", "test: insecure random u64 works", "test: insecure seed works", "all random tests passed"]}

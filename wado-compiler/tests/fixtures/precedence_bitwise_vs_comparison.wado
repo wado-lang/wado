@@ -1,20 +1,20 @@
 // Test bitwise vs comparison precedence (fixes C's design flaw)
 // Bitwise (&, ^, |) > Comparison (==, !=, <, <=, >, >=)
 //
-// In C/Java/JS: flags & MASK == EXPECTED parses as flags & (MASK == EXPECTED) -- BUG!
-// In Wado/Rust/Go: flags & MASK == EXPECTED parses as (flags & MASK) == EXPECTED -- CORRECT!
+// In C/Java/JS: bits & MASK == EXPECTED parses as bits & (MASK == EXPECTED) -- BUG!
+// In Wado/Rust/Go: bits & MASK == EXPECTED parses as (bits & MASK) == EXPECTED -- CORRECT!
 
 fn run() {
     // The classic C bug case
-    // flags & MASK == EXPECTED
+    // bits & MASK == EXPECTED
     // Wado: (12 & 4) == 4 = 4 == 4 = true
     // C:    12 & (4 == 4) = 12 & 1 = 0 (would be falsy)
-    let flags = 12;  // 0b1100
+    let bits = 12;  // 0b1100
     let mask = 4;  // 0b0100
     let expected = 4;
 
     // This should work correctly in Wado (bitwise first, then comparison)
-    let result_and = flags & mask == expected;
+    let result_and = bits & mask == expected;
     assert result_and == true;
 
     // Test with bitwise OR

@@ -3118,7 +3118,7 @@ impl<'a> Resolver<'a> {
         Some(self.resolve_wasi_type(&return_type))
     }
 
-    /// Resolve a WASI AST type to a TypeId
+    /// Resolve a WASI AST type to a `TypeId`
     fn resolve_wasi_type(&mut self, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => match named.name.as_str() {
