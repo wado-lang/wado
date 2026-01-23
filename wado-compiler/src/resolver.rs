@@ -816,7 +816,7 @@ impl<'a> Resolver<'a> {
                 imported_functions,
                 errors: Vec::new(),
                 current_module_source: ModuleSource::entry_point(), // Set in resolve_module
-                current_module_items: Vec::new(),                // Set in resolve_module
+                current_module_items: Vec::new(),                   // Set in resolve_module
                 current_type_params: HashMap::new(),
                 generic_struct_names: HashSet::new(),
                 generic_function_params: HashMap::new(),
