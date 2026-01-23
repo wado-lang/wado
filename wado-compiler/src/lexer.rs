@@ -49,6 +49,22 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Create a new lexer with a custom starting line number.
+    /// Useful for parsing embedded expressions (e.g., template string interpolations)
+    /// where the line number should reflect the original source location.
+    pub fn with_line(input: &'a str, line: usize) -> Self {
+        Self {
+            input,
+            chars: input.char_indices().peekable(),
+            pos: 0,
+            line,
+            column: 1,
+            data_section: None,
+            comments: Vec::new(),
+            shebang: None,
+        }
+    }
+
     /// Returns the content of the __DATA__ section, if present.
     /// This is available after calling `tokenize()`.
     pub fn data_section(&self) -> Option<&str> {

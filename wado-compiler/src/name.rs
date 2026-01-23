@@ -56,7 +56,11 @@ use std::hash::{Hash, Hasher};
 /// // Local modules
 /// ModuleSource::Local { path: "./geometry.wado".to_string() }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+///
+/// Note: Two `EntryPoint` variants are considered equal regardless of their
+/// `filename` field. This ensures that types defined in the entry module
+/// are consistent across different compilation phases.
+#[derive(Debug, Clone)]
 pub enum ModuleSource {
     /// Core library module (e.g., `core:prelude`, `core:cli`, `core:internal`, `core:builtin`)
     Core {
@@ -74,7 +78,40 @@ pub enum ModuleSource {
         path: String,
     },
     /// Entry point module (the main file being compiled)
-    EntryPoint,
+    EntryPoint {
+        /// Filename of the entry point (e.g., "hello.wado")
+        /// None for inline/embedded code
+        filename: Option<String>,
+    },
+}
+
+impl PartialEq for ModuleSource {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Core { name: a }, Self::Core { name: b }) => a == b,
+            (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
+            (Self::Local { path: a }, Self::Local { path: b }) => a == b,
+            // Entry points are equal regardless of filename
+            (Self::EntryPoint { .. }, Self::EntryPoint { .. }) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ModuleSource {}
+
+impl std::hash::Hash for ModuleSource {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Use discriminant to differentiate variants
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Core { name } => name.hash(state),
+            Self::Wasi { interface } => interface.hash(state),
+            Self::Local { path } => path.hash(state),
+            // Entry points hash the same regardless of filename
+            Self::EntryPoint { .. } => {}
+        }
+    }
 }
 
 impl ModuleSource {
@@ -98,13 +135,27 @@ impl ModuleSource {
         Self::Local { path: path.into() }
     }
 
+    /// Create an entry point module source without a filename.
+    #[must_use]
+    pub fn entry_point() -> Self {
+        Self::EntryPoint { filename: None }
+    }
+
+    /// Create an entry point module source with a filename.
+    #[must_use]
+    pub fn entry_point_with_filename(filename: impl Into<String>) -> Self {
+        Self::EntryPoint {
+            filename: Some(filename.into()),
+        }
+    }
+
     /// Convert from a legacy `Vec<String>` module path.
     ///
     /// This enables gradual migration from the old representation.
     #[must_use]
     pub fn from_path(path: &[String]) -> Self {
         match path {
-            [] => Self::EntryPoint,
+            [] => Self::entry_point(),
             [first] if first.starts_with("./") || first.starts_with("../") => Self::Local {
                 path: first.clone(),
             },
@@ -132,7 +183,7 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.clone()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.clone()],
             Self::Local { path } => vec![path.clone()],
-            Self::EntryPoint => vec![],
+            Self::EntryPoint { .. } => vec![],
         }
     }
 
@@ -171,6 +222,12 @@ impl ModuleSource {
     pub fn is_core_prelude(&self) -> bool {
         matches!(self, Self::Core { name } if name == "prelude")
     }
+
+    /// Check if this is the entry point module.
+    #[must_use]
+    pub fn is_entry_point(&self) -> bool {
+        matches!(self, Self::EntryPoint { .. })
+    }
 }
 
 impl fmt::Display for ModuleSource {
@@ -179,7 +236,13 @@ impl fmt::Display for ModuleSource {
             Self::Core { name } => write!(f, "core:{name}"),
             Self::Wasi { interface } => write!(f, "wasi:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
-            Self::EntryPoint => write!(f, "<entry>"),
+            Self::EntryPoint { filename } => {
+                if let Some(name) = filename {
+                    write!(f, "{name}")
+                } else {
+                    write!(f, "<entry>")
+                }
+            }
         }
     }
 }
@@ -646,7 +709,7 @@ impl StructName {
     #[must_use]
     pub fn from_name(name: &str) -> Self {
         Self {
-            module_source: ModuleSource::EntryPoint,
+            module_source: ModuleSource::entry_point(),
             name: name.to_string(),
         }
     }
@@ -676,7 +739,7 @@ impl StructName {
 impl fmt::Display for StructName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.module_source {
-            ModuleSource::EntryPoint => write!(f, "{}", self.name),
+            ModuleSource::EntryPoint { .. } => write!(f, "{}", self.name),
             ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
             ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
             ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
@@ -1379,7 +1442,7 @@ mod tests {
     #[test]
     fn test_module_source_from_path_entry_point() {
         let source = ModuleSource::from_path(&[]);
-        assert!(matches!(source, ModuleSource::EntryPoint));
+        assert!(source.is_entry_point());
     }
 
     #[test]
@@ -1393,7 +1456,7 @@ mod tests {
         let source = ModuleSource::local("./geometry.wado");
         assert_eq!(source.to_path(), vec!["./geometry.wado"]);
 
-        let source = ModuleSource::EntryPoint;
+        let source = ModuleSource::entry_point();
         assert!(source.to_path().is_empty());
     }
 
@@ -1405,7 +1468,11 @@ mod tests {
             ModuleSource::local("./geometry.wado").to_string(),
             "./geometry.wado"
         );
-        assert_eq!(ModuleSource::EntryPoint.to_string(), "<entry>");
+        assert_eq!(ModuleSource::entry_point().to_string(), "<entry>");
+        assert_eq!(
+            ModuleSource::entry_point_with_filename("hello.wado").to_string(),
+            "hello.wado"
+        );
     }
 
     #[test]

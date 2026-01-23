@@ -1884,6 +1884,37 @@ impl Parser {
                 })
             }
             TokenKind::If => self.parse_if_expr(),
+            TokenKind::Hash => {
+                self.advance(); // consume '#'
+                // Parse compile-time location literals: #file, #line, #function
+                match self.peek_kind() {
+                    TokenKind::Ident(name) => {
+                        let name = name.clone();
+                        let end_span = self.advance().span;
+                        let literal = match name.as_str() {
+                            "file" => Literal::LocationFile,
+                            "line" => Literal::LocationLine,
+                            "function" => Literal::LocationFunction,
+                            _ => {
+                                return Err(ParseError {
+                                    message: format!(
+                                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, or `#function`"
+                                    ),
+                                    span: start_span.merge(&end_span),
+                                });
+                            }
+                        };
+                        Ok(Expr::Literal(LiteralExpr {
+                            value: literal,
+                            span: start_span.merge(&end_span),
+                        }))
+                    }
+                    _ => Err(ParseError {
+                        message: "expected identifier after `#` for compile-time literal".into(),
+                        span: start_span,
+                    }),
+                }
+            }
             _ => Err(ParseError {
                 message: format!("expected expression, found {:?}", self.peek_kind()),
                 span: start_span,
@@ -2966,7 +2997,8 @@ impl Parser {
         }
 
         // Create a new lexer and parser for the interpolation expression
-        let mut lexer = crate::lexer::Lexer::new(expr_str);
+        // Use the span's line number so that #line reports the correct location
+        let mut lexer = crate::lexer::Lexer::with_line(expr_str, span.line);
         let tokens = lexer.tokenize().map_err(|e| ParseError {
             message: format!("error parsing template interpolation: {}", e.message),
             span,

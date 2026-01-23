@@ -62,10 +62,9 @@ impl CompilerHost for TestCompilerHost {
 
 /// Extract the entry module from the unparsed TIR modules
 fn extract_entry_module(project: &wado_compiler::Project) -> String {
-    use wado_compiler::name::ModuleSource;
     for (module_source, module) in &project.tir_modules {
         // Entry module is ModuleSource::EntryPoint
-        if matches!(module_source, ModuleSource::EntryPoint) {
+        if module_source.is_entry_point() {
             return wado_compiler::unparse::unparse_tir(module);
         }
     }
@@ -85,12 +84,17 @@ fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>>
             .unwrap_or_else(|e| panic!("Failed to read golden file {:?}: {}", golden_path, e));
 
         // Extract the source filename from the header
-        // Format: "// Source: tests/fixtures/opt_inline_simple.wado"
+        // Format: "// Source: wado-compiler/tests/fixtures/opt_inline_simple.wado"
         let source_line = golden_content
             .lines()
             .find(|line| line.starts_with("// Source:"))
             .expect("Golden file must have a '// Source:' header line");
-        let source_relative = source_line.strip_prefix("// Source:").unwrap().trim();
+        let source_from_header = source_line.strip_prefix("// Source:").unwrap().trim();
+
+        // Strip "wado-compiler/" prefix if present (CLI runs from repo root)
+        let source_relative = source_from_header
+            .strip_prefix("wado-compiler/")
+            .unwrap_or(source_from_header);
 
         // Construct full source path
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -105,10 +109,11 @@ fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>>
         let host = TestCompilerHost::new(base_path);
 
         // Run dump_with_host with O2 optimization
+        // Use the original path from header to match expected #file output
         let result = wado_compiler::dump_with_host(
             &source,
             &host,
-            Some(source_path.to_str().unwrap()),
+            Some(source_from_header),
             OptLevel::Full,
         )
         .await

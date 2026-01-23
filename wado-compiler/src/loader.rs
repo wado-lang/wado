@@ -111,14 +111,20 @@ impl ModuleLoader {
     ///
     /// # Arguments
     /// * `entry_source` - Source code of the entry module
+    /// * `entry_filename` - Optional filename of the entry module (for error messages)
     /// * `host` - `CompilerHost` for loading user modules and emitting diagnostics
     pub async fn load_all<H: CompilerHost>(
         mut self,
         entry_source: &str,
+        entry_filename: Option<&str>,
         host: &H,
     ) -> Result<LoadResult, LoadError> {
         // Parse entry module
-        let entry_module_source = ModuleSource::EntryPoint;
+        let entry_module_source = if let Some(filename) = entry_filename {
+            ModuleSource::entry_point_with_filename(filename)
+        } else {
+            ModuleSource::entry_point()
+        };
         let entry_module = self.parse_source(entry_source, &entry_module_source)?;
 
         // Desugar and store entry module
@@ -206,7 +212,7 @@ impl ModuleLoader {
 
             // Try to load - errors are warnings for implicit modules
             match self
-                .get_source_with_host(&module_source, &ModuleSource::EntryPoint, host)
+                .get_source_with_host(&module_source, &ModuleSource::entry_point(), host)
                 .await
             {
                 Ok(source) => {
@@ -338,7 +344,7 @@ impl ModuleLoader {
                     })
                 }
             }
-            ModuleSource::EntryPoint => {
+            ModuleSource::EntryPoint { .. } => {
                 // Entry point source is provided directly, not loaded from host
                 Err(LoadError::ModuleNotFound {
                     module_source: module_source.clone(),

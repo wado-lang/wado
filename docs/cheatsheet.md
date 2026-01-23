@@ -618,6 +618,24 @@ let make_point = |x: i32, y: i32| Point { x, y };
 
 Note: Closures that capture outer variables are not yet implemented (pure closures work).
 
+## Compile-Time Location Literals
+
+```wado
+// Get current source file
+let file = #file;           // "<entry>" or "./module.wado"
+
+// Get current line number (1-indexed)
+let line = #line;           // i32
+
+// Get current function name
+let func = #function;       // "run" or "Point::distance"
+
+// Example: debug logging
+fn log_debug(message: String) with Stdout {
+    println(`[{#file}:{#line}] {message}`);
+}
+```
+
 ## Attributes
 
 ```wado

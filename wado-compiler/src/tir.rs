@@ -738,7 +738,7 @@ impl FunctionRef {
     /// Get the module source
     pub fn module_source(&self) -> ModuleSource {
         match self {
-            FunctionRef::Resolved(_) => ModuleSource::EntryPoint,
+            FunctionRef::Resolved(_) => ModuleSource::entry_point(),
             FunctionRef::External { module_source, .. } => module_source.clone(),
         }
     }
