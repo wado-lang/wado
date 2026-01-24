@@ -1729,6 +1729,172 @@ assert x > 0;
 assert x > 0, "x must be checked elsewhere";
 ```
 
+## Testing
+
+Wado has built-in support for writing and running tests. Test declarations are first-class syntax, and the `wado test` command provides a test runner similar to `cargo test` or `moon test`.
+
+### Test Declaration Syntax
+
+Tests are declared using the `test` keyword followed by an optional name and a block:
+
+```wado
+// Named test
+test "addition works" {
+    assert 1 + 1 == 2;
+}
+
+// Unnamed test (identified by file:line)
+test {
+    let result = compute_something();
+    assert result > 0;
+}
+
+// Test with multiple assertions
+test "string operations" {
+    let s = "hello";
+    assert s.len() == 5;
+    assert s + " world" == "hello world";
+}
+```
+
+**Syntax Rules:**
+
+- `test` is a contextual keyword (functions named `test` are still allowed)
+- Test name is an optional string literal
+- Test body is a block containing statements
+- No return type or effect declarations needed
+- Tests can use any effects (side effects are allowed in tests)
+
+**Test Identification:**
+
+- Named tests: identified by their string name
+- Unnamed tests: identified by `{filename}:{line_number}`
+
+### Test Semantics
+
+**Execution:**
+
+- Each test runs in isolation with fresh state
+- Test order is deterministic (declaration order within a file)
+- A test passes if it completes without panicking or trapping
+- A test fails if `assert` fails, `panic!` is called, or a trap occurs
+
+**Effects:**
+
+- Tests implicitly have access to all effects (no `with` declaration required)
+- This allows tests to perform I/O, use the filesystem, etc.
+
+**No Runtime Overhead:**
+
+- Test functions are only included when running `wado test`
+- Regular compilation (`wado compile`, `wado run`) excludes test code via dead code elimination
+
+### Test Runner CLI
+
+The `wado test` command discovers and runs tests:
+
+```sh
+# Auto-discover and run all *_test.wado files recursively
+wado test
+
+# Run tests in specific file(s)
+wado test path/to/file.wado
+wado test tests/*.wado
+
+# Filter tests by name pattern
+wado test --filter "addition"
+wado test -f "string"
+
+# Show help
+wado test --help
+```
+
+**Discovery:**
+
+When no files are specified, `wado test` searches for `**/*_test.wado` files recursively from the current directory.
+
+**Output:**
+
+```
+Running tests in math_test.wado...
+  ✓ addition works
+  ✓ subtraction works
+  ✗ division edge case
+    assertion failed at line 15
+
+Running tests in string_test.wado...
+  ✓ concatenation
+
+3 passed, 1 failed
+```
+
+**Exit Codes:**
+
+- `0`: All tests passed
+- `1`: One or more tests failed
+
+### Test File Conventions
+
+By convention, test files are named with a `_test.wado` suffix:
+
+```
+src/
+  math.wado
+  math_test.wado      # Tests for math.wado
+  string.wado
+  string_test.wado    # Tests for string.wado
+```
+
+Tests can also be placed in a separate `tests/` directory:
+
+```
+src/
+  lib.wado
+tests/
+  integration_test.wado
+```
+
+### Example Test File
+
+```wado
+// math_test.wado
+use {add, multiply} from "./math.wado";
+
+test "add positive numbers" {
+    assert add(2, 3) == 5;
+    assert add(0, 0) == 0;
+}
+
+test "add negative numbers" {
+    assert add(-1, -1) == -2;
+    assert add(-5, 3) == -2;
+}
+
+test "multiply" {
+    assert multiply(3, 4) == 12;
+    assert multiply(0, 100) == 0;
+}
+
+// Entry point required for valid Wado module
+fn run() {
+}
+```
+
+### Implementation Notes
+
+**Component Model Export:**
+
+Test functions are exported at the Component Model level with kebab-case names:
+
+- `test "simple addition"` → exported as `test-0-simple-addition`
+- `test { ... }` (unnamed, line 10) → exported as `test-1`
+
+The numeric prefix preserves declaration order for deterministic execution.
+
+**Async Support:**
+
+Test functions use the same async wrapper as `run()`, ensuring compatibility with WASI P3's async model. Each test properly completes its async task before reporting results.
+
 ## Reactive System
 
 Wado has built-in reactive signals (called "signals" in other frameworks like SolidJS, Svelte 5). The compiler analyzes dependencies at compile-time and generates efficient update code.
