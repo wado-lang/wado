@@ -16,57 +16,57 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 
 ### Compilation Pipeline
 
-| Phase       | Input         | Output       | Description                               |
-| ----------- | ------------- | ------------ | ----------------------------------------- |
-| Lexer       | Source        | Tokens       | Tokenize, extract `__DATA__` section      |
-| Parser      | Tokens        | AST          | Build abstract syntax tree                |
-| Bind        | AST           | Bind info    | Local name resolution, scope tracking     |
-| Desugar     | AST           | AST          | Transform syntactic sugar                 |
-| Load        | AST           | All modules  | Load all dependencies recursively         |
-| Analyze     | All modules   | Symbol table | Build symbol table, validate imports      |
-| Resolve     | AST + Symbols | Project      | Type resolution, produce Project          |
-| Monomorphize| Project       | Project      | Instantiate generics with concrete types  |
-| Lower       | Project       | Project      | String literal collection                 |
-| Optimize    | Project       | Project      | DCE, usage analysis, feature flags        |
-| Codegen     | Project       | Wasm bytes   | Generate Component Model Wasm             |
+| Phase        | Input         | Output       | Description                              |
+| ------------ | ------------- | ------------ | ---------------------------------------- |
+| Lexer        | Source        | Tokens       | Tokenize, extract `__DATA__` section     |
+| Parser       | Tokens        | AST          | Build abstract syntax tree               |
+| Bind         | AST           | Bind info    | Local name resolution, scope tracking    |
+| Desugar      | AST           | AST          | Transform syntactic sugar                |
+| Load         | AST           | All modules  | Load all dependencies recursively        |
+| Analyze      | All modules   | Symbol table | Build symbol table, validate imports     |
+| Resolve      | AST + Symbols | Project      | Type resolution, produce Project         |
+| Monomorphize | Project       | Project      | Instantiate generics with concrete types |
+| Lower        | Project       | Project      | String literal collection                |
+| Optimize     | Project       | Project      | DCE, usage analysis, feature flags       |
+| Codegen      | Project       | Wasm bytes   | Generate Component Model Wasm            |
 
 ### Modules
 
-| Module          | File                  | Description                                           |
-| --------------- | --------------------- | ----------------------------------------------------- |
-| Lexer           | `lexer.rs`            | Tokenizes source code, extracts `__DATA__` section    |
-| Parser          | `parser.rs`           | Recursive descent parser, builds AST                  |
-| AST             | `ast.rs`              | AST node definitions, `Module::data_section()` API    |
-| Token           | `token.rs`            | Token types and spans                                 |
-| Comment         | `comment.rs`          | Comment collection and CommentMap for formatting      |
-| Bind            | `bind.rs`             | Local name binding, scope analysis, mutability check  |
-| Loader          | `loader.rs`           | Module loading, dependency resolution                 |
-| Desugar         | `desugar.rs`          | AST transformations (compound assign, etc.)           |
-| Unparser        | `unparse.rs`          | Converts AST/TIR back to source code                  |
-| Analyzer        | `analyze.rs`          | Semantic analysis, symbol table construction          |
-| Symbol          | `symbol.rs`           | Symbol table data structures                          |
-| Name            | `name.rs`             | Name mangling utilities for methods and symbols       |
-| ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library            |
-| Resolver        | `resolver.rs`         | Type resolution, AST to TIR, produces Project         |
-| TIR             | `tir.rs`              | Typed Intermediate Representation                     |
-| Monomorphize    | `monomorphize.rs`     | Generic type/function instantiation (Project→Project) |
-| Lower           | `lower.rs`            | String literal collection (Project→Project)           |
-| Project         | `project.rs`          | Project: compilation context passed through pipeline  |
-| Optimize        | `optimize.rs`         | Optimization coordinator, dispatches to sub-modules   |
-| OptimizeDCE     | `optimize_dce.rs`     | Dead code elimination via reachability analysis       |
-| OptimizeInline  | `optimize_inline.rs`  | Function inlining for small, pure functions           |
-| OptimizeRefElim | `optimize_ref_elim.rs`| Reference elimination after inlining                  |
-| OptimizeCopyProp| `optimize_copy_prop.rs`| Copy propagation for trivial bindings                |
-| OptimizeLICM    | `optimize_licm.rs`    | Loop-invariant code motion                            |
-| OptimizeMove    | `optimize_move.rs`    | Move insertion for fresh values, copy type collection |
-| Stdlib          | `stdlib.rs`           | Embedded core library sources                         |
-| WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution           |
-| BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`         |
-| WorldRegistry   | `world_registry.rs`   | World definitions registry for export signatures      |
-| WasmBuilder     | `wasm_builder.rs`     | Wasm index tracking utilities                         |
-| Codegen         | `codegen.rs`          | Generates Component Model Wasm via wasm-encoder       |
-| Bundled         | `bundled.rs`          | Loads pre-compiled Wasm builtins (wado-bundled)       |
-| Postproc        | `wasm_postprocess.rs` | Wasm binary transformations                           |
+| Module           | File                    | Description                                           |
+| ---------------- | ----------------------- | ----------------------------------------------------- |
+| Lexer            | `lexer.rs`              | Tokenizes source code, extracts `__DATA__` section    |
+| Parser           | `parser.rs`             | Recursive descent parser, builds AST                  |
+| AST              | `ast.rs`                | AST node definitions, `Module::data_section()` API    |
+| Token            | `token.rs`              | Token types and spans                                 |
+| Comment          | `comment.rs`            | Comment collection and CommentMap for formatting      |
+| Bind             | `bind.rs`               | Local name binding, scope analysis, mutability check  |
+| Loader           | `loader.rs`             | Module loading, dependency resolution                 |
+| Desugar          | `desugar.rs`            | AST transformations (compound assign, etc.)           |
+| Unparser         | `unparse.rs`            | Converts AST/TIR back to source code                  |
+| Analyzer         | `analyze.rs`            | Semantic analysis, symbol table construction          |
+| Symbol           | `symbol.rs`             | Symbol table data structures                          |
+| Name             | `name.rs`               | Name mangling utilities for methods and symbols       |
+| ModuleLoader     | `module_loader.rs`      | Module path resolution, loads core library            |
+| Resolver         | `resolver.rs`           | Type resolution, AST to TIR, produces Project         |
+| TIR              | `tir.rs`                | Typed Intermediate Representation                     |
+| Monomorphize     | `monomorphize.rs`       | Generic type/function instantiation (Project→Project) |
+| Lower            | `lower.rs`              | String literal collection (Project→Project)           |
+| Project          | `project.rs`            | Project: compilation context passed through pipeline  |
+| Optimize         | `optimize.rs`           | Optimization coordinator, dispatches to sub-modules   |
+| OptimizeDCE      | `optimize_dce.rs`       | Dead code elimination via reachability analysis       |
+| OptimizeInline   | `optimize_inline.rs`    | Function inlining for small, pure functions           |
+| OptimizeRefElim  | `optimize_ref_elim.rs`  | Reference elimination after inlining                  |
+| OptimizeCopyProp | `optimize_copy_prop.rs` | Copy propagation for trivial bindings                 |
+| OptimizeLICM     | `optimize_licm.rs`      | Loop-invariant code motion                            |
+| OptimizeMove     | `optimize_move.rs`      | Move insertion for fresh values, copy type collection |
+| Stdlib           | `stdlib.rs`             | Embedded core library sources                         |
+| WasiRegistry     | `wasi_registry.rs`      | WASI import registry, type alias resolution           |
+| BuiltinRegistry  | `builtin_registry.rs`   | Builtin function registry from `core:builtin`         |
+| WorldRegistry    | `world_registry.rs`     | World definitions registry for export signatures      |
+| WasmBuilder      | `wasm_builder.rs`       | Wasm index tracking utilities                         |
+| Codegen          | `codegen.rs`            | Generates Component Model Wasm via wasm-encoder       |
+| Bundled          | `bundled.rs`            | Loads pre-compiled Wasm builtins (wado-bundled)       |
+| Postproc         | `wasm_postprocess.rs`   | Wasm binary transformations                           |
 
 ### Parser and Desugar Separation
 
@@ -191,18 +191,19 @@ The `optimize.rs` module coordinates multiple optimization passes on TIR. The op
 
 **Optimization Passes:**
 
-| Module               | File                    | Description                                          |
-| -------------------- | ----------------------- | ---------------------------------------------------- |
-| DCE                  | `optimize_dce.rs`       | Dead code elimination via reachability analysis      |
-| Function Inlining    | `optimize_inline.rs`    | Inline small, pure functions                         |
-| Reference Elimination| `optimize_ref_elim.rs`  | Eliminate unnecessary `&local` bindings after inline |
-| Copy Propagation     | `optimize_copy_prop.rs` | Propagate trivial copies like `let x = y`            |
-| LICM                 | `optimize_licm.rs`      | Hoist loop-invariant field accesses                  |
-| Move Insertion       | `optimize_move.rs`      | Avoid copies for fresh values (literals, call results)|
+| Module                | File                    | Description                                            |
+| --------------------- | ----------------------- | ------------------------------------------------------ |
+| DCE                   | `optimize_dce.rs`       | Dead code elimination via reachability analysis        |
+| Function Inlining     | `optimize_inline.rs`    | Inline small, pure functions                           |
+| Reference Elimination | `optimize_ref_elim.rs`  | Eliminate unnecessary `&local` bindings after inline   |
+| Copy Propagation      | `optimize_copy_prop.rs` | Propagate trivial copies like `let x = y`              |
+| LICM                  | `optimize_licm.rs`      | Hoist loop-invariant field accesses                    |
+| Move Insertion        | `optimize_move.rs`      | Avoid copies for fresh values (literals, call results) |
 
 **Optimization Order:**
 
 For `-O2` and `-Os`:
+
 1. **Inlining** → inline small functions
 2. **Reference Elimination** → clean up `&local` bindings from inlining
 3. **Copy Propagation** → eliminate trivial copies
@@ -214,25 +215,25 @@ For `-O2` and `-Os`:
 
 **Usage Analysis Fields (populated in Project):**
 
-| Field                 | Type                     | Description                                 |
-| --------------------- | ------------------------ | ------------------------------------------- |
-| `reachable_functions` | `HashSet<FunctionId>`    | Functions reachable from entry point (DCE)  |
-| `all_reachable`       | `bool`                   | When true, DCE is disabled                  |
-| `used_effects`        | `HashSet<WasiEffect>`    | WASI effects used (Stdout, Stderr, etc.)    |
-| `used_wasi_functions` | `HashSet<String>`        | WASI functions called                       |
-| `used_builtins`       | `HashSet<CanonBuiltin>`  | Canonical builtins used (stream ops, etc.)  |
-| `used_box_primitives` | `HashSet<PrimitiveType>` | Primitives needing box types for references |
-| `strip_names`         | `bool`                   | Whether to strip debug name sections        |
-| `needed_copy_types`   | `HashMap<String, HashSet<TypeId>>` | Types requiring value copy per function |
+| Field                 | Type                               | Description                                 |
+| --------------------- | ---------------------------------- | ------------------------------------------- |
+| `reachable_functions` | `HashSet<FunctionId>`              | Functions reachable from entry point (DCE)  |
+| `all_reachable`       | `bool`                             | When true, DCE is disabled                  |
+| `used_effects`        | `HashSet<WasiEffect>`              | WASI effects used (Stdout, Stderr, etc.)    |
+| `used_wasi_functions` | `HashSet<String>`                  | WASI functions called                       |
+| `used_builtins`       | `HashSet<CanonBuiltin>`            | Canonical builtins used (stream ops, etc.)  |
+| `used_box_primitives` | `HashSet<PrimitiveType>`           | Primitives needing box types for references |
+| `strip_names`         | `bool`                             | Whether to strip debug name sections        |
+| `needed_copy_types`   | `HashMap<String, HashSet<TypeId>>` | Types requiring value copy per function     |
 
 **CLI Control:**
 
-| Flag  | Effect                                                        |
-| ----- | ------------------------------------------------------------- |
-| `-O0` | No optimizations, includes all functions/features             |
-| `-O1` | DCE only, keeps debug names                                   |
-| `-O2` | Full optimizations (inline, ref-elim, copy-prop, LICM, DCE)   |
-| `-Os` | Full optimizations + strips debug name sections               |
+| Flag  | Effect                                                      |
+| ----- | ----------------------------------------------------------- |
+| `-O0` | No optimizations, includes all functions/features           |
+| `-O1` | DCE only, keeps debug names                                 |
+| `-O2` | Full optimizations (inline, ref-elim, copy-prop, LICM, DCE) |
+| `-Os` | Full optimizations + strips debug name sections             |
 
 ### Standard Library
 
