@@ -2100,39 +2100,92 @@ impl<'a> Resolver<'a> {
         vec![for_tir]
     }
 
-    /// Resolve a for-of statement: `for let item of array { ... }`
+    /// Resolve a for-of statement: `for let item of iterable { ... }`
+    ///
+    /// For Arrays, uses the optimized `TirStmtKind::ForOf` that generates efficient WASM.
+    /// For other types implementing `IntoIterator`, desugars to:
+    /// ```text
+    /// {
+    ///     let mut __iter = iterable.into_iter();
+    ///     loop {
+    ///         if let Some(binding) = __iter.next() {
+    ///             body
+    ///         } else {
+    ///             break;
+    ///         }
+    ///     }
+    /// }
+    /// ```
     fn resolve_for_of(&mut self, for_of_stmt: &ForOfStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Resolve the iterable expression
         let iterable = self.resolve_expr(&for_of_stmt.iterable, ctx);
         let iterable_type = iterable.type_id;
 
-        // Get the element type from the array type
-        let element_type = if let Some(elem_type) = self.type_table.borrow().as_array(iterable_type)
-        {
-            elem_type
-        } else {
-            self.errors.push(TypeError::TypeMismatch {
-                expected: "Array<T>".to_string(),
-                found: self.type_table.borrow().type_name(iterable_type),
-                span: for_of_stmt.iterable.span(),
-            });
-            TypeTable::UNKNOWN
-        };
+        // Fast path: Array<T> - use optimized codegen
+        let element_type_opt = self.type_table.borrow().as_array(iterable_type);
+        if let Some(element_type) = element_type_opt {
+            return self.resolve_for_of_array(for_of_stmt, iterable, element_type, ctx);
+        }
 
-        // Enter a scope for the loop binding and body
+        // Slow path: Check for IntoIterator implementation
+        if let Some((item_type, iter_type)) = self.find_into_iterator_impl(iterable_type) {
+            return self.resolve_for_of_into_iterator(
+                for_of_stmt,
+                iterable,
+                iterable_type,
+                item_type,
+                iter_type,
+                ctx,
+            );
+        }
+
+        // No valid iteration method found
+        self.errors.push(TypeError::TypeMismatch {
+            expected: "Array<T> or type implementing IntoIterator".to_string(),
+            found: self.type_table.borrow().type_name(iterable_type),
+            span: for_of_stmt.iterable.span(),
+        });
+
+        // Generate a dummy loop to avoid cascading errors
         ctx.enter_scope();
+        let binding_local = ctx.add_local(
+            for_of_stmt.binding.clone(),
+            TypeTable::UNKNOWN,
+            for_of_stmt.is_mut,
+        );
+        let body = self.resolve_block(&for_of_stmt.body, ctx);
+        ctx.exit_scope();
 
-        // Add the loop variable
+        TirStmt::new(
+            TirStmtKind::ForOf {
+                binding_local,
+                binding_type: TypeTable::UNKNOWN,
+                is_mut: for_of_stmt.is_mut,
+                iterable,
+                iterable_type,
+                body,
+            },
+            for_of_stmt.span,
+        )
+    }
+
+    /// Optimized for-of for Array<T> - generates direct array access in codegen
+    fn resolve_for_of_array(
+        &mut self,
+        for_of_stmt: &ForOfStmt,
+        iterable: TirExpr,
+        element_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
+        let iterable_type = iterable.type_id;
+
+        ctx.enter_scope();
         let binding_local = ctx.add_local(
             for_of_stmt.binding.clone(),
             element_type,
             for_of_stmt.is_mut,
         );
-
-        // Resolve the body
         let body = self.resolve_block(&for_of_stmt.body, ctx);
-
-        // Exit the scope
         ctx.exit_scope();
 
         TirStmt::new(
@@ -2146,6 +2199,348 @@ impl<'a> Resolver<'a> {
             },
             for_of_stmt.span,
         )
+    }
+
+    /// Desugar for-of for `IntoIterator` types into a loop with iterator method calls
+    fn resolve_for_of_into_iterator(
+        &mut self,
+        for_of_stmt: &ForOfStmt,
+        iterable: TirExpr,
+        iterable_type: TypeId,
+        item_type: TypeId,
+        iter_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
+        let span = for_of_stmt.span;
+
+        // Create outer scope for the whole desugared construct
+        ctx.enter_scope();
+
+        // Generate: let mut __iter = iterable.into_iter();
+        let iter_local = ctx.add_local("__iter".to_string(), iter_type, true);
+
+        // Get base type info for method name mangling
+        let (struct_name, _module_path, type_args) = self.get_type_info_for_method(iterable_type);
+
+        // Build into_iter() method call
+        // Receiver needs to be a reference: &iterable
+        let ref_type = self.type_table.borrow_mut().make_ref(iterable_type);
+        let receiver = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(iterable),
+            },
+            ref_type,
+            span,
+        );
+
+        let into_iter_method_name = format!("{struct_name}^IntoIterator::into_iter");
+        let into_iter_call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func: FunctionRef::External {
+                    module_source: ModuleSource::core("prelude"),
+                    name: into_iter_method_name,
+                    monomorph_info: None,
+                    method_info: Some(crate::name::LocalMethodName::new(
+                        struct_name.clone(),
+                        Some("IntoIterator".to_string()),
+                        "into_iter".to_string(),
+                    )),
+                },
+                type_args: type_args.clone().unwrap_or_default(),
+                args: vec![],
+            },
+            iter_type,
+            span,
+        );
+
+        let let_iter_stmt = TirStmt::new(
+            TirStmtKind::Let {
+                name: "__iter".to_string(),
+                local_index: iter_local,
+                is_mut: true,
+                is_reactive: false,
+                type_id: iter_type,
+                value: into_iter_call,
+            },
+            span,
+        );
+
+        // Create inner scope for the loop body
+        ctx.enter_scope();
+
+        // Add the user's binding variable
+        let binding_local =
+            ctx.add_local(for_of_stmt.binding.clone(), item_type, for_of_stmt.is_mut);
+
+        // Resolve the user's body
+        let user_body = self.resolve_block(&for_of_stmt.body, ctx);
+
+        ctx.exit_scope();
+
+        // Get iterator type info for next() method name
+        let (iter_struct_name, _iter_module_path, iter_type_args) =
+            self.get_type_info_for_method(iter_type);
+
+        // Build __iter.next() call
+        // Receiver needs to be a mutable reference: &mut __iter
+        let iter_local_expr = TirExpr::new(
+            TirExprKind::Local {
+                index: iter_local,
+                name: "__iter".to_string(),
+            },
+            iter_type,
+            span,
+        );
+        let mut_ref_type = self.type_table.borrow_mut().make_mut_ref(iter_type);
+        let next_receiver = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: Box::new(iter_local_expr),
+            },
+            mut_ref_type,
+            span,
+        );
+
+        let next_method_name = format!("{iter_struct_name}^Iterator::next");
+        let option_item_type = self
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Option(item_type));
+
+        let next_call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(next_receiver),
+                func: FunctionRef::External {
+                    module_source: ModuleSource::core("prelude"),
+                    name: next_method_name,
+                    monomorph_info: None,
+                    method_info: Some(crate::name::LocalMethodName::new(
+                        iter_struct_name,
+                        Some("Iterator".to_string()),
+                        "next".to_string(),
+                    )),
+                },
+                type_args: iter_type_args.unwrap_or_default(),
+                args: vec![],
+            },
+            option_item_type,
+            span,
+        );
+
+        // Build: if let Some(binding) = __iter.next() { body } else { break; }
+        let some_pattern = TirPattern::Variant {
+            variant_name: "Some".to_string(),
+            enum_type: option_item_type,
+            bindings: vec![TirPattern::Binding {
+                name: for_of_stmt.binding.clone(),
+                local_index: binding_local,
+            }],
+        };
+
+        let break_stmt = TirStmt::new(
+            TirStmtKind::Break {
+                label: None,
+                value: None,
+            },
+            span,
+        );
+
+        let if_pattern = TirStmt::new(
+            TirStmtKind::IfPattern {
+                scrutinee: next_call,
+                pattern: some_pattern,
+                then_block: user_body,
+                else_block: Some(TirBlock::new(vec![break_stmt], span)),
+            },
+            span,
+        );
+
+        // Build: loop { if let Some(binding) = __iter.next() { body } else { break; } }
+        let loop_stmt = TirStmt::new(
+            TirStmtKind::Loop {
+                body: TirBlock::new(vec![if_pattern], span),
+            },
+            span,
+        );
+
+        ctx.exit_scope();
+
+        // Wrap everything in a labeled block to create proper scope
+        TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label: "__for_of".to_string(),
+                block: TirBlock::new(vec![let_iter_stmt, loop_stmt], span),
+            },
+            span,
+        )
+    }
+
+    /// Find `IntoIterator` implementation for a type and return (Item, Iter) types
+    fn find_into_iterator_impl(&mut self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+        // Get base type for lookup
+        let base_type_id = self.get_base_type(type_id);
+        let base_type = self.type_table.borrow().get(base_type_id).clone();
+
+        let (struct_name, module_path, type_args) = match &base_type {
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => (name.clone(), module_source.to_path(), None),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => (
+                name.clone(),
+                module_source.to_path(),
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args.clone())
+                },
+            ),
+            _ => return None,
+        };
+
+        // Look for impl IntoIterator for StructName
+        self.find_into_iterator_impl_for_struct(&struct_name, &module_path, type_args.as_deref())
+    }
+
+    /// Find `IntoIterator` impl for a struct and return (Item, Iter) associated types
+    fn find_into_iterator_impl_for_struct(
+        &mut self,
+        struct_name: &str,
+        module_path: &[String],
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<(TypeId, TypeId)> {
+        // Collect impl blocks from all modules
+        let mut impl_blocks_to_check: Vec<(Type, Type, Vec<crate::ast::AssociatedTypeBinding>)> =
+            Vec::new();
+
+        // Check specific module if provided
+        if !module_path.is_empty()
+            && let Some(module) = self.loaded_modules.get(module_path)
+        {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && self.get_type_name(trait_type) == "IntoIterator"
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.associated_types.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Also check all loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && self.get_type_name(trait_type) == "IntoIterator"
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.associated_types.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+                && self.get_type_name(trait_type) == "IntoIterator"
+            {
+                impl_blocks_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.associated_types.clone(),
+                ));
+            }
+        }
+
+        // Find matching impl
+        for (impl_ty, _trait_type, associated_types) in impl_blocks_to_check {
+            let impl_struct_name = self.get_type_name(&impl_ty);
+            if impl_struct_name == struct_name {
+                // Set up type params for generic impls
+                let old_type_params = std::mem::take(&mut self.current_type_params);
+                if let Some(type_args) = receiver_type_args
+                    && let Type::Generic(generic) = &impl_ty
+                {
+                    for (i, arg) in generic.args.iter().enumerate() {
+                        if let Type::Named(named) = arg
+                            && i < type_args.len()
+                        {
+                            self.current_type_params
+                                .insert(named.name.clone(), (i as u32, type_args[i]));
+                        }
+                    }
+                }
+
+                // Resolve associated types
+                let mut item_type = TypeTable::UNKNOWN;
+                let mut iter_type = TypeTable::UNKNOWN;
+
+                for binding in &associated_types {
+                    let resolved = self.resolve_type(&binding.ty);
+                    match binding.name.as_str() {
+                        "Item" => item_type = resolved,
+                        "Iter" => iter_type = resolved,
+                        _ => {}
+                    }
+                }
+
+                self.current_type_params = old_type_params;
+
+                if item_type != TypeTable::UNKNOWN && iter_type != TypeTable::UNKNOWN {
+                    return Some((item_type, iter_type));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Get type info for method call generation: (`struct_name`, `module_path`, `type_args`)
+    fn get_type_info_for_method(
+        &self,
+        type_id: TypeId,
+    ) -> (String, Vec<String>, Option<Vec<TypeId>>) {
+        let base_type_id = self.get_base_type(type_id);
+        match self.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => (name, module_source.to_path(), None),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => (
+                name,
+                module_source.to_path(),
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args)
+                },
+            ),
+            ResolvedType::BuiltinArray(elem) => (
+                "Array".to_string(),
+                vec!["core".to_string(), "prelude".to_string()],
+                Some(vec![elem]),
+            ),
+            _ => ("unknown".to_string(), vec![], None),
+        }
     }
 
     /// Resolve a loop statement (infinite loop)
@@ -3341,38 +3736,6 @@ impl<'a> Resolver<'a> {
     /// Resolve a type without registering new types
     /// This is used for lookups where we need immutable access. It only handles
     /// primitive types and type aliases. For generic types, use `resolve_type` instead.
-    fn resolve_type_no_register(&self, ty: &Type) -> TypeId {
-        match ty {
-            Type::Named(named) => match named.name.as_str() {
-                "i8" => TypeTable::I8,
-                "i16" => TypeTable::I16,
-                "i32" => TypeTable::I32,
-                "i64" => TypeTable::I64,
-                "i128" => TypeTable::I128,
-                "u8" => TypeTable::U8,
-                "u16" => TypeTable::U16,
-                "u32" => TypeTable::U32,
-                "u64" => TypeTable::U64,
-                "u128" => TypeTable::U128,
-                "f32" => TypeTable::F32,
-                "f64" => TypeTable::F64,
-                "bool" => TypeTable::BOOL,
-                "char" => TypeTable::CHAR,
-                "!" => TypeTable::NEVER,
-                "()" => TypeTable::UNIT,
-                _ => {
-                    // Check type aliases (e.g., Instant = u64, Duration = u64)
-                    if let Some(&type_id) = self.type_aliases.get(&named.name) {
-                        type_id
-                    } else {
-                        TypeTable::UNKNOWN
-                    }
-                }
-            },
-            _ => TypeTable::UNKNOWN,
-        }
-    }
-
     /// Resolve a method call
     fn resolve_method_call(
         &mut self,
@@ -3425,10 +3788,23 @@ impl<'a> Resolver<'a> {
         let mut method_info = self.lookup_method_info(receiver.type_id, &method_call.method);
         let mut trait_name: Option<String> = None;
 
+        // Extract receiver type args for generic types (used for resolving associated types)
+        let receiver_type_args_for_trait: Option<Vec<TypeId>> =
+            match self.type_table.borrow().get(base_type_id).clone() {
+                ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
+                    Some(type_args)
+                }
+                _ => None,
+            };
+
         // If inherent method not found, try trait methods
         if method_info.is_none()
-            && let Some((found_trait, info)) =
-                self.find_trait_method_for_type(&struct_name, &method_call.method, &module_path)
+            && let Some((found_trait, info)) = self.find_trait_method_for_type(
+                &struct_name,
+                &method_call.method,
+                &module_path,
+                receiver_type_args_for_trait.as_deref(),
+            )
         {
             trait_name = Some(found_trait);
             method_info = Some(info);
@@ -4037,23 +4413,35 @@ impl<'a> Resolver<'a> {
 
     /// Look up method info based on receiver type and method name.
     /// Returns `MethodInfo` including return type and `self_kind`, or None if not found.
-    fn lookup_method_info(&self, receiver_type: TypeId, method_name: &str) -> Option<MethodInfo> {
+    fn lookup_method_info(
+        &mut self,
+        receiver_type: TypeId,
+        method_name: &str,
+    ) -> Option<MethodInfo> {
         // First, get the base (non-reference) type for method lookup
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
-        // Get the struct name and module path from the base type
-        let (struct_name, module_path) = match &base_type {
+        // Get the struct name, module path, and type args from the base type
+        let (struct_name, module_path, receiver_type_args) = match &base_type {
             ResolvedType::Struct {
                 name,
                 module_source,
-            } => (name.clone(), module_source.to_path()),
+            } => (name.clone(), module_source.to_path(), None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
                 name,
                 module_source,
-                ..
-            } => (name.clone(), module_source.to_path()),
+                type_args,
+            } => (
+                name.clone(),
+                module_source.to_path(),
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args.clone())
+                },
+            ),
             // Primitive types have built-in methods like to_string()
             ResolvedType::Primitive(_) => {
                 if method_name == "to_string" {
@@ -4106,16 +4494,36 @@ impl<'a> Resolver<'a> {
                     if impl_struct_name == struct_name {
                         for method in &impl_block.methods {
                             if method.name == method_name {
+                                // Set up type params for generic impls (e.g., impl Array<T>)
+                                let old_type_params = std::mem::take(&mut self.current_type_params);
+                                if let Some(ref type_args) = receiver_type_args
+                                    && let Type::Generic(generic) = &impl_block.ty
+                                {
+                                    for (i, arg) in generic.args.iter().enumerate() {
+                                        if let Type::Named(named) = arg
+                                            && i < type_args.len()
+                                        {
+                                            self.current_type_params.insert(
+                                                named.name.clone(),
+                                                (i as u32, type_args[i]),
+                                            );
+                                        }
+                                    }
+                                }
+
                                 let return_type = method
                                     .return_type
                                     .as_ref()
-                                    .map(|t| self.resolve_type_no_register(t))
+                                    .map(|t| self.resolve_type(t))
                                     .unwrap_or(TypeTable::UNIT);
                                 let self_kind = method
                                     .params
                                     .first()
                                     .map(|p| p.self_kind)
                                     .unwrap_or(ast::SelfKind::None);
+
+                                self.current_type_params = old_type_params;
+
                                 return Some(MethodInfo {
                                     return_type,
                                     self_kind,
@@ -4141,16 +4549,37 @@ impl<'a> Resolver<'a> {
                         if impl_struct_name == struct_name {
                             for method in &impl_block.methods {
                                 if method.name == method_name {
+                                    // Set up type params for generic impls (e.g., impl Array<T>)
+                                    let old_type_params =
+                                        std::mem::take(&mut self.current_type_params);
+                                    if let Some(ref type_args) = receiver_type_args
+                                        && let Type::Generic(generic) = &impl_block.ty
+                                    {
+                                        for (i, arg) in generic.args.iter().enumerate() {
+                                            if let Type::Named(named) = arg
+                                                && i < type_args.len()
+                                            {
+                                                self.current_type_params.insert(
+                                                    named.name.clone(),
+                                                    (i as u32, type_args[i]),
+                                                );
+                                            }
+                                        }
+                                    }
+
                                     let return_type = method
                                         .return_type
                                         .as_ref()
-                                        .map(|t| self.resolve_type_no_register(t))
+                                        .map(|t| self.resolve_type(t))
                                         .unwrap_or(TypeTable::UNIT);
                                     let self_kind = method
                                         .params
                                         .first()
                                         .map(|p| p.self_kind)
                                         .unwrap_or(ast::SelfKind::None);
+
+                                    self.current_type_params = old_type_params;
+
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind,
@@ -4282,11 +4711,16 @@ impl<'a> Resolver<'a> {
     /// Find a trait method for a given type and method name.
     /// Returns (`trait_name`, `MethodInfo`) if found, None otherwise.
     /// This is used when an inherent method is not found.
+    ///
+    /// `receiver_type_args` should contain the concrete type arguments for generic receivers
+    /// (e.g., `[i32]` for `Box_<i32>`). This is used to substitute type parameters when
+    /// resolving associated types like `type Item = T`.
     fn find_trait_method_for_type(
         &mut self,
         struct_name: &str,
         method_name: &str,
         module_path: &[String],
+        receiver_type_args: Option<&[TypeId]>,
     ) -> Option<(String, MethodInfo)> {
         let mut found_traits: Vec<(String, MethodInfo)> = Vec::new();
 
@@ -4351,6 +4785,24 @@ impl<'a> Resolver<'a> {
         for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
             let impl_struct_name = self.get_type_name(&impl_ty);
             if impl_struct_name == struct_name {
+                // Set up type parameters for resolving generic associated types
+                // e.g., for `impl Container for Box_<T>` called on `Box_<i32>`,
+                // we need to map T -> i32 so `type Item = T` resolves to i32
+                let old_type_params = std::mem::take(&mut self.current_type_params);
+                if let Some(type_args) = receiver_type_args
+                    && let Type::Generic(generic) = &impl_ty
+                {
+                    for (i, arg) in generic.args.iter().enumerate() {
+                        if let Type::Named(named) = arg
+                            && i < type_args.len()
+                        {
+                            // Map type param name to concrete type from receiver
+                            self.current_type_params
+                                .insert(named.name.clone(), (i as u32, type_args[i]));
+                        }
+                    }
+                }
+
                 // Set up associated type bindings for resolving Self::* types
                 let old_associated_type_bindings =
                     std::mem::take(&mut self.current_associated_type_bindings);
@@ -4383,8 +4835,9 @@ impl<'a> Resolver<'a> {
                     }
                 }
 
-                // Restore associated type bindings
+                // Restore associated type bindings and type params
                 self.current_associated_type_bindings = old_associated_type_bindings;
+                self.current_type_params = old_type_params;
             }
         }
 
@@ -4825,18 +5278,26 @@ impl<'a> Resolver<'a> {
             _ => output_type,
         };
 
-        let (output_struct_name, output_module_path) =
+        let (output_struct_name, output_module_path, output_type_args) =
             match self.type_table.borrow().get(output_base_type_id).clone() {
                 ResolvedType::Struct {
                     name,
                     module_source,
-                } => (name, module_source.to_path()),
+                } => (name, module_source.to_path(), None),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
-                    ..
-                } => (name, module_source.to_path()),
-                _ => (self.mangle_type_name(output_base_type_id), vec![]),
+                    type_args,
+                } => (
+                    name,
+                    module_source.to_path(),
+                    if type_args.is_empty() {
+                        None
+                    } else {
+                        Some(type_args)
+                    },
+                ),
+                _ => (self.mangle_type_name(output_base_type_id), vec![], None),
             };
 
         // Look up method info to check if it needs &mut self
@@ -4848,6 +5309,7 @@ impl<'a> Resolver<'a> {
                 &output_struct_name,
                 &method_call.method,
                 &output_module_path,
+                output_type_args.as_deref(),
             )
         {
             method_trait_name = Some(found_trait);

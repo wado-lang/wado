@@ -1,0 +1,33 @@
+// Test: generic trait method returning Option<Self::Item>
+use { println, Stdout } from "core:cli";
+
+trait Container {
+    type Item;
+    fn get(&self) -> Option<Self::Item>;
+}
+
+struct Box_<T> {
+    value: T,
+}
+
+impl Container for Box_<T> {
+    type Item = T;
+
+    fn get(&self) -> Option<Self::Item> {
+        return Option::<T>::Some(self.value);
+    }
+}
+
+fn run() with Stdout {
+    let box_: Box_<i32> = Box_ { value: 42 };
+    let result = box_.get();
+
+    if let Some(v) = result {
+        println(`Got: {v}`);
+    } else {
+        println("Empty");
+    }
+}
+
+__DATA__
+{"stdout": "Got: 42\n"}

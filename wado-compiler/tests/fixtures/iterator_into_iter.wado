@@ -1,0 +1,23 @@
+// Test IntoIterator trait with Array
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<i32> = [1, 2, 3];
+
+    // Test into_iter() explicitly
+    let mut iter = arr.into_iter();
+
+    let mut sum = 0;
+    loop {
+        if let Some(x) = iter.next() {
+            sum += x;
+        } else {
+            break;
+        }
+    }
+
+    println(`sum: {sum}`);
+}
+
+__DATA__
+{"stdout": "sum: 6\n"}
