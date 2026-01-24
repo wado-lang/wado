@@ -80,14 +80,11 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// Log an info message
-    ///
-    /// Uses `Code::SpanStart` as a generic info code since info messages
-    /// don't typically have specific error codes.
     pub fn info(&self, message: impl Into<String>) {
         if self.should_log(Severity::Info) {
             self.host.emit_diagnostic(Diagnostic {
                 severity: Severity::Info,
-                code: Code::SpanStart, // Generic code for info
+                code: Code::Log,
                 message: message.into(),
                 span: None,
             });
@@ -95,14 +92,11 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// Log a debug message
-    ///
-    /// Uses `Code::SpanStart` as a generic debug code since debug messages
-    /// don't typically have specific error codes.
     pub fn debug(&self, message: impl Into<String>) {
         if self.should_log(Severity::Hint) {
             self.host.emit_diagnostic(Diagnostic {
                 severity: Severity::Hint, // Use Hint for debug level
-                code: Code::SpanStart,    // Generic code for debug
+                code: Code::Log,
                 message: message.into(),
                 span: None,
             });

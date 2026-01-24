@@ -115,6 +115,10 @@ pub enum Code {
     SpanStart,
     /// End of a span (phase, operation, etc.)
     SpanEnd,
+
+    // General logging
+    /// Generic log message (info, debug, etc.)
+    Log,
 }
 
 impl std::fmt::Display for Code {
@@ -141,6 +145,7 @@ impl std::fmt::Display for Code {
             Code::UnsupportedFeature => "UNSUPPORTED_FEATURE",
             Code::SpanStart => "SPAN_START",
             Code::SpanEnd => "SPAN_END",
+            Code::Log => "LOG",
         };
         write!(f, "{name}")
     }
