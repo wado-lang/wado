@@ -791,12 +791,21 @@ fn run() with Stdout {
 - [x] `impl Iterator for ArrayIter<T>`
 - [x] `impl IntoIterator for Array<T>`
 - [x] `Array::iter()` method
-- [ ] **Blocked**: Generic associated type resolution bug prevents actual usage
-- [ ] For-of loop generalization (Phase 2)
-- [ ] Tuple `IntoIterator` (Phase 3)
-- [ ] `FromIterator` trait (Phase 4)
-- [ ] Iterator combinators (Phase 5)
-- [ ] `collect()` method (Phase 6)
+- [x] Generic associated type resolution bug fixed
+- [x] For-of loop generalization (Phase 2)
+- [ ] Tuple `IntoIterator` (Phase 3) - compiler magic, separate task
+- [x] `FromIterator` trait (Phase 4)
+- [ ] Iterator combinators (Phase 5) - requires closures with captures
+- [x] `ArrayIter::collect()` method (Phase 6 - partial)
+
+### Known Limitations
+
+- **Cross-module monomorphization**: Methods called from within generic stdlib functions
+  (like `ArrayIter::collect` calling `Array::append`) encounter type table ID mismatches.
+  Workaround: Use direct builtin calls instead of method calls in stdlib generic functions.
+
+- **Trait bounds**: `type Iter: Iterator` constraints are not enforced at trait level,
+  only checked at usage sites.
 
 ## Related WEPs
 
