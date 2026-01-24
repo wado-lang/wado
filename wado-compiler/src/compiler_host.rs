@@ -235,9 +235,12 @@ pub trait CompilerHost: Send + Sync {
     /// Load source code for a user module
     ///
     /// # Arguments
-    /// * `path` - Normalized module path (e.g., "./lib.wado", "../utils.wado")
-    ///   NOTE: Standard library paths (core:*, wasi:*) are NOT passed to this method.
-    ///   They are handled directly by the compiler via embedded sources.
+    /// * `path` - Module path, which can be:
+    ///   - Local path (e.g., "./lib.wado", "../utils.wado")
+    ///   - Remote URL (e.g., "<https://example.com/lib.wado>", "<http://example.com/lib.wado>")
+    ///
+    /// NOTE: Standard library paths (core:*, wasi:*) are NOT passed to this method.
+    /// They are handled directly by the compiler via embedded sources.
     ///
     /// # Returns
     /// The complete source code including `__DATA__` section if present

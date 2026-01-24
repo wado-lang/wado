@@ -77,6 +77,11 @@ pub enum ModuleSource {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
         path: String,
     },
+    /// Remote module loaded via HTTP/HTTPS
+    Remote {
+        /// Full URL (e.g., "<https://example.com/lib.wado>")
+        url: String,
+    },
     /// Entry point module (the main file being compiled)
     EntryPoint {
         /// Filename of the entry point (e.g., "hello.wado")
@@ -91,6 +96,7 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
+            (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
             // Entry points are equal regardless of filename
             (Self::EntryPoint { .. }, Self::EntryPoint { .. }) => true,
             _ => false,
@@ -108,6 +114,7 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
+            Self::Remote { url } => url.hash(state),
             // Entry points hash the same regardless of filename
             Self::EntryPoint { .. } => {}
         }
@@ -133,6 +140,12 @@ impl ModuleSource {
     #[must_use]
     pub fn local(path: impl Into<String>) -> Self {
         Self::Local { path: path.into() }
+    }
+
+    /// Create a remote module source.
+    #[must_use]
+    pub fn remote(url: impl Into<String>) -> Self {
+        Self::Remote { url: url.into() }
     }
 
     /// Create an entry point module source without a filename.
@@ -183,6 +196,7 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.clone()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.clone()],
             Self::Local { path } => vec![path.clone()],
+            Self::Remote { url } => vec![url.clone()],
             Self::EntryPoint { .. } => vec![],
         }
     }
@@ -203,6 +217,12 @@ impl ModuleSource {
     #[must_use]
     pub fn is_local(&self) -> bool {
         matches!(self, Self::Local { .. })
+    }
+
+    /// Check if this is a remote module.
+    #[must_use]
+    pub fn is_remote(&self) -> bool {
+        matches!(self, Self::Remote { .. })
     }
 
     /// Check if this is the core/internal module.
@@ -236,6 +256,7 @@ impl fmt::Display for ModuleSource {
             Self::Core { name } => write!(f, "core:{name}"),
             Self::Wasi { interface } => write!(f, "wasi:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
+            Self::Remote { url } => write!(f, "{url}"),
             Self::EntryPoint { filename } => {
                 if let Some(name) = filename {
                     write!(f, "{name}")
@@ -743,6 +764,7 @@ impl fmt::Display for StructName {
             ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
             ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
             ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
+            ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
         }
     }
 }
@@ -911,6 +933,40 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
 
     // Normalize the result to resolve . and ..
     normalize_module_path(&joined)
+}
+
+/// Resolve an import source to a module path (Vec<String> format).
+///
+/// This is used by the analyzer to resolve import paths to module identifiers.
+///
+/// # Arguments
+/// * `from_module` - The path of the importing module (e.g., `["./sub/main.wado"]`)
+/// * `import_source` - The import source string (e.g., `"./geometry.wado"` or `"core:cli"`)
+///
+/// # Returns
+/// The resolved module path as a Vec<String>.
+pub fn resolve_import_path(from_module: &[String], import_source: &str) -> Vec<String> {
+    // Handle special prefixes - parse into path segments
+    if let Some(name) = import_source.strip_prefix("core:") {
+        return vec!["core".to_string(), name.to_string()];
+    }
+    if let Some(interface) = import_source.strip_prefix("wasi:") {
+        return vec!["wasi".to_string(), interface.to_string()];
+    }
+    if import_source.starts_with("https://") || import_source.starts_with("http://") {
+        return vec![import_source.to_string()];
+    }
+
+    // For relative imports, resolve against the from_module path
+    if let Some(from_path) = from_module.first()
+        && (from_path.starts_with("./") || from_path.starts_with("../"))
+    {
+        let resolved = resolve_module_path(from_path, import_source);
+        return vec![resolved];
+    }
+
+    // Fallback: normalize and return as single-element path
+    vec![normalize_module_path(import_source)]
 }
 
 /// Get the canonical name for an entry point file.

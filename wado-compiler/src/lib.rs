@@ -81,7 +81,6 @@ pub mod desugar;
 pub mod lexer;
 pub mod loader;
 pub mod lower;
-pub mod module_loader;
 pub mod name;
 pub mod optimize;
 pub mod optimize_copy_prop;

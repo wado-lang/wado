@@ -1,0 +1,11 @@
+// Error case: using an unknown module namespace
+// Should produce an error like "unknown module namespace 'unknown'; expected 'core' or 'wasi'"
+
+use {foo} from "unknown:module";
+
+fn run() {
+    foo();
+}
+
+__DATA__
+{"compile_error": "unknown module namespace"}
