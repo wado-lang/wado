@@ -259,6 +259,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Indexing Traits Design](./docs/wep-2026-01-20-indexing-traits.md)
 - [String Template Desugaring](./docs/wep-2026-01-20-string-template-desugaring.md)
 - [Compile-Time Location Literals](./docs/wep-2026-01-23-compile-time-location-literals.md)
+- [Iterator Traits Design](./docs/wep-2026-01-24-iterator-traits.md)
 
 ### Structure
 
