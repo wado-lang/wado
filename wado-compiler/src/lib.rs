@@ -222,10 +222,10 @@ pub async fn compile_with_host<H: CompilerHost>(
 
     // === Phase 4: Load all modules upfront ===
     let load_result = {
-        let logger = logger::Logger::new(host, compiler_host::LogLevel::default());
-        let module_loader = loader::ModuleLoader::new();
+        let module_loader =
+            loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
-            .load_all(source, filename.as_deref(), &logger)
+            .load_all(source, filename.as_deref())
             .await
             .map_err(|e| CompileError::Analyzer {
                 message: e.to_string(),
@@ -380,10 +380,10 @@ pub async fn dump_with_host<H: CompilerHost>(
 
     // === Phase 5: Load all modules ===
     let load_result = {
-        let logger = logger::Logger::new(host, compiler_host::LogLevel::default());
-        let module_loader = loader::ModuleLoader::new();
+        let module_loader =
+            loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
-            .load_all(source, filename.as_deref(), &logger)
+            .load_all(source, filename.as_deref())
             .await
             .map_err(|e| CompileError::Analyzer {
                 message: e.to_string(),
