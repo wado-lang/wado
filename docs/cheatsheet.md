@@ -316,6 +316,68 @@ Traits use static dispatch - method calls are resolved at compile time to the co
 
 Associated types allow traits to declare placeholder types that are specified by implementors. Use `Self::TypeName` to refer to an associated type within trait methods.
 
+### Builtin Traits
+
+The prelude defines several builtin traits for common operations:
+
+```wado
+// Eq - equality comparisons (== and !=)
+trait Eq {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+// Ord - ordering comparisons (<, <=, >, >=)
+trait Ord {
+    fn lt(&self, other: &Self) -> bool;
+}
+
+// IndexValue - value-based index access (arr[i] returns a copy)
+trait IndexValue<IndexType> {
+    type Output;
+    fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
+// IndexAssign - index assignment (arr[i] = value)
+trait IndexAssign<IndexType> {
+    type Input;
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+
+// Index - reference-based index access (for reference-type elements)
+trait Index<IndexType> {
+    type Output;
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+```
+
+`String` and `Array<T>` implement `Eq` and `Ord` in the prelude:
+
+```wado
+// String comparison (lexicographic)
+let a = "apple";
+let b = "banana";
+if a < b {
+    println("apple comes before banana");
+}
+
+// Custom Eq implementation
+struct Point { x: i32, y: i32 }
+
+impl Eq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+let p1 = Point { x: 1, y: 2 };
+let p2 = Point { x: 1, y: 2 };
+if p1 == p2 {
+    println("Points are equal");
+}
+```
+
+Note: `IndexValue` returns elements by value (copy) because Wasm GC cannot return references to array elements. `Index` is for containers of reference-type elements.
+
 ## Control Flow
 
 ```wado
@@ -370,10 +432,11 @@ for let mut i = 0; i < 10; i += 1 {
     println(`{i}`);
 }
 
-// For-of (iterables)
+// For-of (any IntoIterator type)
 for let item of items {
     println(`{item}`);
 }
+// Works with Array<T> and any type implementing IntoIterator
 
 // Infinite loop
 loop {
@@ -641,6 +704,128 @@ let make_point = |x: i32, y: i32| Point { x, y };
 
 Note: Closures that capture outer variables are not yet implemented (pure closures work).
 
+## Iterators
+
+Wado provides iterator traits for generic iteration over collections.
+
+### Iterator Traits
+
+```wado
+// Iterator - the core trait for yielding values
+trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+// IntoIterator - convert a collection into an iterator
+trait IntoIterator {
+    type Item;
+    type Iter;
+    fn into_iter(&self) -> Self::Iter;
+}
+
+// FromIterator - create a collection from an iterator
+trait FromIterator<T> {
+    type Iter;
+    fn from_iter(iter: Self::Iter) -> Self;
+}
+```
+
+### ArrayIter and Array Iteration
+
+```wado
+// Array<T> implements IntoIterator
+let arr: Array<i32> = [1, 2, 3, 4, 5];
+
+// for-of uses IntoIterator automatically
+for let x of arr {
+    println(`{x}`);
+}
+
+// Get iterator explicitly
+let mut iter = arr.iter();
+
+// Manual iteration
+loop {
+    if let Some(x) = iter.next() {
+        println(`{x}`);
+    } else {
+        break;
+    }
+}
+
+// Collect remaining elements into a new array
+let mut iter2 = arr.iter();
+iter2.next();  // skip first element
+let rest = iter2.collect();  // Array<i32> with [2, 3, 4, 5]
+```
+
+### Iterator vs IntoIterator
+
+| Trait            | Question                               | Examples             |
+| ---------------- | -------------------------------------- | -------------------- |
+| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`       |
+| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String` |
+
+Collections like `Array<T>` implement `IntoIterator` to produce a separate iterator object:
+
+```wado
+let arr: Array<i32> = [1, 2, 3];
+// arr.next() would NOT work - Array has no next() method
+
+let mut iter: ArrayIter<i32> = arr.into_iter();
+// ArrayIter implements Iterator
+iter.next();  // Some(1)
+iter.next();  // Some(2)
+```
+
+### Custom Iterables
+
+Implement `IntoIterator` to make custom types work with `for-of`:
+
+```wado
+struct Stack<T> {
+    items: Array<T>,
+}
+
+struct StackIter<T> {
+    items: Array<T>,
+    index: i32,
+}
+
+impl Iterator for StackIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < 0 {
+            return null;
+        }
+        let item = self.items.get(self.index);
+        self.index -= 1;
+        return Option::<T>::Some(item);
+    }
+}
+
+impl IntoIterator for Stack<T> {
+    type Item = T;
+    type Iter = StackIter<T>;
+
+    fn into_iter(&self) -> StackIter<T> {
+        return StackIter {
+            items: self.items,
+            index: self.items.len() - 1,
+        };
+    }
+}
+
+// Now for-of works with Stack
+for let x of stack {
+    println(`{x}`);  // Iterates in LIFO order
+}
+```
+
+Note: Iterator combinators (`map`, `filter`, `fold`) are not yet implemented (requires closures with captures).
+
 ## Compile-Time Location Literals
 
 ```wado
@@ -688,6 +873,7 @@ Wado intentionally does not support macros.
 - Effect handlers
 - `reactive` values and `observe()`
 - Closures that capture outer variables (pure closures work)
+- Iterator combinators (`map`, `filter`, `fold`) - requires closures with captures
 - `stores[...]` syntax for reference storage
 - `Dict<K, V>`
 - postfix `?` operator (error propagation)

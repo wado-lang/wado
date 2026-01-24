@@ -321,7 +321,7 @@ for ;; {
 
 ### For-Of Loop
 
-For iterating over arrays:
+For iterating over any type that implements `IntoIterator`:
 
 ```wado
 let numbers: Array<i32> = [1, 2, 3, 4, 5];
@@ -334,9 +334,36 @@ for let mut item of items {
     item = item * 2;  // Can modify the local binding
     println(`{item}`);
 }
+
+// Custom types that implement IntoIterator also work
+for let x of my_collection {
+    println(`{x}`);
+}
 ```
 
-**Note:** For-of loops are for arrays only, not tuples. The binding is a copy of each element, so modifying it does not affect the original array.
+**For-of desugaring:**
+
+```wado
+// Source
+for let item of collection {
+    body(item);
+}
+
+// Desugars to
+scope: {
+    let mut __iter = collection.into_iter();
+    loop {
+        if let Some(__item) = __iter.next() {
+            let item = __item;
+            body(item);
+        } else {
+            break;
+        }
+    }
+}
+```
+
+**Note:** The binding is a copy of each element (value semantics), so modifying it does not affect the original collection. For-of works with any type implementing `IntoIterator`, not just arrays.
 
 ### Infinite Loop
 
@@ -1407,6 +1434,217 @@ Note: `IndexAssign` takes a value parameter rather than returning `&mut T` (like
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
 
+### Iterator Traits
+
+The prelude defines iterator traits for generic iteration over collections.
+
+**Iterator - Core Iteration Trait:**
+
+```wado
+/// Types that can yield a sequence of values
+pub trait Iterator {
+    type Item;
+
+    /// Advances the iterator and returns the next value.
+    /// Returns None when iteration is complete.
+    fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+**IntoIterator - Conversion Trait:**
+
+```wado
+/// Types that can be converted into an iterator
+pub trait IntoIterator {
+    type Item;
+    type Iter;  // The iterator type
+
+    /// Creates an iterator from a value
+    fn into_iter(&self) -> Self::Iter;
+}
+```
+
+**FromIterator - Collection Construction:**
+
+```wado
+/// Types that can be constructed from an iterator
+pub trait FromIterator<T> {
+    type Iter;
+    fn from_iter(iter: Self::Iter) -> Self;
+}
+```
+
+**ArrayIter:**
+
+The prelude provides `ArrayIter<T>` as the iterator type for `Array<T>`:
+
+```wado
+/// Iterator over Array<T> elements
+pub struct ArrayIter<T> {
+    // internal fields
+}
+
+impl Iterator for ArrayIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> { ... }
+}
+
+impl IntoIterator for Array<T> {
+    type Item = T;
+    type Iter = ArrayIter<T>;
+    fn into_iter(&self) -> ArrayIter<T> { ... }
+}
+```
+
+**Usage:**
+
+```wado
+let arr: Array<i32> = [1, 2, 3, 4, 5];
+
+// for-of uses IntoIterator automatically
+for let x of arr {
+    println(`{x}`);
+}
+
+// Explicit iterator
+let mut iter = arr.iter();
+while let Some(x) = iter.next() {
+    println(`{x}`);
+}
+
+// Collect remaining elements
+let mut iter2 = arr.iter();
+iter2.next();  // skip first
+let rest = iter2.collect();  // [2, 3, 4, 5]
+```
+
+**Value Semantics:**
+
+Iterator `next()` returns copies of elements (value semantics). Wasm GC cannot yield `&mut T` for array elements, so `iter_mut()` is not available. For in-place mutation, use indexed access:
+
+```wado
+for let mut i = 0; i < arr.len(); i += 1 {
+    arr[i] = arr[i] * 2;
+}
+```
+
+**Custom Iterables:**
+
+Any type can be made iterable by implementing `IntoIterator`:
+
+```wado
+struct Stack<T> { items: Array<T> }
+struct StackIter<T> { items: Array<T>, index: i32 }
+
+impl Iterator for StackIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> { ... }
+}
+
+impl IntoIterator for Stack<T> {
+    type Item = T;
+    type Iter = StackIter<T>;
+    fn into_iter(&self) -> StackIter<T> { ... }
+}
+
+// Now for-of works
+for let x of stack { ... }
+```
+
+### Builtin Comparison Traits
+
+The prelude defines traits for comparison operators:
+
+**Eq - Equality:**
+
+```wado
+/// Types that can be compared for equality
+pub trait Eq {
+    /// Returns true if self equals other
+    fn eq(&self, other: &Self) -> bool;
+}
+```
+
+The `==` and `!=` operators use `Eq::eq`:
+
+- `a == b` desugars to `Eq::eq(&a, &b)`
+- `a != b` desugars to `!Eq::eq(&a, &b)`
+
+**Ord - Ordering:**
+
+```wado
+/// Types that can be ordered
+pub trait Ord {
+    /// Returns true if self is less than other
+    fn lt(&self, other: &Self) -> bool;
+}
+```
+
+Comparison operators use `Ord::lt`:
+
+- `a < b` desugars to `Ord::lt(&a, &b)`
+- `a <= b` desugars to `Ord::lt(&a, &b) || Eq::eq(&a, &b)`
+- `a > b` desugars to `Ord::lt(&b, &a)`
+- `a >= b` desugars to `Ord::lt(&b, &a) || Eq::eq(&a, &b)`
+
+**Default Implementations:**
+
+`String` and `Array<T>` implement `Eq` and `Ord` with lexicographic comparison:
+
+```wado
+impl Eq for String { ... }  // byte-by-byte equality
+impl Ord for String { ... } // lexicographic ordering
+
+// Usage
+let a = "apple";
+let b = "banana";
+if a < b { ... }  // true
+```
+
+### Indexing Traits
+
+The prelude defines traits for index-based access:
+
+**IndexValue - Value Read:**
+
+```wado
+/// Returns element by value (copy)
+pub trait IndexValue<IndexType> {
+    type Output;
+    fn index_value(&self, index: IndexType) -> Self::Output;
+}
+```
+
+**IndexAssign - Value Write:**
+
+```wado
+/// Assigns value to element at index
+pub trait IndexAssign<IndexType> {
+    type Input;
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+```
+
+**Index - Reference Read:**
+
+```wado
+/// Returns element by reference (for reference-type elements only)
+pub trait Index<IndexType> {
+    type Output;
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+```
+
+**Design Note:** `IndexValue` returns by value because Wasm GC's `array.get` instruction copies elements. For primitives like `i32`, you cannot get `&i32` from an array element. `Index` is for containers of reference-type elements where returning a reference is possible.
+
+`Array<T>` implements `IndexValue` and `IndexAssign`:
+
+```wado
+let mut arr: Array<i32> = [1, 2, 3];
+let x = arr[0];    // IndexValue::index_value
+arr[1] = 100;      // IndexAssign::index_assign
+```
+
 ### Enums, Variants, and Flags
 
 Wado follows Component Model's distinction between enums and variants (unlike Rust):
@@ -1561,6 +1799,24 @@ Wado uses an ESM-like import syntax with `use {...} from "source"`. This aligns 
 | Remote (HTTP) | `"https://..."`               | `"https://example.com/lib.wado"`     |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 | Package       | `"<package-name>"`            | `"parser-lib"`, `"json-utils"`       |
+
+### Module Path Validation
+
+Module paths are validated before loading to provide clear error messages:
+
+**Namespace Resolution:**
+
+1. **Reserved namespaces** (`identifier:`): Paths matching `xxx:` pattern are namespace paths
+   - `core:` - Wado standard library
+   - `wasi:` - WASI interface modules
+   - Unknown namespaces result in compile error: `unknown module namespace 'xxx'; expected 'core' or 'wasi'`
+
+2. **Remote modules** (`http://` or `https://`): Delegated to CompilerHost
+
+3. **Local modules** (`./` or `../`): Resolved relative to importing module
+
+4. **Invalid paths**: Paths not matching any pattern are rejected
+   - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
 
 ### Import Syntax
 

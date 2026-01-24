@@ -532,6 +532,123 @@ impl Container for IntBox {
 }
 ```
 
+### Iterator Trait Resolution
+
+The compiler resolves iterator traits (`Iterator`, `IntoIterator`, `FromIterator`) using the same static dispatch mechanism as other traits.
+
+**For-Of Loop Compilation:**
+
+For-of loops are desugared to use `IntoIterator` and `Iterator` traits:
+
+```wado
+// Source
+for let item of collection {
+    body(item);
+}
+
+// Desugars to (conceptually)
+{
+    let mut __iter = IntoIterator::into_iter(&collection);
+    loop {
+        match Iterator::next(&mut __iter) {
+            Some(__item) => {
+                let item = __item;
+                body(item);
+            }
+            None => break,
+        }
+    }
+}
+```
+
+**Resolution Process:**
+
+1. **Type lookup**: Get the type of `collection`
+2. **IntoIterator lookup**: Find `impl IntoIterator for CollectionType`
+3. **Iter type extraction**: Get `Self::Iter` associated type
+4. **Iterator lookup**: Find `impl Iterator for IterType`
+5. **Item type extraction**: Get `Self::Item` associated type for the loop binding
+
+**Known Limitations:**
+
+- **Cross-module monomorphization**: Generic stdlib methods (like `ArrayIter::collect` calling `Array::append`) may encounter type table ID mismatches when called from user code. Workaround: Use direct builtin calls in stdlib generic functions instead of method calls.
+
+### Builtin Comparison Traits
+
+The compiler desugars comparison operators to trait method calls:
+
+**Eq Trait (Equality):**
+
+```wado
+// a == b desugars to:
+Eq::eq(&a, &b)
+
+// a != b desugars to:
+!Eq::eq(&a, &b)
+```
+
+**Ord Trait (Ordering):**
+
+```wado
+// a < b desugars to:
+Ord::lt(&a, &b)
+
+// a <= b desugars to:
+Ord::lt(&a, &b) || Eq::eq(&a, &b)
+
+// a > b desugars to:
+Ord::lt(&b, &a)
+
+// a >= b desugars to:
+Ord::lt(&b, &a) || Eq::eq(&a, &b)
+```
+
+**Resolution:**
+
+1. For primitive types (`i32`, `f64`, etc.), the compiler generates direct Wasm comparison instructions
+2. For `String` and `Array<T>`, the resolver looks up the trait implementation in prelude
+3. For user-defined types, the resolver finds `impl Eq for Type` or `impl Ord for Type`
+
+### Indexing Traits
+
+Index expressions desugar to trait method calls:
+
+```wado
+// arr[i] (read) desugars to:
+IndexValue::index_value(&arr, i)
+// or Index::index(&arr, i) for reference-type elements
+
+// arr[i] = value (write) desugars to:
+IndexAssign::index_assign(&mut arr, i, value)
+```
+
+**Design Note:** `IndexValue` returns by value because Wasm GC's `array.get` copies elements. For primitive arrays, you cannot get a reference to an element. `Index` is only used for containers of reference-type elements.
+
+### Module Loader
+
+The module loader validates module paths before loading:
+
+**Namespace Validation:**
+
+```rust
+pub enum ModuleSource {
+    Core { name: String },      // core:prelude, core:cli
+    Wasi { interface: String }, // wasi:cli, wasi:io
+    Local { path: String },     // ./module.wado, ../lib.wado
+    Remote { url: String },     // https://example.com/lib.wado
+    EntryPoint,                 // The main entry module
+}
+```
+
+**Resolution Rules:**
+
+1. `core:*` → `ModuleSource::Core` → embedded stdlib
+2. `wasi:*` → `ModuleSource::Wasi` → embedded stdlib
+3. `http://` or `https://` → `ModuleSource::Remote` → host.load_remote()
+4. `./` or `../` → `ModuleSource::Local` → host.load_source()
+5. Unknown `xxx:` → Error: `unknown module namespace`
+6. Other → Error: `invalid module path`
+
 ### Type System
 
 **Primitive Layer (`builtin::`):**
