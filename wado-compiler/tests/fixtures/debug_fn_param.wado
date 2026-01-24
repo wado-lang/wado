@@ -1,0 +1,21 @@
+// Debug test for function type parameters on generic struct methods
+use {println, Stdout} from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+impl Box<T> {
+    fn apply(&self, f: fn(T) -> T) -> T {
+        return f(self.value);
+    }
+}
+
+fn run() with Stdout {
+    let b = Box { value: 5 };
+    let result = b.apply(|x: i32| x * 2);
+    println(`result: {result}`);
+}
+
+__DATA__
+{"stdout": "result: 10\n"}

@@ -325,8 +325,6 @@ impl ArrayIter<T> {
     /// Collects iterator elements into an Array.
     /// Consumes the iterator and returns a new Array with all remaining elements.
     pub fn collect(&mut self) -> Array<T> {
-        // Use direct field access and builtin calls to avoid cross-module
-        // method monomorphization issues (type table mismatch between modules)
         let remaining = self.used - self.index;
         let mut repr = builtin::array_new::<T>(remaining);
         let mut result_used = 0;
@@ -338,6 +336,190 @@ impl ArrayIter<T> {
         // Mark iterator as exhausted
         self.index = self.used;
         return Array { repr, used: result_used };
+    }
+
+    /// Reduces the iterator to a single value by applying a function.
+    /// Takes an initial value and a function that combines the accumulator with each element.
+    pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
+        let mut acc = init;
+        loop {
+            if let Some(item) = self.next() {
+                acc = f(acc, item);
+            } else {
+                break;
+            }
+        }
+        return acc;
+    }
+
+    /// Creates an iterator that yields (index, element) tuples.
+    pub fn enumerate(&self) -> EnumerateIter<T> {
+        return EnumerateIter {
+            repr: self.repr,
+            used: self.used,
+            index: self.index,
+            count: 0,
+        };
+    }
+
+    /// Creates an iterator that transforms each element using a function.
+    pub fn map<U>(&self, f: fn(T) -> U) -> MapIter<T, U> {
+        return MapIter {
+            repr: self.repr,
+            used: self.used,
+            index: self.index,
+            f,
+        };
+    }
+
+    /// Creates an iterator that only yields elements matching a predicate.
+    pub fn filter(&self, pred: fn(T) -> bool) -> FilterIter<T> {
+        return FilterIter {
+            repr: self.repr,
+            used: self.used,
+            index: self.index,
+            pred,
+        };
+    }
+}
+
+/// Iterator that yields (index, element) tuples.
+pub struct EnumerateIter<T> {
+    repr: builtin::array<T>,
+    used: i32,
+    index: i32,
+    count: i32,
+}
+
+impl Iterator for EnumerateIter<T> {
+    type Item = [i32, T];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.used {
+            return null;
+        }
+        let item = builtin::array_get::<T>(self.repr, self.index);
+        let idx = self.count;
+        self.index += 1;
+        self.count += 1;
+        return Option::<[i32, T]>::Some([idx, item]);
+    }
+}
+
+impl EnumerateIter<T> {
+    /// Collects iterator elements into an Array.
+    pub fn collect(&mut self) -> Array<[i32, T]> {
+        let mut result: Array<[i32, T]> = [];
+        loop {
+            if let Some(item) = self.next() {
+                result.append(item);
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+}
+
+/// Iterator that transforms elements using a function.
+pub struct MapIter<T, U> {
+    repr: builtin::array<T>,
+    used: i32,
+    index: i32,
+    f: fn(T) -> U,
+}
+
+impl Iterator for MapIter<T, U> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.used {
+            return null;
+        }
+        let item = builtin::array_get::<T>(self.repr, self.index);
+        self.index += 1;
+        return Option::<U>::Some((self.f)(item));
+    }
+}
+
+impl MapIter<T, U> {
+    /// Collects iterator elements into an Array.
+    pub fn collect(&mut self) -> Array<U> {
+        let mut result: Array<U> = [];
+        loop {
+            if let Some(item) = self.next() {
+                result.append(item);
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+
+    /// Reduces the iterator to a single value.
+    pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
+        let mut acc = init;
+        loop {
+            if let Some(item) = self.next() {
+                acc = f(acc, item);
+            } else {
+                break;
+            }
+        }
+        return acc;
+    }
+}
+
+/// Iterator that filters elements using a predicate.
+pub struct FilterIter<T> {
+    repr: builtin::array<T>,
+    used: i32,
+    index: i32,
+    pred: fn(T) -> bool,
+}
+
+impl Iterator for FilterIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.index >= self.used {
+                return null;
+            }
+            let item = builtin::array_get::<T>(self.repr, self.index);
+            self.index += 1;
+            if (self.pred)(item) {
+                return Option::<T>::Some(item);
+            }
+        }
+    }
+}
+
+impl FilterIter<T> {
+    /// Collects iterator elements into an Array.
+    pub fn collect(&mut self) -> Array<T> {
+        let mut result: Array<T> = [];
+        loop {
+            if let Some(item) = self.next() {
+                result.append(item);
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+
+    /// Reduces the iterator to a single value.
+    pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
+        let mut acc = init;
+        loop {
+            if let Some(item) = self.next() {
+                acc = f(acc, item);
+            } else {
+                break;
+            }
+        }
+        return acc;
     }
 }
 

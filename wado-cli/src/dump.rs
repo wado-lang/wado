@@ -17,6 +17,7 @@ pub struct DumpOptions {
     pub show_symbols: bool,
     pub show_modules: bool,
     pub show_tir: bool,
+    pub show_monomorphize: bool,
     pub show_lower: bool,
     pub show_optimize: bool,
     pub unparse: bool,
@@ -33,14 +34,15 @@ pub fn print_usage() {
     eprintln!("Supports multiple input files for batch processing.");
     eprintln!();
     eprintln!("Compilation Phases:");
-    eprintln!("  --tokens     (Phase 1: Lexer) Show tokens");
-    eprintln!("  --ast        (Phase 2: Parser) Show AST structure");
-    eprintln!("  --desugar    (Phase 3: Desugar) Show desugared AST");
-    eprintln!("  --modules    (Phase 4: Load) Show loaded modules");
-    eprintln!("  --symbols    (Phase 5: Analyze) Show symbol table");
-    eprintln!("  --tir        (Phase 6: Resolve) Show TIR (Typed IR)");
-    eprintln!("  --lower      (Phase 7: Lower) Show lowered TIR");
-    eprintln!("  --optimize   (Phase 8: Optimize) Show optimization hints");
+    eprintln!("  --tokens       (Phase 1: Lexer) Show tokens");
+    eprintln!("  --ast          (Phase 2: Parser) Show AST structure");
+    eprintln!("  --desugar      (Phase 3: Desugar) Show desugared AST");
+    eprintln!("  --modules      (Phase 4: Load) Show loaded modules");
+    eprintln!("  --symbols      (Phase 5: Analyze) Show symbol table");
+    eprintln!("  --tir          (Phase 6: Resolve) Show TIR (Typed IR)");
+    eprintln!("  --monomorphize (Phase 7: Monomorphize) Show monomorphized TIR");
+    eprintln!("  --lower        (Phase 8: Lower) Show lowered TIR");
+    eprintln!("  --optimize     (Phase 9: Optimize) Show optimization hints");
     eprintln!("  --all        Show all phases (default if no phase specified)");
     eprintln!();
     eprintln!("Display Options:");
@@ -70,6 +72,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_symbols = false;
     let mut show_modules = false;
     let mut show_tir = false;
+    let mut show_monomorphize = false;
     let mut show_lower = false;
     let mut show_optimize = false;
     let mut unparse = false;
@@ -88,6 +91,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
             Long("symbols") => show_symbols = true,
             Long("modules") => show_modules = true,
             Long("tir") => show_tir = true,
+            Long("monomorphize") => show_monomorphize = true,
             Long("lower") => show_lower = true,
             Long("optimize") => show_optimize = true,
             Long("unparse") => unparse = true,
@@ -98,6 +102,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                 show_symbols = true;
                 show_modules = true;
                 show_tir = true;
+                show_monomorphize = true;
                 show_lower = true;
                 show_optimize = true;
             }
@@ -142,6 +147,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         && !show_symbols
         && !show_modules
         && !show_tir
+        && !show_monomorphize
         && !show_lower
         && !show_optimize
     {
@@ -151,6 +157,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_symbols = true;
         show_modules = true;
         show_tir = true;
+        show_monomorphize = true;
         show_lower = true;
         show_optimize = true;
     }
@@ -163,6 +170,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_symbols,
         show_modules,
         show_tir,
+        show_monomorphize,
         show_lower,
         show_optimize,
         unparse,
@@ -523,6 +531,33 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         } else {
             println!("=== TIR (Resolve) ===");
             println!("(TIR resolution failed or not available)");
+            println!();
+        }
+    }
+
+    // Monomorphized TIR section (Monomorphize phase)
+    if opts.show_monomorphize {
+        if let Some(ref monomorphized_modules) = result.monomorphized_tir_modules {
+            if opts.unparse {
+                println!("=== Monomorphized TIR (Monomorphize, unparsed) ===");
+                for (module_source, module) in monomorphized_modules {
+                    let path_str = module_source.to_string();
+                    println!("// --- Module: {path_str} ---");
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    println!("{unparsed}");
+                }
+            } else {
+                println!("=== Monomorphized TIR (Monomorphize) ===");
+                for (module_source, module) in monomorphized_modules {
+                    let path_str = module_source.to_string();
+                    println!("--- Module: {path_str} ---");
+                    println!("{module:#?}");
+                    println!();
+                }
+            }
+        } else {
+            println!("=== Monomorphized TIR (Monomorphize) ===");
+            println!("(Monomorphization failed or not available)");
             println!();
         }
     }
