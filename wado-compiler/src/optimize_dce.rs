@@ -613,7 +613,6 @@ fn analyze_expr(
             // Use the func reference directly - it already has the correct mangled name
             // and monomorph_info from lowering phase
             let func_name = func.name();
-            let _module_path = func.module_path();
 
             // Check if this is a monomorphized method using FunctionRef metadata
             if func.is_monomorphized() {
