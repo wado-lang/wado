@@ -3684,22 +3684,32 @@ impl Codegen {
 
         // Special case: u8 arrays use the existing string_array_type_idx
         if element_type_id == TypeTable::U8 {
-            return self.string_array_type_idx;
+            let type_idx = self.string_array_type_idx;
+            self.array_types.insert(element_type_id, type_idx);
+            self.array_types_by_name.insert(canonical_name, type_idx);
+            return type_idx;
         }
 
         // Create new array type
-        let wasm_type = self.type_id_to_valtype(type_table, element_type_id);
-        let storage_type = match wasm_type {
-            ValType::I32 => StorageType::Val(ValType::I32),
-            ValType::I64 => StorageType::Val(ValType::I64),
-            ValType::F32 => StorageType::Val(ValType::F32),
-            ValType::F64 => StorageType::Val(ValType::F64),
-            // For reference types, make them nullable so array.new_default works
-            ValType::Ref(rt) => StorageType::Val(ValType::Ref(RefType {
-                nullable: true,
-                ..rt
-            })),
-            _ => StorageType::Val(ValType::I32),
+        // Use packed storage types for i8/i16/u8/u16, otherwise use ValType
+        let storage_type = if element_type_id == TypeTable::I8 || element_type_id == TypeTable::U8 {
+            StorageType::I8
+        } else if element_type_id == TypeTable::I16 || element_type_id == TypeTable::U16 {
+            StorageType::I16
+        } else {
+            let wasm_type = self.type_id_to_valtype(type_table, element_type_id);
+            match wasm_type {
+                ValType::I32 => StorageType::Val(ValType::I32),
+                ValType::I64 => StorageType::Val(ValType::I64),
+                ValType::F32 => StorageType::Val(ValType::F32),
+                ValType::F64 => StorageType::Val(ValType::F64),
+                // For reference types, make them nullable so array.new_default works
+                ValType::Ref(rt) => StorageType::Val(ValType::Ref(RefType {
+                    nullable: true,
+                    ..rt
+                })),
+                _ => StorageType::Val(ValType::I32),
+            }
         };
 
         // Generate a type name based on element type
@@ -7335,7 +7345,7 @@ impl Codegen {
                 // - break: br 2 (to $exit)
 
                 // Get the raw array type index and Array struct type index for array.get
-                let (raw_array_type_idx, array_struct_type_idx) =
+                let (raw_array_type_idx, array_struct_type_idx, element_type_id) =
                     if let Some(element_type) = type_table.as_array(*iterable_type) {
                         let raw_idx = self
                             .array_types
@@ -7346,9 +7356,9 @@ impl Codegen {
                             .array_struct_types
                             .get(&element_type)
                             .expect("Array struct type should be registered");
-                        (raw_idx, struct_idx)
+                        (raw_idx, struct_idx, element_type)
                     } else {
-                        (self.string_array_type_idx, 0) // shouldn't happen
+                        (self.string_array_type_idx, 0, TypeTable::I32) // shouldn't happen
                     };
 
                 // Get ValType for temporary locals (pre-allocated by preallocate_assert_locals_from_stmt)
@@ -7399,7 +7409,14 @@ impl Codegen {
                     field_index: 0, // repr is field 0
                 });
                 func.instruction(&Instruction::LocalGet(counter_local));
-                func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
+                // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU instead of ArrayGet
+                if element_type_id == TypeTable::U8 || element_type_id == TypeTable::U16 {
+                    func.instruction(&Instruction::ArrayGetU(raw_array_type_idx));
+                } else if element_type_id == TypeTable::I8 || element_type_id == TypeTable::I16 {
+                    func.instruction(&Instruction::ArrayGetS(raw_array_type_idx));
+                } else {
+                    func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
+                }
                 // Store in the binding local (apply offset for closure functions)
                 let adjusted_binding = *binding_local + ctx.local_index_offset;
                 func.instruction(&Instruction::LocalSet(adjusted_binding));
@@ -8481,7 +8498,15 @@ impl Codegen {
                         for arg in args.iter().skip(1) {
                             self.generate_expr(func, arg, type_table, ctx, builder);
                         }
-                        func.instruction(&Instruction::ArrayGet(array_type_idx));
+                        // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
+                        if *element_type == TypeTable::U8 || *element_type == TypeTable::U16 {
+                            func.instruction(&Instruction::ArrayGetU(array_type_idx));
+                        } else if *element_type == TypeTable::I8 || *element_type == TypeTable::I16
+                        {
+                            func.instruction(&Instruction::ArrayGetS(array_type_idx));
+                        } else {
+                            func.instruction(&Instruction::ArrayGet(array_type_idx));
+                        }
                         // For reference element types, array.get returns nullable ref but
                         // the expected return type is non-null, so add ref.as_non_null
                         if self.type_is_reference(*element_type, type_table) {
