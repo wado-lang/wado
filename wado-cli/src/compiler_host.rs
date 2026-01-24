@@ -96,16 +96,18 @@ impl FilesystemCompilerHost {
         }
     }
 
-    /// Format diagnostic with optional timestamp for phase tracking
+    /// Format diagnostic with timestamp for span tracking
+    ///
+    /// Time tracking is done here in the CLI to keep the compiler syscall-free.
     fn format_diagnostic(&self, diagnostic: &Diagnostic) -> String {
         let elapsed = self.start_time.elapsed();
         let timestamp = format!("[{:>6.3}s]", elapsed.as_secs_f64());
 
         match diagnostic.code {
-            Code::PhaseStart => {
+            Code::SpanStart => {
                 format!("{timestamp} >> {}", diagnostic.message)
             }
-            Code::PhaseEnd => {
+            Code::SpanEnd => {
                 format!("{timestamp} << {}", diagnostic.message)
             }
             _ => {

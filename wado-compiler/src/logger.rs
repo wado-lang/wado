@@ -1,9 +1,10 @@
 //! Logger module for structured compiler logging
 //!
 //! Provides a `Logger` wrapper around `CompilerHost` for convenient logging
-//! with severity levels and phase span tracking.
-
-use std::time::Instant;
+//! with severity levels and span tracking.
+//!
+//! Note: Time tracking is intentionally omitted from the compiler to keep it
+//! syscall-free. The CLI or host implementation should add timestamps if needed.
 
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, LogLevel, Severity};
 
@@ -80,13 +81,13 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     /// Log an info message
     ///
-    /// Uses `Code::PhaseStart` as a generic info code since info messages
+    /// Uses `Code::SpanStart` as a generic info code since info messages
     /// don't typically have specific error codes.
     pub fn info(&self, message: impl Into<String>) {
         if self.should_log(Severity::Info) {
             self.host.emit_diagnostic(Diagnostic {
                 severity: Severity::Info,
-                code: Code::PhaseStart, // Generic code for info
+                code: Code::SpanStart, // Generic code for info
                 message: message.into(),
                 span: None,
             });
@@ -95,23 +96,23 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     /// Log a debug message
     ///
-    /// Uses `Code::PhaseStart` as a generic debug code since debug messages
+    /// Uses `Code::SpanStart` as a generic debug code since debug messages
     /// don't typically have specific error codes.
     pub fn debug(&self, message: impl Into<String>) {
         if self.should_log(Severity::Hint) {
             self.host.emit_diagnostic(Diagnostic {
                 severity: Severity::Hint, // Use Hint for debug level
-                code: Code::PhaseStart,   // Generic code for debug
+                code: Code::SpanStart,    // Generic code for debug
                 message: message.into(),
                 span: None,
             });
         }
     }
 
-    /// Start a phase span for timing
+    /// Start a span for tracking
     ///
-    /// Returns a `SpanGuard` that emits `PhaseEnd` when dropped.
-    /// The CLI can add timestamps to track compilation phase timing.
+    /// Returns a `SpanGuard` that emits `SpanEnd` when dropped.
+    /// The CLI or host implementation can add timestamps to track timing.
     ///
     /// # Example
     ///
@@ -119,13 +120,13 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// {
     ///     let _span = logger.span("parse");
     ///     // ... parsing ...
-    /// } // PhaseEnd emitted here
+    /// } // SpanEnd emitted here
     /// ```
     pub fn span(&self, name: &str) -> SpanGuard<'_, 'a, H> {
-        // Emit PhaseStart
+        // Emit SpanStart
         self.host.emit_diagnostic(Diagnostic {
             severity: Severity::Info,
-            code: Code::PhaseStart,
+            code: Code::SpanStart,
             message: name.to_string(),
             span: None,
         });
@@ -133,7 +134,6 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         SpanGuard {
             logger: self,
             name: name.to_string(),
-            start: Instant::now(),
         }
     }
 
@@ -143,22 +143,20 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 }
 
-/// RAII guard for phase span tracking
+/// RAII guard for span tracking
 ///
-/// When dropped, emits a `PhaseEnd` diagnostic with the phase name.
-/// The CLI can use timestamps to measure phase duration.
+/// When dropped, emits a `SpanEnd` diagnostic with the span name.
+/// The CLI or host implementation can use timestamps to measure duration.
 pub struct SpanGuard<'l, 'a, H: CompilerHost> {
     logger: &'l Logger<'a, H>,
     name: String,
-    #[allow(dead_code)]
-    start: Instant,
 }
 
 impl<H: CompilerHost> Drop for SpanGuard<'_, '_, H> {
     fn drop(&mut self) {
         self.logger.host.emit_diagnostic(Diagnostic {
             severity: Severity::Info,
-            code: Code::PhaseEnd,
+            code: Code::SpanEnd,
             message: self.name.clone(),
             span: None,
         });
@@ -200,9 +198,9 @@ mod tests {
 
         let diags = host.diagnostics();
         assert_eq!(diags.len(), 2);
-        assert_eq!(diags[0].code, Code::PhaseStart);
+        assert_eq!(diags[0].code, Code::SpanStart);
         assert_eq!(diags[0].message, "test_phase");
-        assert_eq!(diags[1].code, Code::PhaseEnd);
+        assert_eq!(diags[1].code, Code::SpanEnd);
         assert_eq!(diags[1].message, "test_phase");
     }
 

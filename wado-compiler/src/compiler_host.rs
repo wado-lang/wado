@@ -110,11 +110,11 @@ pub enum Code {
     /// Unsupported feature
     UnsupportedFeature,
 
-    // Phase tracking codes (for logging/profiling)
-    /// Start of a compilation phase
-    PhaseStart,
-    /// End of a compilation phase
-    PhaseEnd,
+    // Span tracking codes (for logging/profiling)
+    /// Start of a span (phase, operation, etc.)
+    SpanStart,
+    /// End of a span (phase, operation, etc.)
+    SpanEnd,
 }
 
 impl std::fmt::Display for Code {
@@ -139,8 +139,8 @@ impl std::fmt::Display for Code {
             Code::NetworkError => "NETWORK_ERROR",
             Code::CodegenError => "CODEGEN_ERROR",
             Code::UnsupportedFeature => "UNSUPPORTED_FEATURE",
-            Code::PhaseStart => "PHASE_START",
-            Code::PhaseEnd => "PHASE_END",
+            Code::SpanStart => "SPAN_START",
+            Code::SpanEnd => "SPAN_END",
         };
         write!(f, "{name}")
     }
