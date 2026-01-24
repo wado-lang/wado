@@ -1,0 +1,17 @@
+// Level 1: Base generic functions for deep cross-module monomorphization test
+
+// Simple identity function
+pub fn wrap<T>(value: T) -> T {
+    return value;
+}
+
+// Generic function that transforms value by calling another function
+pub fn apply_twice<T>(value: T) -> T {
+    let first = wrap::<T>(value);
+    return wrap::<T>(first);
+}
+
+// Generic function returning a tuple
+pub fn pair<T>(a: T, b: T) -> [T, T] {
+    return [wrap::<T>(a), wrap::<T>(b)];
+}
