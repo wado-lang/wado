@@ -30,6 +30,10 @@ pub enum LoadError {
     },
     /// I/O error reading file
     IoError { path: String, message: String },
+    /// Unknown module namespace (e.g., "unknown:foo")
+    UnknownNamespace { namespace: String },
+    /// Invalid module path format (e.g., "foo.wado" without "./" prefix)
+    InvalidModulePath { path: String },
 }
 
 impl std::fmt::Display for LoadError {
@@ -52,6 +56,18 @@ impl std::fmt::Display for LoadError {
             }
             LoadError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
+            }
+            LoadError::UnknownNamespace { namespace } => {
+                write!(
+                    f,
+                    "unknown module namespace '{namespace}'; expected 'core' or 'wasi'"
+                )
+            }
+            LoadError::InvalidModulePath { path } => {
+                write!(
+                    f,
+                    "invalid module path '{path}'; use './' for local modules or 'namespace:' for library modules"
+                )
             }
         }
     }
@@ -134,7 +150,7 @@ impl ModuleLoader {
 
         // Collect imports from entry module
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
-        self.collect_imports(&entry_module, &entry_module_source, &mut pending);
+        self.collect_imports(&entry_module, &entry_module_source, &mut pending)?;
 
         // Load all dependencies iteratively
         while let Some((from_module_source, module_source)) = pending.pop_front() {
@@ -158,7 +174,7 @@ impl ModuleLoader {
             let module = self.parse_source(&source, &module_source)?;
 
             // Collect its imports
-            self.collect_imports(&module, &module_source, &mut pending);
+            self.collect_imports(&module, &module_source, &mut pending)?;
 
             // Desugar and store
             let desugared = desugar_module(&module);
@@ -182,13 +198,14 @@ impl ModuleLoader {
         module: &Module,
         from_module_source: &ModuleSource,
         pending: &mut VecDeque<(ModuleSource, ModuleSource)>,
-    ) {
+    ) -> Result<(), LoadError> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                let resolved = self.resolve_import(from_module_source, &use_decl.source);
+                let resolved = self.resolve_import(from_module_source, &use_decl.source)?;
                 pending.push_back((from_module_source.clone(), resolved));
             }
         }
+        Ok(())
     }
 
     /// Load implicit modules required by the compiler
@@ -220,7 +237,21 @@ impl ModuleLoader {
                         Ok(module) => {
                             // Collect imports from implicit module
                             let mut pending = VecDeque::new();
-                            self.collect_imports(&module, &module_source, &mut pending);
+                            // Implicit modules should only use valid import paths
+                            if let Err(e) =
+                                self.collect_imports(&module, &module_source, &mut pending)
+                            {
+                                host.emit_diagnostic(Diagnostic {
+                                    severity: Severity::Warning,
+                                    code: ErrorCode::ModuleParseError,
+                                    message: format!(
+                                        "failed to collect imports from implicit module: {e}"
+                                    ),
+                                    span: None,
+                                })
+                                .await;
+                                continue;
+                            }
 
                             // Load any dependencies of implicit modules
                             while let Some((from_module_source, dep_module_source)) =
@@ -238,12 +269,14 @@ impl ModuleLoader {
                                     .await
                                     && let Ok(dep_module) =
                                         self.parse_source(&dep_source, &dep_module_source)
+                                    && self
+                                        .collect_imports(
+                                            &dep_module,
+                                            &dep_module_source,
+                                            &mut pending,
+                                        )
+                                        .is_ok()
                                 {
-                                    self.collect_imports(
-                                        &dep_module,
-                                        &dep_module_source,
-                                        &mut pending,
-                                    );
                                     let desugared = desugar_module(&dep_module);
                                     self.loaded.insert(dep_module_source, desugared);
                                 }
@@ -284,35 +317,61 @@ impl ModuleLoader {
         &self,
         from_module_source: &ModuleSource,
         import_source: &str,
-    ) -> ModuleSource {
-        // Handle special prefixes
+    ) -> Result<ModuleSource, LoadError> {
+        // Handle known namespaces
         if let Some(name) = import_source.strip_prefix("core:") {
-            return ModuleSource::Core {
+            return Ok(ModuleSource::Core {
                 name: name.to_string(),
-            };
+            });
         }
         if let Some(interface) = import_source.strip_prefix("wasi:") {
-            return ModuleSource::Wasi {
+            return Ok(ModuleSource::Wasi {
                 interface: interface.to_string(),
-            };
+            });
         }
+
+        // Handle remote modules (http:// or https://)
         if import_source.starts_with("https://") || import_source.starts_with("http://") {
-            return ModuleSource::Local {
-                path: import_source.to_string(),
-            };
+            return Ok(ModuleSource::Remote {
+                url: import_source.to_string(),
+            });
         }
 
-        // For relative imports, resolve against from_module_source
-        if let ModuleSource::Local { path: from_file } = from_module_source
-            && (from_file.starts_with("./") || from_file.starts_with("../"))
-        {
-            let resolved = resolve_module_path(from_file, import_source);
-            return ModuleSource::Local { path: resolved };
+        // Handle local modules (./ or ../)
+        if import_source.starts_with("./") || import_source.starts_with("../") {
+            // For relative imports, resolve against from_module_source
+            if let ModuleSource::Local { path: from_file } = from_module_source {
+                let resolved = resolve_module_path(from_file, import_source);
+                return Ok(ModuleSource::Local { path: resolved });
+            }
+            if let ModuleSource::Remote { url: from_url } = from_module_source {
+                let resolved = resolve_module_path(from_url, import_source);
+                return Ok(ModuleSource::Remote { url: resolved });
+            }
+            // Entry point or stdlib: treat as relative to project root
+            let canonical = normalize_module_path(import_source);
+            return Ok(ModuleSource::Local { path: canonical });
         }
 
-        // Fallback: treat as relative to project root
-        let canonical = normalize_module_path(import_source);
-        ModuleSource::Local { path: canonical }
+        // Check for unknown namespace pattern (xxx:yyy)
+        if let Some(colon_pos) = import_source.find(':') {
+            let namespace = &import_source[..colon_pos];
+            // Ensure it's a valid identifier-like namespace (not a URL scheme)
+            if !namespace.is_empty()
+                && namespace
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            {
+                return Err(LoadError::UnknownNamespace {
+                    namespace: namespace.to_string(),
+                });
+            }
+        }
+
+        // Invalid module path (no recognized prefix)
+        Err(LoadError::InvalidModulePath {
+            path: import_source.to_string(),
+        })
     }
 
     /// Get source code for a module using `CompilerHost`
@@ -324,6 +383,7 @@ impl ModuleLoader {
     ) -> Result<String, LoadError> {
         match module_source {
             ModuleSource::Local { path } => host.load_source(path).await.map_err(LoadError::from),
+            ModuleSource::Remote { url } => host.load_source(url).await.map_err(LoadError::from),
             ModuleSource::Core { name } => {
                 let import_path = format!("core:{name}");
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
