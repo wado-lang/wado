@@ -32,10 +32,10 @@ Wado's GC-based memory model significantly simplifies iterator design:
 
 Wado's iterator model is closer to JavaScript than Rust. Both use a two-layer abstraction:
 
-| JavaScript | Wado | Role |
-| ---------- | ---- | ---- |
-| **Iterable** (`[Symbol.iterator]()`) | **IntoIterator** (`into_iter()`) | Can produce an iterator |
-| **Iterator** (`next()`) | **Iterator** (`next()`) | Yields elements one by one |
+| JavaScript                           | Wado                             | Role                       |
+| ------------------------------------ | -------------------------------- | -------------------------- |
+| **Iterable** (`[Symbol.iterator]()`) | **IntoIterator** (`into_iter()`) | Can produce an iterator    |
+| **Iterator** (`next()`)              | **Iterator** (`next()`)          | Yields elements one by one |
 
 ```javascript
 // JavaScript
@@ -61,9 +61,9 @@ Rust requires three iteration methods (`iter()`, `iter_mut()`, `into_iter()`) be
 
 Understanding the difference between `Iterator` and `IntoIterator`:
 
-| Trait | Question it answers | Example types |
-| ----- | ------------------- | ------------- |
-| **Iterator** | "Can I call `next()` on this?" | `ArrayIter<T>`, `Range`, `Chars` |
+| Trait            | Question it answers                    | Example types                    |
+| ---------------- | -------------------------------------- | -------------------------------- |
+| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `Range`, `Chars` |
 | **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String`, `Stack<T>` |
 
 A collection (like `Array<T>`) is **not** an iterator itself—it doesn't have iteration state. Instead, it implements `IntoIterator` to create a separate iterator object that tracks the current position:
