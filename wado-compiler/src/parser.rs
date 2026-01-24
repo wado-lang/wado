@@ -11,7 +11,7 @@ use crate::ast::{
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
     NamespacedGenericType, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
     UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport,
     WorldImport,
 };
@@ -221,6 +221,13 @@ impl Parser {
             false
         };
 
+        // Check for contextual keyword "test" (identifier followed by string or block)
+        if let TokenKind::Ident(name) = self.peek_kind() {
+            if name == "test" {
+                return self.parse_test_decl().map(Item::Test);
+            }
+        }
+
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(is_pub).map(Item::Use),
             TokenKind::Fn => self.parse_function(is_pub, attrs).map(Item::Function),
@@ -239,6 +246,31 @@ impl Parser {
                 span: self.peek().span,
             }),
         }
+    }
+
+    /// Parse test declaration: `test "name" { ... }` or `test { ... }`
+    fn parse_test_decl(&mut self) -> ParseResult<TestDecl> {
+        let start_span = self.peek().span;
+        // Consume the "test" identifier (contextual keyword)
+        self.advance();
+
+        // Optional test name (string literal)
+        let name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+            self.advance();
+            Some(s)
+        } else {
+            None
+        };
+
+        // Parse body block
+        let body = self.parse_block()?;
+        let end_span = body.span;
+
+        Ok(TestDecl {
+            name,
+            body,
+            span: start_span.merge(&end_span),
+        })
     }
 
     fn parse_attributes(&mut self) -> ParseResult<Vec<Attribute>> {

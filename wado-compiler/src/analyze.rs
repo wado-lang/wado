@@ -286,6 +286,11 @@ impl Analyzer {
                     // Flags are currently parsed but not used directly
                     // They are handled by the WASI registry
                 }
+
+                Item::Test(_) => {
+                    // Test declarations are handled in the resolver, not in the symbol table.
+                    // Tests are converted to functions with generated names.
+                }
             }
         }
     }

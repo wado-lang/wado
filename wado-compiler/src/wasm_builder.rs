@@ -484,6 +484,12 @@ impl ComponentModelContext {
         self.comp_func_names.contains_key(name)
     }
 
+    /// Skip a component-level function index without registering a name.
+    /// Use this when builder operations consume a function index (e.g., export).
+    pub fn skip_comp_func_idx(&mut self) {
+        self.next_comp_func_idx += 1;
+    }
+
     /// Register a core module and return its index
     pub fn register_core_module(&mut self, name: &str) -> u32 {
         let idx = self.next_core_module_idx;

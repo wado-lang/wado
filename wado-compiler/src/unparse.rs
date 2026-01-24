@@ -9,9 +9,9 @@ use crate::ast::{
     Function, FunctionType, IfCondition, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
     Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
     Module, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TraitDecl, TupleLiteralExpr,
-    Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
-    WhileStmt, WorldDecl,
+    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
+    TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -100,6 +100,7 @@ impl<'a> Unparser<'a> {
             Item::Effect(e) => self.unparse_effect(e),
             Item::Resource(r) => self.unparse_resource(r),
             Item::World(w) => self.unparse_world(w),
+            Item::Test(t) => self.unparse_test(t),
         }
 
         // Emit trailing comments
@@ -699,6 +700,18 @@ impl<'a> Unparser<'a> {
         self.indent_level -= 1;
         self.write_indent();
         self.output.push_str("}\n");
+    }
+
+    fn unparse_test(&mut self, t: &TestDecl) {
+        self.write_indent();
+        self.output.push_str("test ");
+        if let Some(name) = &t.name {
+            self.output.push('"');
+            self.output.push_str(name);
+            self.output.push_str("\" ");
+        }
+        self.unparse_block_expr(&t.body);
+        self.output.push('\n');
     }
 
     fn unparse_type(&mut self, ty: &Type) {
@@ -1666,6 +1679,7 @@ fn get_item_span(item: &Item) -> Span {
         Item::Effect(e) => e.span,
         Item::Resource(r) => r.span,
         Item::World(w) => w.span,
+        Item::Test(t) => t.span,
     }
 }
 

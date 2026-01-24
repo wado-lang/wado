@@ -605,6 +605,7 @@ impl<'a> Lexer<'a> {
             "import" => TokenKind::Import,
             "export" => TokenKind::Export,
             "assert" => TokenKind::Assert,
+            // Note: "test" is handled as a contextual keyword in the parser, not here
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "null" => TokenKind::Null,

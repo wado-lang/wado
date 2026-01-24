@@ -12,7 +12,8 @@ use crate::ast::{
     IfCondition, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal,
     LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt,
     StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart,
-    TemplateStringExpr, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp, WhileStmt,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp,
+    WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -50,6 +51,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Use(u) => Item::Use(u.clone()),
         Item::Resource(r) => Item::Resource(r.clone()),
         Item::World(w) => Item::World(w.clone()),
+        Item::Test(t) => Item::Test(desugar_test(t, ctx)),
     }
 }
 
@@ -64,6 +66,14 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
         effects: func.effects.clone(),
         body: func.body.as_ref().map(|b| desugar_block(b, ctx)),
         span: func.span,
+    }
+}
+
+fn desugar_test(test: &TestDecl, ctx: &mut DesugarContext) -> TestDecl {
+    TestDecl {
+        name: test.name.clone(),
+        body: desugar_block(&test.body, ctx),
+        span: test.span,
     }
 }
 

@@ -1554,6 +1554,10 @@ impl Codegen {
         // Export section
         // ========================================
         builder.export_func("run", "run");
+        // Export test functions for test runner
+        for test in &entry_tir.tests {
+            builder.export_func(&test.function_name, &test.function_name);
+        }
         module.section(builder.exports());
 
         // ========================================
@@ -1610,11 +1614,17 @@ impl Codegen {
             if has_type_params {
                 continue;
             }
-            let (wasm_func, hints) =
-                self.generate_function(&tir_func, type_table, &builder, empty_path);
-            code.function(&wasm_func);
-            if !hints.is_empty() {
-                all_branch_hints.push((func_idx, hints));
+            // Test functions need task.return wrapper like run
+            if tir_func.name.starts_with("__test_") {
+                let wasm_func = self.generate_run_function(&tir_func, type_table, &builder);
+                code.function(&wasm_func);
+            } else {
+                let (wasm_func, hints) =
+                    self.generate_function(&tir_func, type_table, &builder, empty_path);
+                code.function(&wasm_func);
+                if !hints.is_empty() {
+                    all_branch_hints.push((func_idx, hints));
+                }
             }
             func_idx += 1;
         }
@@ -2060,6 +2070,60 @@ impl Codegen {
             ctx.comp_func_idx("run"),
             None,
         );
+        // Export consumes a component function index
+        ctx.skip_comp_func_idx();
+
+        // Export test functions
+        for test in &entry_tir.tests {
+            // Convert __test_0_simple to test-0-simple for component export (kebab-case)
+            let export_name = test
+                .function_name
+                .trim_start_matches('_')
+                .replace('_', "-");
+            let core_name = format!("{}-core", export_name);
+            let test_func_type_name = format!("{}-func-type", export_name);
+
+            // Alias test function from main instance
+            ctx.register_core_func(&core_name);
+            builder.core_alias_export(
+                Some(&core_name),
+                ctx.core_instance_idx("main"),
+                &test.function_name,
+                ExportKind::Func,
+            );
+
+            // Type: async test function type () -> result<_, _>
+            let test_func_type = ctx.register_type(&test_func_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&test_func_type_name));
+                enc.function()
+                    .async_(true)
+                    .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                    .result(Some(ComponentValType::Type(result_unit_type)));
+            }
+
+            // Lift test function with Async option
+            ctx.register_comp_func(&export_name);
+            builder.lift_func(
+                Some(&export_name),
+                ctx.core_func_idx(&core_name),
+                test_func_type,
+                [
+                    CanonicalOption::Async,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                ],
+            );
+
+            // Export test function
+            builder.export(
+                &export_name,
+                ComponentExportKind::Func,
+                ctx.comp_func_idx(&export_name),
+                None,
+            );
+            // Export consumes a component function index
+            ctx.skip_comp_func_idx();
+        }
 
         // Add component-level debug names (skip in size-optimized builds)
         if !project.strip_names {
