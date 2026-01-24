@@ -212,21 +212,13 @@ The following are now convention-driven via `generate_cm_effect_call`:
 - `CmCallConvention.with_async()` ensures async functions have Memory+Realloc
 - Async functions with void return skipped (not fully supported: wait_until, wait_for)
 
-**Phase 3 Complete**: Resource-based interface imports are now data-driven
+**Phase 3 Complete**: All interface imports are now data-driven
 
 - `WasiRegistry` tracks resource types from `pub resource` declarations
 - `WasiInterfaceInfo.resource_type` contains `(wado_name, cm_name)` for interfaces with resources
 - `import_interfaces_with_resources()` iterates over registry and imports resource-based interfaces
 - `import_interface_with_resource()` is a generic function that handles any interface with a resource type
-- Removed hardcoded `ensure_terminal_stdin/stdout/stderr_imported` functions
-
-**Remaining fallback functions** (used when DCE or registry skip an interface):
-
-- `ensure_stdout_stderr_imported` - Stream writer interfaces
-- `ensure_environment_imported` - Environment interface
-- `ensure_exit_imported` - Exit interface
-
-These fallbacks exist for cases where the main registry loop skips an interface but it's still needed (e.g., panic handler needs stdout)
+- All hardcoded `ensure_*_imported` functions removed - single registry-driven code path
 
 ## Success Criteria
 
@@ -235,7 +227,7 @@ These fallbacks exist for cases where the main registry loop skips an interface 
 - [x] All 1020 E2E tests pass
 - [x] `canon lower` generation is data-driven (uses CmCallConvention)
 - [x] Scratch local pre-allocation is convention-driven (uses registry lookup)
-- [x] Resource-based interface imports are data-driven (uses `resource_type` from registry)
+- [x] All interface imports are data-driven (single registry-driven code path)
 
 ## Testing
 

@@ -474,16 +474,6 @@ impl WasiRegistry {
         None
     }
 
-    /// Get the function info for stdout's `write_via_stream`
-    pub fn get_stdout_write_via_stream(&self) -> Option<&WasiFunctionInfo> {
-        self.effect_to_func.get("Stdout::write_via_stream")
-    }
-
-    /// Get the function info for stderr's `write_via_stream`
-    pub fn get_stderr_write_via_stream(&self) -> Option<&WasiFunctionInfo> {
-        self.effect_to_func.get("Stderr::write_via_stream")
-    }
-
     /// Get all registered WASI function names
     ///
     /// Returns an iterator over function names in `Effect::method` format
