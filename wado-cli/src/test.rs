@@ -1,8 +1,10 @@
 use std::process;
+use std::sync::Arc;
 
 use anyhow::Result;
 use glob::glob;
 use lexopt::Arg::{Long, Short, Value};
+use tokio::sync::mpsc;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -13,6 +15,7 @@ use crate::compile;
 pub struct TestOptions {
     pub paths: Vec<String>,
     pub filter: Option<String>,
+    pub jobs: usize,
 }
 
 pub fn print_usage() {
@@ -22,6 +25,7 @@ pub fn print_usage() {
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -f, --filter <pattern>  Filter tests by name pattern");
+    eprintln!("  -p, --parallel <N>      Number of parallel workers (default: num CPUs)");
     eprintln!("  --help                  Show this help message");
 }
 
@@ -49,6 +53,7 @@ fn find_test_files() -> Vec<String> {
 pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
     let mut paths: Vec<String> = Vec::new();
     let mut filter: Option<String> = None;
+    let mut jobs: Option<usize> = None;
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -58,6 +63,16 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
             }
             Short('f') | Long("filter") => {
                 filter = Some(parser.value().unwrap().to_string_lossy().into_owned());
+            }
+            Short('p') | Long("parallel") => {
+                let val = parser.value().unwrap().to_string_lossy().into_owned();
+                match val.parse::<usize>() {
+                    Ok(n) if n > 0 => jobs = Some(n),
+                    _ => {
+                        eprintln!("Error: --parallel requires a positive integer");
+                        process::exit(1);
+                    }
+                }
             }
             Value(val) => {
                 paths.push(val.to_string_lossy().into_owned());
@@ -75,7 +90,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
         }
     }
 
-    TestOptions { paths, filter }
+    // Default to half of available CPUs (minimum 2)
+    // This accounts for hyperthreading and leaves headroom for the system
+    let jobs = jobs.unwrap_or_else(|| {
+        let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+        (cpus / 2).max(2)
+    });
+
+    TestOptions {
+        paths,
+        filter,
+        jobs,
+    }
 }
 
 struct WasiState {
@@ -92,15 +118,30 @@ impl WasiView for WasiState {
     }
 }
 
-/// Test result for a single test
+/// A compiled test module ready for parallel execution
+struct CompiledTestModule {
+    path: String,
+    engine: Arc<Engine>,
+    component: Arc<Component>,
+}
+
+/// A single test job to execute
+struct TestJob {
+    module_idx: usize,
+    test_name: String,
+    display_name: String,
+}
+
+/// Result from a test execution
 struct TestResult {
-    name: String,
+    file_path: String,
+    test_name: String,
+    display_name: String,
     passed: bool,
     error: Option<String>,
 }
 
-/// Run all tests in a compiled Wasm module
-async fn run_tests_in_module(wasm: &[u8], filter: Option<&str>) -> Result<Vec<TestResult>> {
+fn create_engine() -> Result<Engine> {
     let mut config = Config::new();
     config.async_support(true);
     config.wasm_component_model(true);
@@ -113,112 +154,237 @@ async fn run_tests_in_module(wasm: &[u8], filter: Option<&str>) -> Result<Vec<Te
     config.wasm_threads(true);
     config.wasm_gc(true);
     config.wasm_function_references(true);
+    Engine::new(&config)
+}
 
-    let engine = Engine::new(&config)?;
-    let component = Component::new(&engine, wasm)?;
-
-    // Find test functions from exports
-    let component_ty = component.component_type();
-    let mut test_exports: Vec<String> = Vec::new();
-
-    for (name, _) in component_ty.exports(&engine) {
-        // Component Model exports use kebab-case: test-0-simple
-        if name.starts_with("test-") {
-            // Apply filter if specified
-            if let Some(pattern) = filter
-                && !name.contains(pattern)
-            {
-                continue;
-            }
-            test_exports.push(name.to_string());
-        }
-    }
-
-    let mut results = Vec::new();
-
-    for test_name in test_exports {
-        // Create fresh WASI state for each test
-        let ctx = WasiCtx::builder().inherit_stdio().build();
-        let table = ResourceTable::new();
-
-        let state = WasiState { ctx, table };
-        let mut store = Store::new(&engine, state);
-
-        // Set up linker with WASI P3
-        let mut linker: Linker<WasiState> = Linker::new(&engine);
-        wasmtime_wasi::p3::add_to_linker(&mut linker)?;
-
-        // Instantiate the component
-        let instance = linker.instantiate_async(&mut store, &component).await?;
-
-        // Get and call the test function
-        let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &test_name);
-
-        let (passed, error) = match test_func {
-            Ok(func) => match func.call_async(&mut store, ()).await {
-                Ok((Ok(()),)) => (true, None),
-                Ok((Err(()),)) => (false, Some("test returned error".to_string())),
-                Err(e) => (false, Some(format!("{e}"))),
-            },
-            Err(e) => (false, Some(format!("failed to get test function: {e}"))),
-        };
-
-        // Extract display name from function name
-        // test-0-simple -> "simple"
-        // test-1 -> "<test 1>"
-        let display_name = if let Some(name_part) = test_name.strip_prefix("test-") {
-            if let Some(idx) = name_part.find('-') {
-                name_part[idx + 1..].replace('-', "_")
-            } else {
-                format!("<test {name_part}>")
-            }
+/// Extract display name from test function name
+/// test-0-simple -> "simple"
+/// test-1 -> "<test 1>"
+fn extract_display_name(test_name: &str) -> String {
+    if let Some(name_part) = test_name.strip_prefix("test-") {
+        if let Some(idx) = name_part.find('-') {
+            name_part[idx + 1..].replace('-', "_")
         } else {
-            test_name.clone()
-        };
+            format!("<test {name_part}>")
+        }
+    } else {
+        test_name.to_string()
+    }
+}
 
-        results.push(TestResult {
-            name: display_name,
-            passed,
-            error,
-        });
+/// Phase 1: Compile all test files and collect test jobs
+async fn collect_test_jobs(
+    paths: &[String],
+    filter: Option<&str>,
+) -> Result<(Vec<Arc<CompiledTestModule>>, Vec<TestJob>)> {
+    let mut modules = Vec::new();
+    let mut jobs = Vec::new();
+
+    for (module_idx, path) in paths.iter().enumerate() {
+        let wasm = compile::compile(path).await;
+        let engine = Arc::new(create_engine()?);
+        let component = Arc::new(Component::new(&engine, &wasm)?);
+
+        // Find test functions from exports
+        let component_ty = component.component_type();
+        let mut test_names: Vec<String> = Vec::new();
+
+        for (name, _) in component_ty.exports(&engine) {
+            if name.starts_with("test-") {
+                // Apply filter if specified
+                if let Some(pattern) = filter
+                    && !name.contains(pattern)
+                {
+                    continue;
+                }
+                test_names.push(name.to_string());
+            }
+        }
+
+        for test_name in &test_names {
+            jobs.push(TestJob {
+                module_idx,
+                test_name: test_name.clone(),
+                display_name: extract_display_name(test_name),
+            });
+        }
+
+        modules.push(Arc::new(CompiledTestModule {
+            path: path.clone(),
+            engine,
+            component,
+        }));
     }
 
-    Ok(results)
+    Ok((modules, jobs))
+}
+
+/// Run a single test in its own Store
+async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResult {
+    // Create fresh Store for this test
+    let ctx = WasiCtx::builder().inherit_stdio().build();
+    let table = ResourceTable::new();
+    let state = WasiState { ctx, table };
+    let mut store = Store::new(module.engine.as_ref(), state);
+
+    // Set up linker
+    let mut linker: Linker<WasiState> = Linker::new(&module.engine);
+    if let Err(e) = wasmtime_wasi::p3::add_to_linker(&mut linker) {
+        return TestResult {
+            file_path: module.path.clone(),
+            test_name: job.test_name.clone(),
+            display_name: job.display_name.clone(),
+            passed: false,
+            error: Some(format!("failed to set up linker: {e}")),
+        };
+    }
+
+    // Instantiate and run
+    let instance = match linker
+        .instantiate_async(&mut store, &module.component)
+        .await
+    {
+        Ok(inst) => inst,
+        Err(e) => {
+            return TestResult {
+                file_path: module.path.clone(),
+                test_name: job.test_name.clone(),
+                display_name: job.display_name.clone(),
+                passed: false,
+                error: Some(format!("failed to instantiate: {e}")),
+            };
+        }
+    };
+
+    // Get and call the test function
+    let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
+
+    let (passed, error) = match test_func {
+        Ok(func) => match func.call_async(&mut store, ()).await {
+            Ok((Ok(()),)) => (true, None),
+            Ok((Err(()),)) => (false, Some("test returned error".to_string())),
+            Err(e) => (false, Some(format!("{e}"))),
+        },
+        Err(e) => (false, Some(format!("failed to get test function: {e}"))),
+    };
+
+    TestResult {
+        file_path: module.path.clone(),
+        test_name: job.test_name.clone(),
+        display_name: job.display_name.clone(),
+        passed,
+        error,
+    }
+}
+
+/// Phase 2: Execute tests in parallel
+async fn execute_tests_parallel(
+    modules: &[Arc<CompiledTestModule>],
+    jobs: Vec<TestJob>,
+    num_workers: usize,
+) -> Vec<TestResult> {
+    if jobs.is_empty() {
+        return Vec::new();
+    }
+
+    let (tx, mut rx) = mpsc::channel(jobs.len());
+    let jobs = Arc::new(std::sync::Mutex::new(jobs.into_iter()));
+
+    let handles: Vec<_> = (0..num_workers)
+        .map(|_| {
+            let modules = modules.to_vec();
+            let jobs = jobs.clone();
+            let tx = tx.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    // Get next job from queue
+                    let job = {
+                        let mut guard = jobs.lock().unwrap();
+                        guard.next()
+                    };
+
+                    let Some(job) = job else { break };
+
+                    // Execute test
+                    let module = &modules[job.module_idx];
+                    let result = run_single_test(module, &job).await;
+
+                    // Send result (ignore error if receiver dropped)
+                    let _ = tx.send(result).await;
+                }
+            })
+        })
+        .collect();
+
+    drop(tx); // Close sender to signal completion
+
+    // Collect results
+    let mut results = Vec::new();
+    while let Some(result) = rx.recv().await {
+        results.push(result);
+    }
+
+    // Wait for all workers
+    for handle in handles {
+        let _ = handle.await;
+    }
+
+    results
 }
 
 pub async fn run(opts: TestOptions) {
+    // Phase 1: Compile all files and collect test jobs
+    let (modules, jobs) = match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("Error collecting tests: {e}");
+            process::exit(1);
+        }
+    };
+
+    let total_tests = jobs.len();
+    if total_tests == 0 {
+        println!("No tests found");
+        return;
+    }
+
+    // Phase 2: Execute tests in parallel
+    let results = execute_tests_parallel(&modules, jobs, opts.jobs).await;
+
+    // Group results by file for display
+    let mut results_by_file: std::collections::HashMap<String, Vec<&TestResult>> =
+        std::collections::HashMap::new();
+    for result in &results {
+        results_by_file
+            .entry(result.file_path.clone())
+            .or_default()
+            .push(result);
+    }
+
+    // Display results in file order (matching input order)
     let mut total_passed = 0;
     let mut total_failed = 0;
-    let mut failed_tests: Vec<(String, String, String)> = Vec::new(); // (file, test_name, error)
 
     for path in &opts.paths {
-        println!("Running tests in {path}...");
+        if let Some(file_results) = results_by_file.get(path) {
+            println!("Running tests in {path}...");
 
-        let wasm = compile::compile(path).await;
+            // Sort by test name for consistent output
+            let mut sorted_results: Vec<_> = file_results.clone();
+            sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
 
-        match run_tests_in_module(&wasm, opts.filter.as_deref()).await {
-            Ok(results) => {
-                for result in results {
-                    if result.passed {
-                        println!("  \x1b[32m✓\x1b[0m {}", result.name);
-                        total_passed += 1;
-                    } else {
-                        println!("  \x1b[31m✗\x1b[0m {}", result.name);
-                        if let Some(ref error) = result.error {
-                            println!("    {error}");
-                        }
-                        total_failed += 1;
-                        failed_tests.push((
-                            path.clone(),
-                            result.name,
-                            result.error.unwrap_or_default(),
-                        ));
+            for result in sorted_results {
+                if result.passed {
+                    println!("  \x1b[32m✓\x1b[0m {}", result.display_name);
+                    total_passed += 1;
+                } else {
+                    println!("  \x1b[31m✗\x1b[0m {}", result.display_name);
+                    if let Some(ref error) = result.error {
+                        println!("    {error}");
                     }
+                    total_failed += 1;
                 }
-            }
-            Err(e) => {
-                eprintln!("Error running tests in {path}: {e}");
-                process::exit(1);
             }
         }
     }

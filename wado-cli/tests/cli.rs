@@ -372,3 +372,108 @@ fn test_test_filter() {
         .success()
         .stdout(predicate::str::contains("1 passed, 0 failed"));
 }
+
+#[test]
+fn test_test_parallel_option() {
+    // Test with explicit parallel count
+    wado()
+        .args([
+            "test",
+            "-p",
+            "2",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_parallel_long_option() {
+    // Test with long option
+    wado()
+        .args([
+            "test",
+            "--parallel",
+            "1",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_parallel_invalid() {
+    // Test with invalid parallel count
+    wado()
+        .args([
+            "test",
+            "-p",
+            "0",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--parallel requires a positive integer",
+        ));
+}
+
+#[test]
+fn test_test_parallel_non_numeric() {
+    // Test with non-numeric parallel count
+    wado()
+        .args([
+            "test",
+            "-p",
+            "abc",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--parallel requires a positive integer",
+        ));
+}
+
+#[test]
+fn test_test_help_shows_parallel_option() {
+    wado()
+        .args(["test", "--help"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("-p, --parallel"));
+}
+
+#[test]
+fn test_parallel_speedup() {
+    use std::time::Instant;
+
+    let bench_file = "wado-cli/tests/fixtures/parallel_bench.wado";
+
+    // Sequential run
+    let start = Instant::now();
+    wado()
+        .args(["test", "-p", "1", bench_file])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("8 passed, 0 failed"));
+    let sequential = start.elapsed();
+
+    // Parallel run (4 workers)
+    let start = Instant::now();
+    wado()
+        .args(["test", "-p", "4", bench_file])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("8 passed, 0 failed"));
+    let parallel = start.elapsed();
+
+    // Parallel should be faster (allow some variance, expect at least 1.5x speedup)
+    let speedup = sequential.as_secs_f64() / parallel.as_secs_f64();
+    assert!(
+        speedup > 1.5,
+        "Expected parallel speedup > 1.5x, got {speedup:.2}x (sequential: {sequential:?}, parallel: {parallel:?})"
+    );
+}

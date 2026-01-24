@@ -44,6 +44,7 @@ fn print_usage() {
     eprintln!();
     eprintln!("Test options:");
     eprintln!("  -f, --filter <pattern>  Filter tests by name pattern");
+    eprintln!("  -p, --parallel <N>      Number of parallel workers (default: num CPUs)");
     eprintln!();
     eprintln!("Format options:");
     eprintln!("  -w, --write      Write formatted output back to file");
