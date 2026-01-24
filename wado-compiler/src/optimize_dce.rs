@@ -626,7 +626,6 @@ fn analyze_expr(
             // Use the func reference directly - it already has the correct mangled name
             // and monomorph_info from lowering phase
             let func_name = func.name();
-            let module_path = func.module_path();
 
             // Check if this is a monomorphized method using FunctionRef metadata
             if func.is_monomorphized() {
@@ -643,8 +642,10 @@ fn analyze_expr(
                     })
                     .unwrap_or_else(|| func_name.clone());
 
+                // Use empty path because monomorphized functions are added
+                // to the entry module, not the original struct's module
                 let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    module_path,
+                    vec![],
                     func_name.clone(),
                     base_name,
                 ));
@@ -688,9 +689,11 @@ fn analyze_expr(
                             } else {
                                 format!("{base_struct}::{method_name}")
                             };
+                            // Use empty path because monomorphized functions are added
+                            // to the entry module, not the original struct's module
                             let callee_id =
                                 FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                                    module_source.to_path(),
+                                    vec![],
                                     mangled_func_name,
                                     base_name,
                                 ));

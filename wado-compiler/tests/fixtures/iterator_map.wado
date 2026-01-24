@@ -1,0 +1,23 @@
+// Test ArrayIter::map() method
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+
+    // Map to double each element
+    let doubled = arr.iter().map(|x: i32| x * 2).collect();
+
+    for let x of doubled {
+        println(`{x}`);
+    }
+
+    // Map to square each element
+    let squared = arr.iter().map(|x: i32| x * x).collect();
+    println("squares:");
+    for let x of squared {
+        println(`{x}`);
+    }
+}
+
+__DATA__
+{"stdout": "2\n4\n6\n8\n10\nsquares:\n1\n4\n9\n16\n25\n"}

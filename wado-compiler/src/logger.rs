@@ -96,9 +96,9 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     /// Log a debug message
     pub fn debug(&self, message: impl Into<String>) {
-        if self.should_log(Severity::Hint) {
+        if self.should_log(Severity::Debug) {
             self.host.emit_diagnostic(Diagnostic {
-                severity: Severity::Hint, // Use Hint for debug level
+                severity: Severity::Debug, // Use Debug for debug level
                 code: Code::Log,
                 message: message.into(),
                 span: None,
@@ -120,13 +120,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// } // SpanEnd emitted here
     /// ```
     pub fn span(&self, name: &str) -> SpanGuard<'_, 'a, H> {
-        // Emit SpanStart
-        self.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Info,
-            code: Code::SpanStart,
-            message: name.to_string(),
-            span: None,
-        });
+        self.span_start(name);
 
         SpanGuard {
             logger: self,
@@ -140,7 +134,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Must be paired with a corresponding `span_end()` call.
     pub fn span_start(&self, name: &str) {
         self.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Info,
+            severity: Severity::Debug,
             code: Code::SpanStart,
             message: name.to_string(),
             span: None,
@@ -153,16 +147,11 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Must be paired with a corresponding `span_start()` call.
     pub fn span_end(&self, name: &str) {
         self.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Info,
+            severity: Severity::Debug,
             code: Code::SpanEnd,
             message: name.to_string(),
             span: None,
         });
-    }
-
-    /// Get a reference to the underlying host
-    pub fn host(&self) -> &'a H {
-        self.host
     }
 }
 
@@ -177,12 +166,7 @@ pub struct SpanGuard<'l, 'a, H: CompilerHost> {
 
 impl<H: CompilerHost> Drop for SpanGuard<'_, '_, H> {
     fn drop(&mut self) {
-        self.logger.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Info,
-            code: Code::SpanEnd,
-            message: self.name.clone(),
-            span: None,
-        });
+        self.logger.span_end(&self.name);
     }
 }
 

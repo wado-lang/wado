@@ -859,17 +859,26 @@ fn run() with Stdout {
 - [x] For-of loop generalization (Phase 2)
 - [ ] Tuple `IntoIterator` (Phase 3) - compiler magic, separate task
 - [x] `FromIterator` trait (Phase 4)
-- [ ] Iterator combinators (Phase 5) - requires closures with captures
-- [x] `ArrayIter::collect()` method (Phase 6 - partial)
+- [x] Iterator combinators (Phase 5) - `map`, `filter`, `fold`, `collect`
+- [x] `MapIter<T, U>`, `FilterIter<T>`, `EnumerateIter<T>` structs
+- [x] `enumerate()` combinator
 
 ### Known Limitations
 
-- **Cross-module monomorphization**: Methods called from within generic stdlib functions
-  (like `ArrayIter::collect` calling `Array::append`) encounter type table ID mismatches.
-  Workaround: Use direct builtin calls instead of method calls in stdlib generic functions.
-
 - **Trait bounds**: `type Iter: Iterator` constraints are not enforced at trait level,
   only checked at usage sites.
+
+- **Closure parameter type inference**: Closures passed to functions require explicit
+  parameter type annotations. Type inference from function signature context is not
+  yet supported.
+
+  ```wado
+  // This doesn't work:
+  apply(5, |x| x * 2);  // Error: can't infer type of x
+
+  // This works:
+  apply(5, |x: i32| x * 2);  // OK: explicit type annotation
+  ```
 
 ## Related WEPs
 

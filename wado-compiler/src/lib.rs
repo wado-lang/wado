@@ -82,6 +82,7 @@ pub mod lexer;
 pub mod loader;
 pub mod logger;
 pub mod lower;
+pub mod monomorphize;
 pub mod name;
 pub mod optimize;
 pub mod optimize_copy_prop;
@@ -116,6 +117,7 @@ pub use compiler_host::InMemoryCompilerHost;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
+pub use monomorphize::{monomorphize_module, monomorphize_modules_indexed, monomorphize_project};
 pub use name::ModuleSource;
 pub use optimize::{CanonBuiltin, OptLevel, optimize};
 pub use parser::{ParseError, Parser};
@@ -155,6 +157,8 @@ pub struct DumpResult {
     pub entry_module_source: ModuleSource,
     /// All TIR modules after resolution (in topological order)
     pub tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
+    /// All monomorphized TIR modules (in topological order)
+    pub monomorphized_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// All lowered TIR modules (in topological order)
     pub lowered_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// Optimized project (contains usage analysis results)
@@ -294,13 +298,16 @@ pub async fn compile_with_host<H: CompilerHost>(
         }
     })?;
 
-    // === Phase 7: Lower (Project -> Project) ===
+    // === Phase 7: Monomorphize (Project -> Project) ===
+    let project = monomorphize_project(project);
+
+    // === Phase 8: Lower (Project -> Project) ===
     let project = lower_project(project);
 
-    // === Phase 8: Optimize (Project -> Project) ===
+    // === Phase 9: Optimize (Project -> Project) ===
     let project = optimize(project, opt_level);
 
-    // === Phase 9: Codegen ===
+    // === Phase 10: Codegen ===
     let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         codegen.generate_wasm(&project)
@@ -439,13 +446,21 @@ pub async fn dump_with_host<H: CompilerHost>(
                 .collect()
         });
 
-    // === Phase 8: Lower all modules ===
-    // Use lower_modules_indexed for cross-module generic function support
-    // tir_modules_by_source already has ModuleSource keys
-    let lowered_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
-        tir_modules_by_source.clone().map(lower_modules_indexed);
+    // === Phase 8: Monomorphize all modules ===
+    // Use monomorphize_modules_indexed for cross-module generic function support
+    let monomorphized_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        tir_modules_by_source
+            .clone()
+            .map(monomorphize_modules_indexed);
 
-    // === Phase 9: Optimize ===
+    // === Phase 9: Lower all modules ===
+    // Apply string literal collection to monomorphized modules
+    let lowered_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        monomorphized_tir_modules_by_source
+            .clone()
+            .map(lower_modules_indexed);
+
+    // === Phase 10: Optimize ===
     // Build a Project from lowered modules if available
     let optimized_project = lowered_tir_modules_by_source
         .clone()
@@ -483,6 +498,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         implicit_modules: load_result.implicit_modules.into_iter().collect(),
         entry_module_source: load_result.entry_module_source,
         tir_modules: tir_modules_by_source,
+        monomorphized_tir_modules: monomorphized_tir_modules_by_source,
         lowered_tir_modules: lowered_tir_modules_by_source,
         optimized_project,
         comments: comment_map,

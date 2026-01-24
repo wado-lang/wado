@@ -238,8 +238,12 @@ struct FunctionContext {
     local_index_offset: u32,
     /// Map from local index to closure id (for closures stored in locals)
     local_closure_ids: HashMap<u32, u32>,
-    /// Counter for generating unique `IndirectCall` temp locals (to support nested closure calls)
-    indirect_call_counter: u32,
+    /// Counter for generating unique `IndirectCall` temp locals per closure struct type
+    /// Key is the closure struct type index, value is the counter for that type
+    indirect_call_counters: HashMap<u32, u32>,
+    /// Counter for generating unique `IfPattern` temp locals per scrutinee type
+    /// Key is the `ValType` (as string), value is the counter for that type
+    if_pattern_counters: HashMap<String, u32>,
 }
 
 impl FunctionContext {
@@ -262,7 +266,8 @@ impl FunctionContext {
             closure_captures: Vec::new(),
             local_index_offset: 0,
             local_closure_ids: HashMap::new(),
-            indirect_call_counter: 0,
+            indirect_call_counters: HashMap::new(),
+            if_pattern_counters: HashMap::new(),
         }
     }
 
@@ -283,7 +288,8 @@ impl FunctionContext {
             local_box_types: HashMap::new(),
             closure_env_type_idx: None,
             closure_captures: Vec::new(),
-            indirect_call_counter: 0,
+            indirect_call_counters: HashMap::new(),
+            if_pattern_counters: HashMap::new(),
             local_index_offset: 0,
             local_closure_ids: HashMap::new(),
         }
@@ -301,6 +307,13 @@ impl FunctionContext {
     /// Reset for-of counter (called between pre-allocation and code generation phases)
     fn reset_for_of_counter(&mut self) {
         self.for_of_counter = 0;
+    }
+
+    /// Reset if-pattern counters (called between pre-allocation and code generation phases)
+    fn reset_if_pattern_counters(&mut self) {
+        for counter in self.if_pattern_counters.values_mut() {
+            *counter = 0;
+        }
     }
 
     /// Get next for-of loop ID and increment counter
@@ -1132,6 +1145,20 @@ impl Codegen {
             }
         }
 
+        // Register canonical closure types BEFORE monomorphized struct types.
+        // This must happen after non-monomorphized structs (which closures may return)
+        // but before monomorphized structs (which may have function-typed fields like
+        // MapIter<T,U> with f: fn(T) -> U).
+        self.register_canonical_closure_types_from_table(type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source != entry_module_source {
+                self.register_canonical_closure_types_from_table(
+                    &tir_mod.type_table.borrow(),
+                    &mut builder,
+                );
+            }
+        }
+
         // PHASE 3: Register MONOMORPHIZED structs from library modules
         // These must be registered BEFORE array types because array types with
         // generic struct elements (e.g., Array<Pair<i32, String>>) need to call
@@ -1251,18 +1278,6 @@ impl Codegen {
                 continue;
             }
             self.register_variant_type(variant, type_table, &mut builder);
-        }
-
-        // Register canonical closure types BEFORE array types.
-        // This is needed so that Array<fn(...)> can use the correct closure struct type.
-        self.register_canonical_closure_types_from_table(type_table, &mut builder);
-        for (module_source, tir_mod) in all_tir_modules {
-            if module_source != entry_module_source {
-                self.register_canonical_closure_types_from_table(
-                    &tir_mod.type_table.borrow(),
-                    &mut builder,
-                );
-            }
         }
 
         // PHASE 5: Register ALL array types (including struct-based like Array<String>)
@@ -5515,7 +5530,11 @@ impl Codegen {
                 let func_name = call_func.name();
 
                 // Handle builtin functions (intrinsics and canonical mappings)
-                if let Some(builtin) = call_func.builtin_name() {
+                // Check both direct builtins and monomorphized builtins
+                if let Some(builtin) = call_func
+                    .builtin_name()
+                    .or_else(|| call_func.monomorphized_builtin_name())
+                {
                     self.generate_builtin_call(
                         &builtin, args, expr, func, type_table, ctx, builder,
                     );
@@ -6352,9 +6371,14 @@ impl Codegen {
                 };
 
                 // Allocate a unique temporary local for this call site.
-                // We use a counter to ensure nested calls don't share the same local.
-                let call_id = ctx.indirect_call_counter;
-                ctx.indirect_call_counter += 1;
+                // We use a per-type counter to ensure nested calls don't share the same local,
+                // and to match the pre-allocated locals from preallocate_closure_call_locals.
+                let call_id = *ctx
+                    .indirect_call_counters
+                    .entry(closure_struct_type_idx)
+                    .or_insert(0);
+                ctx.indirect_call_counters
+                    .insert(closure_struct_type_idx, call_id + 1);
                 let local_name = format!("__indirect_call_{closure_struct_type_idx}_{call_id}");
                 let closure_local = ctx.alloc_local(
                     &local_name,
@@ -7539,9 +7563,13 @@ impl Codegen {
                 },
             ) if variant_name == "Some" => {
                 // Stack: [option_value]
-                // Store scrutinee in a temp local
+                // Store scrutinee in a temp local (using counter-based naming to match pre-allocation)
                 let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                let scrutinee_local = ctx.alloc_local("__if_pattern_scrutinee", option_valtype);
+                let type_key = format!("{:?}", scrutinee.type_id);
+                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
+                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
                 func.instruction(&Instruction::LocalSet(scrutinee_local));
 
                 // Generate: if (ref.is_null scrutinee) { else_block } else { then_block }
@@ -7768,6 +7796,8 @@ impl Codegen {
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_for_of_counter();
+        // Reset if-pattern counters so code generation uses the same indices as pre-allocation
+        func_ctx.reset_if_pattern_counters();
 
         // Generate the function code
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
@@ -7992,6 +8022,8 @@ impl Codegen {
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_for_of_counter();
+        // Reset if-pattern counters so code generation uses the same indices as pre-allocation
+        func_ctx.reset_if_pattern_counters();
 
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
 
@@ -9201,15 +9233,28 @@ impl Codegen {
         match &stmt.kind {
             TirStmtKind::IfPattern {
                 scrutinee,
+                pattern,
                 then_block,
                 else_block,
                 ..
             } => {
-                // Pre-allocate temp local for the scrutinee
+                // Pre-allocate temp local for the scrutinee using a unique name per type
+                // Only allocate for Some patterns (None patterns don't need a temp local)
                 let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-                if let ResolvedType::Option(_) = scrutinee_type {
+                let is_some_pattern = matches!(
+                    pattern,
+                    TirPattern::Variant { variant_name, .. } if variant_name == "Some"
+                );
+                if let ResolvedType::Option(_) = scrutinee_type
+                    && is_some_pattern
+                {
                     let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                    ctx.alloc_local("__if_pattern_scrutinee", option_valtype);
+                    // Use type_id as key since each Option type should have its own counter
+                    let type_key = format!("{:?}", scrutinee.type_id);
+                    let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                    let local_name = format!("__if_pattern_scrutinee_{}_{}", type_key, *counter);
+                    *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                    ctx.alloc_local(&local_name, option_valtype);
                 }
                 // Recursively handle nested blocks
                 self.preallocate_if_pattern_locals(then_block, type_table, ctx);
@@ -9230,11 +9275,116 @@ impl Codegen {
             TirStmtKind::While { body, .. }
             | TirStmtKind::For { body, .. }
             | TirStmtKind::Loop { body }
-            | TirStmtKind::ForOf { body, .. }
             | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.preallocate_if_pattern_locals(body, type_table, ctx);
             }
+            TirStmtKind::ForOf { body, .. } => {
+                self.preallocate_if_pattern_locals(body, type_table, ctx);
+            }
+            TirStmtKind::Let { value, .. } => {
+                // Recurse into the value expression (may contain inlined LabeledBlock)
+                self.preallocate_if_pattern_locals_from_expr(value, type_table, ctx);
+            }
+            TirStmtKind::Expr(expr) => {
+                // Recurse into the expression (may contain inlined LabeledBlock)
+                self.preallocate_if_pattern_locals_from_expr(expr, type_table, ctx);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                self.preallocate_if_pattern_locals_from_expr(expr, type_table, ctx);
+            }
             _ => {}
+        }
+    }
+
+    /// Pre-allocate `IfPattern` locals from expressions (handles inlined `LabeledBlock`)
+    fn preallocate_if_pattern_locals_from_expr(
+        &self,
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { block, .. } => {
+                // Recurse into the inlined block
+                self.preallocate_if_pattern_locals(block, type_table, ctx);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.preallocate_if_pattern_locals_from_expr(condition, type_table, ctx);
+                self.preallocate_if_pattern_locals(then_branch, type_table, ctx);
+                if let Some(else_blk) = else_branch {
+                    self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
+                }
+            }
+            TirExprKind::Block(block) => {
+                self.preallocate_if_pattern_locals(block, type_table, ctx);
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    self.preallocate_if_pattern_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(callee, type_table, ctx);
+                for arg in args {
+                    self.preallocate_if_pattern_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(receiver, type_table, ctx);
+                for arg in args {
+                    self.preallocate_if_pattern_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::FieldAccess { expr: base, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(base, type_table, ctx);
+            }
+            TirExprKind::Index { expr: base, index } => {
+                self.preallocate_if_pattern_locals_from_expr(base, type_table, ctx);
+                self.preallocate_if_pattern_locals_from_expr(index, type_table, ctx);
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(left, type_table, ctx);
+                self.preallocate_if_pattern_locals_from_expr(right, type_table, ctx);
+            }
+            TirExprKind::Unary { expr: inner, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.preallocate_if_pattern_locals_from_expr(&field.value, type_table, ctx);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements, .. } => {
+                for elem in elements {
+                    self.preallocate_if_pattern_locals_from_expr(elem, type_table, ctx);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.preallocate_if_pattern_locals_from_expr(elem, type_table, ctx);
+                }
+            }
+            TirExprKind::Assign { value, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::OptionSome { value } => {
+                self.preallocate_if_pattern_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::Cast { expr: inner, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.preallocate_if_pattern_locals_from_expr(body, type_table, ctx);
+            }
+            _ => {
+                // Other expressions don't contain blocks
+            }
         }
     }
 
@@ -9252,14 +9402,14 @@ impl Codegen {
         Self::count_indirect_calls_in_block(block, type_table, self, &mut call_counts);
 
         // Pre-allocate temp locals for each call site
-        for (struct_type_idx, count) in call_counts {
-            for i in 0..count {
+        for (struct_type_idx, count) in &call_counts {
+            for i in 0..*count {
                 let name = format!("__indirect_call_{struct_type_idx}_{i}");
                 ctx.alloc_local(
                     &name,
                     ValType::Ref(RefType {
                         nullable: true,
-                        heap_type: HeapType::Concrete(struct_type_idx),
+                        heap_type: HeapType::Concrete(*struct_type_idx),
                     }),
                 );
             }
@@ -9440,6 +9590,9 @@ impl Codegen {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 Self::count_indirect_calls_in_block(block, type_table, codegen, counts);
+            }
+            TirExprKind::OptionSome { value } => {
+                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
             }
             _ => {}
         }

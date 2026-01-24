@@ -20,8 +20,10 @@ fn "ArrayIter<String>^Iterator::next"(self: &mut ArrayIter<String>) -> Option<St
     if (self.index >= self.used) {
         return null;
     }
-    let item: String = move core::builtin::array_get::<String>(self.repr, self.index);
+    let item: String = move "array_get<String>"(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
+
+fn "array_get<String>"(arr: builtin::array<String>, idx: i32) -> String;
 

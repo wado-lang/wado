@@ -37,8 +37,8 @@ pub enum Severity {
     Warning,
     /// Informational message
     Info,
-    /// Hint for improvement
-    Hint,
+    /// Debug message
+    Debug,
 }
 
 impl std::fmt::Display for Severity {
@@ -47,7 +47,7 @@ impl std::fmt::Display for Severity {
             Severity::Error => write!(f, "error"),
             Severity::Warning => write!(f, "warning"),
             Severity::Info => write!(f, "info"),
-            Severity::Hint => write!(f, "hint"),
+            Severity::Debug => write!(f, "debug"),
         }
     }
 }
