@@ -90,7 +90,10 @@ impl FilesystemCompilerHost {
             LogLevel::Error => severity == Severity::Error,
             LogLevel::Warn => matches!(severity, Severity::Error | Severity::Warning),
             LogLevel::Info => {
-                matches!(severity, Severity::Error | Severity::Warning | Severity::Info)
+                matches!(
+                    severity,
+                    Severity::Error | Severity::Warning | Severity::Info
+                )
             }
             LogLevel::Debug => true,
         }
@@ -117,7 +120,10 @@ impl FilesystemCompilerHost {
                         span.file, span.line, span.column, diagnostic.severity, diagnostic.message
                     )
                 } else {
-                    format!("{timestamp} {}: {}", diagnostic.severity, diagnostic.message)
+                    format!(
+                        "{timestamp} {}: {}",
+                        diagnostic.severity, diagnostic.message
+                    )
                 }
             }
         }

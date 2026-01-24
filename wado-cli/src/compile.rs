@@ -181,7 +181,11 @@ pub async fn compile(filename: &str) -> Vec<u8> {
 }
 
 /// Compile a Wado source file with optimization options
-pub async fn compile_with_opts(filename: &str, opt_level: OptLevel, log_level: LogLevel) -> Vec<u8> {
+pub async fn compile_with_opts(
+    filename: &str,
+    opt_level: OptLevel,
+    log_level: LogLevel,
+) -> Vec<u8> {
     let path = Path::new(filename);
 
     // Read source file

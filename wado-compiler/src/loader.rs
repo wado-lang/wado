@@ -182,9 +182,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.loading.insert(module_source.clone());
 
             // Load and parse the module
-            let source = self
-                .get_source(&module_source, &from_module_source)
-                .await?;
+            let source = self.get_source(&module_source, &from_module_source).await?;
             let module = self.parse_source(&source, &module_source)?;
 
             // Collect its imports
@@ -259,9 +257,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                             {
                                 self.logger().warn(
                                     Code::ModuleParseError,
-                                    format!(
-                                        "failed to collect imports from implicit module: {e}"
-                                    ),
+                                    format!("failed to collect imports from implicit module: {e}"),
                                 );
                                 continue;
                             }
@@ -445,4 +441,3 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         })
     }
 }
-

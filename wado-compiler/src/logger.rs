@@ -49,7 +49,10 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             LogLevel::Error => severity == Severity::Error,
             LogLevel::Warn => matches!(severity, Severity::Error | Severity::Warning),
             LogLevel::Info => {
-                matches!(severity, Severity::Error | Severity::Warning | Severity::Info)
+                matches!(
+                    severity,
+                    Severity::Error | Severity::Warning | Severity::Info
+                )
             }
             LogLevel::Debug => true,
         }
