@@ -14,7 +14,7 @@ When updating spec.md, keep it mutually exclusive and collectively exhaustive (M
 
 The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
 
-Standard libraries are implemented in `wado-compiler/lib`, with `wasi/` for WASI and `core/` for the core library.
+Standard libraries (a.k.a. stdlib) are implemented in `wado-compiler/lib`, with `wasi/` for WASI and `core/` for the core library.
 
 See `docs/compiler.md` in order to develop the compiler.
 
@@ -130,7 +130,7 @@ Available phases (in compilation order):
 7. `--lower` - Lowered TIR (supports `--unparse`)
 8. `--optimize` - Optimized TIR (supports `--unparse`)
 
-Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (DCE), `-O2` (DCE + inlining), `-Os` (O2 + strip names).
+Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (basic), `-O2` (full), `-Os` (`-O2` + strip names).
 
 ### Golden Fixtures (Lowered TIR Tests)
 
@@ -213,7 +213,8 @@ This project relies on the following Wasm features:
 ### Rules for Compiler Development
 
 - Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formatting.
-- Minimize hard-coded logic. Define builtin and internal functions in Wado source files whenever possible.
+- Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
+- Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
 
 ## Rules for Markdown
 

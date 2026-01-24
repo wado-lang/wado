@@ -658,7 +658,8 @@ Wado intentionally does not support macros.
 
 - `enum` construction (parsed but no codegen)
 - `match` statements/expressions
-- `flags` (bit flags)
+- `flags` (parsed but no codegen)
+- `resource` (Wasm CM resource handles)
 - Trait bounds (`T: Display`)
 - Default trait method implementations
 - Effect handlers
