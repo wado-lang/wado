@@ -105,10 +105,8 @@ use crate::compiler_host::LogLevel;
 /// Loads all modules upfront before analysis and codegen.
 /// Uses a `CompilerHost` for I/O operations.
 pub struct ModuleLoader<'a, H: CompilerHost> {
-    /// Host for I/O operations
-    host: &'a H,
-    /// Log level for filtering messages
-    log_level: LogLevel,
+    /// Logger for diagnostics (also provides access to host)
+    logger: Logger<'a, H>,
     /// Cache of already parsed modules
     loaded: HashMap<ModuleSource, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
@@ -121,17 +119,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Create a new module loader with the given host and log level
     pub fn new(host: &'a H, log_level: LogLevel) -> Self {
         Self {
-            host,
-            log_level,
+            logger: Logger::new(host, log_level),
             loaded: HashMap::new(),
             loading: HashSet::new(),
             implicit_modules: HashSet::new(),
         }
     }
 
-    /// Create a logger for emitting diagnostics
-    fn logger(&self) -> Logger<'_, H> {
-        Logger::new(self.host, self.log_level)
+    /// Get the logger for emitting diagnostics
+    pub fn logger(&self) -> &Logger<'a, H> {
+        &self.logger
     }
 
     /// Load all modules starting from the entry source
@@ -380,12 +377,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         _from_module_source: &ModuleSource,
     ) -> Result<String, LoadError> {
         match module_source {
-            ModuleSource::Local { path } => {
-                self.host.load_source(path).await.map_err(LoadError::from)
-            }
-            ModuleSource::Remote { url } => {
-                self.host.load_source(url).await.map_err(LoadError::from)
-            }
+            ModuleSource::Local { path } => self
+                .logger
+                .host()
+                .load_source(path)
+                .await
+                .map_err(LoadError::from),
+            ModuleSource::Remote { url } => self
+                .logger
+                .host()
+                .load_source(url)
+                .await
+                .map_err(LoadError::from),
             ModuleSource::Core { name } => {
                 let import_path = format!("core:{name}");
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
