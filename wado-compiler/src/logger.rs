@@ -131,6 +131,32 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
+    /// Emit a span start marker
+    ///
+    /// Use this when RAII pattern (`span()`) doesn't work due to borrow conflicts.
+    /// Must be paired with a corresponding `span_end()` call.
+    pub fn span_start(&self, name: &str) {
+        self.host.emit_diagnostic(Diagnostic {
+            severity: Severity::Info,
+            code: Code::SpanStart,
+            message: name.to_string(),
+            span: None,
+        });
+    }
+
+    /// Emit a span end marker
+    ///
+    /// Use this when RAII pattern (`span()`) doesn't work due to borrow conflicts.
+    /// Must be paired with a corresponding `span_start()` call.
+    pub fn span_end(&self, name: &str) {
+        self.host.emit_diagnostic(Diagnostic {
+            severity: Severity::Info,
+            code: Code::SpanEnd,
+            message: name.to_string(),
+            span: None,
+        });
+    }
+
     /// Get a reference to the underlying host
     pub fn host(&self) -> &'a H {
         self.host

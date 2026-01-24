@@ -147,6 +147,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_source: &str,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
+        self.logger().span_start("load");
+
         // Parse entry module
         let entry_module_source = if let Some(filename) = entry_filename {
             ModuleSource::entry_point_with_filename(filename)
@@ -196,6 +198,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         // Load implicit modules (for compiler-generated code)
         self.load_implicit_modules().await?;
+
+        self.logger().span_end("load");
 
         Ok(LoadResult {
             modules: self.loaded,
