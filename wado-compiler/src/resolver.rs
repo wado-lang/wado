@@ -1630,6 +1630,16 @@ impl<'a> Resolver<'a> {
             Type::Generic(generic) => generic.name.clone(),
             Type::Reference(inner) => self.get_type_name(inner),
             Type::MutReference(inner) => self.get_type_name(inner),
+            Type::Function(func_type) => {
+                // Build function type string: "fn(T1, T2) -> R"
+                let param_strs: Vec<String> = func_type
+                    .params
+                    .iter()
+                    .map(|p| self.get_type_name(p))
+                    .collect();
+                let return_str = self.get_type_name(&func_type.return_type);
+                format!("fn({}) -> {}", param_strs.join(", "), return_str)
+            }
             _ => "Unknown".to_string(),
         }
     }
@@ -3268,6 +3278,45 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Check if this is a field access to a function-typed field (e.g., (self.f)(arg))
+        // This handles calling closures stored in struct fields
+        if let Expr::FieldAccess(_field_access) = &call.callee {
+            // Resolve the callee expression to get the field type
+            let callee_expr = self.resolve_expr(&call.callee, ctx);
+            let callee_type = self.type_table.borrow().get(callee_expr.type_id).clone();
+
+            if let ResolvedType::Function {
+                params: fn_params,
+                return_type,
+                ..
+            } = callee_type
+            {
+                // This is calling a function stored in a field!
+                let fn_return_type = return_type;
+                let fn_params = fn_params.clone();
+
+                // Resolve arguments with coercion awareness based on function param types
+                let args: Vec<TirExpr> = call
+                    .args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, arg)| {
+                        let expected_type = fn_params.get(i).copied();
+                        self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                    })
+                    .collect();
+
+                return TirExpr::new(
+                    TirExprKind::IndirectCall {
+                        callee: Box::new(callee_expr),
+                        args,
+                    },
+                    fn_return_type,
+                    call.span,
+                );
+            }
+        }
+
         // First, determine expected parameter types to handle coercion
         let param_types = self.lookup_function_param_types(&call.callee);
 
@@ -3860,8 +3909,16 @@ impl<'a> Resolver<'a> {
         }
 
         // Then add method-level type args with the correct offset
-        if !type_args.is_empty() {
-            subst_ctx = subst_ctx.with_method_args(&type_args, impl_offset);
+        // If no explicit type args, try to infer from arguments
+        let method_type_args = if type_args.is_empty() {
+            // Try to infer method type args from actual arguments
+            self.infer_method_type_args(receiver.type_id, &method_call.method, &args, impl_offset)
+        } else {
+            type_args.clone()
+        };
+
+        if !method_type_args.is_empty() {
+            subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
         }
 
         // Apply unified substitution
@@ -3914,7 +3971,8 @@ impl<'a> Resolver<'a> {
             };
 
         // Convert method type args to string names for method_info
-        let method_type_arg_names: Vec<String> = type_args
+        // Use inferred type args if available, otherwise use explicit type args
+        let method_type_arg_names: Vec<String> = method_type_args
             .iter()
             .map(|t| self.mangle_type_name(*t))
             .collect();
@@ -3933,7 +3991,7 @@ impl<'a> Resolver<'a> {
                         method_type_arg_names,
                     )),
                 },
-                type_args,
+                type_args: method_type_args, // Use inferred type args
                 args,
             },
             return_type,
@@ -4515,9 +4573,11 @@ impl<'a> Resolver<'a> {
                             if method.name == method_name {
                                 // Set up type params for generic impls (e.g., impl Array<T>)
                                 let old_type_params = std::mem::take(&mut self.current_type_params);
+                                let mut impl_offset = 0u32;
                                 if let Some(ref type_args) = receiver_type_args
                                     && let Type::Generic(generic) = &impl_block.ty
                                 {
+                                    impl_offset = type_args.len() as u32;
                                     for (i, arg) in generic.args.iter().enumerate() {
                                         if let Type::Named(named) = arg
                                             && i < type_args.len()
@@ -4528,6 +4588,20 @@ impl<'a> Resolver<'a> {
                                             );
                                         }
                                     }
+                                }
+
+                                // Set up method-level type params (e.g., Acc in fold<Acc>)
+                                // These get TypeParam types that will be substituted at call sites
+                                for (i, type_param) in method.type_params.iter().enumerate() {
+                                    let index = impl_offset + i as u32;
+                                    let type_param_id = self.type_table.borrow_mut().intern(
+                                        ResolvedType::TypeParam {
+                                            name: type_param.name.clone(),
+                                            index,
+                                        },
+                                    );
+                                    self.current_type_params
+                                        .insert(type_param.name.clone(), (index, type_param_id));
                                 }
 
                                 let return_type = method
@@ -4571,9 +4645,11 @@ impl<'a> Resolver<'a> {
                                     // Set up type params for generic impls (e.g., impl Array<T>)
                                     let old_type_params =
                                         std::mem::take(&mut self.current_type_params);
+                                    let mut impl_offset = 0u32;
                                     if let Some(ref type_args) = receiver_type_args
                                         && let Type::Generic(generic) = &impl_block.ty
                                     {
+                                        impl_offset = type_args.len() as u32;
                                         for (i, arg) in generic.args.iter().enumerate() {
                                             if let Type::Named(named) = arg
                                                 && i < type_args.len()
@@ -4584,6 +4660,22 @@ impl<'a> Resolver<'a> {
                                                 );
                                             }
                                         }
+                                    }
+
+                                    // Set up method-level type params (e.g., Acc in fold<Acc>)
+                                    // These get TypeParam types that will be substituted at call sites
+                                    for (i, type_param) in method.type_params.iter().enumerate() {
+                                        let index = impl_offset + i as u32;
+                                        let type_param_id = self.type_table.borrow_mut().intern(
+                                            ResolvedType::TypeParam {
+                                                name: type_param.name.clone(),
+                                                index,
+                                            },
+                                        );
+                                        self.current_type_params.insert(
+                                            type_param.name.clone(),
+                                            (index, type_param_id),
+                                        );
                                     }
 
                                     let return_type = method
@@ -4633,6 +4725,159 @@ impl<'a> Resolver<'a> {
             }
         }
         None
+    }
+
+    /// Infer method type arguments from actual argument types.
+    /// Returns a list of inferred type args matching the method's type params order.
+    /// Uses the position of type params in parameter types to map actual arg types.
+    fn infer_method_type_args(
+        &self,
+        receiver_type: TypeId,
+        method_name: &str,
+        args: &[TirExpr],
+        impl_offset: u32,
+    ) -> Vec<TypeId> {
+        let base_type_id = self.get_base_type(receiver_type);
+        let base_type = self.type_table.borrow().get(base_type_id).clone();
+
+        let (struct_name, module_path) = match &base_type {
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } => (name.clone(), module_source.to_path()),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.to_path()),
+            _ => return vec![],
+        };
+
+        // Search for the method in loaded modules
+        let mut method_type_params: Vec<String> = Vec::new();
+        let mut param_type_strs: Vec<String> = Vec::new();
+
+        // Helper function to extract param info from method
+        let extract_method_info = |method: &crate::ast::Function| -> (Vec<String>, Vec<String>) {
+            let type_params: Vec<String> =
+                method.type_params.iter().map(|p| p.name.clone()).collect();
+            let params: Vec<String> = method
+                .params
+                .iter()
+                // Skip self parameter (has SelfKind::Ref/MutRef and name "self")
+                .filter(|p| {
+                    !(matches!(
+                        p.self_kind,
+                        ast::SelfKind::Ref | ast::SelfKind::MutRef | ast::SelfKind::None
+                    ) && p.name == "self")
+                })
+                .map(|p| self.get_type_name(&p.ty))
+                .collect();
+            (type_params, params)
+        };
+
+        // Check specific module first
+        if !module_path.is_empty()
+            && let Some(module) = self.loaded_modules.get(&module_path) {
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item
+                        && impl_block.trait_type.is_none()
+                    {
+                        let impl_type_name = self.get_type_name(&impl_block.ty);
+                        // Match impl type name: either exact match or the base name matches
+                        // For generic types like ArrayIter<T>, match if base name "ArrayIter" matches
+                        let impl_base_name =
+                            impl_type_name.split('<').next().unwrap_or(&impl_type_name);
+                        if impl_type_name == struct_name || impl_base_name == struct_name {
+                            for method in &impl_block.methods {
+                                if method.name == method_name && !method.type_params.is_empty() {
+                                    let (tp, pp) = extract_method_info(method);
+                                    method_type_params = tp;
+                                    param_type_strs = pp;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        // Search all loaded modules if not found
+        if method_type_params.is_empty() {
+            for module in self.loaded_modules.values() {
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item
+                        && impl_block.trait_type.is_none()
+                    {
+                        let impl_type_name = self.get_type_name(&impl_block.ty);
+                        let impl_base_name =
+                            impl_type_name.split('<').next().unwrap_or(&impl_type_name);
+                        if impl_type_name == struct_name || impl_base_name == struct_name {
+                            for method in &impl_block.methods {
+                                if method.name == method_name && !method.type_params.is_empty() {
+                                    let (tp, pp) = extract_method_info(method);
+                                    method_type_params = tp;
+                                    param_type_strs = pp;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if !method_type_params.is_empty() {
+                    break;
+                }
+            }
+        }
+
+        if method_type_params.is_empty() {
+            return vec![];
+        }
+
+        // Infer type args by matching type param names against param types and actual arg types
+        let mut inferred: Vec<TypeId> = vec![TypeTable::UNKNOWN; method_type_params.len()];
+
+        for (i, type_param_name) in method_type_params.iter().enumerate() {
+            // Find the first parameter whose type matches this type param
+            for (param_idx, param_type_str) in param_type_strs.iter().enumerate() {
+                if param_idx >= args.len() {
+                    continue;
+                }
+
+                if param_type_str == type_param_name {
+                    // This param has type T (or Acc, etc.) - use the actual arg type
+                    inferred[i] = args[param_idx].type_id;
+                    break;
+                }
+
+                // Check if the type param appears in a function type's return position
+                // e.g., for "fn(T) -> U" we can infer U from the closure's return type
+                if param_type_str.starts_with("fn(") {
+                    // Parse function type to extract return type
+                    // Format: "fn(param1, param2, ...) -> ReturnType"
+                    if let Some(arrow_pos) = param_type_str.find(" -> ") {
+                        let return_type_str = &param_type_str[arrow_pos + 4..];
+                        if return_type_str == type_param_name {
+                            // The return type is our type param - infer from closure's return type
+                            let arg_type = self.type_table.borrow().get(args[param_idx].type_id).clone();
+                            if let ResolvedType::Function { return_type, .. } = arg_type {
+                                inferred[i] = return_type;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Return only if we found at least some type args
+        if inferred.iter().all(|&t| t == TypeTable::UNKNOWN) {
+            vec![]
+        } else {
+            // Use impl_offset to verify - type params start after impl params
+            let _ = impl_offset;
+            inferred
+        }
     }
 
     /// Get the base (non-reference) type by stripping all Ref/MutRef wrappers
@@ -6460,6 +6705,24 @@ impl<'a> Resolver<'a> {
                 for (&exp, &act) in expected_elems.iter().zip(actual_elems.iter()) {
                     self.unify_types_for_inference(exp, act, type_param_map);
                 }
+            }
+            // Function types: unify param types and return type
+            (
+                ResolvedType::Function {
+                    params: expected_params,
+                    return_type: expected_ret,
+                    ..
+                },
+                ResolvedType::Function {
+                    params: actual_params,
+                    return_type: actual_ret,
+                    ..
+                },
+            ) if expected_params.len() == actual_params.len() => {
+                for (&exp, &act) in expected_params.iter().zip(actual_params.iter()) {
+                    self.unify_types_for_inference(exp, act, type_param_map);
+                }
+                self.unify_types_for_inference(*expected_ret, *actual_ret, type_param_map);
             }
             // Other cases: no type params to extract
             _ => {}

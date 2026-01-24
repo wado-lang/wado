@@ -91,8 +91,10 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
+    let item: i32 = "array_get<i32>"(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
+
+fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 

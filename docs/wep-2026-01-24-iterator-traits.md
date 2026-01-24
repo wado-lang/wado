@@ -859,29 +859,14 @@ fn run() with Stdout {
 - [x] For-of loop generalization (Phase 2)
 - [ ] Tuple `IntoIterator` (Phase 3) - compiler magic, separate task
 - [x] `FromIterator` trait (Phase 4)
-- [ ] Iterator combinators (Phase 5) - blocked by compiler limitation (see below)
-- [x] `ArrayIter::collect()` method (Phase 6 - partial)
+- [x] Iterator combinators (Phase 5) - `map`, `filter`, `fold`, `collect`
+- [x] `MapIter<T, U>`, `FilterIter<T>`, `EnumerateIter<T>` structs
+- [x] `enumerate()` combinator
 
 ### Known Limitations
 
 - **Trait bounds**: `type Iter: Iterator` constraints are not enforced at trait level,
   only checked at usage sites.
-
-- **Function type parameters on generic struct methods**: Methods on generic structs
-  (like `ArrayIter<T>`) cannot have function type parameters that use the struct's
-  generic type. This blocks iterator combinators like `fold`, `map`, and `filter`.
-
-  ```wado
-  // This pattern doesn't work yet:
-  impl ArrayIter<T> {
-      fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc { ... }
-      fn map<U>(&self, f: fn(T) -> U) -> MapIter<T, U> { ... }
-      fn filter(&self, pred: fn(T) -> bool) -> FilterIter<T> { ... }
-  }
-  ```
-
-  **Workaround**: None currently. Combinators must wait for this compiler limitation
-  to be resolved.
 
 - **Closure parameter type inference**: Closures passed to functions require explicit
   parameter type annotations. Type inference from function signature context is not

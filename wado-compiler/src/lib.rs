@@ -449,7 +449,9 @@ pub async fn dump_with_host<H: CompilerHost>(
     // === Phase 8: Monomorphize all modules ===
     // Use monomorphize_modules_indexed for cross-module generic function support
     let monomorphized_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
-        tir_modules_by_source.clone().map(monomorphize_modules_indexed);
+        tir_modules_by_source
+            .clone()
+            .map(monomorphize_modules_indexed);
 
     // === Phase 9: Lower all modules ===
     // Apply string literal collection to monomorphized modules

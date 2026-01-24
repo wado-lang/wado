@@ -798,6 +798,30 @@ impl FunctionRef {
         }
     }
 
+    /// Get the monomorphized builtin name if this is a monomorphized builtin function.
+    /// Returns the qualified name (e.g., "`builtin::array_get`") if the `generic_name`
+    /// is a known builtin function like "`array_get`", "`array_set`", etc.
+    pub fn monomorphized_builtin_name(&self) -> Option<String> {
+        let generic_name = match self {
+            FunctionRef::Resolved(func) => func
+                .borrow()
+                .monomorph_info
+                .as_ref()
+                .map(|i| i.generic_name.clone()),
+            FunctionRef::External { monomorph_info, .. } => {
+                monomorph_info.as_ref().map(|i| i.generic_name.clone())
+            }
+        }?;
+
+        // Check if the generic name is a known builtin
+        match generic_name.as_str() {
+            "array_get" | "array_set" | "array_new" | "array_len" => {
+                Some(format!("builtin::{generic_name}"))
+            }
+            _ => None,
+        }
+    }
+
     /// Check if this function is monomorphized (instantiated from a generic)
     pub fn is_monomorphized(&self) -> bool {
         match self {

@@ -1,5 +1,5 @@
 // Test ArrayIter::fold() method
-use {println, Stdout} from "core:cli";
+use { println, Stdout } from "core:cli";
 
 fn run() with Stdout {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
@@ -18,7 +18,11 @@ fn run() with Stdout {
 
     // Max using fold (starting with first element pattern)
     let arr2: Array<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
-    let max = arr2.iter().fold(0, |acc: i32, x: i32| if x > acc { x } else { acc });
+    let max = arr2.iter().fold(0, |acc: i32, x: i32| if x > acc {
+        x;
+    } else {
+        acc;
+    });
     println(`max: {max}`);
 }
 

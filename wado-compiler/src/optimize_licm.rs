@@ -6,8 +6,8 @@
 
 use crate::project::Project;
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -319,13 +319,15 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
         }
         TirStmtKind::IfPattern {
             scrutinee,
+            pattern,
             then_block,
             else_block,
             ..
         } => {
             collect_modified_vars_in_expr(scrutinee, modified);
-            // Pattern bindings introduce new variables, but we handle them conservatively
-            // by not tracking specific bindings (they're local to the block anyway)
+            // Pattern bindings introduce new variables that are assigned fresh each iteration
+            // Mark them as modified so LICM doesn't hoist accesses to them
+            collect_pattern_bindings(pattern, modified);
             collect_modified_vars_in_block(then_block, modified);
             if let Some(eb) = else_block {
                 collect_modified_vars_in_block(eb, modified);
@@ -337,6 +339,29 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
             }
         }
         TirStmtKind::Continue => {}
+    }
+}
+
+/// Collect all local variable indices bound by a pattern.
+/// These variables are assigned fresh each time the pattern matches.
+fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut HashSet<u32>) {
+    match pattern {
+        TirPattern::Binding { local_index, .. } => {
+            modified.insert(*local_index);
+        }
+        TirPattern::Variant { bindings, .. } => {
+            for binding in bindings {
+                collect_pattern_bindings(binding, modified);
+            }
+        }
+        TirPattern::Tuple(patterns) => {
+            for p in patterns {
+                collect_pattern_bindings(p, modified);
+            }
+        }
+        TirPattern::Wildcard | TirPattern::Literal(_) => {
+            // No bindings
+        }
     }
 }
 

@@ -203,7 +203,7 @@ impl Monomorphizer {
         // that need to be instantiated too (e.g., Container<i32>::add calls Array<i32>::append)
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         while let Some(key) = self.function_pending.pop() {
-            // First, instantiate the function (needs mutable borrow)
+            // Instantiate the function (needs mutable borrow)
             let concrete = {
                 let generic_func = generic_functions.get(&key.name);
                 if let Some(gf) = generic_func {
@@ -221,10 +221,11 @@ impl Monomorphizer {
             if let Some(concrete) = concrete {
                 // Collect instantiation sites from the newly created function body
                 // This handles transitive monomorphization (e.g., Container method -> Array method)
-                // Only do this for user-defined functions (not Array or other stdlib functions)
-                // to avoid issues with recursive collection
+                // Skip Array<T> methods that don't need transitive collection, but allow
+                // ArrayIter methods (like fold) which may call other generic methods
                 if let Some(body) = &concrete.body
-                    && !concrete.name.starts_with("Array")
+                    && !(concrete.name.starts_with("Array<")
+                        || concrete.name.starts_with("Array::"))
                 {
                     self.collect_func_instantiation_sites_in_block(
                         body,
@@ -369,7 +370,7 @@ impl Monomorphizer {
         // that need to be instantiated too (e.g., Container<i32>::add calls Array<i32>::append)
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         while let Some(key) = self.function_pending.pop() {
-            // First, instantiate the function (needs mutable borrow)
+            // Instantiate the function (needs mutable borrow)
             let concrete = {
                 let generic_func = generic_functions.get(&key.name);
                 if let Some(gf) = generic_func {
@@ -387,10 +388,11 @@ impl Monomorphizer {
             if let Some(concrete) = concrete {
                 // Collect instantiation sites from the newly created function body
                 // This handles transitive monomorphization (e.g., Container method -> Array method)
-                // Only do this for user-defined functions (not Array or other stdlib functions)
-                // to avoid issues with recursive collection
+                // Skip Array<T> methods that don't need transitive collection, but allow
+                // ArrayIter methods (like fold) which may call other generic methods
                 if let Some(body) = &concrete.body
-                    && !concrete.name.starts_with("Array")
+                    && !(concrete.name.starts_with("Array<")
+                        || concrete.name.starts_with("Array::"))
                 {
                     self.collect_func_instantiation_sites_in_block(
                         body,
@@ -1005,6 +1007,19 @@ impl Monomorphizer {
                 let new_err = self.substitute_type(err, substitution, type_table);
                 type_table.make_result(new_ok, new_err)
             }
+            ResolvedType::Function {
+                params,
+                return_type,
+                effects,
+            } => {
+                // Substitute type parameters in function parameter types and return type
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&p| self.substitute_type(p, substitution, type_table))
+                    .collect();
+                let new_return_type = self.substitute_type(return_type, substitution, type_table);
+                type_table.make_function(new_params, new_return_type, effects)
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -1387,14 +1402,21 @@ impl Monomorphizer {
                         ));
                     }
 
-                    for generic_method_name in names_to_try {
-                        if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
+                    for generic_method_name in &names_to_try {
+                        if let Some(generic_func_rc) = generic_functions.get(generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
-                            // Only queue if we have the right number of type args
+                            // Check if method has its own type params (double generics)
+                            let has_method_type_params = !generic_func.type_params.is_empty();
+                            // Only queue if we have the right number of impl type args
                             if impl_type_args.len() == generic_func.impl_type_params.len() {
+                                // Combine impl type args with method type args
+                                let mut combined_type_args = impl_type_args.clone();
+                                if has_method_type_params && !type_args.is_empty() {
+                                    combined_type_args.extend(type_args.iter().copied());
+                                }
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
-                                    type_args: impl_type_args.clone(),
+                                    type_args: combined_type_args,
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
                                     let mangled = self.mangle_method_name(
@@ -1441,11 +1463,18 @@ impl Monomorphizer {
                     for generic_method_name in names_to_try {
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
-                            // Only queue if we have the right number of type args
+                            // Check if method has its own type params (double generics)
+                            let has_method_type_params = !generic_func.type_params.is_empty();
+                            // Only queue if we have the right number of impl type args
                             if impl_type_args.len() == generic_func.impl_type_params.len() {
+                                // Combine impl type args with method type args
+                                let mut combined_type_args = impl_type_args.clone();
+                                if has_method_type_params && !type_args.is_empty() {
+                                    combined_type_args.extend(type_args.iter().copied());
+                                }
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
-                                    type_args: impl_type_args.clone(),
+                                    type_args: combined_type_args,
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
                                     let mangled = self.mangle_method_name(
