@@ -6312,8 +6312,12 @@ impl Codegen {
                 // Allocate a unique temporary local for this call site.
                 // We use a per-type counter to ensure nested calls don't share the same local,
                 // and to match the pre-allocated locals from preallocate_closure_call_locals.
-                let call_id = *ctx.indirect_call_counters.entry(closure_struct_type_idx).or_insert(0);
-                ctx.indirect_call_counters.insert(closure_struct_type_idx, call_id + 1);
+                let call_id = *ctx
+                    .indirect_call_counters
+                    .entry(closure_struct_type_idx)
+                    .or_insert(0);
+                ctx.indirect_call_counters
+                    .insert(closure_struct_type_idx, call_id + 1);
                 let local_name = format!("__indirect_call_{closure_struct_type_idx}_{call_id}");
                 let closure_local = ctx.alloc_local(
                     &local_name,
@@ -9181,15 +9185,16 @@ impl Codegen {
                     TirPattern::Variant { variant_name, .. } if variant_name == "Some"
                 );
                 if let ResolvedType::Option(_) = scrutinee_type
-                    && is_some_pattern {
-                        let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                        // Use type_id as key since each Option type should have its own counter
-                        let type_key = format!("{:?}", scrutinee.type_id);
-                        let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-                        let local_name = format!("__if_pattern_scrutinee_{}_{}", type_key, *counter);
-                        *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                        ctx.alloc_local(&local_name, option_valtype);
-                    }
+                    && is_some_pattern
+                {
+                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                    // Use type_id as key since each Option type should have its own counter
+                    let type_key = format!("{:?}", scrutinee.type_id);
+                    let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                    let local_name = format!("__if_pattern_scrutinee_{}_{}", type_key, *counter);
+                    *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                    ctx.alloc_local(&local_name, option_valtype);
+                }
                 // Recursively handle nested blocks
                 self.preallocate_if_pattern_locals(then_block, type_table, ctx);
                 if let Some(else_blk) = else_block {

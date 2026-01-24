@@ -4778,29 +4778,30 @@ impl<'a> Resolver<'a> {
 
         // Check specific module first
         if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_path) {
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item
-                        && impl_block.trait_type.is_none()
-                    {
-                        let impl_type_name = self.get_type_name(&impl_block.ty);
-                        // Match impl type name: either exact match or the base name matches
-                        // For generic types like ArrayIter<T>, match if base name "ArrayIter" matches
-                        let impl_base_name =
-                            impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-                        if impl_type_name == struct_name || impl_base_name == struct_name {
-                            for method in &impl_block.methods {
-                                if method.name == method_name && !method.type_params.is_empty() {
-                                    let (tp, pp) = extract_method_info(method);
-                                    method_type_params = tp;
-                                    param_type_strs = pp;
-                                    break;
-                                }
+            && let Some(module) = self.loaded_modules.get(&module_path)
+        {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && impl_block.trait_type.is_none()
+                {
+                    let impl_type_name = self.get_type_name(&impl_block.ty);
+                    // Match impl type name: either exact match or the base name matches
+                    // For generic types like ArrayIter<T>, match if base name "ArrayIter" matches
+                    let impl_base_name =
+                        impl_type_name.split('<').next().unwrap_or(&impl_type_name);
+                    if impl_type_name == struct_name || impl_base_name == struct_name {
+                        for method in &impl_block.methods {
+                            if method.name == method_name && !method.type_params.is_empty() {
+                                let (tp, pp) = extract_method_info(method);
+                                method_type_params = tp;
+                                param_type_strs = pp;
+                                break;
                             }
                         }
                     }
                 }
             }
+        }
 
         // Search all loaded modules if not found
         if method_type_params.is_empty() {
@@ -4859,7 +4860,11 @@ impl<'a> Resolver<'a> {
                         let return_type_str = &param_type_str[arrow_pos + 4..];
                         if return_type_str == type_param_name {
                             // The return type is our type param - infer from closure's return type
-                            let arg_type = self.type_table.borrow().get(args[param_idx].type_id).clone();
+                            let arg_type = self
+                                .type_table
+                                .borrow()
+                                .get(args[param_idx].type_id)
+                                .clone();
                             if let ResolvedType::Function { return_type, .. } = arg_type {
                                 inferred[i] = return_type;
                                 break;
