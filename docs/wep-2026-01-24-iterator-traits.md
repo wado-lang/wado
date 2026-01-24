@@ -28,6 +28,70 @@ Wado's GC-based memory model significantly simplifies iterator design:
 | Item ownership    | Borrowed or owned                     | Always copied (value semantics) |
 | Trait bounds      | Required for `Iter: Iterator`         | Not yet available               |
 
+### Comparison with JavaScript
+
+Wado's iterator model is closer to JavaScript than Rust. Both use a two-layer abstraction:
+
+| JavaScript | Wado | Role |
+| ---------- | ---- | ---- |
+| **Iterable** (`[Symbol.iterator]()`) | **IntoIterator** (`into_iter()`) | Can produce an iterator |
+| **Iterator** (`next()`) | **Iterator** (`next()`) | Yields elements one by one |
+
+```javascript
+// JavaScript
+const arr = [1, 2, 3];
+const iter = arr[Symbol.iterator]();  // Iterable → Iterator
+iter.next();  // { value: 1, done: false }
+iter.next();  // { value: 2, done: false }
+```
+
+```wado
+// Wado
+let arr: Array<i32> = [1, 2, 3];
+let mut iter = arr.into_iter();  // IntoIterator → Iterator
+iter.next();  // Option::Some(1)
+iter.next();  // Option::Some(2)
+```
+
+Both languages desugar `for-of` loops the same way: call the conversion method to get an iterator, then repeatedly call `next()` until exhausted.
+
+Rust requires three iteration methods (`iter()`, `iter_mut()`, `into_iter()`) because of ownership semantics. Wado, like JavaScript, uses GC-managed memory with value semantics, so a single `iter()` / `into_iter()` suffices.
+
+### Iterator vs IntoIterator: Role Distinction
+
+Understanding the difference between `Iterator` and `IntoIterator`:
+
+| Trait | Question it answers | Example types |
+| ----- | ------------------- | ------------- |
+| **Iterator** | "Can I call `next()` on this?" | `ArrayIter<T>`, `Range`, `Chars` |
+| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String`, `Stack<T>` |
+
+A collection (like `Array<T>`) is **not** an iterator itself—it doesn't have iteration state. Instead, it implements `IntoIterator` to create a separate iterator object that tracks the current position:
+
+```wado
+// Array<T> implements IntoIterator, NOT Iterator
+let arr: Array<i32> = [1, 2, 3];
+
+// arr.next() would NOT work - Array has no next() method
+// Instead, convert to an iterator first:
+let mut iter: ArrayIter<i32> = arr.into_iter();
+
+// ArrayIter<T> implements Iterator
+iter.next();  // Some(1) - advances internal index from 0 to 1
+iter.next();  // Some(2) - advances internal index from 1 to 2
+iter.next();  // Some(3) - advances internal index from 2 to 3
+iter.next();  // None - exhausted
+```
+
+Some types (like `Range`) are both a collection and their own iterator:
+
+```wado
+// Range implements BOTH IntoIterator and Iterator
+let r = range(1, 4);
+// r.into_iter() returns self (Range is its own iterator)
+// r.next() works directly
+```
+
 ## Decision
 
 ### 1. Core Iterator Trait
