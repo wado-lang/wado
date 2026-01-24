@@ -2039,6 +2039,8 @@ fn remap_expr(
             effect_name,
             op_name,
             args,
+            cm_convention,
+            cm_local_name,
         } => TirExprKind::EffectCall {
             effect_name: effect_name.clone(),
             op_name: op_name.clone(),
@@ -2046,6 +2048,8 @@ fn remap_expr(
                 .iter()
                 .map(|a| remap_expr(a, param_to_local, local_offset, param_count, source_module))
                 .collect(),
+            cm_convention: cm_convention.clone(),
+            cm_local_name: cm_local_name.clone(),
         },
         TirExprKind::FieldAccess {
             expr: inner,

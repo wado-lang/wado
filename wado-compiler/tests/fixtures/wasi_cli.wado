@@ -1,0 +1,26 @@
+// Test for wasi:cli module features
+// Tests: Stdout, Stderr, Environment effects from wasi:cli directly
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Environment } from "wasi:cli";
+
+fn run() with Stdout, Stderr, Environment {
+    // Test Stdout effect via println (uses Stdout::write_via_stream internally)
+    println("test: stdout works");
+
+    // Test Stderr effect via eprintln (uses Stderr::write_via_stream internally)
+    eprintln("test: stderr works");
+
+    // Test Environment::get_arguments() directly from wasi:cli
+    let arguments = Environment::get_arguments();
+    println(`test: Environment::get_arguments().len = {arguments.len()}`);
+
+    // Test Environment::get_environment() directly from wasi:cli
+    let env_vars = Environment::get_environment();
+    println(`test: Environment::get_environment().len = {env_vars.len()}`);
+
+    println("all cli tests passed");
+}
+
+__DATA__
+{"stdout_contains": ["test: stdout works", "test: Environment::get_arguments()", "test: Environment::get_environment()", "all cli tests passed"], "stderr_contains": ["test: stderr works"]}

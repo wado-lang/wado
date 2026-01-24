@@ -54,6 +54,7 @@ pub enum Item {
     Struct(StructDecl),
     Enum(EnumDecl),
     Variant(VariantDecl),
+    Flags(FlagsDecl),
     Type(TypeAlias),
     Impl(ImplBlock),
     Trait(TraitDecl),
@@ -968,6 +969,29 @@ pub struct EnumDecl {
 pub struct EnumVariant {
     pub name: String,
     pub fields: Option<Vec<Type>>,
+    pub span: Span,
+}
+
+/// Flags declaration (bitflags type from WASI)
+/// ```wado
+/// flags DescriptorFlags {
+///     Read,
+///     Write,
+///     FileIntegritySync,
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct FlagsDecl {
+    pub name: String,
+    pub is_pub: bool,
+    pub attributes: Option<Vec<Attribute>>,
+    pub flags: Vec<FlagsVariant>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FlagsVariant {
+    pub name: String,
     pub span: Span,
 }
 

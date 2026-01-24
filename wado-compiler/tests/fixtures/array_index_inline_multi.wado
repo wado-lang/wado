@@ -5,7 +5,7 @@ use { println, Stdout } from "core:cli";
 
 struct Container<T> {
     items: Array<T>,
-    flags: Array<bool>,
+    markers: Array<bool>,
 }
 
 impl Container<T> {
@@ -14,13 +14,13 @@ impl Container<T> {
     }
 
     fn is_flagged(&self, i: i32) -> bool {
-        return self.flags[i];
+        return self.markers[i];
     }
 
     fn count_flagged(&self) -> i32 {
         let mut count = 0;
-        for let mut i = 0; i < self.flags.len(); i += 1 {
-            if self.flags[i] {
+        for let mut i = 0; i < self.markers.len(); i += 1 {
+            if self.markers[i] {
                 count += 1;
             }
         }
@@ -31,8 +31,9 @@ impl Container<T> {
 fn run() with Stdout {
     let c: Container<String> = Container {
         items: ["apple", "banana", "cherry"],
-        flags: [true, false, true],
+        markers: [true, false, true],
     };
+
 
     // Multiple method calls that should be inlined
     let item0 = c.get_item(0);

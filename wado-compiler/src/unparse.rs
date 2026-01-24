@@ -3,7 +3,7 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, CallExpr, CastExpr,
+    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, EffectDecl,
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, FunctionType, IfCondition, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
@@ -93,6 +93,7 @@ impl<'a> Unparser<'a> {
             Item::Struct(s) => self.unparse_struct(s),
             Item::Enum(e) => self.unparse_enum(e),
             Item::Variant(v) => self.unparse_variant(v),
+            Item::Flags(f) => self.unparse_flags(f),
             Item::Type(t) => self.unparse_type_alias(t),
             Item::Impl(i) => self.unparse_impl(i),
             Item::Trait(t) => self.unparse_trait(t),
@@ -411,6 +412,36 @@ impl<'a> Unparser<'a> {
             self.output.push(')');
         }
         self.output.push_str(",\n");
+    }
+
+    fn unparse_flags(&mut self, f: &crate::ast::FlagsDecl) {
+        self.write_indent();
+
+        // Output attributes if any
+        if let Some(attrs) = &f.attributes {
+            for attr in attrs {
+                self.unparse_attribute(attr);
+            }
+        }
+
+        if f.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("flags ");
+        self.output.push_str(&f.name);
+        self.output.push_str(" {\n");
+
+        self.indent_level += 1;
+        for flag in &f.flags {
+            self.write_indent();
+            self.output.push_str(&flag.name);
+            self.output.push_str(",\n");
+        }
+        self.indent_level -= 1;
+
+        self.write_indent();
+        self.output.push_str("}\n");
     }
 
     fn unparse_type_alias(&mut self, t: &TypeAlias) {
@@ -774,7 +805,7 @@ impl<'a> Unparser<'a> {
             Stmt::For(f) => self.unparse_for(f),
             Stmt::ForOf(f) => self.unparse_for_of(f),
             Stmt::Loop(l) => self.unparse_loop(l),
-            Stmt::Break(_) => self.unparse_break(),
+            Stmt::Break(b) => self.unparse_break(b),
             Stmt::Continue(_) => self.unparse_continue(),
             Stmt::Assert(a) => self.unparse_assert(a),
             Stmt::LabeledBlock(lb) => self.unparse_labeled_block(lb),
@@ -1045,9 +1076,18 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
-    fn unparse_break(&mut self) {
+    fn unparse_break(&mut self, b: &BreakStmt) {
         self.write_indent();
-        self.output.push_str("break;\n");
+        self.output.push_str("break");
+        if let Some(label) = &b.label {
+            self.output.push(' ');
+            self.output.push_str(label);
+            if let Some(value) = &b.value {
+                self.output.push_str(": ");
+                self.unparse_expr(value);
+            }
+        }
+        self.output.push_str(";\n");
     }
 
     fn unparse_continue(&mut self) {
@@ -1619,6 +1659,7 @@ fn get_item_span(item: &Item) -> Span {
         Item::Struct(s) => s.span,
         Item::Enum(e) => e.span,
         Item::Variant(v) => v.span,
+        Item::Flags(f) => f.span,
         Item::Type(t) => t.span,
         Item::Impl(i) => i.span,
         Item::Trait(t) => t.span,
@@ -2488,6 +2529,7 @@ impl<'a> TirUnparser<'a> {
                 effect_name,
                 op_name,
                 args,
+                ..
             } => {
                 self.output.push_str(effect_name);
                 self.output.push_str("::");

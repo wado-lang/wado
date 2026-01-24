@@ -11,7 +11,7 @@ use crate::ir::{
     WadoModule, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeAlias, WadoTypeDef,
     WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
 };
-use crate::naming::{escape_keyword, to_snake_case, to_upper_camel_case};
+use crate::naming::{to_snake_case, to_upper_camel_case};
 
 pub struct Transformer<'a> {
     resolve: &'a Resolve,
@@ -210,7 +210,7 @@ impl<'a> Transformer<'a> {
             .iter()
             .map(|(name, ty)| {
                 Ok(WadoParam {
-                    name: escape_keyword(name),
+                    name: to_snake_case(name),
                     ty: self.transform_type(*ty)?,
                 })
             })
@@ -361,7 +361,7 @@ impl<'a> Transformer<'a> {
                     .iter()
                     .map(|field| {
                         Ok(WadoField {
-                            name: escape_keyword(&field.name),
+                            name: to_snake_case(&field.name),
                             ty: self.transform_type(field.ty)?,
                             doc_comment: field.docs.contents.clone(),
                         })

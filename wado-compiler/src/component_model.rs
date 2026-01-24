@@ -6,9 +6,15 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use heck::ToKebabCase;
 use wasm_encoder::ValType;
 
 use crate::ast::{GenericType, Type, WasiImport};
+
+/// Convert a name to kebab-case
+fn to_kebab_case(name: &str) -> String {
+    name.to_kebab_case()
+}
 
 /// Information about a WASI function from an effect method
 #[derive(Debug, Clone)]
@@ -29,6 +35,8 @@ pub struct WasiFunctionInfo {
     pub params: Vec<(String, Type)>,
     /// Return type
     pub return_type: Option<Type>,
+    /// Component Model call convention (derived from return type)
+    pub call_convention: CmCallConvention,
 }
 
 impl WasiFunctionInfo {
@@ -70,6 +78,10 @@ pub struct WasiInterfaceInfo {
     pub version: Option<String>,
     /// Functions in this interface
     pub functions: Vec<WasiFunctionInfo>,
+    /// Resource type exported by this interface (if any).
+    /// Format: (Wado name, CM kebab-case name)
+    /// e.g., ("`TerminalInput`", "terminal-input")
+    pub resource_type: Option<(String, String)>,
 }
 
 /// Registry of WASI imports for code generation
@@ -96,6 +108,10 @@ pub struct WasiRegistry {
 
     /// Type aliases collected from WASI modules (e.g., Instant -> u64)
     type_aliases: HashMap<String, Type>,
+
+    /// Resource types collected from WASI modules (e.g., `TerminalInput`, `TerminalOutput`)
+    /// Maps resource name -> CM resource name (kebab-case)
+    resources: HashMap<String, String>,
 }
 
 impl WasiRegistry {
@@ -133,6 +149,13 @@ impl WasiRegistry {
         let wasi_clocks = parse_module(stdlib::WASI_CLOCKS);
         registry.register_module(&wasi_clocks, &mut world_registry);
 
+        // Parse and register wasi:random
+        let wasi_random = parse_module(stdlib::WASI_RANDOM);
+        registry.register_module(&wasi_random, &mut world_registry);
+
+        // Note: wasi:filesystem uses `flags` syntax which isn't supported yet
+        // TODO: Add wasi:filesystem registration when `flags` parsing is implemented
+
         (registry, world_registry)
     }
 
@@ -149,6 +172,15 @@ impl WasiRegistry {
             if let Item::Type(alias) = item {
                 self.type_aliases
                     .insert(alias.name.clone(), alias.ty.clone());
+            }
+        }
+
+        // Collect resource types from this module
+        for item in &module.items {
+            if let Item::Resource(resource) = item {
+                // Convert PascalCase to kebab-case for CM
+                let cm_name = to_kebab_case(&resource.name);
+                self.resources.insert(resource.name.clone(), cm_name);
             }
         }
 
@@ -213,6 +245,37 @@ impl WasiRegistry {
         &self.type_aliases
     }
 
+    /// Check if a type name is a registered resource
+    pub fn is_resource(&self, name: &str) -> bool {
+        self.resources.contains_key(name)
+    }
+
+    /// Get the CM kebab-case name for a resource
+    pub fn get_resource_cm_name(&self, name: &str) -> Option<&str> {
+        self.resources.get(name).map(String::as_str)
+    }
+
+    /// Get the resource type from a return type (if it's Option<ResourceName>)
+    /// Returns (Wado name, CM name) if the return type references a resource
+    pub fn get_resource_from_return_type(
+        &self,
+        return_type: &Option<Type>,
+    ) -> Option<(String, String)> {
+        let ty = return_type.as_ref()?;
+
+        // Check for Option<ResourceName> pattern
+        if let Type::Generic(g) = ty
+            && g.name == "Option"
+            && g.args.len() == 1
+            && let Type::Named(inner) = &g.args[0]
+            && let Some(cm_name) = self.resources.get(&inner.name)
+        {
+            return Some((inner.name.clone(), cm_name.clone()));
+        }
+
+        None
+    }
+
     /// Register a WASI function from an effect method
     ///
     /// # Arguments
@@ -247,6 +310,11 @@ impl WasiRegistry {
             .collect();
         let resolved_return_type = return_type.map(|ty| self.resolve_type(&ty));
 
+        // Derive CM call convention from return type, params, and async flag
+        let call_convention = CmCallConvention::from_return_type(&resolved_return_type)
+            .with_params(&resolved_params)
+            .with_async(is_async);
+
         let func_info = WasiFunctionInfo {
             effect_name: effect_name.to_string(),
             method_name: method_name.to_string(),
@@ -256,6 +324,7 @@ impl WasiRegistry {
             is_async,
             params: resolved_params,
             return_type: resolved_return_type,
+            call_convention,
         };
 
         // Generate the local alias name using utility function
@@ -321,6 +390,11 @@ impl WasiRegistry {
             // Parse the interface path to extract components
             let wasi = WasiImport::parse(path);
 
+            // Check if any function returns a resource type (Option<ResourceName>)
+            let resource_type = functions
+                .iter()
+                .find_map(|func| self.get_resource_from_return_type(&func.return_type));
+
             WasiInterfaceInfo {
                 path: path.clone(),
                 namespace: wasi
@@ -334,6 +408,7 @@ impl WasiRegistry {
                     .unwrap_or_default(),
                 version: wasi.as_ref().and_then(|w| w.version.clone()),
                 functions: functions.clone(),
+                resource_type,
             }
         })
     }
@@ -399,16 +474,6 @@ impl WasiRegistry {
         None
     }
 
-    /// Get the function info for stdout's `write_via_stream`
-    pub fn get_stdout_write_via_stream(&self) -> Option<&WasiFunctionInfo> {
-        self.effect_to_func.get("Stdout::write_via_stream")
-    }
-
-    /// Get the function info for stderr's `write_via_stream`
-    pub fn get_stderr_write_via_stream(&self) -> Option<&WasiFunctionInfo> {
-        self.effect_to_func.get("Stderr::write_via_stream")
-    }
-
     /// Get all registered WASI function names
     ///
     /// Returns an iterator over function names in `Effect::method` format
@@ -417,6 +482,22 @@ impl WasiRegistry {
     /// Used by the optimizer to populate `used_wasi_functions` in O0 mode.
     pub fn all_function_names(&self) -> impl Iterator<Item = &str> {
         self.effect_to_func.keys().map(std::string::String::as_str)
+    }
+
+    /// Get standard WASI function names (excluding effects that require explicit usage)
+    ///
+    /// Some effects are not included by default because:
+    /// - Exit: May not be supported by all runtimes
+    /// - Terminal*: May not be available in non-terminal environments
+    ///
+    /// These effects are only included when explicitly used in the program.
+    pub fn standard_function_names(&self) -> impl Iterator<Item = &str> {
+        self.all_function_names().filter(|name| {
+            !name.starts_with("Exit::")
+                && !name.starts_with("TerminalStdin::")
+                && !name.starts_with("TerminalStdout::")
+                && !name.starts_with("TerminalStderr::")
+        })
     }
 
     // ============================================================================
@@ -581,11 +662,13 @@ pub fn is_return_type_supported(ty: &Type) -> bool {
                 generic.args.iter().all(is_primitive_type_supported)
             }
             "Tuple" => {
-                // All tuple elements must be supported primitives
+                // All tuple elements must be supported primitives (Tuple<...> syntax)
                 generic.args.iter().all(is_primitive_type_supported)
             }
             _ => false,
         },
+        // Handle [...] tuple syntax
+        Type::Tuple(elements) => elements.iter().all(is_primitive_type_supported),
         _ => false,
     }
 }
@@ -607,10 +690,13 @@ fn is_primitive_type_supported(ty: &Type) -> bool {
                 | "char"
                 | "String"
         ),
+        // Handle Tuple<...> syntax
         Type::Generic(generic) if generic.name == "Tuple" => {
             // Tuples are allowed if all elements are primitives
             generic.args.iter().all(is_primitive_type_supported)
         }
+        // Handle [...] tuple syntax
+        Type::Tuple(elements) => elements.iter().all(is_primitive_type_supported),
         _ => false,
     }
 }
@@ -650,7 +736,306 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
             generic.name.as_str(),
             "Array" | "Option" | "Result" | "Tuple"
         ),
+        // Tuple types [...] require outptr (non-empty tuples only)
+        Type::Tuple(elems) => !elems.is_empty(),
         _ => false,
+    }
+}
+
+// ============================================================================
+// Component Model Call Convention
+// ============================================================================
+
+/// Primitive type for CM tuple return handling
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CmPrimitiveType {
+    I32,
+    I64,
+    U32,
+    U64,
+    F32,
+    F64,
+}
+
+impl CmPrimitiveType {
+    /// Size in bytes
+    pub fn size(&self) -> u32 {
+        match self {
+            Self::I32 | Self::U32 | Self::F32 => 4,
+            Self::I64 | Self::U64 | Self::F64 => 8,
+        }
+    }
+
+    /// Alignment in bytes
+    pub fn align(&self) -> u32 {
+        self.size()
+    }
+}
+
+/// Component Model ABI call convention
+///
+/// Describes how to call a CM function and handle its return value.
+/// This struct is derived from the function's return type and captures
+/// all the information codegen needs without knowing WASI-specific details.
+#[derive(Debug, Clone, Default)]
+#[allow(clippy::struct_excessive_bools)] // These are independent properties, not state
+pub struct CmCallConvention {
+    /// Whether this is an async function (needs subtask handling)
+    pub is_async: bool,
+    /// Whether `canon lower` requires Memory canonical option
+    pub needs_memory: bool,
+    /// Whether `canon lower` requires Realloc canonical option
+    pub needs_realloc: bool,
+    /// If Some, allocate outptr before call: (`size_bytes`, `align_bytes`)
+    pub outptr_alloc: Option<(u32, u32)>,
+    /// Conversion function to call after the call (if any)
+    /// Full path like "`core/internal/cm_list_string_to_array`"
+    pub result_converter: Option<String>,
+    /// For tuple returns: element types for struct creation
+    pub tuple_return: Option<Vec<CmPrimitiveType>>,
+    /// For option<own<resource>>: true if needs boxing to Option<i32>
+    pub option_resource_return: bool,
+}
+
+impl CmCallConvention {
+    /// Derive call convention from a function's return type
+    ///
+    /// This analyzes the type and determines all CM ABI requirements,
+    /// so codegen doesn't need to know about specific WASI types.
+    pub fn from_return_type(return_type: &Option<Type>) -> Self {
+        let Some(ty) = return_type else {
+            return Self::default();
+        };
+
+        match ty {
+            // Primitives: direct return, no special handling
+            Type::Named(named) => match named.name.as_str() {
+                "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" => {
+                    Self::default()
+                }
+                // String is not a primitive in CM, but we don't have a list<u8> return yet
+                _ => Self::default(),
+            },
+
+            // Generic types
+            Type::Generic(generic) => match generic.name.as_str() {
+                // list<string> -> needs outptr (8 bytes: ptr + count) + converter
+                "Array" if generic.args.len() == 1 => Self::for_list_return(&generic.args[0]),
+
+                // option<T> -> depends on T
+                "Option" if generic.args.len() == 1 => Self::for_option_return(&generic.args[0]),
+
+                // Tuple<T, U, ...> -> needs outptr + tuple struct creation
+                "Tuple" if !generic.args.is_empty() => Self::for_tuple_return(&generic.args),
+
+                // Stream<T>, Future<T>, Result<T, E> - handle returns
+                "Stream" | "Future" | "Result" => Self::default(),
+
+                _ => Self::default(),
+            },
+
+            // [T, U, ...] tuple syntax
+            Type::Tuple(elems) if !elems.is_empty() => Self::for_tuple_return(elems),
+
+            _ => Self::default(),
+        }
+    }
+
+    /// Convention for list<T> return types
+    fn for_list_return(element_type: &Type) -> Self {
+        // list<T> uses outptr (8 bytes: ptr + count, align 4)
+        // Needs memory + realloc for lowering
+        let converter = match element_type {
+            Type::Named(named) if named.name == "String" => {
+                Some("core/internal/cm_list_string_to_array".to_string())
+            }
+            Type::Named(named) if named.name == "u8" => {
+                Some("core/internal/cm_list_u8_to_array".to_string())
+            }
+            // list<tuple<string, string>> for Environment::get_environment
+            Type::Tuple(elems) if elems.len() == 2 => {
+                if Self::is_string_type(&elems[0]) && Self::is_string_type(&elems[1]) {
+                    Some("core/internal/cm_list_tuple_string_string_to_array".to_string())
+                } else {
+                    None
+                }
+            }
+            // Tuple<String, String> syntax
+            Type::Generic(g) if g.name == "Tuple" && g.args.len() == 2 => {
+                if Self::is_string_type(&g.args[0]) && Self::is_string_type(&g.args[1]) {
+                    Some("core/internal/cm_list_tuple_string_string_to_array".to_string())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        Self {
+            is_async: false,
+            needs_memory: true,
+            needs_realloc: true,
+            outptr_alloc: Some((8, 4)), // ptr + count
+            result_converter: converter,
+            tuple_return: None,
+            option_resource_return: false,
+        }
+    }
+
+    /// Convention for option<T> return types
+    fn for_option_return(inner_type: &Type) -> Self {
+        match inner_type {
+            // option<string> -> outptr (12 bytes: discriminant + ptr + len)
+            Type::Named(named) if named.name == "String" => Self {
+                is_async: false,
+                needs_memory: true,
+                needs_realloc: true,
+                outptr_alloc: Some((12, 4)),
+                result_converter: Some("core/internal/cm_option_string_to_option".to_string()),
+                tuple_return: None,
+                option_resource_return: false,
+            },
+
+            // option<own<resource>> -> outptr (4 bytes: 0=none, non-zero=handle)
+            // This covers TerminalInput, TerminalOutput, etc.
+            Type::Generic(g) if g.name == "Own" => Self {
+                is_async: false,
+                needs_memory: true,
+                needs_realloc: true,
+                outptr_alloc: Some((4, 4)),
+                result_converter: None,
+                tuple_return: None,
+                option_resource_return: true,
+            },
+
+            // option<primitive> - simple case, but still needs outptr
+            Type::Named(named) => {
+                let prim_size = match named.name.as_str() {
+                    "i32" | "u32" | "f32" | "bool" | "char" => 4,
+                    "i64" | "u64" | "f64" => 8,
+                    // Unknown type - assume resource handle
+                    _ => {
+                        return Self {
+                            is_async: false,
+                            needs_memory: true,
+                            needs_realloc: true,
+                            outptr_alloc: Some((4, 4)),
+                            result_converter: None,
+                            tuple_return: None,
+                            option_resource_return: true,
+                        };
+                    }
+                };
+                // Discriminant (1 byte padded to align) + value
+                let align = prim_size;
+                let size = align + prim_size; // discriminant + padding + value
+                Self {
+                    is_async: false,
+                    needs_memory: true,
+                    needs_realloc: true,
+                    outptr_alloc: Some((size, align)),
+                    result_converter: None,
+                    tuple_return: None,
+                    option_resource_return: false,
+                }
+            }
+
+            _ => Self::default(),
+        }
+    }
+
+    /// Convention for tuple<T, U, ...> return types
+    fn for_tuple_return(elements: &[Type]) -> Self {
+        let mut primitives = Vec::new();
+        let mut total_size: u32 = 0;
+        let mut max_align: u32 = 1;
+
+        for elem in elements {
+            if let Some(prim) = Self::type_to_primitive(elem) {
+                // Align current offset
+                let align = prim.align();
+                if !total_size.is_multiple_of(align) {
+                    total_size += align - (total_size % align);
+                }
+                total_size += prim.size();
+                max_align = max_align.max(align);
+                primitives.push(prim);
+            } else {
+                // Non-primitive in tuple - not supported yet
+                return Self::default();
+            }
+        }
+
+        // Final size must be aligned to max alignment
+        if !total_size.is_multiple_of(max_align) {
+            total_size += max_align - (total_size % max_align);
+        }
+
+        Self {
+            is_async: false,
+            needs_memory: true,
+            needs_realloc: true,
+            outptr_alloc: Some((total_size, max_align)),
+            result_converter: None,
+            tuple_return: Some(primitives),
+            option_resource_return: false,
+        }
+    }
+
+    /// Set the `is_async` flag
+    pub fn with_async(mut self, is_async: bool) -> Self {
+        self.is_async = is_async;
+        // Async functions always need Memory + Realloc for continuation handling
+        if is_async {
+            self.needs_memory = true;
+            self.needs_realloc = true;
+        }
+        self
+    }
+
+    /// Update convention based on parameter types.
+    ///
+    /// Some parameter types (like Stream<T>) require Memory + Realloc
+    /// even if the return type doesn't require it.
+    pub fn with_params(mut self, params: &[(String, Type)]) -> Self {
+        for (_, ty) in params {
+            if Self::type_requires_memory(ty) {
+                self.needs_memory = true;
+                self.needs_realloc = true;
+                break;
+            }
+        }
+        self
+    }
+
+    /// Check if a type requires Memory + Realloc in canon lower
+    fn type_requires_memory(ty: &Type) -> bool {
+        match ty {
+            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "Array"),
+            Type::Named(named) => named.name == "String",
+            _ => false,
+        }
+    }
+
+    /// Check if a type is String
+    fn is_string_type(ty: &Type) -> bool {
+        matches!(ty, Type::Named(named) if named.name == "String")
+    }
+
+    /// Convert AST Type to `CmPrimitiveType`
+    fn type_to_primitive(ty: &Type) -> Option<CmPrimitiveType> {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i32" => Some(CmPrimitiveType::I32),
+                "i64" => Some(CmPrimitiveType::I64),
+                "u32" => Some(CmPrimitiveType::U32),
+                "u64" => Some(CmPrimitiveType::U64),
+                "f32" => Some(CmPrimitiveType::F32),
+                "f64" => Some(CmPrimitiveType::F64),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
 
@@ -806,10 +1191,58 @@ mod tests {
             is_async: true,
             params: vec![],
             return_type: None,
+            call_convention: CmCallConvention::default(),
         };
         assert_eq!(
             func_info.local_alias_name(),
             "wasi:cli/Stdout::write_via_stream"
+        );
+    }
+
+    #[test]
+    fn test_cm_call_convention_from_return_type() {
+        // Test primitives - no special handling
+        let conv = CmCallConvention::from_return_type(&Some(Type::Named(crate::ast::NamedType {
+            name: "i32".to_string(),
+            span: make_span(),
+        })));
+        assert!(conv.outptr_alloc.is_none());
+        assert!(conv.result_converter.is_none());
+
+        // Test list<string>
+        let conv =
+            CmCallConvention::from_return_type(&Some(Type::Generic(crate::ast::GenericType {
+                name: "Array".to_string(),
+                args: vec![Type::Named(crate::ast::NamedType {
+                    name: "String".to_string(),
+                    span: make_span(),
+                })],
+                span: make_span(),
+            })));
+        assert_eq!(conv.outptr_alloc, Some((8, 4)));
+        assert_eq!(
+            conv.result_converter,
+            Some("core/internal/cm_list_string_to_array".to_string())
+        );
+        assert!(conv.needs_memory);
+        assert!(conv.needs_realloc);
+
+        // Test tuple<u64, u64>
+        let conv = CmCallConvention::from_return_type(&Some(Type::Tuple(vec![
+            Type::Named(crate::ast::NamedType {
+                name: "u64".to_string(),
+                span: make_span(),
+            }),
+            Type::Named(crate::ast::NamedType {
+                name: "u64".to_string(),
+                span: make_span(),
+            }),
+        ])));
+        assert_eq!(conv.outptr_alloc, Some((16, 8)));
+        assert!(conv.result_converter.is_none());
+        assert_eq!(
+            conv.tuple_return,
+            Some(vec![CmPrimitiveType::U64, CmPrimitiveType::U64])
         );
     }
 
@@ -868,6 +1301,43 @@ mod tests {
         assert!(
             is_return_type_supported(&option_string),
             "Option<String> should be supported"
+        );
+    }
+
+    #[test]
+    fn test_random_functions_registered() {
+        let (registry, _) = WasiRegistry::build_from_stdlib();
+
+        // Check that Random functions are registered
+        assert!(
+            registry.resolve("Random::get_random_u64").is_some(),
+            "Random::get_random_u64 should be resolved"
+        );
+        assert!(
+            registry.resolve("Random::get_random_bytes").is_some(),
+            "Random::get_random_bytes should be resolved"
+        );
+        assert!(
+            registry
+                .resolve("Insecure::get_insecure_random_u64")
+                .is_some(),
+            "Insecure::get_insecure_random_u64 should be resolved"
+        );
+        assert!(
+            registry
+                .resolve("Insecure::get_insecure_random_bytes")
+                .is_some(),
+            "Insecure::get_insecure_random_bytes should be resolved"
+        );
+
+        // Check that the random interface is included
+        let interfaces: Vec<_> = registry.interfaces().collect();
+        let random_interface = interfaces
+            .iter()
+            .find(|i| i.interface == "random" && i.package == "random");
+        assert!(
+            random_interface.is_some(),
+            "wasi:random/random interface should be registered"
         );
     }
 }

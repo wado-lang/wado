@@ -44,7 +44,7 @@ pub effect Environment {
     /// in the component model, this import function should return the same
     /// values each time it is called.
     #[wasi("wasi:cli/environment@0.3.0-rc-2025-09-16#get-environment")]
-    fn get_environment() -> Array<Tuple<String, String>>;
+    fn get_environment() -> Array<[String, String]>;
     /// Get the POSIX-style arguments to the program.
     #[wasi("wasi:cli/environment@0.3.0-rc-2025-09-16#get-arguments")]
     fn get_arguments() -> Array<String>;
@@ -94,7 +94,7 @@ pub effect Stdin {
     /// Multiple streams may be active at the same time. The behavior of concurrent
     /// reads is implementation-specific.
     #[wasi("wasi:cli/stdin@0.3.0-rc-2025-09-16#read-via-stream")]
-    fn read_via_stream() -> Tuple<Stream<u8>, Future<Result<(), ErrorCode>>>;
+    fn read_via_stream() -> [Stream<u8>, Future<Result<(), ErrorCode>>];
 }
 
 #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16")]

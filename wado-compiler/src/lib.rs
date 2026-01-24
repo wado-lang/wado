@@ -111,7 +111,7 @@ pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
 pub use name::ModuleSource;
-pub use optimize::{CanonBuiltin, OptLevel, WasiEffect, optimize};
+pub use optimize::{CanonBuiltin, OptLevel, optimize};
 pub use parser::{ParseError, Parser};
 pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};

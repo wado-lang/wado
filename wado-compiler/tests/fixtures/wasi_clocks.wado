@@ -1,0 +1,48 @@
+// Comprehensive test for wasi:clocks module features
+// Tests: MonotonicClock effect (the one currently implemented)
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock, Instant } from "wasi:clocks";
+
+fn run() with Stdout, MonotonicClock {
+    // Test MonotonicClock::now() - multiple calls
+    let t1: Instant = MonotonicClock::now();
+    let t2: Instant = MonotonicClock::now();
+    let t3: Instant = MonotonicClock::now();
+
+    // Monotonic clock should return non-decreasing values
+    if t2 >= t1 {
+        println("test: monotonic clock t2 >= t1");
+    } else {
+        println("test: FAILED - monotonic clock went backwards");
+    }
+
+    if t3 >= t2 {
+        println("test: monotonic clock t3 >= t2");
+    } else {
+        println("test: FAILED - monotonic clock went backwards");
+    }
+
+    // Verify the clock returns reasonable values (not zero)
+    // Clock value should be > 0 in normal circumstances
+    if t1 > 0 || t2 > 0 || t3 > 0 {
+        println("test: monotonic clock returns positive values");
+    } else {
+        // All three being 0 is possible but unlikely
+        println("test: monotonic clock returned all zeros (unusual)");
+    }
+
+    // Test elapsed time calculation
+    let elapsed = t3 - t1;
+    // Elapsed should be >= 0
+    if elapsed >= 0 {
+        println("test: elapsed time is non-negative");
+    } else {
+        println("test: FAILED - elapsed time is negative");
+    }
+
+    println("all clocks tests passed");
+}
+
+__DATA__
+{"stdout": "test: monotonic clock t2 >= t1\ntest: monotonic clock t3 >= t2\ntest: monotonic clock returns positive values\ntest: elapsed time is non-negative\nall clocks tests passed\n"}

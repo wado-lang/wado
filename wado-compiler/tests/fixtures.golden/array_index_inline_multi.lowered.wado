@@ -4,11 +4,11 @@
 
 struct "Container<String>" {
     items: Array<String>,
-    flags: Array<bool>,
+    markers: Array<bool>,
 }
 
 fn run() with Stdout {
-    let c: Container<String> = move Container<String> { items: ["apple", "banana", "cherry"], flags: [true, false, true] };
+    let c: Container<String> = move Container<String> { items: ["apple", "banana", "cherry"], markers: [true, false, true] };
     let item0: String = __inline_Container_String___get_item_0: {
         break __inline_Container_String___get_item_0: __inline_Array_String__IndexValue__index_value_1: {
             let self: &Array<String> = &c.items;
@@ -29,21 +29,21 @@ fn run() with Stdout {
     };
     let flag0: bool = __inline_Container_String___is_flagged_6: {
         break __inline_Container_String___is_flagged_6: __inline_Array_bool__IndexValue__index_value_7: {
-            let self: &Array<bool> = &c.flags;
+            let self: &Array<bool> = &c.markers;
             break __inline_Array_bool__IndexValue__index_value_7: core::builtin::array_get::<bool>(self.repr, 0);
         };
     };
     let flag1: bool = __inline_Container_String___is_flagged_8: {
         break __inline_Container_String___is_flagged_8: __inline_Array_bool__IndexValue__index_value_9: {
-            let self: &Array<bool> = &c.flags;
+            let self: &Array<bool> = &c.markers;
             break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(self.repr, 1);
         };
     };
     let count: i32 = __inline_Container_String___count_flagged_10: {
         let mut count: i32 = 0;
-        for let mut i: i32 = 0; (i < "Array<bool>::len"(&c.flags)); i = (i + 1) {
+        for let mut i: i32 = 0; (i < "Array<bool>::len"(&c.markers)); i = (i + 1) {
             if __inline_Array_bool__IndexValue__index_value_11: {
-                let self: &Array<bool> = &c.flags;
+                let self: &Array<bool> = &c.markers;
                 break __inline_Array_bool__IndexValue__index_value_11: core::builtin::array_get::<bool>(self.repr, i);
             } {
                 count = (count + 1);

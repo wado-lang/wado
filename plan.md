@@ -1,266 +1,241 @@
-# Plan: Second-Level LICM via Immutable Reference Look-Through
+# Plan: Remove WASI-Specific Knowledge from codegen.rs
 
-## Problem
+## Goal
 
-After inlining, code contains patterns like:
+__codegen.rs must not know about wasi:_ details_* - it should emit TIR as-is. This enables codegen to handle user-defined Component Model modules, not just WASI.
 
-```wado
-let _licm_entries = self.entries;  // hoisted by LICM
-for ... {
-    __inline_block: {
-        let self: &Array<T> = &_licm_entries;  // immutable ref to hoisted value
-        ... self.repr ...  // NOT hoisted - self is defined in loop
-    };
+## Problem Statement
+
+codegen.rs currently has:
+
+1. **Hardcoded WASI effect/function names**: `"Environment"`, `"get_arguments"`, `"InsecureSeed"`, `"TerminalStdin"`, etc.
+2. **Hardcoded CM ABI patterns**: outptr sizes, alignment values, canonical options
+3. **Hardcoded type-to-converter mappings**: `cm_list_string_to_array`, `cm_list_tuple_string_string_to_array`
+4. **Hardcoded interface definitions**: `ensure_terminal_*` functions build interface types manually
+
+This prevents supporting user-defined CM modules that follow the same patterns.
+
+## Design Principle
+
+**TIR should be self-describing for codegen.** All CM ABI requirements must be derived from types and stored in TIR, not inferred at codegen time.
+
+## Solution: CM Call Convention in TIR
+
+### Phase 1: Define CM Call Convention Struct
+
+Add to `component_model.rs`:
+
+```rust
+/// Component Model ABI call convention
+/// Describes how to call a CM function and handle its return value
+#[derive(Debug, Clone, Default)]
+pub struct CmCallConvention {
+    /// Whether lowering requires Memory canonical option
+    pub needs_memory: bool,
+    /// Whether lowering requires Realloc canonical option
+    pub needs_realloc: bool,
+    /// If Some, allocate outptr before call (size, align)
+    pub outptr_alloc: Option<(u32, u32)>,
+    /// Conversion function to call after the call (if any)
+    /// Full path like "core/internal/cm_list_string_to_array"
+    pub result_converter: Option<String>,
+    /// For tuple returns: element types for struct creation
+    pub tuple_return: Option<Vec<PrimitiveType>>,
+    /// For option<own<resource>>: true if needs boxing
+    pub option_resource_return: bool,
+}
+
+impl CmCallConvention {
+    /// Derive convention from return type
+    pub fn from_return_type(return_type: &Option<Type>) -> Self { ... }
 }
 ```
 
-The `self.repr` access is loop-invariant because:
-
-1. `self` is an immutable reference (`&T`), so `self.repr` cannot be modified through it
-2. `_licm_entries` is loop-invariant (already hoisted)
-3. Therefore `_licm_entries.repr` is also loop-invariant
-
-Current LICM doesn't hoist `self.repr` because `self` is _defined_ inside the loop (added to `modified_vars`). But since `&T` guarantees immutability, we can safely look through the reference.
-
-## Proposed Solution: Look Through Immutable References in LICM
-
-Enhance LICM's candidate finding to look through immutable reference bindings.
-
-### Key Insight
-
-In Wado, `&T` (immutable reference) guarantees the referenced value cannot be modified. So:
-
-- `let self: &T = &x;` followed by `self.field`
-- Is semantically equivalent to `x.field`
-- If `x` is loop-invariant, so is `self.field`
-
-### Implementation
-
-**File:** `wado-compiler/src/optimize.rs`
-
-#### Step 1: Collect Immutable Reference Bindings
-
-Before finding hoist candidates, scan the loop body for immutable reference patterns:
+### Phase 2: Extend TirExprKind::EffectCall
 
 ```rust
-/// Map from reference local index to source local index
-/// For patterns like: `let ref_var: &T = &source_var`
-fn collect_immutable_ref_bindings(block: &TirBlock, type_table: &TypeTable) -> HashMap<u32, u32> {
-    let mut bindings = HashMap::new();
-    collect_ref_bindings_in_block(block, type_table, &mut bindings);
-    bindings
+TirExprKind::EffectCall {
+    effect_name: String,
+    op_name: String,
+    args: Vec<TirExpr>,
+    // NEW: CM call convention (None for non-CM calls)
+    cm_convention: Option<CmCallConvention>,
+    // NEW: Full local alias name for CM call
+    cm_local_name: Option<String>,
 }
+```
 
-fn collect_ref_bindings_in_block(block: &TirBlock, type_table: &TypeTable, bindings: &mut HashMap<u32, u32>) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            TirStmtKind::Let { local_index, value, type_id, .. } => {
-                // Check if this is: let x: &T = &y
-                if is_immutable_ref_type(*type_id, type_table) {
-                    if let TirExprKind::Unary { op: TirUnaryOp::Ref, expr } = &value.kind {
-                        if let TirExprKind::Local { index: source_idx, .. } = &expr.kind {
-                            bindings.insert(*local_index, *source_idx);
-                        }
-                    }
-                }
-            }
-            // Recurse into nested blocks, labeled blocks, etc.
-            TirStmtKind::LabeledBlock { block, .. } => {
-                collect_ref_bindings_in_block(block, type_table, bindings);
-            }
-            // ... other cases
-        }
+### Phase 3: Populate Convention During Lowering
+
+In `lower.rs`, after resolving an effect call:
+
+```rust
+// Look up WASI function info from registry
+if let Some(func_info) = wasi_registry.get_function(&format!("{}::{}", effect_name, op_name)) {
+    // Derive convention from return type
+    let convention = CmCallConvention::from_return_type(&func_info.return_type);
+    let local_name = func_info.local_alias_name();
+    // Store in TIR
+    ...
+}
+```
+
+### Phase 4: Refactor codegen.rs
+
+Replace all hardcoded WASI patterns with generic convention handling:
+
+```rust
+TirExprKind::EffectCall { effect_name, op_name, args, cm_convention, cm_local_name } => {
+    if let (Some(conv), Some(local_name)) = (cm_convention, cm_local_name) {
+        // Generic CM call handling
+        self.generate_cm_call(func, ctx, builder, &conv, local_name, args);
+    } else {
+        // Non-CM effect call (error or unsupported)
+        ...
     }
 }
 
-fn is_immutable_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(type_id), Some(Type::Ref { mutable: false, .. }))
+fn generate_cm_call(&self, ..., conv: &CmCallConvention, ...) {
+    // Allocate outptr if needed
+    if let Some((size, align)) = conv.outptr_alloc {
+        self.allocate_outptr(func, ctx, size, align);
+    }
+
+    // Call the CM function
+    self.emit_call(func, builder, local_name);
+
+    // Handle result conversion
+    if let Some(converter) = &conv.result_converter {
+        self.call_converter(func, builder, ctx, converter);
+    }
+
+    // Handle tuple struct creation
+    if let Some(elements) = &conv.tuple_return {
+        self.create_tuple_struct(func, elements);
+    }
+
+    // Handle option<resource> boxing
+    if conv.option_resource_return {
+        self.box_option_resource(func, ctx);
+    }
 }
 ```
 
-#### Step 2: Enhance Hoist Candidate Finding
+### Phase 5: Make Interface Import Data-Driven
 
-Modify `find_hoist_candidates_in_expr` to look through immutable references:
+Replace `ensure_terminal_stdin_imported()` etc. with generic interface import:
 
 ```rust
-fn find_hoist_candidates_in_expr(
-    expr: &TirExpr,
-    modified_vars: &HashSet<u32>,
-    ref_bindings: &HashMap<u32, u32>,  // NEW parameter
-    candidates: &mut Vec<HoistCandidate>,
-    seen: &mut HashSet<(u32, u32)>,
-    next_local: &mut u32,
+fn ensure_interface_imported(
+    &self,
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    interface_info: &WasiInterfaceInfo,
+    project: &Project,
 ) {
-    match &expr.kind {
-        TirExprKind::FieldAccess { expr: inner, field_index, field_name, .. } => {
-            if let TirExprKind::Local { index, name, .. } = &inner.kind {
-                // Try direct hoist first
-                if !modified_vars.contains(index) {
-                    // existing hoist logic
-                }
-                // NEW: Look through immutable reference
-                else if let Some(source_index) = ref_bindings.get(index) {
-                    if !modified_vars.contains(source_index) {
-                        // Can hoist! Use source variable instead
-                        let key = (*source_index, *field_index);
-                        if !seen.contains(&key) {
-                            seen.insert(key);
-                            candidates.push(HoistCandidate {
-                                local_index: *source_index,
-                                local_name: /* need to get source name */,
-                                field_index: *field_index,
-                                field_name: field_name.clone(),
-                                type_id: expr.type_id,
-                                new_local_index: *next_local,
-                            });
-                            *next_local += 1;
-                        }
-                    }
-                }
-            }
-            // Still recurse
-            find_hoist_candidates_in_expr(inner, modified_vars, ref_bindings, candidates, seen, next_local);
-        }
-        // ... update other recursive calls to pass ref_bindings
-    }
+    // Build interface type from WasiInterfaceInfo
+    // This uses type information, not hardcoded interface definitions
 }
 ```
 
-#### Step 3: Update Replacement Logic
+### Phase 6: Remove Hardcoded Lower Functions
 
-When replacing `self.field` where `self` is a reference to `source`, we need to:
-
-1. Replace `self.field` with `_licm_var` (the hoisted local)
-2. The hoisting statement reads from `source.field`, not `self.field`
+The lower functions `canon lower` for Random, Terminal, etc. should be generated from registry data:
 
 ```rust
-fn replace_hoisted_in_expr(expr: &mut TirExpr, candidates: &[HoistCandidate], ref_bindings: &HashMap<u32, u32>) {
-    match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, field_index, .. } => {
-            if let TirExprKind::Local { index, .. } = &inner.kind {
-                // Check direct match
-                if let Some(candidate) = candidates.iter().find(|c|
-                    c.local_index == *index && c.field_index == *field_index
-                ) {
-                    // Replace with hoisted local
-                    *expr = TirExpr::new(TirExprKind::Local { ... }, ...);
-                    return;
-                }
-                // NEW: Check if this is a reference to a hoisted source
-                if let Some(source_index) = ref_bindings.get(index) {
-                    if let Some(candidate) = candidates.iter().find(|c|
-                        c.local_index == *source_index && c.field_index == *field_index
-                    ) {
-                        // Replace with hoisted local
-                        *expr = TirExpr::new(TirExprKind::Local { ... }, ...);
-                        return;
-                    }
-                }
-            }
-            replace_hoisted_in_expr(inner, candidates, ref_bindings);
-        }
-        // ... other cases
-    }
+for func_info in wasi_registry.all_functions_with_convention() {
+    let conv = &func_info.call_convention;
+    let options = if conv.needs_memory && conv.needs_realloc {
+        vec![CanonicalOption::Memory(ctx.memory_idx()), CanonicalOption::Realloc(...)]
+    } else {
+        vec![]
+    };
+    builder.lower_func(..., options);
 }
 ```
 
-#### Step 4: Update Call Sites
+## Type-to-Convention Mapping
 
-Update `licm_loop` to collect and pass `ref_bindings`:
+| Return Type                              | outptr_alloc  | result_converter                       | tuple_return | option_resource |
+| ---------------------------------------- | ------------- | -------------------------------------- | ------------ | --------------- |
+| (none)                                   | None          | None                                   | None         | false           |
+| `i32`, `i64`, `u32`, `u64`, `f32`, `f64` | None          | None                                   | None         | false           |
+| `list<string>`                           | Some((8, 4))  | `cm_list_string_to_array`              | None         | false           |
+| `list<tuple<string, string>>`            | Some((8, 4))  | `cm_list_tuple_string_string_to_array` | None         | false           |
+| `option<string>`                         | Some((12, 4)) | `cm_option_string_to_option`           | None         | false           |
+| `tuple<u64, u64>`                        | Some((16, 8)) | None                                   | [U64, U64]   | false           |
+| `option<own<resource>>`                  | Some((4, 4))  | None                                   | None         | true            |
 
-```rust
-fn licm_loop(
-    loop_body: &mut TirBlock,
-    local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
-    type_table: &TypeTable,
-    extra_modified: &HashSet<u32>,
-) -> Vec<TirStmt> {
-    let mut modified_vars = extra_modified.clone();
-    collect_modified_vars_in_block(loop_body, &mut modified_vars);
+## Files to Modify
 
-    // NEW: Collect immutable reference bindings
-    let ref_bindings = collect_immutable_ref_bindings(loop_body, type_table);
+1. **component_model.rs**: Add `CmCallConvention`, derivation logic
+2. **tir.rs**: Extend `TirExprKind::EffectCall` with convention fields
+3. **lower.rs**: Populate convention during lowering
+4. **codegen.rs**: Replace hardcoded patterns with convention-based codegen
 
-    let mut candidates = Vec::new();
-    let mut seen = HashSet::new();
-    let mut next_local = *local_count;
-    find_hoist_candidates_in_block(
-        loop_body,
-        &modified_vars,
-        &ref_bindings,  // NEW
-        &mut candidates,
-        &mut seen,
-        &mut next_local,
-    );
+## Implementation Order
 
-    // ... rest of function, also pass ref_bindings to replace functions
-}
-```
+- [x] Define `CmCallConvention` struct with `from_return_type()`
+- [x] Add tests for type-to-convention derivation
+- [x] Extend TIR with convention fields (`cm_convention`, `cm_local_name` in EffectCall)
+- [ ] Update lower phase to populate conventions (not needed - used WasiRegistry lookup at codegen time)
+- [x] Refactor codegen to use conventions via `generate_cm_effect_call` helper
+- [x] Remove hardcoded effect call patterns from `TirExprKind::Call` branch
+- [x] Remove hardcoded effect call patterns from `TirExprKind::EffectCall` branch
+- [x] Refactor interface import functions (ensure_*_imported) - resource-based interfaces done
+- [x] Refactor `canon lower` generation to be data-driven
+- [x] Refactor scratch local helpers to be convention-driven
+- [x] Clean up unused code
 
-### Expected Result
+## Current Status
 
-```wado
-// Before (current)
-fn "MiniDict<String,String>::has"(...) -> bool {
-    let _licm_entries: Array<[String, String]> = self.entries;
-    for let mut i: i32 = 0; ... {
-        if "String^Eq::eq"(&__inline_..._0: {
-            let self: &Array<[String, String]> = &_licm_entries;
-            break ...: core::builtin::array_get::<[String, String]>(self.repr, i);
-        }.0, &key) {
-            return true;
-        }
-    }
-    return false;
-}
+**Phase 1 Complete**: Expression codegen no longer has hardcoded WASI patterns
 
-// After (with immutable ref look-through)
-fn "MiniDict<String,String>::has"(...) -> bool {
-    let _licm_entries: Array<[String, String]> = self.entries;
-    let _licm_repr: builtin::array<[String, String]> = _licm_entries.repr;  // NEW
-    for let mut i: i32 = 0; ... {
-        if "String^Eq::eq"(&__inline_..._0: {
-            break ...: core::builtin::array_get::<[String, String]>(_licm_repr, i);  // Uses hoisted
-        }.0, &key) {
-            return true;
-        }
-    }
-    return false;
-}
-```
+The following are now convention-driven via `generate_cm_effect_call`:
 
-### Scope
+- Stdout::write_via_stream (async, subtask handling)
+- Stderr::write_via_stream (async, subtask handling)
+- Environment::get_arguments (list<string> return)
+- Environment::get_environment (list<tuple<string,string>> return)
+- Environment::get_initial_cwd (option<string> return)
+- InsecureSeed::get_insecure_seed (tuple<u64,u64> return)
+- Terminal*::get_terminal_* (option<own<resource>> return)
 
-1. Only handle immutable references (`&T`, not `&mut T`)
-2. Only handle simple patterns: `let x: &T = &local_var`
-3. Skip complex cases like `let x: &T = &expr.field` (could extend later)
+**Phase 2 Complete**: `canon lower` generation is now data-driven
 
-### Testing
+- `lower_wasi_functions()` iterates over WasiRegistry
+- Canonical options derived from `CmCallConvention`:
+  - `is_async` → `CanonicalOption::Async`
+  - `needs_memory` → `CanonicalOption::Memory`
+  - `needs_realloc` → `CanonicalOption::Realloc`
+- `CmCallConvention.with_params()` handles Stream<T> parameters
+- `CmCallConvention.with_async()` ensures async functions have Memory+Realloc
+- Async functions with void return skipped (not fully supported: wait_until, wait_for)
 
-1. All existing e2e tests must pass
-2. Check `dict_mini.lowered.wado` - should show `_licm_repr` hoisted
-3. Check `array_index_inline_nested.lowered.wado` - should show second-level hoisting
-4. Run `make benchmark-sieve` - verify no regression, possibly improvement
+**Phase 3 Complete**: All interface imports are now data-driven
 
-### Risk
+- `WasiRegistry` tracks resource types from `pub resource` declarations
+- `WasiInterfaceInfo.resource_type` contains `(wado_name, cm_name)` for interfaces with resources
+- `import_interfaces_with_resources()` iterates over registry and imports resource-based interfaces
+- `import_interface_with_resource()` is a generic function that handles any interface with a resource type
+- All hardcoded `ensure_*_imported` functions removed - single registry-driven code path
 
-Low:
+## Success Criteria
 
-- Semantically safe: `&T` guarantees no mutation through the reference
-- Conservative: only handles simple, clear patterns
-- Additive: enhances existing LICM, doesn't change its core logic
+- [x] No WASI effect/function name strings in expression codegen (`generate_expr`)
+- [x] CM ABI patterns derived from type information
+- [x] All 1020 E2E tests pass
+- [x] `canon lower` generation is data-driven (uses CmCallConvention)
+- [x] Scratch local pre-allocation is convention-driven (uses registry lookup)
+- [x] All interface imports are data-driven (single registry-driven code path)
 
-## Implementation Checklist
+## Testing
 
-- [x] Add `is_immutable_ref_type` helper function
-- [x] Add `collect_immutable_ref_bindings` function (as `collect_licm_ref_bindings_*`)
-- [x] Update `find_hoist_candidates_in_block/expr` to accept and use `ref_bindings`
-- [x] Update `replace_hoisted_in_block/expr` to handle reference look-through
-- [x] Update `licm_loop` to collect and pass `ref_bindings`
-- [x] Make LICM iterative with max 10 iterations for second-level hoisting
-- [x] Fix: Recurse into Break statement values for all LICM functions
-- [x] Run tests: `cargo test -p wado-compiler`
-- [x] Update golden fixtures: `make update-golden-fixtures`
-- [x] Run benchmarks: `make benchmark-sieve` (75-79ms, down from original 95ms)
-- [x] Run full validation: `make on-task-done`
+Focus tests:
+
+- `Environment::get_arguments` (list<string>)
+- `Environment::get_environment` (list<tuple<string,string>>)
+- `Environment::get_initial_cwd` (option<string>)
+- `InsecureSeed::get_insecure_seed` (tuple<u64,u64>)
+- `Terminal*::get_terminal_*` (option<own<resource>>)
+- `Random::get_random_bytes` (list<u8>)

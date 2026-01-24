@@ -5,14 +5,15 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedTypeBinding, AssociatedTypeDecl, Attribute, BinaryExpr,
     BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt, EffectDecl,
-    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, FloatLiteral, ForOfStmt,
-    ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr, IfCondition, IfExpr,
-    IfStmt, ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item, LabeledBlockStmt, LetStmt,
-    Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType, NamespacedGenericType,
-    Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
-    StructField, StructLiteralExpr, StructLiteralField, TraitDecl, TupleLiteralExpr, Type,
-    TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
-    WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr,
+    IfCondition, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
+    NamespacedGenericType, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport,
+    WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -186,6 +187,27 @@ impl Parser {
         }
     }
 
+    /// Consume an identifier or a keyword for use as a field name.
+    /// Keywords are allowed as field names since they're unambiguous (receiver.field).
+    fn consume_field_name(&mut self) -> ParseResult<String> {
+        // First try identifier
+        if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            self.advance();
+            return Ok(name);
+        }
+
+        // Try keyword
+        if let Some(keyword) = self.peek_kind().as_keyword_str() {
+            self.advance();
+            return Ok(keyword.to_string());
+        }
+
+        Err(ParseError {
+            message: format!("expected field name, found {:?}", self.peek_kind()),
+            span: self.peek().span,
+        })
+    }
+
     // Parsing
 
     fn parse_item(&mut self) -> ParseResult<Item> {
@@ -206,6 +228,7 @@ impl Parser {
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub).map(Item::Variant),
+            TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
@@ -1589,12 +1612,13 @@ impl Parser {
                         } else {
                             // Not a valid tuple field sequence
                             return Err(ParseError {
-                                message: format!("expected identifier, found FloatLit({s:?})"),
+                                message: format!("expected field name, found FloatLit({s:?})"),
                                 span: field_span,
                             });
                         }
                     } else {
-                        (self.consume_ident()?, None)
+                        // Allow keywords as field names (unambiguous after dot)
+                        (self.consume_field_name()?, None)
                     };
 
                     // Check for method call with turbofish: obj.method::<T>(x)
@@ -2420,7 +2444,8 @@ impl Parser {
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let start_span = self.peek().span;
-            let name = self.consume_ident()?;
+            // Allow keywords as field names (unambiguous in context)
+            let name = self.consume_field_name()?;
             self.expect(&TokenKind::Colon)?;
             let ty = self.parse_type()?;
 
@@ -2488,6 +2513,47 @@ impl Parser {
             name,
             fields,
             span: start_span,
+        })
+    }
+
+    /// Parse a flags declaration
+    /// ```wado
+    /// flags DescriptorFlags {
+    ///     Read,
+    ///     Write,
+    /// }
+    /// ```
+    fn parse_flags_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<FlagsDecl> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Flags)?;
+        let name = self.consume_ident()?;
+
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut flags = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            // Skip doc comments (lines starting with ///)
+            // The lexer should handle these, but flags only have simple names
+            let flag_span = self.peek().span;
+            let flag_name = self.consume_ident()?;
+            flags.push(FlagsVariant {
+                name: flag_name,
+                span: flag_span,
+            });
+            // Comma is optional for the last item
+            if !self.check(&TokenKind::RBrace) {
+                self.expect(&TokenKind::Comma)?;
+            }
+        }
+
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
+
+        Ok(FlagsDecl {
+            name,
+            is_pub,
+            attributes: if attrs.is_empty() { None } else { Some(attrs) },
+            flags,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -3027,7 +3093,8 @@ impl Parser {
         if !self.check(&TokenKind::RBrace) {
             loop {
                 let field_span = self.peek().span;
-                let field_name = self.consume_ident()?;
+                // Allow keywords as field names (unambiguous in context)
+                let field_name = self.consume_field_name()?;
 
                 let (value, is_shorthand) = if self.check(&TokenKind::Colon) {
                     self.advance();
