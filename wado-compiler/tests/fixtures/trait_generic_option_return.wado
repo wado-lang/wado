@@ -1,0 +1,36 @@
+// Test: generic trait method returning Option<Self::Item>
+// TODO: Compiler bug - when a generic struct Box_<T> implements a trait with
+// associated type Item = T, and a method returns Option<Self::Item>,
+// the type resolution fails with "Unknown/Error type in codegen".
+use { println, Stdout } from "core:cli";
+
+trait Container {
+    type Item;
+    fn get(&self) -> Option<Self::Item>;
+}
+
+struct Box_<T> {
+    value: T,
+}
+
+impl Container for Box_<T> {
+    type Item = T;
+
+    fn get(&self) -> Option<Self::Item> {
+        return Option::<T>::Some(self.value);
+    }
+}
+
+fn run() with Stdout {
+    let box_: Box_<i32> = Box_ { value: 42 };
+    let result = box_.get();
+
+    if let Some(v) = result {
+        println(`Got: {v}`);
+    } else {
+        println("Empty");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "Got: 42\n"}

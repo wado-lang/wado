@@ -1,0 +1,20 @@
+// Test iterator with String elements
+// TODO: Blocked by compiler bug - generic trait methods returning Option<Self::Item>
+// where Self::Item is bound to a type parameter T don't resolve correctly.
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<String> = ["hello", "world", "!"];
+    let mut iter = arr.iter();
+
+    loop {
+        if let Some(s) = iter.next() {
+            println(s);
+        } else {
+            break;
+        }
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "hello\nworld\n!\n"}

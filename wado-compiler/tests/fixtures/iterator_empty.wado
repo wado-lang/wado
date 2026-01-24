@@ -1,0 +1,26 @@
+// Test iterator on empty array
+// TODO: Blocked by compiler bug - generic trait methods returning Option<Self::Item>
+// where Self::Item is bound to a type parameter T don't resolve correctly.
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<i32> = [];
+    let mut iter = arr.iter();
+
+    // Should immediately return None
+    if let Some(a) = iter.next() {
+        println(`unexpected: {a}`);
+    } else {
+        println("empty");
+    }
+
+    // Second call should also return None
+    if let Some(b) = iter.next() {
+        println(`unexpected: {b}`);
+    } else {
+        println("still empty");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "empty\nstill empty\n"}

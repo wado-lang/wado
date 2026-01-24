@@ -1,0 +1,34 @@
+// Test basic iterator functionality with Array::iter()
+// TODO: Blocked by compiler bug - generic trait methods returning Option<Self::Item>
+// where Self::Item is bound to a type parameter T don't resolve correctly.
+// See also: trait_generic_option_return.wado
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30];
+
+    // Test iter() with explicit next() calls
+    let mut iter = arr.iter();
+
+    if let Some(a) = iter.next() {
+        println(`first: {a}`);
+    }
+
+    if let Some(b) = iter.next() {
+        println(`second: {b}`);
+    }
+
+    if let Some(c) = iter.next() {
+        println(`third: {c}`);
+    }
+
+    // Should be None now
+    if let Some(d) = iter.next() {
+        println(`unexpected: {d}`);
+    } else {
+        println("done");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "first: 10\nsecond: 20\nthird: 30\ndone\n"}

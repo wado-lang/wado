@@ -552,6 +552,38 @@ Add combinator types and methods:
 - `collect()` method on Iterator
 - End-to-end: `[1,2,3].iter().filter(...).map(...).collect()`
 
+### 15. Known Compiler Limitations
+
+#### Parser: `self` by Value Not Supported
+
+The parser does not support `self` (by value) in trait method parameters, only `&self` and `&mut self`. This affects the `IntoIterator` trait:
+
+```wado
+// Ideally:
+fn into_iter(self) -> Self::Iter;
+
+// Workaround (current):
+fn into_iter(&self) -> Self::Iter;
+```
+
+This is a parser limitation, not a fundamental design issue.
+
+#### Resolver: Generic Associated Types in Return Position
+
+When a generic struct `Foo<T>` implements a trait with `type Item = T`, and a trait method returns `Option<Self::Item>`, the type resolution fails. This affects all iterator implementations:
+
+```wado
+// This pattern fails to resolve correctly:
+impl Iterator for ArrayIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> { ... }  // Error: Unknown type
+}
+```
+
+**Status**: Compiler bug. Iterator tests are marked as TODO until fixed.
+
+**Workaround**: None currently. Iterators must wait for this bug to be fixed.
+
 ## Consequences
 
 ### Positive
@@ -741,6 +773,21 @@ fn run() with Stdout {
     }
 }
 ```
+
+## Implementation Status
+
+- [x] `Iterator` trait definition in prelude
+- [x] `IntoIterator` trait definition in prelude
+- [x] `ArrayIter<T>` struct
+- [x] `impl Iterator for ArrayIter<T>`
+- [x] `impl IntoIterator for Array<T>`
+- [x] `Array::iter()` method
+- [ ] **Blocked**: Generic associated type resolution bug prevents actual usage
+- [ ] For-of loop generalization (Phase 2)
+- [ ] Tuple `IntoIterator` (Phase 3)
+- [ ] `FromIterator` trait (Phase 4)
+- [ ] Iterator combinators (Phase 5)
+- [ ] `collect()` method (Phase 6)
 
 ## Related WEPs
 

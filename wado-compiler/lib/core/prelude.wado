@@ -229,6 +229,73 @@ pub variant Result<T, E> {
     Err(E),
 }
 
+/// The core iterator trait for sequences of values.
+/// Types implementing this trait can be iterated over using `for-of` loops.
+pub trait Iterator {
+    type Item;
+
+    /// Advances the iterator and returns the next value.
+    /// Returns None when iteration is complete.
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+/// Conversion into an Iterator.
+/// Types implementing this trait can be used in `for-of` loops directly.
+pub trait IntoIterator {
+    type Item;
+    type Iter;
+
+    /// Creates an iterator from a value.
+    /// Note: Uses &self due to parser limitation (self by value not yet supported in traits).
+    fn into_iter(&self) -> Self::Iter;
+}
+
+/// Iterator over Array<T> elements.
+/// Yields copies of each element (value semantics).
+pub struct ArrayIter<T> {
+    repr: builtin::array<T>,
+    used: i32,
+    index: i32,
+}
+
+impl Iterator for ArrayIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.used {
+            return null;
+        }
+        let item = builtin::array_get::<T>(self.repr, self.index);
+        self.index += 1;
+        return Option::<T>::Some(item);
+    }
+}
+
+impl IntoIterator for Array<T> {
+    type Item = T;
+    type Iter = ArrayIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        return ArrayIter {
+            repr: self.repr,
+            used: self.used,
+            index: 0,
+        };
+    }
+}
+
+impl Array<T> {
+    /// Returns an iterator over the array elements.
+    /// Each call to next() returns a copy of the element (value semantics).
+    pub fn iter(&self) -> ArrayIter<T> {
+        return ArrayIter {
+            repr: self.repr,
+            used: self.used,
+            index: 0,
+        };
+    }
+}
+
 /// Traps with a message
 /// Logs the message to stderr (ambient, no effect required) and traps.
 pub fn panic(message: String) -> ! {
