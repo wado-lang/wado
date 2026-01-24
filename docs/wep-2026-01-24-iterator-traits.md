@@ -20,13 +20,13 @@ Wado needs iterator traits to enable:
 
 Wado's GC-based memory model significantly simplifies iterator design:
 
-| Aspect | Rust | Wado |
-|--------|------|------|
-| Memory | Ownership + borrowing | GC-managed |
-| Lifetimes | Required on iterators | Not needed |
-| Iterator variants | `iter()`, `iter_mut()`, `into_iter()` | `iter()` only |
-| Item ownership | Borrowed or owned | Always copied (value semantics) |
-| Trait bounds | Required for `Iter: Iterator` | Not yet available |
+| Aspect            | Rust                                  | Wado                            |
+| ----------------- | ------------------------------------- | ------------------------------- |
+| Memory            | Ownership + borrowing                 | GC-managed                      |
+| Lifetimes         | Required on iterators                 | Not needed                      |
+| Iterator variants | `iter()`, `iter_mut()`, `into_iter()` | `iter()` only                   |
+| Item ownership    | Borrowed or owned                     | Always copied (value semantics) |
+| Trait bounds      | Required for `Iter: Iterator`         | Not yet available               |
 
 ## Decision
 
@@ -44,6 +44,7 @@ pub trait Iterator {
 ```
 
 Key differences from Rust:
+
 - No `size_hint()` initially (can add later for optimization)
 - No lifetime parameters needed
 - `Self::Item` is always owned/copied (value semantics)
@@ -78,11 +79,13 @@ pub trait FromIterator<T> {
 ### 4. No `iter_mut()` - Wasm GC Limitation
 
 In Rust, there are three ways to iterate:
+
 - `iter()` - borrows elements (`&T`)
 - `iter_mut()` - mutably borrows elements (`&mut T`)
 - `into_iter()` - takes ownership (`T`)
 
 In Wado:
+
 - **`iter()`** - Returns iterator yielding element copies
 - **No `iter_mut()`** - Impossible due to Wasm GC limitations
 - **`into_iter()`** - Same as `iter()` for most types (no ownership transfer)
@@ -99,6 +102,7 @@ let r: &mut i32 = &mut arr[0];  // ❌ Cannot get reference to array element
 ```
 
 This is why Wado has separate traits for indexing:
+
 - `IndexValue<I>` - Returns element by value (copy)
 - `Index<I>` - Returns element by reference (only for reference-type elements)
 
@@ -196,6 +200,7 @@ scope: {
 ```
 
 **Fallback Strategy** (until trait bounds work):
+
 1. Check if type has `into_iter()` method
 2. Check if result has `next()` method returning `Option<T>`
 3. Infer `Item` type from `Option<T>`
@@ -402,6 +407,7 @@ impl IntoIterator for Range {
 ```
 
 Usage:
+
 ```wado
 // Iterate from 0 to 9
 for let i of range(0, 10) {
@@ -515,6 +521,7 @@ for let [i, x] of arr.iter().enumerate() {
 #### Phase 1: Minimal Core (No Compiler Changes)
 
 Define traits and Array implementation in prelude:
+
 - `Iterator` trait with `next()`
 - `IntoIterator` trait
 - `ArrayIter<T>` struct
@@ -527,6 +534,7 @@ For-of loop remains hardcoded for `Array<T>`.
 #### Phase 2: For-Of Generalization
 
 Modify compiler to:
+
 1. Resolve `for-of` via `IntoIterator` trait lookup
 2. Desugar to `into_iter()` + `next()` loop
 3. Remove hardcoded `Array<T>` check
@@ -544,6 +552,7 @@ Compiler-generated `IntoIterator` impls for homogeneous tuples.
 #### Phase 5: Iterator Combinators
 
 Add combinator types and methods:
+
 - `MapIter`, `FilterIter`, `Enumerate`, etc.
 - Either as standalone functions or trait default methods
 
@@ -605,13 +614,13 @@ impl Iterator for ArrayIter<T> {
 
 ### Trade-offs
 
-| Aspect | Rust | Wado |
-|--------|------|------|
-| Iteration flexibility | `iter()`, `iter_mut()`, `into_iter()` | `iter()` only |
-| Zero-cost iteration | Yes (references) | No (copies, but GC handles memory) |
-| Lifetime complexity | High | None |
-| In-place mutation | `iter_mut()` | Indexed access |
-| Implementation difficulty | High | Low |
+| Aspect                    | Rust                                  | Wado                               |
+| ------------------------- | ------------------------------------- | ---------------------------------- |
+| Iteration flexibility     | `iter()`, `iter_mut()`, `into_iter()` | `iter()` only                      |
+| Zero-cost iteration       | Yes (references)                      | No (copies, but GC handles memory) |
+| Lifetime complexity       | High                                  | None                               |
+| In-place mutation         | `iter_mut()`                          | Indexed access                     |
+| Implementation difficulty | High                                  | Low                                |
 
 ## Examples
 

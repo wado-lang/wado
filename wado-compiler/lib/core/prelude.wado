@@ -296,6 +296,51 @@ impl Array<T> {
     }
 }
 
+/// Trait for creating a collection from an iterator.
+/// This is a simplified version - the full Rust-style trait requires `impl Iterator`
+/// syntax which is not yet supported.
+trait FromIterator<T> {
+    type Iter;
+    fn from_iter(iter: Self::Iter) -> Self;
+}
+
+impl FromIterator<T> for Array<T> {
+    type Iter = ArrayIter<T>;
+
+    fn from_iter(iter: ArrayIter<T>) -> Array<T> {
+        let mut result: Array<T> = [];
+        let mut it = iter;
+        loop {
+            if let Some(item) = it.next() {
+                result.append(item);
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+}
+
+impl ArrayIter<T> {
+    /// Collects iterator elements into an Array.
+    /// Consumes the iterator and returns a new Array with all remaining elements.
+    pub fn collect(&mut self) -> Array<T> {
+        // Use direct field access and builtin calls to avoid cross-module
+        // method monomorphization issues (type table mismatch between modules)
+        let remaining = self.used - self.index;
+        let mut repr = builtin::array_new::<T>(remaining);
+        let mut result_used = 0;
+        for let mut i = self.index; i < self.used; i += 1 {
+            let item = builtin::array_get::<T>(self.repr, i);
+            builtin::array_set::<T>(repr, result_used, item);
+            result_used += 1;
+        }
+        // Mark iterator as exhausted
+        self.index = self.used;
+        return Array { repr, used: result_used };
+    }
+}
+
 /// Traps with a message
 /// Logs the message to stderr (ambient, no effect required) and traps.
 pub fn panic(message: String) -> ! {

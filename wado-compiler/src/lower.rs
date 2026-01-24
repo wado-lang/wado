@@ -1788,7 +1788,15 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<(String, Vec<TypeId>)> {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. } => Some((name.clone(), vec![])),
+            ResolvedType::Struct { name, .. } => {
+                // For monomorphized structs with names like "Array<i32>", look up the
+                // original InstantiationKey to get the base name and type_args
+                if let Some(key) = self.mangled_struct_to_key.get(name) {
+                    Some((key.name.clone(), key.type_args.clone()))
+                } else {
+                    Some((name.clone(), vec![]))
+                }
+            }
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => Some((name.clone(), type_args.clone())),
@@ -2210,8 +2218,18 @@ impl Monomorphizer {
                     sorted_entries.sort_by_key(|(idx, _)| **idx);
                     let type_args: Vec<TypeId> =
                         sorted_entries.iter().map(|(_, tid)| **tid).collect();
+                    // Preserve the existing generic_name if we already have monomorph_info
+                    // (e.g., Array<T>::append has generic_name: Array::append)
+                    // Otherwise use old_func_name as the generic name
+                    let existing_generic_name = match method_func {
+                        FunctionRef::External {
+                            monomorph_info: Some(info),
+                            ..
+                        } => Some(info.generic_name.clone()),
+                        _ => None,
+                    };
                     let monomorph_info = Some(MonomorphInfo {
-                        generic_name: old_func_name,
+                        generic_name: existing_generic_name.unwrap_or(old_func_name),
                         type_args,
                     });
                     // Preserve original method_info (struct/trait/method names unchanged,

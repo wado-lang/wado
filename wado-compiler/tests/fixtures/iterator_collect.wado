@@ -1,0 +1,21 @@
+// Test ArrayIter::collect() method
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+
+    // Collect iterator back into an array
+    let mut iter = arr.iter();
+    let collected = iter.collect();
+
+    // Print collected array
+    for let x of collected {
+        println(`{x}`);
+    }
+
+    // Verify length
+    println(`len: {collected.len()}`);
+}
+
+__DATA__
+{"stdout": "1\n2\n3\n4\n5\nlen: 5\n"}
