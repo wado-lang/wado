@@ -7,27 +7,28 @@ This document tracks the current implementation status of the Wado compiler.
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze → Resolve → Lower → Optimize → Codegen
-                           ↓                                           ↓         ↓
-                       Unparser                                  TIR (Typed IR) TIR Unparser
-                           ↓                                                        ↓
-                   Formatted Source                                         Pseudo-Wado Source
+Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze → Resolve → Monomorphize → Lower → Optimize → Codegen
+                           ↓                                           ↓              ↓          ↓
+                       Unparser                                  TIR (Typed IR) TIR Unparser  TIR Unparser
+                           ↓                                                        ↓              ↓
+                   Formatted Source                                         Pseudo-Wado Source (pre/post lower)
 ```
 
 ### Compilation Pipeline
 
-| Phase    | Input         | Output       | Description                           |
-| -------- | ------------- | ------------ | ------------------------------------- |
-| Lexer    | Source        | Tokens       | Tokenize, extract `__DATA__` section  |
-| Parser   | Tokens        | AST          | Build abstract syntax tree            |
-| Bind     | AST           | Bind info    | Local name resolution, scope tracking |
-| Desugar  | AST           | AST          | Transform syntactic sugar             |
-| Load     | AST           | All modules  | Load all dependencies recursively     |
-| Analyze  | All modules   | Symbol table | Build symbol table, validate imports  |
-| Resolve  | AST + Symbols | Project      | Type resolution, produce Project      |
-| Lower    | Project       | Project      | String collection, monomorphization   |
-| Optimize | Project       | Project      | DCE, usage analysis, feature flags    |
-| Codegen  | Project       | Wasm bytes   | Generate Component Model Wasm         |
+| Phase       | Input         | Output       | Description                               |
+| ----------- | ------------- | ------------ | ----------------------------------------- |
+| Lexer       | Source        | Tokens       | Tokenize, extract `__DATA__` section      |
+| Parser      | Tokens        | AST          | Build abstract syntax tree                |
+| Bind        | AST           | Bind info    | Local name resolution, scope tracking     |
+| Desugar     | AST           | AST          | Transform syntactic sugar                 |
+| Load        | AST           | All modules  | Load all dependencies recursively         |
+| Analyze     | All modules   | Symbol table | Build symbol table, validate imports      |
+| Resolve     | AST + Symbols | Project      | Type resolution, produce Project          |
+| Monomorphize| Project       | Project      | Instantiate generics with concrete types  |
+| Lower       | Project       | Project      | String literal collection                 |
+| Optimize    | Project       | Project      | DCE, usage analysis, feature flags        |
+| Codegen     | Project       | Wasm bytes   | Generate Component Model Wasm             |
 
 ### Modules
 
@@ -48,9 +49,16 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | ModuleLoader    | `module_loader.rs`    | Module path resolution, loads core library            |
 | Resolver        | `resolver.rs`         | Type resolution, AST to TIR, produces Project         |
 | TIR             | `tir.rs`              | Typed Intermediate Representation                     |
-| Lower           | `lower.rs`            | Monomorphization, string collection (Project→Project) |
+| Monomorphize    | `monomorphize.rs`     | Generic type/function instantiation (Project→Project) |
+| Lower           | `lower.rs`            | String literal collection (Project→Project)           |
 | Project         | `project.rs`          | Project: compilation context passed through pipeline  |
-| Optimize        | `optimize.rs`         | DCE, usage analysis, populates Project                |
+| Optimize        | `optimize.rs`         | Optimization coordinator, dispatches to sub-modules   |
+| OptimizeDCE     | `optimize_dce.rs`     | Dead code elimination via reachability analysis       |
+| OptimizeInline  | `optimize_inline.rs`  | Function inlining for small, pure functions           |
+| OptimizeRefElim | `optimize_ref_elim.rs`| Reference elimination after inlining                  |
+| OptimizeCopyProp| `optimize_copy_prop.rs`| Copy propagation for trivial bindings                |
+| OptimizeLICM    | `optimize_licm.rs`    | Loop-invariant code motion                            |
+| OptimizeMove    | `optimize_move.rs`    | Move insertion for fresh values, copy type collection |
 | Stdlib          | `stdlib.rs`           | Embedded core library sources                         |
 | WasiRegistry    | `wasi_registry.rs`    | WASI import registry, type alias resolution           |
 | BuiltinRegistry | `builtin_registry.rs` | Builtin function registry from `core:builtin`         |
@@ -78,18 +86,19 @@ This separation ensures:
 
 ### TIR Unparser
 
-The `unparse.rs` module also provides a TIR unparser that converts Typed IR back to pseudo-Wado source code. This is useful for debugging the lowering and monomorphization phases.
+The `unparse.rs` module also provides a TIR unparser that converts Typed IR back to pseudo-Wado source code. This is useful for debugging the monomorphization and lowering phases.
 
 **Usage:**
 
 ```sh
-wado dump --tir --unparse file.wado    # Show TIR before lowering
-wado dump --lower --unparse file.wado  # Show TIR after monomorphization
+wado dump --tir --unparse file.wado    # Show TIR before monomorphization
+wado dump --lower --unparse file.wado  # Show TIR after monomorphization and lowering
 ```
 
 **Output Characteristics:**
 
-- Shows monomorphized type names (e.g., `Box$i32` instead of `Box<T>`)
+- `--tir`: Shows generic types as-is (e.g., `Box<T>`)
+- `--lower`: Shows monomorphized type names (e.g., `Box$i32` instead of `Box<T>`)
 - Includes fully qualified function calls (e.g., `core::cli::println`)
 - Preserves the `__DATA__` section if present
 - Output is pseudo-Wado (not compilable due to mangled names)
@@ -131,15 +140,21 @@ The bundled module is stored as WAT in `wado-compiler/lib/builtins/wado-bundled.
 
 ### Monomorphization
 
-The `lower.rs` module implements monomorphization for generic structs. Generic types like `Box<T>` are instantiated into concrete types like `Box$i32` at compile time.
+The `monomorphize.rs` module is a dedicated compilation phase that instantiates generic structs and functions with concrete types. It runs after type resolution and before the lower phase.
 
 **Process:**
 
-1. **Collection**: Scan the type table for all `GenericInstance` types (e.g., `Box<i32>`)
-2. **Instantiation**: For each unique instantiation, create a concrete struct with substituted field types
-3. **Naming**: Mangle type names using `$` separator (e.g., `Box$i32`, `Pair$i32$String`)
-4. **Rewriting**: Replace all `GenericInstance` type references with concrete struct types
-5. **Container handling**: Recursively rewrite nested types in Array, Option, Tuple, Result
+1. **Collect generic definitions**: Gather all generic struct and function definitions from all modules
+2. **Find instantiation sites**: Scan for `GenericInstance` types and generic function calls
+3. **Instantiate structs**: Create concrete struct definitions with substituted field types
+4. **Instantiate functions**: Create concrete function definitions with substituted types
+5. **Rewrite types**: Replace all `GenericInstance` type references with concrete struct types
+6. **Rewrite calls**: Replace generic function calls with calls to monomorphized functions
+7. **Transitive instantiation**: Iteratively process new instantiations created during monomorphization
+
+**Cross-Module Support:**
+
+The monomorphizer supports cross-module generic function instantiation. Generic functions defined in one module (e.g., `Array` methods from prelude) can be instantiated when used in another module. This is achieved by collecting all generic functions from all modules before processing.
 
 **Supported Features:**
 
@@ -172,7 +187,30 @@ Container::transform::<i32, i64> → Container::transform$1
 
 ### Optimizer
 
-The `optimize.rs` module implements optimization passes that analyze TIR and populate usage analysis results in `Project`. The optimizer follows the ownership transfer pattern: `optimize(project: Project, opt_level: OptLevel) -> Project`.
+The `optimize.rs` module coordinates multiple optimization passes on TIR. The optimizer follows the ownership transfer pattern: `optimize(project: Project, opt_level: OptLevel) -> Project`.
+
+**Optimization Passes:**
+
+| Module               | File                    | Description                                          |
+| -------------------- | ----------------------- | ---------------------------------------------------- |
+| DCE                  | `optimize_dce.rs`       | Dead code elimination via reachability analysis      |
+| Function Inlining    | `optimize_inline.rs`    | Inline small, pure functions                         |
+| Reference Elimination| `optimize_ref_elim.rs`  | Eliminate unnecessary `&local` bindings after inline |
+| Copy Propagation     | `optimize_copy_prop.rs` | Propagate trivial copies like `let x = y`            |
+| LICM                 | `optimize_licm.rs`      | Hoist loop-invariant field accesses                  |
+| Move Insertion       | `optimize_move.rs`      | Avoid copies for fresh values (literals, call results)|
+
+**Optimization Order:**
+
+For `-O2` and `-Os`:
+1. **Inlining** → inline small functions
+2. **Reference Elimination** → clean up `&local` bindings from inlining
+3. **Copy Propagation** → eliminate trivial copies
+4. **LICM** → hoist loop-invariant code
+5. **DCE Analysis** → determine reachable functions
+6. **DCE Removal** → remove unreachable functions
+7. **Move Insertion** → mark fresh values as movable (all optimization levels)
+8. **Value Copy Collection** → collect types needing copy support for codegen
 
 **Usage Analysis Fields (populated in Project):**
 
@@ -185,23 +223,16 @@ The `optimize.rs` module implements optimization passes that analyze TIR and pop
 | `used_builtins`       | `HashSet<CanonBuiltin>`  | Canonical builtins used (stream ops, etc.)  |
 | `used_box_primitives` | `HashSet<PrimitiveType>` | Primitives needing box types for references |
 | `strip_names`         | `bool`                   | Whether to strip debug name sections        |
-
-**Current Optimizations:**
-
-| Optimization            | Description                                              |
-| ----------------------- | -------------------------------------------------------- |
-| Dead Code Elimination   | Removes unreachable functions/methods from output        |
-| Float-to-string removal | Excludes `f32_to_buffer`/`f64_to_buffer` when not needed |
-| Conditional WASI import | Only imports WASI interfaces that are actually used      |
+| `needed_copy_types`   | `HashMap<String, HashSet<TypeId>>` | Types requiring value copy per function |
 
 **CLI Control:**
 
-| Flag  | Effect                                              |
-| ----- | --------------------------------------------------- |
-| `-O1` | Default, DCE enabled, keeps debug names             |
-| `-O2` | Full optimizations, DCE enabled                     |
-| `-Os` | Size optimization: DCE + strips debug name sections |
-| `-O0` | Disables DCE, includes all functions/features       |
+| Flag  | Effect                                                        |
+| ----- | ------------------------------------------------------------- |
+| `-O0` | No optimizations, includes all functions/features             |
+| `-O1` | DCE only, keeps debug names                                   |
+| `-O2` | Full optimizations (inline, ref-elim, copy-prop, LICM, DCE)   |
+| `-Os` | Full optimizations + strips debug name sections               |
 
 ### Standard Library
 
