@@ -66,7 +66,7 @@ impl SyntaxDefinition {
                 // Declarations
                 declaration: vec![
                     "fn", "let", "struct", "enum", "variant", "impl", "trait", "type", "use",
-                    "from", "pub", "import", "export",
+                    "from", "pub", "import", "export", "test",
                 ],
                 // Modifiers
                 modifier: vec!["as", "with", "mut", "async", "move", "unique", "in", "of"],
@@ -131,8 +131,16 @@ mod tests {
             .copied()
             .collect();
 
+        // Contextual keywords: these are in SyntaxDefinition for highlighting
+        // but are parsed as identifiers by the lexer and handled specially by the parser
+        let contextual_keywords = ["test"];
+
         // Verify each keyword is lexed as a keyword token (not an identifier)
+        // Skip contextual keywords which are intentionally lexed as identifiers
         for keyword in &all_keywords {
+            if contextual_keywords.contains(keyword) {
+                continue;
+            }
             let mut lexer = Lexer::new(keyword);
             let tokens = lexer.tokenize().expect("should lex keyword");
             assert!(!tokens.is_empty(), "'{keyword}' produced no tokens");
@@ -151,6 +159,10 @@ mod tests {
             "resource", "world", "async", "import", "export", "assert",
         ];
 
+        // Contextual keywords: these are in SyntaxDefinition for highlighting
+        // but are parsed as identifiers by the lexer and handled specially by the parser
+        let contextual_keywords = ["test"];
+
         // Verify SyntaxDefinition covers all lexer keywords
         for keyword in lexer_keywords {
             assert!(
@@ -159,11 +171,11 @@ mod tests {
             );
         }
 
-        // Verify no extra keywords in SyntaxDefinition
+        // Verify no extra keywords in SyntaxDefinition (except contextual keywords)
         for keyword in &all_keywords {
             assert!(
-                lexer_keywords.contains(keyword),
-                "SyntaxDefinition keyword '{keyword}' is not in lexer"
+                lexer_keywords.contains(keyword) || contextual_keywords.contains(keyword),
+                "SyntaxDefinition keyword '{keyword}' is not in lexer or contextual_keywords"
             );
         }
     }

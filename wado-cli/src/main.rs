@@ -19,6 +19,7 @@ mod dump;
 mod format;
 mod run;
 mod syntax;
+mod test;
 
 pub use compiler_host::FilesystemCompilerHost;
 
@@ -32,6 +33,7 @@ fn print_usage() {
     eprintln!("Commands:");
     eprintln!("  compile [options] <file.wado>  Compile a Wado source file");
     eprintln!("  run [options] <file.wado>      Compile and run a Wado source file");
+    eprintln!("  test [options] <files...>      Run tests in Wado source files");
     eprintln!("  format [options] <file.wado>   Format a Wado source file");
     eprintln!("  dump [options] <file.wado>     Dump compiler internal state");
     eprintln!("  syntax [options]               Generate syntax definition files");
@@ -39,6 +41,9 @@ fn print_usage() {
     eprintln!("Compile options:");
     eprintln!("  -o <file>        Output file path (default: <input>.wasm)");
     eprintln!("  --format <fmt>   Output format: wasm, wat (default: guessed from -o extension)");
+    eprintln!();
+    eprintln!("Test options:");
+    eprintln!("  -f, --filter <pattern>  Filter tests by name pattern");
     eprintln!();
     eprintln!("Format options:");
     eprintln!("  -w, --write      Write formatted output back to file");
@@ -102,6 +107,10 @@ async fn main() {
                 "syntax" => {
                     let opts = syntax::parse_args(parser);
                     syntax::run(opts);
+                }
+                "test" => {
+                    let opts = test::parse_args(parser);
+                    test::run(opts).await;
                 }
                 _ => {
                     eprintln!("Error: unknown command '{cmd}'");

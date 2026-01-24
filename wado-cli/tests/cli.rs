@@ -326,3 +326,49 @@ fn test_run_unknown_option() {
         .failure()
         .stderr(predicate::str::contains("invalid option"));
 }
+
+// =============================================================================
+// Test subcommand tests
+// =============================================================================
+
+#[test]
+fn test_test_help() {
+    wado()
+        .args(["test", "--help"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Usage: wado test"))
+        .stderr(predicate::str::contains("--filter"));
+}
+
+#[test]
+fn test_test_passing() {
+    wado()
+        .args(["test", "wado-compiler/tests/fixtures/test_decl.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_failing() {
+    wado()
+        .args(["test", "wado-compiler/tests/fixtures/test_fail.wado"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("1 passed, 1 failed"));
+}
+
+#[test]
+fn test_test_filter() {
+    wado()
+        .args([
+            "test",
+            "--filter",
+            "simple",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 passed, 0 failed"));
+}

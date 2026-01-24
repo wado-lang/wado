@@ -1354,6 +1354,19 @@ pub struct TirTypeAlias {
     pub span: Span,
 }
 
+/// Test declaration metadata
+/// The actual test code is stored as a `TirFunction` in the functions list.
+#[derive(Debug, Clone)]
+pub struct TirTest {
+    /// The original test name from source (None if unnamed)
+    pub name: Option<String>,
+    /// Generated function name (e.g., "__`test_0`" or "__`test_addition_works`")
+    pub function_name: String,
+    /// Source line number for unnamed test identification
+    pub line: usize,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct TirEffect {
     pub name: String,
@@ -1428,6 +1441,8 @@ pub struct TirModule {
     pub effects: Vec<TirEffect>,
     pub traits: Vec<TirTrait>,
     pub impls: Vec<TirImpl>,
+    /// Test declarations with their metadata
+    pub tests: Vec<TirTest>,
     pub data_section: Option<String>,
     pub string_literals: Vec<String>,
     /// Map of function name to string literals it contains (for DCE)
@@ -1455,6 +1470,7 @@ impl TirModule {
             effects: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
+            tests: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
             function_strings: HashMap::new(),
@@ -1479,6 +1495,7 @@ impl TirModule {
             effects: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
+            tests: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
             function_strings: HashMap::new(),

@@ -53,6 +53,19 @@ pub fn analyze_project(project: &mut Project) {
     // Compute reachable functions from entry point
     let mut reachable = compute_reachable(&call_graph, &entry_func);
 
+    // Add test functions as additional entry points
+    // Test functions are also roots for reachability analysis
+    if let Some(entry_module) = project.tir_modules.get(&project.entry_module_source) {
+        for test in &entry_module.tests {
+            let test_func = FunctionId::Free(FreeFunctionName::from_module_source(
+                &project.entry_module_source,
+                &test.function_name,
+            ));
+            let test_reachable = compute_reachable(&call_graph, &test_func);
+            reachable.extend(test_reachable);
+        }
+    }
+
     // Collect used WASI functions and box primitives from reachable functions
     let mut used_wasi_functions: HashSet<String> = HashSet::new();
     let mut used_box_primitives: HashSet<PrimitiveType> = HashSet::new();
@@ -1052,6 +1065,11 @@ pub fn remove_unreachable_functions(project: &mut Project) {
         // Retain only reachable functions
         module.functions.retain(|func_rc| {
             let func = func_rc.borrow();
+
+            // Always retain test functions (they are entry points for the test runner)
+            if func.name.starts_with("__test_") {
+                return true;
+            }
             // Use TirFunction's method_info to check if this is a method
             if let Some(ref info) = func.method_info {
                 // Could be either:

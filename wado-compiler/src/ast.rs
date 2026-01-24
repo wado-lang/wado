@@ -60,6 +60,16 @@ pub enum Item {
     Trait(TraitDecl),
     Resource(ResourceDecl),
     World(WorldDecl),
+    Test(TestDecl),
+}
+
+/// Test declaration: `test "name" { ... }` or `test { ... }`
+#[derive(Debug, Clone)]
+pub struct TestDecl {
+    /// Optional test name (string literal). If None, identified by <file:line>.
+    pub name: Option<String>,
+    pub body: Block,
+    pub span: Span,
 }
 
 /// Attribute like #[wasi("...")]

@@ -485,6 +485,29 @@ assert x > 0;
 assert x > 0, "x must be positive";
 ```
 
+## Tests
+
+```wado
+// Named test
+test "addition works" {
+    assert 1 + 1 == 2;
+}
+
+// Unnamed test (identified by file:line)
+test {
+    let result = fib(10);
+    assert result == 55;
+}
+```
+
+Run tests with the CLI:
+
+```sh
+wado test                       # discover and run *_test.wado files
+wado test file.wado             # run specific file
+wado test --filter pattern      # filter tests by name
+```
+
 ## Imports
 
 ```wado

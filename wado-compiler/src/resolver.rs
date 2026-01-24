@@ -27,7 +27,7 @@ use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock,
     TirCapture, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTest, TirUnaryOp,
     TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
@@ -592,6 +592,15 @@ impl<'a> Resolver<'a> {
                 Item::Variant(variant_decl) => {
                     let tir_variant = self.resolve_variant_decl(variant_decl);
                     tir_module.variants.push(tir_variant);
+                }
+                Item::Test(test_decl) => {
+                    let test_index = tir_module.tests.len();
+                    if let Some((tir_func, tir_test)) =
+                        self.resolve_test_decl(test_decl, test_index)
+                    {
+                        tir_module.add_function(tir_func);
+                        tir_module.tests.push(tir_test);
+                    }
                 }
                 // Other items will be added as needed
                 _ => {}
@@ -1466,6 +1475,61 @@ impl<'a> Resolver<'a> {
             address_taken_locals: ctx.address_taken_locals,
             needed_copy_types: std::collections::HashSet::new(),
         })
+    }
+
+    /// Resolve a test declaration to a `TirFunction` and `TirTest`
+    fn resolve_test_decl(
+        &mut self,
+        test_decl: &ast::TestDecl,
+        test_index: usize,
+    ) -> Option<(TirFunction, TirTest)> {
+        // Generate function name: __test_{index} or __test_{name_snake_case}
+        let function_name = match &test_decl.name {
+            Some(name) => {
+                // Convert test name to snake_case for function name
+                let snake_name: String = name
+                    .chars()
+                    .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                    .collect::<String>()
+                    .to_lowercase();
+                format!("__test_{test_index}_{snake_name}")
+            }
+            None => format!("__test_{test_index}"),
+        };
+
+        // Create function context - tests have no parameters and return unit
+        let return_type = TypeTable::UNIT;
+        let mut ctx = FunctionContext::new(return_type, function_name.clone());
+
+        // Resolve the test body
+        let body = self.resolve_block(&test_decl.body, &mut ctx);
+
+        let tir_func = TirFunction {
+            name: function_name.clone(),
+            is_pub: false, // Tests are not public
+            type_params: vec![],
+            impl_type_params: vec![],
+            monomorph_info: None,
+            method_info: None,
+            params: vec![], // Tests have no parameters
+            return_type,
+            effects: vec![], // Tests can have any effects (they're allowed to do I/O)
+            body: Some(body),
+            span: test_decl.span,
+            local_count: ctx.next_local,
+            local_types: ctx.local_types,
+            address_taken_locals: ctx.address_taken_locals,
+            needed_copy_types: std::collections::HashSet::new(),
+        };
+
+        let tir_test = TirTest {
+            name: test_decl.name.clone(),
+            function_name,
+            line: test_decl.span.line,
+            span: test_decl.span,
+        };
+
+        Some((tir_func, tir_test))
     }
 
     /// Resolve a method (function with &self parameter)
