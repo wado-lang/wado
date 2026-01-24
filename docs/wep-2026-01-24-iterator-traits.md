@@ -75,17 +75,38 @@ pub trait FromIterator<T> {
 
 **Simplification**: Instead of `fn from_iter<I: Iterator<Item = T>>(iter: I)`, we use `impl Iterator`. The compiler checks element type compatibility at usage sites.
 
-### 4. No `iter()` / `iter_mut()` Distinction
+### 4. No `iter_mut()` - Wasm GC Limitation
 
 In Rust, there are three ways to iterate:
 - `iter()` - borrows elements (`&T`)
 - `iter_mut()` - mutably borrows elements (`&mut T`)
 - `into_iter()` - takes ownership (`T`)
 
-In Wado with GC and value semantics:
+In Wado:
 - **`iter()`** - Returns iterator yielding element copies
-- No `iter_mut()` needed - mutate via indexed access instead
+- **No `iter_mut()`** - Impossible due to Wasm GC limitations
 - **`into_iter()`** - Same as `iter()` for most types (no ownership transfer)
+
+#### Why `iter_mut()` is Impossible
+
+Wasm GC's `array.get` and `array.set` instructions only support **value copy** operations. You cannot obtain a reference to an array element:
+
+```wado
+let mut arr: Array<i32> = [1, 2, 3];
+
+// This is impossible in Wasm GC:
+let r: &mut i32 = &mut arr[0];  // ❌ Cannot get reference to array element
+```
+
+This is why Wado has separate traits for indexing:
+- `IndexValue<I>` - Returns element by value (copy)
+- `Index<I>` - Returns element by reference (only for reference-type elements)
+
+For `Array<i32>`, only `IndexValue` can be implemented, not `Index`. Since `iter_mut()` would need to yield `&mut T`, it's fundamentally impossible for primitive arrays.
+
+#### Mutation via Indexed Access
+
+For in-place mutation, use indexed access:
 
 ```wado
 // Wado: iter() returns copies (value semantics)
@@ -99,6 +120,8 @@ for let mut i = 0; i < arr.len(); i += 1 {
     arr[i] = arr[i] * 2;
 }
 ```
+
+This pattern works universally for all element types and is idiomatic in Wado.
 
 ### 5. Array Iterator Implementation
 
@@ -543,8 +566,8 @@ Add combinator types and methods:
 
 1. **Value copy overhead**: Each `next()` copies the element
    - **Mitigation**: Compiler can optimize for primitives; large structs should use references
-2. **No lazy references**: Can't have `iter_mut()` that yields `&mut T`
-   - **Mitigation**: Use indexed mutation for in-place modification
+2. **No `iter_mut()`**: Wasm GC cannot yield `&mut T` for array elements
+   - **Mitigation**: Use indexed access for in-place modification
 3. **Trait bounds missing**: `type Iter: Iterator` constraint not enforced
    - **Mitigation**: Check at usage sites until bounds are implemented
 
