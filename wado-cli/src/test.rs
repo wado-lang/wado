@@ -1,6 +1,7 @@
 use std::process;
 
 use anyhow::Result;
+use glob::glob;
 use lexopt::Arg::{Long, Short, Value};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
@@ -15,11 +16,34 @@ pub struct TestOptions {
 }
 
 pub fn print_usage() {
-    eprintln!("Usage: wado test [options] <files...>");
+    eprintln!("Usage: wado test [options] [files...]");
+    eprintln!();
+    eprintln!("If no files are specified, searches for **/*_test.wado recursively.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -f, --filter <pattern>  Filter tests by name pattern");
     eprintln!("  --help                  Show this help message");
+}
+
+/// Find all *_test.wado files recursively in the current directory
+fn find_test_files() -> Vec<String> {
+    let pattern = "**/*_test.wado";
+    let mut files: Vec<String> = Vec::new();
+
+    match glob(pattern) {
+        Ok(paths) => {
+            for entry in paths.flatten() {
+                files.push(entry.display().to_string());
+            }
+        }
+        Err(e) => {
+            eprintln!("Error: failed to glob pattern: {e}");
+            process::exit(1);
+        }
+    }
+
+    files.sort();
+    files
 }
 
 pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
@@ -42,10 +66,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
         }
     }
 
+    // If no files specified, search for *_test.wado files
     if paths.is_empty() {
-        eprintln!("Error: no test files specified");
-        print_usage();
-        process::exit(1);
+        paths = find_test_files();
+        if paths.is_empty() {
+            eprintln!("No test files found (looking for **/*_test.wado)");
+            process::exit(0);
+        }
     }
 
     TestOptions { paths, filter }
