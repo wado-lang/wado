@@ -108,7 +108,7 @@ fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>>
             &source,
             &host,
             Some(source_from_header),
-            OptLevel::Full,
+            OptLevel::O2,
         )
         .await
         .unwrap_or_else(|e| panic!("Compilation failed for {:?}: {}", source_path, e));

@@ -479,10 +479,9 @@ fn run() with Stdout {
         }
     }
     let box_i32: Box<i32> = move Box<i32> { value: 42 };
-    let box_ref: &Box<i32> = &box_i32;
     __assert_3: {
         let __v0: i32 = __inline_Box_i32___get_30: {
-            break __inline_Box_i32___get_30: box_ref.value;
+            break __inline_Box_i32___get_30: box_i32.value;
         };
         let __cond: bool = (__v0 == 42);
         if !__cond {
@@ -634,9 +633,8 @@ fn run() with Stdout {
         }
     }
     let box_str: Box<String> = move Box<String> { value: "hello" };
-    let box_str_ref: &Box<String> = &box_str;
     let inner: String = __inline_Box_String___get_40: {
-        break __inline_Box_String___get_40: box_str_ref.value;
+        break __inline_Box_String___get_40: box_str.value;
     };
     __assert_4: {
         let __v0: i32 = "String::len"(&inner);
@@ -1094,10 +1092,9 @@ fn run() with Stdout {
         }
     }
     let mut p2: Point = move Point { x: 5, y: 10 };
-    let p2_mut_ref: &mut Point = &mut p2;
     __assert_7: {
         let __v0: i32 = __inline_Point__sum_68: {
-            break __inline_Point__sum_68: (p2_mut_ref.x + p2_mut_ref.y);
+            break __inline_Point__sum_68: (p2.x + p2.y);
         };
         let __cond: bool = (__v0 == 15);
         if !__cond {
@@ -1248,10 +1245,9 @@ fn run() with Stdout {
             });
         }
     }
-    let p_ref3: &&&Point = &p_ref2;
     __assert_8: {
         let __v0: i32 = __inline_Point__sum_78: {
-            break __inline_Point__sum_78: (p_ref3.x + p_ref3.y);
+            break __inline_Point__sum_78: (p_ref2.x + p_ref2.y);
         };
         let __cond: bool = (__v0 == 30);
         if !__cond {

@@ -51,8 +51,9 @@ pub fn print_usage() {
     eprintln!();
     eprintln!("Optimization Level (for --optimize phase):");
     eprintln!("  -O0          No optimizations (default)");
-    eprintln!("  -O1          Baseline optimizations (DCE)");
-    eprintln!("  -O2          Full optimizations (DCE + inlining)");
+    eprintln!("  -O1          Development optimizations (all passes except DCE)");
+    eprintln!("  -O2          Production optimizations (full, 2 iterations)");
+    eprintln!("  -O3          Aggressive optimizations (full, 10 iterations)");
     eprintln!("  -Os          Size optimizations (O2 + strip names)");
     eprintln!();
     eprintln!("Output:");
@@ -76,7 +77,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_lower = false;
     let mut show_optimize = false;
     let mut unparse = false;
-    let mut opt_level = OptLevel::None;
+    let mut opt_level = OptLevel::O0;
     let mut output_template: Option<String> = None;
 
     while let Some(arg) = next_arg(&mut parser) {
@@ -108,18 +109,19 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
             }
             Short('O') => {
                 let level = parser.value().unwrap_or_else(|_| {
-                    eprintln!("Error: -O requires a level (0, 1, 2, or s)");
+                    eprintln!("Error: -O requires a level (0, 1, 2, 3, or s)");
                     process::exit(1);
                 });
                 let level_str = level.to_string_lossy();
                 opt_level = match level_str.as_ref() {
-                    "0" => OptLevel::None,
-                    "1" => OptLevel::Basic,
-                    "2" => OptLevel::Full,
-                    "s" => OptLevel::Size,
+                    "0" => OptLevel::O0,
+                    "1" => OptLevel::O1,
+                    "2" => OptLevel::O2,
+                    "3" => OptLevel::O3,
+                    "s" => OptLevel::Os,
                     _ => {
                         eprintln!("Error: Unknown optimization level: -O{level_str}");
-                        eprintln!("Valid levels: -O0, -O1, -O2, -Os");
+                        eprintln!("Valid levels: -O0, -O1, -O2, -O3, -Os");
                         process::exit(1);
                     }
                 };

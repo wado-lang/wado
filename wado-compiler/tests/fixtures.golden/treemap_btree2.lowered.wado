@@ -283,12 +283,10 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
     let _licm_repr: builtin::array<i32> = _licm_values.repr;
     for let mut i: i32 = 0; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
         if !__inline_Array_bool__IndexValue__index_value_0: {
-            let self: &Array<bool> = &_licm_deleted;
             break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(_licm_repr, i);
         } {
             __inline_Array_String___append_1: {
                 let value: String = __inline_Array_String__IndexValue__index_value_2: {
-                    let self: &Array<String> = &_licm_keys;
                     break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(_licm_repr, i);
                 };
                 let used: i32 = new_keys.used;
@@ -307,7 +305,6 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
             };
             __inline_Array_i32___append_3: {
                 let value: i32 = __inline_Array_i32__IndexValue__index_value_4: {
-                    let self: &Array<i32> = &_licm_values;
                     break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(_licm_repr, i);
                 };
                 let used: i32 = new_values.used;
@@ -372,10 +369,6 @@ fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> 
     return core::builtin::array_get::<String>(self.repr, index);
 }
 
-fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    return core::builtin::array_get::<bool>(self.repr, index);
-}
-
 pub fn "Array<String>::len"(self: &Array<String>) -> i32 {
     return self.used;
 }
@@ -403,15 +396,12 @@ fn "TreeMap<String,i32>::collect_entries"(self: &TreeMap<String,i32>, node: &BTr
             "TreeMap<String,i32>::collect_entries"(self, "Array<BTreeNode<String,i32>>^IndexValue::index_value"(&_licm_children, i), result);
         }
         if !__inline_Array_bool__IndexValue__index_value_0: {
-            let self: &Array<bool> = &_licm_deleted;
             break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(_licm_repr, i);
         } {
             __inline_Array_Tuple_String_i32____append_1: {
                 let value: [String, i32] = move [__inline_Array_String__IndexValue__index_value_2: {
-                    let self: &Array<String> = &_licm_keys;
                     break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(_licm_repr, i);
                 }, __inline_Array_i32__IndexValue__index_value_3: {
-                    let self: &Array<i32> = &_licm_values;
                     break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(_licm_repr, i);
                 }];
                 let used: i32 = result.used;
@@ -581,7 +571,10 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
             };
             let mut count: i32 = 0;
             for let mut i: i32 = 0; (i < "Array<String>::len"(&root.keys)); i = (i + 1) {
-                if !"Array<bool>^IndexValue::index_value"(&root.deleted, i) {
+                if !__inline_Array_bool__IndexValue__index_value_0: {
+                    let self: &Array<bool> = &root.deleted;
+                    break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(self.repr, i);
+                } {
                     count = (count + 1);
                 }
             }
@@ -751,7 +744,10 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
             };
             let mut count: i32 = 0;
             for let mut i: i32 = 0; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
-                if !"Array<bool>^IndexValue::index_value"(&self.deleted, i) {
+                if !__inline_Array_bool__IndexValue__index_value_0: {
+                    let self: &Array<bool> = &self.deleted;
+                    break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(self.repr, i);
+                } {
                     count = (count + 1);
                 }
             }
@@ -786,7 +782,6 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
         __inline_Array_String___append_0: {
             let self: &mut Array<String> = &mut new_sibling.keys;
             let value: String = __inline_Array_String__IndexValue__index_value_1: {
-                let self: &Array<String> = &_licm_keys;
                 break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
             };
             let used: i32 = self.used;
@@ -806,7 +801,6 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
         __inline_Array_i32___append_2: {
             let self: &mut Array<i32> = &mut new_sibling.values;
             let value: i32 = __inline_Array_i32__IndexValue__index_value_3: {
-                let self: &Array<i32> = &_licm_values;
                 break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(_licm_repr, i);
             };
             let used: i32 = self.used;
@@ -826,7 +820,6 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
         __inline_Array_bool___append_4: {
             let self: &mut Array<bool> = &mut new_sibling.deleted;
             let value: bool = __inline_Array_bool__IndexValue__index_value_5: {
-                let self: &Array<bool> = &_licm_deleted;
                 break __inline_Array_bool__IndexValue__index_value_5: core::builtin::array_get::<bool>(_licm_repr, i);
             };
             let used: i32 = self.used;

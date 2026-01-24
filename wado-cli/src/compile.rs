@@ -15,14 +15,15 @@ use crate::compiler_host::FilesystemCompilerHost;
 pub enum OptLevel {
     /// No optimizations. Used for debugging.
     O0,
-    /// Baseline optimizations including DCE. Intended for development (default).
+    /// Development optimizations. All passes except DCE (default).
+    /// Keeps dead code visible for debugging while improving runtime.
     #[default]
     O1,
-    /// All optimizations. Intended for production (server-side).
+    /// Production optimizations. Full passes including DCE (2 iterations).
     O2,
-    /// Same as O2 (reserved for future use).
+    /// Aggressive production optimizations. Full passes including DCE (10 iterations).
     O3,
-    /// O2 plus name section stripping. Intended for frontend.
+    /// Size optimizations. O2 plus name section stripping.
     Os,
 }
 
@@ -168,10 +169,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
 /// Convert CLI `OptLevel` to compiler `OptLevel`
 fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     match level {
-        OptLevel::O0 => wado_compiler::OptLevel::None,
-        OptLevel::O1 => wado_compiler::OptLevel::Basic,
-        OptLevel::O2 | OptLevel::O3 => wado_compiler::OptLevel::Full,
-        OptLevel::Os => wado_compiler::OptLevel::Size,
+        OptLevel::O0 => wado_compiler::OptLevel::O0,
+        OptLevel::O1 => wado_compiler::OptLevel::O1,
+        OptLevel::O2 => wado_compiler::OptLevel::O2,
+        OptLevel::O3 => wado_compiler::OptLevel::O3,
+        OptLevel::Os => wado_compiler::OptLevel::Os,
     }
 }
 

@@ -305,10 +305,11 @@ fn verify_result(result: &WasmRunResult, spec: &TestSpec, fixture_name: &str) {
 /// Get human-readable name for optimization level
 fn opt_level_name(opt: OptLevel) -> &'static str {
     match opt {
-        OptLevel::None => "O0",
-        OptLevel::Basic => "O1",
-        OptLevel::Full => "O2",
-        OptLevel::Size => "Os",
+        OptLevel::O0 => "O0",
+        OptLevel::O1 => "O1",
+        OptLevel::O2 => "O2",
+        OptLevel::O3 => "O3",
+        OptLevel::Os => "Os",
     }
 }
 
@@ -412,19 +413,19 @@ fn run_normal_test(fixture_path: &Path, opt_level: OptLevel, spec: &TestSpec, te
 
 /// Test function for O0 (no optimization)
 fn fixture_test_o0(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    run_fixture_test_with_opt(path, OptLevel::None);
+    run_fixture_test_with_opt(path, OptLevel::O0);
     Ok(())
 }
 
 /// Test function for O2 (full optimization)
 fn fixture_test_o2(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    run_fixture_test_with_opt(path, OptLevel::Full);
+    run_fixture_test_with_opt(path, OptLevel::O2);
     Ok(())
 }
 
 /// Test function for Os (size optimization)
 fn fixture_test_os(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    run_fixture_test_with_opt(path, OptLevel::Size);
+    run_fixture_test_with_opt(path, OptLevel::Os);
     Ok(())
 }
 

@@ -65,7 +65,10 @@ fn run() {
     core::cli::println(__inline_string_concat_7: {
         let a: String = move "Length: ";
         let b: String = move "i32::to_string"(__inline_Container_i32___len_6: {
-            break __inline_Container_i32___len_6: "Array<i32>::len"(&container.items);
+            break __inline_Container_i32___len_6: __inline_Array_i32___len_0: {
+                let self: &Array<i32> = &container.items;
+                break __inline_Array_i32___len_0: self.used;
+            };
         });
         let len_a: i32 = "String::len"(&a);
         let len_b: i32 = "String::len"(&b);
@@ -84,7 +87,10 @@ fn run() {
     core::cli::println(__inline_string_concat_9: {
         let a: String = move "First: ";
         let b: String = move "i32::to_string"(__inline_Container_i32___get_8: {
-            break __inline_Container_i32___get_8: "Array<i32>^IndexValue::index_value"(&container.items, 0);
+            break __inline_Container_i32___get_8: __inline_Array_i32__IndexValue__index_value_1: {
+                let self: &Array<i32> = &container.items;
+                break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(self.repr, 0);
+            };
         });
         let len_a: i32 = "String::len"(&a);
         let len_b: i32 = "String::len"(&b);
@@ -103,7 +109,10 @@ fn run() {
     core::cli::println(__inline_string_concat_11: {
         let a: String = move "Second: ";
         let b: String = move "i32::to_string"(__inline_Container_i32___get_10: {
-            break __inline_Container_i32___get_10: "Array<i32>^IndexValue::index_value"(&container.items, 1);
+            break __inline_Container_i32___get_10: __inline_Array_i32__IndexValue__index_value_2: {
+                let self: &Array<i32> = &container.items;
+                break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(self.repr, 1);
+            };
         });
         let len_a: i32 = "String::len"(&a);
         let len_b: i32 = "String::len"(&b);
@@ -122,7 +131,10 @@ fn run() {
     core::cli::println(__inline_string_concat_13: {
         let a: String = move "Third: ";
         let b: String = move "i32::to_string"(__inline_Container_i32___get_12: {
-            break __inline_Container_i32___get_12: "Array<i32>^IndexValue::index_value"(&container.items, 2);
+            break __inline_Container_i32___get_12: __inline_Array_i32__IndexValue__index_value_3: {
+                let self: &Array<i32> = &container.items;
+                break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(self.repr, 2);
+            };
         });
         let len_a: i32 = "String::len"(&a);
         let len_b: i32 = "String::len"(&b);
@@ -138,14 +150,6 @@ fn run() {
         }
         break __inline_string_concat_13: result;
     });
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    return core::builtin::array_get::<i32>(self.repr, index);
-}
-
-pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
-    return self.used;
 }
 
 fn "Container<i32>::new"() -> Container<i32> {

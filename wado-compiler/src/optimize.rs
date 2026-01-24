@@ -114,49 +114,71 @@ impl CanonBuiltin {
 }
 
 /// Optimization level for the compiler.
+///
+/// The levels are designed for different use cases:
+/// - O0: Debugging - no optimizations
+/// - O1: Development - fast compilation, all optimizations except DCE
+/// - O2: Production - full optimizations with moderate iteration count
+/// - O3: Production - full optimizations with aggressive iteration count
+/// - Os: Frontend - O2 + name section stripping for smaller binaries
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimizations. Used for debugging.
     #[default]
-    None,
-    /// Baseline optimizations including DCE. Intended for development.
-    Basic,
-    /// All optimizations including inlining, decomposition, etc. (TBD).
-    /// Intended for production (server-side).
-    Full,
-    /// Full optimizations plus name section stripping. Intended for frontend.
-    Size,
+    O0,
+    /// Development optimizations. All passes except DCE.
+    /// Keeps dead code for debugging while improving runtime performance.
+    O1,
+    /// Production optimizations. All passes including DCE.
+    /// Fixed-point iteration count: 2.
+    O2,
+    /// Aggressive production optimizations. All passes including DCE.
+    /// Fixed-point iteration count: 10.
+    O3,
+    /// Size optimizations. Same as O2 plus name section stripping.
+    /// Intended for frontend/browser deployment.
+    Os,
 }
 
 /// Optimize a Project by analyzing and populating its usage fields.
 ///
 /// This is the main entry point for the optimizer. Based on the optimization
-/// level, it either performs DCE analysis or enables all features.
+/// level, it applies different optimization strategies:
+///
+/// - O0: No optimizations, just populate all features for codegen
+/// - O1: All optimizations except DCE (keeps dead code for debugging)
+/// - O2: Full optimizations including DCE, 2 fixed-point iterations
+/// - O3: Full optimizations including DCE, 10 fixed-point iterations
+/// - Os: Same as O2 plus name section stripping
 pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     match opt_level {
-        OptLevel::None => {
+        OptLevel::O0 => {
+            // No optimizations - just enable all features for codegen
             populate_all_features(&mut project);
         }
-        OptLevel::Basic => {
-            analyze_project(&mut project);
-            remove_unreachable_functions(&mut project);
+        OptLevel::O1 => {
+            // Development mode: all optimizations except DCE
+            // This keeps dead code visible for debugging while improving runtime
+            run_optimization_passes(&mut project, 2, false);
+            // Still need to populate features without removing unreachable code
+            populate_all_features(&mut project);
         }
-        OptLevel::Full => {
-            inline_functions(&mut project);
-            eliminate_unnecessary_refs(&mut project);
-            propagate_copies(&mut project);
-            apply_licm(&mut project);
+        OptLevel::O2 | OptLevel::Os => {
+            // Production mode: full optimizations with DCE
+            run_optimization_passes(&mut project, 2, true);
+            // DCE: analyze and remove unreachable functions
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
+            if opt_level == OptLevel::Os {
+                project.strip_names = true;
+            }
         }
-        OptLevel::Size => {
-            inline_functions(&mut project);
-            eliminate_unnecessary_refs(&mut project);
-            propagate_copies(&mut project);
-            apply_licm(&mut project);
+        OptLevel::O3 => {
+            // Aggressive production mode: more fixed-point iterations
+            run_optimization_passes(&mut project, 10, true);
+            // DCE: analyze and remove unreachable functions
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
-            project.strip_names = true;
         }
     }
 
@@ -169,4 +191,23 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     collect_value_copy_types(&mut project);
 
     project
+}
+
+/// Run optimization passes with a fixed-point iteration strategy.
+///
+/// Each iteration runs the full optimization pipeline:
+/// - Function inlining
+/// - Reference elimination
+/// - Copy propagation
+/// - Loop-invariant code motion (LICM)
+///
+/// The `max_iterations` parameter controls how many times to run the pipeline.
+/// More iterations can find more optimization opportunities but take longer.
+fn run_optimization_passes(project: &mut Project, max_iterations: u32, _with_dce: bool) {
+    for _ in 0..max_iterations {
+        inline_functions(project);
+        eliminate_unnecessary_refs(project);
+        propagate_copies(project);
+        apply_licm(project);
+    }
 }
