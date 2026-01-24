@@ -2757,7 +2757,6 @@ impl Monomorphizer {
                 args,
             } => {
                 let func_name = func.name();
-                let module_source = func.module_source();
                 // If this is a generic call, rewrite to monomorphized name
                 if !type_args.is_empty() {
                     let key = InstantiationKey {
@@ -2767,8 +2766,11 @@ impl Monomorphizer {
                     if let Some(mangled) = self.function_instantiated.get(&key) {
                         // Preserve original method_info
                         let original_method_info = func.method_info();
+                        // Use EntryPoint module source since monomorphized functions are
+                        // generated in the current (calling) module, not the original
+                        // module where the generic function was defined.
                         *func = FunctionRef::External {
-                            module_source,
+                            module_source: ModuleSource::EntryPoint { filename: None },
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: func_name,
@@ -2776,6 +2778,16 @@ impl Monomorphizer {
                             }),
                             method_info: original_method_info,
                         };
+
+                        // Update the expression's type_id if it's a type parameter
+                        // This handles cross-module generic function calls where
+                        // the return type needs to be substituted
+                        if let ResolvedType::TypeParam { index, .. } = type_table.get(expr.type_id)
+                            && let Some(&concrete) = key.type_args.get(*index as usize)
+                        {
+                            expr.type_id = concrete;
+                        }
+
                         type_args.clear(); // Clear type args - now using concrete function
                     }
                 }

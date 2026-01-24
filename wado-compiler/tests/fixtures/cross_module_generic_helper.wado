@@ -1,0 +1,19 @@
+// Helper module with generic function for cross-module monomorphization test
+use {println, Stdout} from "core:cli";
+
+pub fn identity<T>(value: T) -> T {
+    return value;
+}
+
+pub fn make_pair<T, U>(first: T, second: U) -> [T, U] {
+    return [first, second];
+}
+
+// Test the generic functions locally
+fn run() with Stdout {
+    let x = identity::<i32>(100);
+    println(`identity(100) = {x}`);
+}
+
+__DATA__
+{"stdout": "identity(100) = 100\n"}

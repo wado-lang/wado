@@ -3476,21 +3476,40 @@ impl<'a> Resolver<'a> {
 
         // Try looking up in loaded modules
         if !module_path.is_empty() {
-            // Clone the return type AST to avoid borrow issues
-            let return_type_ast = self.loaded_modules.get(module_path).and_then(|module| {
+            // Clone the return type AST and type params to avoid borrow issues
+            let func_info = self.loaded_modules.get(module_path).and_then(|module| {
                 module.items.iter().find_map(|item| {
                     if let Item::Function(func) = item
                         && func.name == func_name
                     {
-                        func.return_type.clone()
+                        Some((func.return_type.clone(), func.type_params.clone()))
                     } else {
                         None
                     }
                 })
             });
 
-            if let Some(ty) = return_type_ast {
-                return self.resolve_type(&ty);
+            if let Some((ty, type_params)) = func_info
+                && let Some(return_type_ast) = ty
+            {
+                // Set up the function's type parameters in scope so we can resolve
+                // type parameter references (like T -> TypeParam { index: 0 })
+                let old_type_params = std::mem::take(&mut self.current_type_params);
+                for (i, type_param) in type_params.iter().enumerate() {
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(type_param.name.clone(), i as u32);
+                    self.current_type_params
+                        .insert(type_param.name.clone(), (i as u32, type_id));
+                }
+
+                let resolved = self.resolve_type(&return_type_ast);
+
+                // Restore previous type params
+                self.current_type_params = old_type_params;
+
+                return resolved;
             }
         }
 
