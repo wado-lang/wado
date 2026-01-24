@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process;
 
 use lexopt::Arg::{Long, Short, Value};
+use wado_compiler::LogLevel;
 
 use crate::args::{
     next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
@@ -57,6 +58,7 @@ pub struct CompileOptions {
     pub format: Option<OutputFormat>,
     pub opt_level: OptLevel,
     pub wat_to_stdout: bool,
+    pub log_level: LogLevel,
 }
 
 pub fn print_usage() {
@@ -69,7 +71,20 @@ pub fn print_usage() {
         "  --wat-to-stdout  Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
     );
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
+    eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
     eprintln!("  --help           Show this help message");
+}
+
+/// Parse log level from string
+fn parse_log_level(s: &str) -> Option<LogLevel> {
+    match s.to_lowercase().as_str() {
+        "debug" => Some(LogLevel::Debug),
+        "info" => Some(LogLevel::Info),
+        "warn" | "warning" => Some(LogLevel::Warn),
+        "error" => Some(LogLevel::Error),
+        "off" | "none" => Some(LogLevel::Off),
+        _ => None,
+    }
 }
 
 pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
@@ -78,6 +93,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut input: Option<String> = None;
     let mut opt_level = OptLevel::default();
     let mut wat_to_stdout = false;
+    let mut log_level = LogLevel::default();
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -120,6 +136,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
                     process::exit(1);
                 }
             }
+            Long("log-level") => {
+                let level_str = require_string(&mut parser);
+                if let Some(level) = parse_log_level(&level_str) {
+                    log_level = level;
+                } else {
+                    eprintln!(
+                        "Error: unknown log level '{level_str}'. Use debug, info, warn, error, or off"
+                    );
+                    process::exit(1);
+                }
+            }
             Value(val) => {
                 reject_multiple_inputs(&input);
                 input = Some(val.to_string_lossy().into_owned());
@@ -134,6 +161,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
         format,
         opt_level,
         wat_to_stdout,
+        log_level,
     }
 }
 
@@ -149,11 +177,11 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
 
 /// Compile a Wado source file and return the Wasm binary
 pub async fn compile(filename: &str) -> Vec<u8> {
-    compile_with_opts(filename, OptLevel::default()).await
+    compile_with_opts(filename, OptLevel::default(), LogLevel::default()).await
 }
 
 /// Compile a Wado source file with optimization options
-pub async fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
+pub async fn compile_with_opts(filename: &str, opt_level: OptLevel, log_level: LogLevel) -> Vec<u8> {
     let path = Path::new(filename);
 
     // Read source file
@@ -170,7 +198,7 @@ pub async fn compile_with_opts(filename: &str, opt_level: OptLevel) -> Vec<u8> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::new(base_path);
+    let host = FilesystemCompilerHost::with_log_level(base_path, log_level);
 
     // Compile using async API
     let compiler_opt_level = to_compiler_opt_level(opt_level);
@@ -201,7 +229,7 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 }
 
 pub async fn run(opts: CompileOptions) {
-    let wasm = compile_with_opts(&opts.input, opts.opt_level).await;
+    let wasm = compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {

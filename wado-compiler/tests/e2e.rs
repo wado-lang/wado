@@ -51,14 +51,8 @@ impl CompilerHost for TestCompilerHost {
         }
     }
 
-    fn emit_diagnostic(
-        &self,
-        diagnostic: wado_compiler::Diagnostic,
-    ) -> impl std::future::Future<Output = ()> + Send {
-        let diagnostics = &self.diagnostics;
-        async move {
-            diagnostics.lock().unwrap().push(diagnostic);
-        }
+    fn emit_diagnostic(&self, diagnostic: wado_compiler::Diagnostic) {
+        self.diagnostics.lock().unwrap().push(diagnostic);
     }
 }
 

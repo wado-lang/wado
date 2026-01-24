@@ -80,6 +80,7 @@ pub mod component_model;
 pub mod desugar;
 pub mod lexer;
 pub mod loader;
+pub mod logger;
 pub mod lower;
 pub mod name;
 pub mod optimize;
@@ -106,8 +107,9 @@ pub use analyze::Analyzer;
 pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
 pub use compiler_host::{
-    CompilerHost, Diagnostic, DiagnosticSpan, ErrorCode, Severity, SourceError,
+    Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SourceError,
 };
+pub use logger::Logger;
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;

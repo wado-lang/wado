@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{Item, Module};
-use crate::compiler_host::{CompilerHost, Diagnostic, ErrorCode, Severity, SourceError};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, Severity, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
 use crate::name::{ModuleSource, normalize_module_path, resolve_module_path};
@@ -243,13 +243,12 @@ impl ModuleLoader {
                             {
                                 host.emit_diagnostic(Diagnostic {
                                     severity: Severity::Warning,
-                                    code: ErrorCode::ModuleParseError,
+                                    code: Code::ModuleParseError,
                                     message: format!(
                                         "failed to collect imports from implicit module: {e}"
                                     ),
                                     span: None,
-                                })
-                                .await;
+                                });
                                 continue;
                             }
 
@@ -289,22 +288,20 @@ impl ModuleLoader {
                         Err(e) => {
                             host.emit_diagnostic(Diagnostic {
                                 severity: Severity::Warning,
-                                code: ErrorCode::ModuleParseError,
+                                code: Code::ModuleParseError,
                                 message: format!("failed to parse implicit module: {e}"),
                                 span: None,
-                            })
-                            .await;
+                            });
                         }
                     }
                 }
                 Err(e) => {
                     host.emit_diagnostic(Diagnostic {
                         severity: Severity::Warning,
-                        code: ErrorCode::ModuleNotFound,
+                        code: Code::ModuleNotFound,
                         message: format!("failed to load implicit module: {e}"),
                         span: None,
-                    })
-                    .await;
+                    });
                 }
             }
         }

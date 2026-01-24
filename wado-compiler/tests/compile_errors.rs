@@ -23,12 +23,7 @@ impl CompilerHost for InMemoryTestHost {
         async move { Err(SourceError::NotFound { path }) }
     }
 
-    fn emit_diagnostic(
-        &self,
-        _diagnostic: Diagnostic,
-    ) -> impl std::future::Future<Output = ()> + Send {
-        async {}
-    }
+    fn emit_diagnostic(&self, _diagnostic: Diagnostic) {}
 }
 
 /// Filesystem compiler host for file-based tests
@@ -60,14 +55,8 @@ impl CompilerHost for FilesystemTestHost {
         }
     }
 
-    fn emit_diagnostic(
-        &self,
-        diagnostic: Diagnostic,
-    ) -> impl std::future::Future<Output = ()> + Send {
-        let diagnostics = &self.diagnostics;
-        async move {
-            diagnostics.lock().unwrap().push(diagnostic);
-        }
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        self.diagnostics.lock().unwrap().push(diagnostic);
     }
 }
 
