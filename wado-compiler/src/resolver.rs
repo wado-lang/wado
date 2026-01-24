@@ -1477,7 +1477,7 @@ impl<'a> Resolver<'a> {
         })
     }
 
-    /// Resolve a test declaration to a TirFunction and TirTest
+    /// Resolve a test declaration to a `TirFunction` and `TirTest`
     fn resolve_test_decl(
         &mut self,
         test_decl: &ast::TestDecl,

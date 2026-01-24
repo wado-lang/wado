@@ -1355,12 +1355,12 @@ pub struct TirTypeAlias {
 }
 
 /// Test declaration metadata
-/// The actual test code is stored as a TirFunction in the functions list.
+/// The actual test code is stored as a `TirFunction` in the functions list.
 #[derive(Debug, Clone)]
 pub struct TirTest {
     /// The original test name from source (None if unnamed)
     pub name: Option<String>,
-    /// Generated function name (e.g., "__test_0" or "__test_addition_works")
+    /// Generated function name (e.g., "__`test_0`" or "__`test_addition_works`")
     pub function_name: String,
     /// Source line number for unnamed test identification
     pub line: usize,

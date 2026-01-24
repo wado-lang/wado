@@ -222,10 +222,10 @@ impl Parser {
         };
 
         // Check for contextual keyword "test" (identifier followed by string or block)
-        if let TokenKind::Ident(name) = self.peek_kind() {
-            if name == "test" {
-                return self.parse_test_decl().map(Item::Test);
-            }
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && name == "test"
+        {
+            return self.parse_test_decl().map(Item::Test);
         }
 
         match self.peek_kind() {

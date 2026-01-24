@@ -125,10 +125,10 @@ async fn run_tests_in_module(wasm: &[u8], filter: Option<&str>) -> Result<Vec<Te
         // Component Model exports use kebab-case: test-0-simple
         if name.starts_with("test-") {
             // Apply filter if specified
-            if let Some(pattern) = filter {
-                if !name.contains(pattern) {
-                    continue;
-                }
+            if let Some(pattern) = filter
+                && !name.contains(pattern)
+            {
+                continue;
             }
             test_exports.push(name.to_string());
         }
@@ -224,7 +224,7 @@ pub async fn run(opts: TestOptions) {
     }
 
     println!();
-    println!("{} passed, {} failed", total_passed, total_failed);
+    println!("{total_passed} passed, {total_failed} failed");
 
     if total_failed > 0 {
         process::exit(1);

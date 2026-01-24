@@ -2076,12 +2076,9 @@ impl Codegen {
         // Export test functions
         for test in &entry_tir.tests {
             // Convert __test_0_simple to test-0-simple for component export (kebab-case)
-            let export_name = test
-                .function_name
-                .trim_start_matches('_')
-                .replace('_', "-");
-            let core_name = format!("{}-core", export_name);
-            let test_func_type_name = format!("{}-func-type", export_name);
+            let export_name = test.function_name.trim_start_matches('_').replace('_', "-");
+            let core_name = format!("{export_name}-core");
+            let test_func_type_name = format!("{export_name}-func-type");
 
             // Alias test function from main instance
             ctx.register_core_func(&core_name);
