@@ -205,9 +205,6 @@ struct FunctionContext {
     local_types: Vec<ValType>,
     /// Return type of the function (for `ref.as_non_null` handling)
     return_type: Option<ValType>,
-    /// When true, skip `ref.as_non_null` in local variable reads
-    /// Set when generating return expressions for functions with nullable return types
-    skip_ref_as_non_null: bool,
     /// Pending branch hint from `builtin::likely()` or `builtin::unlikely()`
     /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
     pending_branch_hint: Option<bool>,
@@ -254,7 +251,6 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
-            skip_ref_as_non_null: false,
             pending_branch_hint: None,
             branch_hints: Vec::new(),
             current_module_path: Vec::new(),
@@ -278,7 +274,6 @@ impl FunctionContext {
             next_local: param_count,
             local_types: Vec::new(),
             return_type: None,
-            skip_ref_as_non_null: false,
             pending_branch_hint: None,
             branch_hints: Vec::new(),
             current_module_path: module_path,
@@ -5663,10 +5658,9 @@ impl Codegen {
                         struct_type_index: box_type_idx,
                         field_index: 0,
                     });
-                } else if !ctx.skip_ref_as_non_null {
+                } else {
                     // For reference types, locals are nullable but we may need non-nullable
                     // Check if this is a reference type and add RefAsNonNull
-                    // Skip this when in nullable context (e.g., return from Option-returning function)
                     let val_type = self.type_id_to_valtype(type_table, expr.type_id);
                     if matches!(val_type, ValType::Ref(rt) if !rt.nullable) {
                         func.instruction(&Instruction::RefAsNonNull);
@@ -8101,16 +8095,7 @@ impl Codegen {
 
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    // If return type is nullable reference, skip ref.as_non_null conversion
-                    let is_nullable_return =
-                        matches!(ctx.return_type, Some(ValType::Ref(rt)) if rt.nullable);
-                    if is_nullable_return {
-                        ctx.skip_ref_as_non_null = true;
-                    }
                     self.generate_expr(func, expr, type_table, ctx, builder);
-                    if is_nullable_return {
-                        ctx.skip_ref_as_non_null = false;
-                    }
                 }
                 func.instruction(&Instruction::Return);
             }
