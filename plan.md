@@ -182,9 +182,10 @@ for func_info in wasi_registry.all_functions_with_convention() {
 - [x] Refactor codegen to use conventions via `generate_cm_effect_call` helper
 - [x] Remove hardcoded effect call patterns from `TirExprKind::Call` branch
 - [x] Remove hardcoded effect call patterns from `TirExprKind::EffectCall` branch
-- [ ] Refactor interface import functions (ensure_*_imported)
+- [x] Refactor interface import functions (ensure_*_imported) - resource-based interfaces done
 - [x] Refactor `canon lower` generation to be data-driven
-- [ ] Clean up unused code
+- [x] Refactor scratch local helpers to be convention-driven
+- [x] Clean up unused code
 
 ## Current Status
 
@@ -200,7 +201,7 @@ The following are now convention-driven via `generate_cm_effect_call`:
 - InsecureSeed::get_insecure_seed (tuple<u64,u64> return)
 - Terminal*::get_terminal_* (option<own<resource>> return)
 
-**Phase 2 Progress**: `canon lower` generation is now data-driven
+**Phase 2 Complete**: `canon lower` generation is now data-driven
 
 - `lower_wasi_functions()` iterates over WasiRegistry
 - Canonical options derived from `CmCallConvention`:
@@ -211,16 +212,21 @@ The following are now convention-driven via `generate_cm_effect_call`:
 - `CmCallConvention.with_async()` ensures async functions have Memory+Realloc
 - Async functions with void return skipped (not fully supported: wait_until, wait_for)
 
-**Remaining Work (deferred)**:
+**Phase 3 Complete**: Resource-based interface imports are now data-driven
 
-- Interface import functions (`ensure_stdout_imported`, etc.) - contain WASI interface type definitions
-  - These are inherently WASI-specific (defined by WASI spec)
-  - Would require parsing WIT files to make fully data-driven
-  - Low ROI for this refactoring
-- Scratch local pre-allocation helpers (`expr_needs_environment_scratch_locals`, `expr_needs_async_scratch_locals`)
-  - Optimization helpers that check if effect calls need scratch locals
-  - Already convention-driven for EffectCall, but hardcoded for Call expressions
-  - Would require TIR restructuring to make fully data-driven
+- `WasiRegistry` tracks resource types from `pub resource` declarations
+- `WasiInterfaceInfo.resource_type` contains `(wado_name, cm_name)` for interfaces with resources
+- `import_interfaces_with_resources()` iterates over registry and imports resource-based interfaces
+- `import_interface_with_resource()` is a generic function that handles any interface with a resource type
+- Removed hardcoded `ensure_terminal_stdin/stdout/stderr_imported` functions
+
+**Remaining fallback functions** (used when DCE or registry skip an interface):
+
+- `ensure_stdout_stderr_imported` - Stream writer interfaces
+- `ensure_environment_imported` - Environment interface
+- `ensure_exit_imported` - Exit interface
+
+These fallbacks exist for cases where the main registry loop skips an interface but it's still needed (e.g., panic handler needs stdout)
 
 ## Success Criteria
 
@@ -228,7 +234,8 @@ The following are now convention-driven via `generate_cm_effect_call`:
 - [x] CM ABI patterns derived from type information
 - [x] All 1020 E2E tests pass
 - [x] `canon lower` generation is data-driven (uses CmCallConvention)
-- [ ] No WASI effect/function name strings in CM generation (Phase 2) - partial: main codegen is clean, optimization helpers remain
+- [x] Scratch local pre-allocation is convention-driven (uses registry lookup)
+- [x] Resource-based interface imports are data-driven (uses `resource_type` from registry)
 
 ## Testing
 

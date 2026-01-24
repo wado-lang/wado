@@ -925,6 +925,7 @@ fn analyze_expr(
             effect_name,
             op_name,
             args,
+            ..
         } => {
             // Track effect usage for WASI import DCE
             analysis

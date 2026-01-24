@@ -2529,6 +2529,7 @@ impl<'a> TirUnparser<'a> {
                 effect_name,
                 op_name,
                 args,
+                ..
             } => {
                 self.output.push_str(effect_name);
                 self.output.push_str("::");

@@ -13,6 +13,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::component_model::CmCallConvention;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::token::Span;
 
@@ -906,6 +907,11 @@ pub enum TirExprKind {
         effect_name: String,
         op_name: String,
         args: Vec<TirExpr>,
+        /// Component Model call convention (if this is a CM effect call)
+        /// Contains all ABI information for codegen - no WASI-specific knowledge needed
+        cm_convention: Option<CmCallConvention>,
+        /// Full local alias name for CM call (e.g., "`wasi:cli/Environment::get_arguments`")
+        cm_local_name: Option<String>,
     },
     MethodCall {
         receiver: Box<TirExpr>,
