@@ -80,6 +80,7 @@ pub mod component_model;
 pub mod desugar;
 pub mod lexer;
 pub mod loader;
+pub mod logger;
 pub mod lower;
 pub mod name;
 pub mod optimize;
@@ -106,8 +107,9 @@ pub use analyze::Analyzer;
 pub use bind::{BindError, Binder};
 pub use codegen::Codegen;
 pub use compiler_host::{
-    CompilerHost, Diagnostic, DiagnosticSpan, ErrorCode, Severity, SourceError,
+    Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SourceError,
 };
+pub use logger::Logger;
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
@@ -220,9 +222,9 @@ pub async fn compile_with_host<H: CompilerHost>(
 
     // === Phase 4: Load all modules upfront ===
     let load_result = {
-        let module_loader = loader::ModuleLoader::new();
+        let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
-            .load_all(source, filename.as_deref(), host)
+            .load_all(source, filename.as_deref())
             .await
             .map_err(|e| CompileError::Analyzer {
                 message: e.to_string(),
@@ -377,9 +379,9 @@ pub async fn dump_with_host<H: CompilerHost>(
 
     // === Phase 5: Load all modules ===
     let load_result = {
-        let module_loader = loader::ModuleLoader::new();
+        let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
-            .load_all(source, filename.as_deref(), host)
+            .load_all(source, filename.as_deref())
             .await
             .map_err(|e| CompileError::Analyzer {
                 message: e.to_string(),

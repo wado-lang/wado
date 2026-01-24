@@ -5,13 +5,14 @@
 
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Instant;
 
-use wado_compiler::{CompilerHost, Diagnostic, Severity, SourceError};
+use wado_compiler::{Code, CompilerHost, Diagnostic, LogLevel, Severity, SourceError};
 
 /// Filesystem-based compiler host
 ///
 /// This is the standard host used by the CLI. It loads sources from the filesystem
-/// and prints diagnostics to stderr.
+/// and prints diagnostics to stderr with optional timestamps for phase tracking.
 #[derive(Debug)]
 pub struct FilesystemCompilerHost {
     /// Base path for resolving relative imports
@@ -20,6 +21,10 @@ pub struct FilesystemCompilerHost {
     diagnostics: Mutex<Vec<Diagnostic>>,
     /// Whether to print diagnostics to stderr
     print_diagnostics: bool,
+    /// Log level for filtering output
+    log_level: LogLevel,
+    /// Start time for timestamp calculation
+    start_time: Instant,
 }
 
 impl FilesystemCompilerHost {
@@ -30,6 +35,8 @@ impl FilesystemCompilerHost {
             base_path,
             diagnostics: Mutex::new(Vec::new()),
             print_diagnostics: true,
+            log_level: LogLevel::Info,
+            start_time: Instant::now(),
         }
     }
 
@@ -40,6 +47,20 @@ impl FilesystemCompilerHost {
             base_path,
             diagnostics: Mutex::new(Vec::new()),
             print_diagnostics: false,
+            log_level: LogLevel::Off,
+            start_time: Instant::now(),
+        }
+    }
+
+    /// Create a host with a specific log level
+    #[must_use]
+    pub fn with_log_level(base_path: PathBuf, log_level: LogLevel) -> Self {
+        Self {
+            base_path,
+            diagnostics: Mutex::new(Vec::new()),
+            print_diagnostics: true,
+            log_level,
+            start_time: Instant::now(),
         }
     }
 
@@ -61,6 +82,52 @@ impl FilesystemCompilerHost {
     pub fn base_path(&self) -> &PathBuf {
         &self.base_path
     }
+
+    /// Check if the given severity should be logged at the current level
+    fn should_log(&self, severity: Severity) -> bool {
+        match self.log_level {
+            LogLevel::Off => false,
+            LogLevel::Error => severity == Severity::Error,
+            LogLevel::Warn => matches!(severity, Severity::Error | Severity::Warning),
+            LogLevel::Info => {
+                matches!(
+                    severity,
+                    Severity::Error | Severity::Warning | Severity::Info
+                )
+            }
+            LogLevel::Debug => true,
+        }
+    }
+
+    /// Format diagnostic with timestamp for span tracking
+    ///
+    /// Time tracking is done here in the CLI to keep the compiler syscall-free.
+    fn format_diagnostic(&self, diagnostic: &Diagnostic) -> String {
+        let elapsed = self.start_time.elapsed();
+        let timestamp = format!("[{:>6.3}s]", elapsed.as_secs_f64());
+
+        match diagnostic.code {
+            Code::SpanStart => {
+                format!("{timestamp} >> {}", diagnostic.message)
+            }
+            Code::SpanEnd => {
+                format!("{timestamp} << {}", diagnostic.message)
+            }
+            _ => {
+                if let Some(span) = &diagnostic.span {
+                    format!(
+                        "{timestamp} {}:{}:{}: {}: {}",
+                        span.file, span.line, span.column, diagnostic.severity, diagnostic.message
+                    )
+                } else {
+                    format!(
+                        "{timestamp} {}: {}",
+                        diagnostic.severity, diagnostic.message
+                    )
+                }
+            }
+        }
+    }
 }
 
 impl CompilerHost for FilesystemCompilerHost {
@@ -72,10 +139,14 @@ impl CompilerHost for FilesystemCompilerHost {
         })
     }
 
-    async fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        if self.print_diagnostics {
-            eprintln!("{diagnostic}");
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        // Always collect diagnostics (for errors check)
+        self.diagnostics.lock().unwrap().push(diagnostic.clone());
+
+        // Print if enabled and severity passes the log level filter
+        if self.print_diagnostics && self.should_log(diagnostic.severity) {
+            let formatted = self.format_diagnostic(&diagnostic);
+            eprintln!("{formatted}");
         }
-        self.diagnostics.lock().unwrap().push(diagnostic);
     }
 }

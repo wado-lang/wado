@@ -6,9 +6,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{Item, Module};
-use crate::compiler_host::{CompilerHost, Diagnostic, ErrorCode, Severity, SourceError};
+use crate::compiler_host::{Code, CompilerHost, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
+use crate::logger::Logger;
 use crate::name::{ModuleSource, normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
 use crate::stdlib;
@@ -97,11 +98,17 @@ pub struct LoadResult {
     pub implicit_modules: HashSet<ModuleSource>,
 }
 
+use crate::compiler_host::LogLevel;
+
 /// Module loader
 ///
 /// Loads all modules upfront before analysis and codegen.
 /// Uses a `CompilerHost` for I/O operations.
-pub struct ModuleLoader {
+pub struct ModuleLoader<'a, H: CompilerHost> {
+    /// Host for I/O operations
+    host: &'a H,
+    /// Log level for filtering messages
+    log_level: LogLevel,
     /// Cache of already parsed modules
     loaded: HashMap<ModuleSource, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
@@ -110,17 +117,24 @@ pub struct ModuleLoader {
     implicit_modules: HashSet<ModuleSource>,
 }
 
-impl ModuleLoader {
-    /// Create a new module loader
-    pub fn new() -> Self {
+impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
+    /// Create a new module loader with the given host and log level
+    pub fn new(host: &'a H, log_level: LogLevel) -> Self {
         Self {
+            host,
+            log_level,
             loaded: HashMap::new(),
             loading: HashSet::new(),
             implicit_modules: HashSet::new(),
         }
     }
 
-    /// Load all modules starting from the entry source using a `CompilerHost`
+    /// Create a logger for emitting diagnostics
+    fn logger(&self) -> Logger<'_, H> {
+        Logger::new(self.host, self.log_level)
+    }
+
+    /// Load all modules starting from the entry source
     ///
     /// This loads the entry module and all its transitive dependencies.
     /// It also loads implicit modules (core:prelude, core:internal, core:builtin).
@@ -128,13 +142,13 @@ impl ModuleLoader {
     /// # Arguments
     /// * `entry_source` - Source code of the entry module
     /// * `entry_filename` - Optional filename of the entry module (for error messages)
-    /// * `host` - `CompilerHost` for loading user modules and emitting diagnostics
-    pub async fn load_all<H: CompilerHost>(
+    pub async fn load_all(
         mut self,
         entry_source: &str,
         entry_filename: Option<&str>,
-        host: &H,
     ) -> Result<LoadResult, LoadError> {
+        self.logger().span_start("load");
+
         // Parse entry module
         let entry_module_source = if let Some(filename) = entry_filename {
             ModuleSource::entry_point_with_filename(filename)
@@ -168,9 +182,7 @@ impl ModuleLoader {
             self.loading.insert(module_source.clone());
 
             // Load and parse the module
-            let source = self
-                .get_source_with_host(&module_source, &from_module_source, host)
-                .await?;
+            let source = self.get_source(&module_source, &from_module_source).await?;
             let module = self.parse_source(&source, &module_source)?;
 
             // Collect its imports
@@ -183,7 +195,9 @@ impl ModuleLoader {
         }
 
         // Load implicit modules (for compiler-generated code)
-        self.load_implicit_modules(host).await?;
+        self.load_implicit_modules().await?;
+
+        self.logger().span_end("load");
 
         Ok(LoadResult {
             modules: self.loaded,
@@ -209,7 +223,7 @@ impl ModuleLoader {
     }
 
     /// Load implicit modules required by the compiler
-    async fn load_implicit_modules<H: CompilerHost>(&mut self, host: &H) -> Result<(), LoadError> {
+    async fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
         let implicit_module_sources = [
             ModuleSource::Core {
                 name: "prelude".to_string(),
@@ -229,7 +243,7 @@ impl ModuleLoader {
 
             // Try to load - errors are warnings for implicit modules
             match self
-                .get_source_with_host(&module_source, &ModuleSource::entry_point(), host)
+                .get_source(&module_source, &ModuleSource::entry_point())
                 .await
             {
                 Ok(source) => {
@@ -241,15 +255,10 @@ impl ModuleLoader {
                             if let Err(e) =
                                 self.collect_imports(&module, &module_source, &mut pending)
                             {
-                                host.emit_diagnostic(Diagnostic {
-                                    severity: Severity::Warning,
-                                    code: ErrorCode::ModuleParseError,
-                                    message: format!(
-                                        "failed to collect imports from implicit module: {e}"
-                                    ),
-                                    span: None,
-                                })
-                                .await;
+                                self.logger().warn(
+                                    Code::ModuleParseError,
+                                    format!("failed to collect imports from implicit module: {e}"),
+                                );
                                 continue;
                             }
 
@@ -261,11 +270,7 @@ impl ModuleLoader {
                                     continue;
                                 }
                                 if let Ok(dep_source) = self
-                                    .get_source_with_host(
-                                        &dep_module_source,
-                                        &from_module_source,
-                                        host,
-                                    )
+                                    .get_source(&dep_module_source, &from_module_source)
                                     .await
                                     && let Ok(dep_module) =
                                         self.parse_source(&dep_source, &dep_module_source)
@@ -287,24 +292,18 @@ impl ModuleLoader {
                             self.implicit_modules.insert(module_source);
                         }
                         Err(e) => {
-                            host.emit_diagnostic(Diagnostic {
-                                severity: Severity::Warning,
-                                code: ErrorCode::ModuleParseError,
-                                message: format!("failed to parse implicit module: {e}"),
-                                span: None,
-                            })
-                            .await;
+                            self.logger().warn(
+                                Code::ModuleParseError,
+                                format!("failed to parse implicit module: {e}"),
+                            );
                         }
                     }
                 }
                 Err(e) => {
-                    host.emit_diagnostic(Diagnostic {
-                        severity: Severity::Warning,
-                        code: ErrorCode::ModuleNotFound,
-                        message: format!("failed to load implicit module: {e}"),
-                        span: None,
-                    })
-                    .await;
+                    self.logger().warn(
+                        Code::ModuleNotFound,
+                        format!("failed to load implicit module: {e}"),
+                    );
                 }
             }
         }
@@ -374,16 +373,19 @@ impl ModuleLoader {
         })
     }
 
-    /// Get source code for a module using `CompilerHost`
-    async fn get_source_with_host<H: CompilerHost>(
+    /// Get source code for a module
+    async fn get_source(
         &self,
         module_source: &ModuleSource,
         _from_module_source: &ModuleSource,
-        host: &H,
     ) -> Result<String, LoadError> {
         match module_source {
-            ModuleSource::Local { path } => host.load_source(path).await.map_err(LoadError::from),
-            ModuleSource::Remote { url } => host.load_source(url).await.map_err(LoadError::from),
+            ModuleSource::Local { path } => {
+                self.host.load_source(path).await.map_err(LoadError::from)
+            }
+            ModuleSource::Remote { url } => {
+                self.host.load_source(url).await.map_err(LoadError::from)
+            }
             ModuleSource::Core { name } => {
                 let import_path = format!("core:{name}");
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
@@ -437,11 +439,5 @@ impl ModuleLoader {
                 e.span.line, e.span.column, e.message
             ),
         })
-    }
-}
-
-impl Default for ModuleLoader {
-    fn default() -> Self {
-        Self::new()
     }
 }

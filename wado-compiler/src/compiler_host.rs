@@ -12,6 +12,22 @@ use std::future::Future;
 
 use crate::token::Span;
 
+/// Log level for filtering diagnostics and log messages
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum LogLevel {
+    /// Show all messages including debug
+    Debug,
+    /// Show info, warnings, and errors
+    #[default]
+    Info,
+    /// Show only warnings and errors
+    Warn,
+    /// Show only errors
+    Error,
+    /// Show nothing
+    Off,
+}
+
 /// Severity level for diagnostics
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
@@ -36,12 +52,12 @@ impl std::fmt::Display for Severity {
     }
 }
 
-/// Error code for diagnostics
+/// Diagnostic code for categorizing messages
 ///
-/// Named error codes without payloads for clear categorization.
-/// The actual error details go in the `Diagnostic::message` field.
+/// Named codes without payloads for clear categorization.
+/// The actual details go in the `Diagnostic::message` field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorCode {
+pub enum Code {
     // Lexer errors
     /// Invalid character in source
     InvalidCharacter,
@@ -93,30 +109,43 @@ pub enum ErrorCode {
     CodegenError,
     /// Unsupported feature
     UnsupportedFeature,
+
+    // Span tracking codes (for logging/profiling)
+    /// Start of a span (phase, operation, etc.)
+    SpanStart,
+    /// End of a span (phase, operation, etc.)
+    SpanEnd,
+
+    // General logging
+    /// Generic log message (info, debug, etc.)
+    Log,
 }
 
-impl std::fmt::Display for ErrorCode {
+impl std::fmt::Display for Code {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
-            ErrorCode::InvalidCharacter => "INVALID_CHARACTER",
-            ErrorCode::UnterminatedString => "UNTERMINATED_STRING",
-            ErrorCode::InvalidEscape => "INVALID_ESCAPE",
-            ErrorCode::UnexpectedToken => "UNEXPECTED_TOKEN",
-            ErrorCode::ExpectedToken => "EXPECTED_TOKEN",
-            ErrorCode::InvalidSyntax => "INVALID_SYNTAX",
-            ErrorCode::UndefinedVariable => "UNDEFINED_VARIABLE",
-            ErrorCode::DuplicateDefinition => "DUPLICATE_DEFINITION",
-            ErrorCode::ImmutableAssignment => "IMMUTABLE_ASSIGNMENT",
-            ErrorCode::TypeMismatch => "TYPE_MISMATCH",
-            ErrorCode::UnknownType => "UNKNOWN_TYPE",
-            ErrorCode::InvalidCast => "INVALID_CAST",
-            ErrorCode::ModuleNotFound => "MODULE_NOT_FOUND",
-            ErrorCode::CircularDependency => "CIRCULAR_DEPENDENCY",
-            ErrorCode::ModuleParseError => "MODULE_PARSE_ERROR",
-            ErrorCode::FileReadError => "FILE_READ_ERROR",
-            ErrorCode::NetworkError => "NETWORK_ERROR",
-            ErrorCode::CodegenError => "CODEGEN_ERROR",
-            ErrorCode::UnsupportedFeature => "UNSUPPORTED_FEATURE",
+            Code::InvalidCharacter => "INVALID_CHARACTER",
+            Code::UnterminatedString => "UNTERMINATED_STRING",
+            Code::InvalidEscape => "INVALID_ESCAPE",
+            Code::UnexpectedToken => "UNEXPECTED_TOKEN",
+            Code::ExpectedToken => "EXPECTED_TOKEN",
+            Code::InvalidSyntax => "INVALID_SYNTAX",
+            Code::UndefinedVariable => "UNDEFINED_VARIABLE",
+            Code::DuplicateDefinition => "DUPLICATE_DEFINITION",
+            Code::ImmutableAssignment => "IMMUTABLE_ASSIGNMENT",
+            Code::TypeMismatch => "TYPE_MISMATCH",
+            Code::UnknownType => "UNKNOWN_TYPE",
+            Code::InvalidCast => "INVALID_CAST",
+            Code::ModuleNotFound => "MODULE_NOT_FOUND",
+            Code::CircularDependency => "CIRCULAR_DEPENDENCY",
+            Code::ModuleParseError => "MODULE_PARSE_ERROR",
+            Code::FileReadError => "FILE_READ_ERROR",
+            Code::NetworkError => "NETWORK_ERROR",
+            Code::CodegenError => "CODEGEN_ERROR",
+            Code::UnsupportedFeature => "UNSUPPORTED_FEATURE",
+            Code::SpanStart => "SPAN_START",
+            Code::SpanEnd => "SPAN_END",
+            Code::Log => "LOG",
         };
         write!(f, "{name}")
     }
@@ -127,8 +156,8 @@ impl std::fmt::Display for ErrorCode {
 pub struct Diagnostic {
     /// Severity level
     pub severity: Severity,
-    /// Error code categorizing the diagnostic
-    pub code: ErrorCode,
+    /// Code categorizing the diagnostic
+    pub code: Code,
     /// Human-readable message
     pub message: String,
     /// Source location (if available)
@@ -226,7 +255,7 @@ impl std::error::Error for SourceError {}
 ///         // Load source from custom storage
 ///     }
 ///
-///     async fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+///     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
 ///         // Handle diagnostic (print, collect, send to UI, etc.)
 ///     }
 /// }
@@ -248,9 +277,10 @@ pub trait CompilerHost: Send + Sync {
 
     /// Emit a diagnostic (error, warning, etc.)
     ///
-    /// This method is called by the compiler whenever a diagnostic needs to be reported.
-    /// Implementations can print to stderr, collect into a list, send to an LSP client, etc.
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) -> impl Future<Output = ()> + Send;
+    /// This method is called synchronously by the compiler whenever a diagnostic
+    /// needs to be reported. Implementations can print to stderr, collect into
+    /// a list, send to an LSP client, etc.
+    fn emit_diagnostic(&self, diagnostic: Diagnostic);
 }
 
 /// A simple in-memory compiler host for testing
@@ -305,7 +335,7 @@ impl CompilerHost for InMemoryCompilerHost {
             })
     }
 
-    async fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         self.diagnostics.lock().unwrap().push(diagnostic);
     }
 }
@@ -333,7 +363,7 @@ mod tests {
     fn test_diagnostic_display() {
         let diag = Diagnostic {
             severity: Severity::Error,
-            code: ErrorCode::UnexpectedToken,
+            code: Code::UnexpectedToken,
             message: "expected ';' but found '}'".to_string(),
             span: Some(DiagnosticSpan {
                 file: "test.wado".to_string(),
