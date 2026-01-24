@@ -935,6 +935,40 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
     normalize_module_path(&joined)
 }
 
+/// Resolve an import source to a module path (Vec<String> format).
+///
+/// This is used by the analyzer to resolve import paths to module identifiers.
+///
+/// # Arguments
+/// * `from_module` - The path of the importing module (e.g., `["./sub/main.wado"]`)
+/// * `import_source` - The import source string (e.g., `"./geometry.wado"` or `"core:cli"`)
+///
+/// # Returns
+/// The resolved module path as a Vec<String>.
+pub fn resolve_import_path(from_module: &[String], import_source: &str) -> Vec<String> {
+    // Handle special prefixes - parse into path segments
+    if let Some(name) = import_source.strip_prefix("core:") {
+        return vec!["core".to_string(), name.to_string()];
+    }
+    if let Some(interface) = import_source.strip_prefix("wasi:") {
+        return vec!["wasi".to_string(), interface.to_string()];
+    }
+    if import_source.starts_with("https://") || import_source.starts_with("http://") {
+        return vec![import_source.to_string()];
+    }
+
+    // For relative imports, resolve against the from_module path
+    if let Some(from_path) = from_module.first()
+        && (from_path.starts_with("./") || from_path.starts_with("../"))
+    {
+        let resolved = resolve_module_path(from_path, import_source);
+        return vec![resolved];
+    }
+
+    // Fallback: normalize and return as single-element path
+    vec![normalize_module_path(import_source)]
+}
+
 /// Get the canonical name for an entry point file.
 ///
 /// The entry point file gets a canonical name based on its filename,

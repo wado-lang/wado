@@ -1,13 +1,12 @@
 //! Semantic analyzer for Wado
 //!
 //! The analyzer performs:
-//! 1. Module loading and import resolution
-//! 2. Symbol table construction
+//! 1. Symbol table construction from pre-loaded modules
+//! 2. Import validation
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
-use crate::module_loader::{ModuleLoadError, ModuleResolver};
-use crate::name::validate_module_path;
+use crate::name::{resolve_import_path, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
     SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol, WorldExportSymbol, WorldImportSymbol,
@@ -18,8 +17,11 @@ use crate::token::Span;
 /// Error that can occur during analysis
 #[derive(Debug, Clone)]
 pub enum AnalyzeError {
-    /// Module resolution failed
-    ModuleLoadError(ModuleLoadError),
+    /// Module not found (not in pre-loaded modules)
+    ModuleNotFound {
+        module_path: Vec<String>,
+        span: Span,
+    },
     /// Symbol not found in module
     ImportNotFound {
         module_path: Vec<String>,
@@ -41,7 +43,15 @@ pub enum AnalyzeError {
 impl std::fmt::Display for AnalyzeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnalyzeError::ModuleLoadError(e) => write!(f, "{e}"),
+            AnalyzeError::ModuleNotFound { module_path, span } => {
+                write!(
+                    f,
+                    "{}:{}: module not found: '{}'",
+                    span.line,
+                    span.column,
+                    module_path.join("::")
+                )
+            }
             AnalyzeError::ImportNotFound {
                 module_path,
                 name,
@@ -87,20 +97,12 @@ impl std::fmt::Display for AnalyzeError {
 
 impl std::error::Error for AnalyzeError {}
 
-impl From<ModuleLoadError> for AnalyzeError {
-    fn from(e: ModuleLoadError) -> Self {
-        AnalyzeError::ModuleLoadError(e)
-    }
-}
-
 /// Semantic analyzer
 ///
-/// Builds a symbol table from modules and resolves imports.
+/// Builds a symbol table from pre-loaded modules and validates imports.
 pub struct Analyzer {
     /// The symbol table being built
     pub symbols: SymbolTable,
-    /// Module resolver for loading imported modules
-    resolver: ModuleResolver,
     /// Collected errors
     errors: Vec<AnalyzeError>,
     /// Modules loaded implicitly by the compiler (not by user imports)
@@ -112,85 +114,9 @@ impl Analyzer {
     pub fn new() -> Self {
         Self {
             symbols: SymbolTable::new(),
-            resolver: ModuleResolver::new(),
             errors: Vec::new(),
             implicit_modules: std::collections::HashSet::new(),
         }
-    }
-
-    /// Create a new analyzer with a base path for resolving local imports
-    pub fn with_base_path(base_path: &std::path::Path) -> Self {
-        Self {
-            symbols: SymbolTable::new(),
-            resolver: ModuleResolver::with_base_path(base_path),
-            errors: Vec::new(),
-            implicit_modules: std::collections::HashSet::new(),
-        }
-    }
-
-    /// Analyze a module and all its imports
-    ///
-    /// # Arguments
-    /// * `module` - The main module to analyze
-    /// * `module_path` - Path of the main module (empty for the entry point)
-    ///
-    /// # Returns
-    /// The completed symbol table, or a list of errors if analysis failed.
-    pub fn analyze(
-        &mut self,
-        module: &Module,
-        module_path: &[String],
-    ) -> Result<(), Vec<AnalyzeError>> {
-        // First pass: collect all definitions from this module
-        self.collect_definitions(module, module_path);
-
-        // Second pass: resolve imports
-        self.resolve_imports(module, module_path)?;
-
-        // Always load core:prelude for compiler-generated code (e.g., panic from assert)
-        // This module provides fundamental functions like panic.
-        self.load_implicit_module(&["core".to_string(), "prelude".to_string()]);
-
-        // Always load core:internal for compiler-generated code (e.g., template strings)
-        // This module provides internal helper functions like string_concat, f64_to_string, etc.
-        self.load_implicit_module(&["core".to_string(), "internal".to_string()]);
-
-        // Always load core:builtin for compiler intrinsic type information.
-        // This module provides type declarations for builtin:: functions.
-        self.load_implicit_module(&["core".to_string(), "builtin".to_string()]);
-
-        if self.errors.is_empty() {
-            Ok(())
-        } else {
-            Err(std::mem::take(&mut self.errors))
-        }
-    }
-
-    /// Load a module implicitly (without a user import declaration)
-    /// Used for modules like core:internal that provide compiler-generated code support.
-    /// Functions from implicit modules are only accessible via qualified names in codegen,
-    /// not via simple names from user code.
-    fn load_implicit_module(&mut self, module_path: &[String]) {
-        // Skip if already loaded (might have been explicitly imported by user)
-        if self.resolver.is_loaded(module_path) {
-            return;
-        }
-
-        // Try to load the module
-        let imported_module = match self.resolver.load_module(module_path) {
-            Ok(m) => m.clone(),
-            Err(e) => {
-                // Log but don't fail - implicit modules are optional
-                eprintln!("Warning: failed to load implicit module {module_path:?}: {e}");
-                return;
-            }
-        };
-
-        // Mark this module as implicitly loaded
-        self.implicit_modules.insert(module_path.to_vec());
-
-        // Collect definitions from the implicit module
-        self.collect_definitions(&imported_module, module_path);
     }
 
     /// Collect all definitions from a module into the symbol table
@@ -348,93 +274,8 @@ impl Analyzer {
                         .define(&world.name, kind, module_path, Some(world.span));
                 }
 
-                Item::Use(use_decl) => {
-                    // Handle pub use (re-exports)
-                    if use_decl.is_pub {
-                        // Validate the import source is a valid URI reference
-                        if let Err(message) = validate_module_path(&use_decl.source) {
-                            self.errors.push(AnalyzeError::InvalidModulePath {
-                                path: use_decl.source.clone(),
-                                message,
-                                span: use_decl.span,
-                            });
-                            continue;
-                        }
-
-                        // Resolve the source path relative to the current module
-                        let source_path =
-                            self.resolver.resolve_import(module_path, &use_decl.source);
-
-                        // Try to load the source module
-                        let source_module = match self.resolver.load_module(&source_path) {
-                            Ok(m) => m.clone(),
-                            Err(e) => {
-                                self.errors.push(AnalyzeError::ModuleLoadError(e));
-                                continue;
-                            }
-                        };
-
-                        // Collect definitions from the source module (if not already done)
-                        if self.symbols.get_module_symbols(&source_path).is_empty() {
-                            self.collect_definitions(&source_module, &source_path);
-                        }
-
-                        // Re-export each item to the current module's namespace
-                        for use_item in &use_decl.items {
-                            match use_item {
-                                UseItem::Simple { name, alias } => {
-                                    if let Some(symbol) =
-                                        self.symbols.lookup_in_module(&source_path, name)
-                                    {
-                                        // Re-register the symbol in the current module
-                                        let export_name = alias.as_ref().unwrap_or(name);
-                                        self.symbols.define(
-                                            export_name,
-                                            symbol.kind.clone(),
-                                            module_path,
-                                            symbol.span,
-                                        );
-                                    } else {
-                                        self.errors.push(AnalyzeError::ImportNotFound {
-                                            module_path: source_path.clone(),
-                                            name: name.clone(),
-                                            span: use_decl.span,
-                                        });
-                                    }
-                                }
-                                UseItem::EffectFunctions {
-                                    effect_name,
-                                    functions,
-                                } => {
-                                    // Re-export effect functions
-                                    for func_item in functions {
-                                        let lookup_name =
-                                            format!("{}::{}", effect_name, func_item.name);
-                                        if let Some(symbol) = self
-                                            .symbols
-                                            .lookup_in_module(&source_path, &lookup_name)
-                                        {
-                                            let export_name =
-                                                func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                            self.symbols.define(
-                                                export_name,
-                                                symbol.kind.clone(),
-                                                module_path,
-                                                symbol.span,
-                                            );
-                                        } else {
-                                            self.errors.push(AnalyzeError::ImportNotFound {
-                                                module_path: source_path.clone(),
-                                                name: lookup_name,
-                                                span: use_decl.span,
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Non-pub use declarations are handled in resolve_imports
+                Item::Use(_) => {
+                    // Use declarations are handled in validate_imports
                 }
 
                 Item::Impl(_) => {
@@ -446,110 +287,6 @@ impl Analyzer {
                     // They are handled by the WASI registry
                 }
             }
-        }
-    }
-
-    /// Resolve all import declarations in a module
-    ///
-    /// Handles the new ESM-like import syntax:
-    /// `use {items} from "source";`
-    ///
-    /// # Arguments
-    /// * `module` - The module containing import declarations
-    /// * `from_module_path` - Canonical path of the importing module (used for resolving relative imports)
-    fn resolve_imports(
-        &mut self,
-        module: &Module,
-        from_module_path: &[String],
-    ) -> Result<(), Vec<AnalyzeError>> {
-        for item in &module.items {
-            if let Item::Use(use_decl) = item {
-                // Validate the import source is a valid URI reference
-                if let Err(message) = validate_module_path(&use_decl.source) {
-                    self.errors.push(AnalyzeError::InvalidModulePath {
-                        path: use_decl.source.clone(),
-                        message,
-                        span: use_decl.span,
-                    });
-                    continue;
-                }
-
-                // Resolve the import source relative to the importing module
-                // This handles cases like:
-                // - "core:cli" -> ["core", "cli"]
-                // - "./geometry.wado" from "./sub/main.wado" -> ["./sub/geometry.wado"]
-                let module_path = self
-                    .resolver
-                    .resolve_import(from_module_path, &use_decl.source);
-
-                // Try to load the module
-                let imported_module = match self.resolver.load_module(&module_path) {
-                    Ok(m) => m.clone(),
-                    Err(e) => {
-                        self.errors.push(AnalyzeError::ModuleLoadError(e));
-                        continue;
-                    }
-                };
-
-                // Collect definitions from the imported module (if not already done)
-                if self.symbols.get_module_symbols(&module_path).is_empty() {
-                    self.collect_definitions(&imported_module, &module_path);
-                    // Recursively resolve imports of the imported module
-                    // This ensures transitive dependencies are loaded
-                    let _ = self.resolve_imports(&imported_module, &module_path);
-                }
-
-                // Register each imported item
-                for use_item in &use_decl.items {
-                    match use_item {
-                        UseItem::Simple { name, alias } => {
-                            // Simple import: `name` or `name as alias`
-                            if let Some(symbol) = self.symbols.lookup_in_module(&module_path, name)
-                            {
-                                let symbol_id = symbol.id;
-                                let import_name = alias.as_ref().unwrap_or(name);
-                                self.symbols.register_import(import_name, symbol_id);
-                            } else {
-                                self.errors.push(AnalyzeError::ImportNotFound {
-                                    module_path: module_path.clone(),
-                                    name: name.clone(),
-                                    span: use_decl.span,
-                                });
-                            }
-                        }
-                        UseItem::EffectFunctions {
-                            effect_name,
-                            functions,
-                        } => {
-                            // Effect function import: `Effect::{func1, func2}`
-                            for func_item in functions {
-                                // Look up as "{Effect}::{function}"
-                                let lookup_name = format!("{}::{}", effect_name, func_item.name);
-                                if let Some(symbol) =
-                                    self.symbols.lookup_in_module(&module_path, &lookup_name)
-                                {
-                                    let symbol_id = symbol.id;
-                                    let import_name =
-                                        func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                    self.symbols.register_import(import_name, symbol_id);
-                                } else {
-                                    self.errors.push(AnalyzeError::ImportNotFound {
-                                        module_path: module_path.clone(),
-                                        name: lookup_name,
-                                        span: use_decl.span,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if self.errors.is_empty() {
-            Ok(())
-        } else {
-            Err(std::mem::take(&mut self.errors))
         }
     }
 
@@ -573,36 +310,7 @@ impl Analyzer {
         &self.symbols
     }
 
-    /// Get a reference to the module resolver (for accessing loaded modules)
-    pub fn get_resolver(&self) -> &ModuleResolver {
-        &self.resolver
-    }
-
-    /// Get all loaded modules from the resolver
-    pub fn loaded_modules(&self) -> Vec<(&Vec<String>, &Module)> {
-        self.resolver
-            .loaded_modules()
-            .into_iter()
-            .filter_map(|path| self.resolver.get_cached(path).map(|m| (path, m)))
-            .collect()
-    }
-
-    /// Consume the analyzer and return the symbol table, loaded modules, and implicit modules
-    pub fn into_parts(
-        self,
-    ) -> (
-        SymbolTable,
-        std::collections::HashMap<Vec<String>, Module>,
-        std::collections::HashSet<Vec<String>>,
-    ) {
-        (
-            self.symbols,
-            self.resolver.into_modules(),
-            self.implicit_modules,
-        )
-    }
-
-    /// Analyze pre-loaded modules (new pipeline)
+    /// Analyze pre-loaded modules
     ///
     /// This method takes modules that were already loaded by `ModuleLoader`
     /// and builds a symbol table from them.
@@ -619,12 +327,17 @@ impl Analyzer {
     ) -> Result<(), Vec<AnalyzeError>> {
         self.implicit_modules = implicit_modules;
 
-        // First pass: collect definitions from all modules
+        // First pass: collect definitions from all modules (excluding pub use)
         for (path, module) in modules {
             self.collect_definitions(module, path);
         }
 
-        // Second pass: validate imports in each module
+        // Second pass: process pub use (re-exports) now that all symbols are collected
+        for (path, module) in modules {
+            self.process_pub_use(module, path, modules);
+        }
+
+        // Third pass: validate imports in each module
         for (path, module) in modules {
             self.validate_imports(module, path, modules)?;
         }
@@ -633,6 +346,75 @@ impl Analyzer {
             Ok(())
         } else {
             Err(std::mem::take(&mut self.errors))
+        }
+    }
+
+    /// Process pub use declarations (re-exports) in a module
+    fn process_pub_use(
+        &mut self,
+        module: &Module,
+        module_path: &[String],
+        all_modules: &std::collections::HashMap<Vec<String>, Module>,
+    ) {
+        for item in &module.items {
+            if let Item::Use(use_decl) = item {
+                if !use_decl.is_pub {
+                    continue;
+                }
+
+                // Validate the import source
+                if validate_module_path(&use_decl.source).is_err() {
+                    continue; // Error already collected in validate_imports
+                }
+
+                // Resolve the source path
+                let source_path = resolve_import_path(module_path, &use_decl.source);
+
+                // Check the module exists
+                if !all_modules.contains_key(&source_path) {
+                    continue; // Error already collected in validate_imports
+                }
+
+                // Re-export each item to the current module's namespace
+                for use_item in &use_decl.items {
+                    match use_item {
+                        UseItem::Simple { name, alias } => {
+                            if let Some(symbol) = self.symbols.lookup_in_module(&source_path, name)
+                            {
+                                let export_name = alias.as_ref().unwrap_or(name);
+                                self.symbols.define(
+                                    export_name,
+                                    symbol.kind.clone(),
+                                    module_path,
+                                    symbol.span,
+                                );
+                            }
+                            // Error case handled in validate_imports
+                        }
+                        UseItem::EffectFunctions {
+                            effect_name,
+                            functions,
+                        } => {
+                            for func_item in functions {
+                                let lookup_name = format!("{}::{}", effect_name, func_item.name);
+                                if let Some(symbol) =
+                                    self.symbols.lookup_in_module(&source_path, &lookup_name)
+                                {
+                                    let export_name =
+                                        func_item.alias.as_ref().unwrap_or(&func_item.name);
+                                    self.symbols.define(
+                                        export_name,
+                                        symbol.kind.clone(),
+                                        module_path,
+                                        symbol.span,
+                                    );
+                                }
+                                // Error case handled in validate_imports
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -655,18 +437,15 @@ impl Analyzer {
                     continue;
                 }
 
-                // Resolve the import path
-                let module_path = self
-                    .resolver
-                    .resolve_import(from_module_path, &use_decl.source);
+                // Resolve the import path using name utilities
+                let module_path = resolve_import_path(from_module_path, &use_decl.source);
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_path) {
-                    self.errors.push(AnalyzeError::ModuleLoadError(
-                        crate::module_loader::ModuleLoadError::ModuleNotFound {
-                            path: module_path.clone(),
-                        },
-                    ));
+                    self.errors.push(AnalyzeError::ModuleNotFound {
+                        module_path: module_path.clone(),
+                        span: use_decl.span,
+                    });
                     continue;
                 }
 
@@ -730,103 +509,5 @@ impl Analyzer {
 impl Default for Analyzer {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
-
-    fn parse(source: &str) -> Module {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("lexer error");
-        let mut parser = Parser::new(tokens);
-        parser.parse().expect("parser error")
-    }
-
-    #[test]
-    fn test_analyze_simple_function() {
-        let source = r#"
-            fn run() {
-                println("hello");
-            }
-        "#;
-
-        let module = parse(source);
-        let mut analyzer = Analyzer::new();
-        let result = analyzer.analyze(&module, &[]);
-
-        assert!(result.is_ok());
-
-        // run should be defined
-        let run = analyzer.lookup_in_module(&[], "run");
-        assert!(run.is_some());
-        assert_eq!(run.unwrap().name, "run");
-    }
-
-    #[test]
-    fn test_analyze_with_imports() {
-        let source = r#"
-            use {println, Stdout} from "core:cli";
-
-            fn run() with Stdout {
-                println("hello");
-            }
-        "#;
-
-        let module = parse(source);
-        let mut analyzer = Analyzer::new();
-        let result = analyzer.analyze(&module, &[]);
-
-        assert!(result.is_ok(), "Analysis failed: {:?}", result.err());
-
-        // println should be imported and accessible
-        let println = analyzer.lookup("println");
-        assert!(println.is_some(), "println not found");
-        assert!(println.unwrap().is_builtin_function());
-
-        // Stdout should be imported
-        let stdout = analyzer.lookup("Stdout");
-        assert!(stdout.is_some(), "Stdout not found");
-    }
-
-    #[test]
-    fn test_import_not_found() {
-        let source = r#"
-            use {nonexistent_function} from "core:cli";
-
-            fn run() {
-            }
-        "#;
-
-        let module = parse(source);
-        let mut analyzer = Analyzer::new();
-        let result = analyzer.analyze(&module, &[]);
-
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(!errors.is_empty());
-        assert!(matches!(
-            &errors[0],
-            AnalyzeError::ImportNotFound { name, .. } if name == "nonexistent_function"
-        ));
-    }
-
-    #[test]
-    fn test_module_not_found() {
-        let source = r#"
-            use {something} from "nonexistent:module";
-
-            fn run() {
-            }
-        "#;
-
-        let module = parse(source);
-        let mut analyzer = Analyzer::new();
-        let result = analyzer.analyze(&module, &[]);
-
-        assert!(result.is_err());
     }
 }
