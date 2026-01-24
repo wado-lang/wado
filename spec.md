@@ -1818,18 +1818,6 @@ Module paths are validated before loading to provide clear error messages:
 4. **Invalid paths**: Paths not matching any pattern are rejected
    - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
 
-**Migration Note:**
-
-Bare filenames no longer work; use `./` prefix for local imports:
-
-```wado
-// Old (no longer valid)
-use {foo} from "utils.wado";
-
-// New (required)
-use {foo} from "./utils.wado";
-```
-
 ### Import Syntax
 
 ```wado
