@@ -2193,6 +2193,7 @@ impl ClosureLowerer {
         let specialized_method_info = callee.method_info.as_ref().map(|info| {
             LocalMethodName {
                 struct_name: info.struct_name.clone(),
+                base_struct_name: info.base_struct_name.clone(),
                 trait_name: info.trait_name.clone(),
                 method_name: specialized_method_name.clone(),
                 method_type_args: Vec::new(), // Type args are now in method_name
@@ -3183,6 +3184,7 @@ impl ClosureLowerer {
         let specialized_method_info = func.method_info().map(|info| {
             LocalMethodName {
                 struct_name: info.struct_name.clone(),
+                base_struct_name: info.base_struct_name.clone(),
                 trait_name: info.trait_name.clone(),
                 method_name: format!("{}{}", info.full_method_name(), functor_suffix),
                 method_type_args: Vec::new(), // Type args are now in method_name

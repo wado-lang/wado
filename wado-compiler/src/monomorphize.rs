@@ -1157,7 +1157,6 @@ impl Monomorphizer {
             type_params: vec![], // Concrete struct has no type params
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),
-                base_struct_name: Some(generic.name.clone()),
                 type_args: key.type_args.clone(),
             }),
             fields,
@@ -1761,33 +1760,49 @@ impl Monomorphizer {
                     let struct_part = &func_name[..sep_pos];
                     let method_name = &func_name[sep_pos + 2..];
 
-                    // First, try to use monomorph_info if available
-                    // This handles cases like BTreeNode<String,i32>::new_leaf which has
-                    // generic_name = "BTreeNode<K,V>::new_leaf" and type_args
-                    if let FunctionRef::External {
-                        monomorph_info: Some(info),
-                        ..
-                    } = static_func
-                    {
-                        // Use base_struct_name metadata if available, otherwise extract from generic_name
-                        let base_struct = info.base_struct_name.clone().unwrap_or_else(|| {
+                    // Try to get base_struct_name from method_info (preferred) or monomorph_info
+                    let base_struct_and_type_args: Option<(String, Vec<TypeId>)> =
+                        if let FunctionRef::External {
+                            method_info: Some(info),
+                            monomorph_info,
+                            ..
+                        } = static_func
+                        {
+                            // Use base_struct_name from method_info
+                            let type_args = monomorph_info
+                                .as_ref()
+                                .map(|m| m.type_args.clone())
+                                .unwrap_or_default();
+                            if type_args.is_empty() {
+                                None
+                            } else {
+                                Some((info.base_struct_name.clone(), type_args))
+                            }
+                        } else if let FunctionRef::External {
+                            monomorph_info: Some(info),
+                            ..
+                        } = static_func
+                        {
                             // Fallback: extract base struct from generic_name
                             // "BTreeNode<K,V>::new_leaf" -> "BTreeNode"
                             let generic_name = &info.generic_name;
-                            if let Some(sep_pos) = generic_name.find("::") {
-                                let struct_part = &generic_name[..sep_pos];
-                                crate::name::strip_type_params(struct_part).to_string()
+                            if let Some(generic_sep_pos) = generic_name.find("::") {
+                                let generic_struct_part = &generic_name[..generic_sep_pos];
+                                let base_struct =
+                                    crate::name::strip_type_params(generic_struct_part);
+                                Some((base_struct.to_string(), info.type_args.clone()))
                             } else {
-                                crate::name::strip_type_params(generic_name).to_string()
+                                None
                             }
-                        });
+                        } else {
+                            None
+                        };
+
+                    if let Some((base_struct, type_args)) = base_struct_and_type_args {
                         let generic_method_name =
                             MethodName::format_local(&base_struct, None, method_name);
-                        if let Some(generic_func_rc) =
-                            generic_functions.get(&generic_method_name)
-                        {
+                        if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
-                            let type_args = info.type_args.clone();
                             // Only queue if we have the right number of type args
                             if type_args.len() == generic_func.impl_type_params.len() {
                                 let key = InstantiationKey {
@@ -2211,11 +2226,6 @@ impl Monomorphizer {
             impl_type_params: vec![], // Already monomorphized, no impl type params
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),
-                // Extract base struct name from method_info if available (strip type params if present)
-                base_struct_name: generic
-                    .method_info
-                    .as_ref()
-                    .map(|info| crate::name::strip_type_params(&info.struct_name).to_string()),
                 type_args: key.type_args.clone(),
             }),
             // Update method_info with mangled struct name including impl type args
@@ -2445,8 +2455,6 @@ impl Monomorphizer {
                 // Handle case where func_name is "StructName^Trait::method" or "StructName::method"
                 // without type params but we're in a generic context
                 // e.g., TreeMap^IndexAssign::index_assign inside TreeMap<K,V>::insert
-                // Note: We check the name for '<' rather than is_monomorphized() because
-                // the function might have type params in its name but not have monomorph_info set yet.
                 if !substitution.is_empty() && !new_func_name.contains('<') {
                     // Find the separator (either ^ for trait methods or :: for regular methods)
                     let separator_pos =
@@ -2492,25 +2500,15 @@ impl Monomorphizer {
                     // Preserve the existing generic_name if we already have monomorph_info
                     // (e.g., Array<T>::append has generic_name: Array::append)
                     // Otherwise use old_func_name as the generic name
-                    let (existing_generic_name, existing_base_struct) = match method_func {
+                    let existing_generic_name = match method_func {
                         FunctionRef::External {
                             monomorph_info: Some(info),
                             ..
-                        } => (
-                            Some(info.generic_name.clone()),
-                            info.base_struct_name.clone(),
-                        ),
-                        _ => (None, None),
+                        } => Some(info.generic_name.clone()),
+                        _ => None,
                     };
-                    // Get base_struct_name from method_info if not already set (strip type params if present)
-                    let base_struct_name = existing_base_struct.or_else(|| {
-                        method_func
-                            .method_info()
-                            .map(|i| crate::name::strip_type_params(&i.struct_name).to_string())
-                    });
                     let monomorph_info = Some(MonomorphInfo {
                         generic_name: existing_generic_name.unwrap_or(old_func_name),
-                        base_struct_name,
                         type_args,
                     });
                     // Preserve original method_info (struct/trait/method names unchanged,
@@ -2542,8 +2540,6 @@ impl Monomorphizer {
                 // Handle case where func_name is "StructName::method" without type params
                 // but we're in a generic context (substitution is not empty)
                 // e.g., TreeMap::new inside TreeMap<K,V>::with_default_degree
-                // Note: We check the name for '<' rather than is_monomorphized() because
-                // the function might have type params in its name but not have monomorph_info set yet.
                 if !substitution.is_empty()
                     && !new_func_name.contains('<')
                     && let Some(sep_pos) = new_func_name.find("::")
@@ -2585,13 +2581,8 @@ impl Monomorphizer {
                     sorted_entries.sort_by_key(|(idx, _)| **idx);
                     let type_args: Vec<TypeId> =
                         sorted_entries.iter().map(|(_, tid)| **tid).collect();
-                    // Get base_struct_name from method_info (strip type params if present)
-                    let base_struct_name = static_func
-                        .method_info()
-                        .map(|i| crate::name::strip_type_params(&i.struct_name).to_string());
                     let monomorph_info = Some(MonomorphInfo {
                         generic_name: old_func_name,
-                        base_struct_name,
                         type_args,
                     });
                     // Preserve original method_info
@@ -3076,10 +3067,6 @@ impl Monomorphizer {
                     if let Some(mangled) = self.function_instantiated.get(&key) {
                         // Preserve original method_info
                         let original_method_info = func.method_info();
-                        // Get base_struct_name from method_info (strip type params if present)
-                        let base_struct_name = original_method_info
-                            .as_ref()
-                            .map(|i| crate::name::strip_type_params(&i.struct_name).to_string());
                         // Use EntryPoint module source since monomorphized functions are
                         // generated in the current (calling) module, not the original
                         // module where the generic function was defined.
@@ -3088,7 +3075,6 @@ impl Monomorphizer {
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: func_name,
-                                base_struct_name,
                                 type_args: key.type_args.clone(),
                             }),
                             method_info: original_method_info,
@@ -3137,15 +3123,11 @@ impl Monomorphizer {
                         // Update func to the monomorphized method
                         // Preserve original method_info
                         let original_method_info = method_func.method_info();
-                        // Strip type params from struct_name for base_struct_name
-                        let base_struct_name =
-                            Some(crate::name::strip_type_params(&struct_name).to_string());
                         *method_func = FunctionRef::External {
                             module_source: module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: full_method_name.clone(),
-                                base_struct_name,
                                 type_args: key.type_args.clone(),
                             }),
                             method_info: original_method_info,
@@ -3177,7 +3159,6 @@ impl Monomorphizer {
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
                                     generic_name: generic_method_name,
-                                    base_struct_name: Some(base_struct.clone()),
                                     type_args: combined_key.type_args.clone(),
                                 }),
                                 method_info: original_method_info,
@@ -3242,7 +3223,6 @@ impl Monomorphizer {
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
                                     generic_name: key.name.clone(),
-                                    base_struct_name: Some(base_struct.clone()),
                                     type_args: key.type_args.clone(),
                                 }),
                                 method_info: original_method_info,

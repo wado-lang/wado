@@ -518,12 +518,15 @@ pub fn extract_local_name(name: &str) -> &str {
 /// Parsed components of a local method name (without module path).
 ///
 /// This is used to extract struct/trait/method info from names like:
-/// - `Point::sum` → `struct_name="Point`", `trait_name=None`, `method_name="sum`"
-/// - `Point^Display::fmt` → `struct_name="Point`", `trait_name=Some("Display`"), `method_name="fmt`"
+/// - `Point::sum` → `struct_name="Point"`, `trait_name=None`, `method_name="sum"`
+/// - `Point^Display::fmt` → `struct_name="Point"`, `trait_name=Some("Display")`, `method_name="fmt"`
 #[derive(Debug, Clone)]
 pub struct LocalMethodName {
-    /// The struct name (e.g., "Point" or "Point<i32>")
+    /// The struct name, possibly with type args (e.g., "Point" or "Point<i32>")
     pub struct_name: String,
+    /// The base struct name without type args (e.g., "Point")
+    /// This is preserved during monomorphization for lookup purposes.
+    pub base_struct_name: String,
     /// The trait name if this is a trait method (e.g., "Display")
     pub trait_name: Option<String>,
     /// The method name (e.g., "sum" or "fmt")
@@ -534,9 +537,11 @@ pub struct LocalMethodName {
 
 impl LocalMethodName {
     /// Create a new `LocalMethodName` directly from components.
+    /// `base_struct_name` is derived by stripping type params from `struct_name`.
     #[must_use]
     pub fn new(struct_name: String, trait_name: Option<String>, method_name: String) -> Self {
         Self {
+            base_struct_name: strip_type_params(&struct_name).to_string(),
             struct_name,
             trait_name,
             method_name,
@@ -545,6 +550,7 @@ impl LocalMethodName {
     }
 
     /// Create a new `LocalMethodName` with all components including method type args.
+    /// `base_struct_name` is derived by stripping type params from `struct_name`.
     #[must_use]
     pub fn with_method_type_args(
         struct_name: String,
@@ -553,6 +559,7 @@ impl LocalMethodName {
         method_type_args: Vec<String>,
     ) -> Self {
         Self {
+            base_struct_name: strip_type_params(&struct_name).to_string(),
             struct_name,
             trait_name,
             method_name,
@@ -564,15 +571,17 @@ impl LocalMethodName {
     ///
     /// `impl_type_args` are applied to the struct name (e.g., "Array" + ["i32"] → "Array<i32>").
     /// `method_type_args` are stored separately (not embedded in `method_name`).
+    /// `base_struct_name` is preserved (not changed by type args).
     #[must_use]
     pub fn with_type_args(&self, impl_type_args: &[String], method_type_args: &[String]) -> Self {
         let mangled_struct = if impl_type_args.is_empty() {
             self.struct_name.clone()
         } else {
-            format!("{}<{}>", self.struct_name, impl_type_args.join(","))
+            format!("{}<{}>", self.base_struct_name, impl_type_args.join(","))
         };
         Self {
             struct_name: mangled_struct,
+            base_struct_name: self.base_struct_name.clone(),
             trait_name: self.trait_name.clone(),
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
@@ -634,6 +643,7 @@ impl LocalMethodName {
             let trait_name = &prefix[caret_pos + 1..];
             Some(Self {
                 struct_name: struct_name.to_string(),
+                base_struct_name: strip_type_params(struct_name).to_string(),
                 trait_name: Some(trait_name.to_string()),
                 method_name: method_name.to_string(),
                 method_type_args,
@@ -641,6 +651,7 @@ impl LocalMethodName {
         } else {
             Some(Self {
                 struct_name: prefix.to_string(),
+                base_struct_name: strip_type_params(prefix).to_string(),
                 trait_name: None,
                 method_name: method_name.to_string(),
                 method_type_args,
