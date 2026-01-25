@@ -1,0 +1,34 @@
+// Test if-let pattern matching on custom variants
+
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+fn run() with Stdout {
+    let c = Shape::Circle(5.0);
+
+    if let Circle(r) = c {
+        println(`Circle with radius {r}`);
+    } else {
+        println("Not a circle");
+    }
+
+    let p = Shape::Point;
+    if let Circle(r) = p {
+        println(`Circle with radius {r}`);
+    } else {
+        println("Not a circle");
+    }
+
+    if let Point = p {
+        println("It's a point");
+    } else {
+        println("Not a point");
+    }
+}
+
+__DATA__
+{"stdout": "Circle with radius 5.0\nNot a circle\nIt's a point\n"}

@@ -8031,6 +8031,87 @@ impl Codegen {
                 }
             }
 
+            // Custom variant with pattern - check tag and extract fields
+            (
+                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    bindings,
+                    ..
+                },
+            ) => {
+                // Look up variant type info
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(name).unwrap_or_else(|| {
+                    panic!("Variant type not registered: {name}");
+                });
+                let struct_type_idx = variant_info.struct_type_idx;
+
+                // Find the case index for this pattern
+                let case_index = variant_info
+                    .cases
+                    .iter()
+                    .position(|(case, _)| case == case_name)
+                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"))
+                    as i32;
+                drop(variant_types);
+
+                // Stack: [variant_value]
+                // Store scrutinee in a temp local
+                let variant_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                let type_key = format!("{:?}", scrutinee.type_id);
+                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
+                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                let scrutinee_local = ctx.alloc_local(&local_name, variant_valtype);
+                func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+                // Get the tag and compare with case_index
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::StructGet {
+                    struct_type_index: struct_type_idx,
+                    field_index: 0, // tag is field 0
+                });
+                func.instruction(&Instruction::I32Const(case_index));
+                func.instruction(&Instruction::I32Eq);
+
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                // Then block: pattern matches
+                // Extract payload fields and bind them
+                for (i, binding) in bindings.iter().enumerate() {
+                    if let TirPattern::Binding { local_index, .. } = binding {
+                        // Get the field (field 0 is tag, payload starts at field 1)
+                        func.instruction(&Instruction::LocalGet(scrutinee_local));
+                        func.instruction(&Instruction::StructGet {
+                            struct_type_index: struct_type_idx,
+                            field_index: (1 + i) as u32,
+                        });
+
+                        // Store in the binding local with proper offset
+                        let adjusted_index = *local_index + ctx.local_index_offset;
+                        func.instruction(&Instruction::LocalSet(adjusted_index));
+                    }
+                }
+
+                // Generate then block body
+                self.generate_block(func, then_block, type_table, ctx, builder);
+
+                // Else block (if any)
+                if let Some(else_blk) = else_block {
+                    func.instruction(&Instruction::Else);
+                    self.generate_block(func, else_blk, type_table, ctx, builder);
+                }
+
+                func.instruction(&Instruction::End);
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            }
+
             // Unsupported pattern
             _ => {
                 panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
@@ -9879,22 +9960,25 @@ impl Codegen {
                 ..
             } => {
                 // Pre-allocate temp local for the scrutinee using a unique name per type
-                // Only allocate for Some patterns (None patterns don't need a temp local)
                 let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-                let is_some_pattern = matches!(
-                    pattern,
-                    TirPattern::Variant { variant_name, .. } if variant_name == "Some"
-                );
-                if let ResolvedType::Option(_) = scrutinee_type
-                    && is_some_pattern
-                {
-                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                    // Use type_id as key since each Option type should have its own counter
+                let needs_temp_local = match &scrutinee_type {
+                    // Option: only Some patterns need a temp local (None doesn't bind)
+                    ResolvedType::Option(_) => matches!(
+                        pattern,
+                        TirPattern::Variant { variant_name, .. } if variant_name == "Some"
+                    ),
+                    // Custom variants always need a temp local for tag checking
+                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => true,
+                    _ => false,
+                };
+                if needs_temp_local {
+                    let scrutinee_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                    // Use type_id as key since each type should have its own counter
                     let type_key = format!("{:?}", scrutinee.type_id);
                     let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
                     let local_name = format!("__if_pattern_scrutinee_{}_{}", type_key, *counter);
                     *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                    ctx.alloc_local(&local_name, option_valtype);
+                    ctx.alloc_local(&local_name, scrutinee_valtype);
                 }
                 // Recursively handle nested blocks
                 self.preallocate_if_pattern_locals(then_block, type_table, ctx);
@@ -9904,18 +9988,26 @@ impl Codegen {
             }
             TirStmtKind::WhilePattern {
                 scrutinee,
-                pattern: _,
+                pattern,
                 body,
             } => {
                 // Pre-allocate temp local for the scrutinee
                 let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-                if let ResolvedType::Option(_) = scrutinee_type {
-                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                let needs_temp_local = match &scrutinee_type {
+                    ResolvedType::Option(_) => matches!(
+                        pattern,
+                        TirPattern::Variant { variant_name, .. } if variant_name == "Some"
+                    ),
+                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => true,
+                    _ => false,
+                };
+                if needs_temp_local {
+                    let scrutinee_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
                     let type_key = format!("{:?}", scrutinee.type_id);
                     let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
                     let local_name = format!("__while_pattern_scrutinee_{}_{}", type_key, *counter);
                     *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                    ctx.alloc_local(&local_name, option_valtype);
+                    ctx.alloc_local(&local_name, scrutinee_valtype);
                 }
                 // Recursively handle body
                 self.preallocate_if_pattern_locals(body, type_table, ctx);
@@ -9923,19 +10015,27 @@ impl Codegen {
             TirStmtKind::ForPattern {
                 init,
                 scrutinee,
-                pattern: _,
+                pattern,
                 body,
                 ..
             } => {
                 // Pre-allocate temp local for the scrutinee
                 let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-                if let ResolvedType::Option(_) = scrutinee_type {
-                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                let needs_temp_local = match &scrutinee_type {
+                    ResolvedType::Option(_) => matches!(
+                        pattern,
+                        TirPattern::Variant { variant_name, .. } if variant_name == "Some"
+                    ),
+                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => true,
+                    _ => false,
+                };
+                if needs_temp_local {
+                    let scrutinee_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
                     let type_key = format!("{:?}", scrutinee.type_id);
                     let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
                     let local_name = format!("__for_pattern_scrutinee_{}_{}", type_key, *counter);
                     *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                    ctx.alloc_local(&local_name, option_valtype);
+                    ctx.alloc_local(&local_name, scrutinee_valtype);
                 }
                 // Recursively handle init and body
                 for s in init {
@@ -10565,11 +10665,13 @@ impl Codegen {
             }
             TirStmtKind::IfPattern {
                 scrutinee,
+                pattern,
                 then_block,
                 else_block,
-                ..
             } => {
                 self.preallocate_locals_from_expr(scrutinee, type_table, ctx);
+                // Pre-allocate locals for pattern bindings
+                self.preallocate_locals_from_pattern(pattern, type_table, ctx);
                 self.preallocate_locals_from_block(then_block, type_table, ctx);
                 if let Some(else_blk) = else_block {
                     self.preallocate_locals_from_block(else_blk, type_table, ctx);
@@ -10587,6 +10689,40 @@ impl Codegen {
                 self.preallocate_locals_from_expr(expr, type_table, ctx);
             }
             _ => {}
+        }
+    }
+
+    /// Allocate locals for pattern bindings
+    fn preallocate_locals_from_pattern(
+        &self,
+        pattern: &TirPattern,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match pattern {
+            TirPattern::Binding {
+                local_index,
+                type_id,
+                ..
+            } => {
+                let local_name = format!("_local_{local_index}");
+                // Check if already allocated (by matching name)
+                if ctx.locals.get(&local_name).is_none() {
+                    let local_type = self.type_id_to_valtype(type_table, *type_id);
+                    ctx.alloc_local(&local_name, local_type);
+                }
+            }
+            TirPattern::Variant { bindings, .. } => {
+                for binding in bindings {
+                    self.preallocate_locals_from_pattern(binding, type_table, ctx);
+                }
+            }
+            TirPattern::Tuple(patterns) => {
+                for pat in patterns {
+                    self.preallocate_locals_from_pattern(pat, type_table, ctx);
+                }
+            }
+            TirPattern::Wildcard | TirPattern::Literal(_) => {}
         }
     }
 
