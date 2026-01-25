@@ -1106,8 +1106,11 @@ impl Monomorphizer {
         //   struct Node<T> { left: Option<&mut Node<T>>, right: Option<&mut Node<T>> }
         // When substituting field types, the inner Node<T> needs to resolve to the
         // monomorphized struct type, not a GenericInstance.
-        let concrete_type_id =
-            type_table.make_struct(mangled_name.clone(), ModuleSource::entry_point());
+        let concrete_type_id = type_table.make_monomorphized_struct(
+            mangled_name.clone(),
+            ModuleSource::entry_point(),
+            key.name.clone(), // base_name: the original generic struct name
+        );
 
         // Find the GenericInstance TypeId and record the substitution early
         // so that substitute_type can use it for self-references
@@ -1259,6 +1262,7 @@ impl Monomorphizer {
                         if let ResolvedType::Struct {
                             name: struct_name,
                             module_source: struct_source,
+                            ..
                         } = type_table.get(tid)
                             && struct_name == &name
                             && struct_source == &module_source
@@ -1749,75 +1753,28 @@ impl Monomorphizer {
                 func: static_func,
                 args,
             } => {
-                let func_name = static_func.name();
                 // Check if this is a call to a method on a monomorphized struct
-                // e.g., func_name = "Counter<i32>::zero" or "Counter<i32>::default_value"
-                if let Some(sep_pos) = func_name.find("::") {
-                    let struct_part = &func_name[..sep_pos];
-                    let method_name = &func_name[sep_pos + 2..];
-
-                    // First, try to use monomorph_info if available
-                    // This handles cases like BTreeNode<String,i32>::new_leaf which has
-                    // generic_name = "BTreeNode<K,V>::new_leaf" and type_args
-                    if let FunctionRef::External {
-                        monomorph_info: Some(info),
-                        ..
-                    } = static_func
-                    {
-                        // Extract base struct name from generic_name (strip type params)
-                        // "BTreeNode<K,V>::new_leaf" -> "BTreeNode"
-                        let generic_name = &info.generic_name;
-                        if let Some(generic_sep_pos) = generic_name.find("::") {
-                            let generic_struct_part = &generic_name[..generic_sep_pos];
-                            // Strip type params: "BTreeNode<K,V>" -> "BTreeNode"
-                            let base_struct = generic_struct_part
-                                .find('<')
-                                .map(|pos| &generic_struct_part[..pos])
-                                .unwrap_or(generic_struct_part);
-
-                            let generic_method_name =
-                                MethodName::format_local(base_struct, None, method_name);
-                            if let Some(generic_func_rc) =
-                                generic_functions.get(&generic_method_name)
-                            {
-                                let generic_func = generic_func_rc.borrow();
-                                let type_args = info.type_args.clone();
-                                // Only queue if we have the right number of type args
-                                if type_args.len() == generic_func.impl_type_params.len() {
-                                    let key = InstantiationKey {
-                                        name: generic_method_name,
-                                        type_args,
-                                    };
-                                    if !self.function_instantiated.contains_key(&key) {
-                                        let mangled = self.mangle_method_name(
-                                            &key,
-                                            type_table,
-                                            generic_func.impl_type_params.len(),
-                                        );
-                                        self.function_instantiated
-                                            .insert(key.clone(), mangled.clone());
-                                        self.mangled_func_to_key.insert(mangled, key.clone());
-                                        self.function_pending.push(key);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Fallback: check if struct_part is a monomorphized struct via reverse lookup
-                    else if let Some(struct_key) = self.mangled_struct_to_key.get(struct_part) {
-                        let base_struct = &struct_key.name;
-                        let type_args = struct_key.type_args.clone();
-
-                        // Look for generic method: BaseStruct::method
-                        let generic_method_name =
-                            MethodName::format_local(base_struct, None, method_name);
+                // Use method_info metadata to get base_struct_name and method_name
+                if let FunctionRef::External {
+                    method_info: Some(info),
+                    monomorph_info: Some(monomorph),
+                    ..
+                } = static_func
+                {
+                    let type_args = &monomorph.type_args;
+                    if !type_args.is_empty() {
+                        let generic_method_name = MethodName::format_local(
+                            &info.base_struct_name,
+                            None,
+                            &info.method_name,
+                        );
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
                             // Only queue if we have the right number of type args
                             if type_args.len() == generic_func.impl_type_params.len() {
                                 let key = InstantiationKey {
                                     name: generic_method_name,
-                                    type_args,
+                                    type_args: type_args.clone(),
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
                                     let mangled = self.mangle_method_name(
@@ -3340,26 +3297,22 @@ impl Monomorphizer {
             _ => return None,
         };
 
-        // Get the struct name from the operand type
+        // Get the base struct name and type args from the operand type
         let operand_type = type_table.get(left.type_id);
-        let struct_name = match operand_type {
-            ResolvedType::Struct { name, .. } => name.clone(),
+        let (base_struct_name, impl_type_args): (String, Vec<String>) = match operand_type {
+            ResolvedType::Struct { name, .. } => (name.clone(), vec![]),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
-                // For generic instances, build mangled name
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|&t| self.type_id_to_name(t, type_table))
                     .collect();
-                format!("{}<{}>", name, args.join(","))
+                (name.clone(), args)
             }
             // Primitives don't use trait-based comparison
             _ => return None,
         };
-
-        // Build the mangled method name: StructName^TraitName::method
-        let mangled_method_name = format!("{struct_name}^{trait_name}::{method_name}");
 
         // Choose receiver and argument based on operand order
         let (receiver_expr, arg_expr) = if swap_operands {
@@ -3390,18 +3343,23 @@ impl Monomorphizer {
             span,
         );
 
-        // Create the method call
+        // Create the method call with proper method_info
+        // Use base_struct_name for LocalMethodName, then apply type args
+        let method_info = LocalMethodName::new(
+            base_struct_name,
+            Some(trait_name.to_string()),
+            method_name.to_string(),
+        )
+        .with_struct_type_args(&impl_type_args);
+        let mangled_name = method_info.to_mangled_name();
+
         let method_call = TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef::External {
                 module_source: ModuleSource::core("prelude"),
-                name: mangled_method_name.clone(),
+                name: mangled_name,
                 monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    struct_name,
-                    Some(trait_name.to_string()),
-                    method_name.to_string(),
-                )),
+                method_info: Some(method_info),
             },
             type_args: vec![],
             args: vec![arg_ref],

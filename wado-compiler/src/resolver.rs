@@ -938,6 +938,7 @@ impl<'a> Resolver<'a> {
                 if let ResolvedType::Struct {
                     name: ref_struct_name,
                     module_source: ref_module_source,
+                    ..
                 } = type_table.get(*field_type_id)
                 {
                     // Skip self-references (same struct or same module)
@@ -1720,6 +1721,7 @@ impl<'a> Resolver<'a> {
             monomorph_info: None, // Not from monomorphization
             method_info: Some(LocalMethodName {
                 struct_name: struct_name.to_string(),
+                base_struct_name: struct_name.to_string(),
                 trait_name: trait_name.map(String::from),
                 method_name: func.name.clone(),
                 method_type_args: vec![],
@@ -1899,11 +1901,7 @@ impl<'a> Resolver<'a> {
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
-                    if let ResolvedType::Struct {
-                        name,
-                        module_source: _,
-                    } = target_resolved
-                    {
+                    if let ResolvedType::Struct { name, .. } = target_resolved {
                         let name = name.clone();
                         let struct_type = target_type;
 
@@ -2653,6 +2651,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path(), None),
             ResolvedType::GenericInstance {
                 name,
@@ -2786,6 +2785,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name, module_source.to_path(), None),
             ResolvedType::GenericInstance {
                 name,
@@ -4098,6 +4098,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path()),
             ResolvedType::GenericInstance {
                 name,
@@ -4183,7 +4184,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Get struct name and monomorph info from base type for mangled method name
-        let (receiver_struct_name, base_struct_name, receiver_type_args) =
+        let (receiver_struct_name, base_struct_name, impl_type_arg_names, receiver_type_args) =
             match self.type_table.borrow().get(base_type_id).clone() {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
@@ -4193,14 +4194,27 @@ impl<'a> Resolver<'a> {
                         .map(|t| self.mangle_type_name(*t))
                         .collect();
                     let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                    (mangled, Some(name.clone()), Some(type_args.clone()))
+                    (
+                        mangled,
+                        name.clone(),
+                        type_arg_names,
+                        Some(type_args.clone()),
+                    )
                 }
                 ResolvedType::BuiltinArray(elem) => {
                     let elem_name = self.mangle_type_name(elem);
-                    let mangled = format!("Array<{elem_name}>");
-                    (mangled, Some("Array".to_string()), Some(vec![elem]))
+                    let _mangled = format!("Array<{elem_name}>");
+                    (
+                        "Array".to_string(),
+                        "Array".to_string(),
+                        vec![elem_name],
+                        Some(vec![elem]),
+                    )
                 }
-                _ => (self.mangle_type_name(base_type_id), None, None),
+                _ => {
+                    let name = self.mangle_type_name(base_type_id);
+                    (name.clone(), name, vec![], None)
+                }
             };
 
         // Build mangled method name:
@@ -4215,16 +4229,13 @@ impl<'a> Resolver<'a> {
         };
 
         // Build monomorph_info for method calls on generic types
-        let monomorph_info =
-            if let (Some(base), Some(type_args)) = (base_struct_name, receiver_type_args) {
-                let generic_name = format!("{}::{}", base, method_call.method);
-                Some(MonomorphInfo {
-                    generic_name,
-                    type_args,
-                })
-            } else {
-                None
-            };
+        let monomorph_info = receiver_type_args.map(|type_args| {
+            let generic_name = format!("{}::{}", base_struct_name, method_call.method);
+            MonomorphInfo {
+                generic_name,
+                type_args,
+            }
+        });
 
         // Convert method type args to string names for method_info
         // Use inferred type args if available, otherwise use explicit type args
@@ -4233,6 +4244,14 @@ impl<'a> Resolver<'a> {
             .map(|t| self.mangle_type_name(*t))
             .collect();
 
+        // Build method_info with base struct name, then apply impl and method type args
+        let method_info = LocalMethodName::new(
+            base_struct_name, // Use base struct name without type params
+            trait_name,
+            method_call.method.clone(),
+        )
+        .with_type_args(&impl_type_arg_names, &method_type_arg_names);
+
         TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
@@ -4240,12 +4259,7 @@ impl<'a> Resolver<'a> {
                     module_source: self.current_module_source.clone(),
                     name: mangled_method_name,
                     monomorph_info,
-                    method_info: Some(LocalMethodName::with_method_type_args(
-                        receiver_struct_name,
-                        trait_name,
-                        method_call.method.clone(),
-                        method_type_arg_names,
-                    )),
+                    method_info: Some(method_info),
                 },
                 type_args: method_type_args, // Use inferred type args
                 args,
@@ -4375,6 +4389,7 @@ impl<'a> Resolver<'a> {
                 ResolvedType::Struct {
                     name,
                     module_source,
+                    ..
                 } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
                 ResolvedType::GenericInstance {
                     name,
@@ -4417,16 +4432,32 @@ impl<'a> Resolver<'a> {
         }
 
         // Build monomorph_info for generic instantiations
-        let monomorph_info = if struct_type_args.is_empty() {
-            None
-        } else {
-            // Generic static method: track the original generic name
-            let generic_name = format!("{}::{}", struct_name, static_call.method);
-            Some(MonomorphInfo {
-                generic_name,
-                type_args: struct_type_args,
-            })
-        };
+        let (monomorph_info, impl_type_arg_names): (Option<MonomorphInfo>, Vec<String>) =
+            if struct_type_args.is_empty() {
+                (None, vec![])
+            } else {
+                // Generic static method: track the original generic name
+                let generic_name = format!("{}::{}", struct_name, static_call.method);
+                let type_arg_names: Vec<String> = struct_type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name(*t))
+                    .collect();
+                (
+                    Some(MonomorphInfo {
+                        generic_name,
+                        type_args: struct_type_args,
+                    }),
+                    type_arg_names,
+                )
+            };
+
+        // Build method_info with base struct name, then apply type args
+        let method_info = LocalMethodName::new(
+            struct_name, // Use base struct name without type params
+            None,        // Static methods are inherent, no trait
+            static_call.method.clone(),
+        )
+        .with_struct_type_args(&impl_type_arg_names);
 
         TirExpr::new(
             TirExprKind::StaticCall {
@@ -4434,11 +4465,7 @@ impl<'a> Resolver<'a> {
                     module_source: ModuleSource::from_path(&module_path),
                     name: mangled_func_name,
                     monomorph_info,
-                    method_info: Some(LocalMethodName::new(
-                        mangled_struct_name,
-                        None, // Static methods are inherent, no trait
-                        static_call.method.clone(),
-                    )),
+                    method_info: Some(method_info),
                 },
                 args,
             },
@@ -4760,6 +4787,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path(), None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
@@ -5000,6 +5028,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path()),
             ResolvedType::GenericInstance {
                 name,
@@ -5909,6 +5938,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name, module_source.to_path()),
             ResolvedType::GenericInstance {
                 name,
@@ -5938,6 +5968,7 @@ impl<'a> Resolver<'a> {
                 ResolvedType::Struct {
                     name,
                     module_source,
+                    ..
                 } => (name, module_source.to_path(), None),
                 ResolvedType::GenericInstance {
                     name,

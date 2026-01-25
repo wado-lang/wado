@@ -228,6 +228,12 @@ pub enum ResolvedType {
     Struct {
         name: String,
         module_source: ModuleSource,
+        /// Whether this struct was created by monomorphizing a generic struct.
+        /// If true, `base_name` contains the original generic struct name.
+        is_monomorphized: bool,
+        /// For monomorphized structs, the original generic name (e.g., "`TreeMap`" for "`TreeMap`<String,i32>").
+        /// None for non-monomorphized structs.
+        base_name: Option<String>,
     },
     Enum {
         name: String,
@@ -444,6 +450,26 @@ impl TypeTable {
         self.intern(ResolvedType::Struct {
             name,
             module_source,
+            is_monomorphized: false,
+            base_name: None,
+        })
+    }
+
+    /// Create a monomorphized struct type (e.g., "Box<i32>")
+    ///
+    /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
+    /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
+    pub fn make_monomorphized_struct(
+        &mut self,
+        name: String,
+        module_source: ModuleSource,
+        base_name: String,
+    ) -> TypeId {
+        self.intern(ResolvedType::Struct {
+            name,
+            module_source,
+            is_monomorphized: true,
+            base_name: Some(base_name),
         })
     }
 
@@ -454,12 +480,14 @@ impl TypeTable {
         })
     }
 
-    /// Find the `type_id` for a struct by name and module source (O(1) lookup via `intern_map`)
+    /// Find the `type_id` for a non-monomorphized struct by name and module source (O(1) lookup via `intern_map`)
     pub fn find_struct_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
             name: name.to_string(),
             module_source: module_source.clone(),
+            is_monomorphized: false,
+            base_name: None,
         };
         self.intern_map.get(&key).copied()
     }
@@ -606,11 +634,9 @@ impl TypeTable {
             | ResolvedType::Stream(_)
             | ResolvedType::Future(_)
             | ResolvedType::BuiltinArray(_) => true,
-            // TODO: Monomorphized structs have their type args baked into the name (e.g., "BTreeNode<String,i32>")
-            // These are effectively generic types that were instantiated with concrete type arguments.
-            // This string check should be replaced with proper type metadata once we track
-            // whether a struct is a monomorphized generic.
-            ResolvedType::Struct { name, .. } => name.contains('<'),
+            ResolvedType::Struct {
+                is_monomorphized, ..
+            } => *is_monomorphized,
             // References are generic if inner is generic
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.is_generic_type(*inner),
             // Tuples are generic if they contain generic types
@@ -771,11 +797,7 @@ impl FunctionRef {
                 let func = func.borrow();
                 // Use method_info to create a unique name for methods
                 if let Some(info) = &func.method_info {
-                    if let Some(trait_name) = &info.trait_name {
-                        format!("{}^{}::{}", info.struct_name, trait_name, info.method_name)
-                    } else {
-                        format!("{}::{}", info.struct_name, info.method_name)
-                    }
+                    info.to_mangled_name()
                 } else {
                     func.name.clone()
                 }
@@ -1286,7 +1308,7 @@ pub struct TirTypeParam {
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {
-    /// Original generic name (e.g., "Box" for "Box<i32>")
+    /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
     pub generic_name: String,
     /// Concrete type arguments used for this instantiation
     pub type_args: Vec<TypeId>,
