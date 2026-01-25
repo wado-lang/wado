@@ -1107,7 +1107,7 @@ impl Monomorphizer {
         // When substituting field types, the inner Node<T> needs to resolve to the
         // monomorphized struct type, not a GenericInstance.
         let concrete_type_id =
-            type_table.make_struct(mangled_name.clone(), ModuleSource::entry_point());
+            type_table.make_monomorphized_struct(mangled_name.clone(), ModuleSource::entry_point());
 
         // Find the GenericInstance TypeId and record the substitution early
         // so that substitute_type can use it for self-references
@@ -1259,6 +1259,7 @@ impl Monomorphizer {
                         if let ResolvedType::Struct {
                             name: struct_name,
                             module_source: struct_source,
+                            ..
                         } = type_table.get(tid)
                             && struct_name == &name
                             && struct_source == &module_source

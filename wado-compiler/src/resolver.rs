@@ -938,6 +938,7 @@ impl<'a> Resolver<'a> {
                 if let ResolvedType::Struct {
                     name: ref_struct_name,
                     module_source: ref_module_source,
+                    ..
                 } = type_table.get(*field_type_id)
                 {
                     // Skip self-references (same struct or same module)
@@ -1899,11 +1900,7 @@ impl<'a> Resolver<'a> {
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
-                    if let ResolvedType::Struct {
-                        name,
-                        module_source: _,
-                    } = target_resolved
-                    {
+                    if let ResolvedType::Struct { name, .. } = target_resolved {
                         let name = name.clone();
                         let struct_type = target_type;
 
@@ -2578,6 +2575,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path(), None),
             ResolvedType::GenericInstance {
                 name,
@@ -2711,6 +2709,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name, module_source.to_path(), None),
             ResolvedType::GenericInstance {
                 name,
@@ -4023,6 +4022,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path()),
             ResolvedType::GenericInstance {
                 name,
@@ -4300,6 +4300,7 @@ impl<'a> Resolver<'a> {
                 ResolvedType::Struct {
                     name,
                     module_source,
+                    ..
                 } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
                 ResolvedType::GenericInstance {
                     name,
@@ -4685,6 +4686,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path(), None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
@@ -4925,6 +4927,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.to_path()),
             ResolvedType::GenericInstance {
                 name,
@@ -5834,6 +5837,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => (name, module_source.to_path()),
             ResolvedType::GenericInstance {
                 name,
@@ -5863,6 +5867,7 @@ impl<'a> Resolver<'a> {
                 ResolvedType::Struct {
                     name,
                     module_source,
+                    ..
                 } => (name, module_source.to_path(), None),
                 ResolvedType::GenericInstance {
                     name,

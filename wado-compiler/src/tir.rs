@@ -228,6 +228,8 @@ pub enum ResolvedType {
     Struct {
         name: String,
         module_source: ModuleSource,
+        /// Whether this struct was created by monomorphizing a generic struct
+        is_monomorphized: bool,
     },
     Enum {
         name: String,
@@ -444,6 +446,20 @@ impl TypeTable {
         self.intern(ResolvedType::Struct {
             name,
             module_source,
+            is_monomorphized: false,
+        })
+    }
+
+    /// Create a monomorphized struct type (e.g., "Box<i32>")
+    pub fn make_monomorphized_struct(
+        &mut self,
+        name: String,
+        module_source: ModuleSource,
+    ) -> TypeId {
+        self.intern(ResolvedType::Struct {
+            name,
+            module_source,
+            is_monomorphized: true,
         })
     }
 
@@ -454,12 +470,13 @@ impl TypeTable {
         })
     }
 
-    /// Find the `type_id` for a struct by name and module source (O(1) lookup via `intern_map`)
+    /// Find the `type_id` for a non-monomorphized struct by name and module source (O(1) lookup via `intern_map`)
     pub fn find_struct_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
             name: name.to_string(),
             module_source: module_source.clone(),
+            is_monomorphized: false,
         };
         self.intern_map.get(&key).copied()
     }
@@ -606,11 +623,9 @@ impl TypeTable {
             | ResolvedType::Stream(_)
             | ResolvedType::Future(_)
             | ResolvedType::BuiltinArray(_) => true,
-            // TODO: Monomorphized structs have their type args baked into the name (e.g., "BTreeNode<String,i32>")
-            // These are effectively generic types that were instantiated with concrete type arguments.
-            // This string check should be replaced with proper type metadata once we track
-            // whether a struct is a monomorphized generic.
-            ResolvedType::Struct { name, .. } => name.contains('<'),
+            ResolvedType::Struct {
+                is_monomorphized, ..
+            } => *is_monomorphized,
             // References are generic if inner is generic
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.is_generic_type(*inner),
             // Tuples are generic if they contain generic types

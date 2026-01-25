@@ -693,45 +693,45 @@ fn analyze_expr(
                 match base_receiver_type {
                     ResolvedType::Struct {
                         name,
-                        module_source,
+                        is_monomorphized: true,
                         ..
                     } => {
-                        // Check if this is a monomorphized struct (name contains "<")
-                        // Monomorphized structs are registered as FunctionId::Free, not Method
-                        if name.contains('<') {
-                            // Monomorphized struct method call - use FunctionId::Free
-                            // Include trait name for trait methods
-                            let mangled_func_name = if let Some(ref trait_n) = trait_name {
-                                format!("{name}^{trait_n}::{method_name}")
-                            } else {
-                                format!("{name}::{method_name}")
-                            };
-                            // Extract base generic name (e.g., "TreeMap" from "TreeMap<String,i32>")
-                            let base_struct = name.split('<').next().unwrap_or(&name);
-                            let base_name = if let Some(ref trait_n) = trait_name {
-                                format!("{base_struct}^{trait_n}::{method_name}")
-                            } else {
-                                format!("{base_struct}::{method_name}")
-                            };
-                            // Use empty path because monomorphized functions are added
-                            // to the entry module, not the original struct's module
-                            let callee_id =
-                                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                                    vec![],
-                                    mangled_func_name,
-                                    base_name,
-                                ));
-                            analysis.callees.insert(callee_id);
+                        // Monomorphized struct method call - use FunctionId::Free
+                        // Include trait name for trait methods
+                        let mangled_func_name = if let Some(ref trait_n) = trait_name {
+                            format!("{name}^{trait_n}::{method_name}")
                         } else {
-                            // Regular struct method call - use FunctionId::Method
-                            let method_id = FunctionId::Method(MethodName::new(
-                                module_source.to_path().join("/"),
-                                name.clone(),
-                                trait_name.clone(),
-                                method_name,
-                            ));
-                            analysis.callees.insert(method_id);
-                        }
+                            format!("{name}::{method_name}")
+                        };
+                        // Extract base generic name (e.g., "TreeMap" from "TreeMap<String,i32>")
+                        let base_struct = name.split('<').next().unwrap_or(&name);
+                        let base_name = if let Some(ref trait_n) = trait_name {
+                            format!("{base_struct}^{trait_n}::{method_name}")
+                        } else {
+                            format!("{base_struct}::{method_name}")
+                        };
+                        // Use empty path because monomorphized functions are added
+                        // to the entry module, not the original struct's module
+                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                            vec![],
+                            mangled_func_name,
+                            base_name,
+                        ));
+                        analysis.callees.insert(callee_id);
+                    }
+                    ResolvedType::Struct {
+                        name,
+                        module_source,
+                        is_monomorphized: false,
+                    } => {
+                        // Regular struct method call - use FunctionId::Method
+                        let method_id = FunctionId::Method(MethodName::new(
+                            module_source.to_path().join("/"),
+                            name.clone(),
+                            trait_name.clone(),
+                            method_name,
+                        ));
+                        analysis.callees.insert(method_id);
                     }
                     ResolvedType::Primitive(_) => {
                         // Primitive method call (e.g., i32.to_string())

@@ -3160,6 +3160,7 @@ impl Codegen {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => {
                 if let Some(info) = self.lookup_struct_type(name, module_source) {
                     info.type_idx
@@ -3238,6 +3239,7 @@ impl Codegen {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => {
                 if let Some(info) = self.lookup_struct_type(name, module_source) {
                     self.generate_struct_copy(func, info.type_idx, info.field_count, ctx);
@@ -4575,9 +4577,10 @@ impl Codegen {
                 };
 
             // Only process non-monomorphized struct element types
-            // Monomorphized structs have names like "Pair<i32,String>", non-monomorphized are simple like "String"
             let is_non_monomorphized_struct = match type_table.get(element_type_id) {
-                ResolvedType::Struct { name, .. } => !name.contains('<'),
+                ResolvedType::Struct {
+                    is_monomorphized, ..
+                } => !is_monomorphized,
                 _ => false,
             };
             if !is_non_monomorphized_struct {
@@ -4737,12 +4740,12 @@ impl Codegen {
     ) -> bool {
         match type_table.get(type_id) {
             ResolvedType::GenericInstance { .. } => true,
-            // Check for monomorphized struct types (name contains '<')
-            // that aren't registered yet in struct_types
+            // Check for monomorphized struct types that aren't registered yet in struct_types
             ResolvedType::Struct {
                 name,
                 module_source,
-            } if name.contains('<') => {
+                is_monomorphized: true,
+            } => {
                 let struct_name = StructName::new(module_source.clone(), name.clone());
                 !self.struct_types.contains_key(&struct_name)
             }
@@ -4921,6 +4924,7 @@ impl Codegen {
             ResolvedType::Struct {
                 name,
                 module_source,
+                ..
             } => {
                 // Special case: String struct - always use the canonical module source
                 let lookup_source = if name == "String" {
@@ -5965,6 +5969,7 @@ impl Codegen {
                     ResolvedType::Struct {
                         name,
                         module_source,
+                        ..
                     } => {
                         // String struct: check for optimized intrinsic methods first
                         let is_string =
@@ -6283,6 +6288,7 @@ impl Codegen {
                         ResolvedType::Struct {
                             name,
                             module_source: type_module_source,
+                            ..
                         } => {
                             // Check if this struct is monomorphized using metadata
                             let struct_lookup =
@@ -6499,6 +6505,7 @@ impl Codegen {
                     ResolvedType::Struct {
                         name,
                         module_source,
+                        ..
                     } => self.lookup_struct_type(name, module_source),
                     ResolvedType::GenericInstance {
                         name, type_args, ..
@@ -9714,6 +9721,7 @@ impl Codegen {
                 ResolvedType::Struct {
                     name,
                     module_source,
+                    ..
                 } => {
                     if let Some(info) = self.lookup_struct_type(name, module_source) {
                         let local_name = format!("__copy_source_{}", info.type_idx);
