@@ -1,0 +1,34 @@
+// TreeMap remove and reinsert
+use {println} from "core:cli";
+
+fn run() with Stdout {
+    let mut map = TreeMap::<String, i32>::new();
+
+    map.insert("a", 1);
+    map.insert("b", 2);
+    map.insert("c", 3);
+
+    // Remove existing key
+    assert map.remove(&"b");
+    assert !map.contains_key(&"b");
+    assert map.len() == 2;
+    assert map.contains_key(&"a");
+    assert map.contains_key(&"c");
+
+    // Remove nonexistent key
+    assert !map.remove(&"z");
+    assert map.len() == 2;
+
+    // Reinsert after remove
+    map.insert("b", 999);
+    assert map.contains_key(&"b");
+    if let Some(val) = map.get(&"b") {
+        assert val == 999;
+    }
+    assert map.len() == 3;
+
+    println("remove operations: ok");
+}
+
+__DATA__
+{"stdout": "remove operations: ok\n"}

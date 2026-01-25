@@ -1,0 +1,16 @@
+// Test importing generic structs from prelude
+// This tests that generic structs like TreeMap<K,V> work when defined in prelude
+use {println} from "core:cli";
+
+fn run() with Stdout {
+    // TreeMap is defined in prelude with type params <K, V>
+    let mut map = TreeMap::<String, i32>::new();
+    map.insert("hello", 42);
+
+    if let Some(val) = map.get(&"hello") {
+        println(`value: {val}`);
+    }
+}
+
+__DATA__
+{"stdout": "value: 42\n"}

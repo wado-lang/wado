@@ -1,0 +1,41 @@
+// TreeMap index operations (bracket syntax)
+use {println} from "core:cli";
+
+fn run() with Stdout {
+    let mut map = TreeMap::<String, i32>::new();
+
+    // Index assignment
+    map["one"] = 1;
+    map["two"] = 2;
+    map["three"] = 3;
+
+    assert map.len() == 3;
+    assert map.contains_key(&"one");
+    assert map.contains_key(&"two");
+    assert map.contains_key(&"three");
+
+    // Index value access
+    if let Some(v1) = map["one"] {
+        assert v1 == 1;
+    }
+
+    if let Some(v2) = map["two"] {
+        assert v2 == 2;
+    }
+
+    // Update via index
+    map["one"] = 100;
+    if let Some(v3) = map["one"] {
+        assert v3 == 100;
+    }
+
+    // Nonexistent key returns null
+    if let Some(_) = map["nonexistent"] {
+        assert false, "should not reach here";
+    }
+
+    println("index operations: ok");
+}
+
+__DATA__
+{"stdout": "index operations: ok\n"}

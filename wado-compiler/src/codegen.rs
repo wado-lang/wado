@@ -1163,28 +1163,36 @@ impl Codegen {
         // generic struct elements (e.g., Array<Pair<i32, String>>) need to call
         // type_id_to_valtype which requires the struct to be registered.
         // Skip Array monomorphized structs - they're handled by array_struct_types.
+        // Note: We register ALL monomorphized structs (not just public ones) because
+        // private structs like TreeMapNode may be needed as dependencies of public
+        // structs like TreeMap.
         for (module_source, tir_mod) in all_tir_modules {
             if module_source == entry_module_source {
                 continue;
             }
-            for tir_struct in &tir_mod.structs {
-                if !tir_struct.is_pub {
-                    continue;
-                }
-                // Only register monomorphized structs in this phase
-                if tir_struct.monomorph_info.is_none() {
-                    continue;
-                }
-                // Skip Array monomorphized structs - they use array_struct_types
-                if let Some(info) = &tir_struct.monomorph_info
-                    && info.generic_name == "Array"
-                {
-                    continue;
-                }
+            // Collect monomorphized structs (excluding Array which has special handling)
+            let mono_lib_structs: Vec<_> = tir_mod
+                .structs
+                .iter()
+                .filter(|s| {
+                    s.monomorph_info.is_some()
+                        && s.monomorph_info
+                            .as_ref()
+                            .map(|i| i.generic_name != "Array")
+                            .unwrap_or(true)
+                })
+                .cloned()
+                .collect();
+
+            // Sort topologically to ensure dependencies come before dependents
+            let lib_type_table = tir_mod.type_table.borrow();
+            let sorted_lib_structs =
+                Self::sort_structs_topologically(&mono_lib_structs, &lib_type_table);
+
+            for tir_struct in sorted_lib_structs {
                 let struct_name =
                     StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
                 // Check for self-referential structs using full struct name
-                let lib_type_table = tir_mod.type_table.borrow();
                 let self_ref_fields = Self::get_self_referential_field_types(
                     &tir_struct.name,
                     tir_struct,

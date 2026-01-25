@@ -43,10 +43,10 @@ pub fn monomorphize_project(mut project: Project) -> Project {
     project
 }
 
-/// Monomorphize multiple modules with cross-module generic function support
+/// Monomorphize multiple modules with cross-module generic function and struct support
 ///
-/// This function enables monomorphization of generic functions defined in one module
-/// but used in another (e.g., Array methods from prelude used in user code).
+/// This function enables monomorphization of generic functions and structs defined in one module
+/// but used in another (e.g., Array methods from prelude, `TreeMap` from prelude used in user code).
 ///
 /// IMPORTANT: Requires unified type tables - all modules must share the same `TypeTable`
 /// so that `TypeIds` are valid across modules.
@@ -64,25 +64,145 @@ pub fn monomorphize_modules_indexed(
         }
     }
 
-    // Second pass: monomorphize each module using the combined generic functions
+    // Collect all generic structs from all modules, tracking ALL source modules
+    // (a struct name can appear in multiple modules due to shadowing)
+    // This includes private structs as they may be needed for instantiating public structs
+    // (e.g., TreeMap uses TreeMapNode internally)
+    let mut all_generic_structs: HashMap<String, Vec<(ModuleSource, TirStruct)>> = HashMap::new();
+    for (module_source, module) in &modules {
+        for tir_struct in &module.structs {
+            if !tir_struct.type_params.is_empty() {
+                all_generic_structs
+                    .entry(tir_struct.name.clone())
+                    .or_default()
+                    .push((module_source.clone(), tir_struct.clone()));
+            }
+        }
+    }
+
+    // Identify entry module and its generic struct names (for shadowing detection)
+    // Entry module is the one with ModuleSource::EntryPoint or the last module (user's file)
+    let entry_module_source = modules
+        .keys()
+        .find(|s| matches!(s, ModuleSource::EntryPoint { .. }))
+        .cloned()
+        .unwrap_or_else(|| {
+            modules
+                .keys()
+                .last()
+                .cloned()
+                .unwrap_or(ModuleSource::EntryPoint { filename: None })
+        });
+
+    let entry_generic_struct_names: std::collections::HashSet<String> = modules
+        .get(&entry_module_source)
+        .map(|m| {
+            m.structs
+                .iter()
+                .filter(|s| !s.type_params.is_empty())
+                .map(|s| s.name.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Second pass: monomorphize each module using the combined generic functions and structs
     modules
         .into_iter()
         .map(|(module_source, module)| {
             (
-                module_source,
-                monomorphize_with_externals(module, &all_generic_functions),
+                module_source.clone(),
+                monomorphize_with_externals(
+                    module,
+                    &module_source,
+                    &entry_module_source,
+                    &entry_generic_struct_names,
+                    &all_generic_functions,
+                    &all_generic_structs,
+                ),
             )
         })
         .collect()
 }
 
-/// Monomorphize a single module with access to cross-module generic functions
+/// Monomorphize a single module with access to cross-module generic functions and structs
 fn monomorphize_with_externals(
     module: TirModule,
+    current_module_source: &ModuleSource,
+    entry_module_source: &ModuleSource,
+    entry_generic_struct_names: &std::collections::HashSet<String>,
     all_generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
+    all_generic_structs_with_sources: &HashMap<String, Vec<(ModuleSource, TirStruct)>>,
 ) -> TirModule {
+    let is_entry_module = current_module_source == entry_module_source;
+
+    // Find modules whose structs are shadowed by the entry module's definitions
+    // This is computed globally, not per-module, because we want consistent shadowing
+    let mut shadowed_modules: std::collections::HashSet<ModuleSource> =
+        std::collections::HashSet::new();
+    for entry_struct_name in entry_generic_struct_names {
+        if let Some(sources) = all_generic_structs_with_sources.get(entry_struct_name) {
+            // Find external modules that define this struct (not the entry module)
+            for (external_module_source, _) in sources {
+                if external_module_source != entry_module_source {
+                    shadowed_modules.insert(external_module_source.clone());
+                }
+            }
+        }
+    }
+
+    // Build generic structs map based on whether this is the entry module or not
+    let mut all_generic_structs: HashMap<String, TirStruct> = HashMap::new();
+
+    if is_entry_module {
+        // Entry module: use its own structs + non-shadowed external structs
+        for (name, sources) in all_generic_structs_with_sources {
+            let mut selected: Option<&TirStruct> = None;
+
+            // First, try to find local definition (entry module's own struct)
+            for (source, tir_struct) in sources {
+                if source == entry_module_source {
+                    selected = Some(tir_struct);
+                    break;
+                }
+            }
+
+            // If no local definition, try external (from non-shadowed modules)
+            if selected.is_none() {
+                for (source, tir_struct) in sources {
+                    if !shadowed_modules.contains(source) {
+                        selected = Some(tir_struct);
+                        break;
+                    }
+                }
+            }
+
+            if let Some(tir_struct) = selected {
+                all_generic_structs.insert(name.clone(), tir_struct.clone());
+            }
+        }
+    } else {
+        // Library module: only use structs from this module itself
+        // Skip struct monomorphization for structs that are shadowed by entry module
+        // This prevents prelude's TreeMap<String,i32> from being instantiated when
+        // user defines their own TreeMap
+        for (name, sources) in all_generic_structs_with_sources {
+            // Skip if this struct name is defined in entry module (shadowed)
+            if entry_generic_struct_names.contains(name) {
+                continue;
+            }
+
+            // Only use structs from the current module
+            for (source, tir_struct) in sources {
+                if source == current_module_source {
+                    all_generic_structs.insert(name.clone(), tir_struct.clone());
+                    break;
+                }
+            }
+        }
+    }
+
     let mut monomorph = Monomorphizer::new();
-    monomorph.monomorphize_with_externals(module, all_generic_functions)
+    monomorph.monomorphize_with_externals(module, all_generic_functions, &all_generic_structs)
 }
 
 /// Monomorphizer collects generic instantiations and generates concrete types
@@ -278,27 +398,32 @@ impl Monomorphizer {
 
     /// Perform monomorphization with access to external generic functions
     ///
-    /// This enables monomorphization of generic functions defined in other modules
-    /// (e.g., Array methods from prelude used in user code).
+    /// This enables monomorphization of generic functions and structs defined in other modules
+    /// (e.g., Array methods from prelude, `TreeMap` from prelude used in user code).
     ///
-    /// IMPORTANT: Requires unified type tables - `TypeIds` in `external_generic_functions`
+    /// IMPORTANT: Requires unified type tables - `TypeIds` in external generics
     /// must be valid in the module's `type_table`.
     fn monomorphize_with_externals(
         &mut self,
         mut module: TirModule,
         external_generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        external_generic_structs: &HashMap<String, TirStruct>,
     ) -> TirModule {
         // ========================
         // Struct Monomorphization
         // ========================
 
         // Phase 1: Collect all generic struct definitions
-        let generic_structs: HashMap<String, TirStruct> = module
-            .structs
-            .iter()
-            .filter(|s| !s.type_params.is_empty())
-            .map(|s| (s.name.clone(), s.clone()))
-            .collect();
+        // Include both local structs AND external generic structs from other modules
+        let mut generic_structs: HashMap<String, TirStruct> = external_generic_structs.clone();
+
+        // Local generic structs override external ones (allows module-local specialization)
+        // This handles the case where user defines their own TreeMap that shadows prelude's
+        for tir_struct in &module.structs {
+            if !tir_struct.type_params.is_empty() {
+                generic_structs.insert(tir_struct.name.clone(), tir_struct.clone());
+            }
+        }
 
         // Store in module for later phases
         module.generic_structs = generic_structs.clone();
@@ -820,6 +945,12 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
+                // Skip Array - it has special codegen handling and should remain
+                // as GenericInstance, not be rewritten to Struct
+                if name == "Array" {
+                    return type_id;
+                }
+
                 // Build the mangled name using type names (not TypeIds)
                 let type_names: Vec<String> = type_args
                     .iter()
@@ -853,6 +984,12 @@ impl Monomorphizer {
             {
                 // Skip empty type_args (invalid generic instances)
                 if type_args.is_empty() {
+                    continue;
+                }
+
+                // Skip Array - it has special codegen handling and should not be
+                // monomorphized as a regular struct
+                if name == "Array" {
                     continue;
                 }
 
