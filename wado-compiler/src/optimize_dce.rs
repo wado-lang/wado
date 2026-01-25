@@ -694,6 +694,7 @@ fn analyze_expr(
                     ResolvedType::Struct {
                         name,
                         is_monomorphized: true,
+                        base_name: Some(base_struct),
                         ..
                     } => {
                         // Monomorphized struct method call - use FunctionId::Free
@@ -703,9 +704,8 @@ fn analyze_expr(
                         } else {
                             format!("{name}::{method_name}")
                         };
-                        // Extract base generic name (e.g., "TreeMap" from "TreeMap<String,i32>")
-                        let base_struct = name.split('<').next().unwrap_or(&name);
-                        let base_name = if let Some(ref trait_n) = trait_name {
+                        // Build base method name using the original generic struct name
+                        let base_method_name = if let Some(ref trait_n) = trait_name {
                             format!("{base_struct}^{trait_n}::{method_name}")
                         } else {
                             format!("{base_struct}::{method_name}")
@@ -715,7 +715,7 @@ fn analyze_expr(
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                             vec![],
                             mangled_func_name,
-                            base_name,
+                            base_method_name,
                         ));
                         analysis.callees.insert(callee_id);
                     }
@@ -723,6 +723,7 @@ fn analyze_expr(
                         name,
                         module_source,
                         is_monomorphized: false,
+                        ..
                     } => {
                         // Regular struct method call - use FunctionId::Method
                         let method_id = FunctionId::Method(MethodName::new(

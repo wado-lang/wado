@@ -4745,6 +4745,7 @@ impl Codegen {
                 name,
                 module_source,
                 is_monomorphized: true,
+                ..
             } => {
                 let struct_name = StructName::new(module_source.clone(), name.clone());
                 !self.struct_types.contains_key(&struct_name)

@@ -228,8 +228,12 @@ pub enum ResolvedType {
     Struct {
         name: String,
         module_source: ModuleSource,
-        /// Whether this struct was created by monomorphizing a generic struct
+        /// Whether this struct was created by monomorphizing a generic struct.
+        /// If true, `base_name` contains the original generic struct name.
         is_monomorphized: bool,
+        /// For monomorphized structs, the original generic name (e.g., "`TreeMap`" for "`TreeMap`<String,i32>").
+        /// None for non-monomorphized structs.
+        base_name: Option<String>,
     },
     Enum {
         name: String,
@@ -447,19 +451,25 @@ impl TypeTable {
             name,
             module_source,
             is_monomorphized: false,
+            base_name: None,
         })
     }
 
     /// Create a monomorphized struct type (e.g., "Box<i32>")
+    ///
+    /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
+    /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
     pub fn make_monomorphized_struct(
         &mut self,
         name: String,
         module_source: ModuleSource,
+        base_name: String,
     ) -> TypeId {
         self.intern(ResolvedType::Struct {
             name,
             module_source,
             is_monomorphized: true,
+            base_name: Some(base_name),
         })
     }
 
@@ -477,6 +487,7 @@ impl TypeTable {
             name: name.to_string(),
             module_source: module_source.clone(),
             is_monomorphized: false,
+            base_name: None,
         };
         self.intern_map.get(&key).copied()
     }
