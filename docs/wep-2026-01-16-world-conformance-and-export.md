@@ -30,12 +30,12 @@ To properly support Component Model worlds, we need:
 
 Two orthogonal concepts control accessibility:
 
-| Declaration | From Wado modules | From CM boundary |
-|-------------|-------------------|------------------|
-| `fn foo()` | ❌ | ❌ |
-| `pub fn foo()` | ✅ | ❌ |
-| `export fn foo()` | ❌ | ✅ |
-| `pub export fn foo()` | ✅ | ✅ |
+| Declaration           | From Wado modules | From CM boundary |
+| --------------------- | ----------------- | ---------------- |
+| `fn foo()`            | ❌                | ❌               |
+| `pub fn foo()`        | ✅                | ❌               |
+| `export fn foo()`     | ❌                | ✅               |
+| `pub export fn foo()` | ✅                | ✅               |
 
 - **`pub`**: Makes a declaration visible to other Wado modules
 - **`export`**: Generates Component Model ABI glue code, making it accessible across CM boundary
@@ -175,12 +175,12 @@ export(Command::run, HttpServer::run) pub fn run() {
 
 ## Keyword Selection Rationale
 
-| Keyword      | Pros                                   | Cons                           | Decision     |
-| ------------ | -------------------------------------- | ------------------------------ | ------------ |
-| `implements` | Common in OOP languages                | Strong class-level connotation | Rejected     |
-| `conforms`   | Clear protocol conformance meaning     | Slightly verbose               | Considered   |
-| `confirms`   | Declarative reading                    | Unusual verb form              | Considered   |
-| `contract`   | Clear boundary contract semantics      | N/A                            | **Accepted** |
+| Keyword      | Pros                               | Cons                           | Decision     |
+| ------------ | ---------------------------------- | ------------------------------ | ------------ |
+| `implements` | Common in OOP languages            | Strong class-level connotation | Rejected     |
+| `conforms`   | Clear protocol conformance meaning | Slightly verbose               | Considered   |
+| `confirms`   | Declarative reading                | Unusual verb form              | Considered   |
+| `contract`   | Clear boundary contract semantics  | N/A                            | **Accepted** |
 
 **Why `contract`:**
 
