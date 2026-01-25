@@ -402,6 +402,7 @@ let pair = SortedPair { first: 1, second: 2 };
 ```
 
 Built-in trait implementations:
+
 - All primitive types (`i32`, `f64`, `bool`, etc.) implement `Eq` and `Ord`
 - Custom types must explicitly implement traits
 
