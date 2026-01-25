@@ -1763,8 +1763,11 @@ impl Monomorphizer {
                 {
                     let type_args = &monomorph.type_args;
                     if !type_args.is_empty() {
-                        let generic_method_name =
-                            MethodName::format_local(&info.base_struct_name, None, &info.method_name);
+                        let generic_method_name = MethodName::format_local(
+                            &info.base_struct_name,
+                            None,
+                            &info.method_name,
+                        );
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
                             // Only queue if we have the right number of type args
