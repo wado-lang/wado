@@ -1217,6 +1217,21 @@ impl Codegen {
             }
         }
 
+        // PHASE 3.5: Pre-register array types from monomorphized struct fields
+        // This must happen BEFORE PHASE 4 so that struct fields with Array<Tuple<...>>
+        // or other non-primitive element types can be properly typed.
+        self.pre_register_arrays_from_monomorphized_structs(entry_tir, type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source == entry_module_source {
+                continue;
+            }
+            self.pre_register_arrays_from_monomorphized_structs(
+                tir_mod,
+                &tir_mod.type_table.borrow(),
+                &mut builder,
+            );
+        }
+
         // PHASE 4: Register MONOMORPHIZED main module structs
         // Skip Array monomorphized structs - they're handled by array_struct_types
         let mono_structs: Vec<_> = entry_tir
@@ -4588,6 +4603,106 @@ impl Codegen {
             if is_array_struct && !self.array_struct_types.contains_key(&element_type_id) {
                 self.get_or_create_array_struct_type(element_type_id, type_table, builder);
             }
+        }
+    }
+
+    /// Pre-register array types from monomorphized struct fields.
+    /// This is needed BEFORE monomorphized structs are registered, so that fields
+    /// with Array<Tuple<...>> or other non-primitive element types can be properly typed.
+    fn pre_register_arrays_from_monomorphized_structs(
+        &mut self,
+        tir_module: &TirModule,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        // Find all monomorphized structs (non-Array)
+        let mono_structs: Vec<_> = tir_module
+            .structs
+            .iter()
+            .filter(|s| {
+                s.type_params.is_empty()
+                    && s.monomorph_info.is_some()
+                    && s.monomorph_info
+                        .as_ref()
+                        .map(|i| i.generic_name != "Array")
+                        .unwrap_or(true)
+            })
+            .collect();
+
+        // For each monomorphized struct, scan field types for Array<T> instances
+        let mut array_types_to_register: Vec<(TypeId, bool)> = Vec::new();
+        for tir_struct in mono_structs {
+            for field in &tir_struct.fields {
+                self.collect_array_types_recursive(
+                    field.type_id,
+                    type_table,
+                    &mut array_types_to_register,
+                    &mut std::collections::HashSet::new(),
+                );
+            }
+        }
+
+        // Register the discovered array types
+        for (element_type_id, is_array_struct) in array_types_to_register {
+            // Skip array types with type parameters (unmonomorphized generics)
+            if type_table.contains_type_param(element_type_id) {
+                continue;
+            }
+            // Skip array types with Unknown/Error element types
+            if element_type_id == TypeTable::UNKNOWN || element_type_id == TypeTable::ERROR {
+                continue;
+            }
+            // Skip element types that involve monomorphized structs (GenericInstance)
+            // These are handled by either:
+            // - Self-referential struct registration with rec groups
+            // - Later PHASE 5 array registration after structs are registered
+            if self.element_type_involves_unregistered_struct(element_type_id, type_table) {
+                continue;
+            }
+            // Register raw array type
+            if !self.array_types.contains_key(&element_type_id) {
+                self.get_or_create_array_type(element_type_id, type_table, builder);
+            }
+            // Also register Array struct type
+            if is_array_struct && !self.array_struct_types.contains_key(&element_type_id) {
+                self.get_or_create_array_struct_type(element_type_id, type_table, builder);
+            }
+        }
+    }
+
+    /// Check if an element type involves an unregistered monomorphized struct
+    /// (`GenericInstance` or Struct with mangled name like "Foo<T>").
+    /// This recursively checks nested types.
+    fn element_type_involves_unregistered_struct(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+    ) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::GenericInstance { .. } => true,
+            // Check for monomorphized struct types (name contains '<')
+            // that aren't registered yet in struct_types
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } if name.contains('<') => {
+                let struct_name = StructName::new(module_source.clone(), name.clone());
+                !self.struct_types.contains_key(&struct_name)
+            }
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.element_type_involves_unregistered_struct(*inner, type_table)
+            }
+            ResolvedType::Option(inner) => {
+                self.element_type_involves_unregistered_struct(*inner, type_table)
+            }
+            ResolvedType::Tuple(elements) => elements
+                .iter()
+                .any(|e| self.element_type_involves_unregistered_struct(*e, type_table)),
+            ResolvedType::Result { ok, err } => {
+                self.element_type_involves_unregistered_struct(*ok, type_table)
+                    || self.element_type_involves_unregistered_struct(*err, type_table)
+            }
+            _ => false,
         }
     }
 

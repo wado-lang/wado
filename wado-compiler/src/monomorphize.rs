@@ -260,10 +260,14 @@ impl Monomorphizer {
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)
         // may create new GenericInstance types in its fields (like BTreeNode<String,i32>)
         // that also need to be instantiated.
+        // Build set of valid struct names for collection
+        let valid_struct_names: std::collections::HashSet<String> =
+            generic_structs.keys().cloned().collect();
+
         let mut new_structs = Vec::new();
         loop {
             // Collect instantiation sites from current type table
-            self.collect_instantiation_sites(&module.type_table.borrow());
+            self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
 
             // If no new structs to instantiate, we're done
             if self.pending.is_empty() {
@@ -376,8 +380,8 @@ impl Monomorphizer {
         // Function monomorphization may have created new GenericInstance types
         // (e.g., BTreeNode<String,i32>) that weren't in the type table during Phase 2.
         // Collect and instantiate these now.
-        self.collect_instantiation_sites(&module.type_table.borrow());
-        let mut new_structs = Vec::new();
+        self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
+        let mut second_pass_structs = Vec::new();
         while let Some(key) = self.pending.pop() {
             if let Some(generic_struct) = generic_structs.get(&key.name)
                 && let Some(concrete) = self.instantiate_struct(
@@ -386,10 +390,10 @@ impl Monomorphizer {
                     &mut module.type_table.borrow_mut(),
                 )
             {
-                new_structs.push(concrete);
+                second_pass_structs.push(concrete);
             }
         }
-        module.structs.extend(new_structs);
+        module.structs.extend(second_pass_structs);
         // Rewrite types again for any new struct instantiations
         self.rewrite_types_in_module(&mut module);
 
@@ -428,6 +432,10 @@ impl Monomorphizer {
         // Store in module for later phases
         module.generic_structs = generic_structs.clone();
 
+        // Build set of valid struct names for collection
+        let valid_struct_names: std::collections::HashSet<String> =
+            generic_structs.keys().cloned().collect();
+
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)
         // may create new GenericInstance types in its fields (like BTreeNode<String,i32>)
@@ -435,7 +443,7 @@ impl Monomorphizer {
         let mut new_structs = Vec::new();
         loop {
             // Collect instantiation sites from current type table
-            self.collect_instantiation_sites(&module.type_table.borrow());
+            self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
 
             // If no new structs to instantiate, we're done
             if self.pending.is_empty() {
@@ -547,8 +555,8 @@ impl Monomorphizer {
         // Function monomorphization may have created new GenericInstance types
         // (e.g., BTreeNode<String,i32>) that weren't in the type table during Phase 2.
         // Collect and instantiate these now.
-        self.collect_instantiation_sites(&module.type_table.borrow());
-        let mut new_structs = Vec::new();
+        self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
+        let mut second_pass_structs = Vec::new();
         while let Some(key) = self.pending.pop() {
             if let Some(generic_struct) = generic_structs.get(&key.name)
                 && let Some(concrete) = self.instantiate_struct(
@@ -557,10 +565,10 @@ impl Monomorphizer {
                     &mut module.type_table.borrow_mut(),
                 )
             {
-                new_structs.push(concrete);
+                second_pass_structs.push(concrete);
             }
         }
-        module.structs.extend(new_structs);
+        module.structs.extend(second_pass_structs);
         // Rewrite types again for any new struct instantiations
         self.rewrite_types_in_module(&mut module);
 
@@ -976,7 +984,12 @@ impl Monomorphizer {
     }
 
     /// Collect all `GenericInstance` types from the type table
-    fn collect_instantiation_sites(&mut self, type_table: &TypeTable) {
+    /// Only collects types whose base struct is in `valid_struct_names`
+    fn collect_instantiation_sites(
+        &mut self,
+        type_table: &TypeTable,
+        valid_struct_names: &std::collections::HashSet<String>,
+    ) {
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -990,6 +1003,12 @@ impl Monomorphizer {
                 // Skip Array - it has special codegen handling and should not be
                 // monomorphized as a regular struct
                 if name == "Array" {
+                    continue;
+                }
+
+                // Only collect if the struct is in our valid set
+                // This prevents library modules from trying to instantiate entry module's structs
+                if !valid_struct_names.contains(name) {
                     continue;
                 }
 

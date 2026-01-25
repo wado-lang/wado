@@ -25,20 +25,20 @@ fn run() with Stdout {
     }
 }
 
-pub fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: &String) -> Option<i32> {
+pub fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
     if Some(node) = "TreeMap<String,i32>::find_node"(self, key) {
         return Option::Some(node.value);
     }
     return null;
 }
 
-fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: &String) -> Option<&TreeMapNode<String,i32>> {
+fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: String) -> Option<&TreeMapNode<String,i32>> {
     let mut current: Option<&mut TreeMapNode<String,i32>> = self.root;
     while let Some(n) = current {
-        if (!n.deleted && "String^Eq::eq"(&*key, &n.key)) {
+        if (!n.deleted && "String^Eq::eq"(&key, &n.key)) {
             return Option::Some(n);
         }
-        if "String^Ord::lt"(&*key, &n.key) {
+        if "String^Ord::lt"(&key, &n.key) {
             current = n.left;
         } else {
             current = n.right;
