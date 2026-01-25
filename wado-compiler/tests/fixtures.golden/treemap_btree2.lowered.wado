@@ -335,7 +335,7 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
         "Array<String>::append"(&mut new_root.keys, key);
         "Array<i32>::append"(&mut new_root.values, value);
         "Array<bool>::append"(&mut new_root.deleted, false);
-        self.root = Option::Some(&mut new_root);
+        self.root = move Option::Some(&mut new_root);
         self.size = 1;
         return;
     }
@@ -358,7 +358,7 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
             let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_internal"();
             "Array<BTreeNode<String,i32>>::append"(&mut new_root.children, root);
             "TreeMap<String,i32>::split_child"(self, &mut new_root, 0);
-            self.root = Option::Some(&mut new_root);
+            self.root = move Option::Some(&mut new_root);
         }
         if Some(r) = self.root {
             "TreeMap<String,i32>::insert_non_full"(self, r, key, value);

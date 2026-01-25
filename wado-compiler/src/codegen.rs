@@ -3201,7 +3201,9 @@ impl Codegen {
     /// Option<T> needs copying if T needs copying.
     fn needs_value_copy(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. } => true,
             ResolvedType::Tuple(elements) => !elements.is_empty(),
             ResolvedType::Option(inner) => self.needs_value_copy(*inner, type_table),
             _ => false,
@@ -3309,6 +3311,20 @@ impl Codegen {
                     self.generate_option_copy(func, *inner, type_table, ctx, builder);
                 }
                 // If inner doesn't need copying, the option value is already on stack
+            }
+            ResolvedType::Variant { name, .. } => {
+                // Variant types are represented as struct { tag: i32, field0, field1, ... }
+                // Copy like a struct
+                let variant_types = self.variant_types.borrow();
+                if let Some(info) = variant_types.get(name) {
+                    let struct_type_idx = info.struct_type_idx;
+                    // field_count = 1 (tag) + max payload fields
+                    let field_count = 1 + info.field_types.len();
+                    drop(variant_types);
+                    self.generate_struct_copy(func, struct_type_idx, field_count, ctx);
+                } else {
+                    panic!("unknown variant type: {name}");
+                }
             }
             _ => {
                 // Primitives, references, etc. don't need copying
@@ -9857,6 +9873,20 @@ impl Codegen {
                         ctx.alloc_local(
                             &format!("__copy_array_len_{raw_array_type_idx}"),
                             ValType::I32,
+                        );
+                    }
+                }
+                ResolvedType::Variant { name, .. } => {
+                    let variant_types = self.variant_types.borrow();
+                    if let Some(info) = variant_types.get(name) {
+                        let struct_type_idx = info.struct_type_idx;
+                        drop(variant_types);
+                        ctx.alloc_local(
+                            &format!("__copy_source_{struct_type_idx}"),
+                            ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(struct_type_idx),
+                            }),
                         );
                     }
                 }
