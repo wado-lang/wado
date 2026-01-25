@@ -1729,6 +1729,10 @@ impl Codegen {
             module.section(&names);
         }
 
+        // Producers section (always include - small overhead, useful for analysis)
+        let producers = CoreModuleBuilder::build_producers_section();
+        module.section(&producers);
+
         module.finish()
     }
 

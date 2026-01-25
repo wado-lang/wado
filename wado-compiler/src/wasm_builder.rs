@@ -7,8 +7,8 @@ use std::collections::{HashMap, HashSet};
 
 use wasm_encoder::{
     ArrayType, CompositeInnerType, CompositeType, EntityType, ExportKind, ExportSection, FieldType,
-    FunctionSection, ImportSection, MemoryType, NameMap, NameSection, StorageType, SubType,
-    TypeSection, ValType,
+    FunctionSection, ImportSection, MemoryType, NameMap, NameSection, ProducersField,
+    ProducersSection, StorageType, SubType, TypeSection, ValType,
 };
 
 // ============================================================================
@@ -328,6 +328,25 @@ impl CoreModuleBuilder {
         names.types(&type_names);
 
         names
+    }
+
+    /// Build the producers section with language and compiler metadata
+    ///
+    /// This is a standard custom section that records toolchain information.
+    /// See: <https://github.com/WebAssembly/tool-conventions/blob/main/ProducersSection.md>
+    #[must_use]
+    pub fn build_producers_section() -> ProducersSection {
+        let mut language = ProducersField::new();
+        language.value("Wado", "");
+
+        let mut processed_by = ProducersField::new();
+        processed_by.value(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
+        let mut producers = ProducersSection::new();
+        producers.field("language", &language);
+        producers.field("processed-by", &processed_by);
+
+        producers
     }
 }
 
