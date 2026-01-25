@@ -12,8 +12,14 @@ use crate::tir::{
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-/// Maximum number of statements for a function to be inlined
-const INLINE_THRESHOLD: usize = 20;
+// TODO: The inline threshold is currently a simple statement count.
+// A proper cost model should consider:
+// - Instruction weights (e.g., calls are more expensive than arithmetic)
+// - Code size impact (inlining increases code size)
+// - Register pressure effects
+// - Hot path vs cold path (only inline on hot paths)
+// - Profile-guided optimization (PGO) data when available
+// This would allow more accurate inlining decisions and better performance.
 
 /// Count statements in a TIR block (recursive)
 fn count_stmts(block: &TirBlock) -> usize {
@@ -47,6 +53,7 @@ fn is_inline_eligible(
     recursive_functions: &HashSet<String>,
     _module_path: &[String],
     type_table: &TypeTable,
+    inline_threshold: usize,
 ) -> bool {
     // Must have a body
     let Some(body) = &func.body else {
@@ -97,7 +104,7 @@ fn is_inline_eligible(
     }
 
     // Small enough
-    count_stmts(body) < INLINE_THRESHOLD
+    count_stmts(body) < inline_threshold
 }
 
 /// Check if a type has complex nested generics that could cause type normalization issues.
@@ -636,7 +643,10 @@ fn can_reach(
 }
 
 /// Inline eligible functions at their call sites
-pub fn inline_functions(project: &mut Project) {
+///
+/// The `inline_threshold` parameter controls the maximum number of statements
+/// a function can have to be considered for inlining.
+pub fn inline_functions(project: &mut Project, inline_threshold: usize) {
     let recursive_functions = find_recursive_functions(&project.tir_modules);
 
     // Collect inline candidates from all modules
@@ -655,6 +665,7 @@ pub fn inline_functions(project: &mut Project) {
                 &recursive_functions,
                 &module_path,
                 &module.type_table.borrow(),
+                inline_threshold,
             ) {
                 inline_candidates.insert((module_path.clone(), func.name.clone()), func.clone());
                 // Get the strings used by this function

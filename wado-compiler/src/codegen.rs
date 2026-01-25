@@ -10218,6 +10218,7 @@ mod tests {
     #[tokio::test]
     async fn test_generate_binary() {
         let host = InMemoryCompilerHost::new();
+        // Use O0 to avoid DCE removing unused code in this simple smoke test
         let result = crate::compile_with_host(
             r#"
             fn add(a: i32, b: i32) -> i32 {
@@ -10230,7 +10231,7 @@ mod tests {
         "#,
             &host,
             None,
-            crate::OptLevel::default(),
+            crate::OptLevel::O0,
         )
         .await
         .expect("compilation failed");

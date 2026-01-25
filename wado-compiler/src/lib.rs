@@ -181,7 +181,7 @@ pub struct DumpResult {
 /// # Example
 /// ```ignore
 /// let host = FilesystemCompilerHost::new(base_path);
-/// let result = compile_with_host(source, &host, Some("main.wado"), OptLevel::Basic).await?;
+/// let result = compile_with_host(source, &host, Some("main.wado"), OptLevel::O1).await?;
 /// ```
 pub async fn compile_with_host<H: CompilerHost>(
     source: &str,

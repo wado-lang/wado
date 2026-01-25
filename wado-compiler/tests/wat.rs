@@ -71,7 +71,7 @@ fn test_branch_hints_emitted() {
             &source,
             &host,
             Some(source_path.to_str().unwrap()),
-            OptLevel::None,
+            OptLevel::O0,
         )
         .await
         .unwrap_or_else(|e| panic!("Compilation failed: {}", e));
@@ -115,7 +115,7 @@ fn test_branch_hints_values() {
             &source,
             &host,
             Some(source_path.to_str().unwrap()),
-            OptLevel::None,
+            OptLevel::O0,
         )
         .await
         .unwrap_or_else(|e| panic!("Compilation failed: {}", e));

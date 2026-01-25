@@ -4,56 +4,27 @@
 
 fn run() with Stdout {
     let mut arr: Array<String> = move [];
-    __inline_Array_String___append_0: {
-        let value: String = move "hello";
-        let used: i32 = arr.used;
-        let capacity: i32 = core::builtin::array_len(arr.repr);
-        if core::builtin::unlikely((used >= capacity)) {
-            let mut new_capacity: i32 = (capacity * 2);
-            if (capacity == 0) {
-                new_capacity = 4;
-            }
-            let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
-            core::builtin::array_copy::<String>(new_repr, 0, arr.repr, 0, used);
-            arr.repr = new_repr;
-        }
-        core::builtin::array_set::<String>(arr.repr, used, value);
-        arr.used = (used + 1);
-    };
-    __inline_Array_String___append_1: {
-        let value: String = move "world";
-        let used: i32 = arr.used;
-        let capacity: i32 = core::builtin::array_len(arr.repr);
-        if core::builtin::unlikely((used >= capacity)) {
-            let mut new_capacity: i32 = (capacity * 2);
-            if (capacity == 0) {
-                new_capacity = 4;
-            }
-            let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
-            core::builtin::array_copy::<String>(new_repr, 0, arr.repr, 0, used);
-            arr.repr = new_repr;
-        }
-        core::builtin::array_set::<String>(arr.repr, used, value);
-        arr.used = (used + 1);
-    };
-    __inline_Array_String___append_2: {
-        let value: String = move "!";
-        let used: i32 = arr.used;
-        let capacity: i32 = core::builtin::array_len(arr.repr);
-        if core::builtin::unlikely((used >= capacity)) {
-            let mut new_capacity: i32 = (capacity * 2);
-            if (capacity == 0) {
-                new_capacity = 4;
-            }
-            let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
-            core::builtin::array_copy::<String>(new_repr, 0, arr.repr, 0, used);
-            arr.repr = new_repr;
-        }
-        core::builtin::array_set::<String>(arr.repr, used, value);
-        arr.used = (used + 1);
-    };
+    "Array<String>::append"(&mut arr, move "hello");
+    "Array<String>::append"(&mut arr, move "world");
+    "Array<String>::append"(&mut arr, move "!");
     for let _item of arr {
         core::cli::println(x);
     }
+}
+
+pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
+        }
+        let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+        core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<String>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

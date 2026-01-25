@@ -130,7 +130,7 @@ Available phases (in compilation order):
 7. `--lower` - Lowered TIR (supports `--unparse`)
 8. `--optimize` - Optimized TIR (supports `--unparse`)
 
-Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (basic), `-O2` (full), `-Os` (`-O2` + strip names).
+Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development: all except DCE, 2 iterations), `-O2` (production: 10 iterations, default), `-O3` (aggressive: 100 iterations), `-Os` (`-O2` + strip names).
 
 ### Golden Fixtures (Lowered TIR Tests)
 
@@ -262,6 +262,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Iterator Traits Design](./docs/wep-2026-01-24-iterator-traits.md)
 - [Module Loader Design](./docs/wep-2026-01-24-module-loader.md)
 - [Closure Parameter Monomorphization](./docs/wep-2026-01-25-closure-parameter-monomorphization.md)
+- [128-bit Integer Types (i128/u128)](./docs/wep-2026-01-24-i128-u128-types.md)
 
 ### Structure
 

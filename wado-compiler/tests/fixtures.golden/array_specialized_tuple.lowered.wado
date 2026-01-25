@@ -4,120 +4,27 @@
 
 fn run() with Stdout {
     let mut arr: Array<[bool, i32, String]> = move [];
-    __inline_Array_Tuple_bool_i32_String____append_0: {
-        let value: [bool, i32, String] = move [true, 1, "one"];
-        let used: i32 = arr.used;
-        let capacity: i32 = core::builtin::array_len(arr.repr);
-        if core::builtin::unlikely((used >= capacity)) {
-            let mut new_capacity: i32 = (capacity * 2);
-            if (capacity == 0) {
-                new_capacity = 4;
-            }
-            let new_repr: builtin::array<[bool, i32, String]> = core::builtin::array_new::<[bool, i32, String]>(new_capacity);
-            core::builtin::array_copy::<[bool, i32, String]>(new_repr, 0, arr.repr, 0, used);
-            arr.repr = new_repr;
-        }
-        core::builtin::array_set::<[bool, i32, String]>(arr.repr, used, value);
-        arr.used = (used + 1);
-    };
-    __inline_Array_Tuple_bool_i32_String____append_1: {
-        let value: [bool, i32, String] = move [false, 2, "two"];
-        let used: i32 = arr.used;
-        let capacity: i32 = core::builtin::array_len(arr.repr);
-        if core::builtin::unlikely((used >= capacity)) {
-            let mut new_capacity: i32 = (capacity * 2);
-            if (capacity == 0) {
-                new_capacity = 4;
-            }
-            let new_repr: builtin::array<[bool, i32, String]> = core::builtin::array_new::<[bool, i32, String]>(new_capacity);
-            core::builtin::array_copy::<[bool, i32, String]>(new_repr, 0, arr.repr, 0, used);
-            arr.repr = new_repr;
-        }
-        core::builtin::array_set::<[bool, i32, String]>(arr.repr, used, value);
-        arr.used = (used + 1);
-    };
-    __inline_Array_Tuple_bool_i32_String____append_2: {
-        let value: [bool, i32, String] = move [true, 3, "three"];
-        let used: i32 = arr.used;
-        let capacity: i32 = core::builtin::array_len(arr.repr);
-        if core::builtin::unlikely((used >= capacity)) {
-            let mut new_capacity: i32 = (capacity * 2);
-            if (capacity == 0) {
-                new_capacity = 4;
-            }
-            let new_repr: builtin::array<[bool, i32, String]> = core::builtin::array_new::<[bool, i32, String]>(new_capacity);
-            core::builtin::array_copy::<[bool, i32, String]>(new_repr, 0, arr.repr, 0, used);
-            arr.repr = new_repr;
-        }
-        core::builtin::array_set::<[bool, i32, String]>(arr.repr, used, value);
-        arr.used = (used + 1);
-    };
+    "Array<Tuple<bool,i32,String>>::append"(&mut arr, move [true, 1, "one"]);
+    "Array<Tuple<bool,i32,String>>::append"(&mut arr, move [false, 2, "two"]);
+    "Array<Tuple<bool,i32,String>>::append"(&mut arr, move [true, 3, "three"]);
     for let _item of arr {
-        core::cli::println(__inline_string_concat_6: {
-            let a: String = __inline_string_concat_5: {
-                let a: String = __inline_string_concat_4: {
-                    let a: String = __inline_string_concat_3: {
-                        let a: String = move "bool::to_string"(x.0);
-                        let b: String = move " ";
-                        let len_a: i32 = "String::len"(&a);
-                        let len_b: i32 = "String::len"(&b);
-                        let total: i32 = (len_a + len_b);
-                        let result: String = move core::builtin::string_new(total);
-                        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
-                            let byte: i32 = "String::get"(&a, i);
-                            "String::set"(&mut result, i, byte);
-                        }
-                        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
-                            let byte: i32 = "String::get"(&b, i);
-                            "String::set"(&mut result, (len_a + i), byte);
-                        }
-                        break __inline_string_concat_3: result;
-                    };
-                    let b: String = move "i32::to_string"(x.1);
-                    let len_a: i32 = "String::len"(&a);
-                    let len_b: i32 = "String::len"(&b);
-                    let total: i32 = (len_a + len_b);
-                    let result: String = move core::builtin::string_new(total);
-                    for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
-                        let byte: i32 = "String::get"(&a, i);
-                        "String::set"(&mut result, i, byte);
-                    }
-                    for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
-                        let byte: i32 = "String::get"(&b, i);
-                        "String::set"(&mut result, (len_a + i), byte);
-                    }
-                    break __inline_string_concat_4: result;
-                };
-                let b: String = move " ";
-                let len_a: i32 = "String::len"(&a);
-                let len_b: i32 = "String::len"(&b);
-                let total: i32 = (len_a + len_b);
-                let result: String = move core::builtin::string_new(total);
-                for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
-                    let byte: i32 = "String::get"(&a, i);
-                    "String::set"(&mut result, i, byte);
-                }
-                for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
-                    let byte: i32 = "String::get"(&b, i);
-                    "String::set"(&mut result, (len_a + i), byte);
-                }
-                break __inline_string_concat_5: result;
-            };
-            let b: String = x.2;
-            let len_a: i32 = "String::len"(&a);
-            let len_b: i32 = "String::len"(&b);
-            let total: i32 = (len_a + len_b);
-            let result: String = move core::builtin::string_new(total);
-            for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
-                let byte: i32 = "String::get"(&a, i);
-                "String::set"(&mut result, i, byte);
-            }
-            for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
-                let byte: i32 = "String::get"(&b, i);
-                "String::set"(&mut result, (len_a + i), byte);
-            }
-            break __inline_string_concat_6: result;
-        });
+        core::cli::println(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move core::internal::string_concat(move "bool::to_string"(x.0), move " "), move "i32::to_string"(x.1)), move " "), x.2));
     }
+}
+
+pub fn "Array<Tuple<bool,i32,String>>::append"(self: &mut Array<[bool, i32, String]>, value: [bool, i32, String]) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
+        }
+        let new_repr: builtin::array<[bool, i32, String]> = core::builtin::array_new::<[bool, i32, String]>(new_capacity);
+        core::builtin::array_copy::<[bool, i32, String]>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<[bool, i32, String]>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

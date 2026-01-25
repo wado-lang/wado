@@ -1,0 +1,522 @@
+// AA Tree - A self-balancing binary search tree
+//
+// AA trees are a simpler variant of red-black trees, invented by Arne Andersson.
+// Instead of tracking node colors, each node has a "level" that determines balance.
+//
+// This implementation uses:
+// - Recursive node structure with Option for children
+// - Flag-based lazy deletion with periodic compaction
+
+use { println, print, Stdout } from "core:cli";
+
+// A node in the AA tree
+struct AANode<K, V> {
+    key: K,
+    value: V,
+    level: i32,
+    left: Option<&mut AANode<K, V>>,
+    right: Option<&mut AANode<K, V>>,
+    deleted: bool,
+}
+
+impl AANode<K, V> {
+    fn new(key: K, value: V) -> AANode<K, V> {
+        return AANode {
+            key,
+            value,
+            level: 1,
+            left: null,
+            right: null,
+            deleted: false,
+        };
+    }
+}
+
+// The AA Tree
+pub struct AATree<K, V> {
+    root: Option<&mut AANode<K, V>>,
+    size: i32,
+    deleted_count: i32,
+}
+
+impl AATree<K, V> {
+    pub fn new() -> AATree<K, V> {
+        return AATree {
+            root: null,
+            size: 0,
+            deleted_count: 0,
+        };
+    }
+
+    pub fn len(&self) -> i32 { return self.size; }
+    pub fn is_empty(&self) -> bool { return self.size == 0; }
+    pub fn deleted_count(&self) -> i32 { return self.deleted_count; }
+
+    // Skew: right rotation to fix left horizontal link
+    fn skew(&mut self, node: Option<&mut AANode<K, V>>) -> Option<&mut AANode<K, V>> {
+        if let Some(n) = node {
+            if let Some(left) = n.left {
+                if left.level == n.level {
+                    // Rotate right
+                    n.left = left.right;
+                    left.right = Option::Some(n);
+                    return Option::Some(left);
+                }
+            }
+            return Option::Some(n);
+        }
+        return null;
+    }
+
+    // Split: left rotation to fix consecutive right horizontal links
+    fn split(&mut self, node: Option<&mut AANode<K, V>>) -> Option<&mut AANode<K, V>> {
+        if let Some(n) = node {
+            if let Some(right) = n.right {
+                if let Some(rr) = right.right {
+                    if rr.level == n.level {
+                        // Rotate left
+                        n.right = right.left;
+                        right.left = Option::Some(n);
+                        right.level = right.level + 1;
+                        return Option::Some(right);
+                    }
+                }
+            }
+            return Option::Some(n);
+        }
+        return null;
+    }
+
+    fn insert_at(
+        &mut self,
+        node: Option<&mut AANode<K, V>>,
+        key: K,
+        value: V,
+        inserted: &mut bool,
+    ) -> Option<&mut AANode<K, V>> {
+        if let Some(n) = node {
+            // Reactivate deleted node
+            if n.deleted && key == n.key {
+                n.value = value;
+                n.deleted = false;
+                *inserted = true;
+                return Option::Some(n);
+            }
+
+            // Update existing key
+            if !n.deleted && key == n.key {
+                n.value = value;
+                return Option::Some(n);
+            }
+
+            // Recurse left or right
+            if key < n.key {
+                n.left = self.insert_at(n.left, key, value, inserted);
+            } else {
+                n.right = self.insert_at(n.right, key, value, inserted);
+            }
+
+            // Rebalance
+            let after_skew = self.skew(Option::Some(n));
+            return self.split(after_skew);
+        }
+
+        // Create new leaf node
+        let new_node = AANode::<K, V>::new(key, value);
+        *inserted = true;
+        return Option::Some(&mut new_node);
+    }
+
+    pub fn insert(&mut self, key: K, value: V) {
+        let mut inserted = false;
+        self.root = self.insert_at(self.root, key, value, &mut inserted);
+        if inserted {
+            self.size = self.size + 1;
+        }
+    }
+
+    fn find_node(&self, key: &K) -> Option<&AANode<K, V>> {
+        let mut current = self.root;
+        while let Some(n) = current {
+            if !n.deleted && *key == n.key {
+                return Option::Some(n);
+            }
+            if *key < n.key {
+                current = n.left;
+            } else {
+                current = n.right;
+            }
+        }
+        return null;
+    }
+
+    pub fn contains(&self, key: &K) -> bool {
+        return self.find_node(key) != null;
+    }
+
+    pub fn get(&self, key: &K) -> Option<V> {
+        if let Some(node) = self.find_node(key) {
+            return Option::Some(node.value);
+        }
+        return null;
+    }
+
+    fn find_node_mut(&mut self, key: &K) -> Option<&mut AANode<K, V>> {
+        let mut current = self.root;
+        while let Some(n) = current {
+            if !n.deleted && *key == n.key {
+                return Option::Some(n);
+            }
+            if *key < n.key {
+                current = n.left;
+            } else {
+                current = n.right;
+            }
+        }
+        return null;
+    }
+
+    pub fn delete(&mut self, key: &K) -> bool {
+        if let Some(node) = self.find_node_mut(key) {
+            node.deleted = true;
+            self.deleted_count = self.deleted_count + 1;
+            self.size = self.size - 1;
+            // Auto-compact if > 50% deleted
+            if self.deleted_count > self.size {
+                self.compact();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    fn collect_pairs(&self, node: Option<&AANode<K, V>>, result: &mut Array<[K, V]>) {
+        if let Some(n) = node {
+            self.collect_pairs(n.left, result);
+            if !n.deleted {
+                result.append([n.key, n.value]);
+            }
+            self.collect_pairs(n.right, result);
+        }
+    }
+
+    pub fn compact(&mut self) {
+        if self.deleted_count == 0 { return; }
+
+        let mut pairs: Array<[K, V]> = [];
+        self.collect_pairs(self.root, &mut pairs);
+
+        // Rebuild tree
+        self.root = null;
+        self.deleted_count = 0;
+        self.size = 0;
+
+        for let pair of pairs {
+            self.insert(pair.0, pair.1);
+        }
+    }
+
+    fn collect_keys(&self, node: Option<&AANode<K, V>>, result: &mut Array<K>) {
+        if let Some(n) = node {
+            self.collect_keys(n.left, result);
+            if !n.deleted {
+                result.append(n.key);
+            }
+            self.collect_keys(n.right, result);
+        }
+    }
+
+    pub fn keys(&self) -> Array<K> {
+        let mut result: Array<K> = [];
+        self.collect_keys(self.root, &mut result);
+        return result;
+    }
+
+    fn collect_values(&self, node: Option<&AANode<K, V>>, result: &mut Array<V>) {
+        if let Some(n) = node {
+            self.collect_values(n.left, result);
+            if !n.deleted {
+                result.append(n.value);
+            }
+            self.collect_values(n.right, result);
+        }
+    }
+
+    pub fn values(&self) -> Array<V> {
+        let mut result: Array<V> = [];
+        self.collect_values(self.root, &mut result);
+        return result;
+    }
+
+    fn find_min(&self, node: Option<&AANode<K, V>>) -> Option<&AANode<K, V>> {
+        if let Some(n) = node {
+            // Try left first
+            if let Some(left_min) = self.find_min(n.left) {
+                return Option::Some(left_min);
+            }
+            // Current if not deleted
+            if !n.deleted {
+                return Option::Some(n);
+            }
+            // Try right
+            return self.find_min(n.right);
+        }
+        return null;
+    }
+
+    pub fn min_key(&self) -> Option<K> {
+        if let Some(node) = self.find_min(self.root) {
+            return Option::Some(node.key);
+        }
+        return null;
+    }
+
+    fn find_max(&self, node: Option<&AANode<K, V>>) -> Option<&AANode<K, V>> {
+        if let Some(n) = node {
+            // Try right first
+            if let Some(right_max) = self.find_max(n.right) {
+                return Option::Some(right_max);
+            }
+            // Current if not deleted
+            if !n.deleted {
+                return Option::Some(n);
+            }
+            // Try left
+            return self.find_max(n.left);
+        }
+        return null;
+    }
+
+    pub fn max_key(&self) -> Option<K> {
+        if let Some(node) = self.find_max(self.root) {
+            return Option::Some(node.key);
+        }
+        return null;
+    }
+
+    pub fn clear(&mut self) {
+        self.root = null;
+        self.size = 0;
+        self.deleted_count = 0;
+    }
+}
+
+// IndexAssign for tree[key] = value
+impl IndexAssign<K> for AATree<K, V> {
+    type Input = V;
+    fn index_assign(&mut self, key: K, value: Self::Input) {
+        self.insert(key, value);
+    }
+}
+
+// IndexValue for tree[key] -> Option<V>
+impl IndexValue<K> for AATree<K, V> {
+    type Output = Option<V>;
+    fn index_value(&self, key: K) -> Self::Output {
+        return self.get(&key);
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test "empty tree" {
+    let tree = AATree::<String, i32>::new();
+    assert tree.is_empty();
+    assert tree.len() == 0;
+    assert !tree.contains(&"key");
+}
+
+test "single insert and get" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("one", 1);
+    assert tree.len() == 1;
+    assert tree.contains(&"one");
+    if let Some(val) = tree.get(&"one") {
+        assert val == 1;
+    }
+}
+
+test "multiple inserts maintain order" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("echo", 5);
+    tree.insert("charlie", 3);
+    tree.insert("golf", 7);
+    tree.insert("alpha", 1);
+    tree.insert("india", 9);
+    tree.insert("delta", 4);
+    tree.insert("foxtrot", 6);
+    tree.insert("bravo", 2);
+    tree.insert("hotel", 8);
+    assert tree.len() == 9;
+    let keys = tree.keys();
+    assert keys[0] == "alpha";
+    assert keys[1] == "bravo";
+    assert keys[2] == "charlie";
+    assert keys[3] == "delta";
+    assert keys[4] == "echo";
+    assert keys[5] == "foxtrot";
+    assert keys[6] == "golf";
+    assert keys[7] == "hotel";
+    assert keys[8] == "india";
+}
+
+test "update existing key" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("key", 100);
+    tree.insert("key", 200);
+    assert tree.len() == 1;
+    if let Some(val) = tree.get(&"key") {
+        assert val == 200;
+    }
+}
+
+test "delete and contains" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("a", 1);
+    tree.insert("b", 2);
+    tree.insert("c", 3);
+    assert tree.delete(&"b");
+    assert !tree.contains(&"b");
+    assert tree.len() == 2;
+    assert tree.contains(&"a");
+    assert tree.contains(&"c");
+}
+
+test "delete nonexistent" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("a", 1);
+    assert !tree.delete(&"z");
+    assert tree.len() == 1;
+}
+
+test "reinsert after delete" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("key", 100);
+    tree.delete(&"key");
+    tree.insert("key", 999);
+    assert tree.contains(&"key");
+    if let Some(val) = tree.get(&"key") {
+        assert val == 999;
+    }
+}
+
+test "compaction" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("a", 1);
+    tree.insert("b", 2);
+    tree.insert("c", 3);
+    tree.delete(&"b");
+    assert tree.deleted_count() == 1;
+    tree.compact();
+    assert tree.deleted_count() == 0;
+    assert tree.len() == 2;
+}
+
+test "auto compaction" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("a", 1);
+    tree.insert("b", 2);
+    tree.insert("c", 3);
+    tree.insert("d", 4);
+    tree.delete(&"a");
+    tree.delete(&"b");
+    tree.delete(&"c");
+    assert tree.deleted_count() == 0;
+    assert tree.len() == 1;
+}
+
+test "min max" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("bravo", 2);
+    tree.insert("alpha", 1);
+    tree.insert("charlie", 3);
+    if let Some(min) = tree.min_key() { assert min == "alpha"; }
+    if let Some(max) = tree.max_key() { assert max == "charlie"; }
+}
+
+test "index assign" {
+    let mut tree = AATree::<String, i32>::new();
+    tree["one"] = 1;
+    tree["two"] = 2;
+    assert tree.len() == 2;
+    assert tree.contains(&"one");
+}
+
+test "index value" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("key", 42);
+    if let Some(val) = tree["key"] {
+        assert val == 42;
+    }
+}
+
+test "values in order" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("charlie", 3);
+    tree.insert("alpha", 1);
+    tree.insert("bravo", 2);
+    let values = tree.values();
+    assert values[0] == 1;
+    assert values[1] == 2;
+    assert values[2] == 3;
+}
+
+test "clear" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("a", 1);
+    tree.insert("b", 2);
+    tree.clear();
+    assert tree.is_empty();
+}
+
+test "large tree" {
+    let mut tree = AATree::<String, i32>::new();
+    for let mut i = 0; i < 50; i += 1 {
+        tree.insert(`item{i}`, i);
+    }
+    assert tree.len() == 50;
+    for let mut i = 0; i < 50; i += 2 {
+        tree.delete(&`item{i}`);
+    }
+    assert tree.len() == 25;
+}
+
+// Demo entry point
+fn run() with Stdout {
+    println("AA Tree Demo");
+    println("============");
+
+    let mut tree = AATree::<String, i32>::new();
+    tree["apple"] = 5;
+    tree["banana"] = 3;
+    tree["cherry"] = 8;
+    tree["date"] = 2;
+    tree["elderberry"] = 9;
+
+    println(`Tree size: {tree.len()}`);
+
+    if let Some(count) = tree.get(&"banana") {
+        println(`Banana count: {count}`);
+    }
+
+    let keys = tree.keys();
+    print("Keys in order: ");
+    for let mut i = 0; i < keys.len(); i += 1 {
+        if i > 0 { print(", "); }
+        print(keys[i]);
+    }
+    println("");
+
+    tree.delete(&"cherry");
+    println(`After deleting 'cherry': {tree.len()} items`);
+
+    if let Some(min) = tree.min_key() { println(`Min key: {min}`); }
+    if let Some(max) = tree.max_key() { println(`Max key: {max}`); }
+
+    println("Demo complete!");
+}
+
+__DATA__
+{"stdout": "AA Tree Demo\n============\nTree size: 5\nBanana count: 3\nKeys in order: apple, banana, cherry, date, elderberry\nAfter deleting 'cherry': 4 items\nMin key: apple\nMax key: elderberry\nDemo complete!\n"}

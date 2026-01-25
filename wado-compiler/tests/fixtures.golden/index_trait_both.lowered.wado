@@ -17,24 +17,8 @@ fn run() with Stdout {
     __inline_SimpleArray_IndexAssign__index_assign_0: {
         arr.a = 42;
     };
-    core::cli::println(__inline_string_concat_2: {
-        let a: String = move "arr[0] = ";
-        let b: String = move "i32::to_string"(*__inline_SimpleArray_Index__index_1: {
-            break __inline_SimpleArray_Index__index_1: &arr.a;
-        });
-        let len_a: i32 = "String::len"(&a);
-        let len_b: i32 = "String::len"(&b);
-        let total: i32 = (len_a + len_b);
-        let result: String = move core::builtin::string_new(total);
-        for let mut i: i32 = 0; (i < len_a); i = (i + 1) {
-            let byte: i32 = "String::get"(&a, i);
-            "String::set"(&mut result, i, byte);
-        }
-        for let mut i: i32 = 0; (i < len_b); i = (i + 1) {
-            let byte: i32 = "String::get"(&b, i);
-            "String::set"(&mut result, (len_a + i), byte);
-        }
-        break __inline_string_concat_2: result;
-    });
+    core::cli::println(move core::internal::string_concat(move "arr[0] = ", move "i32::to_string"(*__inline_SimpleArray_Index__index_1: {
+        break __inline_SimpleArray_Index__index_1: &arr.a;
+    })));
 }
 
