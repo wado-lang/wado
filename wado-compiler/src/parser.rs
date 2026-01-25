@@ -5,7 +5,7 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedTypeBinding, AssociatedTypeDecl, Attribute, BinaryExpr,
     BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ContinueStmt, EffectDecl,
-    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr,
     IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item, LabeledBlockStmt,
     LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
@@ -2573,9 +2573,9 @@ impl Parser {
 
         self.expect(&TokenKind::LBrace)?;
 
-        let mut variants = Vec::new();
+        let mut cases = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            variants.push(self.parse_enum_variant()?);
+            cases.push(self.parse_enum_case()?);
             if !self.check(&TokenKind::RBrace) {
                 self.expect(&TokenKind::Comma)?;
             }
@@ -2587,31 +2587,18 @@ impl Parser {
             name,
             is_pub,
             type_params,
-            variants,
+            cases,
             span: start_span.merge(&end_span),
         })
     }
 
-    fn parse_enum_variant(&mut self) -> ParseResult<EnumVariant> {
+    fn parse_enum_case(&mut self) -> ParseResult<EnumCase> {
         let start_span = self.peek().span;
         let name = self.consume_ident()?;
 
-        let fields = if self.check(&TokenKind::LParen) {
-            self.advance();
-            let mut types = vec![self.parse_type()?];
-            while self.check(&TokenKind::Comma) {
-                self.advance();
-                types.push(self.parse_type()?);
-            }
-            self.expect(&TokenKind::RParen)?;
-            Some(types)
-        } else {
-            None
-        };
-
-        Ok(EnumVariant {
+        // Enum cases have no payload (unlike variant cases)
+        Ok(EnumCase {
             name,
-            fields,
             span: start_span,
         })
     }

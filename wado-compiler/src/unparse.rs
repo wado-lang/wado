@@ -5,7 +5,7 @@
 use crate::ast::{
     AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, EffectDecl,
-    EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
+    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item,
     LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
     Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
@@ -356,8 +356,8 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
-        for variant in &e.variants {
-            self.unparse_enum_variant(variant);
+        for case in &e.cases {
+            self.unparse_enum_case(case);
         }
         self.indent_level -= 1;
 
@@ -365,19 +365,10 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
-    fn unparse_enum_variant(&mut self, variant: &EnumVariant) {
+    fn unparse_enum_case(&mut self, case: &EnumCase) {
         self.write_indent();
-        self.output.push_str(&variant.name);
-        if let Some(fields) = &variant.fields {
-            self.output.push('(');
-            for (i, ty) in fields.iter().enumerate() {
-                if i > 0 {
-                    self.output.push_str(", ");
-                }
-                self.unparse_type(ty);
-            }
-            self.output.push(')');
-        }
+        self.output.push_str(&case.name);
+        // Enum cases have no payload (unlike variant cases)
         self.output.push_str(",\n");
     }
 
@@ -2057,19 +2048,10 @@ impl<'a> TirUnparser<'a> {
         self.output.push_str(" {\n");
         self.indent_level += 1;
 
-        for variant in &e.variants {
+        for case in &e.cases {
             self.write_indent();
-            self.output.push_str(&variant.name);
-            if !variant.fields.is_empty() {
-                self.output.push('(');
-                for (i, field_ty) in variant.fields.iter().enumerate() {
-                    if i > 0 {
-                        self.output.push_str(", ");
-                    }
-                    self.output.push_str(&self.type_table.type_name(*field_ty));
-                }
-                self.output.push(')');
-            }
+            self.output.push_str(&case.name);
+            // Enum cases have no payload (unlike variant cases)
             self.output.push_str(",\n");
         }
 
