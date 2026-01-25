@@ -40,6 +40,7 @@ function processCircle(c: Circle) { ... }
 ```
 
 This approach:
+
 - Makes each variant a first-class type
 - Uses structural typing for discrimination
 - No special "variant" keyword needed
@@ -50,14 +51,15 @@ This approach:
 
 Wado variants support exactly four payload forms with **consistent syntax**:
 
-| Form | Syntax | Example | Description |
-|------|--------|---------|-------------|
-| **Unit** | `Name` | `Point` | No payload |
-| **Scalar** | `Name(T)` | `Circle(f64)` | Single value |
-| **Tuple** | `Name([T, U, ...])` | `Rectangle([f64, f64])` | Explicit tuple type |
+| Form       | Syntax                    | Example                              | Description                |
+| ---------- | ------------------------- | ------------------------------------ | -------------------------- |
+| **Unit**   | `Name`                    | `Point`                              | No payload                 |
+| **Scalar** | `Name(T)`                 | `Circle(f64)`                        | Single value               |
+| **Tuple**  | `Name([T, U, ...])`       | `Rectangle([f64, f64])`              | Explicit tuple type        |
 | **Struct** | `Name({ field: T, ... })` | `Named({ width: f64, height: f64 })` | Anonymous struct in parens |
 
 Key principles:
+
 - **No implicit tuple expansion**: Multiple values require explicit tuple syntax `[T, U]` or struct syntax `{ a: T, b: U }`
 - **Consistent wrapper**: All non-unit payloads use `Name(payload)` form
 - **Minimal special rules**: Edge cases like single-element tuples `Foo([T])` or zero-element tuples `Foo([])` are allowed
@@ -100,6 +102,7 @@ let shape: Shape = circle;  // OK: implicit upcast
 ```
 
 This enables:
+
 - Functions that accept only specific variants
 - No need for `unreachable!()` in match arms
 - Better type safety and documentation
@@ -174,11 +177,11 @@ fn circle_area(c: Shape::Circle) -> f64 {
 
 **Payload is always at `.0`** - this provides consistent access regardless of payload type:
 
-| Payload Type | Access Syntax | Example |
-|--------------|---------------|---------|
-| Scalar | `.0` | `circle.0` → the value |
-| Tuple | `.0` then `.0`, `.1`, etc. | `rect.0.0`, `rect.0.1` |
-| Struct | `.0` then `.field` | `named.0.width`, `named.0.height` |
+| Payload Type | Access Syntax              | Example                           |
+| ------------ | -------------------------- | --------------------------------- |
+| Scalar       | `.0`                       | `circle.0` → the value            |
+| Tuple        | `.0` then `.0`, `.1`, etc. | `rect.0.0`, `rect.0.1`            |
+| Struct       | `.0` then `.field`         | `named.0.width`, `named.0.height` |
 
 ```wado
 let c: Shape::Circle = Shape::Circle(5.0);
@@ -309,16 +312,17 @@ match x {
 
 This provides set-like operations that named variants cannot express:
 
-| Feature | `variant` | Union Type |
-|---------|-----------|------------|
-| Named cases | ✓ | ✗ (structural) |
-| Exhaustiveness checking | ✓ | ✓ |
-| Subset binding | ✗ | ✓ |
-| Set operations | ✗ | `\|` (union) |
+| Feature                 | `variant` | Union Type     |
+| ----------------------- | --------- | -------------- |
+| Named cases             | ✓         | ✗ (structural) |
+| Exhaustiveness checking | ✓         | ✓              |
+| Subset binding          | ✗         | ✓              |
+| Set operations          | ✗         | `\|` (union)   |
 
 ### Comparison with TypeScript
 
 TypeScript's type narrowing:
+
 ```typescript
 function process(x: A | B | C | D) {
     if (isAB(x)) {
@@ -328,6 +332,7 @@ function process(x: A | B | C | D) {
 ```
 
 Wado's subset binding:
+
 ```wado
 fn process(x: A | B | C | D) {
     if let ab: A | B = x {
@@ -421,6 +426,7 @@ if let Shape::Rectangle([w, _]) = shape {
 ## Migration from Current Syntax
 
 Current:
+
 ```wado
 variant Shape {
     Rectangle(f64, f64),        // implicit tuple
@@ -431,6 +437,7 @@ let n = Shape::Named { width: 10.0, height: 20.0 };
 ```
 
 New:
+
 ```wado
 variant Shape {
     Rectangle([f64, f64]),                   // explicit tuple
@@ -441,6 +448,7 @@ let n = Shape::Named({ width: 10.0, height: 20.0 });
 ```
 
 Migration steps:
+
 1. Wrap multiple payload types in `[...]`
 2. Wrap struct payloads in `({})`
 
@@ -464,14 +472,14 @@ Migration steps:
 
 ### Comparison with Rust
 
-| Aspect | Rust | Wado |
-|--------|------|------|
-| Multiple payloads | `Foo(T, U)` implicit tuple | `Foo([T, U])` explicit |
-| Struct variants | `Foo { a: T }` | `Foo({ a: T })` with parens |
-| Payload access | `.0`, `.1` directly | `.0.0`, `.0.1` (payload at `.0`) |
-| Variant as type | Not supported | `Shape::Circle` is a type |
-| Empty variants | Unit/tuple/struct differ | Unit only: `Foo` |
-| Union types | Not supported | `A \| B` with subset binding |
+| Aspect            | Rust                       | Wado                             |
+| ----------------- | -------------------------- | -------------------------------- |
+| Multiple payloads | `Foo(T, U)` implicit tuple | `Foo([T, U])` explicit           |
+| Struct variants   | `Foo { a: T }`             | `Foo({ a: T })` with parens      |
+| Payload access    | `.0`, `.1` directly        | `.0.0`, `.0.1` (payload at `.0`) |
+| Variant as type   | Not supported              | `Shape::Circle` is a type        |
+| Empty variants    | Unit/tuple/struct differ   | Unit only: `Foo`                 |
+| Union types       | Not supported              | `A \| B` with subset binding     |
 
 ## Implementation Roadmap
 
