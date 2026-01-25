@@ -473,12 +473,12 @@ let empty_dict: Dict<String, i32> = {};
 
 Builder-based coercion and Iterator traits serve different purposes:
 
-| Mechanism | Purpose | Hetero Support |
-|-----------|---------|----------------|
-| **TupleBuilder** | Tuple literal → Collection | ✅ Yes |
-| **ObjectBuilder** | Object literal → Collection | ✅ Yes |
-| **FromIterator** | Iterator → Collection | ❌ Homo only |
-| **IntoIterator** | Collection → Iterator | N/A |
+| Mechanism         | Purpose                     | Hetero Support |
+| ----------------- | --------------------------- | -------------- |
+| **TupleBuilder**  | Tuple literal → Collection  | ✅ Yes         |
+| **ObjectBuilder** | Object literal → Collection | ✅ Yes         |
+| **FromIterator**  | Iterator → Collection       | ❌ Homo only   |
+| **IntoIterator**  | Collection → Iterator       | N/A            |
 
 They coexist and can be combined:
 
@@ -537,6 +537,7 @@ let m: MyType = [1, 2, 3];
 #### Phase 1: Core Traits
 
 Define traits in prelude:
+
 - `Into<T>`
 - `TupleBuilder` / `FromTuple`
 - `ObjectBuilder` / `FromObject`
@@ -607,13 +608,13 @@ fn try_tuple_coercion(elements: &[Expr], target_type: &Type) -> Option<Expr> {
 
 ### Trade-offs
 
-| Aspect | Tuple Literal | Object Literal |
-|--------|---------------|----------------|
-| Default type | Tuple `[T, U, V]` | Anonymous struct `{ a: T, b: U }` |
-| Coercion trait | `FromTuple` | `FromObject` |
-| Builder trait | `TupleBuilder` | `ObjectBuilder` |
-| Key type | N/A | `String` (fixed) |
-| Hetero support | ✅ via `Into<E>` | ✅ via `Into<V>` |
+| Aspect         | Tuple Literal     | Object Literal                    |
+| -------------- | ----------------- | --------------------------------- |
+| Default type   | Tuple `[T, U, V]` | Anonymous struct `{ a: T, b: U }` |
+| Coercion trait | `FromTuple`       | `FromObject`                      |
+| Builder trait  | `TupleBuilder`    | `ObjectBuilder`                   |
+| Key type       | N/A               | `String` (fixed)                  |
+| Hetero support | ✅ via `Into<E>`  | ✅ via `Into<V>`                  |
 
 ## Examples
 
