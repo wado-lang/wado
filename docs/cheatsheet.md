@@ -234,10 +234,10 @@ A function must have `return` if it returns a value. This is applied to methods 
 
 Wado has two kinds of "public":
 
-| Keyword | Term | Scope |
-|---------|------|-------|
-| `pub` | module public | Other Wado modules |
-| `export` | world export | Component Model boundary |
+| Keyword  | Term          | Scope                    |
+| -------- | ------------- | ------------------------ |
+| `pub`    | module public | Other Wado modules       |
+| `export` | world export  | Component Model boundary |
 
 ```wado
 fn private_fn() { }           // module-private (default)

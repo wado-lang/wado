@@ -8,10 +8,10 @@ Wado needs a way to re-export symbols from other modules. This is a common patte
 
 Wado distinguishes between two kinds of "public":
 
-| Keyword | Term | Meaning |
-|---------|------|---------|
-| `pub` | **module public** | Visible to other Wado modules that import this module |
-| `export` | **world export** | Exposed at the Component Model boundary (WASI world conformance) |
+| Keyword  | Term              | Meaning                                                          |
+| -------- | ----------------- | ---------------------------------------------------------------- |
+| `pub`    | **module public** | Visible to other Wado modules that import this module            |
+| `export` | **world export**  | Exposed at the Component Model boundary (WASI world conformance) |
 
 The `pub use` syntax combines module public visibility with import, creating a **re-export**.
 
@@ -71,14 +71,14 @@ pub use {Stdout} from "wasi:cli";
 
 ### Visibility Levels
 
-| Declaration | Within module | Other Wado modules | CM world boundary |
-|-------------|---------------|-------------------|-------------------|
-| `fn foo()` | Yes | No | No |
-| `pub fn foo()` | Yes | Yes | No |
-| `export fn foo()` | Yes | No | Yes |
-| `pub export fn foo()` | Yes | Yes | Yes |
-| `use {x} from "..."` | Yes | No | - |
-| `pub use {x} from "..."` | Yes | Yes | - |
+| Declaration              | Within module | Other Wado modules | CM world boundary |
+| ------------------------ | ------------- | ------------------ | ----------------- |
+| `fn foo()`               | Yes           | No                 | No                |
+| `pub fn foo()`           | Yes           | Yes                | No                |
+| `export fn foo()`        | Yes           | No                 | Yes               |
+| `pub export fn foo()`    | Yes           | Yes                | Yes               |
+| `use {x} from "..."`     | Yes           | No                 | -                 |
+| `pub use {x} from "..."` | Yes           | Yes                | -                 |
 
 ### Namespace Re-export
 

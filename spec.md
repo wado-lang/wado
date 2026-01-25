@@ -1794,10 +1794,10 @@ Wado uses an ESM-like import syntax with `use {...} from "source"`. This aligns 
 
 Wado distinguishes between two kinds of "public" visibility:
 
-| Keyword | Term | Meaning |
-|---------|------|---------|
-| `pub` | **module public** | Visible to other Wado modules that import this module |
-| `export` | **world export** | Exposed at the Component Model boundary (WASI world conformance) |
+| Keyword  | Term              | Meaning                                                          |
+| -------- | ----------------- | ---------------------------------------------------------------- |
+| `pub`    | **module public** | Visible to other Wado modules that import this module            |
+| `export` | **world export**  | Exposed at the Component Model boundary (WASI world conformance) |
 
 The `pub` keyword controls **module public** visibility - whether a symbol can be accessed by other Wado modules:
 
@@ -1815,12 +1815,12 @@ export fn run() { ... }
 pub export fn shared_entry() { ... }
 ```
 
-| Declaration | Within module | Other Wado modules | CM world boundary |
-|-------------|---------------|-------------------|-------------------|
-| `fn foo()` | Yes | No | No |
-| `pub fn foo()` | Yes | Yes | No |
-| `export fn foo()` | Yes | No | Yes |
-| `pub export fn foo()` | Yes | Yes | Yes |
+| Declaration           | Within module | Other Wado modules | CM world boundary |
+| --------------------- | ------------- | ------------------ | ----------------- |
+| `fn foo()`            | Yes           | No                 | No                |
+| `pub fn foo()`        | Yes           | Yes                | No                |
+| `export fn foo()`     | Yes           | No                 | Yes               |
+| `pub export fn foo()` | Yes           | Yes                | Yes               |
 
 The `pub` modifier can be applied to:
 
