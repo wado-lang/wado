@@ -1,4 +1,4 @@
-# Instructions to Review for New Feature Implementation
+# Instructions
 
 Review the changes in the branch `git diff $(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/@@')...HEAD` carefully, which is intended to implement a new feature.
 

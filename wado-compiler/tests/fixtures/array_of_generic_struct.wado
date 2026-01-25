@@ -1,0 +1,50 @@
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+impl Box<T> {
+    fn new(value: T) -> Box<T> {
+        return Box { value };
+    }
+}
+
+struct Container<T> {
+    items: Array<T>,
+    size: i32,
+}
+
+impl Container<T> {
+    fn new() -> Container<T> {
+        return Container { items: [], size: 0 };
+    }
+
+    fn add(&mut self, item: T) {
+        self.items.append(item);
+        self.size += 1;
+    }
+}
+
+test "container-of-boxes" {
+    let mut c = Container::<Box<i32>>::new();
+    c.add(Box::<i32>::new(42));
+    assert c.size == 1;
+    assert c.items[0].value == 42;
+}
+
+test "array-of-boxes" {
+    let mut arr: Array<Box<i32>> = [];
+    arr.append(Box::<i32>::new(10));
+    arr.append(Box::<i32>::new(20));
+    assert arr.len() == 2;
+    assert arr[0].value == 10;
+    assert arr[1].value == 20;
+}
+
+fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

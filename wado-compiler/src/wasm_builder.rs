@@ -7,8 +7,8 @@ use std::collections::{HashMap, HashSet};
 
 use wasm_encoder::{
     ArrayType, CompositeInnerType, CompositeType, EntityType, ExportKind, ExportSection, FieldType,
-    FunctionSection, HeapType, ImportSection, MemoryType, NameMap, NameSection, RefType,
-    StorageType, SubType, TypeSection, ValType,
+    FunctionSection, ImportSection, MemoryType, NameMap, NameSection, StorageType, SubType,
+    TypeSection, ValType,
 };
 
 // ============================================================================
@@ -328,14 +328,6 @@ impl CoreModuleBuilder {
         names.types(&type_names);
 
         names
-    }
-
-    /// Create a `RefType` for the string array (GC array<u8>)
-    pub fn string_ref_type(&self) -> RefType {
-        RefType {
-            nullable: false,
-            heap_type: HeapType::Concrete(self.type_idx("string-array")),
-        }
     }
 }
 
