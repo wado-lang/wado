@@ -41,6 +41,14 @@ let obj = { name: "Alice", age: 30 };
 
 Default type is an anonymous struct. The parser already supports this as "implicit struct".
 
+#### Null Literal
+
+```wado
+let n = null;  // Type: Null
+```
+
+`null` has the special type `Null`. By default, `Null` coerces to `Option::None`. Custom coercion can be provided via `impl Into<T> for Null`.
+
 ### 2. TupleBuilder Trait
 
 ```wado
@@ -56,7 +64,7 @@ pub trait TupleBuilder {
     fn append(&mut self, element: Self::Element);
 
     /// Finalize and return the built collection
-    fn into(self) -> Self::Output;
+    fn build(self) -> Self::Output;
 }
 ```
 
@@ -85,7 +93,7 @@ pub trait ObjectBuilder {
     fn insert(&mut self, key: String, value: Self::Value);
 
     /// Finalize and return the built collection
-    fn into(self) -> Self::Output;
+    fn build(self) -> Self::Output;
 }
 ```
 
@@ -120,7 +128,8 @@ impl Into<T> for T {
 When the compiler encounters a tuple literal `[e0, e1, ..., en]` with target type `C` where `C: FromTuple<Element = E>`:
 
 1. **Check each element**: Verify `Ti: Into<E>` for each element type `Ti`
-2. **Expand at compile time**:
+2. **Recursively coerce nested literals**: If `ei` is itself a literal (tuple or object), coerce it to `E` first
+3. **Expand at compile time**:
 
 ```wado
 // Source
@@ -132,8 +141,16 @@ let container: C = {
     __builder.append(Into::<E>::into(e0));
     __builder.append(Into::<E>::into(e1));
     __builder.append(Into::<E>::into(e2));
-    __builder.into()
+    __builder.build()
 };
+```
+
+**Important**: Coercion only applies to **literals**, not variables:
+
+```wado
+let t = [1, 2, 3];           // t is a tuple [i32, i32, i32]
+let arr: Array<i32> = t;     // ERROR: t is not a literal, no coercion
+let arr: Array<i32> = [1, 2, 3];  // OK: literal coercion
 ```
 
 ### 8. Object Literal Coercion Rules
@@ -141,7 +158,8 @@ let container: C = {
 When the compiler encounters an object literal `{ k0: v0, k1: v1, ... }` with target type `C` where `C: FromObject<Value = V>`:
 
 1. **Check each value**: Verify `Vi: Into<V>` for each value type `Vi`
-2. **Expand at compile time**:
+2. **Recursively coerce nested literals**: If `vi` is itself a literal (tuple or object), coerce it to `V` first
+3. **Expand at compile time**:
 
 ```wado
 // Source
@@ -152,17 +170,34 @@ let container: C = {
     let mut __builder = C::Builder::with_capacity(2);
     __builder.insert("name", Into::<V>::into("Alice"));
     __builder.insert("age", Into::<V>::into(30));
-    __builder.into()
+    __builder.build()
 };
+```
+
+**Struct literal priority**: If the target type is a struct with matching fields, it is interpreted as a struct literal, not an object literal coercion:
+
+```wado
+struct Config { width: i32, height: i32 }
+
+let c: Config = { width: 1920, height: 1080 };  // Struct literal, NOT FromObject coercion
 ```
 
 ### 9. Coercion Contexts
 
-Coercion applies in three contexts:
+Coercion applies in the following contexts where the target type is known:
 
 1. **Variable initialization**: `let arr: Array<i32> = [1, 2, 3];`
 2. **Function argument**: `process([1, 2, 3]);`
 3. **Explicit cast**: `[1, 2, 3] as Array<i32>`
+4. **Return statement**: `fn f() -> Array<i32> { return [1, 2, 3]; }`
+5. **Conditional branches**: `let x: Array<i32> = if cond { [1, 2] } else { [3, 4, 5] };`
+
+**Not a coercion context** (requires explicit cast):
+
+```wado
+[1, 2, 3].iter()  // ERROR: tuple has no iter() method
+([1, 2, 3] as Array<i32>).iter()  // OK: explicit cast
+```
 
 ### 10. Array Implementation
 
@@ -181,7 +216,7 @@ impl TupleBuilder for Array<T> {
         self.append(element);  // Existing method
     }
 
-    fn into(self) -> Array<T> {
+    fn build(self) -> Array<T> {
         return self;  // Identity
     }
 }
@@ -203,7 +238,7 @@ let arr: Array<i32> = [1, 2, 3];
     __builder.append(1);
     __builder.append(2);
     __builder.append(3);
-    __builder.into()
+    __builder.build()
 }
 ```
 
@@ -224,7 +259,7 @@ impl ObjectBuilder for Dict<String, V> {
         self.insert(key, value);  // Existing method
     }
 
-    fn into(self) -> Dict<String, V> {
+    fn build(self) -> Dict<String, V> {
         return self;  // Identity
     }
 }
@@ -245,11 +280,13 @@ let config: Dict<String, i32> = { "width": 1920, "height": 1080 };
     let mut __builder = Dict::<String, i32>::with_capacity(2);
     __builder.insert("width", 1920);
     __builder.insert("height", 1080);
-    __builder.into()
+    __builder.build()
 }
 ```
 
-### 12. JSONArray Example (Heterogeneous Tuple)
+### 12. JSONValue Example (Both FromTuple and FromObject)
+
+JSONValue can accept both tuple and object literals by implementing both traits:
 
 ```wado
 pub variant JSONValue {
@@ -257,8 +294,8 @@ pub variant JSONValue {
     Bool(bool),
     Number(f64),
     String(String),
-    Array(JSONArray),
-    Object(JSONObject),
+    Array(Array<JSONValue>),
+    Object(Dict<String, JSONValue>),
 }
 
 // Into implementations for JSONValue
@@ -280,102 +317,100 @@ impl Into<JSONValue> for bool {
     }
 }
 
-// JSONArray can use Array<JSONValue> as its builder
-pub struct JSONArray {
+// Null type coerces to JSONValue::Null
+impl Into<JSONValue> for Null {
+    fn into(self) -> JSONValue {
+        return JSONValue::Null;
+    }
+}
+```
+
+### 13. JSONValue FromTuple Implementation
+
+```wado
+// Builder for tuple literals → JSONValue::Array
+pub struct JSONValueArrayBuilder {
     items: Array<JSONValue>,
 }
 
-impl TupleBuilder for JSONArray {
+impl TupleBuilder for JSONValueArrayBuilder {
     type Element = JSONValue;
-    type Output = JSONArray;
+    type Output = JSONValue;
 
     fn with_capacity(n: i32) -> Self {
-        return JSONArray { items: Array::<JSONValue>::with_capacity(n) };
+        return JSONValueArrayBuilder { items: Array::<JSONValue>::with_capacity(n) };
     }
 
     fn append(&mut self, element: JSONValue) {
         self.items.append(element);
     }
 
-    fn into(self) -> JSONArray {
-        return self;
+    fn build(self) -> JSONValue {
+        return JSONValue::Array(self.items);
     }
 }
 
-impl FromTuple for JSONArray {
+impl FromTuple for JSONValue {
     type Element = JSONValue;
-    type Builder = JSONArray;
+    type Builder = JSONValueArrayBuilder;
 }
 ```
 
-Usage:
+### 14. JSONValue FromObject Implementation
 
 ```wado
-// Heterogeneous tuple → JSONArray
-let json: JSONArray = [1, "hello", true, null];
-
-// Expands to:
-{
-    let mut __builder = JSONArray::with_capacity(4);
-    __builder.append(Into::<JSONValue>::into(1));        // i32 → JSONValue::Number
-    __builder.append(Into::<JSONValue>::into("hello"));  // String → JSONValue::String
-    __builder.append(Into::<JSONValue>::into(true));     // bool → JSONValue::Bool
-    __builder.append(Into::<JSONValue>::into(null));     // null → JSONValue::Null
-    __builder.into()
-}
-```
-
-### 13. JSONObject Example (Heterogeneous Object)
-
-```wado
-pub struct JSONObject {
+// Builder for object literals → JSONValue::Object
+pub struct JSONValueObjectBuilder {
     entries: Dict<String, JSONValue>,
 }
 
-impl ObjectBuilder for JSONObject {
+impl ObjectBuilder for JSONValueObjectBuilder {
     type Value = JSONValue;
-    type Output = JSONObject;
+    type Output = JSONValue;
 
     fn with_capacity(n: i32) -> Self {
-        return JSONObject { entries: Dict::<String, JSONValue>::with_capacity(n) };
+        return JSONValueObjectBuilder { entries: Dict::<String, JSONValue>::with_capacity(n) };
     }
 
     fn insert(&mut self, key: String, value: JSONValue) {
         self.entries.insert(key, value);
     }
 
-    fn into(self) -> JSONObject {
-        return self;
+    fn build(self) -> JSONValue {
+        return JSONValue::Object(self.entries);
     }
 }
 
-impl FromObject for JSONObject {
+impl FromObject for JSONValue {
     type Value = JSONValue;
-    type Builder = JSONObject;
+    type Builder = JSONValueObjectBuilder;
 }
 ```
 
-Usage:
+### 15. Nested JSON Literals
+
+With both traits implemented, JSONValue supports nested structures:
 
 ```wado
-// Heterogeneous object → JSONObject
-let obj: JSONObject = {
+let data: JSONValue = {
     "name": "Alice",
     "age": 30,
-    "active": true
+    "tags": [1, 2, 3],           // Nested tuple → JSONValue::Array
+    "metadata": {                 // Nested object → JSONValue::Object
+        "created": "2024-01-01",
+        "active": true,
+    },
+    "nullable": null,            // Null → JSONValue::Null
 };
 
-// Expands to:
-{
-    let mut __builder = JSONObject::with_capacity(3);
-    __builder.insert("name", Into::<JSONValue>::into("Alice"));
-    __builder.insert("age", Into::<JSONValue>::into(30));
-    __builder.insert("active", Into::<JSONValue>::into(true));
-    __builder.into()
-}
+// Compiler recursively coerces each nested literal:
+// 1. Outer { ... } → FromObject → JSONValue::Object
+// 2. Inner [1, 2, 3] → FromTuple → JSONValue::Array
+// 3. Inner { ... } → FromObject → JSONValue::Object
+// 4. null → Into<JSONValue> → JSONValue::Null
 ```
 
-### 14. Immutable Collection Example
+### 16. Immutable Collection Example
 
 ```wado
 // Completely immutable - no mutation methods exposed
@@ -407,7 +442,7 @@ impl TupleBuilder for ImmutableListBuilder<T> {
         self.buffer.append(element);
     }
 
-    fn into(self) -> ImmutableList<T> {
+    fn build(self) -> ImmutableList<T> {
         return ImmutableList::from_array(self.buffer);
     }
 }
@@ -422,7 +457,7 @@ let list: ImmutableList<i32> = [1, 2, 3, 4, 5];
 // list has no mutation methods, but was constructed via Builder
 ```
 
-### 15. Empty Literals
+### 17. Empty Literals
 
 Empty literals coerce to empty collections:
 
@@ -431,10 +466,10 @@ let empty_arr: Array<i32> = [];
 let empty_dict: Dict<String, i32> = {};
 
 // Expand to:
-// C::Builder::with_capacity(0).into()
+// C::Builder::with_capacity(0).build()
 ```
 
-### 16. Relationship with Iterator Traits
+### 18. Relationship with Iterator Traits
 
 Builder-based coercion and Iterator traits serve different purposes:
 
@@ -470,7 +505,7 @@ impl FromIterator<T> for Array<T> {
 }
 ```
 
-### 17. Type Error Messages
+### 19. Type Error Messages
 
 Clear error messages guide users:
 
@@ -497,7 +532,7 @@ let m: MyType = [1, 2, 3];
 //    = help: implement FromTuple for MyType to enable tuple coercion
 ```
 
-### 18. Implementation Strategy
+### 20. Implementation Strategy
 
 #### Phase 1: Core Traits
 
@@ -546,7 +581,7 @@ fn try_tuple_coercion(elements: &[Expr], target_type: &Type) -> Option<Expr> {
         let converted = call_into(elem, element_type);
         stmts.push(call_method_stmt("__builder", "append", [converted]));
     }
-    stmts.push(call_method("__builder", "into", []));
+    stmts.push(call_method("__builder", "build", []));
 
     return Some(block_expr(stmts));
 }
@@ -644,7 +679,7 @@ impl TupleBuilder for SortedSetBuilder<T: Ord> {
         // ...
     }
 
-    fn into(self) -> SortedSet<T> {
+    fn build(self) -> SortedSet<T> {
         return SortedSet { items: self.items };
     }
 }
