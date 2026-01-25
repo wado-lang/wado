@@ -13,7 +13,7 @@ struct "BTreeNode<String,i32>" {
     keys: Array<String>,
     values: Array<i32>,
     deleted: Array<bool>,
-    children: Array<&mut BTreeNode<String, i32>>,
+    children: Array<&mut BTreeNode<String,i32>>,
     is_leaf: bool,
 }
 
@@ -129,16 +129,8 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
     }
 }
 
-fn "Array<BTreeNode<String,i32>>^IndexValue::index_value"(self: &Array<&mut BTreeNode<String, i32>>, index: i32) -> &mut BTreeNode<String,i32> {
-    return core::builtin::array_get::<&mut BTreeNode<String, i32>>(self.repr, index);
-}
-
 fn "Array<BTreeNode<String,i32>>^IndexValue::index_value"(self: &Array<&mut BTreeNode<String,i32>>, index: i32) -> &mut BTreeNode<String,i32> {
     return core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, index);
-}
-
-pub fn "Array<BTreeNode<String,i32>>::len"(self: &Array<&mut BTreeNode<String, i32>>) -> i32 {
-    return self.used;
 }
 
 pub fn "Array<BTreeNode<String,i32>>::len"(self: &Array<&mut BTreeNode<String,i32>>) -> i32 {
@@ -551,22 +543,6 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
     "Array<bool>::append"(&mut parent.deleted, promoted_deleted);
     "Array<BTreeNode<String,i32>>::append"(&mut parent.children, &mut new_sibling);
     "TreeMap<String,i32>::sort_node_entries"(self, parent);
-}
-
-pub fn "Array<BTreeNode<String,i32>>::append"(self: &mut Array<&mut BTreeNode<String, i32>>, value: &mut BTreeNode<String,i32>) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<&mut BTreeNode<String,i32>> = core::builtin::array_new::<&mut BTreeNode<String, i32>>(new_capacity);
-        core::builtin::array_copy::<&mut BTreeNode<String, i32>>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<&mut BTreeNode<String, i32>>(self.repr, used, value);
-    self.used = (used + 1);
 }
 
 pub fn "Array<BTreeNode<String,i32>>::append"(self: &mut Array<&mut BTreeNode<String,i32>>, value: &mut BTreeNode<String,i32>) {

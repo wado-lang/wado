@@ -542,6 +542,30 @@ fn analyze_block(
                     analyze_block(else_blk, current_module, type_table, analysis);
                 }
             }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                analyze_expr(scrutinee, current_module, type_table, analysis);
+                analyze_block(body, current_module, type_table, analysis);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for init_stmt in init {
+                    if let TirStmtKind::Let { value, .. } = &init_stmt.kind {
+                        analyze_expr(value, current_module, type_table, analysis);
+                    }
+                }
+                analyze_expr(scrutinee, current_module, type_table, analysis);
+                analyze_block(body, current_module, type_table, analysis);
+                if let Some(upd) = update {
+                    analyze_expr(upd, current_module, type_table, analysis);
+                }
+            }
             TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
                     analyze_expr(v, current_module, type_table, analysis);

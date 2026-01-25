@@ -1,0 +1,36 @@
+// TreeMap basic operations test
+use {println} from "core:cli";
+
+fn run() with Stdout {
+    let mut map = TreeMap::<String, i32>::new();
+
+    // Empty map
+    assert map.is_empty();
+    assert map.len() == 0;
+    assert !map.contains_key("key");
+
+    // Insert and get using index traits
+    map["one"] = 1;
+    assert map.len() == 1;
+    assert map.contains_key("one");
+    if let Some(v1) = map["one"] {
+        assert v1 == 1;
+    }
+
+    // Update existing key
+    map["one"] = 100;
+    assert map.len() == 1;
+    if let Some(v2) = map["one"] {
+        assert v2 == 100;
+    }
+
+    // Multiple inserts
+    map["two"] = 2;
+    map["three"] = 3;
+    assert map.len() == 3;
+
+    println("basic operations: ok");
+}
+
+__DATA__
+{"stdout": "basic operations: ok\n"}

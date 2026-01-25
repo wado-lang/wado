@@ -2028,7 +2028,7 @@ impl<'a> Resolver<'a> {
         }
 
         match &if_stmt.condition {
-            ast::IfCondition::Expr(expr) => {
+            ast::Condition::Expr(expr) => {
                 // Regular expression condition
                 let condition = self.resolve_expr(expr, ctx);
                 let then_block = self.resolve_block(&if_stmt.then_block, ctx);
@@ -2046,7 +2046,7 @@ impl<'a> Resolver<'a> {
                     if_stmt.span,
                 ));
             }
-            ast::IfCondition::Pattern { pattern, expr, .. } => {
+            ast::Condition::Pattern { pattern, expr, .. } => {
                 // Pattern match condition: if let Some(x) = expr { ... }
                 let scrutinee = self.resolve_expr(expr, ctx);
                 let scrutinee_type = scrutinee.type_id;
@@ -2174,10 +2174,35 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a while statement
     fn resolve_while(&mut self, while_stmt: &WhileStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let condition = self.resolve_expr(&while_stmt.condition, ctx);
-        let body = self.resolve_block(&while_stmt.body, ctx);
+        match &while_stmt.condition {
+            ast::Condition::Expr(expr) => {
+                let condition = self.resolve_expr(expr, ctx);
+                let body = self.resolve_block(&while_stmt.body, ctx);
+                TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
+            }
+            ast::Condition::Pattern { pattern, expr, .. } => {
+                // while let Some(x) = expr { ... }
+                let scrutinee = self.resolve_expr(expr, ctx);
+                let scrutinee_type = scrutinee.type_id;
 
-        TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
+                // Enter scope for pattern bindings (visible in body)
+                ctx.enter_scope();
+
+                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx);
+                let body = self.resolve_block(&while_stmt.body, ctx);
+
+                ctx.exit_scope();
+
+                TirStmt::new(
+                    TirStmtKind::WhilePattern {
+                        scrutinee,
+                        pattern: tir_pattern,
+                        body,
+                    },
+                    while_stmt.span,
+                )
+            }
+        }
     }
 
     /// Resolve a for statement - generates a For node with init statements included
@@ -2194,28 +2219,71 @@ impl<'a> Resolver<'a> {
             Vec::new()
         };
 
-        // Resolve the body (note: resolve_block enters its own scope for body variables)
-        let body = self.resolve_block(&for_stmt.body, ctx);
+        // Check if condition is a pattern
+        let for_tir = match &for_stmt.condition {
+            Some(ast::Condition::Pattern { pattern, expr, .. }) => {
+                // for init; let Some(x) = expr; update { ... }
+                let scrutinee = self.resolve_expr(expr, ctx);
+                let scrutinee_type = scrutinee.type_id;
 
-        // Resolve condition (None means infinite loop)
-        let condition = for_stmt
-            .condition
-            .as_ref()
-            .map(|c| self.resolve_expr(c, ctx));
+                // Enter scope for pattern bindings (visible in body)
+                ctx.enter_scope();
 
-        // Resolve update expression
-        let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
+                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx);
+                let body = self.resolve_block(&for_stmt.body, ctx);
 
-        // Create For statement with init included
-        let for_tir = TirStmt::new(
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            },
-            for_stmt.span,
-        );
+                ctx.exit_scope();
+
+                // Resolve update expression
+                let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
+
+                TirStmt::new(
+                    TirStmtKind::ForPattern {
+                        init,
+                        scrutinee,
+                        pattern: tir_pattern,
+                        body,
+                        update,
+                    },
+                    for_stmt.span,
+                )
+            }
+            Some(ast::Condition::Expr(expr)) => {
+                // Regular for loop with expression condition
+                let condition = Some(self.resolve_expr(expr, ctx));
+
+                // Resolve the body (note: resolve_block enters its own scope for body variables)
+                let body = self.resolve_block(&for_stmt.body, ctx);
+
+                // Resolve update expression
+                let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
+
+                TirStmt::new(
+                    TirStmtKind::For {
+                        init,
+                        condition,
+                        body,
+                        update,
+                    },
+                    for_stmt.span,
+                )
+            }
+            None => {
+                // Infinite loop (no condition)
+                let body = self.resolve_block(&for_stmt.body, ctx);
+                let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
+
+                TirStmt::new(
+                    TirStmtKind::For {
+                        init,
+                        condition: None,
+                        body,
+                        update,
+                    },
+                    for_stmt.span,
+                )
+            }
+        };
 
         // Exit the for loop's scope
         ctx.exit_scope();
@@ -5695,15 +5763,30 @@ impl<'a> Resolver<'a> {
                     .map(|arg| self.resolve_type_with_param_mapping(arg, type_param_mapping))
                     .collect();
 
-                // Find the base type and create a generic instance
+                // Special-case Option and Result to use their dedicated types
+                // (required for pattern matching to work correctly)
                 let base_name = &g.name;
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::GenericInstance {
-                        name: base_name.clone(),
-                        module_source: self.current_module_source.clone(),
-                        type_args: resolved_args,
-                    })
+                match base_name.as_str() {
+                    "Option" => {
+                        let inner = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
+                        self.type_table.borrow_mut().make_option(inner)
+                    }
+                    "Result" => {
+                        let ok = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
+                        let err = resolved_args.get(1).copied().unwrap_or(TypeTable::UNKNOWN);
+                        self.type_table.borrow_mut().make_result(ok, err)
+                    }
+                    _ => {
+                        // For other generic types, create a generic instance
+                        self.type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::GenericInstance {
+                                name: base_name.clone(),
+                                module_source: self.current_module_source.clone(),
+                                type_args: resolved_args,
+                            })
+                    }
+                }
             }
             Type::Reference(inner) => {
                 let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
@@ -6230,8 +6313,8 @@ impl<'a> Resolver<'a> {
 
         // Resolve the condition
         let condition = match &if_expr.condition {
-            ast::IfCondition::Expr(expr) => self.resolve_expr(expr, ctx),
-            ast::IfCondition::Pattern { span, .. } => {
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
+            ast::Condition::Pattern { span, .. } => {
                 self.errors.push(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
                         .to_string(),

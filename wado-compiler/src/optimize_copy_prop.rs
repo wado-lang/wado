@@ -194,6 +194,28 @@ fn collect_assigned_in_stmt(stmt: &TirStmt, assigned: &mut HashSet<u32>) {
                 collect_assigned_in_stmts(&eb.stmts, assigned);
             }
         }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            collect_assigned_in_expr(scrutinee, assigned);
+            collect_assigned_in_stmts(&body.stmts, assigned);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                collect_assigned_in_stmt(s, assigned);
+            }
+            collect_assigned_in_expr(scrutinee, assigned);
+            collect_assigned_in_stmts(&body.stmts, assigned);
+            if let Some(u) = update {
+                collect_assigned_in_expr(u, assigned);
+            }
+        }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_assigned_in_expr(v, assigned);
@@ -377,6 +399,28 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut HashMap<u32, LocalUsage>, i
             collect_usage_in_block(then_block, usage, in_loop);
             if let Some(eb) = else_block {
                 collect_usage_in_block(eb, usage, in_loop);
+            }
+        }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            collect_usage_in_expr(scrutinee, usage, true, true);
+            collect_usage_in_block(body, usage, true);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                collect_usage_in_stmt(s, usage, true);
+            }
+            collect_usage_in_expr(scrutinee, usage, true, true);
+            collect_usage_in_block(body, usage, true);
+            if let Some(u) = update {
+                collect_usage_in_expr(u, usage, true, false);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -680,6 +724,28 @@ fn substitute_in_stmt(stmt: &mut TirStmt, from_local: u32, source: &CopySource) 
                 substitute_in_block(eb, from_local, source);
             }
         }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            substitute_in_expr(scrutinee, from_local, source);
+            substitute_in_block(body, from_local, source);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                substitute_in_stmt(s, from_local, source);
+            }
+            substitute_in_expr(scrutinee, from_local, source);
+            substitute_in_block(body, from_local, source);
+            if let Some(u) = update {
+                substitute_in_expr(u, from_local, source);
+            }
+        }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 substitute_in_expr(v, from_local, source);
@@ -918,6 +984,28 @@ fn collect_copy_bindings_in_stmt(
                 collect_copy_bindings(&eb.stmts, bindings, block_local_assigned);
             }
         }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            collect_copy_bindings_in_expr(scrutinee, bindings, block_local_assigned);
+            collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                collect_copy_bindings_in_stmt(s, bindings, block_local_assigned);
+            }
+            collect_copy_bindings_in_expr(scrutinee, bindings, block_local_assigned);
+            collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
+            if let Some(u) = update {
+                collect_copy_bindings_in_expr(u, bindings, block_local_assigned);
+            }
+        }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_copy_bindings_in_expr(v, bindings, block_local_assigned);
@@ -1111,6 +1199,28 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u32>) 
             remove_copy_bindings(&mut then_block.stmts, dead_locals);
             if let Some(eb) = else_block {
                 remove_copy_bindings(&mut eb.stmts, dead_locals);
+            }
+        }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            remove_copy_bindings_in_expr(scrutinee, dead_locals);
+            remove_copy_bindings(&mut body.stmts, dead_locals);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                remove_copy_bindings_in_stmt(s, dead_locals);
+            }
+            remove_copy_bindings_in_expr(scrutinee, dead_locals);
+            remove_copy_bindings(&mut body.stmts, dead_locals);
+            if let Some(u) = update {
+                remove_copy_bindings_in_expr(u, dead_locals);
             }
         }
         TirStmtKind::Break { value, .. } => {

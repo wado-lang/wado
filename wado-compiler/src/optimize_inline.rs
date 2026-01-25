@@ -304,6 +304,27 @@ fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> boo
                     .as_ref()
                     .is_some_and(|b| block_has_complex_generic_types(b, type_table))
         }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            expr_has_complex_generic_types(scrutinee, type_table)
+                || block_has_complex_generic_types(body, type_table)
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            init.iter()
+                .any(|s| stmt_has_complex_generic_types(s, type_table))
+                || expr_has_complex_generic_types(scrutinee, type_table)
+                || block_has_complex_generic_types(body, type_table)
+                || update
+                    .as_ref()
+                    .is_some_and(|e| expr_has_complex_generic_types(e, type_table))
+        }
         TirStmtKind::Break { value, .. } => value
             .as_ref()
             .is_some_and(|e| expr_has_complex_generic_types(e, type_table)),
@@ -490,6 +511,28 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
             collect_callees_from_block(then_block, callees);
             if let Some(else_blk) = else_block {
                 collect_callees_from_block(else_blk, callees);
+            }
+        }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            collect_callees_from_expr(scrutinee, callees);
+            collect_callees_from_block(body, callees);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                collect_callees_from_stmt(s, callees);
+            }
+            collect_callees_from_expr(scrutinee, callees);
+            collect_callees_from_block(body, callees);
+            if let Some(upd) = update {
+                collect_callees_from_expr(upd, callees);
             }
         }
         TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
@@ -1180,6 +1223,72 @@ fn inline_calls_in_block(
                     stmt.span,
                 ));
             }
+            TirStmtKind::WhilePattern {
+                mut scrutinee,
+                pattern,
+                mut body,
+            } => {
+                inline_calls_in_expr(
+                    &mut scrutinee,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                    inline_counter,
+                );
+                inline_calls_in_block(
+                    &mut body,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                    inline_counter,
+                );
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::WhilePattern {
+                        scrutinee,
+                        pattern,
+                        body,
+                    },
+                    stmt.span,
+                ));
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern,
+                mut body,
+                update,
+            } => {
+                // NOTE: We intentionally do NOT inline calls in the for condition/scrutinee,
+                // update, or init. These are evaluated on each iteration, so inlining would
+                // place the preparatory statements outside the loop.
+                inline_calls_in_block(
+                    &mut body,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                    inline_counter,
+                );
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::ForPattern {
+                        init,
+                        scrutinee,
+                        pattern,
+                        body,
+                        update,
+                    },
+                    stmt.span,
+                ));
+            }
             TirStmtKind::Break { label, value } => {
                 let new_value = value.map(|mut v| {
                     inline_calls_in_expr(
@@ -1815,6 +1924,68 @@ fn remap_stmt_with_label(
                     source_module,
                 )
             }),
+        },
+        TirStmtKind::WhilePattern {
+            scrutinee,
+            pattern,
+            body,
+        } => TirStmtKind::WhilePattern {
+            scrutinee: remap_expr(
+                scrutinee,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            body: remap_block_with_label(
+                body,
+                param_to_local,
+                local_offset,
+                param_count,
+                label,
+                source_module,
+            ),
+        },
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            pattern,
+            body,
+            update,
+        } => TirStmtKind::ForPattern {
+            init: init
+                .iter()
+                .map(|s| {
+                    remap_stmt_with_label(
+                        s,
+                        param_to_local,
+                        local_offset,
+                        param_count,
+                        label,
+                        source_module,
+                    )
+                })
+                .collect(),
+            scrutinee: remap_expr(
+                scrutinee,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            body: remap_block_with_label(
+                body,
+                param_to_local,
+                local_offset,
+                param_count,
+                label,
+                source_module,
+            ),
+            update: update
+                .as_ref()
+                .map(|u| remap_expr(u, param_to_local, local_offset, param_count, source_module)),
         },
         TirStmtKind::Break {
             label: break_label,
@@ -2498,6 +2669,57 @@ fn remap_stmt(
             else_block: else_block
                 .as_ref()
                 .map(|b| remap_block(b, param_to_local, local_offset, param_count, source_module)),
+        },
+        TirStmtKind::WhilePattern {
+            scrutinee,
+            pattern,
+            body,
+        } => TirStmtKind::WhilePattern {
+            scrutinee: remap_expr(
+                scrutinee,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            body: remap_block(
+                body,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+        },
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            pattern,
+            body,
+            update,
+        } => TirStmtKind::ForPattern {
+            init: init
+                .iter()
+                .map(|s| remap_stmt(s, param_to_local, local_offset, param_count, source_module))
+                .collect(),
+            scrutinee: remap_expr(
+                scrutinee,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            body: remap_block(
+                body,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+            update: update
+                .as_ref()
+                .map(|u| remap_expr(u, param_to_local, local_offset, param_count, source_module)),
         },
         TirStmtKind::Break { label, value } => TirStmtKind::Break {
             label: label.clone(),

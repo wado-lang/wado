@@ -14,7 +14,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    AssertStmt, Block, ClosureExpr, Expr, ExprStmt, ForOfStmt, ForStmt, Function, IfCondition,
+    AssertStmt, Block, ClosureExpr, Condition, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
     IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
 };
 use crate::token::Span;
@@ -249,7 +249,7 @@ impl Binder {
             self.bind_let(init);
         }
 
-        self.bind_if_condition(&if_stmt.condition);
+        self.bind_condition(&if_stmt.condition);
         self.bind_block(&if_stmt.then_block);
         if let Some(ref else_block) = if_stmt.else_block {
             self.bind_block(else_block);
@@ -262,8 +262,19 @@ impl Binder {
 
     /// Bind a while statement
     fn bind_while(&mut self, while_stmt: &WhileStmt) {
-        self.bind_expr(&while_stmt.condition);
+        // For pattern conditions, enter scope before the condition so pattern bindings
+        // are visible in the body
+        let is_pattern = matches!(while_stmt.condition, Condition::Pattern { .. });
+        if is_pattern {
+            self.enter_scope();
+        }
+
+        self.bind_condition(&while_stmt.condition);
         self.bind_block(&while_stmt.body);
+
+        if is_pattern {
+            self.exit_scope();
+        }
     }
 
     /// Bind a for statement
@@ -275,9 +286,9 @@ impl Binder {
             self.bind_stmt(init);
         }
 
-        // Bind condition
+        // Bind condition (may be pattern or expression)
         if let Some(ref condition) = for_stmt.condition {
-            self.bind_expr(condition);
+            self.bind_condition(condition);
         }
 
         // Bind update
@@ -483,7 +494,7 @@ impl Binder {
             self.bind_let(init);
         }
 
-        self.bind_if_condition(&if_expr.condition);
+        self.bind_condition(&if_expr.condition);
         self.bind_block(&if_expr.then_block);
         if let Some(ref else_block) = if_expr.else_block {
             self.bind_block(else_block);
@@ -495,12 +506,12 @@ impl Binder {
     }
 
     /// Bind an if condition (expression or pattern match)
-    fn bind_if_condition(&mut self, condition: &IfCondition) {
+    fn bind_condition(&mut self, condition: &Condition) {
         match condition {
-            IfCondition::Expr(expr) => {
+            Condition::Expr(expr) => {
                 self.bind_expr(expr);
             }
-            IfCondition::Pattern { pattern, expr, .. } => {
+            Condition::Pattern { pattern, expr, .. } => {
                 // First bind the expression being matched
                 self.bind_expr(expr);
                 // Then bind the pattern (introduces variables)

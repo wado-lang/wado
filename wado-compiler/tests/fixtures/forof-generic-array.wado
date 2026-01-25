@@ -1,0 +1,25 @@
+// Test: for-of over Array inside a generic method
+// This tests that for-of loops work when iterating over generic array types
+
+use { println, Stdout } from "core:cli";
+
+struct Container<T> {
+    items: Array<T>,
+}
+
+impl Container<T> {
+    fn process(&self) {
+        for let item of self.items {
+            // just iterate
+        }
+    }
+}
+
+fn run() with Stdout {
+    let c = Container { items: [1, 2, 3] as Array<i32> };
+    c.process();
+    println("done");
+}
+
+__DATA__
+{"stdout": "done\n"}

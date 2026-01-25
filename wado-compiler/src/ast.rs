@@ -339,12 +339,13 @@ pub struct ReturnStmt {
     pub span: Span,
 }
 
-/// Condition in an if statement: either a regular expression or a pattern match
+/// Condition in control flow statements: either a regular expression or a pattern match
+/// Used in `if`, `while`, and `for` statements.
 #[derive(Debug, Clone)]
-pub enum IfCondition {
-    /// Regular boolean expression: `if x > 0 { ... }`
+pub enum Condition {
+    /// Regular boolean expression: `if x > 0 { ... }` or `while x > 0 { ... }`
     Expr(Expr),
-    /// Rust-style pattern match: `if let Some(x) = expr { ... }`
+    /// Rust-style pattern match: `if let Some(x) = expr { ... }` or `while let Some(x) = expr { ... }`
     Pattern {
         pattern: Pattern,
         expr: Expr,
@@ -356,7 +357,7 @@ pub enum IfCondition {
 pub struct IfStmt {
     /// Optional init binding: `if let x = expr; condition { ... }`
     pub init: Option<Box<LetStmt>>,
-    pub condition: IfCondition,
+    pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,
     pub span: Span,
@@ -364,18 +365,19 @@ pub struct IfStmt {
 
 #[derive(Debug, Clone)]
 pub struct WhileStmt {
-    pub condition: Expr,
+    pub condition: Condition,
     pub body: Block,
     pub span: Span,
 }
 
 /// C-style for loop: `for (init; condition; update) { body }`
+/// Also supports pattern conditions: `for init; let Some(x) = iter.next(); update { body }`
 #[derive(Debug, Clone)]
 pub struct ForStmt {
     /// Initialization statement (e.g., `let i = 0`)
     pub init: Option<Box<Stmt>>,
-    /// Loop condition (e.g., `i < 10`)
-    pub condition: Option<Expr>,
+    /// Loop condition (e.g., `i < 10` or `let Some(x) = iter.next()`)
+    pub condition: Option<Condition>,
     /// Update expression (e.g., `i = i + 1`)
     pub update: Option<Expr>,
     pub body: Block,
@@ -802,7 +804,7 @@ pub struct IndexExpr {
 pub struct IfExpr {
     /// Optional init binding: `if let x = expr; condition { ... }`
     pub init: Option<Box<LetStmt>>,
-    pub condition: IfCondition,
+    pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,
     pub span: Span,

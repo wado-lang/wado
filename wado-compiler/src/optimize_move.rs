@@ -168,6 +168,28 @@ fn insert_moves_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) {
                 insert_moves_in_block(eb, type_table);
             }
         }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            insert_moves_in_expr(scrutinee, type_table);
+            insert_moves_in_block(body, type_table);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                insert_moves_in_stmt(s, type_table);
+            }
+            insert_moves_in_expr(scrutinee, type_table);
+            insert_moves_in_block(body, type_table);
+            if let Some(u) = update {
+                insert_moves_in_expr(u, type_table);
+            }
+        }
     }
 }
 
@@ -405,6 +427,28 @@ fn collect_value_copy_types_in_stmt(
             collect_value_copy_types_in_block(then_block, type_table, copy_types);
             if let Some(eb) = else_block {
                 collect_value_copy_types_in_block(eb, type_table, copy_types);
+            }
+        }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            collect_value_copy_types_in_expr(scrutinee, type_table, copy_types);
+            collect_value_copy_types_in_block(body, type_table, copy_types);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                collect_value_copy_types_in_stmt(s, type_table, copy_types);
+            }
+            collect_value_copy_types_in_expr(scrutinee, type_table, copy_types);
+            collect_value_copy_types_in_block(body, type_table, copy_types);
+            if let Some(u) = update {
+                collect_value_copy_types_in_expr(u, type_table, copy_types);
             }
         }
         TirStmtKind::LabeledBlock { block, .. } => {

@@ -7,10 +7,10 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt,
-    EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function, IdentExpr,
-    IfCondition, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal,
-    LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt,
+    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
+    Function, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt,
+    Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt,
     StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart,
     TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp,
     WhileStmt,
@@ -161,19 +161,19 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
         }),
         Stmt::If(i) => Stmt::If(IfStmt {
             init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
-            condition: desugar_if_condition(&i.condition),
+            condition: desugar_condition(&i.condition),
             then_block: desugar_block(&i.then_block, ctx),
             else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
             span: i.span,
         }),
         Stmt::While(w) => Stmt::While(WhileStmt {
-            condition: desugar_expr(&w.condition),
+            condition: desugar_condition(&w.condition),
             body: desugar_block(&w.body, ctx),
             span: w.span,
         }),
         Stmt::For(f) => Stmt::For(ForStmt {
             init: f.init.as_ref().map(|s| Box::new(desugar_stmt(s, ctx))),
-            condition: f.condition.as_ref().map(desugar_expr),
+            condition: f.condition.as_ref().map(desugar_condition),
             update: f.update.as_ref().map(desugar_expr),
             body: desugar_block(&f.body, ctx),
             span: f.span,
@@ -210,14 +210,14 @@ fn desugar_expr(expr: &Expr) -> Expr {
     desugar_expr_impl(expr, None)
 }
 
-fn desugar_if_condition(cond: &IfCondition) -> IfCondition {
+fn desugar_condition(cond: &Condition) -> Condition {
     match cond {
-        IfCondition::Expr(expr) => IfCondition::Expr(desugar_expr(expr)),
-        IfCondition::Pattern {
+        Condition::Expr(expr) => Condition::Expr(desugar_expr(expr)),
+        Condition::Pattern {
             pattern,
             expr,
             span,
-        } => IfCondition::Pattern {
+        } => Condition::Pattern {
             pattern: pattern.clone(),
             expr: desugar_expr(expr),
             span: *span,
@@ -298,7 +298,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             if let Some(ctx) = ctx {
                 Expr::If(Box::new(IfExpr {
                     init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
-                    condition: desugar_if_condition(&i.condition),
+                    condition: desugar_condition(&i.condition),
                     then_block: desugar_block(&i.then_block, ctx),
                     else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
                     span: i.span,
@@ -307,7 +307,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 let mut temp_ctx = DesugarContext { assert_counter: 0 };
                 Expr::If(Box::new(IfExpr {
                     init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
-                    condition: desugar_if_condition(&i.condition),
+                    condition: desugar_condition(&i.condition),
                     then_block: desugar_block(&i.then_block, &mut temp_ctx),
                     else_block: i
                         .else_block
@@ -619,7 +619,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     // Build: if !__cond { panic(...); }
     let if_stmt = Stmt::If(IfStmt {
         init: None,
-        condition: IfCondition::Expr(Expr::Unary(Box::new(UnaryExpr {
+        condition: Condition::Expr(Expr::Unary(Box::new(UnaryExpr {
             op: UnaryOp::Not,
             expr: Expr::Ident(IdentExpr {
                 name: cond_var,

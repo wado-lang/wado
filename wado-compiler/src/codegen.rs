@@ -655,17 +655,16 @@ impl Codegen {
     }
 
     /// Check if a type references a struct by name (transitively through Array/Ref/MutRef).
+    /// The `struct_name` should be the full mangled name (e.g., "`AANode`<String,i32>").
     fn type_references_struct(type_id: TypeId, struct_name: &str, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. } => name == struct_name,
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
-                // Check if this generic instance has the same base name
-                if name == struct_name {
-                    return true;
-                }
-                // Also recurse into type args for Array<&mut BTreeNode> patterns
+            ResolvedType::Struct { name, .. } => {
+                // Exact name match only
+                name == struct_name
+            }
+            ResolvedType::GenericInstance { type_args, .. } => {
+                // Recurse into type args for Array<&mut BTreeNode> patterns
+                // GenericInstance name (like "Array") won't match struct_name (like "Node<i32>")
                 type_args
                     .iter()
                     .any(|arg| Self::type_references_struct(*arg, struct_name, type_table))
@@ -1164,35 +1163,41 @@ impl Codegen {
         // generic struct elements (e.g., Array<Pair<i32, String>>) need to call
         // type_id_to_valtype which requires the struct to be registered.
         // Skip Array monomorphized structs - they're handled by array_struct_types.
+        // Note: We register ALL monomorphized structs (not just public ones) because
+        // private structs like TreeMapNode may be needed as dependencies of public
+        // structs like TreeMap.
         for (module_source, tir_mod) in all_tir_modules {
             if module_source == entry_module_source {
                 continue;
             }
-            for tir_struct in &tir_mod.structs {
-                if !tir_struct.is_pub {
-                    continue;
-                }
-                // Only register monomorphized structs in this phase
-                if tir_struct.monomorph_info.is_none() {
-                    continue;
-                }
-                // Skip Array monomorphized structs - they use array_struct_types
-                if let Some(info) = &tir_struct.monomorph_info
-                    && info.generic_name == "Array"
-                {
-                    continue;
-                }
+            // Collect monomorphized structs (excluding Array which has special handling)
+            let mono_lib_structs: Vec<_> = tir_mod
+                .structs
+                .iter()
+                .filter(|s| {
+                    s.monomorph_info.is_some()
+                        && s.monomorph_info
+                            .as_ref()
+                            .map(|i| i.generic_name != "Array")
+                            .unwrap_or(true)
+                })
+                .cloned()
+                .collect();
+
+            // Sort topologically to ensure dependencies come before dependents
+            let lib_type_table = tir_mod.type_table.borrow();
+            let sorted_lib_structs =
+                Self::sort_structs_topologically(&mono_lib_structs, &lib_type_table);
+
+            for tir_struct in sorted_lib_structs {
                 let struct_name =
                     StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
-                // Check for self-referential structs
-                let lib_type_table = tir_mod.type_table.borrow();
-                let base_name = tir_struct
-                    .monomorph_info
-                    .as_ref()
-                    .map(|i| i.generic_name.as_str())
-                    .unwrap_or(&tir_struct.name);
-                let self_ref_fields =
-                    Self::get_self_referential_field_types(base_name, tir_struct, &lib_type_table);
+                // Check for self-referential structs using full struct name
+                let self_ref_fields = Self::get_self_referential_field_types(
+                    &tir_struct.name,
+                    tir_struct,
+                    &lib_type_table,
+                );
                 if self_ref_fields.is_empty() {
                     self.register_struct_type(
                         struct_name,
@@ -1210,6 +1215,21 @@ impl Codegen {
                     );
                 }
             }
+        }
+
+        // PHASE 3.5: Pre-register array types from monomorphized struct fields
+        // This must happen BEFORE PHASE 4 so that struct fields with Array<Tuple<...>>
+        // or other non-primitive element types can be properly typed.
+        self.pre_register_arrays_from_monomorphized_structs(entry_tir, type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source == entry_module_source {
+                continue;
+            }
+            self.pre_register_arrays_from_monomorphized_structs(
+                tir_mod,
+                &tir_mod.type_table.borrow(),
+                &mut builder,
+            );
         }
 
         // PHASE 4: Register MONOMORPHIZED main module structs
@@ -1231,14 +1251,12 @@ impl Codegen {
         for tir_struct in sorted_mono {
             let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
-            // For monomorphized structs, check against both the mangled name and base name
-            let base_name = tir_struct
-                .monomorph_info
-                .as_ref()
-                .map(|i| i.generic_name.as_str())
-                .unwrap_or(&tir_struct.name);
+            // For monomorphized structs, use the FULL mangled name (e.g., "AANode<String,i32>")
+            // to detect true self-references, not just base name matches.
+            // This prevents Box<Box<i32>> from being incorrectly detected as self-referential
+            // when it contains Box<i32> (a different instantiation).
             let self_ref_fields =
-                Self::get_self_referential_field_types(base_name, tir_struct, type_table);
+                Self::get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
             if self_ref_fields.is_empty() {
                 self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
             } else {
@@ -2888,13 +2906,16 @@ impl Codegen {
         let mut struct_fields = Vec::new();
 
         for field in &tir_struct.fields {
-            // Check if this field is one of the self-referential Array types
-            let is_self_ref_array = self_ref_field_types.contains(&field.type_id);
-            let wasm_type = if is_self_ref_array {
-                // Look up the Array struct type we just planned
-                if let ResolvedType::GenericInstance { type_args, .. } =
-                    type_table.get(field.type_id)
+            // Check if this field is in the self-referential list
+            let is_self_ref = self_ref_field_types.contains(&field.type_id);
+            let wasm_type = if is_self_ref {
+                // Check if it's an Array type (Array<&mut T> pattern)
+                if let ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } = type_table.get(field.type_id)
+                    && name == "Array"
                 {
+                    // Look up the Array struct type we planned in the rec group
                     if let Some(&(_, _, array_struct_idx)) = array_type_mappings
                         .iter()
                         .find(|(elem_id, _, _)| *elem_id == type_args[0])
@@ -2904,10 +2925,17 @@ impl Codegen {
                             heap_type: HeapType::Concrete(array_struct_idx),
                         })
                     } else {
+                        // Fallback - shouldn't happen for properly detected Array self-refs
                         self.type_id_to_valtype(type_table, field.type_id)
                     }
                 } else {
-                    self.type_id_to_valtype(type_table, field.type_id)
+                    // Non-Array self-reference (e.g., Option<&mut Self>, &mut Self)
+                    // Use forward reference to the struct being defined
+                    Self::type_id_to_valtype_with_self_ref(
+                        type_table,
+                        field.type_id,
+                        struct_type_idx,
+                    )
                 }
             } else {
                 self.type_id_to_valtype(type_table, field.type_id)
@@ -3188,6 +3216,22 @@ impl Codegen {
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Tuple(elements) => !elements.is_empty(),
             ResolvedType::Option(inner) => self.needs_value_copy(*inner, type_table),
+            _ => false,
+        }
+    }
+
+    /// Check if a type is a reference type that uses GC references.
+    /// Reference types need `ref.eq` for equality comparison instead of `i32.eq`.
+    fn is_reference_type(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Option(_)
+            | ResolvedType::Function { .. } => true,
+            ResolvedType::Tuple(elements) => !elements.is_empty(),
             _ => false,
         }
     }
@@ -3992,6 +4036,28 @@ impl Codegen {
                     Self::collect_closures_from_block(else_blk, closures);
                 }
             }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                Self::collect_closures_from_expr(scrutinee, closures);
+                Self::collect_closures_from_block(body, closures);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for stmt in init {
+                    Self::collect_closures_from_stmt(stmt, closures);
+                }
+                Self::collect_closures_from_expr(scrutinee, closures);
+                Self::collect_closures_from_block(body, closures);
+                if let Some(upd) = update {
+                    Self::collect_closures_from_expr(upd, closures);
+                }
+            }
             TirStmtKind::Return { value: None }
             | TirStmtKind::Break { .. }
             | TirStmtKind::Continue => {}
@@ -4261,6 +4327,28 @@ impl Codegen {
                     Self::find_closure_locals_in_block(else_blk, result, closure_counter);
                 }
             }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for stmt in init {
+                    Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
+                }
+                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+                if let Some(upd) = update {
+                    Self::find_closure_locals_in_expr(upd, result, closure_counter);
+                }
+            }
             TirStmtKind::Return { value: None }
             | TirStmtKind::Break { .. }
             | TirStmtKind::Continue => {}
@@ -4515,6 +4603,106 @@ impl Codegen {
             if is_array_struct && !self.array_struct_types.contains_key(&element_type_id) {
                 self.get_or_create_array_struct_type(element_type_id, type_table, builder);
             }
+        }
+    }
+
+    /// Pre-register array types from monomorphized struct fields.
+    /// This is needed BEFORE monomorphized structs are registered, so that fields
+    /// with Array<Tuple<...>> or other non-primitive element types can be properly typed.
+    fn pre_register_arrays_from_monomorphized_structs(
+        &mut self,
+        tir_module: &TirModule,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        // Find all monomorphized structs (non-Array)
+        let mono_structs: Vec<_> = tir_module
+            .structs
+            .iter()
+            .filter(|s| {
+                s.type_params.is_empty()
+                    && s.monomorph_info.is_some()
+                    && s.monomorph_info
+                        .as_ref()
+                        .map(|i| i.generic_name != "Array")
+                        .unwrap_or(true)
+            })
+            .collect();
+
+        // For each monomorphized struct, scan field types for Array<T> instances
+        let mut array_types_to_register: Vec<(TypeId, bool)> = Vec::new();
+        for tir_struct in mono_structs {
+            for field in &tir_struct.fields {
+                self.collect_array_types_recursive(
+                    field.type_id,
+                    type_table,
+                    &mut array_types_to_register,
+                    &mut std::collections::HashSet::new(),
+                );
+            }
+        }
+
+        // Register the discovered array types
+        for (element_type_id, is_array_struct) in array_types_to_register {
+            // Skip array types with type parameters (unmonomorphized generics)
+            if type_table.contains_type_param(element_type_id) {
+                continue;
+            }
+            // Skip array types with Unknown/Error element types
+            if element_type_id == TypeTable::UNKNOWN || element_type_id == TypeTable::ERROR {
+                continue;
+            }
+            // Skip element types that involve monomorphized structs (GenericInstance)
+            // These are handled by either:
+            // - Self-referential struct registration with rec groups
+            // - Later PHASE 5 array registration after structs are registered
+            if self.element_type_involves_unregistered_struct(element_type_id, type_table) {
+                continue;
+            }
+            // Register raw array type
+            if !self.array_types.contains_key(&element_type_id) {
+                self.get_or_create_array_type(element_type_id, type_table, builder);
+            }
+            // Also register Array struct type
+            if is_array_struct && !self.array_struct_types.contains_key(&element_type_id) {
+                self.get_or_create_array_struct_type(element_type_id, type_table, builder);
+            }
+        }
+    }
+
+    /// Check if an element type involves an unregistered monomorphized struct
+    /// (`GenericInstance` or Struct with mangled name like "Foo<T>").
+    /// This recursively checks nested types.
+    fn element_type_involves_unregistered_struct(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+    ) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::GenericInstance { .. } => true,
+            // Check for monomorphized struct types (name contains '<')
+            // that aren't registered yet in struct_types
+            ResolvedType::Struct {
+                name,
+                module_source,
+            } if name.contains('<') => {
+                let struct_name = StructName::new(module_source.clone(), name.clone());
+                !self.struct_types.contains_key(&struct_name)
+            }
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.element_type_involves_unregistered_struct(*inner, type_table)
+            }
+            ResolvedType::Option(inner) => {
+                self.element_type_involves_unregistered_struct(*inner, type_table)
+            }
+            ResolvedType::Tuple(elements) => elements
+                .iter()
+                .any(|e| self.element_type_involves_unregistered_struct(*e, type_table)),
+            ResolvedType::Result { ok, err } => {
+                self.element_type_involves_unregistered_struct(*ok, type_table)
+                    || self.element_type_involves_unregistered_struct(*err, type_table)
+            }
+            _ => false,
         }
     }
 
@@ -4875,6 +5063,45 @@ impl Codegen {
         }
     }
 
+    /// Convert a type to `ValType`, using a forward reference for self-referential struct types.
+    /// This is used when registering recursive structs in a rec group.
+    fn type_id_to_valtype_with_self_ref(
+        type_table: &TypeTable,
+        type_id: TypeId,
+        self_type_idx: u32,
+    ) -> ValType {
+        match type_table.get(type_id) {
+            // For Struct and GenericInstance that would normally require lookup,
+            // use the forward reference since this IS the struct being defined
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
+                ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(self_type_idx),
+                })
+            }
+            // Option<T> - make the inner type nullable
+            ResolvedType::Option(inner) => {
+                let inner_valtype =
+                    Self::type_id_to_valtype_with_self_ref(type_table, *inner, self_type_idx);
+                match inner_valtype {
+                    ValType::Ref(ref_type) => ValType::Ref(RefType {
+                        nullable: true,
+                        ..ref_type
+                    }),
+                    other => other,
+                }
+            }
+            // Ref/MutRef - recurse into inner
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                Self::type_id_to_valtype_with_self_ref(type_table, *inner, self_type_idx)
+            }
+            // For other types, use standard conversion (they don't reference self)
+            ResolvedType::Primitive(prim) => primitive_to_valtype(prim),
+            ResolvedType::Unit => ValType::I32,
+            _ => ValType::I32, // Fallback
+        }
+    }
+
     /// Check if a type is a reference type (struct, string, variant, etc.)
     /// These types are represented as GC references in Wasm.
     fn type_is_reference(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
@@ -5205,6 +5432,22 @@ impl Codegen {
                     // a is false, evaluate b
                     self.generate_expr(func, right, type_table, ctx, builder);
                     func.instruction(&Instruction::End);
+                    return;
+                }
+
+                // Handle reference type comparisons (use ref.eq instead of i32.eq/ne)
+                let left_is_ref = self.is_reference_type(left.type_id, type_table);
+                let right_is_ref = self.is_reference_type(right.type_id, type_table);
+                if (left_is_ref || right_is_ref)
+                    && (*op == TirBinaryOp::Eq || *op == TirBinaryOp::NotEq)
+                {
+                    self.generate_expr(func, left, type_table, ctx, builder);
+                    self.generate_expr(func, right, type_table, ctx, builder);
+                    func.instruction(&Instruction::RefEq);
+                    if *op == TirBinaryOp::NotEq {
+                        // Invert the result for !=
+                        func.instruction(&Instruction::I32Eqz);
+                    }
                     return;
                 }
 
@@ -7349,14 +7592,26 @@ impl Codegen {
                 // Get the raw array type index and Array struct type index for array.get
                 let (raw_array_type_idx, array_struct_type_idx, element_type_id) =
                     if let Some(element_type) = type_table.as_array(*iterable_type) {
+                        // Try TypeId lookup first, then fall back to canonical name lookup
                         let raw_idx = self
                             .array_types
                             .get(&element_type)
                             .copied()
+                            .or_else(|| {
+                                let canonical =
+                                    self.canonical_element_type_name(element_type, type_table);
+                                self.array_types_by_name.get(&canonical).copied()
+                            })
                             .unwrap_or(self.string_array_type_idx);
-                        let struct_idx = *self
+                        let struct_idx = self
                             .array_struct_types
                             .get(&element_type)
+                            .copied()
+                            .or_else(|| {
+                                let canonical =
+                                    self.canonical_element_type_name(element_type, type_table);
+                                self.array_struct_types_by_name.get(&canonical).copied()
+                            })
                             .expect("Array struct type should be registered");
                         (raw_idx, struct_idx, element_type)
                     } else {
@@ -7550,10 +7805,32 @@ impl Codegen {
                     func, scrutinee, pattern, then_block, else_block, type_table, ctx, builder,
                 );
             }
+
+            TirStmtKind::WhilePattern {
+                scrutinee,
+                pattern,
+                body,
+            } => {
+                self.generate_while_pattern(
+                    func, scrutinee, pattern, body, type_table, ctx, builder,
+                );
+            }
+
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern,
+                body,
+                update,
+            } => {
+                self.generate_for_pattern(
+                    func, init, scrutinee, pattern, body, update, type_table, ctx, builder,
+                );
+            }
         }
     }
 
-    /// Generate code for if-pattern statement: `if Some(x) = expr { ... }`
+    /// Generate code for if-pattern statement: `if let Some(x) = expr { ... }`
     fn generate_if_pattern(
         &self,
         func: &mut Function,
@@ -7677,6 +7954,242 @@ impl Codegen {
                 panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
             }
         }
+    }
+
+    /// Generate code for while-pattern statement: `while let Some(x) = expr { ... }`
+    ///
+    /// Structure:
+    /// ```text
+    /// block $exit
+    ///   loop $loop
+    ///     ;; evaluate scrutinee
+    ///     ;; if pattern matches: bind + body + br $loop
+    ///     ;; else: br $exit
+    ///   end
+    /// end
+    /// ```
+    fn generate_while_pattern(
+        &self,
+        func: &mut Function,
+        scrutinee: &TirExpr,
+        pattern: &TirPattern,
+        body: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Outer block for exit
+        ctx.loop_info.push((None, 1, 0, false, None)); // break_offset=1, continue_offset=0
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+        // Inner loop
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
+        // Generate scrutinee and store in a temp local (evaluate only once per iteration!)
+        self.generate_expr(func, scrutinee, type_table, ctx, builder);
+
+        let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+        let type_key = format!("{:?}", scrutinee.type_id);
+        let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+        let local_name = format!("__while_pattern_scrutinee_{type_key}_{counter}");
+        *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+        let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
+        func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+        // Pattern matching - reuse the same logic as if-pattern
+        // For Option<T> with Some(x) pattern
+        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+        match (&scrutinee_type, pattern) {
+            (
+                ResolvedType::Option(inner_type),
+                TirPattern::Variant {
+                    variant_name,
+                    bindings,
+                    ..
+                },
+            ) if variant_name == "Some" => {
+                // Check if null (None case means exit)
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                // If null, exit the loop
+                func.instruction(&Instruction::BrIf(1)); // br $exit
+
+                // Bind the inner value (the non-null reference)
+                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefAsNonNull);
+
+                    // For primitive types, unbox the value from the box struct
+                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                    if !is_address_taken
+                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                    {
+                        let val_type = primitive_to_valtype(prim);
+                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                        }
+                    }
+
+                    // Store in the binding local with proper offset
+                    let adjusted_index = *local_index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
+
+                // Generate loop body
+                self.generate_block(func, body, type_table, ctx, builder);
+
+                // Continue the loop
+                func.instruction(&Instruction::Br(0)); // br $loop
+            }
+
+            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
+                if variant_name == "None" =>
+            {
+                // Check if not null (Some case means exit for None pattern)
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                func.instruction(&Instruction::I32Eqz); // !is_null = Some
+                // If not null (Some), exit the loop
+                func.instruction(&Instruction::BrIf(1)); // br $exit
+
+                // Generate loop body
+                self.generate_block(func, body, type_table, ctx, builder);
+
+                // Continue the loop
+                func.instruction(&Instruction::Br(0)); // br $loop
+            }
+
+            _ => {
+                panic!("Unsupported while-pattern: {pattern:?} on type {scrutinee_type:?}");
+            }
+        }
+
+        func.instruction(&Instruction::End); // end loop
+        func.instruction(&Instruction::End); // end block
+        ctx.loop_info.pop();
+    }
+
+    /// Generate code for for-pattern statement: `for init; let Some(x) = expr; update { ... }`
+    ///
+    /// Structure:
+    /// ```text
+    /// ;; init
+    /// block $exit
+    ///   loop $loop
+    ///     block $body
+    ///       ;; evaluate scrutinee
+    ///       ;; if pattern matches: bind + body
+    ///       ;; else: br $exit
+    ///     end
+    ///     ;; update
+    ///     br $loop
+    ///   end
+    /// end
+    /// ```
+    fn generate_for_pattern(
+        &self,
+        func: &mut Function,
+        init: &[TirStmt],
+        scrutinee: &TirExpr,
+        pattern: &TirPattern,
+        body: &TirBlock,
+        update: &Option<TirExpr>,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Generate init statements
+        for stmt in init {
+            self.generate_stmt(func, stmt, type_table, ctx, builder);
+        }
+
+        // Outer block for exit
+        ctx.loop_info.push((None, 1, 0, false, None)); // break_offset=1, continue_offset=0
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+        // Inner loop
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
+        // Body block (for continue to skip to update)
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+        // Generate scrutinee and store in a temp local (evaluate only once per iteration!)
+        self.generate_expr(func, scrutinee, type_table, ctx, builder);
+
+        let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+        let type_key = format!("{:?}", scrutinee.type_id);
+        let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+        let local_name = format!("__for_pattern_scrutinee_{type_key}_{counter}");
+        *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+        let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
+        func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+        // Pattern matching
+        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+        match (&scrutinee_type, pattern) {
+            (
+                ResolvedType::Option(inner_type),
+                TirPattern::Variant {
+                    variant_name,
+                    bindings,
+                    ..
+                },
+            ) if variant_name == "Some" => {
+                // Check if null (None case means exit)
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                // If null, exit the loop
+                func.instruction(&Instruction::BrIf(2)); // br $exit
+
+                // Bind the inner value (the non-null reference)
+                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefAsNonNull);
+
+                    // For primitive types, unbox the value from the box struct
+                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                    if !is_address_taken
+                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                    {
+                        let val_type = primitive_to_valtype(prim);
+                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                        }
+                    }
+
+                    // Store in the binding local with proper offset
+                    let adjusted_index = *local_index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
+
+                // Generate loop body
+                self.generate_block(func, body, type_table, ctx, builder);
+            }
+
+            _ => {
+                panic!("Unsupported for-pattern: {pattern:?} on type {scrutinee_type:?}");
+            }
+        }
+
+        func.instruction(&Instruction::End); // end $body block
+
+        // Generate update expression
+        if let Some(upd) = update {
+            self.generate_expr_as_stmt(func, upd, type_table, ctx, builder);
+        }
+
+        // Continue the loop
+        func.instruction(&Instruction::Br(0)); // br $loop
+
+        func.instruction(&Instruction::End); // end loop
+        func.instruction(&Instruction::End); // end block
+        ctx.loop_info.pop();
     }
 
     /// Generate a Wasm function from TIR function
@@ -9288,6 +9801,47 @@ impl Codegen {
                 if let Some(else_blk) = else_block {
                     self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
                 }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee,
+                pattern: _,
+                body,
+            } => {
+                // Pre-allocate temp local for the scrutinee
+                let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+                if let ResolvedType::Option(_) = scrutinee_type {
+                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                    let type_key = format!("{:?}", scrutinee.type_id);
+                    let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                    let local_name = format!("__while_pattern_scrutinee_{}_{}", type_key, *counter);
+                    *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                    ctx.alloc_local(&local_name, option_valtype);
+                }
+                // Recursively handle body
+                self.preallocate_if_pattern_locals(body, type_table, ctx);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern: _,
+                body,
+                ..
+            } => {
+                // Pre-allocate temp local for the scrutinee
+                let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+                if let ResolvedType::Option(_) = scrutinee_type {
+                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                    let type_key = format!("{:?}", scrutinee.type_id);
+                    let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                    let local_name = format!("__for_pattern_scrutinee_{}_{}", type_key, *counter);
+                    *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                    ctx.alloc_local(&local_name, option_valtype);
+                }
+                // Recursively handle init and body
+                for s in init {
+                    self.preallocate_if_pattern_locals_from_stmt(s, type_table, ctx);
+                }
+                self.preallocate_if_pattern_locals(body, type_table, ctx);
             }
             TirStmtKind::If {
                 then_block,
