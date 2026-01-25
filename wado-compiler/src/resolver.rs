@@ -2170,7 +2170,7 @@ impl<'a> Resolver<'a> {
                         } else {
                             self.errors.push(TypeError::TypeMismatch {
                                 expected: "variant type".to_string(),
-                                found: name.to_string(),
+                                found: name.clone(),
                                 span: *span,
                             });
                             vec![]
