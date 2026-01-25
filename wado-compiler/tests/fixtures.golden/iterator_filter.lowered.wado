@@ -15,21 +15,7 @@ fn run() with Stdout {
         let mut result: Array<i32> = move [];
         loop {
             if Some(item) = "FilterIter<i32>^Iterator::next"(self) {
-                __inline_Array_i32___append_3: {
-                    let used: i32 = result.used;
-                    let capacity: i32 = core::builtin::array_len(result.repr);
-                    if core::builtin::unlikely((used >= capacity)) {
-                        let mut new_capacity: i32 = (capacity * 2);
-                        if (capacity == 0) {
-                            new_capacity = 4;
-                        }
-                        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
-                        core::builtin::array_copy::<i32>(new_repr, 0, result.repr, 0, used);
-                        result.repr = new_repr;
-                    }
-                    core::builtin::array_set::<i32>(result.repr, used, item);
-                    result.used = (used + 1);
-                };
+                "Array<i32>::append"(&mut result, item);
             } else {
                 break;
             }
@@ -40,42 +26,44 @@ fn run() with Stdout {
     for let _item of evens {
         core::cli::println(move "i32::to_string"(x));
     }
-    let large: Array<i32> = __inline_FilterIter_i32___collect_4: {
-        let self: &mut FilterIter<i32> = &mut __inline_ArrayIter_i32___filter_6: {
-            let self: &ArrayIter<i32> = &__inline_Array_i32___iter_5: {
-                break __inline_Array_i32___iter_5: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+    let large: Array<i32> = __inline_FilterIter_i32___collect_3: {
+        let self: &mut FilterIter<i32> = &mut __inline_ArrayIter_i32___filter_5: {
+            let self: &ArrayIter<i32> = &__inline_Array_i32___iter_4: {
+                break __inline_Array_i32___iter_4: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
             };
             let pred: fn(i32) -> bool = |x: i32| (x > 5);
-            break __inline_ArrayIter_i32___filter_6: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+            break __inline_ArrayIter_i32___filter_5: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
         };
         let mut result: Array<i32> = move [];
         loop {
             if Some(item) = "FilterIter<i32>^Iterator::next"(self) {
-                __inline_Array_i32___append_7: {
-                    let used: i32 = result.used;
-                    let capacity: i32 = core::builtin::array_len(result.repr);
-                    if core::builtin::unlikely((used >= capacity)) {
-                        let mut new_capacity: i32 = (capacity * 2);
-                        if (capacity == 0) {
-                            new_capacity = 4;
-                        }
-                        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
-                        core::builtin::array_copy::<i32>(new_repr, 0, result.repr, 0, used);
-                        result.repr = new_repr;
-                    }
-                    core::builtin::array_set::<i32>(result.repr, used, item);
-                    result.used = (used + 1);
-                };
+                "Array<i32>::append"(&mut result, item);
             } else {
                 break;
             }
         }
-        break __inline_FilterIter_i32___collect_4: result;
+        break __inline_FilterIter_i32___collect_3: result;
     };
     core::cli::println(move "large:");
     for let _item of large {
         core::cli::println(move "i32::to_string"(x));
     }
+}
+
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
+        }
+        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<i32>(self.repr, used, value);
+    self.used = (used + 1);
 }
 
 fn "FilterIter<i32>^Iterator::next"(self: &mut FilterIter<i32>) -> Option<i32> {

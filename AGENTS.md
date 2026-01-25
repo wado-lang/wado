@@ -130,7 +130,7 @@ Available phases (in compilation order):
 7. `--lower` - Lowered TIR (supports `--unparse`)
 8. `--optimize` - Optimized TIR (supports `--unparse`)
 
-Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development: all except DCE), `-O2` (production: 2 iterations), `-O3` (aggressive: 10 iterations), `-Os` (`-O2` + strip names).
+Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development: all except DCE, 2 iterations), `-O2` (production: 10 iterations, default), `-O3` (aggressive: 100 iterations), `-Os` (`-O2` + strip names).
 
 ### Golden Fixtures (Lowered TIR Tests)
 

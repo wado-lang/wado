@@ -50,10 +50,10 @@ pub fn print_usage() {
     eprintln!("               Default: Debug/tree format");
     eprintln!();
     eprintln!("Optimization Level (for --optimize phase):");
-    eprintln!("  -O0          No optimizations (default)");
+    eprintln!("  -O0          No optimizations");
     eprintln!("  -O1          Development optimizations (all passes except DCE)");
-    eprintln!("  -O2          Production optimizations (full, 2 iterations)");
-    eprintln!("  -O3          Aggressive optimizations (full, 10 iterations)");
+    eprintln!("  -O2          Production optimizations (default)");
+    eprintln!("  -O3          Aggressive optimizations");
     eprintln!("  -Os          Size optimizations (O2 + strip names)");
     eprintln!();
     eprintln!("Output:");
@@ -77,7 +77,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_lower = false;
     let mut show_optimize = false;
     let mut unparse = false;
-    let mut opt_level = OptLevel::O0;
+    let mut opt_level = OptLevel::O2;
     let mut output_template: Option<String> = None;
 
     while let Some(arg) = next_arg(&mut parser) {

@@ -15,13 +15,16 @@ use crate::compiler_host::FilesystemCompilerHost;
 pub enum OptLevel {
     /// No optimizations. Used for debugging.
     O0,
-    /// Development optimizations. All passes except DCE (default).
+    /// Development optimizations. All passes except DCE.
     /// Keeps dead code visible for debugging while improving runtime.
-    #[default]
+    /// Iterations: 2, Inline threshold: 10.
     O1,
-    /// Production optimizations. Full passes including DCE (2 iterations).
+    /// Production optimizations. Full passes including DCE (default).
+    /// Iterations: 10, Inline threshold: 10.
+    #[default]
     O2,
-    /// Aggressive production optimizations. Full passes including DCE (10 iterations).
+    /// Aggressive production optimizations. Full passes including DCE.
+    /// Iterations: 100, Inline threshold: 20.
     O3,
     /// Size optimizations. O2 plus name section stripping.
     Os,
