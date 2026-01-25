@@ -176,7 +176,7 @@ The result: a language where common agentic coding pitfalls are eliminated by de
 - [Language Specification](spec.md) - Full language reference
 - [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
 - [Benchmarks](benchmark/README.md) - Performance benchmarks vs C and JavaScript, and so on
-- [Other Documentation](docs) - ADR, research notes, TODOs, etc.
+- [Other Documentation](docs) - WEP, research notes, TODOs, etc.
 
 ## Development
 
