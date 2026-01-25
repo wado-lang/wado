@@ -195,7 +195,7 @@ impl Analyzer {
 
                 Item::Enum(enum_decl) => {
                     let kind = SymbolKind::Enum(EnumSymbol {
-                        variants: enum_decl.variants.iter().map(|v| v.name.clone()).collect(),
+                        cases: enum_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
 
                     self.symbols

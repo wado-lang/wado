@@ -103,8 +103,8 @@ pub struct StructSymbol {
 /// Enum symbol data
 #[derive(Debug, Clone)]
 pub struct EnumSymbol {
-    /// Variant names
-    pub variants: Vec<String>,
+    /// Case names
+    pub cases: Vec<String>,
 }
 
 /// Variant symbol data (tagged union with payloads)

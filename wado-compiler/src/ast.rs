@@ -975,14 +975,15 @@ pub struct EnumDecl {
     pub is_pub: bool,
     /// Generic type parameters: `enum Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
-    pub variants: Vec<EnumVariant>,
+    pub cases: Vec<EnumCase>,
     pub span: Span,
 }
 
+/// A case in an enum declaration.
+/// Unlike `VariantCase`, enum cases have no payload.
 #[derive(Debug, Clone)]
-pub struct EnumVariant {
+pub struct EnumCase {
     pub name: String,
-    pub fields: Option<Vec<Type>>,
     pub span: Span,
 }
 

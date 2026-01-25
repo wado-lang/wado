@@ -1372,15 +1372,16 @@ pub struct TirEnum {
     pub type_params: Vec<TirTypeParam>,
     /// If this enum was created by monomorphization, contains the origin info
     pub monomorph_info: Option<MonomorphInfo>,
-    pub variants: Vec<TirVariant>,
+    pub cases: Vec<TirEnumCase>,
     pub span: Span,
 }
 
+/// A case in a TIR enum.
+/// Unlike `TirVariantCase`, enum cases have no payload.
 #[derive(Debug, Clone)]
-pub struct TirVariant {
+pub struct TirEnumCase {
     pub name: String,
     pub index: u32,
-    pub fields: Vec<TypeId>,
     pub span: Span,
 }
 
