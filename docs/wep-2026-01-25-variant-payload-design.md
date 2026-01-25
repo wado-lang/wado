@@ -60,6 +60,7 @@ Wado variants support exactly four payload forms with **consistent syntax**:
 Key principles:
 - **No implicit tuple expansion**: Multiple values require explicit tuple syntax `[T, U]` or struct syntax `{ a: T, b: U }`
 - **Consistent wrapper**: All non-unit payloads use `Name(payload)` form
+- **Minimal special rules**: Edge cases like single-element tuples `Foo([T])` or zero-element tuples `Foo([])` are allowed
 
 ```wado
 variant Shape {
@@ -123,6 +124,22 @@ let opt: Option<i32> = some;  // confirms the type
 
 Type inference is encouraged over explicit turbofish notation.
 
+#### None and Polymorphic Unit Cases
+
+For unit cases like `None` that don't use the type parameter, the type can be inferred from context:
+
+```wado
+// All equivalent:
+let none: Option<i32> = Option::<i32>::None;  // canonical
+let none: Option<i32> = Option::None;          // type from annotation
+let none: Option<i32> = null;                  // null coerces to Option::None
+
+// Error: T cannot be inferred
+let none = Option::None;  // compile error
+```
+
+The `null` literal is a singleton value that implicitly coerces to `Option::None` for any `T`.
+
 ### 4. Pattern Matching
 
 ```wado
@@ -135,8 +152,15 @@ fn area(s: Shape) -> f64 {
     }
 }
 
+// Full path also works in patterns
+match s {
+    Shape::Circle(r) => ...,
+    Shape::Rectangle([w, h]) => ...,
+    ...
+}
+
 // if let for single variant
-if let Circle(r) = shape {
+if let Shape::Circle(r) = shape {
     println(`radius: {r}`);
 }
 
@@ -148,22 +172,34 @@ fn circle_area(c: Shape::Circle) -> f64 {
 
 ### 5. Accessing Payload Fields
 
+**Payload is always at `.0`** - this provides consistent access regardless of payload type:
+
 | Payload Type | Access Syntax | Example |
 |--------------|---------------|---------|
-| Scalar | `.0` | `circle.0` → radius |
-| Tuple | `.0`, `.1`, etc. | `rect.0`, `rect.1` |
-| Struct | `.field` | `named.width`, `named.height` |
+| Scalar | `.0` | `circle.0` → the value |
+| Tuple | `.0` then `.0`, `.1`, etc. | `rect.0.0`, `rect.0.1` |
+| Struct | `.0` then `.field` | `named.0.width`, `named.0.height` |
 
 ```wado
 let c: Shape::Circle = Shape::Circle(5.0);
 let radius = c.0;           // 5.0
 
 let r: Shape::Rectangle = Shape::Rectangle([10.0, 20.0]);
-let width = r.0;            // 10.0 (tuple .0)
-let height = r.1;           // 20.0 (tuple .1)
+let tuple = r.0;            // [f64, f64]
+let width = r.0.0;          // 10.0
+let height = r.0.1;         // 20.0
 
 let n: Shape::Named = Shape::Named({ width: 10.0, height: 20.0 });
-let w = n.width;            // 10.0
+let payload = n.0;          // { width: f64, height: f64 }
+let w = n.0.width;          // 10.0
+```
+
+In practice, pattern matching is preferred (99% of cases):
+
+```wado
+if let Shape::Rectangle([w, h]) = shape {
+    println(`{w} x {h}`);
+}
 ```
 
 ## Union Type & Subset Binding
@@ -172,7 +208,7 @@ Beyond named variants, Wado supports anonymous union types with a powerful **sub
 
 ### Union Types
 
-Union types are anonymous sum types that flatten automatically:
+Union types are anonymous sum types with set semantics:
 
 ```wado
 type A = { kind: "a", a: i32 };
@@ -186,6 +222,54 @@ type ABCD = AB | CD;  // flattens to A | B | C | D
 ```
 
 Internally, union types have a discriminant (tag) just like variants.
+
+#### Union with Primitives
+
+Union types work with any types, including primitives:
+
+```wado
+type IntOrString = i32 | String;
+
+fn process(x: IntOrString) {
+    if let n: i32 = x {
+        println(`int: {n}`);
+    } else if let s: String = x {
+        println(`string: {s}`);
+    }
+}
+```
+
+#### Union of Variant Cases
+
+Variant cases can be combined into union types:
+
+```wado
+variant Shape { Circle(f64), Rectangle([f64, f64]), Point }
+
+type CircleOrRect = Shape::Circle | Shape::Rectangle;
+
+fn process_non_point(s: CircleOrRect) {
+    // Only Circle or Rectangle, Point is excluded at type level
+}
+```
+
+### Normalization Rules
+
+Union types follow set semantics with normalization:
+
+```wado
+// Flattening
+type AB = A | B;
+type BA = B | A;
+type ABBA = AB | BA;      // normalizes to A | B (order: first occurrence)
+
+// Duplicate handling - becomes Union<A>, not bare A
+type AA = A | A;          // Union<A> - requires match binding to use
+
+// Why Union<A> instead of A?
+// Consistency: all union types require subset binding/match
+// Edge case, but consistent rules are more important
+```
 
 ### Subset Binding
 
@@ -210,6 +294,16 @@ fn process(x: ABCD) {
         // a: A
         println(`got A with a={a.a}`);
     }
+}
+```
+
+Subset binding also works in match expressions:
+
+```wado
+match x {
+    ab: A | B => println("A or B"),
+    c: C => println("C"),
+    d: D => println("D"),
 }
 ```
 
@@ -244,6 +338,86 @@ fn process(x: A | B | C | D) {
 
 Wado's approach is more declarative - no need for manual type guard functions.
 
+## Edge Cases
+
+### Empty Variant
+
+Empty variants are allowed (uninhabited type):
+
+```wado
+variant Empty {}  // valid, no values can exist
+```
+
+### Recursive Variants
+
+Self-referential variants are supported:
+
+```wado
+variant List<T> {
+    Cons({ head: T, tail: List<T> }),
+    Nil,
+}
+
+let list = List::Cons({
+    head: 1,
+    tail: List::Cons({
+        head: 2,
+        tail: List::Nil,
+    }),
+});
+```
+
+### Single-Element and Zero-Element Tuples
+
+No special rules - these are allowed even if rarely useful:
+
+```wado
+variant Wrapper {
+    Single([i32]),     // single-element tuple payload
+    Empty([]),         // zero-element tuple payload (not same as unit)
+}
+
+let s = Wrapper::Single([42]);
+let val = s.0.0;  // 42
+
+let e = Wrapper::Empty([]);
+// e.0 is [] (empty tuple)
+```
+
+### Pattern Matching Syntax
+
+Both short and full paths work in patterns:
+
+```wado
+// Short form (within match on known variant type)
+match shape {
+    Circle(r) => ...,
+    Rectangle([w, h]) => ...,
+    Point => ...,
+}
+
+// Full path (always valid)
+match shape {
+    Shape::Circle(r) => ...,
+    Shape::Rectangle([w, h]) => ...,
+    Shape::Point => ...,
+}
+
+// if let requires full path for clarity
+if let Shape::Circle(r) = shape { ... }
+```
+
+### Wildcard in Patterns
+
+Wildcards work as expected:
+
+```wado
+if let Shape::Rectangle([w, _]) = shape {
+    // Ignore height
+    println(`width: {w}`);
+}
+```
+
 ## Migration from Current Syntax
 
 Current:
@@ -276,14 +450,15 @@ Migration steps:
 
 1. **No ambiguity**: `Foo(T)` is always scalar, `Foo([T, U])` is always tuple, `Foo({...})` is always struct
 2. **Consistent syntax**: All non-unit payloads use `Name(payload)` form
-3. **Variant types**: Functions can accept specific variants, improving type safety
-4. **Subset binding**: Union types enable flexible pattern matching against type subsets
-5. **TypeScript familiarity**: Variant cases as types and union types align with TypeScript patterns
-6. **Future-proof**: Clean integration path with literal types
+3. **Consistent access**: Payload is always at `.0`
+4. **Variant types**: Functions can accept specific variants, improving type safety
+5. **Subset binding**: Union types enable flexible pattern matching against type subsets
+6. **TypeScript familiarity**: Variant cases as types and union types align with TypeScript patterns
+7. **Minimal special rules**: Edge cases (empty variants, single-element tuples) just work
 
 ### Trade-offs
 
-1. **More verbose**: `Rectangle([f64, f64])` and `Named({...})` are longer
+1. **More verbose**: `r.0.0` instead of `r.0` for tuple element access
 2. **Different from Rust**: Users from Rust may expect implicit tuple expansion and `Name { }` syntax
 3. **Implementation complexity**: Variant cases as types and subset binding require additional type system work
 
@@ -293,6 +468,7 @@ Migration steps:
 |--------|------|------|
 | Multiple payloads | `Foo(T, U)` implicit tuple | `Foo([T, U])` explicit |
 | Struct variants | `Foo { a: T }` | `Foo({ a: T })` with parens |
+| Payload access | `.0`, `.1` directly | `.0.0`, `.0.1` (payload at `.0`) |
 | Variant as type | Not supported | `Shape::Circle` is a type |
 | Empty variants | Unit/tuple/struct differ | Unit only: `Foo` |
 | Union types | Not supported | `A \| B` with subset binding |
@@ -322,15 +498,16 @@ Current status: variant construction, single-payload if-let pattern matching, an
 
 - [ ] Variant case as standalone type (`Shape::Circle` as a type)
 - [ ] Implicit coercion from variant case to variant type
-- [ ] Field access on variant case types (`.0`, `.field`)
+- [ ] Field access on variant case types (`.0` for payload)
 - [ ] Generic variant case types (`Option::<i32>::Some`)
 
 ### Phase 4: Union Types & Subset Binding
 
 - [ ] Union type syntax (`A | B`)
-- [ ] Union type flattening (`(A | B) | C` → `A | B | C`)
+- [ ] Union type normalization (flattening, deduplication to `Union<A>`)
 - [ ] Discriminant generation for union types
 - [ ] Subset binding in `if let` (`if let x: A | B = abc`)
+- [ ] Subset binding in `match`
 - [ ] Exhaustiveness checking for union types
 
 ### Completed
