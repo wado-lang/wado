@@ -335,6 +335,10 @@ impl<'a> Unparser<'a> {
                     self.output.push_str(bound);
                 }
             }
+            if let Some(default_type) = &param.default {
+                self.output.push_str(" = ");
+                self.unparse_type(default_type);
+            }
         }
         self.output.push('>');
     }
@@ -2013,6 +2017,15 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str(", ");
                 }
                 self.output.push_str(&param.name);
+                if !param.bounds.is_empty() {
+                    self.output.push_str(": ");
+                    self.output.push_str(&param.bounds.join(" + "));
+                }
+                if let Some(default_type) = param.default {
+                    self.output.push_str(" = ");
+                    self.output
+                        .push_str(&self.type_table.type_name(default_type));
+                }
             }
             self.output.push('>');
         }
@@ -2081,6 +2094,15 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str(", ");
                 }
                 self.output.push_str(&param.name);
+                if !param.bounds.is_empty() {
+                    self.output.push_str(": ");
+                    self.output.push_str(&param.bounds.join(" + "));
+                }
+                if let Some(default_type) = param.default {
+                    self.output.push_str(" = ");
+                    self.output
+                        .push_str(&self.type_table.type_name(default_type));
+                }
             }
             self.output.push('>');
         }
