@@ -1753,91 +1753,25 @@ impl Monomorphizer {
                 func: static_func,
                 args,
             } => {
-                let func_name = static_func.name();
                 // Check if this is a call to a method on a monomorphized struct
-                // e.g., func_name = "Counter<i32>::zero" or "Counter<i32>::default_value"
-                if let Some(sep_pos) = func_name.find("::") {
-                    let struct_part = &func_name[..sep_pos];
-                    let method_name = &func_name[sep_pos + 2..];
-
-                    // Try to get base_struct_name from method_info (preferred) or monomorph_info
-                    let base_struct_and_type_args: Option<(String, Vec<TypeId>)> =
-                        if let FunctionRef::External {
-                            method_info: Some(info),
-                            monomorph_info,
-                            ..
-                        } = static_func
-                        {
-                            // Use base_struct_name from method_info
-                            let type_args = monomorph_info
-                                .as_ref()
-                                .map(|m| m.type_args.clone())
-                                .unwrap_or_default();
-                            if type_args.is_empty() {
-                                None
-                            } else {
-                                Some((info.base_struct_name.clone(), type_args))
-                            }
-                        } else if let FunctionRef::External {
-                            monomorph_info: Some(info),
-                            ..
-                        } = static_func
-                        {
-                            // Fallback: extract base struct from generic_name
-                            // "BTreeNode<K,V>::new_leaf" -> "BTreeNode"
-                            let generic_name = &info.generic_name;
-                            if let Some(generic_sep_pos) = generic_name.find("::") {
-                                let generic_struct_part = &generic_name[..generic_sep_pos];
-                                let base_struct =
-                                    crate::name::strip_type_params(generic_struct_part);
-                                Some((base_struct.to_string(), info.type_args.clone()))
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-
-                    if let Some((base_struct, type_args)) = base_struct_and_type_args {
+                // Use method_info metadata to get base_struct_name and method_name
+                if let FunctionRef::External {
+                    method_info: Some(info),
+                    monomorph_info: Some(monomorph),
+                    ..
+                } = static_func
+                {
+                    let type_args = &monomorph.type_args;
+                    if !type_args.is_empty() {
                         let generic_method_name =
-                            MethodName::format_local(&base_struct, None, method_name);
+                            MethodName::format_local(&info.base_struct_name, None, &info.method_name);
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
                             // Only queue if we have the right number of type args
                             if type_args.len() == generic_func.impl_type_params.len() {
                                 let key = InstantiationKey {
                                     name: generic_method_name,
-                                    type_args,
-                                };
-                                if !self.function_instantiated.contains_key(&key) {
-                                    let mangled = self.mangle_method_name(
-                                        &key,
-                                        type_table,
-                                        generic_func.impl_type_params.len(),
-                                    );
-                                    self.function_instantiated
-                                        .insert(key.clone(), mangled.clone());
-                                    self.mangled_func_to_key.insert(mangled, key.clone());
-                                    self.function_pending.push(key);
-                                }
-                            }
-                        }
-                    }
-                    // Fallback: check if struct_part is a monomorphized struct via reverse lookup
-                    else if let Some(struct_key) = self.mangled_struct_to_key.get(struct_part) {
-                        let base_struct = &struct_key.name;
-                        let type_args = struct_key.type_args.clone();
-
-                        // Look for generic method: BaseStruct::method
-                        let generic_method_name =
-                            MethodName::format_local(base_struct, None, method_name);
-                        if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
-                            let generic_func = generic_func_rc.borrow();
-                            // Only queue if we have the right number of type args
-                            if type_args.len() == generic_func.impl_type_params.len() {
-                                let key = InstantiationKey {
-                                    name: generic_method_name,
-                                    type_args,
+                                    type_args: type_args.clone(),
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
                                     let mangled = self.mangle_method_name(
