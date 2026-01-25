@@ -670,13 +670,13 @@ impl TreeMap<K, V> {
         }
     }
 
-    fn find_node(&self, key: &K) -> Option<&TreeMapNode<K, V>> {
+    fn find_node(&self, key: K) -> Option<&TreeMapNode<K, V>> {
         let mut current = self.root;
         while let Some(n) = current {
-            if !n.deleted && *key == n.key {
+            if !n.deleted && key == n.key {
                 return Option::Some(n);
             }
-            if *key < n.key {
+            if key < n.key {
                 current = n.left;
             } else {
                 current = n.right;
@@ -686,25 +686,25 @@ impl TreeMap<K, V> {
     }
 
     /// Returns true if the map contains a value for the specified key
-    pub fn contains_key(&self, key: &K) -> bool {
+    pub fn contains_key(&self, key: K) -> bool {
         return self.find_node(key) != null;
     }
 
     /// Returns the value corresponding to the key, or null if not found
-    pub fn get(&self, key: &K) -> Option<V> {
+    pub fn get(&self, key: K) -> Option<V> {
         if let Some(node) = self.find_node(key) {
             return Option::Some(node.value);
         }
         return null;
     }
 
-    fn find_node_mut(&mut self, key: &K) -> Option<&mut TreeMapNode<K, V>> {
+    fn find_node_mut(&mut self, key: K) -> Option<&mut TreeMapNode<K, V>> {
         let mut current = self.root;
         while let Some(n) = current {
-            if !n.deleted && *key == n.key {
+            if !n.deleted && key == n.key {
                 return Option::Some(n);
             }
-            if *key < n.key {
+            if key < n.key {
                 current = n.left;
             } else {
                 current = n.right;
@@ -714,7 +714,7 @@ impl TreeMap<K, V> {
     }
 
     /// Removes a key from the map. Returns true if the key was present.
-    pub fn remove(&mut self, key: &K) -> bool {
+    pub fn remove(&mut self, key: K) -> bool {
         if let Some(node) = self.find_node_mut(key) {
             node.deleted = true;
             self.deleted_count = self.deleted_count + 1;
@@ -806,7 +806,7 @@ impl IndexAssign<K> for TreeMap<K, V> {
 impl IndexValue<K> for TreeMap<K, V> {
     type Output = Option<V>;
     fn index_value(&self, key: K) -> Self::Output {
-        return self.get(&key);
+        return self.get(key);
     }
 }
 

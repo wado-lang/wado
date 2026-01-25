@@ -7,26 +7,26 @@ fn run() with Stdout {
     // Empty map
     assert map.is_empty();
     assert map.len() == 0;
-    assert !map.contains_key(&"key");
+    assert !map.contains_key("key");
 
-    // Insert and get
-    map.insert("one", 1);
+    // Insert and get using index traits
+    map["one"] = 1;
     assert map.len() == 1;
-    assert map.contains_key(&"one");
-    if let Some(v1) = map.get(&"one") {
+    assert map.contains_key("one");
+    if let Some(v1) = map["one"] {
         assert v1 == 1;
     }
 
     // Update existing key
-    map.insert("one", 100);
+    map["one"] = 100;
     assert map.len() == 1;
-    if let Some(v2) = map.get(&"one") {
+    if let Some(v2) = map["one"] {
         assert v2 == 100;
     }
 
     // Multiple inserts
-    map.insert("two", 2);
-    map.insert("three", 3);
+    map["two"] = 2;
+    map["three"] = 3;
     assert map.len() == 3;
 
     println("basic operations: ok");
