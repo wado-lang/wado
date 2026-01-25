@@ -1,0 +1,19 @@
+// Test trait bound violation error
+// i32 does not implement Printable, so this should fail
+
+trait Printable {
+    fn print(&self) -> String;
+}
+
+// Container requires T to implement Printable
+struct Container<T: Printable> {
+    item: T,
+}
+
+fn run() {
+    // This should fail: i32 does not implement Printable
+    let c: Container<i32> = Container { item: 42 };
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Printable'"}

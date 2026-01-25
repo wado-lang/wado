@@ -945,6 +945,8 @@ pub struct GenericParam {
     pub name: String,
     /// Trait bounds (e.g., `Ord`, `Clone`) - for future constraint checking
     pub bounds: Vec<String>,
+    /// Default type (e.g., `T = []` or `Effects = []`)
+    pub default: Option<Type>,
     pub span: Span,
 }
 

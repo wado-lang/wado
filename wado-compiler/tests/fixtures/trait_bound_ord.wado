@@ -1,0 +1,22 @@
+// Test Ord trait bound
+// Primitives have built-in Ord implementation
+
+use {println, Stdout} from "core:cli";
+
+struct SortedPair<T: Ord> {
+    first: T,
+    second: T,
+}
+
+fn run() with Stdout {
+    // This should work: i32 implements Ord (built-in)
+    let pair = SortedPair { first: 1, second: 2 };
+    if pair.first < pair.second {
+        println("first is smaller");
+    } else {
+        println("second is smaller or equal");
+    }
+}
+
+__DATA__
+{"stdout": "first is smaller\n"}

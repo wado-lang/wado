@@ -2388,7 +2388,7 @@ impl Parser {
         })
     }
 
-    /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`
+    /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`
     fn parse_generic_params(&mut self) -> ParseResult<Vec<crate::ast::GenericParam>> {
         if !self.check(&TokenKind::Lt) {
             return Ok(Vec::new());
@@ -2415,9 +2415,18 @@ impl Parser {
                 Vec::new()
             };
 
+            // Parse optional default type: `T = DefaultType`
+            let default = if self.check(&TokenKind::Eq) {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
             params.push(crate::ast::GenericParam {
                 name,
                 bounds,
+                default,
                 span: start_span,
             });
 

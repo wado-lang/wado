@@ -261,6 +261,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Compile-Time Location Literals](./docs/wep-2026-01-23-compile-time-location-literals.md)
 - [Iterator Traits Design](./docs/wep-2026-01-24-iterator-traits.md)
 - [Module Loader Design](./docs/wep-2026-01-24-module-loader.md)
+- [Closure Parameter Monomorphization](./docs/wep-2026-01-25-closure-parameter-monomorphization.md)
 
 ### Structure
 

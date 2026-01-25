@@ -764,10 +764,22 @@ impl FunctionRef {
 
     /// Get the fully qualified function name including module path.
     /// For external functions, this returns "{`module_source}/{name`}".
-    /// For resolved functions, this returns just the name.
+    /// For resolved functions, this returns the method-qualified name if available.
     pub fn full_name(&self) -> String {
         match self {
-            FunctionRef::Resolved(func) => func.borrow().name.clone(),
+            FunctionRef::Resolved(func) => {
+                let func = func.borrow();
+                // Use method_info to create a unique name for methods
+                if let Some(info) = &func.method_info {
+                    if let Some(trait_name) = &info.trait_name {
+                        format!("{}^{}::{}", info.struct_name, trait_name, info.method_name)
+                    } else {
+                        format!("{}::{}", info.struct_name, info.method_name)
+                    }
+                } else {
+                    func.name.clone()
+                }
+            }
             FunctionRef::External {
                 module_source,
                 name,
@@ -998,6 +1010,9 @@ pub enum TirExprKind {
         params: Vec<(String, TypeId)>,
         body: Box<TirExpr>,
         captures: Vec<TirCapture>,
+        /// Optional functor ID assigned during lowering.
+        /// Used by monomorphize phase to look up the corresponding ClosureFunctor.
+        functor_id: Option<u32>,
     },
 
     /// Indirect call through a callable value (closure or funcref)
@@ -1240,6 +1255,8 @@ pub enum TirStmtKind {
 pub struct TirTypeParam {
     pub name: String,
     pub bounds: Vec<String>,
+    /// Default type if specified (e.g., `Effects = []`)
+    pub default: Option<TypeId>,
     pub index: u32,
 }
 
@@ -1439,6 +1456,29 @@ pub struct TirImpl {
 }
 
 // ============================================================================
+// Closure Metadata (for optimizer)
+// ============================================================================
+
+/// Metadata about a closure for optimization (especially inlining).
+///
+/// This is populated by the lower phase and used by the optimizer to inline
+/// closure calls when the closure is known at compile time.
+#[derive(Debug, Clone)]
+pub struct ClosureFunctor {
+    /// Unique closure ID (matches the order closures are visited in the module)
+    pub id: u32,
+    /// Name of the generated functor struct (e.g., `__Closure_0`)
+    pub struct_name: String,
+    /// Type ID of the generated functor struct
+    pub struct_type_id: TypeId,
+    /// The `__call` method for this closure (with body transformed:
+    /// Capture nodes become `FieldAccess` on self)
+    pub call_method: Rc<RefCell<TirFunction>>,
+    /// Captures from the original closure
+    pub captures: Vec<TirCapture>,
+}
+
+// ============================================================================
 // Module
 // ============================================================================
 
@@ -1479,6 +1519,9 @@ pub struct TirModule {
     pub generic_functions: HashMap<String, Rc<RefCell<TirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
     pub instantiation_requests: std::collections::HashSet<InstantiationKey>,
+    /// Closure metadata for optimization (populated by lower phase).
+    /// Maps closure ID to functor info including the `__call` method for inlining.
+    pub closure_functors: Vec<ClosureFunctor>,
 }
 
 impl TirModule {
@@ -1501,6 +1544,7 @@ impl TirModule {
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiation_requests: std::collections::HashSet::new(),
+            closure_functors: Vec::new(),
         }
     }
 
@@ -1526,6 +1570,7 @@ impl TirModule {
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiation_requests: std::collections::HashSet::new(),
+            closure_functors: Vec::new(),
         }
     }
 
