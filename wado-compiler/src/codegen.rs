@@ -4005,6 +4005,7 @@ impl Codegen {
                 params,
                 body,
                 captures,
+                functor_id: _,
             } => {
                 // Determine return type:
                 // - For block bodies, check for return statements
@@ -6313,6 +6314,7 @@ impl Codegen {
                 params: _,
                 body: _,
                 captures,
+                functor_id: _,
             } => {
                 // Get the closure ID and look up its registered info
                 let closure_id = {

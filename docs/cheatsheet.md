@@ -378,6 +378,36 @@ if p1 == p2 {
 
 Note: `IndexValue` returns elements by value (copy) because Wasm GC cannot return references to array elements. `Index` is for containers of reference-type elements.
 
+### Trait Bounds
+
+Type parameters can have trait bounds that constrain what types can be used:
+
+```wado
+// Struct with trait bound - T must implement Ord
+struct SortedPair<T: Ord> {
+    first: T,
+    second: T,
+}
+
+// Multiple bounds with + syntax
+struct PrintableOrd<T: Ord + Printable> {
+    value: T,
+}
+
+// Works: i32 implements Ord (built-in for primitives)
+let pair = SortedPair { first: 1, second: 2 };
+
+// Compile error: MyStruct doesn't implement Ord
+// let bad = SortedPair { first: MyStruct {}, second: MyStruct {} };
+```
+
+Built-in trait implementations:
+
+- All primitive types (`i32`, `f64`, `bool`, etc.) implement `Eq` and `Ord`
+- Custom types must explicitly implement traits
+
+Note: Function type parameter bounds (`fn foo<T: Trait>(x: T)`) are parsed but not yet enforced.
+
 ## Control Flow
 
 ```wado

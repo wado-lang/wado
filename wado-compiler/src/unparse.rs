@@ -2704,6 +2704,7 @@ impl<'a> TirUnparser<'a> {
                 params,
                 body,
                 captures,
+                functor_id: _,
             } => {
                 self.output.push('|');
                 for (i, (name, type_id)) in params.iter().enumerate() {

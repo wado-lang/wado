@@ -1,0 +1,28 @@
+// Test default type parameters in traits
+// Verifies that `T = DefaultType` syntax parses and compiles correctly
+
+use {println, Stdout} from "core:cli";
+
+// Trait with default type parameter
+trait Container<T, Default = i32> {
+    fn value(&self) -> T;
+}
+
+struct IntBox {
+    x: i32,
+}
+
+// Implement with explicit type args (using the default)
+impl Container<i32, i32> for IntBox {
+    fn value(&self) -> i32 {
+        return self.x;
+    }
+}
+
+fn run() with Stdout {
+    let box = IntBox { x: 42 };
+    println(`value: {box.value()}`);
+}
+
+__DATA__
+{"stdout": "value: 42\n"}

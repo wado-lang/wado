@@ -43,6 +43,9 @@ struct StructFieldInfo {
     module_source: ModuleSource,
     /// Field definitions: (name, `type_id`) pairs
     fields: Vec<(String, TypeId)>,
+    /// Type parameter bounds: (`param_name`, `trait_bounds`)
+    /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
+    type_param_bounds: Vec<(String, Vec<String>)>,
 }
 
 /// Variant case info: case name and field types
@@ -101,6 +104,14 @@ pub enum TypeError {
 
     /// Invalid assignment target (not a valid l-value)
     CannotAssign { message: String, span: Span },
+
+    /// Trait bound not satisfied
+    TraitBoundNotSatisfied {
+        type_name: String,
+        trait_name: String,
+        param_name: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -171,6 +182,18 @@ impl std::fmt::Display for TypeError {
                     f,
                     "{}:{}: cannot assign: {}",
                     span.line, span.column, message
+                )
+            }
+            TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name,
+                param_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: type '{}' does not implement trait '{}' required by bound on '{}'",
+                    span.line, span.column, type_name, trait_name, param_name
                 )
             }
         }
@@ -654,11 +677,18 @@ impl<'a> Resolver<'a> {
                 match item {
                     Item::Struct(struct_decl) => {
                         // Insert with empty fields first - will be populated in second sub-pass
+                        // Extract type parameter bounds
+                        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+                            .type_params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.bounds.clone()))
+                            .collect();
                         struct_fields.insert(
                             struct_decl.name.clone(),
                             StructFieldInfo {
                                 module_source: module_source.clone(),
                                 fields: Vec::new(),
+                                type_param_bounds,
                             },
                         );
                     }
@@ -704,12 +734,19 @@ impl<'a> Resolver<'a> {
                             );
                             fields.push((field.name.clone(), type_id));
                         }
+                        // Extract type parameter bounds
+                        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+                            .type_params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.bounds.clone()))
+                            .collect();
                         // Update the struct_fields entry with actual fields
                         struct_fields.insert(
                             struct_decl.name.clone(),
                             StructFieldInfo {
                                 module_source: module_source.clone(),
                                 fields,
+                                type_param_bounds,
                             },
                         );
                     }
@@ -1130,11 +1167,18 @@ impl<'a> Resolver<'a> {
                         let type_id = self.resolve_type(&field.ty);
                         fields.push((field.name.clone(), type_id));
                     }
+                    // Extract type parameter bounds
+                    let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+                        .type_params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.bounds.clone()))
+                        .collect();
                     self.struct_fields.insert(
                         struct_decl.name.clone(),
                         StructFieldInfo {
                             module_source: self.current_module_source.clone(),
                             fields,
+                            type_param_bounds,
                         },
                     );
 
@@ -1314,10 +1358,7 @@ impl<'a> Resolver<'a> {
             });
         }
 
-        // Restore previous type params scope
-        self.current_type_params = old_type_params;
-
-        // Convert AST type params to TIR type params
+        // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
             .type_params
             .iter()
@@ -1325,9 +1366,13 @@ impl<'a> Resolver<'a> {
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
                 bounds: p.bounds.clone(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
+
+        // Restore previous type params scope
+        self.current_type_params = old_type_params;
 
         TirStruct {
             name: struct_decl.name.clone(),
@@ -1368,10 +1413,7 @@ impl<'a> Resolver<'a> {
             });
         }
 
-        // Restore previous type params scope
-        self.current_type_params = old_type_params;
-
-        // Convert AST type params to TIR type params
+        // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
             .type_params
             .iter()
@@ -1379,9 +1421,13 @@ impl<'a> Resolver<'a> {
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
                 bounds: p.bounds.clone(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
+
+        // Restore previous type params scope
+        self.current_type_params = old_type_params;
 
         TirVariantDecl {
             name: variant_decl.name.clone(),
@@ -1443,10 +1489,7 @@ impl<'a> Resolver<'a> {
         // Resolve body
         let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx));
 
-        // Restore previous type params scope
-        self.current_type_params = old_type_params;
-
-        // Convert AST type params to TIR type params
+        // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
@@ -1454,9 +1497,13 @@ impl<'a> Resolver<'a> {
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
                 bounds: p.bounds.clone(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
+
+        // Restore previous type params scope
+        self.current_type_params = old_type_params;
 
         Some(TirFunction {
             name: func.name.clone(),
@@ -1562,6 +1609,7 @@ impl<'a> Resolver<'a> {
                         impl_type_params.push(crate::tir::TirTypeParam {
                             name: name.clone(),
                             bounds: vec![],
+                            default: None, // Impl type params don't have defaults
                             index: i as u32,
                         });
                     }
@@ -1639,6 +1687,19 @@ impl<'a> Resolver<'a> {
         // Resolve body
         let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx));
 
+        // Convert AST type params to TIR type params (while type params still in scope)
+        let type_params: Vec<crate::tir::TirTypeParam> = func
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                bounds: p.bounds.clone(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                index: i as u32,
+            })
+            .collect();
+
         // Restore previous type params scope
         self.current_type_params = old_type_params;
 
@@ -1647,18 +1708,6 @@ impl<'a> Resolver<'a> {
             self.generic_method_params
                 .insert(mangled_name, type_param_list);
         }
-
-        // Convert AST type params to TIR type params
-        let type_params: Vec<crate::tir::TirTypeParam> = func
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                bounds: p.bounds.clone(),
-                index: i as u32,
-            })
-            .collect();
 
         // Restore Self type
         self.current_self_type = old_self_type;
@@ -5276,6 +5325,121 @@ impl<'a> Resolver<'a> {
         self.find_comparison_trait_impl(struct_name, base_type_id, "Ord", "lt")
     }
 
+    /// Check if a type implements a specific trait (for trait bound checking)
+    fn type_implements_trait(&self, type_id: TypeId, trait_name: &str) -> bool {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+
+        // Primitives have built-in implementations for certain traits
+        if let ResolvedType::Primitive(prim) = &resolved {
+            match trait_name {
+                // All primitives implement Eq and Ord
+                "Eq" | "Ord" => return true,
+                // Add other built-in trait implementations as needed
+                _ => {}
+            }
+            // For other traits, check the type name
+            let type_name = format!("{prim:?}").to_lowercase();
+            return self.find_trait_impl_for_type(&type_name, trait_name);
+        }
+
+        // Get the type name for looking up implementations
+        let type_name = match &resolved {
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { name, .. } => name.clone(),
+            ResolvedType::Option(_) => "Option".to_string(),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                // For references, check if the inner type implements the trait
+                return self.type_implements_trait(*inner, trait_name);
+            }
+            _ => return false,
+        };
+
+        self.find_trait_impl_for_type(&type_name, trait_name)
+    }
+
+    /// Helper to check if there's an impl block for a type implementing a trait
+    fn find_trait_impl_for_type(&self, type_name: &str, trait_name: &str) -> bool {
+        // Check all loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    let impl_type_name = self.get_type_name(&impl_block.ty);
+                    let impl_trait_name = self.get_type_name(trait_type);
+
+                    if impl_type_name == type_name && impl_trait_name == trait_name {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                let impl_type_name = self.get_type_name(&impl_block.ty);
+                let impl_trait_name = self.get_type_name(trait_type);
+
+                if impl_type_name == type_name && impl_trait_name == trait_name {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Convert a `TypeId` to a human-readable string for error messages
+    fn type_id_to_string(&self, type_id: TypeId) -> String {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        match resolved {
+            ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
+            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                if type_args.is_empty() {
+                    name
+                } else {
+                    let args: Vec<String> = type_args
+                        .iter()
+                        .map(|&t| self.type_id_to_string(t))
+                        .collect();
+                    format!("{}<{}>", name, args.join(", "))
+                }
+            }
+            ResolvedType::Option(inner) => format!("Option<{}>", self.type_id_to_string(inner)),
+            ResolvedType::BuiltinArray(elem) => {
+                format!("builtin::array<{}>", self.type_id_to_string(elem))
+            }
+            ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
+            ResolvedType::Tuple(elems) => {
+                let parts: Vec<String> = elems.iter().map(|&t| self.type_id_to_string(t)).collect();
+                format!("[{}]", parts.join(", "))
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                let param_strs: Vec<String> =
+                    params.iter().map(|&t| self.type_id_to_string(t)).collect();
+                let ret_str = self.type_id_to_string(return_type);
+                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
+            }
+            ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::Unit => "()".to_string(),
+            ResolvedType::Never => "!".to_string(),
+            ResolvedType::Unknown => "<unknown>".to_string(),
+            ResolvedType::Error => "<error>".to_string(),
+            _ => format!("{resolved:?}"),
+        }
+    }
+
     /// Helper to find comparison trait implementations (`Eq` or `Ord`)
     fn find_comparison_trait_impl(
         &mut self,
@@ -6303,6 +6467,7 @@ impl<'a> Resolver<'a> {
                 params,
                 body: Box::new(body),
                 captures,
+                functor_id: None, // Assigned during lowering
             },
             func_type,
             closure.span,
@@ -7044,12 +7209,32 @@ impl<'a> Resolver<'a> {
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
-                    // Get the module source where the struct was defined
-                    let module_source = self
-                        .struct_fields
-                        .get(name)
+                    // Get struct info for module source and bounds checking
+                    let struct_info = self.struct_fields.get(name).cloned();
+                    let module_source = struct_info
+                        .as_ref()
                         .map(|info| info.module_source.clone())
                         .unwrap_or_else(|| self.current_module_source.clone());
+
+                    // Check trait bounds for each type argument
+                    if let Some(info) = &struct_info {
+                        for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
+                            if let Some(&type_arg) = type_args.get(i) {
+                                for bound in bounds {
+                                    if !self.type_implements_trait(type_arg, bound) {
+                                        // Get the type name for the error message
+                                        let type_name = self.type_id_to_string(type_arg);
+                                        self.errors.push(TypeError::TraitBoundNotSatisfied {
+                                            type_name,
+                                            trait_name: bound.clone(),
+                                            param_name: param_name.clone(),
+                                            span,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Create a GenericInstance type
                     self.type_table.borrow_mut().make_generic_instance(

@@ -2184,6 +2184,7 @@ fn remap_expr(
             params,
             body,
             captures,
+            functor_id,
         } => TirExprKind::Closure {
             params: params.clone(),
             body: Box::new(remap_expr(
@@ -2194,6 +2195,7 @@ fn remap_expr(
                 source_module,
             )),
             captures: captures.clone(), // Captures reference outer scope, not remapped
+            functor_id: *functor_id,
         },
         TirExprKind::IndirectCall { callee, args } => TirExprKind::IndirectCall {
             callee: Box::new(remap_expr(
