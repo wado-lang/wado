@@ -1311,10 +1311,8 @@ pub struct TirTypeParam {
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {
-    /// Original generic name (e.g., "Box" for "Box<i32>", or "BTreeNode<K,V>::insert" for methods)
+    /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
     pub generic_name: String,
-    /// Base struct name without type parameters (e.g., "BTreeNode" for "BTreeNode<K,V>::insert")
-    pub base_struct_name: Option<String>,
     /// Concrete type arguments used for this instantiation
     pub type_args: Vec<TypeId>,
 }

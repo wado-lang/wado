@@ -537,11 +537,17 @@ pub struct LocalMethodName {
 
 impl LocalMethodName {
     /// Create a new `LocalMethodName` directly from components.
-    /// `base_struct_name` is derived by stripping type params from `struct_name`.
+    ///
+    /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
+    /// Use `with_type_args()` or `with_struct_type_args()` to add type parameters.
     #[must_use]
     pub fn new(struct_name: String, trait_name: Option<String>, method_name: String) -> Self {
+        debug_assert!(
+            !struct_name.contains('<'),
+            "LocalMethodName::new() expects base struct name without type params, got: {struct_name}"
+        );
         Self {
-            base_struct_name: strip_type_params(&struct_name).to_string(),
+            base_struct_name: struct_name.clone(),
             struct_name,
             trait_name,
             method_name,
@@ -550,7 +556,9 @@ impl LocalMethodName {
     }
 
     /// Create a new `LocalMethodName` with all components including method type args.
-    /// `base_struct_name` is derived by stripping type params from `struct_name`.
+    ///
+    /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
+    /// Use `with_type_args()` to add struct type parameters.
     #[must_use]
     pub fn with_method_type_args(
         struct_name: String,
@@ -558,8 +566,12 @@ impl LocalMethodName {
         method_name: String,
         method_type_args: Vec<String>,
     ) -> Self {
+        debug_assert!(
+            !struct_name.contains('<'),
+            "LocalMethodName::with_method_type_args() expects base struct name without type params, got: {struct_name}"
+        );
         Self {
-            base_struct_name: strip_type_params(&struct_name).to_string(),
+            base_struct_name: struct_name.clone(),
             struct_name,
             trait_name,
             method_name,
