@@ -4145,6 +4145,7 @@ impl<'a> Resolver<'a> {
                 let generic_name = format!("{}::{}", base, method_call.method);
                 Some(MonomorphInfo {
                     generic_name,
+                    base_struct_name: Some(base.clone()),
                     type_args,
                 })
             } else {
@@ -4350,6 +4351,7 @@ impl<'a> Resolver<'a> {
             let generic_name = format!("{}::{}", struct_name, static_call.method);
             Some(MonomorphInfo {
                 generic_name,
+                base_struct_name: Some(struct_name.clone()),
                 type_args: struct_type_args,
             })
         };
@@ -4927,8 +4929,13 @@ impl<'a> Resolver<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
+                base_name,
                 ..
-            } => (name.clone(), module_source.to_path()),
+            } => {
+                // Use base_name for monomorphized structs (e.g., "ArrayIter" instead of "ArrayIter<i32>")
+                let effective_name = base_name.as_ref().unwrap_or(name).clone();
+                (effective_name, module_source.to_path())
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -4969,11 +4976,8 @@ impl<'a> Resolver<'a> {
                     && impl_block.trait_type.is_none()
                 {
                     let impl_type_name = self.get_type_name(&impl_block.ty);
-                    // Match impl type name: either exact match or the base name matches
-                    // For generic types like ArrayIter<T>, match if base name "ArrayIter" matches
-                    let impl_base_name =
-                        impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-                    if impl_type_name == struct_name || impl_base_name == struct_name {
+                    // get_type_name returns just the base name (no type args)
+                    if impl_type_name == struct_name {
                         for method in &impl_block.methods {
                             if method.name == method_name && !method.type_params.is_empty() {
                                 let (tp, pp) = extract_method_info(method);
@@ -4995,9 +4999,8 @@ impl<'a> Resolver<'a> {
                         && impl_block.trait_type.is_none()
                     {
                         let impl_type_name = self.get_type_name(&impl_block.ty);
-                        let impl_base_name =
-                            impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-                        if impl_type_name == struct_name || impl_base_name == struct_name {
+                        // get_type_name returns just the base name (no type args)
+                        if impl_type_name == struct_name {
                             for method in &impl_block.methods {
                                 if method.name == method_name && !method.type_params.is_empty() {
                                     let (tp, pp) = extract_method_info(method);
