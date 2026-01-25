@@ -305,6 +305,36 @@ fn track_local_uses_in_stmt(stmt: &TirStmt, local_index: u32) -> (bool, u32) {
                 .map_or((true, 0), |eb| track_local_uses_in_block(eb, local_index));
             (s_ok && t_ok && e_ok, s_count + t_count + e_count)
         }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            let (s_ok, s_count) = track_local_uses_in_expr(scrutinee, local_index);
+            let (b_ok, b_count) = track_local_uses_in_block(body, local_index);
+            (s_ok && b_ok, s_count + b_count)
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            let (mut all_ok, mut total_count) = (true, 0);
+            for s in init {
+                let (ok, count) = track_local_uses_in_stmt(s, local_index);
+                all_ok = all_ok && ok;
+                total_count += count;
+            }
+            let (s_ok, s_count) = track_local_uses_in_expr(scrutinee, local_index);
+            let (u_ok, u_count) = update
+                .as_ref()
+                .map_or((true, 0), |u| track_local_uses_in_expr(u, local_index));
+            let (b_ok, b_count) = track_local_uses_in_block(body, local_index);
+            (
+                all_ok && s_ok && u_ok && b_ok,
+                total_count + s_count + u_count + b_count,
+            )
+        }
         TirStmtKind::Break { value, .. } => value
             .as_ref()
             .map_or((true, 0), |v| track_local_uses_in_expr(v, local_index)),
@@ -528,6 +558,28 @@ fn replace_ref_field_access_in_stmt(
                 replace_ref_field_access_in_block(eb, ref_local, target_local, target_name);
             }
         }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            replace_ref_field_access_in_expr(scrutinee, ref_local, target_local, target_name);
+            replace_ref_field_access_in_block(body, ref_local, target_local, target_name);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                replace_ref_field_access_in_stmt(s, ref_local, target_local, target_name);
+            }
+            replace_ref_field_access_in_expr(scrutinee, ref_local, target_local, target_name);
+            replace_ref_field_access_in_block(body, ref_local, target_local, target_name);
+            if let Some(u) = update {
+                replace_ref_field_access_in_expr(u, ref_local, target_local, target_name);
+            }
+        }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 replace_ref_field_access_in_expr(v, ref_local, target_local, target_name);
@@ -658,6 +710,28 @@ fn collect_ref_bindings_in_stmt(stmt: &TirStmt, bindings: &mut Vec<RefBinding>) 
             collect_ref_bindings(&then_block.stmts, bindings);
             if let Some(eb) = else_block {
                 collect_ref_bindings(&eb.stmts, bindings);
+            }
+        }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            collect_ref_bindings_in_expr(scrutinee, bindings);
+            collect_ref_bindings(&body.stmts, bindings);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                collect_ref_bindings_in_stmt(s, bindings);
+            }
+            collect_ref_bindings_in_expr(scrutinee, bindings);
+            collect_ref_bindings(&body.stmts, bindings);
+            if let Some(u) = update {
+                collect_ref_bindings_in_expr(u, bindings);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -855,6 +929,28 @@ fn remove_dead_ref_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u3
             remove_dead_ref_bindings(&mut then_block.stmts, dead_locals);
             if let Some(eb) = else_block {
                 remove_dead_ref_bindings(&mut eb.stmts, dead_locals);
+            }
+        }
+        TirStmtKind::WhilePattern {
+            scrutinee, body, ..
+        } => {
+            remove_dead_ref_bindings_in_expr(scrutinee, dead_locals);
+            remove_dead_ref_bindings(&mut body.stmts, dead_locals);
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for s in init {
+                remove_dead_ref_bindings_in_stmt(s, dead_locals);
+            }
+            remove_dead_ref_bindings_in_expr(scrutinee, dead_locals);
+            remove_dead_ref_bindings(&mut body.stmts, dead_locals);
+            if let Some(u) = update {
+                remove_dead_ref_bindings_in_expr(u, dead_locals);
             }
         }
         TirStmtKind::Break { value, .. } => {

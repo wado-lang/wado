@@ -457,9 +457,28 @@ while i < 10 {
     i += 1;
 }
 
+// While let pattern matching
+let mut iter = items.iter();
+while let Some(x) = iter.next() {
+    println(`{x}`);
+}
+
 // For (C-style)
 for let mut i = 0; i < 10; i += 1 {
     println(`{i}`);
+}
+
+// For with pattern condition
+let mut iter = items.iter();
+for ; let Some(x) = iter.next(); {
+    println(`{x}`);
+}
+
+// For with pattern and update expression
+let mut iter = items.iter();
+let mut count = 0;
+for ; let Some(x) = iter.next(); count += 1 {
+    println(`item {count}: {x}`);
 }
 
 // For-of (any IntoIterator type)

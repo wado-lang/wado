@@ -4,11 +4,11 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedTypeBinding, AssociatedTypeDecl, Attribute, BinaryExpr,
     BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, ContinueStmt, EffectDecl,
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ContinueStmt, EffectDecl,
     EffectMethod, EnumDecl, EnumVariant, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr,
-    IfCondition, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item, LabeledBlockStmt,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
     NamespacedGenericType, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
@@ -842,14 +842,14 @@ impl Parser {
             self.advance(); // consume 'let'
 
             // Check if this is Rust-style pattern matching (uppercase identifier = pattern start)
-            if self.is_pattern_start() {
+            if self.is_variant_pattern_start() {
                 // Rust-style: `if let Some(x) = expr { ... }` or `if let None = expr { ... }`
                 let pattern_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
                 let expr = self.parse_expr()?;
                 let span = pattern_span.merge(&expr.span());
-                condition = IfCondition::Pattern {
+                condition = Condition::Pattern {
                     pattern,
                     expr,
                     span,
@@ -860,11 +860,11 @@ impl Parser {
                 let let_stmt = self.parse_let_stmt_after_let()?;
                 self.expect(&TokenKind::Semicolon)?;
                 init = Some(Box::new(let_stmt));
-                condition = IfCondition::Expr(self.parse_expr()?);
+                condition = Condition::Expr(self.parse_expr()?);
             }
         } else {
             // No 'let', just a regular condition expression
-            condition = IfCondition::Expr(self.parse_expr()?);
+            condition = Condition::Expr(self.parse_expr()?);
         }
 
         let then_block = self.parse_block()?;
@@ -901,11 +901,25 @@ impl Parser {
         }))
     }
 
-    /// Check if the next tokens look like a pattern start (uppercase identifier)
-    fn is_pattern_start(&self) -> bool {
+    /// Check if the next tokens look like a variant pattern start.
+    /// Detects patterns by presence of parentheses after identifier: `Some(`.
+    /// This detects patterns structurally, not by naming convention.
+    /// Note: Unit variants like `None` are detected by uppercase first letter convention.
+    fn is_variant_pattern_start(&self) -> bool {
         if let TokenKind::Ident(name) = self.peek_kind() {
-            // Uppercase identifier indicates a variant pattern like Some, None, Ok, Err
-            name.chars().next().is_some_and(char::is_uppercase)
+            let next = self.peek_nth(1);
+            // Check if identifier is followed by `(` (variant with payload like `Some(x)`)
+            if matches!(next.kind, TokenKind::LParen) {
+                return true;
+            }
+            // For unit variants like `None`, check if identifier starts with uppercase
+            // and is followed by `=` (to distinguish from Go-style `let x = value`)
+            if matches!(next.kind, TokenKind::Eq)
+                && let Some(first_char) = name.chars().next()
+            {
+                return first_char.is_uppercase();
+            }
+            false
         } else {
             false
         }
@@ -948,7 +962,32 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::While)?;
 
-        let condition = self.parse_expr()?;
+        // Check for while-let: `while let Some(x) = expr { ... }`
+        let condition = if self.check(&TokenKind::Let) {
+            self.advance(); // consume 'let'
+
+            if self.is_variant_pattern_start() {
+                // Rust-style: `while let Some(x) = expr { ... }`
+                let pattern_span = self.peek().span;
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::Eq)?;
+                let expr = self.parse_expr()?;
+                let span = pattern_span.merge(&expr.span());
+                Condition::Pattern {
+                    pattern,
+                    expr,
+                    span,
+                }
+            } else {
+                return Err(ParseError {
+                    message: "expected pattern after 'while let'".to_string(),
+                    span: self.peek().span,
+                });
+            }
+        } else {
+            Condition::Expr(self.parse_expr()?)
+        };
+
         let body = self.parse_block()?;
         let span = start_span.merge(&body.span);
 
@@ -1026,11 +1065,31 @@ impl Parser {
         };
         self.expect(&TokenKind::Semicolon)?;
 
-        // Parse condition (optional): `i < 10`
+        // Parse condition (optional): `i < 10` or `let Some(x) = expr`
         let condition = if self.check(&TokenKind::Semicolon) {
             None
+        } else if self.check(&TokenKind::Let) {
+            // Pattern condition: `let Some(x) = iter.next()`
+            self.advance(); // consume 'let'
+            if self.is_variant_pattern_start() {
+                let pattern_span = self.peek().span;
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::Eq)?;
+                let expr = self.parse_expr()?;
+                let span = pattern_span.merge(&expr.span());
+                Some(Condition::Pattern {
+                    pattern,
+                    expr,
+                    span,
+                })
+            } else {
+                return Err(ParseError {
+                    message: "expected pattern after 'let' in for condition".to_string(),
+                    span: self.peek().span,
+                });
+            }
         } else {
-            Some(self.parse_expr()?)
+            Some(Condition::Expr(self.parse_expr()?))
         };
         self.expect(&TokenKind::Semicolon)?;
 
@@ -1991,14 +2050,14 @@ impl Parser {
             self.advance(); // consume 'let'
 
             // Check if this is Rust-style pattern matching (uppercase identifier = pattern start)
-            if self.is_pattern_start() {
+            if self.is_variant_pattern_start() {
                 // Rust-style: `if let Some(x) = expr { ... }` or `if let None = expr { ... }`
                 let pattern_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
                 let expr = self.parse_expr()?;
                 let span = pattern_span.merge(&expr.span());
-                condition = IfCondition::Pattern {
+                condition = Condition::Pattern {
                     pattern,
                     expr,
                     span,
@@ -2009,11 +2068,11 @@ impl Parser {
                 let let_stmt = self.parse_let_stmt_after_let()?;
                 self.expect(&TokenKind::Semicolon)?;
                 init = Some(Box::new(let_stmt));
-                condition = IfCondition::Expr(self.parse_expr()?);
+                condition = Condition::Expr(self.parse_expr()?);
             }
         } else {
             // No 'let', just a regular condition expression
-            condition = IfCondition::Expr(self.parse_expr()?);
+            condition = Condition::Expr(self.parse_expr()?);
         }
 
         let then_block = self.parse_block()?;

@@ -297,6 +297,21 @@ while i < 10 {
 }
 ```
 
+#### While Let Pattern Matching
+
+`while let` allows iterating while a pattern matches:
+
+```wado
+let items: Array<i32> = [1, 2, 3];
+let mut iter = items.iter();
+
+while let Some(x) = iter.next() {
+    println(`{x}`);
+}
+```
+
+The loop continues as long as the pattern matches. When the pattern fails to match (e.g., `iter.next()` returns `None`), the loop exits.
+
 ### For Loop
 
 C-style for loop with initialization, condition, and update. Parentheses are optional:
@@ -318,6 +333,27 @@ for ;; {
 ```
 
 **Note:** `continue` in a for loop executes the update expression before the next iteration, matching C semantics.
+
+#### For with Pattern Condition
+
+The condition part of a C-style for loop can use `let` pattern matching:
+
+```wado
+let items: Array<i32> = [10, 20, 30];
+let mut iter = items.iter();
+
+for ; let Some(x) = iter.next(); {
+    println(`{x}`);
+}
+
+// With update expression
+let mut count = 0;
+for ; let Some(x) = iter.next(); count += 1 {
+    println(`item {count}: {x}`);
+}
+```
+
+The loop continues as long as the pattern matches. This is useful for iterating with additional state (like a counter) alongside pattern matching.
 
 ### For-Of Loop
 

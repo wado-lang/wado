@@ -3992,6 +3992,28 @@ impl Codegen {
                     Self::collect_closures_from_block(else_blk, closures);
                 }
             }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                Self::collect_closures_from_expr(scrutinee, closures);
+                Self::collect_closures_from_block(body, closures);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for stmt in init {
+                    Self::collect_closures_from_stmt(stmt, closures);
+                }
+                Self::collect_closures_from_expr(scrutinee, closures);
+                Self::collect_closures_from_block(body, closures);
+                if let Some(upd) = update {
+                    Self::collect_closures_from_expr(upd, closures);
+                }
+            }
             TirStmtKind::Return { value: None }
             | TirStmtKind::Break { .. }
             | TirStmtKind::Continue => {}
@@ -4259,6 +4281,28 @@ impl Codegen {
                 Self::find_closure_locals_in_block(then_block, result, closure_counter);
                 if let Some(else_blk) = else_block {
                     Self::find_closure_locals_in_block(else_blk, result, closure_counter);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for stmt in init {
+                    Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
+                }
+                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
+                Self::find_closure_locals_in_block(body, result, closure_counter);
+                if let Some(upd) = update {
+                    Self::find_closure_locals_in_expr(upd, result, closure_counter);
                 }
             }
             TirStmtKind::Return { value: None }
@@ -7550,10 +7594,32 @@ impl Codegen {
                     func, scrutinee, pattern, then_block, else_block, type_table, ctx, builder,
                 );
             }
+
+            TirStmtKind::WhilePattern {
+                scrutinee,
+                pattern,
+                body,
+            } => {
+                self.generate_while_pattern(
+                    func, scrutinee, pattern, body, type_table, ctx, builder,
+                );
+            }
+
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern,
+                body,
+                update,
+            } => {
+                self.generate_for_pattern(
+                    func, init, scrutinee, pattern, body, update, type_table, ctx, builder,
+                );
+            }
         }
     }
 
-    /// Generate code for if-pattern statement: `if Some(x) = expr { ... }`
+    /// Generate code for if-pattern statement: `if let Some(x) = expr { ... }`
     fn generate_if_pattern(
         &self,
         func: &mut Function,
@@ -7677,6 +7743,242 @@ impl Codegen {
                 panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
             }
         }
+    }
+
+    /// Generate code for while-pattern statement: `while let Some(x) = expr { ... }`
+    ///
+    /// Structure:
+    /// ```text
+    /// block $exit
+    ///   loop $loop
+    ///     ;; evaluate scrutinee
+    ///     ;; if pattern matches: bind + body + br $loop
+    ///     ;; else: br $exit
+    ///   end
+    /// end
+    /// ```
+    fn generate_while_pattern(
+        &self,
+        func: &mut Function,
+        scrutinee: &TirExpr,
+        pattern: &TirPattern,
+        body: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Outer block for exit
+        ctx.loop_info.push((None, 1, 0, false, None)); // break_offset=1, continue_offset=0
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+        // Inner loop
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
+        // Generate scrutinee and store in a temp local (evaluate only once per iteration!)
+        self.generate_expr(func, scrutinee, type_table, ctx, builder);
+
+        let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+        let type_key = format!("{:?}", scrutinee.type_id);
+        let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+        let local_name = format!("__while_pattern_scrutinee_{type_key}_{counter}");
+        *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+        let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
+        func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+        // Pattern matching - reuse the same logic as if-pattern
+        // For Option<T> with Some(x) pattern
+        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+        match (&scrutinee_type, pattern) {
+            (
+                ResolvedType::Option(inner_type),
+                TirPattern::Variant {
+                    variant_name,
+                    bindings,
+                    ..
+                },
+            ) if variant_name == "Some" => {
+                // Check if null (None case means exit)
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                // If null, exit the loop
+                func.instruction(&Instruction::BrIf(1)); // br $exit
+
+                // Bind the inner value (the non-null reference)
+                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefAsNonNull);
+
+                    // For primitive types, unbox the value from the box struct
+                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                    if !is_address_taken
+                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                    {
+                        let val_type = primitive_to_valtype(prim);
+                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                        }
+                    }
+
+                    // Store in the binding local with proper offset
+                    let adjusted_index = *local_index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
+
+                // Generate loop body
+                self.generate_block(func, body, type_table, ctx, builder);
+
+                // Continue the loop
+                func.instruction(&Instruction::Br(0)); // br $loop
+            }
+
+            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
+                if variant_name == "None" =>
+            {
+                // Check if not null (Some case means exit for None pattern)
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                func.instruction(&Instruction::I32Eqz); // !is_null = Some
+                // If not null (Some), exit the loop
+                func.instruction(&Instruction::BrIf(1)); // br $exit
+
+                // Generate loop body
+                self.generate_block(func, body, type_table, ctx, builder);
+
+                // Continue the loop
+                func.instruction(&Instruction::Br(0)); // br $loop
+            }
+
+            _ => {
+                panic!("Unsupported while-pattern: {pattern:?} on type {scrutinee_type:?}");
+            }
+        }
+
+        func.instruction(&Instruction::End); // end loop
+        func.instruction(&Instruction::End); // end block
+        ctx.loop_info.pop();
+    }
+
+    /// Generate code for for-pattern statement: `for init; let Some(x) = expr; update { ... }`
+    ///
+    /// Structure:
+    /// ```text
+    /// ;; init
+    /// block $exit
+    ///   loop $loop
+    ///     block $body
+    ///       ;; evaluate scrutinee
+    ///       ;; if pattern matches: bind + body
+    ///       ;; else: br $exit
+    ///     end
+    ///     ;; update
+    ///     br $loop
+    ///   end
+    /// end
+    /// ```
+    fn generate_for_pattern(
+        &self,
+        func: &mut Function,
+        init: &[TirStmt],
+        scrutinee: &TirExpr,
+        pattern: &TirPattern,
+        body: &TirBlock,
+        update: &Option<TirExpr>,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Generate init statements
+        for stmt in init {
+            self.generate_stmt(func, stmt, type_table, ctx, builder);
+        }
+
+        // Outer block for exit
+        ctx.loop_info.push((None, 1, 0, false, None)); // break_offset=1, continue_offset=0
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+        // Inner loop
+        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
+        // Body block (for continue to skip to update)
+        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+
+        // Generate scrutinee and store in a temp local (evaluate only once per iteration!)
+        self.generate_expr(func, scrutinee, type_table, ctx, builder);
+
+        let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+        let type_key = format!("{:?}", scrutinee.type_id);
+        let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+        let local_name = format!("__for_pattern_scrutinee_{type_key}_{counter}");
+        *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+        let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
+        func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+        // Pattern matching
+        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+        match (&scrutinee_type, pattern) {
+            (
+                ResolvedType::Option(inner_type),
+                TirPattern::Variant {
+                    variant_name,
+                    bindings,
+                    ..
+                },
+            ) if variant_name == "Some" => {
+                // Check if null (None case means exit)
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                // If null, exit the loop
+                func.instruction(&Instruction::BrIf(2)); // br $exit
+
+                // Bind the inner value (the non-null reference)
+                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefAsNonNull);
+
+                    // For primitive types, unbox the value from the box struct
+                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                    if !is_address_taken
+                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                    {
+                        let val_type = primitive_to_valtype(prim);
+                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                        }
+                    }
+
+                    // Store in the binding local with proper offset
+                    let adjusted_index = *local_index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
+
+                // Generate loop body
+                self.generate_block(func, body, type_table, ctx, builder);
+            }
+
+            _ => {
+                panic!("Unsupported for-pattern: {pattern:?} on type {scrutinee_type:?}");
+            }
+        }
+
+        func.instruction(&Instruction::End); // end $body block
+
+        // Generate update expression
+        if let Some(upd) = update {
+            self.generate_expr_as_stmt(func, upd, type_table, ctx, builder);
+        }
+
+        // Continue the loop
+        func.instruction(&Instruction::Br(0)); // br $loop
+
+        func.instruction(&Instruction::End); // end loop
+        func.instruction(&Instruction::End); // end block
+        ctx.loop_info.pop();
     }
 
     /// Generate a Wasm function from TIR function
@@ -9288,6 +9590,47 @@ impl Codegen {
                 if let Some(else_blk) = else_block {
                     self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
                 }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee,
+                pattern: _,
+                body,
+            } => {
+                // Pre-allocate temp local for the scrutinee
+                let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+                if let ResolvedType::Option(_) = scrutinee_type {
+                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                    let type_key = format!("{:?}", scrutinee.type_id);
+                    let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                    let local_name = format!("__while_pattern_scrutinee_{}_{}", type_key, *counter);
+                    *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                    ctx.alloc_local(&local_name, option_valtype);
+                }
+                // Recursively handle body
+                self.preallocate_if_pattern_locals(body, type_table, ctx);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern: _,
+                body,
+                ..
+            } => {
+                // Pre-allocate temp local for the scrutinee
+                let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+                if let ResolvedType::Option(_) = scrutinee_type {
+                    let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                    let type_key = format!("{:?}", scrutinee.type_id);
+                    let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                    let local_name = format!("__for_pattern_scrutinee_{}_{}", type_key, *counter);
+                    *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                    ctx.alloc_local(&local_name, option_valtype);
+                }
+                // Recursively handle init and body
+                for s in init {
+                    self.preallocate_if_pattern_locals_from_stmt(s, type_table, ctx);
+                }
+                self.preallocate_if_pattern_locals(body, type_table, ctx);
             }
             TirStmtKind::If {
                 then_block,

@@ -1233,7 +1233,7 @@ pub enum TirStmtKind {
         label: String,
         block: TirBlock,
     },
-    /// Pattern match in if condition: `if Some(x) = expr { ... } else { ... }`
+    /// Pattern match in if condition: `if let Some(x) = expr { ... } else { ... }`
     IfPattern {
         /// The expression being matched against
         scrutinee: TirExpr,
@@ -1243,6 +1243,28 @@ pub enum TirStmtKind {
         then_block: TirBlock,
         /// Optional else block when pattern doesn't match
         else_block: Option<TirBlock>,
+    },
+    /// Pattern match in while condition: `while let Some(x) = expr { ... }`
+    WhilePattern {
+        /// The expression being matched against (evaluated each iteration)
+        scrutinee: TirExpr,
+        /// The pattern to match
+        pattern: TirPattern,
+        /// Block executed when pattern matches
+        body: TirBlock,
+    },
+    /// Pattern match in for condition: `for init; let Some(x) = expr; update { ... }`
+    ForPattern {
+        /// Init statements (e.g., `let mut iter = arr.iter()`)
+        init: Vec<TirStmt>,
+        /// The expression being matched against (evaluated each iteration)
+        scrutinee: TirExpr,
+        /// The pattern to match
+        pattern: TirPattern,
+        /// Block executed when pattern matches
+        body: TirBlock,
+        /// Optional update expression (executed after body, before next iteration)
+        update: Option<TirExpr>,
     },
 }
 

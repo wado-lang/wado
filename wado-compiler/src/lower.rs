@@ -333,6 +333,28 @@ impl ClosureLowerer {
                     self.collect_closures_in_block(else_blk);
                 }
             }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.collect_closures_in_expr(scrutinee);
+                self.collect_closures_in_block(body);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    self.collect_closures_in_stmt(s);
+                }
+                self.collect_closures_in_expr(scrutinee);
+                self.collect_closures_in_block(body);
+                if let Some(upd) = update {
+                    self.collect_closures_in_expr(upd);
+                }
+            }
         }
     }
 
@@ -536,6 +558,28 @@ impl ClosureLowerer {
                 self.analyze_closure_safety_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.analyze_closure_safety_block(else_blk);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.analyze_closure_safety_expr(scrutinee, false);
+                self.analyze_closure_safety_block(body);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    self.analyze_closure_safety_stmt(s);
+                }
+                self.analyze_closure_safety_expr(scrutinee, false);
+                self.analyze_closure_safety_block(body);
+                if let Some(upd) = update {
+                    self.analyze_closure_safety_expr(upd, false);
                 }
             }
         }
@@ -1453,6 +1497,27 @@ impl ClosureLowerer {
                         .as_ref()
                         .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
             }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
+                    || self.fn_param_stored_in_struct_field(body, fn_param_indices)
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                init.iter()
+                    .any(|s| self.fn_param_in_struct_field_stmt(s, fn_param_indices))
+                    || self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
+                    || self.fn_param_stored_in_struct_field(body, fn_param_indices)
+                    || update
+                        .as_ref()
+                        .is_some_and(|u| self.fn_param_in_struct_field_expr(u, fn_param_indices))
+            }
         }
     }
 
@@ -1641,6 +1706,28 @@ impl ClosureLowerer {
                 self.collect_fn_param_specs(then_block, func_by_name, type_table, requests);
                 if let Some(else_blk) = else_block {
                     self.collect_fn_param_specs(else_blk, func_by_name, type_table, requests);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
+                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    self.collect_fn_param_specs_stmt(s, func_by_name, type_table, requests);
+                }
+                self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
+                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
+                if let Some(upd) = update {
+                    self.collect_fn_param_specs_expr(upd, func_by_name, type_table, requests);
                 }
             }
         }
@@ -2257,6 +2344,33 @@ impl ClosureLowerer {
                     .as_ref()
                     .map(|b| self.specialize_function_body(b, param_to_functor, type_table)),
             },
+            TirStmtKind::WhilePattern {
+                scrutinee,
+                pattern,
+                body,
+            } => TirStmtKind::WhilePattern {
+                scrutinee: self.specialize_expr(scrutinee, param_to_functor, type_table),
+                pattern: pattern.clone(),
+                body: self.specialize_function_body(body, param_to_functor, type_table),
+            },
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern,
+                body,
+                update,
+            } => TirStmtKind::ForPattern {
+                init: init
+                    .iter()
+                    .map(|s| self.specialize_stmt(s, param_to_functor, type_table))
+                    .collect(),
+                scrutinee: self.specialize_expr(scrutinee, param_to_functor, type_table),
+                pattern: pattern.clone(),
+                body: self.specialize_function_body(body, param_to_functor, type_table),
+                update: update
+                    .as_ref()
+                    .map(|u| self.specialize_expr(u, param_to_functor, type_table)),
+            },
         };
         TirStmt::new(kind, stmt.span)
     }
@@ -2755,6 +2869,28 @@ impl ClosureLowerer {
                     self.transform_block(else_blk, type_table);
                 }
             }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.transform_expr(scrutinee, type_table);
+                self.transform_block(body, type_table);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    self.transform_stmt(s, type_table);
+                }
+                self.transform_expr(scrutinee, type_table);
+                self.transform_block(body, type_table);
+                if let Some(upd) = update {
+                    self.transform_expr(upd, type_table);
+                }
+            }
         }
     }
 
@@ -3196,6 +3332,28 @@ impl StringCollector {
                 self.collect_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.collect_block(else_blk);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.collect_expr(scrutinee);
+                self.collect_block(body);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    self.collect_stmt(s);
+                }
+                self.collect_expr(scrutinee);
+                self.collect_block(body);
+                if let Some(upd) = update {
+                    self.collect_expr(upd);
                 }
             }
         }
