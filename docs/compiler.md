@@ -973,7 +973,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Option pattern matching (`if let Some(x) = ...`)
 - [ ] Match expressions
 - [x] Closures - pure (no captures)
-- [ ] Closures - with captures (see ADR)
+- [ ] Closures - with captures (see WEP)
 - [ ] Effect handlers
 - [x] Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
 - [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
