@@ -246,7 +246,7 @@ export fn entry() { }         // world export
 pub export fn both() { }      // both
 ```
 
-The `pub` modifier applies to functions, structs, fields, variants, traits, and type aliases.
+All entity definitions can have `pub` visibility.
 
 ## Methods
 

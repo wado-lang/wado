@@ -1822,14 +1822,7 @@ pub export fn shared_entry() { ... }
 | `export fn foo()`     | Yes           | No                 | Yes               |
 | `pub export fn foo()` | Yes           | Yes                | Yes               |
 
-The `pub` modifier can be applied to:
-
-- Functions: `pub fn`
-- Structs: `pub struct`
-- Struct fields: `pub field_name: Type`
-- Variants: `pub variant`
-- Traits: `pub trait`
-- Type aliases: `pub type`
+All entity definitions can have `pub` visibility.
 
 ### Module Source Types
 
