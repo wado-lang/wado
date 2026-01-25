@@ -1,0 +1,22 @@
+// Test closure with captures passed as fn-param
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+impl Box<T> {
+    fn apply(&self, f: fn(T) -> T) -> T {
+        return f(self.value);
+    }
+}
+
+fn run() with Stdout {
+    let b = Box { value: 5 };
+    let multiplier = 3;
+    let result = b.apply(|x: i32| x * multiplier);
+    println(`result: {result}`);
+}
+
+__DATA__
+{"stdout": "result: 15\n"}

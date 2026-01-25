@@ -1011,7 +1011,7 @@ pub enum TirExprKind {
         body: Box<TirExpr>,
         captures: Vec<TirCapture>,
         /// Optional functor ID assigned during lowering.
-        /// Used by monomorphize phase to look up the corresponding ClosureFunctor.
+        /// Used by monomorphize phase to look up the corresponding `ClosureFunctor`.
         functor_id: Option<u32>,
     },
 

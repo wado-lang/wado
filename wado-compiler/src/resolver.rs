@@ -43,7 +43,7 @@ struct StructFieldInfo {
     module_source: ModuleSource,
     /// Field definitions: (name, `type_id`) pairs
     fields: Vec<(String, TypeId)>,
-    /// Type parameter bounds: (param_name, trait_bounds)
+    /// Type parameter bounds: (`param_name`, `trait_bounds`)
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     type_param_bounds: Vec<(String, Vec<String>)>,
 }
@@ -5392,13 +5392,15 @@ impl<'a> Resolver<'a> {
         false
     }
 
-    /// Convert a TypeId to a human-readable string for error messages
+    /// Convert a `TypeId` to a human-readable string for error messages
     fn type_id_to_string(&self, type_id: TypeId) -> String {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match resolved {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
             ResolvedType::Struct { name, .. } => name,
-            ResolvedType::GenericInstance { name, type_args, .. } => {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
                 if type_args.is_empty() {
                     name
                 } else {
@@ -5416,10 +5418,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
             ResolvedType::Tuple(elems) => {
-                let parts: Vec<String> = elems
-                    .iter()
-                    .map(|&t| self.type_id_to_string(t))
-                    .collect();
+                let parts: Vec<String> = elems.iter().map(|&t| self.type_id_to_string(t)).collect();
                 format!("[{}]", parts.join(", "))
             }
             ResolvedType::Function {
@@ -5427,10 +5426,8 @@ impl<'a> Resolver<'a> {
                 return_type,
                 ..
             } => {
-                let param_strs: Vec<String> = params
-                    .iter()
-                    .map(|&t| self.type_id_to_string(t))
-                    .collect();
+                let param_strs: Vec<String> =
+                    params.iter().map(|&t| self.type_id_to_string(t)).collect();
                 let ret_str = self.type_id_to_string(return_type);
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
@@ -7221,9 +7218,7 @@ impl<'a> Resolver<'a> {
 
                     // Check trait bounds for each type argument
                     if let Some(info) = &struct_info {
-                        for (i, (param_name, bounds)) in
-                            info.type_param_bounds.iter().enumerate()
-                        {
+                        for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
                             if let Some(&type_arg) = type_args.get(i) {
                                 for bound in bounds {
                                     if !self.type_implements_trait(type_arg, bound) {

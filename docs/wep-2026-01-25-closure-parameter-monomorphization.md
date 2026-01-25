@@ -23,15 +23,18 @@ After closure lowering, `|x| x * 2` becomes a functor struct `__Closure_0` with 
 ### Option A: Dynamic Dispatch with CanonicalClosure
 
 Transform closures to a canonical closure format at the call site:
+
 - `CanonicalClosure` struct: `(env: ref struct, funcref: ref func)`
 - Generate wrapper functions that bridge functor `__call` to the canonical calling convention
 - `IndirectCall` uses `call_ref` with the funcref
 
 Pros:
+
 - Single function implementation regardless of closure type
 - Smaller code size
 
 Cons:
+
 - Runtime overhead from indirect calls
 - Cannot inline closure bodies
 - Complex wrapper generation in codegen
@@ -39,15 +42,18 @@ Cons:
 ### Option B: Trait Objects (`dyn Fn`)
 
 Introduce `dyn Trait` support with vtables:
+
 - Define `Fn<Args, Ret, Effects>` trait
 - `fn(A) -> B` becomes `Box<dyn Fn<[A], B, []>>`
 - Closures implement `Fn` and are boxed when passed
 
 Pros:
+
 - General solution for all trait objects
 - Unified model for dynamic dispatch
 
 Cons:
+
 - Requires full vtable implementation
 - Runtime overhead from vtable lookup
 - Memory overhead from boxing
@@ -77,12 +83,14 @@ apply(|x| x * 2, 5)
 ```
 
 Pros:
+
 - No runtime overhead (static dispatch)
 - Enables inlining of closure bodies
 - Leverages existing monomorphization infrastructure
 - Conceptually clean (closures are just structs with methods)
 
 Cons:
+
 - Code size increase from specialization
 - Requires trait bounds implementation
 
@@ -103,25 +111,26 @@ trait Fn<Args, Ret, Effects = []> {
 The `Effects` parameter defaults to `[]` (pure), so `Fn<[i32], bool>` is shorthand for `Fn<[i32], bool, []>`.
 
 The name `Fn` mirrors the `fn` keyword, creating a natural mapping:
+
 - `fn(T) -> R` (function type) ↔ `Fn<[T], R>` (trait bound)
 
 ### Type Parameter Semantics
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `Args` | Tuple of argument types using `[...]` syntax | `[i32, String]` |
-| `Ret` | Return type | `bool` |
-| `Effects` | Tuple of effect types using `[...]` syntax | `[Stdout]`, `[]` for pure |
+| Parameter | Description                                  | Example                   |
+| --------- | -------------------------------------------- | ------------------------- |
+| `Args`    | Tuple of argument types using `[...]` syntax | `[i32, String]`           |
+| `Ret`     | Return type                                  | `bool`                    |
+| `Effects` | Tuple of effect types using `[...]` syntax   | `[Stdout]`, `[]` for pure |
 
 ### Mapping from `fn` Types
 
-| Function Type | Fn Bound (short) | Fn Bound (full) |
-|---------------|------------------------|----------------------|
-| `fn() -> R` | `Fn<[], R>` | `Fn<[], R, []>` |
-| `fn(A) -> R` | `Fn<[A], R>` | `Fn<[A], R, []>` |
-| `fn(A, B) -> R` | `Fn<[A, B], R>` | `Fn<[A, B], R, []>` |
-| `fn(A) -> R with E` | — | `Fn<[A], R, [E]>` |
-| `fn(A, B) -> R with E1, E2` | — | `Fn<[A, B], R, [E1, E2]>` |
+| Function Type               | Fn Bound (short) | Fn Bound (full)           |
+| --------------------------- | ---------------- | ------------------------- |
+| `fn() -> R`                 | `Fn<[], R>`      | `Fn<[], R, []>`           |
+| `fn(A) -> R`                | `Fn<[A], R>`     | `Fn<[A], R, []>`          |
+| `fn(A, B) -> R`             | `Fn<[A, B], R>`  | `Fn<[A, B], R, []>`       |
+| `fn(A) -> R with E`         | —                | `Fn<[A], R, [E]>`         |
+| `fn(A, B) -> R with E1, E2` | —                | `Fn<[A, B], R, [E1, E2]>` |
 
 ### Example: Effectful Closure
 
@@ -155,6 +164,7 @@ let closure = || x + 1;  // captures x
 ```
 
 These will be modeled as internal effect types in the future:
+
 - `stores[N]` → internal `Stores<N>` effect type
 - Captures → implicit `Captures<...>` effect on closure type
 
