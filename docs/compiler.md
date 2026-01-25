@@ -987,7 +987,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Value semantics for strings (element-by-element copy on assignment)
 - [x] Value semantics for Option<T> (conditional copy of inner value)
 - [ ] Value semantics for Result<T, E> (blocked on Result codegen)
-- [ ] Value semantics for Variant (blocked on Variant codegen)
+- [x] Value semantics for Variant (copy tag + all fields)
 - [ ] Value semantics for Dict<K, V> (blocked on Dict codegen)
 - [x] Template string array concatenation
 - [ ] String UTF-8 validation (reject invalid byte sequences at construction)
@@ -1050,7 +1050,7 @@ fn run() with Stdout {
 
 ## Variant Implementation Roadmap
 
-Current status: basic variant construction and single-payload if-let pattern matching work.
+Current status: variant construction, single-payload if-let pattern matching, and value semantics work.
 
 ### TODO
 
@@ -1060,7 +1060,7 @@ Current status: basic variant construction and single-payload if-let pattern mat
 - [ ] `match` expressions and statements
 - [ ] Generic variant pattern matching (`if let Just(x) = maybe` for `Maybe<T>`)
 - [ ] `Result<T, E>` pattern matching (`if let Ok(v) = result`, `if let Err(e) = result`)
-- [ ] Value semantics (copy) for custom variants
+- [x] Value semantics (copy) for custom variants
 
 ---
 
