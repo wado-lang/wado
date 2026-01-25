@@ -845,7 +845,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] `world` declarations (with imports/exports)
 - [x] Attributes (`#[...]`)
 - [ ] `#[data]` attribute for data section injection
-- [x] `variant` declarations (with payloads, construction, Option `if let` pattern matching)
+- [x] `variant` declarations (with payloads, construction, if let pattern matching for single-payload cases)
 - [ ] `flags` declarations (bit flags)
 - [ ] Inner attributes (`#![...]`)
 - [x] Generic parameters on structs (monomorphization)
@@ -915,6 +915,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Tuple patterns
 - [ ] Literal patterns
 - [ ] Struct patterns
+- [x] Variant patterns in if let (single-payload: `if let Circle(r) = shape`)
 - [x] Option variant patterns (`if let Some(x) = ...`, `if let None = ...`)
 
 ### Semantic Analysis
@@ -971,6 +972,9 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [ ] Generic function/method type inference
 - [x] Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
 - [x] Option pattern matching (`if let Some(x) = ...`)
+- [x] Custom variant pattern matching (single-payload: `if let Circle(r) = shape`)
+- [ ] Custom variant pattern matching (multi-payload)
+- [ ] Custom variant pattern matching (no-payload cases with binding)
 - [ ] Match expressions
 - [x] Closures - pure (no captures)
 - [ ] Closures - with captures (see WEP)
@@ -1041,6 +1045,22 @@ fn run() with Stdout {
 6. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
 7. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
 8. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
+
+---
+
+## Variant Implementation Roadmap
+
+Current status: basic variant construction and single-payload if-let pattern matching work.
+
+### TODO
+
+- [ ] Multi-payload variant patterns (`if let Rect(w, h) = shape`)
+- [ ] No-payload variant patterns with else binding (`if let Point = shape`)
+- [ ] while let / for let with custom variants
+- [ ] `match` expressions and statements
+- [ ] Generic variant pattern matching (`if let Just(x) = maybe` for `Maybe<T>`)
+- [ ] `Result<T, E>` pattern matching (`if let Ok(v) = result`, `if let Err(e) = result`)
+- [ ] Value semantics (copy) for custom variants
 
 ---
 
