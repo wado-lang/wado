@@ -219,13 +219,34 @@ fn greet(name: String) with Stdout {
     println(`Hello, {name}!`);
 }
 
-// Public
+// Module public (accessible from other Wado modules)
 pub fn api_function() -> i32 {
     return 42;
 }
+
+// World export (exposed at CM boundary)
+export fn run() { ... }
 ```
 
 A function must have `return` if it returns a value. This is applied to methods and closures as well.
+
+## Visibility
+
+Wado has two kinds of "public":
+
+| Keyword  | Term          | Scope                    |
+| -------- | ------------- | ------------------------ |
+| `pub`    | module public | Other Wado modules       |
+| `export` | world export  | Component Model boundary |
+
+```wado
+fn private_fn() { }           // module-private (default)
+pub fn public_fn() { }        // module public
+export fn entry() { }         // world export
+pub export fn both() { }      // both
+```
+
+All entity definitions can have `pub` visibility.
 
 ## Methods
 

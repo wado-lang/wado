@@ -263,6 +263,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Module Loader Design](./docs/wep-2026-01-24-module-loader.md)
 - [Closure Parameter Monomorphization](./docs/wep-2026-01-25-closure-parameter-monomorphization.md)
 - [128-bit Integer Types (i128/u128)](./docs/wep-2026-01-24-i128-u128-types.md)
+- [Re-export Syntax (`pub use`)](./docs/wep-2026-01-25-pub-use-reexport.md)
 
 ### Structure
 

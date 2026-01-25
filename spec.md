@@ -1790,6 +1790,40 @@ d["key"]
 
 Wado uses an ESM-like import syntax with `use {...} from "source"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
 
+### Visibility
+
+Wado distinguishes between two kinds of "public" visibility:
+
+| Keyword  | Term              | Meaning                                                          |
+| -------- | ----------------- | ---------------------------------------------------------------- |
+| `pub`    | **module public** | Visible to other Wado modules that import this module            |
+| `export` | **world export**  | Exposed at the Component Model boundary (WASI world conformance) |
+
+The `pub` keyword controls **module public** visibility - whether a symbol can be accessed by other Wado modules:
+
+```wado
+// Private to this module (default)
+fn internal_helper() { ... }
+
+// Module public - accessible from other Wado modules
+pub fn api_function() -> i32 { ... }
+
+// World export - exposed at CM boundary
+export fn run() { ... }
+
+// Both module public and world export
+pub export fn shared_entry() { ... }
+```
+
+| Declaration           | Within module | Other Wado modules | CM world boundary |
+| --------------------- | ------------- | ------------------ | ----------------- |
+| `fn foo()`            | Yes           | No                 | No                |
+| `pub fn foo()`        | Yes           | Yes                | No                |
+| `export fn foo()`     | Yes           | No                 | Yes               |
+| `pub export fn foo()` | Yes           | Yes                | Yes               |
+
+All entity definitions can have `pub` visibility.
+
 ### Module Source Types
 
 | Source Type   | Syntax                        | Example                              |
