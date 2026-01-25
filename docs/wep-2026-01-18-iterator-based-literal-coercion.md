@@ -1,617 +1,710 @@
-# WEP: Iterator-Based Literal Coercion
+# WEP: Literal-to-Collection Coercion
 
 ## Context
 
-Wado allows tuple literals to be coerced to `Array<T>` in certain contexts:
+Wado allows literals to be coerced to collection types in certain contexts:
 
 ```wado
-let a: Array<i32> = [1, 2, 3];  // Tuple literal → Array<i32>
-fn takes(arr: Array<i32>) {}
-takes([1, 2, 3]);                // Implicit coercion
-let b = [1, 2, 3] as Array<i32>; // Explicit cast
+// Tuple literal → Array
+let a: Array<i32> = [1, 2, 3];
+
+// Object literal → Dict
+let d: Dict<String, i32> = { "width": 1920, "height": 1080 };
 ```
 
-This coercion is currently **hardcoded** in the compiler. When the compiler encounters a tuple literal with a target type of `Array<T>`, it performs special conversion logic.
+This coercion is currently **hardcoded** in the compiler. We need a trait-based mechanism that:
 
-### Current Implementation
-
-The resolver has three specific coercion points:
-
-1. **Variable initialization with type annotation**
-
-   ```rust
-   // In resolver.rs
-   if let ResolvedType::Array { element_type } = target_type {
-       // Special case: convert TupleLiteral to ArrayLiteral
-       return coerce_tuple_to_array(...);
-   }
-   ```
-
-2. **Function argument passing**
-
-   ```rust
-   // Check if parameter type is Array and argument is tuple
-   if is_array_type(param_type) && is_tuple_literal(arg) {
-       coerce_tuple_to_array(...);
-   }
-   ```
-
-3. **Explicit `as` cast**
-   ```rust
-   // Handle tuple-to-array cast specially
-   if cast_to_array && expr_is_tuple {
-       convert_to_array_literal(...);
-   }
-   ```
-
-### Problems with Current Approach
-
-1. **Compiler complexity**: Each new collection type (Set, Dict, Vec, etc.) requires adding more special cases to the compiler
-2. **Limited extensibility**: Users cannot define their own collection types with literal coercion
-3. **Inconsistency**: Array gets special treatment, but other collection types don't
-4. **Maintenance burden**: Coercion logic is scattered across multiple compiler phases
-
-### The Opportunity
-
-Wado already has iterator traits defined in the spec (WEP: Struct and Trait System):
-
-```wado
-trait Iterator {
-    type Item;
-    fn next(&mut self) -> Option<Self::Item>;
-}
-
-trait IntoIterator {
-    type Item;
-    type Iter: Iterator<Item = Self::Item>;
-    fn into_iter(self) -> Self::Iter;
-}
-
-trait FromIterator<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Self;
-}
-```
-
-These traits provide a **general mechanism** for converting between iterable types and collections. If we leverage them for literal coercion, we can:
-
-- Remove hardcoded Array coercion from the compiler
-- Enable coercion for any type implementing `FromIterator<T>`
-- Allow users to define custom collection types with literal syntax
-- Align with Rust's `.collect()` pattern
-
-### Language Survey
-
-#### Rust
-
-Rust uses explicit `.collect()` with type inference:
-
-```rust
-let v: Vec<i32> = vec![1, 2, 3].into_iter().collect();
-let set: HashSet<i32> = vec![1, 2, 2, 3].into_iter().collect();
-```
-
-Wado's proposal is similar but allows implicit coercion in type contexts:
-
-```wado
-let a: Array<i32> = [1, 2, 3];  // Implicit
-let s: Set<i32> = [1, 2, 2, 3]; // Implicit
-```
-
-This is more concise while maintaining type safety.
-
-#### TypeScript
-
-TypeScript has structural typing and doesn't have explicit iterator-based coercion. Arrays and tuples are distinguished by type annotations only.
-
-#### Python
-
-Python has distinct syntax for lists `[1, 2, 3]` and tuples `(1, 2, 3)`, and uses comprehensions or explicit constructors:
-
-```python
-my_set = set([1, 2, 2, 3])  # Explicit constructor
-```
-
-Wado's approach is more elegant with implicit coercion based on type context.
+1. Supports both tuple literals and object literals
+2. Handles heterogeneous elements (e.g., `[1, "hello", true]` → `JSONArray`)
+3. Works with immutable containers
+4. Is extensible to user-defined collections
 
 ## Decision
 
-### 1. Generalize Literal Coercion via Iterator Traits
+### 1. Literal Types
 
-When the compiler encounters an expression `expr` that doesn't match the target type `T`, it applies the following coercion rule:
-
-**Automatic Iterator Coercion**:
-
-- If `expr`'s type `E` implements `IntoIterator`
-- And target type `T` implements `FromIterator<E::Item>`
-- Then desugar to: `T::from_iter(expr.into_iter())`
-
-This replaces all hardcoded tuple-to-array coercion logic.
-
-### 2. Tuple Types Implement IntoIterator
-
-All tuple types implement `IntoIterator`:
+#### Tuple Literal
 
 ```wado
-// For homogeneous tuples (same element type)
-impl<T> IntoIterator for [T, T] {
-    type Item = T;
-    type Iter = TupleIter<T>;
-
-    fn into_iter(self) -> TupleIter<T> {
-        return TupleIter::new_2(self.0, self.1);
-    }
-}
-
-impl<T> IntoIterator for [T, T, T] {
-    type Item = T;
-    type Iter = TupleIter<T>;
-
-    fn into_iter(self) -> TupleIter<T> {
-        return TupleIter::new_3(self.0, self.1, self.2);
-    }
-}
-
-// ... and so on for various tuple sizes
+let t = [1, 2, 3];       // Type: [i32, i32, i32]
+let mixed = [1, "hi"];   // Type: [i32, String]
 ```
 
-**Note**: Only homogeneous tuples (all elements same type) can implement `IntoIterator`. Heterogeneous tuples like `[i32, String, bool]` cannot be iterated uniformly.
+Default type is a tuple with the inferred element types.
 
-### 3. Collection Types Implement FromIterator
-
-Standard collection types implement `FromIterator<T>`:
+#### Object Literal
 
 ```wado
-// Array
-impl<T> FromIterator<T> for Array<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Array<T> {
-        let mut arr: Array<T> = [];
-        for let item of iter {
-            arr.append(item);
+let obj = { name: "Alice", age: 30 };
+// Type: { name: String, age: i32 } (anonymous struct)
+```
+
+Default type is an anonymous struct. The parser already supports this as "implicit struct".
+
+#### Null Literal
+
+```wado
+let n = null;  // Type: Null
+```
+
+`null` has the special type `Null`. By default, `Null` coerces to `Option::None`. Custom coercion can be provided via `impl Into<T> for Null`.
+
+### 2. TupleBuilder Trait
+
+```wado
+/// Trait for building collections from tuple literals
+pub trait TupleBuilder {
+    type Element;
+    type Output;
+
+    /// Create a builder with pre-allocated capacity
+    fn with_capacity(n: i32) -> Self;
+
+    /// Append an element to the builder
+    fn append(&mut self, element: Self::Element);
+
+    /// Finalize and return the built collection
+    fn build(self) -> Self::Output;
+}
+```
+
+### 3. FromTuple Trait
+
+```wado
+/// Trait for collection types that can be built from tuple literals
+pub trait FromTuple {
+    type Element;
+    type Builder: TupleBuilder<Element = Self::Element, Output = Self>;
+}
+```
+
+### 4. ObjectBuilder Trait
+
+```wado
+/// Trait for building collections from object literals
+pub trait ObjectBuilder {
+    type Value;
+    type Output;
+
+    /// Create a builder with pre-allocated capacity
+    fn with_capacity(n: i32) -> Self;
+
+    /// Insert a key-value pair
+    fn insert(&mut self, key: String, value: Self::Value);
+
+    /// Finalize and return the built collection
+    fn build(self) -> Self::Output;
+}
+```
+
+### 5. FromObject Trait
+
+```wado
+/// Trait for collection types that can be built from object literals
+pub trait FromObject {
+    type Value;
+    type Builder: ObjectBuilder<Value = Self::Value, Output = Self>;
+}
+```
+
+### 6. Into Trait for Element Conversion
+
+```wado
+/// Trait for type conversions
+pub trait Into<T> {
+    fn into(self) -> T;
+}
+
+// Identity implementation
+impl Into<T> for T {
+    fn into(self) -> T {
+        return self;
+    }
+}
+```
+
+### 7. Tuple Literal Coercion Rules
+
+When the compiler encounters a tuple literal `[e0, e1, ..., en]` with target type `C` where `C: FromTuple<Element = E>`:
+
+1. **Check each element**: Verify `Ti: Into<E>` for each element type `Ti`
+2. **Recursively coerce nested literals**: If `ei` is itself a literal (tuple or object), coerce it to `E` first
+3. **Expand at compile time**:
+
+```wado
+// Source
+let container: C = [e0, e1, e2];
+
+// Compiler expansion
+let container: C = {
+    let mut __builder = C::Builder::with_capacity(3);
+    __builder.append(Into::<E>::into(e0));
+    __builder.append(Into::<E>::into(e1));
+    __builder.append(Into::<E>::into(e2));
+    __builder.build()
+};
+```
+
+**Important**: Coercion only applies to **literals**, not variables:
+
+```wado
+let t = [1, 2, 3];           // t is a tuple [i32, i32, i32]
+let arr: Array<i32> = t;     // ERROR: t is not a literal, no coercion
+let arr: Array<i32> = [1, 2, 3];  // OK: literal coercion
+```
+
+### 8. Object Literal Coercion Rules
+
+When the compiler encounters an object literal `{ k0: v0, k1: v1, ... }` with target type `C` where `C: FromObject<Value = V>`:
+
+1. **Check each value**: Verify `Vi: Into<V>` for each value type `Vi`
+2. **Recursively coerce nested literals**: If `vi` is itself a literal (tuple or object), coerce it to `V` first
+3. **Expand at compile time**:
+
+```wado
+// Source
+let container: C = { "name": "Alice", "age": 30 };
+
+// Compiler expansion
+let container: C = {
+    let mut __builder = C::Builder::with_capacity(2);
+    __builder.insert("name", Into::<V>::into("Alice"));
+    __builder.insert("age", Into::<V>::into(30));
+    __builder.build()
+};
+```
+
+**Struct literal priority**: If the target type is a struct with matching fields, it is interpreted as a struct literal, not an object literal coercion:
+
+```wado
+struct Config { width: i32, height: i32 }
+
+let c: Config = { width: 1920, height: 1080 };  // Struct literal, NOT FromObject coercion
+```
+
+### 9. Coercion Contexts
+
+Coercion applies in the following contexts where the target type is known:
+
+1. **Variable initialization**: `let arr: Array<i32> = [1, 2, 3];`
+2. **Function argument**: `process([1, 2, 3]);`
+3. **Explicit cast**: `[1, 2, 3] as Array<i32>`
+4. **Return statement**: `fn f() -> Array<i32> { return [1, 2, 3]; }`
+5. **Conditional branches**: `let x: Array<i32> = if cond { [1, 2] } else { [3, 4, 5] };`
+
+**Not a coercion context** (requires explicit cast):
+
+```wado
+[1, 2, 3].iter()  // ERROR: tuple has no iter() method
+([1, 2, 3] as Array<i32>).iter()  // OK: explicit cast
+```
+
+### 10. Array Implementation
+
+Array serves as its own builder (no separate builder type needed):
+
+```wado
+impl TupleBuilder for Array<T> {
+    type Element = T;
+    type Output = Array<T>;
+
+    fn with_capacity(n: i32) -> Self {
+        return Array::<T>::with_capacity(n);
+    }
+
+    fn append(&mut self, element: T) {
+        self.append(element);  // Existing method
+    }
+
+    fn build(self) -> Array<T> {
+        return self;  // Identity
+    }
+}
+
+impl FromTuple for Array<T> {
+    type Element = T;
+    type Builder = Array<T>;  // Array is its own builder!
+}
+```
+
+Expansion for Array:
+
+```wado
+let arr: Array<i32> = [1, 2, 3];
+
+// →
+{
+    let mut __builder = Array::<i32>::with_capacity(3);
+    __builder.append(1);
+    __builder.append(2);
+    __builder.append(3);
+    __builder.build()
+}
+```
+
+### 11. Dict Implementation
+
+Dict also serves as its own builder:
+
+```wado
+impl ObjectBuilder for Dict<String, V> {
+    type Value = V;
+    type Output = Dict<String, V>;
+
+    fn with_capacity(n: i32) -> Self {
+        return Dict::<String, V>::with_capacity(n);
+    }
+
+    fn insert(&mut self, key: String, value: V) {
+        self.insert(key, value);  // Existing method
+    }
+
+    fn build(self) -> Dict<String, V> {
+        return self;  // Identity
+    }
+}
+
+impl FromObject for Dict<String, V> {
+    type Value = V;
+    type Builder = Dict<String, V>;
+}
+```
+
+Expansion for Dict:
+
+```wado
+let config: Dict<String, i32> = { "width": 1920, "height": 1080 };
+
+// →
+{
+    let mut __builder = Dict::<String, i32>::with_capacity(2);
+    __builder.insert("width", 1920);
+    __builder.insert("height", 1080);
+    __builder.build()
+}
+```
+
+### 12. JSONValue Example (Both FromTuple and FromObject)
+
+JSONValue can accept both tuple and object literals by implementing both traits:
+
+```wado
+pub variant JSONValue {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Array<JSONValue>),
+    Object(Dict<String, JSONValue>),
+}
+
+// Into implementations for JSONValue
+impl Into<JSONValue> for i32 {
+    fn into(self) -> JSONValue {
+        return JSONValue::Number(self as f64);
+    }
+}
+
+impl Into<JSONValue> for String {
+    fn into(self) -> JSONValue {
+        return JSONValue::String(self);
+    }
+}
+
+impl Into<JSONValue> for bool {
+    fn into(self) -> JSONValue {
+        return JSONValue::Bool(self);
+    }
+}
+
+// Null type coerces to JSONValue::Null
+impl Into<JSONValue> for Null {
+    fn into(self) -> JSONValue {
+        return JSONValue::Null;
+    }
+}
+```
+
+### 13. JSONValue FromTuple Implementation
+
+```wado
+// Builder for tuple literals → JSONValue::Array
+pub struct JSONValueArrayBuilder {
+    items: Array<JSONValue>,
+}
+
+impl TupleBuilder for JSONValueArrayBuilder {
+    type Element = JSONValue;
+    type Output = JSONValue;
+
+    fn with_capacity(n: i32) -> Self {
+        return JSONValueArrayBuilder { items: Array::<JSONValue>::with_capacity(n) };
+    }
+
+    fn append(&mut self, element: JSONValue) {
+        self.items.append(element);
+    }
+
+    fn build(self) -> JSONValue {
+        return JSONValue::Array(self.items);
+    }
+}
+
+impl FromTuple for JSONValue {
+    type Element = JSONValue;
+    type Builder = JSONValueArrayBuilder;
+}
+```
+
+### 14. JSONValue FromObject Implementation
+
+```wado
+// Builder for object literals → JSONValue::Object
+pub struct JSONValueObjectBuilder {
+    entries: Dict<String, JSONValue>,
+}
+
+impl ObjectBuilder for JSONValueObjectBuilder {
+    type Value = JSONValue;
+    type Output = JSONValue;
+
+    fn with_capacity(n: i32) -> Self {
+        return JSONValueObjectBuilder { entries: Dict::<String, JSONValue>::with_capacity(n) };
+    }
+
+    fn insert(&mut self, key: String, value: JSONValue) {
+        self.entries.insert(key, value);
+    }
+
+    fn build(self) -> JSONValue {
+        return JSONValue::Object(self.entries);
+    }
+}
+
+impl FromObject for JSONValue {
+    type Value = JSONValue;
+    type Builder = JSONValueObjectBuilder;
+}
+```
+
+### 15. Nested JSON Literals
+
+With both traits implemented, JSONValue supports nested structures:
+
+```wado
+let data: JSONValue = {
+    "name": "Alice",
+    "age": 30,
+    "tags": [1, 2, 3],           // Nested tuple → JSONValue::Array
+    "metadata": {                 // Nested object → JSONValue::Object
+        "created": "2024-01-01",
+        "active": true,
+    },
+    "nullable": null,            // Null → JSONValue::Null
+};
+
+// Compiler recursively coerces each nested literal:
+// 1. Outer { ... } → FromObject → JSONValue::Object
+// 2. Inner [1, 2, 3] → FromTuple → JSONValue::Array
+// 3. Inner { ... } → FromObject → JSONValue::Object
+// 4. null → Into<JSONValue> → JSONValue::Null
+```
+
+### 16. Immutable Collection Example
+
+```wado
+// Completely immutable - no mutation methods exposed
+pub struct ImmutableList<T> {
+    #[hidden]
+    repr: InternalRepr<T>,
+}
+
+impl ImmutableList<T> {
+    fn len(&self) -> i32 { ... }
+    fn get(&self, index: i32) -> Option<T> { ... }
+    // No append, push, or any mutation methods!
+}
+
+// Separate builder for immutable list
+pub struct ImmutableListBuilder<T> {
+    buffer: Array<T>,
+}
+
+impl TupleBuilder for ImmutableListBuilder<T> {
+    type Element = T;
+    type Output = ImmutableList<T>;
+
+    fn with_capacity(n: i32) -> Self {
+        return ImmutableListBuilder { buffer: Array::<T>::with_capacity(n) };
+    }
+
+    fn append(&mut self, element: T) {
+        self.buffer.append(element);
+    }
+
+    fn build(self) -> ImmutableList<T> {
+        return ImmutableList::from_array(self.buffer);
+    }
+}
+
+impl FromTuple for ImmutableList<T> {
+    type Element = T;
+    type Builder = ImmutableListBuilder<T>;
+}
+
+// Now this works!
+let list: ImmutableList<i32> = [1, 2, 3, 4, 5];
+// list has no mutation methods, but was constructed via Builder
+```
+
+### 17. Empty Literals
+
+Empty literals coerce to empty collections:
+
+```wado
+let empty_arr: Array<i32> = [];
+let empty_dict: Dict<String, i32> = {};
+
+// Expand to:
+// C::Builder::with_capacity(0).build()
+```
+
+### 18. Relationship with Iterator Traits
+
+Builder-based coercion and Iterator traits serve different purposes:
+
+| Mechanism         | Purpose                     | Hetero Support |
+| ----------------- | --------------------------- | -------------- |
+| **TupleBuilder**  | Tuple literal → Collection  | ✅ Yes         |
+| **ObjectBuilder** | Object literal → Collection | ✅ Yes         |
+| **FromIterator**  | Iterator → Collection       | ❌ Homo only   |
+| **IntoIterator**  | Collection → Iterator       | N/A            |
+
+They coexist and can be combined:
+
+```wado
+// Literal-based (compile-time, supports hetero)
+let json: JSONArray = [1, "hello", true];
+
+// Iterator-based (runtime, homo only)
+let arr: Array<i32> = some_iterator.collect();
+
+// FromIterator can use TupleBuilder internally
+impl FromIterator<T> for Array<T> {
+    fn from_iter(iter: impl Iterator<Item = T>) -> Array<T> {
+        let mut arr = Array::<T>::with_capacity(0);
+        loop {
+            if let Some(item) = iter.next() {
+                arr.append(item);
+            } else {
+                break;
+            }
         }
         return arr;
     }
 }
-
-// Set (hypothetical)
-impl<T: Eq + Hash> FromIterator<T> for Set<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Set<T> {
-        let mut set = Set::new();
-        for let item of iter {
-            set.insert(item);
-        }
-        return set;
-    }
-}
-
-// Dict (from key-value pair tuples)
-impl<K: Eq + Hash, V> FromIterator<[K, V]> for Dict<K, V> {
-    fn from_iter<I: Iterator<Item = [K, V]>>(iter: I) -> Dict<K, V> {
-        let mut dict = Dict::new();
-        for let [k, v] of iter {
-            dict.insert(k, v);
-        }
-        return dict;
-    }
-}
 ```
 
-### 4. Compiler Desugaring Rules
+### 19. Type Error Messages
 
-The compiler applies iterator coercion in three contexts (same as current hardcoded coercion):
-
-#### Context 1: Variable Initialization with Type Annotation
+Clear error messages guide users:
 
 ```wado
-// Source
-let a: Array<i32> = [1, 2, 3];
-
-// Desugared to
-let a: Array<i32> = Array::from_iter([1, 2, 3].into_iter());
+// ERROR: No Into<E> implementation
+let arr: Array<i32> = [1, "hello", 3];
+// error: cannot coerce String to i32
+//   --> example.wado:1:27
+//    |
+// 1  | let arr: Array<i32> = [1, "hello", 3];
+//    |                           ^^^^^^^ String does not implement Into<i32>
 ```
-
-#### Context 2: Function Argument Passing
 
 ```wado
-// Source
-fn process(items: Array<i32>) { ... }
-process([1, 2, 3]);
-
-// Desugared to
-fn process(items: Array<i32>) { ... }
-process(Array::from_iter([1, 2, 3].into_iter()));
+// ERROR: Type not FromTuple
+struct MyType { ... }
+let m: MyType = [1, 2, 3];
+// error: MyType does not implement FromTuple
+//   --> example.wado:2:5
+//    |
+// 2  | let m: MyType = [1, 2, 3];
+//    |     ^ cannot coerce tuple literal to MyType
+//    |
+//    = help: implement FromTuple for MyType to enable tuple coercion
 ```
 
-#### Context 3: Explicit Cast with `as`
+### 20. Implementation Strategy
 
-```wado
-// Source
-let a = [1, 2, 3] as Array<i32>;
+#### Phase 1: Core Traits
 
-// Desugared to
-let a = Array::from_iter([1, 2, 3].into_iter()) as Array<i32>;
-```
+Define traits in prelude:
 
-### 5. Type Checking Requirements
+- `Into<T>`
+- `TupleBuilder` / `FromTuple`
+- `ObjectBuilder` / `FromObject`
 
-For coercion to succeed, the compiler verifies:
+#### Phase 2: Standard Implementations
 
-1. **Source implements IntoIterator**: `E: IntoIterator`
-2. **Target implements FromIterator**: `T: FromIterator<E::Item>`
-3. **Element type matches**: The `Item` type from `IntoIterator` matches the type parameter of `FromIterator`
+- `impl TupleBuilder for Array<T>`
+- `impl FromTuple for Array<T>`
+- `impl ObjectBuilder for Dict<String, V>`
+- `impl FromObject for Dict<String, V>`
 
-If any condition fails, coercion is not applied and a type error is reported.
+#### Phase 3: Compiler Coercion Logic
 
-### 6. Heterogeneous Tuple Handling
-
-Heterogeneous tuples (mixed element types) cannot be coerced to collections:
-
-```wado
-let mixed = [1, "hello", true];  // Type: [i32, String, bool]
-
-// ERROR: Cannot coerce to Array<?>
-let a: Array<i32> = mixed;  // ❌ Heterogeneous tuple doesn't implement IntoIterator
-```
-
-This is a compile-time error with a clear message:
-
-```
-error: cannot coerce heterogeneous tuple to Array
-  --> example.wado:2:21
-   |
-2  | let a: Array<i32> = mixed;
-   |                     ^^^^^ type [i32, String, bool] does not implement IntoIterator
-   |
-   = note: only homogeneous tuples (all elements same type) can be iterated
-```
-
-### 7. Empty Tuple Special Case
-
-The empty tuple `[]` has type `[]` (0-tuple). It implements `IntoIterator`:
-
-```wado
-impl IntoIterator for [] {
-    type Item = !;  // Never type (no elements)
-    type Iter = EmptyIter;
-
-    fn into_iter(self) -> EmptyIter {
-        return EmptyIter::new();
-    }
-}
-```
-
-This allows:
-
-```wado
-let empty: Array<i32> = [];  // OK: creates empty array
-let empty_set: Set<String> = [];  // OK: creates empty set
-```
-
-**Type parameter inference**: When coercing `[]`, the element type is inferred from the target collection's type parameter.
-
-### 8. User-Defined Collection Types
-
-Users can define their own collection types with literal coercion by implementing `FromIterator`:
-
-```wado
-// User-defined immutable vector
-struct Vec<T> {
-    items: Array<T>,
-}
-
-impl<T> Vec<T> {
-    fn new() -> Vec<T> {
-        return Vec { items: [] };
-    }
-}
-
-impl<T> FromIterator<T> for Vec<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Vec<T> {
-        let mut vec = Vec::new();
-        for let item of iter {
-            vec.items.append(item);
-        }
-        return vec;
-    }
-}
-
-// Now tuple literals work automatically!
-let v: Vec<i32> = [1, 2, 3];  // ✅ Coercion via FromIterator
-```
-
-No compiler changes needed - the trait implementation is sufficient.
-
-### 9. Chaining with Iterator Methods
-
-Iterator coercion composes with iterator methods:
-
-```wado
-// Explicit iterator chain
-let even_doubles: Array<i32> = [1, 2, 3, 4, 5]
-    .into_iter()
-    .filter(|x| x % 2 == 0)
-    .map(|x| x * 2)
-    .collect();
-
-// With type inference
-let result: Set<String> = [1, 2, 2, 3]
-    .into_iter()
-    .map(|n| `num_{n}`)
-    .collect();
-```
-
-**Note**: `.collect()` is a method on `Iterator` that calls `FromIterator::from_iter(self)`. It provides the same functionality as implicit coercion but can be used mid-chain.
-
-### 10. Remove Hardcoded Array Coercion
-
-The compiler's special-case logic for tuple-to-array coercion (in `resolver.rs`) is **removed** and replaced with the general iterator coercion mechanism.
-
-**Before** (hardcoded):
+Replace hardcoded coercion with trait-based expansion:
 
 ```rust
-// resolver.rs - REMOVED
-if let ResolvedType::Array { element_type } = target_type {
-    if let TirExprKind::TupleLiteral { elements } = &expr.kind {
-        // Special case: convert to ArrayLiteral
-        return coerce_tuple_to_array(elements, element_type);
+// In resolver.rs
+fn try_literal_coercion(expr: &Expr, target_type: &Type) -> Option<Expr> {
+    match expr.kind {
+        TupleLiteral { elements } => try_tuple_coercion(elements, target_type),
+        ObjectLiteral { entries } => try_object_coercion(entries, target_type),
+        _ => None,
     }
 }
-```
 
-**After** (general):
+fn try_tuple_coercion(elements: &[Expr], target_type: &Type) -> Option<Expr> {
+    // 1. Check target implements FromTuple
+    let element_type = get_from_tuple_element(target_type)?;
+    let builder_type = get_from_tuple_builder(target_type)?;
 
-```rust
-// resolver.rs - NEW
-if let Some(coercion) = try_iterator_coercion(expr_type, target_type) {
-    // General case: E: IntoIterator, T: FromIterator<E::Item>
-    return desugar_to_from_iter_call(expr, target_type, coercion);
+    // 2. Check each element has Into<Element>
+    for elem in elements {
+        check_into_impl(elem.type, element_type)?;
+    }
+
+    // 3. Generate builder expansion
+    let n = elements.len();
+    let mut stmts = vec![
+        let_mut("__builder", call_static(builder_type, "with_capacity", [n]))
+    ];
+    for elem in elements {
+        let converted = call_into(elem, element_type);
+        stmts.push(call_method_stmt("__builder", "append", [converted]));
+    }
+    stmts.push(call_method("__builder", "build", []));
+
+    return Some(block_expr(stmts));
 }
 ```
-
-### 11. Dict Literal Syntax (Future Extension)
-
-While not part of this WEP, the iterator-based coercion enables future Dict literal syntax:
-
-```wado
-// Tuple of 2-tuples coerces to Dict
-let config: Dict<String, i32> = [
-    ["width", 800],
-    ["height", 600],
-    ["fps", 60],
-];
-
-// Desugars to
-let config: Dict<String, i32> = Dict::from_iter(
-    [["width", 800], ["height", 600], ["fps", 60]].into_iter()
-);
-```
-
-This requires `Dict` to implement `FromIterator<[K, V]>`, which is natural.
 
 ## Consequences
 
 ### Positive
 
-1. **Simplicity**: Removes ~200 lines of special-case coercion logic from the compiler
-2. **Generality**: Any type implementing `FromIterator<T>` gets literal coercion for free
-3. **Extensibility**: Users can define custom collection types with literal syntax
-4. **Consistency**: All collections are treated uniformly, not just `Array<T>`
-5. **Composability**: Works seamlessly with iterator methods (`.filter()`, `.map()`, etc.)
-6. **Rust alignment**: Matches Rust's `.collect()` pattern, reducing learning curve
-7. **Type safety**: Compiler verifies trait bounds at compile time
-8. **Clear errors**: Type errors point to missing trait implementations, not mysterious coercion failures
-9. **Future-proof**: New collection types (Set, Dict, Vec, etc.) work automatically
+1. **Unified design**: Both tuple and object literals use the same pattern
+2. **Heterogeneous support**: `[1, "hello", true]` → `JSONArray` works
+3. **Immutable containers**: Collections need not expose mutation
+4. **User extensibility**: Any type can implement `FromTuple` / `FromObject`
+5. **Compile-time expansion**: No runtime overhead for literals
+6. **Self-as-builder optimization**: `Array` and `Dict` are their own builders
 
 ### Negative
 
-1. **Requires trait system**: This feature depends on full trait implementation (not yet complete)
-   - **Mitigation**: Trait system is high priority and already designed (WEP: Struct and Trait System)
-2. **Potential performance**: Iterator creation and `from_iter` calls may have overhead
-   - **Mitigation**: Compiler can inline and optimize away iterator abstractions in most cases
-   - **Mitigation**: For literals, the compiler can directly generate optimized code (constant folding)
-3. **Heterogeneous tuples don't coerce**: Mixed-type tuples like `[1, "hello"]` cannot be iterated
-   - **Mitigation**: This is expected behavior - heterogeneous collections don't make sense
-   - **Mitigation**: Clear error messages guide users
-4. **Breaking change**: If any code relies on current coercion behavior, it may break
-   - **Mitigation**: Current behavior is preserved - this is a drop-in replacement
+1. **Four traits**: `TupleBuilder`, `FromTuple`, `ObjectBuilder`, `FromObject`
+   - **Mitigation**: Clear separation of concerns; users typically implement one pair
+2. **Requires `Into` implementations**: For heterogeneous coercion
+   - **Mitigation**: `Into` is useful beyond coercion
 
 ### Trade-offs
 
-| Aspect                  | Hardcoded Coercion         | Iterator-Based Coercion      |
-| ----------------------- | -------------------------- | ---------------------------- |
-| **Compiler complexity** | High (special cases)       | Low (general rule)           |
-| **Extensibility**       | ❌ Compiler changes needed | ✅ Trait implementation only |
-| **User-defined types**  | ❌ Not supported           | ✅ Fully supported           |
-| **Performance**         | ✅ Direct codegen          | ⚠️ Requires optimization      |
-| **Consistency**         | ❌ Array is special        | ✅ All collections equal     |
-| **Error messages**      | ⚠️ "Type mismatch"          | ✅ "Missing trait impl"      |
-| **Maintenance**         | ❌ High                    | ✅ Low                       |
+| Aspect         | Tuple Literal     | Object Literal                    |
+| -------------- | ----------------- | --------------------------------- |
+| Default type   | Tuple `[T, U, V]` | Anonymous struct `{ a: T, b: U }` |
+| Coercion trait | `FromTuple`       | `FromObject`                      |
+| Builder trait  | `TupleBuilder`    | `ObjectBuilder`                   |
+| Key type       | N/A               | `String` (fixed)                  |
+| Hetero support | ✅ via `Into<E>`  | ✅ via `Into<V>`                  |
 
 ## Examples
 
-### Basic Array Coercion
+### Basic Usage
 
 ```wado
-use {println} from "core:cli";
-
 fn run() with Stdout {
-    // Tuple literal coerces to Array
+    // Tuple literal → Array
     let numbers: Array<i32> = [1, 2, 3, 4, 5];
 
-    // Works in function arguments
-    fn sum(items: Array<i32>) -> i32 {
-        let mut total = 0;
-        for let n of items {
-            total += n;
-        }
-        return total;
+    // Object literal → Dict
+    let config: Dict<String, i32> = {
+        "width": 1920,
+        "height": 1080,
+    };
+
+    for let n of numbers {
+        println(`{n}`);
     }
-
-    let result = sum([10, 20, 30]);  // Implicit coercion
-    println(`Sum: {result}`);  // Sum: 60
-
-    // Explicit cast
-    let explicit = [1, 2, 3] as Array<i32>;
 }
 ```
 
-### User-Defined Collection
+### JSON Construction
 
 ```wado
-// User-defined immutable vector
-struct ImmutableVec<T> {
+fn run() with Stdout {
+    // Nested JSON structure
+    let user: JSONObject = {
+        "name": "Alice",
+        "age": 30,
+        "tags": [1, 2, 3],  // Nested JSONArray
+        "metadata": {        // Nested JSONObject
+            "created": "2024-01-01",
+            "active": true,
+        },
+    };
+
+    println(user.stringify());
+}
+```
+
+### Custom Collection
+
+```wado
+struct SortedSet<T: Ord> {
     items: Array<T>,
 }
 
-impl<T> ImmutableVec<T> {
-    fn len(&self) -> i32 {
-        return self.items.len();
-    }
-
-    fn get(&self, idx: i32) -> &T {
-        return &self.items[idx];
-    }
-}
-
-// Implement FromIterator to enable literal coercion
-impl<T> FromIterator<T> for ImmutableVec<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> ImmutableVec<T> {
-        let items = Array::from_iter(iter);
-        return ImmutableVec { items };
-    }
-}
-
-fn run() {
-    // Now tuple literals work automatically!
-    let vec: ImmutableVec<i32> = [1, 2, 3, 4, 5];
-
-    assert vec.len() == 5;
-    assert *vec.get(0) == 1;
-}
-```
-
-### Iterator Method Chaining
-
-```wado
-fn run() {
-    // Filter and map with automatic coercion
-    let squares: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        .into_iter()
-        .filter(|x| x % 2 == 0)
-        .map(|x| x * x)
-        .collect();
-
-    // squares = [4, 16, 36, 64, 100]
-    assert squares.len() == 5;
-}
-```
-
-### Set with Deduplication
-
-```wado
-// Hypothetical Set implementation
-struct Set<T> {
+struct SortedSetBuilder<T: Ord> {
     items: Array<T>,
 }
 
-impl<T: Eq + Hash> FromIterator<T> for Set<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Set<T> {
-        let mut set = Set { items: [] };
-        for let item of iter {
-            if !set.contains(&item) {
-                set.items.append(item);
-            }
-        }
-        return set;
+impl TupleBuilder for SortedSetBuilder<T: Ord> {
+    type Element = T;
+    type Output = SortedSet<T>;
+
+    fn with_capacity(n: i32) -> Self {
+        return SortedSetBuilder { items: Array::<T>::with_capacity(n) };
+    }
+
+    fn append(&mut self, element: T) {
+        // Insert in sorted order, skip duplicates
+        // ...
+    }
+
+    fn build(self) -> SortedSet<T> {
+        return SortedSet { items: self.items };
     }
 }
 
-fn run() {
-    // Duplicates automatically removed
-    let unique: Set<i32> = [1, 2, 2, 3, 3, 3, 4];
-    assert unique.len() == 4;  // [1, 2, 3, 4]
-}
-```
-
-### Dict from Tuple Pairs
-
-```wado
-// Hypothetical Dict implementation
-impl<K: Eq + Hash, V> FromIterator<[K, V]> for Dict<K, V> {
-    fn from_iter<I: Iterator<Item = [K, V]>>(iter: I) -> Dict<K, V> {
-        let mut dict = Dict::new();
-        for let [k, v] of iter {
-            dict.insert(k, v);
-        }
-        return dict;
-    }
+impl FromTuple for SortedSet<T: Ord> {
+    type Element = T;
+    type Builder = SortedSetBuilder<T>;
 }
 
 fn run() {
-    // Config dict from tuple of tuples
-    let config: Dict<String, i32> = [
-        ["width", 1920],
-        ["height", 1080],
-        ["fps", 60],
-    ];
-
-    assert config.get("width") == Some(1920);
+    let set: SortedSet<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
+    // set.items = [1, 2, 3, 4, 5, 6, 9]
 }
 ```
-
-### Empty Collection
-
-```wado
-fn run() {
-    // Empty tuple coerces to empty collections
-    let empty_array: Array<i32> = [];
-    let empty_set: Set<String> = [];
-    let empty_dict: Dict<i32, String> = [];
-
-    assert empty_array.len() == 0;
-    assert empty_set.len() == 0;
-    assert empty_dict.len() == 0;
-}
-```
-
-### Error Cases
-
-```wado
-fn run() {
-    // ERROR: Heterogeneous tuple cannot be coerced
-    let mixed = [1, "hello", true];  // [i32, String, bool]
-    let arr: Array<i32> = mixed;
-    // error: type [i32, String, bool] does not implement IntoIterator
-
-    // ERROR: Element type mismatch
-    let numbers = [1, 2, 3];  // [i32, i32, i32]
-    let strings: Array<String> = numbers;
-    // error: cannot coerce [i32, i32, i32] to Array<String>
-    //        element types do not match (i32 vs String)
-}
-```
-
-## Comparison with Other Languages
-
-| Language   | Literal Syntax  | Default Type            | Coercion Mechanism              |
-| ---------- | --------------- | ----------------------- | ------------------------------- |
-| **Wado**   | `[1, 2, 3]`     | Tuple `[i32, i32, i32]` | `IntoIterator` + `FromIterator` |
-| Rust       | `vec![1, 2, 3]` | `Vec<i32>` (macro)      | Explicit `.collect()`           |
-| TypeScript | `[1, 2, 3]`     | `number[]`              | Type annotation for tuples      |
-| Python     | `[1, 2, 3]`     | `list`                  | Constructor: `set([1, 2, 3])`   |
-| Swift      | `[1, 2, 3]`     | `[Int]`                 | No coercion to Set/Dict         |
-
-Wado's approach is unique in providing **implicit coercion via traits** while maintaining **type safety** and **extensibility**.
 
 ## Related WEPs
 
-- [WEP: Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md) - Defines tuple literal syntax
-- [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) - Foundation for trait-based coercion
-- [WEP: Literal Type Conversion Rules](./wep-2026-01-12-literal-type-conversion.md) - General type conversion philosophy
+- [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md) - Tuple literal syntax
+- [Iterator Traits Design](./wep-2026-01-24-iterator-traits.md) - Iterator traits (orthogonal)
+- [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) - Trait foundation
 
 ## References
 
-- [Rust Iterator trait](https://doc.rust-lang.org/std/iter/trait.Iterator.html)
-- [Rust IntoIterator trait](https://doc.rust-lang.org/std/iter/trait.IntoIterator.html)
-- [Rust FromIterator trait](https://doc.rust-lang.org/std/iter/trait.FromIterator.html)
-- [Rust collect() method](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect)
-- [TypeScript Tuple Types](https://www.typescriptlang.org/docs/handbook/2/objects.html#tuple-types)
+- [Swift ExpressibleByArrayLiteral](https://developer.apple.com/documentation/swift/expressiblebyarrayliteral)
+- [Swift ExpressibleByDictionaryLiteral](https://developer.apple.com/documentation/swift/expressiblebydictionaryliteral)
+- [C# Collection Initializers](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/object-and-collection-initializers)
+- [Kotlin buildList / buildMap](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin.collections/build-list.html)
