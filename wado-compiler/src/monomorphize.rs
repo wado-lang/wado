@@ -530,7 +530,15 @@ impl Monomorphizer {
             TirStmtKind::Loop { body } => {
                 self.rewrite_types_in_block(body, type_table);
             }
-            TirStmtKind::ForOf { iterable, body, .. } => {
+            TirStmtKind::ForOf {
+                iterable,
+                body,
+                binding_type,
+                iterable_type,
+                ..
+            } => {
+                *binding_type = self.rewrite_type_id(*binding_type, type_table);
+                *iterable_type = self.rewrite_type_id(*iterable_type, type_table);
                 self.rewrite_types_in_expr(iterable, type_table);
                 self.rewrite_types_in_block(body, type_table);
             }
@@ -937,6 +945,29 @@ impl Monomorphizer {
     ) -> Option<TirStruct> {
         let mangled_name = self.instantiated.get(key)?.clone();
 
+        // Register the concrete struct type in the type table BEFORE substituting field types.
+        // This is critical for self-referential structs like:
+        //   struct Node<T> { left: Option<&mut Node<T>>, right: Option<&mut Node<T>> }
+        // When substituting field types, the inner Node<T> needs to resolve to the
+        // monomorphized struct type, not a GenericInstance.
+        let concrete_type_id =
+            type_table.make_struct(mangled_name.clone(), ModuleSource::entry_point());
+
+        // Find the GenericInstance TypeId and record the substitution early
+        // so that substitute_type can use it for self-references
+        for id in type_table.iter_type_ids() {
+            if let ResolvedType::GenericInstance {
+                name, type_args, ..
+            } = type_table.get(id)
+                && name == &key.name
+                && type_args == &key.type_args
+            {
+                self.type_substitutions.insert(id, concrete_type_id);
+                self.type_to_mangled_name
+                    .insert(id, self.instantiated.get(key).cloned().unwrap_or_default());
+            }
+        }
+
         // Build substitution map: type param index -> concrete type
         let substitution: HashMap<u32, TypeId> = generic
             .type_params
@@ -945,7 +976,7 @@ impl Monomorphizer {
             .map(|(param, &arg)| (param.index, arg))
             .collect();
 
-        // Substitute types in fields
+        // Substitute types in fields (now self-references can be resolved)
         let fields: Vec<TirField> = generic
             .fields
             .iter()
@@ -972,23 +1003,6 @@ impl Monomorphizer {
             fields,
             span: generic.span,
         };
-
-        // Register the concrete struct type in the type table
-        let concrete_type_id = type_table.make_struct(mangled_name, ModuleSource::entry_point());
-
-        // Find the GenericInstance TypeId and record the substitution
-        for id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance {
-                name, type_args, ..
-            } = type_table.get(id)
-                && name == &key.name
-                && type_args == &key.type_args
-            {
-                self.type_substitutions.insert(id, concrete_type_id);
-                self.type_to_mangled_name
-                    .insert(id, self.instantiated.get(key).cloned().unwrap_or_default());
-            }
-        }
 
         Some(concrete)
     }
@@ -2140,9 +2154,11 @@ impl Monomorphizer {
                 iterable,
                 body,
                 binding_type,
+                iterable_type,
                 ..
             } => {
                 *binding_type = self.substitute_type(*binding_type, substitution, type_table);
+                *iterable_type = self.substitute_type(*iterable_type, substitution, type_table);
                 self.substitute_types_in_expr(iterable, substitution, type_table);
                 self.substitute_types_in_block(body, substitution, type_table);
             }

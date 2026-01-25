@@ -1,0 +1,26 @@
+// Test: Recursive generic struct (like a tree node)
+// This tests that generic structs with self-referential Option<&mut Self> fields work
+
+struct Node<T> {
+    value: T,
+    left: Option<&mut Node<T>>,
+    right: Option<&mut Node<T>>,
+}
+
+impl Node<T> {
+    fn new(value: T) -> Node<T> {
+        return Node {
+            value,
+            left: null,
+            right: null,
+        };
+    }
+}
+
+test "create recursive node" {
+    let mut node = Node::<i32>::new(42);
+    assert node.value == 42;
+}
+
+__DATA__
+{"stdout": ""}

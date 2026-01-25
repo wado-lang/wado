@@ -5763,15 +5763,30 @@ impl<'a> Resolver<'a> {
                     .map(|arg| self.resolve_type_with_param_mapping(arg, type_param_mapping))
                     .collect();
 
-                // Find the base type and create a generic instance
+                // Special-case Option and Result to use their dedicated types
+                // (required for pattern matching to work correctly)
                 let base_name = &g.name;
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::GenericInstance {
-                        name: base_name.clone(),
-                        module_source: self.current_module_source.clone(),
-                        type_args: resolved_args,
-                    })
+                match base_name.as_str() {
+                    "Option" => {
+                        let inner = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
+                        self.type_table.borrow_mut().make_option(inner)
+                    }
+                    "Result" => {
+                        let ok = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
+                        let err = resolved_args.get(1).copied().unwrap_or(TypeTable::UNKNOWN);
+                        self.type_table.borrow_mut().make_result(ok, err)
+                    }
+                    _ => {
+                        // For other generic types, create a generic instance
+                        self.type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::GenericInstance {
+                                name: base_name.clone(),
+                                module_source: self.current_module_source.clone(),
+                                type_args: resolved_args,
+                            })
+                    }
+                }
             }
             Type::Reference(inner) => {
                 let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);

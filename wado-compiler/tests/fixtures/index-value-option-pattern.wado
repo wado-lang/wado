@@ -1,0 +1,26 @@
+// Test: if let Some pattern matching on index expression returning Option<T>
+// This tests that IndexValue trait's Output type is properly recognized as Option
+
+struct Box<T> {
+    value: T,
+}
+
+impl IndexValue<i32> for Box<i32> {
+    type Output = Option<i32>;
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index == 0 {
+            return Option::<i32>::Some(self.value);
+        }
+        return null;
+    }
+}
+
+test "if let Some on index value returning Option" {
+    let b = Box { value: 42 };
+    if let Some(val) = b[0] {
+        assert val == 42;
+    }
+}
+
+__DATA__
+{"stdout": ""}

@@ -655,17 +655,16 @@ impl Codegen {
     }
 
     /// Check if a type references a struct by name (transitively through Array/Ref/MutRef).
+    /// The `struct_name` should be the full mangled name (e.g., "`AANode`<String,i32>").
     fn type_references_struct(type_id: TypeId, struct_name: &str, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. } => name == struct_name,
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
-                // Check if this generic instance has the same base name
-                if name == struct_name {
-                    return true;
-                }
-                // Also recurse into type args for Array<&mut BTreeNode> patterns
+            ResolvedType::Struct { name, .. } => {
+                // Exact name match only
+                name == struct_name
+            }
+            ResolvedType::GenericInstance { type_args, .. } => {
+                // Recurse into type args for Array<&mut BTreeNode> patterns
+                // GenericInstance name (like "Array") won't match struct_name (like "Node<i32>")
                 type_args
                     .iter()
                     .any(|arg| Self::type_references_struct(*arg, struct_name, type_table))
@@ -1184,15 +1183,13 @@ impl Codegen {
                 }
                 let struct_name =
                     StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
-                // Check for self-referential structs
+                // Check for self-referential structs using full struct name
                 let lib_type_table = tir_mod.type_table.borrow();
-                let base_name = tir_struct
-                    .monomorph_info
-                    .as_ref()
-                    .map(|i| i.generic_name.as_str())
-                    .unwrap_or(&tir_struct.name);
-                let self_ref_fields =
-                    Self::get_self_referential_field_types(base_name, tir_struct, &lib_type_table);
+                let self_ref_fields = Self::get_self_referential_field_types(
+                    &tir_struct.name,
+                    tir_struct,
+                    &lib_type_table,
+                );
                 if self_ref_fields.is_empty() {
                     self.register_struct_type(
                         struct_name,
@@ -1231,14 +1228,12 @@ impl Codegen {
         for tir_struct in sorted_mono {
             let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
-            // For monomorphized structs, check against both the mangled name and base name
-            let base_name = tir_struct
-                .monomorph_info
-                .as_ref()
-                .map(|i| i.generic_name.as_str())
-                .unwrap_or(&tir_struct.name);
+            // For monomorphized structs, use the FULL mangled name (e.g., "AANode<String,i32>")
+            // to detect true self-references, not just base name matches.
+            // This prevents Box<Box<i32>> from being incorrectly detected as self-referential
+            // when it contains Box<i32> (a different instantiation).
             let self_ref_fields =
-                Self::get_self_referential_field_types(base_name, tir_struct, type_table);
+                Self::get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
             if self_ref_fields.is_empty() {
                 self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
             } else {
@@ -2888,13 +2883,16 @@ impl Codegen {
         let mut struct_fields = Vec::new();
 
         for field in &tir_struct.fields {
-            // Check if this field is one of the self-referential Array types
-            let is_self_ref_array = self_ref_field_types.contains(&field.type_id);
-            let wasm_type = if is_self_ref_array {
-                // Look up the Array struct type we just planned
-                if let ResolvedType::GenericInstance { type_args, .. } =
-                    type_table.get(field.type_id)
+            // Check if this field is in the self-referential list
+            let is_self_ref = self_ref_field_types.contains(&field.type_id);
+            let wasm_type = if is_self_ref {
+                // Check if it's an Array type (Array<&mut T> pattern)
+                if let ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } = type_table.get(field.type_id)
+                    && name == "Array"
                 {
+                    // Look up the Array struct type we planned in the rec group
                     if let Some(&(_, _, array_struct_idx)) = array_type_mappings
                         .iter()
                         .find(|(elem_id, _, _)| *elem_id == type_args[0])
@@ -2904,10 +2902,17 @@ impl Codegen {
                             heap_type: HeapType::Concrete(array_struct_idx),
                         })
                     } else {
+                        // Fallback - shouldn't happen for properly detected Array self-refs
                         self.type_id_to_valtype(type_table, field.type_id)
                     }
                 } else {
-                    self.type_id_to_valtype(type_table, field.type_id)
+                    // Non-Array self-reference (e.g., Option<&mut Self>, &mut Self)
+                    // Use forward reference to the struct being defined
+                    Self::type_id_to_valtype_with_self_ref(
+                        type_table,
+                        field.type_id,
+                        struct_type_idx,
+                    )
                 }
             } else {
                 self.type_id_to_valtype(type_table, field.type_id)
@@ -3188,6 +3193,22 @@ impl Codegen {
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Tuple(elements) => !elements.is_empty(),
             ResolvedType::Option(inner) => self.needs_value_copy(*inner, type_table),
+            _ => false,
+        }
+    }
+
+    /// Check if a type is a reference type that uses GC references.
+    /// Reference types need `ref.eq` for equality comparison instead of `i32.eq`.
+    fn is_reference_type(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Option(_)
+            | ResolvedType::Function { .. } => true,
+            ResolvedType::Tuple(elements) => !elements.is_empty(),
             _ => false,
         }
     }
@@ -4919,6 +4940,45 @@ impl Codegen {
         }
     }
 
+    /// Convert a type to `ValType`, using a forward reference for self-referential struct types.
+    /// This is used when registering recursive structs in a rec group.
+    fn type_id_to_valtype_with_self_ref(
+        type_table: &TypeTable,
+        type_id: TypeId,
+        self_type_idx: u32,
+    ) -> ValType {
+        match type_table.get(type_id) {
+            // For Struct and GenericInstance that would normally require lookup,
+            // use the forward reference since this IS the struct being defined
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
+                ValType::Ref(RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(self_type_idx),
+                })
+            }
+            // Option<T> - make the inner type nullable
+            ResolvedType::Option(inner) => {
+                let inner_valtype =
+                    Self::type_id_to_valtype_with_self_ref(type_table, *inner, self_type_idx);
+                match inner_valtype {
+                    ValType::Ref(ref_type) => ValType::Ref(RefType {
+                        nullable: true,
+                        ..ref_type
+                    }),
+                    other => other,
+                }
+            }
+            // Ref/MutRef - recurse into inner
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                Self::type_id_to_valtype_with_self_ref(type_table, *inner, self_type_idx)
+            }
+            // For other types, use standard conversion (they don't reference self)
+            ResolvedType::Primitive(prim) => primitive_to_valtype(prim),
+            ResolvedType::Unit => ValType::I32,
+            _ => ValType::I32, // Fallback
+        }
+    }
+
     /// Check if a type is a reference type (struct, string, variant, etc.)
     /// These types are represented as GC references in Wasm.
     fn type_is_reference(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
@@ -5249,6 +5309,22 @@ impl Codegen {
                     // a is false, evaluate b
                     self.generate_expr(func, right, type_table, ctx, builder);
                     func.instruction(&Instruction::End);
+                    return;
+                }
+
+                // Handle reference type comparisons (use ref.eq instead of i32.eq/ne)
+                let left_is_ref = self.is_reference_type(left.type_id, type_table);
+                let right_is_ref = self.is_reference_type(right.type_id, type_table);
+                if (left_is_ref || right_is_ref)
+                    && (*op == TirBinaryOp::Eq || *op == TirBinaryOp::NotEq)
+                {
+                    self.generate_expr(func, left, type_table, ctx, builder);
+                    self.generate_expr(func, right, type_table, ctx, builder);
+                    func.instruction(&Instruction::RefEq);
+                    if *op == TirBinaryOp::NotEq {
+                        // Invert the result for !=
+                        func.instruction(&Instruction::I32Eqz);
+                    }
                     return;
                 }
 
@@ -7393,14 +7469,26 @@ impl Codegen {
                 // Get the raw array type index and Array struct type index for array.get
                 let (raw_array_type_idx, array_struct_type_idx, element_type_id) =
                     if let Some(element_type) = type_table.as_array(*iterable_type) {
+                        // Try TypeId lookup first, then fall back to canonical name lookup
                         let raw_idx = self
                             .array_types
                             .get(&element_type)
                             .copied()
+                            .or_else(|| {
+                                let canonical =
+                                    self.canonical_element_type_name(element_type, type_table);
+                                self.array_types_by_name.get(&canonical).copied()
+                            })
                             .unwrap_or(self.string_array_type_idx);
-                        let struct_idx = *self
+                        let struct_idx = self
                             .array_struct_types
                             .get(&element_type)
+                            .copied()
+                            .or_else(|| {
+                                let canonical =
+                                    self.canonical_element_type_name(element_type, type_table);
+                                self.array_struct_types_by_name.get(&canonical).copied()
+                            })
                             .expect("Array struct type should be registered");
                         (raw_idx, struct_idx, element_type)
                     } else {
