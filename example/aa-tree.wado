@@ -1,71 +1,48 @@
-// AA Tree - A self-balancing binary search tree (generic keys and values)
+// AA Tree - A self-balancing binary search tree
 //
 // AA trees are a simpler variant of red-black trees, invented by Arne Andersson.
 // Instead of tracking node colors, each node has a "level" that determines balance.
 //
 // This implementation uses:
-// - Array-based node storage with index references
+// - Recursive node structure with Option for children
 // - Flag-based lazy deletion with periodic compaction
 
 use { println, print, Stdout } from "core:cli";
 
-// Sentinel value for null/empty child pointers
-fn null_idx() -> i32 { return -1; }
-fn is_null(idx: i32) -> bool { return idx < 0; }
-
-// Node storage (flat array avoids recursive struct issues)
-// Using generic types to work around codegen issues with concrete Array<String>
-struct AATreeData<K, V> {
-    // Parallel arrays for node data
-    keys: Array<K>,
-    values: Array<V>,
-    levels: Array<i32>,
-    lefts: Array<i32>,   // left child index (-1 = null)
-    rights: Array<i32>,  // right child index (-1 = null)
-    deleted: Array<bool>,
+// A node in the AA tree
+struct AANode<K, V> {
+    key: K,
+    value: V,
+    level: i32,
+    left: Option<&mut AANode<K, V>>,
+    right: Option<&mut AANode<K, V>>,
+    deleted: bool,
 }
 
-impl AATreeData<K, V> {
-    fn new() -> AATreeData<K, V> {
-        return AATreeData {
-            keys: [],
-            values: [],
-            levels: [],
-            lefts: [],
-            rights: [],
-            deleted: [],
+impl AANode<K, V> {
+    fn new(key: K, value: V) -> AANode<K, V> {
+        return AANode {
+            key,
+            value,
+            level: 1,
+            left: null,
+            right: null,
+            deleted: false,
         };
-    }
-
-    fn add_node(&mut self, key: K, value: V) -> i32 {
-        let idx = self.keys.len();
-        self.keys.append(key);
-        self.values.append(value);
-        self.levels.append(1);
-        self.lefts.append(null_idx());
-        self.rights.append(null_idx());
-        self.deleted.append(false);
-        return idx;
-    }
-
-    fn len(&self) -> i32 {
-        return self.keys.len();
     }
 }
 
 // The AA Tree
 pub struct AATree<K, V> {
-    data: AATreeData<K, V>,
-    root: i32,           // root node index (-1 if empty)
-    size: i32,           // active (non-deleted) count
+    root: Option<&mut AANode<K, V>>,
+    size: i32,
     deleted_count: i32,
 }
 
 impl AATree<K, V> {
     pub fn new() -> AATree<K, V> {
         return AATree {
-            data: AATreeData::<K, V>::new(),
-            root: null_idx(),
+            root: null,
             size: 0,
             deleted_count: 0,
         };
@@ -74,161 +51,179 @@ impl AATree<K, V> {
     pub fn len(&self) -> i32 { return self.size; }
     pub fn is_empty(&self) -> bool { return self.size == 0; }
     pub fn deleted_count(&self) -> i32 { return self.deleted_count; }
-    pub fn total_nodes(&self) -> i32 { return self.data.len(); }
-
-    fn level(&self, idx: i32) -> i32 {
-        if is_null(idx) { return 0; }
-        return self.data.levels[idx];
-    }
 
     // Skew: right rotation to fix left horizontal link
-    fn skew(&mut self, idx: i32) -> i32 {
-        if is_null(idx) { return idx; }
-        let left = self.data.lefts[idx];
-        if is_null(left) { return idx; }
-        if self.data.levels[left] != self.data.levels[idx] { return idx; }
-        // Rotate right
-        self.data.lefts[idx] = self.data.rights[left];
-        self.data.rights[left] = idx;
-        return left;
+    fn skew(&mut self, node: Option<&mut AANode<K, V>>) -> Option<&mut AANode<K, V>> {
+        if let Some(n) = node {
+            if let Some(left) = n.left {
+                if left.level == n.level {
+                    // Rotate right
+                    n.left = left.right;
+                    left.right = Option::Some(n);
+                    return Option::Some(left);
+                }
+            }
+            return Option::Some(n);
+        }
+        return null;
     }
 
     // Split: left rotation to fix consecutive right horizontal links
-    fn split(&mut self, idx: i32) -> i32 {
-        if is_null(idx) { return idx; }
-        let right = self.data.rights[idx];
-        if is_null(right) { return idx; }
-        let rr = self.data.rights[right];
-        if is_null(rr) { return idx; }
-        if self.data.levels[rr] != self.data.levels[idx] { return idx; }
-        // Rotate left
-        self.data.rights[idx] = self.data.lefts[right];
-        self.data.lefts[right] = idx;
-        self.data.levels[right] = self.data.levels[right] + 1;
-        return right;
+    fn split(&mut self, node: Option<&mut AANode<K, V>>) -> Option<&mut AANode<K, V>> {
+        if let Some(n) = node {
+            if let Some(right) = n.right {
+                if let Some(rr) = right.right {
+                    if rr.level == n.level {
+                        // Rotate left
+                        n.right = right.left;
+                        right.left = Option::Some(n);
+                        right.level = right.level + 1;
+                        return Option::Some(right);
+                    }
+                }
+            }
+            return Option::Some(n);
+        }
+        return null;
     }
 
-    // Returns: [new_root_idx, 1 if inserted/reactivated else 0]
-    fn insert_at(&mut self, idx: i32, key: K, value: V) -> [i32, i32] {
-        if is_null(idx) {
-            let new_idx = self.data.add_node(key, value);
-            return [new_idx, 1];
+    fn insert_at(
+        &mut self,
+        node: Option<&mut AANode<K, V>>,
+        key: K,
+        value: V,
+        inserted: &mut bool,
+    ) -> Option<&mut AANode<K, V>> {
+        if let Some(n) = node {
+            // Reactivate deleted node
+            if n.deleted && key == n.key {
+                n.value = value;
+                n.deleted = false;
+                *inserted = true;
+                return Option::Some(n);
+            }
+
+            // Update existing key
+            if !n.deleted && key == n.key {
+                n.value = value;
+                return Option::Some(n);
+            }
+
+            // Recurse left or right
+            if key < n.key {
+                n.left = self.insert_at(n.left, key, value, inserted);
+            } else {
+                n.right = self.insert_at(n.right, key, value, inserted);
+            }
+
+            // Rebalance
+            let after_skew = self.skew(Option::Some(n));
+            return self.split(after_skew);
         }
 
-        let node_key = self.data.keys[idx];
-        let node_deleted = self.data.deleted[idx];
-
-        // Reactivate deleted node
-        if node_deleted && key == node_key {
-            self.data.values[idx] = value;
-            self.data.deleted[idx] = false;
-            return [idx, 1];
-        }
-
-        // Update existing key
-        if !node_deleted && key == node_key {
-            self.data.values[idx] = value;
-            return [idx, 0];
-        }
-
-        // Recurse left or right
-        let mut did_insert = 0;
-        if key < node_key {
-            let left = self.data.lefts[idx];
-            let result = self.insert_at(left, key, value);
-            self.data.lefts[idx] = result.0;
-            did_insert = result.1;
-        } else {
-            let right = self.data.rights[idx];
-            let result = self.insert_at(right, key, value);
-            self.data.rights[idx] = result.0;
-            did_insert = result.1;
-        }
-
-        // Rebalance
-        let after_skew = self.skew(idx);
-        let after_split = self.split(after_skew);
-        return [after_split, did_insert];
+        // Create new leaf node
+        let new_node = AANode::<K, V>::new(key, value);
+        *inserted = true;
+        return Option::Some(&mut new_node);
     }
 
     pub fn insert(&mut self, key: K, value: V) {
-        let result = self.insert_at(self.root, key, value);
-        self.root = result.0;
-        if result.1 > 0 { self.size = self.size + 1; }
+        let mut inserted = false;
+        self.root = self.insert_at(self.root, key, value, &mut inserted);
+        if inserted {
+            self.size = self.size + 1;
+        }
     }
 
-    fn find_idx(&self, key: &K) -> i32 {
-        let mut cur = self.root;
-        while !is_null(cur) {
-            let node_key = self.data.keys[cur];
-            if !self.data.deleted[cur] && *key == node_key {
-                return cur;
+    fn find_node(&self, key: &K) -> Option<&AANode<K, V>> {
+        let mut current = self.root;
+        while let Some(n) = current {
+            if !n.deleted && *key == n.key {
+                return Option::Some(n);
             }
-            if *key < node_key {
-                cur = self.data.lefts[cur];
+            if *key < n.key {
+                current = n.left;
             } else {
-                cur = self.data.rights[cur];
+                current = n.right;
             }
         }
-        return null_idx();
+        return null;
     }
 
     pub fn contains(&self, key: &K) -> bool {
-        return !is_null(self.find_idx(key));
+        return self.find_node(key) != null;
     }
 
     pub fn get(&self, key: &K) -> Option<V> {
-        let idx = self.find_idx(key);
-        if is_null(idx) { return null; }
-        return Option::<V>::Some(self.data.values[idx]);
+        if let Some(node) = self.find_node(key) {
+            return Option::Some(node.value);
+        }
+        return null;
+    }
+
+    fn find_node_mut(&mut self, key: &K) -> Option<&mut AANode<K, V>> {
+        let mut current = self.root;
+        while let Some(n) = current {
+            if !n.deleted && *key == n.key {
+                return Option::Some(n);
+            }
+            if *key < n.key {
+                current = n.left;
+            } else {
+                current = n.right;
+            }
+        }
+        return null;
     }
 
     pub fn delete(&mut self, key: &K) -> bool {
-        let idx = self.find_idx(key);
-        if is_null(idx) { return false; }
-        self.data.deleted[idx] = true;
-        self.deleted_count = self.deleted_count + 1;
-        self.size = self.size - 1;
-        // Auto-compact if > 50% deleted
-        if self.deleted_count > self.size {
-            self.compact();
+        if let Some(node) = self.find_node_mut(key) {
+            node.deleted = true;
+            self.deleted_count = self.deleted_count + 1;
+            self.size = self.size - 1;
+            // Auto-compact if > 50% deleted
+            if self.deleted_count > self.size {
+                self.compact();
+            }
+            return true;
         }
-        return true;
+        return false;
     }
 
-    fn collect_pairs(&self, idx: i32, result: &mut Array<[K, V]>) {
-        if is_null(idx) { return; }
-        self.collect_pairs(self.data.lefts[idx], result);
-        if !self.data.deleted[idx] {
-            result.append([self.data.keys[idx], self.data.values[idx]]);
+    fn collect_pairs(&self, node: Option<&AANode<K, V>>, result: &mut Array<[K, V]>) {
+        if let Some(n) = node {
+            self.collect_pairs(n.left, result);
+            if !n.deleted {
+                result.append([n.key, n.value]);
+            }
+            self.collect_pairs(n.right, result);
         }
-        self.collect_pairs(self.data.rights[idx], result);
     }
 
     pub fn compact(&mut self) {
         if self.deleted_count == 0 { return; }
+
         let mut pairs: Array<[K, V]> = [];
         self.collect_pairs(self.root, &mut pairs);
 
         // Rebuild tree
-        self.data = AATreeData::<K, V>::new();
-        self.root = null_idx();
+        self.root = null;
         self.deleted_count = 0;
         self.size = 0;
 
-        for let mut i = 0; i < pairs.len(); i += 1 {
-            let pair = pairs[i];
+        for let pair of pairs {
             self.insert(pair.0, pair.1);
         }
     }
 
-    fn collect_keys(&self, idx: i32, result: &mut Array<K>) {
-        if is_null(idx) { return; }
-        self.collect_keys(self.data.lefts[idx], result);
-        if !self.data.deleted[idx] {
-            result.append(self.data.keys[idx]);
+    fn collect_keys(&self, node: Option<&AANode<K, V>>, result: &mut Array<K>) {
+        if let Some(n) = node {
+            self.collect_keys(n.left, result);
+            if !n.deleted {
+                result.append(n.key);
+            }
+            self.collect_keys(n.right, result);
         }
-        self.collect_keys(self.data.rights[idx], result);
     }
 
     pub fn keys(&self) -> Array<K> {
@@ -237,13 +232,14 @@ impl AATree<K, V> {
         return result;
     }
 
-    fn collect_values(&self, idx: i32, result: &mut Array<V>) {
-        if is_null(idx) { return; }
-        self.collect_values(self.data.lefts[idx], result);
-        if !self.data.deleted[idx] {
-            result.append(self.data.values[idx]);
+    fn collect_values(&self, node: Option<&AANode<K, V>>, result: &mut Array<V>) {
+        if let Some(n) = node {
+            self.collect_values(n.left, result);
+            if !n.deleted {
+                result.append(n.value);
+            }
+            self.collect_values(n.right, result);
         }
-        self.collect_values(self.data.rights[idx], result);
     }
 
     pub fn values(&self) -> Array<V> {
@@ -252,43 +248,54 @@ impl AATree<K, V> {
         return result;
     }
 
-    fn find_min_idx(&self, idx: i32) -> i32 {
-        if is_null(idx) { return null_idx(); }
-        // Try left
-        let left_min = self.find_min_idx(self.data.lefts[idx]);
-        if !is_null(left_min) { return left_min; }
-        // Current if not deleted
-        if !self.data.deleted[idx] { return idx; }
-        // Try right
-        return self.find_min_idx(self.data.rights[idx]);
+    fn find_min(&self, node: Option<&AANode<K, V>>) -> Option<&AANode<K, V>> {
+        if let Some(n) = node {
+            // Try left first
+            if let Some(left_min) = self.find_min(n.left) {
+                return Option::Some(left_min);
+            }
+            // Current if not deleted
+            if !n.deleted {
+                return Option::Some(n);
+            }
+            // Try right
+            return self.find_min(n.right);
+        }
+        return null;
     }
 
     pub fn min_key(&self) -> Option<K> {
-        let idx = self.find_min_idx(self.root);
-        if is_null(idx) { return null; }
-        return Option::<K>::Some(self.data.keys[idx]);
+        if let Some(node) = self.find_min(self.root) {
+            return Option::Some(node.key);
+        }
+        return null;
     }
 
-    fn find_max_idx(&self, idx: i32) -> i32 {
-        if is_null(idx) { return null_idx(); }
-        // Try right
-        let right_max = self.find_max_idx(self.data.rights[idx]);
-        if !is_null(right_max) { return right_max; }
-        // Current if not deleted
-        if !self.data.deleted[idx] { return idx; }
-        // Try left
-        return self.find_max_idx(self.data.lefts[idx]);
+    fn find_max(&self, node: Option<&AANode<K, V>>) -> Option<&AANode<K, V>> {
+        if let Some(n) = node {
+            // Try right first
+            if let Some(right_max) = self.find_max(n.right) {
+                return Option::Some(right_max);
+            }
+            // Current if not deleted
+            if !n.deleted {
+                return Option::Some(n);
+            }
+            // Try left
+            return self.find_max(n.left);
+        }
+        return null;
     }
 
     pub fn max_key(&self) -> Option<K> {
-        let idx = self.find_max_idx(self.root);
-        if is_null(idx) { return null; }
-        return Option::<K>::Some(self.data.keys[idx]);
+        if let Some(node) = self.find_max(self.root) {
+            return Option::Some(node.key);
+        }
+        return null;
     }
 
     pub fn clear(&mut self) {
-        self.data = AATreeData::<K, V>::new();
-        self.root = null_idx();
+        self.root = null;
         self.size = 0;
         self.deleted_count = 0;
     }
@@ -299,6 +306,14 @@ impl IndexAssign<K> for AATree<K, V> {
     type Input = V;
     fn index_assign(&mut self, key: K, value: Self::Input) {
         self.insert(key, value);
+    }
+}
+
+// IndexValue for tree[key] -> Option<V>
+impl IndexValue<K> for AATree<K, V> {
+    type Output = Option<V>;
+    fn index_value(&self, key: K) -> Self::Output {
+        return self.get(&key);
     }
 }
 
@@ -427,6 +442,14 @@ test "index assign" {
     tree["two"] = 2;
     assert tree.len() == 2;
     assert tree.contains(&"one");
+}
+
+test "index value" {
+    let mut tree = AATree::<String, i32>::new();
+    tree.insert("key", 42);
+    if let Some(val) = tree["key"] {
+        assert val == 42;
+    }
 }
 
 test "values in order" {
