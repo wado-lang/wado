@@ -3377,16 +3377,6 @@ impl Monomorphizer {
             _ => return None,
         };
 
-        // Build the mangled struct name (with type args if any)
-        let mangled_struct_name = if impl_type_args.is_empty() {
-            base_struct_name.clone()
-        } else {
-            format!("{}<{}>", base_struct_name, impl_type_args.join(","))
-        };
-
-        // Build the mangled method name: StructName^TraitName::method
-        let mangled_method_name = format!("{mangled_struct_name}^{trait_name}::{method_name}");
-
         // Choose receiver and argument based on operand order
         let (receiver_expr, arg_expr) = if swap_operands {
             (right.clone(), left.clone())
@@ -3424,12 +3414,13 @@ impl Monomorphizer {
             method_name.to_string(),
         )
         .with_struct_type_args(&impl_type_args);
+        let mangled_name = method_info.to_mangled_name();
 
         let method_call = TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef::External {
                 module_source: ModuleSource::core("prelude"),
-                name: mangled_method_name.clone(),
+                name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
             },

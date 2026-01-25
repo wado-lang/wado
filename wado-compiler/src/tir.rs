@@ -797,11 +797,7 @@ impl FunctionRef {
                 let func = func.borrow();
                 // Use method_info to create a unique name for methods
                 if let Some(info) = &func.method_info {
-                    if let Some(trait_name) = &info.trait_name {
-                        format!("{}^{}::{}", info.struct_name, trait_name, info.method_name)
-                    } else {
-                        format!("{}::{}", info.struct_name, info.method_name)
-                    }
+                    info.to_mangled_name()
                 } else {
                     func.name.clone()
                 }

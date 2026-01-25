@@ -617,6 +617,23 @@ impl LocalMethodName {
         }
     }
 
+    /// Generate the mangled name from the components.
+    ///
+    /// Produces:
+    /// - `StructName::method` for inherent methods
+    /// - `StructName^TraitName::method` for trait methods
+    /// - `StructName<TypeArgs>::method` for monomorphized methods
+    /// - `StructName<TypeArgs>^TraitName::method` for monomorphized trait methods
+    #[must_use]
+    pub fn to_mangled_name(&self) -> String {
+        let method_part = self.full_method_name();
+        if let Some(trait_name) = &self.trait_name {
+            format!("{}^{}::{}", self.struct_name, trait_name, method_part)
+        } else {
+            format!("{}::{}", self.struct_name, method_part)
+        }
+    }
+
     /// Parse a local method name string into its components.
     ///
     /// Expected formats:
