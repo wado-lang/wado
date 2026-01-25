@@ -1103,6 +1103,7 @@ pub enum TirPattern {
     Binding {
         name: String,
         local_index: u32,
+        type_id: TypeId,
     },
     Literal(TirLiteralPattern),
     Tuple(Vec<TirPattern>),

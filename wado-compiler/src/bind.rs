@@ -249,8 +249,20 @@ impl Binder {
             self.bind_let(init);
         }
 
+        // For pattern conditions, enter scope before the condition so pattern bindings
+        // are only visible in then_block (not in else_block or outer scope)
+        let is_pattern = matches!(if_stmt.condition, Condition::Pattern { .. });
+        if is_pattern {
+            self.enter_scope();
+        }
+
         self.bind_condition(&if_stmt.condition);
         self.bind_block(&if_stmt.then_block);
+
+        if is_pattern {
+            self.exit_scope();
+        }
+
         if let Some(ref else_block) = if_stmt.else_block {
             self.bind_block(else_block);
         }
@@ -494,8 +506,20 @@ impl Binder {
             self.bind_let(init);
         }
 
+        // For pattern conditions, enter scope before the condition so pattern bindings
+        // are only visible in then_block (not in else_block or outer scope)
+        let is_pattern = matches!(if_expr.condition, Condition::Pattern { .. });
+        if is_pattern {
+            self.enter_scope();
+        }
+
         self.bind_condition(&if_expr.condition);
         self.bind_block(&if_expr.then_block);
+
+        if is_pattern {
+            self.exit_scope();
+        }
+
         if let Some(ref else_block) = if_expr.else_block {
             self.bind_block(else_block);
         }

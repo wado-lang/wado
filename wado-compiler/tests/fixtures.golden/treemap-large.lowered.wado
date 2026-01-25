@@ -207,7 +207,7 @@ fn "TreeMap<String,i32>::insert_at"(self: &mut TreeMap<String,i32>, node: Option
         } else {
             n.right = "TreeMap<String,i32>::insert_at"(self, n.right, key, value, inserted);
         }
-        let after_skew: Option<&mut TreeMapNode<String,i32>> = "TreeMap<String,i32>::skew"(self, Option::Some(n));
+        let after_skew: Option<&mut TreeMapNode<String,i32>> = "TreeMap<String,i32>::skew"(self, move Option::Some(n));
         return "TreeMap<String,i32>::split"(self, after_skew);
     }
     let mut new_node: TreeMapNode<String,i32> = move "TreeMapNode<String,i32>::new"(key, value);
@@ -225,7 +225,7 @@ fn "TreeMap<String,i32>::split"(self: &mut TreeMap<String,i32>, node: Option<&mu
             if Some(rr) = right.right {
                 if (rr.level == n.level) {
                     n.right = right.left;
-                    right.left = Option::Some(n);
+                    right.left = move Option::Some(n);
                     right.level = (right.level + 1);
                     return Option::Some(right);
                 }
@@ -241,7 +241,7 @@ fn "TreeMap<String,i32>::skew"(self: &mut TreeMap<String,i32>, node: Option<&mut
         if Some(left) = n.left {
             if (left.level == n.level) {
                 n.left = left.right;
-                left.right = Option::Some(n);
+                left.right = move Option::Some(n);
                 return Option::Some(left);
             }
         }

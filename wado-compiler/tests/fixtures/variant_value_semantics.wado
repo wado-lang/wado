@@ -1,0 +1,40 @@
+// Test value semantics for custom variants
+
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+fn run() with Stdout {
+    // Create a variant
+    let c1 = Shape::Circle(5.0);
+
+    // Copy the variant (value semantics)
+    let c2 = c1;
+
+    // Both should have the same value
+    if let Circle(r) = c1 {
+        println(`c1 radius: {r}`);
+    }
+
+    if let Circle(r) = c2 {
+        println(`c2 radius: {r}`);
+    }
+
+    // Test with Point (no payload)
+    let p1 = Shape::Point;
+    let p2 = p1;
+
+    if let Point = p1 {
+        println("p1 is Point");
+    }
+
+    if let Point = p2 {
+        println("p2 is Point");
+    }
+}
+
+__DATA__
+{"stdout": "c1 radius: 5.0\nc2 radius: 5.0\np1 is Point\np2 is Point\n"}

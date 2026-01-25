@@ -2101,6 +2101,7 @@ impl<'a> Resolver<'a> {
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index: index,
+                    type_id: scrutinee_type,
                 }
             }
             Pattern::Literal(lit) => {
@@ -2143,24 +2144,56 @@ impl<'a> Resolver<'a> {
                 bindings,
                 span,
             } => {
-                // For Option patterns: Some(x) or None
-                let inner_type = if let ResolvedType::Option(inner) =
-                    self.type_table.borrow().get(scrutinee_type).clone()
-                {
-                    inner
-                } else {
-                    self.errors.push(TypeError::TypeMismatch {
-                        expected: "Option type".to_string(),
-                        found: format!("{:?}", self.type_table.borrow().get(scrutinee_type)),
-                        span: *span,
-                    });
-                    TypeTable::UNKNOWN
+                let resolved_type = self.type_table.borrow().get(scrutinee_type).clone();
+
+                // Determine field types for the variant case
+                let field_types: Vec<TypeId> = match &resolved_type {
+                    // Option<T>: Some has inner type T, None has no fields
+                    ResolvedType::Option(inner) => {
+                        if variant_name == "Some" {
+                            vec![*inner]
+                        } else {
+                            vec![]
+                        }
+                    }
+                    // Non-generic variant
+                    ResolvedType::Variant { name, .. } => {
+                        self.get_variant_case_field_types(name, variant_name, &[], *span)
+                    }
+                    // Generic variant instantiation
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
+                        // Check if this is a variant (not a struct)
+                        if self.variant_cases.contains_key(name) {
+                            self.get_variant_case_field_types(name, variant_name, type_args, *span)
+                        } else {
+                            self.errors.push(TypeError::TypeMismatch {
+                                expected: "variant type".to_string(),
+                                found: name.clone(),
+                                span: *span,
+                            });
+                            vec![]
+                        }
+                    }
+                    _ => {
+                        self.errors.push(TypeError::TypeMismatch {
+                            expected: "variant type (Option or custom variant)".to_string(),
+                            found: format!("{resolved_type:?}"),
+                            span: *span,
+                        });
+                        vec![]
+                    }
                 };
 
-                // Resolve inner bindings with the inner type
+                // Resolve bindings with field types
                 let resolved_bindings: Vec<TirPattern> = bindings
                     .iter()
-                    .map(|p| self.resolve_if_pattern(p, inner_type, ctx))
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let field_type = field_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                        self.resolve_if_pattern(p, field_type, ctx)
+                    })
                     .collect();
 
                 TirPattern::Variant {
@@ -2170,6 +2203,47 @@ impl<'a> Resolver<'a> {
                 }
             }
         }
+    }
+
+    /// Get field types for a variant case, substituting type parameters if needed
+    fn get_variant_case_field_types(
+        &mut self,
+        variant_name: &str,
+        case_name: &str,
+        type_args: &[TypeId],
+        span: Span,
+    ) -> Vec<TypeId> {
+        // Clone field_types first to avoid borrow conflict with substitute_type_params
+        let field_types_opt = self.variant_cases.get(variant_name).and_then(|info| {
+            info.cases
+                .iter()
+                .find(|case| case.name == case_name)
+                .map(|case| case.field_types.clone())
+        });
+
+        if let Some(field_types) = field_types_opt {
+            // Substitute type parameters with concrete types
+            return field_types
+                .iter()
+                .map(|&ty| self.substitute_type_params(ty, type_args))
+                .collect();
+        }
+
+        // Check if variant exists but case not found
+        if self.variant_cases.contains_key(variant_name) {
+            self.errors.push(TypeError::TypeMismatch {
+                expected: format!("valid case of variant {variant_name}"),
+                found: case_name.to_string(),
+                span,
+            });
+        } else {
+            self.errors.push(TypeError::TypeMismatch {
+                expected: "known variant type".to_string(),
+                found: variant_name.to_string(),
+                span,
+            });
+        }
+        vec![]
     }
 
     /// Resolve a while statement
@@ -2527,6 +2601,7 @@ impl<'a> Resolver<'a> {
             bindings: vec![TirPattern::Binding {
                 name: for_of_stmt.binding.clone(),
                 local_index: binding_local,
+                type_id: item_type,
             }],
         };
 
@@ -6444,6 +6519,7 @@ impl<'a> Resolver<'a> {
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index: index,
+                    type_id: TypeTable::UNKNOWN,
                 }
             }
             Pattern::Literal(lit) => {

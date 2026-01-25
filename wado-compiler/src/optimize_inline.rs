@@ -2011,9 +2011,14 @@ fn remap_pattern(
 ) -> TirPattern {
     match pattern {
         TirPattern::Wildcard => TirPattern::Wildcard,
-        TirPattern::Binding { name, local_index } => TirPattern::Binding {
+        TirPattern::Binding {
+            name,
+            local_index,
+            type_id,
+        } => TirPattern::Binding {
             name: name.clone(),
             local_index: remap_local_index(*local_index, param_to_local, local_offset, param_count),
+            type_id: *type_id,
         },
         TirPattern::Literal(lit) => TirPattern::Literal(lit.clone()),
         TirPattern::Tuple(patterns) => TirPattern::Tuple(
