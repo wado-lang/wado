@@ -3915,10 +3915,9 @@ impl Codegen {
             .get_struct_copy_local(type_idx)
             .unwrap_or_else(|| {
                 panic!(
-                    "BUG: struct copy local for type_idx {} not pre-allocated. \
+                    "BUG: struct copy local for type_idx {type_idx} not pre-allocated. \
                      This indicates a missing case in preallocate_value_copy_locals or \
-                     CopyContext::expand_copy_types.",
-                    type_idx
+                     CopyContext::expand_copy_types."
                 )
             });
 
@@ -3955,10 +3954,9 @@ impl Codegen {
             .get_array_copy_locals(array_type_idx)
             .unwrap_or_else(|| {
                 panic!(
-                    "BUG: array copy locals for type_idx {} not pre-allocated. \
+                    "BUG: array copy locals for type_idx {array_type_idx} not pre-allocated. \
                      This indicates a missing case in preallocate_value_copy_locals or \
-                     CopyContext::expand_copy_types.",
-                    array_type_idx
+                     CopyContext::expand_copy_types."
                 )
             });
         let (source_local, dest_local, counter_local, len_local) =
@@ -4107,8 +4105,7 @@ impl Codegen {
         let inner_idx = inner_type_idx.unwrap_or_else(|| {
             panic!(
                 "BUG: Option copy called for non-reference inner type. \
-                 inner_type_id = {:?}",
-                inner_type_id
+                 inner_type_id = {inner_type_id:?}"
             )
         });
         let source_local = ctx
@@ -4116,10 +4113,9 @@ impl Codegen {
             .get_option_copy_local(inner_idx)
             .unwrap_or_else(|| {
                 panic!(
-                    "BUG: option copy local for inner_type_idx {} not pre-allocated. \
+                    "BUG: option copy local for inner_type_idx {inner_idx} not pre-allocated. \
                      This indicates a missing case in preallocate_value_copy_locals or \
-                     CopyContext::expand_copy_types.",
-                    inner_idx
+                     CopyContext::expand_copy_types."
                 )
             });
 

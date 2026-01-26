@@ -43,6 +43,7 @@ pub struct ArrayCopyLocals {
 /// scratch locals needed for copying struct, tuple, variant, array,
 /// and option types.
 #[derive(Debug, Default)]
+#[allow(clippy::struct_field_names)]
 pub struct CopyContext {
     /// Map from Wasm struct type index to its copy source local index.
     /// Used for struct, tuple, and variant types.
