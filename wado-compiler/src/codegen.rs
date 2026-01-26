@@ -130,6 +130,10 @@ pub struct Codegen {
     /// Key: variant name (e.g., "Shape")
     /// Value: `VariantTypeInfo` with struct type index and case metadata
     variant_types: RefCell<HashMap<String, VariantTypeInfo>>,
+    /// Pre-allocated type indices for user types during rec group construction.
+    /// This allows `type_id_to_valtype` to resolve forward references within a rec group.
+    /// Cleared after the rec group is defined.
+    pending_type_indices: RefCell<HashMap<String, u32>>,
 }
 
 /// Information about a custom variant type's Wasm GC representation
@@ -422,6 +426,13 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
     }
 }
 
+/// A type declaration that can be either a struct or a variant.
+/// Used for unified topological sorting of type declarations.
+enum TypeDecl<'a> {
+    Struct(&'a crate::tir::TirStruct),
+    Variant(&'a crate::tir::TirVariantDecl),
+}
+
 impl Codegen {
     /// Create a new code generator with registries built from stdlib
     pub fn new() -> Self {
@@ -445,6 +456,7 @@ impl Codegen {
             pending_closures: RefCell::new(Vec::new()),
             closure_codegen_counter: RefCell::new(0),
             variant_types: RefCell::new(HashMap::new()),
+            pending_type_indices: RefCell::new(HashMap::new()),
         }
     }
 
@@ -558,9 +570,12 @@ impl Codegen {
 
     /// Extract struct names that a type depends on (for field types)
     /// Returns mangled names for `GenericInstance` types (e.g., "`BTreeNode`<String,i32>")
-    fn get_struct_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
+    /// Get type dependencies (struct and variant names) for a given type.
+    /// Used for topological sorting of type declarations.
+    fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => vec![name.clone()],
+            ResolvedType::Variant { name, .. } => vec![name.clone()],
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -569,7 +584,7 @@ impl Codegen {
                 let mangled_name = Self::mangle_generic_instance_name(name, type_args, type_table);
                 let mut deps = vec![mangled_name];
                 for arg in type_args {
-                    deps.extend(Self::get_struct_dependencies(type_table, *arg));
+                    deps.extend(Self::get_type_dependencies(type_table, *arg));
                 }
                 deps
             }
@@ -579,15 +594,15 @@ impl Codegen {
             | ResolvedType::MutRef(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
-            | ResolvedType::Reactive(inner) => Self::get_struct_dependencies(type_table, *inner),
+            | ResolvedType::Reactive(inner) => Self::get_type_dependencies(type_table, *inner),
             ResolvedType::Result { ok, err } => {
-                let mut deps = Self::get_struct_dependencies(type_table, *ok);
-                deps.extend(Self::get_struct_dependencies(type_table, *err));
+                let mut deps = Self::get_type_dependencies(type_table, *ok);
+                deps.extend(Self::get_type_dependencies(type_table, *err));
                 deps
             }
             ResolvedType::Tuple(elems) => elems
                 .iter()
-                .flat_map(|e| Self::get_struct_dependencies(type_table, *e))
+                .flat_map(|e| Self::get_type_dependencies(type_table, *e))
                 .collect(),
             _ => vec![],
         }
@@ -685,49 +700,72 @@ impl Codegen {
         }
     }
 
-    /// Sort structs topologically so dependencies are registered before dependents
-    fn sort_structs_topologically<'a>(
+    /// Sort structs and variants together topologically so dependencies are registered before dependents.
+    /// This handles mutual dependencies between structs and variants (e.g., struct with variant field,
+    /// variant with struct payload).
+    fn sort_types_topologically<'a>(
         structs: &'a [crate::tir::TirStruct],
+        variants: &'a [crate::tir::TirVariantDecl],
         type_table: &TypeTable,
-    ) -> Vec<&'a crate::tir::TirStruct> {
-        // Build dependency graph: deps[A] = [B] means A depends on B (B must come before A)
+    ) -> Vec<TypeDecl<'a>> {
+        // Collect all type names
         let struct_names: HashSet<String> = structs.iter().map(|s| s.name.clone()).collect();
+        let variant_names: HashSet<String> = variants.iter().map(|v| v.name.clone()).collect();
+        let all_names: HashSet<String> = struct_names.union(&variant_names).cloned().collect();
+
+        // Build dependency graph: deps[A] = [B] means A depends on B (B must come before A)
         let mut deps: HashMap<String, Vec<String>> = HashMap::new();
 
+        // Add struct dependencies
         for s in structs {
-            let mut struct_deps = Vec::new();
+            let mut type_deps = Vec::new();
             for field in &s.fields {
-                let field_deps = Self::get_struct_dependencies(type_table, field.type_id);
+                let field_deps = Self::get_type_dependencies(type_table, field.type_id);
                 for dep in field_deps {
-                    // Only count dependencies on structs in our set
-                    if struct_names.contains(&dep) && dep != s.name {
-                        struct_deps.push(dep);
+                    // Only count dependencies on types in our set
+                    if all_names.contains(&dep) && dep != s.name {
+                        type_deps.push(dep);
                     }
                 }
             }
-            deps.insert(s.name.clone(), struct_deps);
+            deps.insert(s.name.clone(), type_deps);
+        }
+
+        // Add variant dependencies (from payload types)
+        for v in variants {
+            let mut type_deps = Vec::new();
+            for case in &v.cases {
+                for field_type_id in &case.fields {
+                    let field_deps = Self::get_type_dependencies(type_table, *field_type_id);
+                    for dep in field_deps {
+                        if all_names.contains(&dep) && dep != v.name {
+                            type_deps.push(dep);
+                        }
+                    }
+                }
+            }
+            deps.insert(v.name.clone(), type_deps);
         }
 
         // Topological sort using Kahn's algorithm
-        // in_degree[A] = number of dependencies A has (structs that A needs)
         let mut in_degree: HashMap<String, usize> = HashMap::new();
-        for s in structs {
-            let struct_deps = deps.get(&s.name).map(std::vec::Vec::len).unwrap_or(0);
-            in_degree.insert(s.name.clone(), struct_deps);
+        for name in &all_names {
+            let type_deps = deps.get(name).map(std::vec::Vec::len).unwrap_or(0);
+            in_degree.insert(name.clone(), type_deps);
         }
 
-        // Build reverse mapping: dependents[B] = list of structs that depend on B
+        // Build reverse mapping: dependents[B] = list of types that depend on B
         let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
-        for (s_name, struct_deps) in &deps {
-            for dep in struct_deps {
+        for (name, type_deps) in &deps {
+            for dep in type_deps {
                 dependents
                     .entry(dep.clone())
                     .or_default()
-                    .push(s_name.clone());
+                    .push(name.clone());
             }
         }
 
-        // Start with structs that have no dependencies
+        // Start with types that have no dependencies
         let mut queue: Vec<String> = in_degree
             .iter()
             .filter(|&(_, deg)| *deg == 0)
@@ -737,7 +775,6 @@ impl Codegen {
         let mut sorted_names = Vec::new();
         while let Some(name) = queue.pop() {
             sorted_names.push(name.clone());
-            // For each struct that depends on 'name', decrement its in_degree
             if let Some(deps_on_name) = dependents.get(&name) {
                 for dependent in deps_on_name {
                     let deg = in_degree.get_mut(dependent).unwrap();
@@ -749,12 +786,23 @@ impl Codegen {
             }
         }
 
-        // Map names back to structs
+        // Map names back to TypeDecl
         let name_to_struct: HashMap<&str, &crate::tir::TirStruct> =
             structs.iter().map(|s| (s.name.as_str(), s)).collect();
+        let name_to_variant: HashMap<&str, &crate::tir::TirVariantDecl> =
+            variants.iter().map(|v| (v.name.as_str(), v)).collect();
+
         sorted_names
             .iter()
-            .filter_map(|name| name_to_struct.get(name.as_str()).copied())
+            .filter_map(|name| {
+                if let Some(s) = name_to_struct.get(name.as_str()) {
+                    Some(TypeDecl::Struct(s))
+                } else {
+                    name_to_variant
+                        .get(name.as_str())
+                        .map(|v| TypeDecl::Variant(v))
+                }
+            })
             .collect()
     }
 
@@ -1078,9 +1126,11 @@ impl Codegen {
             }
         }
 
-        // PHASE 2: Register NON-MONOMORPHIZED main module structs
-        // Skip generic struct templates and monomorphized structs
-        // Sort structs topologically to ensure dependencies are registered before dependents
+        // PHASE 2: Register NON-MONOMORPHIZED main module structs AND variants
+        // Skip generic templates and monomorphized types
+        // Sort structs and variants together topologically to handle mutual dependencies
+        // (e.g., struct with variant field, variant with struct payload)
+        // Note: Non-mono structs that depend on mono structs will be deferred to PHASE 4
         let non_mono_structs: Vec<_> = entry_tir
             .structs
             .iter()
@@ -1091,10 +1141,49 @@ impl Codegen {
             })
             .cloned()
             .collect();
-        let sorted_non_mono = Self::sort_structs_topologically(&non_mono_structs, type_table);
-        for tir_struct in sorted_non_mono {
-            let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
-            self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
+        let non_mono_variants: Vec<_> = entry_tir
+            .variants
+            .iter()
+            .filter(|v| v.type_params.is_empty())
+            .cloned()
+            .collect();
+        let sorted_types =
+            Self::sort_types_topologically(&non_mono_structs, &non_mono_variants, type_table);
+        // Track which non-mono structs depend on mono structs (to be deferred to PHASE 4)
+        let mono_struct_names: HashSet<String> = entry_tir
+            .structs
+            .iter()
+            .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_some())
+            .map(|s| s.name.clone())
+            .collect();
+        let mut deferred_non_mono_structs: Vec<crate::tir::TirStruct> = Vec::new();
+        for type_decl in sorted_types {
+            match type_decl {
+                TypeDecl::Struct(tir_struct) => {
+                    // Check if this struct depends on any mono structs
+                    let deps = tir_struct
+                        .fields
+                        .iter()
+                        .flat_map(|f| Self::get_type_dependencies(type_table, f.type_id))
+                        .collect::<HashSet<_>>();
+                    if deps.iter().any(|d| mono_struct_names.contains(d)) {
+                        // Defer to PHASE 4
+                        deferred_non_mono_structs.push(tir_struct.clone());
+                    } else {
+                        let struct_name =
+                            StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
+                        self.register_struct_type(
+                            struct_name,
+                            tir_struct,
+                            type_table,
+                            &mut builder,
+                        );
+                    }
+                }
+                TypeDecl::Variant(tir_variant) => {
+                    self.register_variant_type(tir_variant, type_table, &mut builder);
+                }
+            }
         }
 
         // Register struct type aliases (e.g., `Point as OtherPoint`)
@@ -1178,10 +1267,13 @@ impl Codegen {
 
             // Sort topologically to ensure dependencies come before dependents
             let lib_type_table = tir_mod.type_table.borrow();
-            let sorted_lib_structs =
-                Self::sort_structs_topologically(&mono_lib_structs, &lib_type_table);
+            let sorted_lib_types =
+                Self::sort_types_topologically(&mono_lib_structs, &[], &lib_type_table);
 
-            for tir_struct in sorted_lib_structs {
+            for type_decl in sorted_lib_types {
+                let TypeDecl::Struct(tir_struct) = type_decl else {
+                    continue;
+                };
                 let struct_name =
                     StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
                 // Check for self-referential structs using full struct name
@@ -1224,7 +1316,8 @@ impl Codegen {
             );
         }
 
-        // PHASE 4: Register MONOMORPHIZED main module structs
+        // PHASE 4: Register MONOMORPHIZED main module structs AND deferred non-mono structs
+        // Deferred non-mono structs are those that depend on mono structs (e.g., Container with Box<i32>)
         // Note: Array<T> is now treated like any other generic struct.
         let mono_structs: Vec<_> = entry_tir
             .structs
@@ -1232,14 +1325,19 @@ impl Codegen {
             .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_some())
             .cloned()
             .collect();
-        let sorted_mono = Self::sort_structs_topologically(&mono_structs, type_table);
-        for tir_struct in sorted_mono {
+        // Combine mono structs with deferred non-mono structs
+        let all_phase4_structs: Vec<_> = mono_structs
+            .iter()
+            .chain(deferred_non_mono_structs.iter())
+            .cloned()
+            .collect();
+        let sorted_phase4 = Self::sort_types_topologically(&all_phase4_structs, &[], type_table);
+        for type_decl in sorted_phase4 {
+            let TypeDecl::Struct(tir_struct) = type_decl else {
+                continue;
+            };
             let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
-            // For monomorphized structs, use the FULL mangled name (e.g., "AANode<String,i32>")
-            // to detect true self-references, not just base name matches.
-            // This prevents Box<Box<i32>> from being incorrectly detected as self-referential
-            // when it contains Box<i32> (a different instantiation).
             let self_ref_fields =
                 Self::get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
             if self_ref_fields.is_empty() {
@@ -1256,8 +1354,8 @@ impl Codegen {
             }
         }
 
-        // PHASE 4.5: Register variant types (tagged unions)
-        // Register variants from imported modules first
+        // PHASE 4.5: Register variant types (tagged unions) from imported modules
+        // Note: Main module non-generic variants are already registered in PHASE 2
         for (module_source, tir_mod) in all_tir_modules {
             if module_source == entry_module_source {
                 continue;
@@ -1274,16 +1372,7 @@ impl Codegen {
             }
         }
 
-        // Register variants from main module
-        for variant in &entry_tir.variants {
-            // Skip generic variants - they will be registered when monomorphized
-            if !variant.type_params.is_empty() {
-                continue;
-            }
-            self.register_variant_type(variant, type_table, &mut builder);
-        }
-
-        // PHASE 4.5: Register monomorphized generic variants from type tables
+        // PHASE 4.5b: Register monomorphized generic variants from type tables
         // Scan for GenericInstance types that refer to variants and register them
         self.register_monomorphized_variants_from_table(entry_tir, type_table, &mut builder);
         for (module_source, tir_mod) in all_tir_modules {
@@ -5417,6 +5506,13 @@ impl Codegen {
                 module_source,
                 ..
             } => {
+                // Check pending_type_indices first (for rec group construction)
+                if let Some(&type_idx) = self.pending_type_indices.borrow().get(name) {
+                    return ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(type_idx),
+                    });
+                }
                 // Special case: String struct - always use the canonical module source
                 let lookup_source = if name == "String" {
                     string_module_source()
@@ -5581,6 +5677,13 @@ impl Codegen {
                 panic!("Result type codegen not yet implemented")
             }
             ResolvedType::Variant { name, .. } => {
+                // Check pending_type_indices first (for rec group construction)
+                if let Some(&type_idx) = self.pending_type_indices.borrow().get(name) {
+                    return ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(type_idx),
+                    });
+                }
                 // Custom variant types are represented as GC struct references
                 let variant_types = self.variant_types.borrow();
                 if let Some(info) = variant_types.get(name) {
@@ -5606,6 +5709,13 @@ impl Codegen {
             // Look up the monomorphized struct or variant type
             ResolvedType::GenericInstance { .. } => {
                 let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                // Check pending_type_indices first (for rec group construction)
+                if let Some(&type_idx) = self.pending_type_indices.borrow().get(&mangled_name) {
+                    return ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(type_idx),
+                    });
+                }
                 if let Some(struct_info) =
                     self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
                 {

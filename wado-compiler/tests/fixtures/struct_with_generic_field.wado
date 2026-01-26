@@ -1,0 +1,24 @@
+// Test: struct with generic type field
+// Related to issue #149 - checking if generic types have similar registration issues
+
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+struct Container {
+    box_int: Box<i32>,
+}
+
+fn create() -> Container {
+    return Container { box_int: Box { value: 42 } };
+}
+
+fn run() with Stdout {
+    let c = create();
+    println(`box value: {c.box_int.value}`);
+}
+
+__DATA__
+{"stdout": "box value: 42\n"}
