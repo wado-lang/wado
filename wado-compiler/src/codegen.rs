@@ -137,17 +137,28 @@ pub struct Codegen {
     pending_type_indices: RefCell<HashMap<String, u32>>,
 }
 
+/// Information about a single variant case's Wasm GC representation
+#[derive(Clone, Debug)]
+struct VariantCaseInfo {
+    /// The case name (e.g., "Number", "Str")
+    name: String,
+    /// The GC struct type index for this specific case (subtype of base)
+    type_idx: u32,
+    /// Field types for this case's payload (after the tag)
+    field_types: Vec<ValType>,
+}
+
 /// Information about a custom variant type's Wasm GC representation
+///
+/// Uses subtype-based representation where:
+/// - Base type has only the discriminator (tag) field
+/// - Each case is a subtype with case-specific payload fields
 #[derive(Clone, Debug)]
 struct VariantTypeInfo {
-    /// The GC struct type index for this variant
-    struct_type_idx: u32,
-    /// Information about each case: (`case_name`, `field_count`)
-    #[allow(dead_code)]
-    cases: Vec<(String, usize)>,
-    /// Field types for the payload fields (after the tag)
-    /// Index 0 corresponds to field index 1 in the struct (field 0 is the tag)
-    field_types: Vec<ValType>,
+    /// The GC struct type index for the base variant type (discriminator only)
+    base_type_idx: u32,
+    /// Information about each case (indexed by `case_index`)
+    cases: Vec<VariantCaseInfo>,
 }
 
 /// Information about a closure to be generated
@@ -3290,14 +3301,17 @@ impl Codegen {
         *indices.last().unwrap()
     }
 
-    /// Register a custom variant type as a Wasm GC struct.
+    /// Register a custom variant type as a Wasm GC struct hierarchy.
     ///
-    /// Variant representation: (tag: i32, field0, field1, ...)
-    /// - Tag field identifies the case (0-based index)
-    /// - Payload fields are the union of all case fields
+    /// Uses subtype-based representation:
+    /// - Base type: (tag: i32) - contains only the discriminator
+    /// - Case types: subtypes of base with case-specific payload fields
     ///
-    /// For variants with heterogeneous field types, we use the largest field count
-    /// and store all fields. Unused fields for smaller cases are zeroed.
+    /// Example for `variant JsonValue { Null, Number(f64), Str(String) }`:
+    /// - Base: `$JsonValue (struct (field i32))`
+    /// - `$JsonValue::Null (sub $JsonValue (struct (field i32)))`
+    /// - `$JsonValue::Number (sub $JsonValue (struct (field i32) (field f64)))`
+    /// - `$JsonValue::Str (sub $JsonValue (struct (field i32) (field (ref $String))))`
     fn register_variant_type(
         &mut self,
         variant: &crate::tir::TirVariantDecl,
@@ -3311,101 +3325,64 @@ impl Codegen {
 
         // Already registered?
         if self.variant_types.borrow().contains_key(&variant.name) {
-            return self.variant_types.borrow()[&variant.name].struct_type_idx;
+            return self.variant_types.borrow()[&variant.name].base_type_idx;
         }
 
-        // Collect case metadata
-        let cases: Vec<(String, usize)> = variant
-            .cases
-            .iter()
-            .map(|c| (c.name.clone(), c.fields.len()))
-            .collect();
-
-        // Find the maximum number of fields across all cases
-        let max_fields = variant
-            .cases
-            .iter()
-            .map(|c| c.fields.len())
-            .max()
-            .unwrap_or(0);
-
-        // Build the struct fields: tag (i32) + max_fields payload fields
-        let mut fields = Vec::with_capacity(1 + max_fields);
-
-        // Field 0: tag (discriminant)
-        fields.push(FieldType {
+        // Define the base type with just the tag field
+        let base_fields = vec![FieldType {
             element_type: StorageType::Val(ValType::I32),
             mutable: false, // Tag is immutable once set
-        });
+        }];
+        let base_type_idx = builder.define_gc_struct_type(&variant.name, &base_fields);
 
-        // Collect all field types from all cases to determine the payload types
-        // For now, use a simple approach: if all fields at position i have the same type,
-        // use that type; otherwise use eqref (GC supertype for all ref types)
-        let mut payload_field_types: Vec<ValType> = Vec::with_capacity(max_fields);
+        // Define each case as a subtype
+        let mut case_infos = Vec::with_capacity(variant.cases.len());
 
-        for field_idx in 0..max_fields {
-            let mut field_types_at_idx: Vec<ValType> = Vec::new();
+        for case in &variant.cases {
+            // Build fields for this case: tag + payload fields
+            let mut case_fields = vec![FieldType {
+                element_type: StorageType::Val(ValType::I32),
+                mutable: false,
+            }];
 
-            for case in &variant.cases {
-                if field_idx < case.fields.len() {
-                    let wasm_type = self.type_id_to_valtype(type_table, case.fields[field_idx]);
-                    field_types_at_idx.push(wasm_type);
-                }
+            let mut payload_types = Vec::with_capacity(case.fields.len());
+            for field_type_id in &case.fields {
+                let wasm_type = self.type_id_to_valtype(type_table, *field_type_id);
+                payload_types.push(wasm_type);
+                case_fields.push(FieldType {
+                    element_type: StorageType::Val(wasm_type),
+                    mutable: true,
+                });
             }
 
-            // Determine the storage type for this field position
-            let (storage_type, field_type) = if field_types_at_idx.is_empty() {
-                // No fields at this index (shouldn't happen if max_fields > 0)
-                (StorageType::Val(ValType::I32), ValType::I32)
-            } else if field_types_at_idx
-                .iter()
-                .all(|t| *t == field_types_at_idx[0])
-            {
-                // All cases have the same type at this position
-                (
-                    StorageType::Val(field_types_at_idx[0]),
-                    field_types_at_idx[0],
-                )
-            } else {
-                // Heterogeneous types - use eqref as a common supertype
-                // This allows any ref type to be stored
-                let eqref = ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: HeapType::Abstract {
-                        shared: false,
-                        ty: AbstractHeapType::Eq,
-                    },
-                });
-                (StorageType::Val(eqref), eqref)
-            };
+            // Define the case subtype
+            let case_type_name = format!("{}::{}", variant.name, case.name);
+            let case_type_idx =
+                builder.define_gc_struct_subtype(&case_type_name, base_type_idx, &case_fields);
 
-            payload_field_types.push(field_type);
-            fields.push(FieldType {
-                element_type: storage_type,
-                mutable: true,
+            case_infos.push(VariantCaseInfo {
+                name: case.name.clone(),
+                type_idx: case_type_idx,
+                field_types: payload_types,
             });
         }
-
-        // Define the GC struct type
-        let type_idx = builder.define_gc_struct_type(&variant.name, &fields);
 
         // Store in registry
         self.variant_types.borrow_mut().insert(
             variant.name.clone(),
             VariantTypeInfo {
-                struct_type_idx: type_idx,
-                cases,
-                field_types: payload_field_types,
+                base_type_idx,
+                cases: case_infos,
             },
         );
 
-        type_idx
+        base_type_idx
     }
 
     /// Register monomorphized generic variants from the type table.
     ///
     /// Scans for `GenericInstance` types that refer to variants (like `Result<i32, String>`)
-    /// and registers them as concrete variant types.
+    /// and registers them as concrete variant types using subtype hierarchy.
     fn register_monomorphized_variants_from_table(
         &mut self,
         tir_module: &TirModule,
@@ -3464,92 +3441,61 @@ impl Codegen {
                 continue;
             }
 
-            // Find the maximum number of fields across all cases
-            let max_fields = base_variant
-                .cases
-                .iter()
-                .map(|c| c.fields.len())
-                .max()
-                .unwrap_or(0);
-
-            // Collect case metadata
-            let cases: Vec<(String, usize)> = base_variant
-                .cases
-                .iter()
-                .map(|c| (c.name.clone(), c.fields.len()))
-                .collect();
-
-            // Build the struct fields: tag (i32) + max_fields payload fields
-            let mut fields = Vec::with_capacity(1 + max_fields);
-
-            // Field 0: tag (discriminant)
-            fields.push(FieldType {
+            // Define the base type with just the tag field
+            let base_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
-            });
+            }];
+            let base_type_idx = builder.define_gc_struct_type(&mangled_name, &base_fields);
 
-            // Build payload fields with substituted types
-            let mut payload_field_types: Vec<ValType> = Vec::with_capacity(max_fields);
+            // Define each case as a subtype
+            let mut case_infos = Vec::with_capacity(base_variant.cases.len());
 
-            for field_idx in 0..max_fields {
-                let mut field_types_at_idx: Vec<ValType> = Vec::new();
+            for case in &base_variant.cases {
+                // Build fields for this case: tag + payload fields
+                let mut case_fields = vec![FieldType {
+                    element_type: StorageType::Val(ValType::I32),
+                    mutable: false,
+                }];
 
-                for case in &base_variant.cases {
-                    if field_idx < case.fields.len() {
-                        // Substitute type parameters in field type
-                        let field_type_id = case.fields[field_idx];
-                        let concrete_type_id =
-                            self.substitute_type_params(field_type_id, &type_subst, type_table);
-                        let wasm_type = self.type_id_to_valtype(type_table, concrete_type_id);
-                        field_types_at_idx.push(wasm_type);
-                    }
+                let mut payload_types = Vec::with_capacity(case.fields.len());
+                for &field_type_id in &case.fields {
+                    // Substitute type parameters
+                    let concrete_type_id =
+                        self.substitute_type_params(field_type_id, &type_subst, type_table);
+                    let wasm_type = self.type_id_to_valtype(type_table, concrete_type_id);
+                    payload_types.push(wasm_type);
+                    case_fields.push(FieldType {
+                        element_type: StorageType::Val(wasm_type),
+                        mutable: true,
+                    });
                 }
 
-                let (storage_type, field_type) = if field_types_at_idx.is_empty() {
-                    (StorageType::Val(ValType::I32), ValType::I32)
-                } else if field_types_at_idx
-                    .iter()
-                    .all(|t| *t == field_types_at_idx[0])
-                {
-                    (
-                        StorageType::Val(field_types_at_idx[0]),
-                        field_types_at_idx[0],
-                    )
-                } else {
-                    let eqref = ValType::Ref(RefType {
-                        nullable: true,
-                        heap_type: HeapType::Abstract {
-                            shared: false,
-                            ty: AbstractHeapType::Eq,
-                        },
-                    });
-                    (StorageType::Val(eqref), eqref)
-                };
+                // Define the case subtype
+                let case_type_name = format!("{}::{}", mangled_name, case.name);
+                let case_type_idx =
+                    builder.define_gc_struct_subtype(&case_type_name, base_type_idx, &case_fields);
 
-                payload_field_types.push(field_type);
-                fields.push(FieldType {
-                    element_type: storage_type,
-                    mutable: true,
+                case_infos.push(VariantCaseInfo {
+                    name: case.name.clone(),
+                    type_idx: case_type_idx,
+                    field_types: payload_types,
                 });
             }
-
-            // Define the GC struct type
-            let type_idx = builder.define_gc_struct_type(&mangled_name, &fields);
 
             // Store in registry
             self.variant_types.borrow_mut().insert(
                 mangled_name,
                 VariantTypeInfo {
-                    struct_type_idx: type_idx,
-                    cases,
-                    field_types: payload_field_types,
+                    base_type_idx,
+                    cases: case_infos,
                 },
             );
         }
     }
 
     /// Register Result types from the type table.
-    /// Result<T, E> is represented as a variant with Ok(T) and Err(E) cases.
+    /// Result<T, E> is represented as a variant with Ok(T) and Err(E) cases using subtype hierarchy.
     fn register_result_types_from_table(
         &mut self,
         type_table: &TypeTable,
@@ -3568,38 +3514,64 @@ impl Codegen {
             }
         }
 
-        // Register each Result type as a variant
+        // Register each Result type as a variant with subtype hierarchy
         for (type_id, ok_type_id, err_type_id) in result_types {
             let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
 
-            // Result is represented as struct { tag: i32, payload: <max_type> }
-            // For simplicity, we use i32 for both Ok and Err payloads since most
-            // WASI Result types have i32-sized payloads (resource handles, enums)
-            let fields = vec![
-                FieldType {
-                    element_type: StorageType::Val(ValType::I32), // discriminant
-                    mutable: false,
-                },
-                FieldType {
-                    element_type: StorageType::Val(ValType::I32), // payload (i32 for resource/enum)
-                    mutable: true,
-                },
-            ];
-
-            // Define the GC struct type
-            let type_idx = builder.define_gc_struct_type(&mangled_name, &fields);
+            // Define the base type with just the tag field
+            let base_fields = vec![FieldType {
+                element_type: StorageType::Val(ValType::I32),
+                mutable: false,
+            }];
+            let base_type_idx = builder.define_gc_struct_type(&mangled_name, &base_fields);
 
             // Determine the payload types
             let ok_type = self.type_id_to_valtype(type_table, ok_type_id);
             let err_type = self.type_id_to_valtype(type_table, err_type_id);
 
+            // Define Ok case subtype
+            let ok_case_name = format!("{mangled_name}::Ok");
+            let mut ok_fields = vec![FieldType {
+                element_type: StorageType::Val(ValType::I32),
+                mutable: false,
+            }];
+            ok_fields.push(FieldType {
+                element_type: StorageType::Val(ok_type),
+                mutable: true,
+            });
+            let ok_type_idx =
+                builder.define_gc_struct_subtype(&ok_case_name, base_type_idx, &ok_fields);
+
+            // Define Err case subtype
+            let err_case_name = format!("{mangled_name}::Err");
+            let mut err_fields = vec![FieldType {
+                element_type: StorageType::Val(ValType::I32),
+                mutable: false,
+            }];
+            err_fields.push(FieldType {
+                element_type: StorageType::Val(err_type),
+                mutable: true,
+            });
+            let err_type_idx =
+                builder.define_gc_struct_subtype(&err_case_name, base_type_idx, &err_fields);
+
             // Store in registry with Ok and Err cases
             self.variant_types.borrow_mut().insert(
                 mangled_name,
                 VariantTypeInfo {
-                    struct_type_idx: type_idx,
-                    cases: vec![("Ok".to_string(), 0), ("Err".to_string(), 1)],
-                    field_types: vec![ok_type, err_type],
+                    base_type_idx,
+                    cases: vec![
+                        VariantCaseInfo {
+                            name: "Ok".to_string(),
+                            type_idx: ok_type_idx,
+                            field_types: vec![ok_type],
+                        },
+                        VariantCaseInfo {
+                            name: "Err".to_string(),
+                            type_idx: err_type_idx,
+                            field_types: vec![err_type],
+                        },
+                    ],
                 },
             );
         }
@@ -3711,52 +3683,6 @@ impl Codegen {
             }
             other => {
                 panic!("expected struct or tuple type, got: {other:?}");
-            }
-        }
-    }
-
-    /// Get the Wasm GC type index for a variant type (Result, Option, custom variants).
-    /// Handles reference types by looking through to the inner type.
-    fn get_variant_type_idx(&self, type_id: TypeId, type_table: &TypeTable) -> u32 {
-        match type_table.get(type_id) {
-            ResolvedType::Variant { name, .. } => {
-                let variant_types = self.variant_types.borrow();
-                if let Some(info) = variant_types.get(name) {
-                    info.struct_type_idx
-                } else {
-                    panic!("unknown variant type: {name}");
-                }
-            }
-            ResolvedType::Result { .. } => {
-                // Result<T, E> uses mangled name for lookup
-                let variant_types = self.variant_types.borrow();
-                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
-                if let Some(info) = variant_types.get(&mangled_name) {
-                    info.struct_type_idx
-                } else if let Some(info) = variant_types.get("Result") {
-                    // Fallback to base name for non-monomorphized Result
-                    info.struct_type_idx
-                } else {
-                    panic!("unknown Result variant type: {mangled_name}");
-                }
-            }
-            ResolvedType::GenericInstance { name, .. } => {
-                let variant_types = self.variant_types.borrow();
-                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
-                if let Some(info) = variant_types.get(&mangled_name) {
-                    info.struct_type_idx
-                } else if let Some(info) = variant_types.get(name) {
-                    // Fallback to base name for non-monomorphized variants
-                    info.struct_type_idx
-                } else {
-                    panic!("unknown generic variant type: {mangled_name}");
-                }
-            }
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.get_variant_type_idx(*inner, type_table)
-            }
-            other => {
-                panic!("expected variant type, got: {other:?}");
             }
         }
     }
@@ -3880,15 +3806,14 @@ impl Codegen {
                 // If inner doesn't need copying, the option value is already on stack
             }
             ResolvedType::Variant { name, .. } => {
-                // Variant types are represented as struct { tag: i32, field0, field1, ... }
-                // Copy like a struct
+                // Variant types use subtype-based representation.
+                // We need to check the tag and copy based on the specific case type.
                 let variant_types = self.variant_types.borrow();
                 if let Some(info) = variant_types.get(name) {
-                    let struct_type_idx = info.struct_type_idx;
-                    // field_count = 1 (tag) + max payload fields
-                    let field_count = 1 + info.field_types.len();
+                    let base_type_idx = info.base_type_idx;
+                    let cases = info.cases.clone();
                     drop(variant_types);
-                    self.generate_struct_copy(func, struct_type_idx, field_count, ctx);
+                    self.generate_variant_copy(func, base_type_idx, &cases, ctx);
                 } else {
                     panic!("unknown variant type: {name}");
                 }
@@ -3935,6 +3860,126 @@ impl Codegen {
 
         // Create a new struct with all field values
         func.instruction(&Instruction::StructNew(type_idx));
+    }
+
+    /// Generate code to copy a variant value with subtype-based representation.
+    /// Assumes source variant reference is on the stack.
+    /// Leaves the copied variant reference on the stack.
+    ///
+    /// Since each variant case has its own struct type, we need to:
+    /// 1. Read the tag to determine which case it is
+    /// 2. Cast to the appropriate case type
+    /// 3. Copy the fields from that case
+    /// 4. Create a new instance of the same case type
+    fn generate_variant_copy(
+        &self,
+        func: &mut Function,
+        base_type_idx: u32,
+        cases: &[VariantCaseInfo],
+        ctx: &mut FunctionContext,
+    ) {
+        // Use CopyContext to get the pre-allocated local for the base type
+        let source_local = ctx
+            .copy_context
+            .get_struct_copy_local(base_type_idx)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: variant copy local for base_type_idx {base_type_idx} not pre-allocated."
+                )
+            });
+
+        // Store source to temp local
+        func.instruction(&Instruction::LocalSet(source_local));
+
+        // Generate a br_table to dispatch based on tag value
+        // Each case copies its specific fields and creates a new instance
+        //
+        // Block structure:
+        // block $done (result (ref $BaseType))
+        //   block $case_N
+        //     ...
+        //     block $case_1
+        //       block $case_0
+        //         local.get $source
+        //         struct.get $base 0  ;; get discriminator INSIDE blocks
+        //         br_table $case_0 $case_1 ... $case_N $case_0
+        //       end  ;; $case_0
+        //       <copy case 0>
+        //       br $done
+        //     end  ;; $case_1
+        //     <copy case 1>
+        //     br $done
+        //   end  ;; $case_N
+        //   <copy case N>
+        //   br $done (implicit)
+        // end  ;; $done
+
+        // Result type: nullable ref to base type
+        let result_type = ValType::Ref(RefType {
+            nullable: true,
+            heap_type: HeapType::Concrete(base_type_idx),
+        });
+
+        // Start outer block ($done)
+        func.instruction(&Instruction::Block(BlockType::Result(result_type)));
+
+        // Create nested blocks for each case (innermost first in execution order)
+        for _ in 0..cases.len() {
+            func.instruction(&Instruction::Block(BlockType::Empty));
+        }
+
+        // Read tag from source INSIDE all blocks (field 0 is common to all cases)
+        func.instruction(&Instruction::LocalGet(source_local));
+        func.instruction(&Instruction::StructGet {
+            struct_type_index: base_type_idx,
+            field_index: 0,
+        });
+
+        // Generate br_table with case indices
+        let targets: Vec<u32> = (0..cases.len() as u32).collect();
+        func.instruction(&Instruction::BrTable(
+            targets.clone().into(),
+            targets.first().copied().unwrap_or(0), // default to case 0
+        ));
+
+        // Generate code for each case (in order of their blocks)
+        // After ending each case block, we're one level less deep, so br depth decreases
+        // Case 0: after End, depth to $done is cases.len() - 1
+        // Case 1: after End, depth to $done is cases.len() - 2
+        // etc.
+        for (case_idx, case_info) in cases.iter().enumerate() {
+            // End the current case's block
+            func.instruction(&Instruction::End);
+
+            // Copy this case: cast to case type, read all fields, create new struct
+            let case_type_idx = case_info.type_idx;
+            let field_count = 1 + case_info.field_types.len(); // tag + payload fields
+
+            // Read all fields and push onto stack
+            // For each field: get source, cast to case type, read field
+            // This duplicates the cast but avoids needing temp locals
+            for field_index in 0..field_count as u32 {
+                func.instruction(&Instruction::LocalGet(source_local));
+                func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                    case_type_idx,
+                )));
+                func.instruction(&Instruction::StructGet {
+                    struct_type_index: case_type_idx,
+                    field_index,
+                });
+            }
+
+            // Create new struct of this case type
+            func.instruction(&Instruction::StructNew(case_type_idx));
+
+            // Branch to $done block
+            // After case_idx blocks have ended, we need to exit (cases.len() - 1 - case_idx) more
+            let depth_to_done = (cases.len() - 1 - case_idx) as u32;
+            func.instruction(&Instruction::Br(depth_to_done));
+        }
+
+        // End the outer $done block
+        func.instruction(&Instruction::End);
     }
 
     /// Generate code to copy an array value.
@@ -5685,12 +5730,12 @@ impl Codegen {
                         heap_type: HeapType::Concrete(type_idx),
                     });
                 }
-                // Custom variant types are represented as GC struct references
+                // Custom variant types are represented as GC struct references (base type)
                 let variant_types = self.variant_types.borrow();
                 if let Some(info) = variant_types.get(name) {
                     ValType::Ref(RefType {
                         nullable: true,
-                        heap_type: HeapType::Concrete(info.struct_type_idx),
+                        heap_type: HeapType::Concrete(info.base_type_idx),
                     })
                 } else {
                     panic!("Variant type not registered: {name}");
@@ -5725,10 +5770,10 @@ impl Codegen {
                         heap_type: HeapType::Concrete(struct_info.type_idx),
                     })
                 } else if let Some(variant_info) = self.variant_types.borrow().get(&mangled_name) {
-                    // Generic variant (like Result<i32, String>)
+                    // Generic variant (like Result<i32, String>) - use base type
                     ValType::Ref(RefType {
                         nullable: true,
-                        heap_type: HeapType::Concrete(variant_info.struct_type_idx),
+                        heap_type: HeapType::Concrete(variant_info.base_type_idx),
                     })
                 } else {
                     panic!(
@@ -6005,65 +6050,21 @@ impl Codegen {
                     panic!("Variant type not registered: {variant_name}");
                 });
 
-                let struct_type_idx = variant_info.struct_type_idx;
-                let field_types = variant_info.field_types.clone();
-                let max_fields = field_types.len();
+                // Get the case-specific type index
+                let case_info = &variant_info.cases[*case_index as usize];
+                let case_type_idx = case_info.type_idx;
                 drop(variant_types);
 
                 // Push the tag (case index)
                 func.instruction(&Instruction::I32Const(*case_index as i32));
 
-                // Push the field values, boxing primitives if the struct expects eqref
-                for (i, field_expr) in fields.iter().enumerate() {
+                // Push the field values directly (no boxing needed with subtype-based approach)
+                for field_expr in fields {
                     self.generate_expr(func, field_expr, type_table, ctx, builder);
-
-                    // Check if we need to box this value
-                    let expected_field_type = &field_types[i];
-                    let expr_resolved_type = type_table.get(field_expr.type_id);
-                    if let ValType::Ref(ref_type) = expected_field_type
-                        && matches!(
-                            ref_type.heap_type,
-                            HeapType::Abstract {
-                                ty: AbstractHeapType::Eq,
-                                ..
-                            }
-                        )
-                    {
-                        // The struct field is eqref - box primitives
-                        if let ResolvedType::Primitive(prim) = expr_resolved_type {
-                            let val_type = primitive_to_valtype(prim);
-                            if let Some(box_idx) = self.get_box_type_idx(val_type) {
-                                func.instruction(&Instruction::StructNew(box_idx));
-                            }
-                        }
-                    }
                 }
 
-                // Pad with default values if this case has fewer fields than max
-                for pad_idx in fields.len()..max_fields {
-                    let field_type = &field_types[pad_idx];
-                    // Generate default value for this type
-                    match field_type {
-                        ValType::I32 => func.instruction(&Instruction::I32Const(0)),
-                        ValType::I64 => func.instruction(&Instruction::I64Const(0)),
-                        ValType::F32 => func.instruction(&Instruction::F32Const(0.0_f32.into())),
-                        ValType::F64 => func.instruction(&Instruction::F64Const(0.0_f64.into())),
-                        ValType::Ref(_) => {
-                            // For reference types, use ref.null with the appropriate heap type
-                            func.instruction(&Instruction::RefNull(HeapType::Abstract {
-                                shared: false,
-                                ty: AbstractHeapType::None,
-                            }))
-                        }
-                        ValType::V128 => {
-                            // V128 zero constant
-                            func.instruction(&Instruction::V128Const(0))
-                        }
-                    };
-                }
-
-                // Create the struct
-                func.instruction(&Instruction::StructNew(struct_type_idx));
+                // Create the case-specific struct (no padding needed)
+                func.instruction(&Instruction::StructNew(case_type_idx));
             }
 
             TirExprKind::EnumConstruct { case_index, .. } => {
@@ -6977,15 +6978,14 @@ impl Codegen {
                             // Find the case index by method name
                             // The method name is the last part after ::
                             let case_name = func_name.rsplit("::").next().unwrap_or(&func_name);
-                            if let Some((case_idx, _)) = variant_info
+                            if let Some((case_idx, case_info)) = variant_info
                                 .cases
                                 .iter()
                                 .enumerate()
-                                .find(|(_, (name, _))| name == case_name)
+                                .find(|(_, info)| info.name == case_name)
                             {
-                                // Generate variant construction
-                                // Stack already has arguments, need to create struct with tag and fields
-                                let struct_type_idx = variant_info.struct_type_idx;
+                                // Generate variant construction using the case-specific type
+                                let case_type_idx = case_info.type_idx;
 
                                 // Push tag value
                                 func.instruction(&Instruction::I32Const(case_idx as i32));
@@ -7001,7 +7001,7 @@ impl Codegen {
 
                                 // For now, generate the struct with tag first, then set fields
                                 // Create struct with default values
-                                func.instruction(&Instruction::StructNew(struct_type_idx));
+                                func.instruction(&Instruction::StructNew(case_type_idx));
                                 return;
                             }
                         }
@@ -7035,11 +7035,32 @@ impl Codegen {
                         let func_idx = builder.func_idx(&local_name);
                         func.instruction(&Instruction::Call(func_idx));
 
-                        // Handle Result return conversion
+                        // Handle Result return conversion using subtype-based representation
                         if let Some((ok_is_resource, _err_is_enum)) = conv.result_return {
                             let outptr_local = ctx
                                 .get_local("__cm_outptr")
                                 .expect("__cm_outptr should be pre-allocated for Result returns");
+
+                            // Get Result type info for Ok and Err subtypes
+                            let result_type_id = expr.type_id;
+                            let mangled_name =
+                                self.mangle_type_for_struct_name(result_type_id, type_table);
+                            let variant_types = self.variant_types.borrow();
+                            let result_info =
+                                variant_types.get(&mangled_name).unwrap_or_else(|| {
+                                    panic!("Result type not registered: {mangled_name}")
+                                });
+                            // Result has cases [Ok (0), Err (1)]
+                            let ok_type_idx = result_info.cases[0].type_idx;
+                            let err_type_idx = result_info.cases[1].type_idx;
+                            let base_type_idx = result_info.base_type_idx;
+                            drop(variant_types);
+
+                            // Result type for block result
+                            let result_ref_type = ValType::Ref(RefType {
+                                nullable: true,
+                                heap_type: HeapType::Concrete(base_type_idx),
+                            });
 
                             // Read discriminant from outptr
                             func.instruction(&Instruction::LocalGet(outptr_local));
@@ -7049,12 +7070,25 @@ impl Codegen {
                                 memory_index: 0,
                             }));
 
-                            // Get Result type indices
-                            let result_type_id = expr.type_id;
-                            let result_type_idx =
-                                self.get_variant_type_idx(result_type_id, type_table);
+                            // Branch based on discriminant: 0 = Ok, non-zero = Err
+                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                                result_ref_type,
+                            )));
 
-                            // Read payload from outptr+4
+                            // Err case (discriminant != 0)
+                            func.instruction(&Instruction::I32Const(1)); // Err discriminant
+                            func.instruction(&Instruction::LocalGet(outptr_local));
+                            func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                                offset: 4,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                            func.instruction(&Instruction::StructNew(err_type_idx));
+
+                            func.instruction(&Instruction::Else);
+
+                            // Ok case (discriminant == 0)
+                            func.instruction(&Instruction::I32Const(0)); // Ok discriminant
                             func.instruction(&Instruction::LocalGet(outptr_local));
                             if ok_is_resource {
                                 // Resource handle is i32
@@ -7071,9 +7105,9 @@ impl Codegen {
                                     memory_index: 0,
                                 }));
                             }
+                            func.instruction(&Instruction::StructNew(ok_type_idx));
 
-                            // Create Result variant struct with discriminant and payload
-                            func.instruction(&Instruction::StructNew(result_type_idx));
+                            func.instruction(&Instruction::End);
                         }
 
                         return;
@@ -8810,15 +8844,18 @@ impl Codegen {
                 let variant_info = variant_types.get(name).unwrap_or_else(|| {
                     panic!("Variant type not registered: {name}");
                 });
-                let struct_type_idx = variant_info.struct_type_idx;
 
-                // Find the case index for this pattern
-                let case_index = variant_info
+                // Find the case info and case index for this pattern
+                let (case_index, case_info) = variant_info
                     .cases
                     .iter()
-                    .position(|(case, _)| case == case_name)
-                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"))
-                    as i32;
+                    .enumerate()
+                    .find(|(_, info)| info.name == *case_name)
+                    .map(|(i, info)| (i, info.clone()))
+                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
+                let case_type_idx = case_info.type_idx;
+                let base_type_idx = variant_info.base_type_idx;
+                let is_unit_variant = case_info.field_types.is_empty();
                 drop(variant_types);
 
                 // Stack: [variant_value]
@@ -8831,14 +8868,24 @@ impl Codegen {
                 let scrutinee_local = ctx.alloc_local(&local_name, variant_valtype);
                 func.instruction(&Instruction::LocalSet(scrutinee_local));
 
-                // Get the tag and compare with case_index
+                // For unit variants (no payload), check discriminator value directly
+                // because structurally identical subtypes can't be distinguished by ref.test.
+                // For payload variants, use ref.test since they have different structures.
                 func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::StructGet {
-                    struct_type_index: struct_type_idx,
-                    field_index: 0, // tag is field 0
-                });
-                func.instruction(&Instruction::I32Const(case_index));
-                func.instruction(&Instruction::I32Eq);
+                if is_unit_variant {
+                    // Read discriminator and compare with case index
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    func.instruction(&Instruction::I32Const(case_index as i32));
+                    func.instruction(&Instruction::I32Eq);
+                } else {
+                    // Use ref.test to check if the value is of the expected case type
+                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                }
 
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
@@ -8847,12 +8894,17 @@ impl Codegen {
 
                 // Then block: pattern matches
                 // Extract payload fields and bind them
+                // Cast inline for each field access to avoid needing extra locals
                 for (i, binding) in bindings.iter().enumerate() {
                     if let TirPattern::Binding { local_index, .. } = binding {
                         // Get the field (field 0 is tag, payload starts at field 1)
+                        // Cast from scrutinee_local inline for each access
                         func.instruction(&Instruction::LocalGet(scrutinee_local));
+                        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                            case_type_idx,
+                        )));
                         func.instruction(&Instruction::StructGet {
-                            struct_type_index: struct_type_idx,
+                            struct_type_index: case_type_idx,
                             field_index: (1 + i) as u32,
                         });
 
@@ -10649,14 +10701,14 @@ impl Codegen {
                 ResolvedType::Variant { name, .. } => {
                     let variant_types = self.variant_types.borrow();
                     if let Some(info) = variant_types.get(name) {
-                        let struct_type_idx = info.struct_type_idx;
+                        let base_type_idx = info.base_type_idx;
                         drop(variant_types);
                         let local_idx = ctx.alloc_local(
-                            &format!("__copy_source_{struct_type_idx}"),
-                            CopyContext::nullable_ref(struct_type_idx),
+                            &format!("__copy_source_{base_type_idx}"),
+                            CopyContext::nullable_ref(base_type_idx),
                         );
                         ctx.copy_context
-                            .register_struct_copy_local(struct_type_idx, local_idx);
+                            .register_struct_copy_local(base_type_idx, local_idx);
                     }
                 }
                 ResolvedType::Option(inner) => {

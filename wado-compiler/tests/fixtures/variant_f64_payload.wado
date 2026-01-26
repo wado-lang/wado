@@ -1,0 +1,29 @@
+// Test variant with f64 payload when mixed with reference types
+// Issue #151: f64 payload in variant causes "type mismatch: expected eqref, found f64"
+
+use { println, Stdout } from "core:cli";
+
+// Mixed primitive and reference types in the same variant
+variant JsonValue {
+    Null,
+    Number(f64),    // primitive
+    Str(String),    // reference type
+}
+
+fn make_number() -> JsonValue {
+    return JsonValue::Number(3.14);
+}
+
+fn make_str() -> JsonValue {
+    return JsonValue::Str("hello");
+}
+
+fn run() with Stdout {
+    let n = make_number();
+    let s = make_str();
+    let x = JsonValue::Null;
+    println("done");
+}
+
+__DATA__
+{"skip_o0": true, "stdout": "done\n"}
