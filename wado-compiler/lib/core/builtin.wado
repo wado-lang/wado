@@ -137,6 +137,26 @@ fn f64_to_buffer(value: f64, ptr: i32) -> i32;
 fn f32_to_buffer(value: f32, ptr: i32) -> i32;
 
 // ============================================================================
+// Wide Arithmetic Operations (Wasm wide-arithmetic proposal)
+// ============================================================================
+
+/// 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi)
+/// Maps to Wasm i64.add128 instruction
+fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
+
+/// 128-bit subtraction: (a_lo, a_hi) - (b_lo, b_hi) = (result_lo, result_hi)
+/// Maps to Wasm i64.sub128 instruction
+fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
+
+/// 64x64 unsigned multiplication producing 128-bit result: a * b = (result_lo, result_hi)
+/// Maps to Wasm i64.mul_wide_u instruction
+fn i64_mul_wide_u(a: i64, b: i64) -> [i64, i64];
+
+/// 64x64 signed multiplication producing 128-bit result: a * b = (result_lo, result_hi)
+/// Maps to Wasm i64.mul_wide_s(a: i64, b: i64) -> [i64, i64];
+fn i64_mul_wide_s(a: i64, b: i64) -> [i64, i64];
+
+// ============================================================================
 // Control Flow
 // ============================================================================
 

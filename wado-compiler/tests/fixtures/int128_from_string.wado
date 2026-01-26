@@ -1,0 +1,30 @@
+use {println, Stdout} from "core:cli";
+use {u128, i128} from "core:int128";
+
+fn run() with Stdout {
+    // Test u128::from_string
+    let a = u128::from_string("100");
+    println(`u128 from "100": low={a.low()}`);
+
+    let b = u128::from_string("18446744073709551616"); // 2^64
+    println(`u128 from "2^64": low={b.low()}, high={b.high()}`);
+
+    // Test i128::from_string with positive value
+    let x = i128::from_string("100");
+    println(`i128 from "100": low={x.low()}`);
+
+    // Test i128::from_string with negative value
+    let y = i128::from_string("-100");
+    if y.is_negative() {
+        println("i128 from \"-100\" is negative");
+    }
+
+    // Test arithmetic with from_string values
+    let sum = a + u128::from_string("50");
+    println(`100 + 50 = {sum.low()}`);
+
+    println("All from_string tests passed!");
+}
+
+__DATA__
+{"stdout": "u128 from \"100\": low=100\nu128 from \"2^64\": low=0, high=1\ni128 from \"100\": low=100\ni128 from \"-100\" is negative\n100 + 50 = 150\nAll from_string tests passed!\n"}

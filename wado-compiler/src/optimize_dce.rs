@@ -866,10 +866,33 @@ fn analyze_expr(
                 } else {
                     module_path.as_slice()
                 };
-                FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    callee_path,
-                    &func_name,
-                ))
+                // Check if this is a method call (contains "::") or a regular function
+                if let Some(sep_pos) = func_name.find("::") {
+                    // This is a static method call (e.g., "Uint128::from_u64")
+                    // Track as FunctionId::Method to match codegen's registration
+                    let prefix = &func_name[..sep_pos];
+                    let method_name = &func_name[sep_pos + 2..];
+                    // Parse struct name and optional trait name from prefix
+                    // Format: "StructName" or "StructName^TraitName"
+                    let (struct_name, trait_name): (&str, Option<&str>) =
+                        if let Some(caret_pos) = prefix.find('^') {
+                            (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
+                        } else {
+                            (prefix, None)
+                        };
+                    let filename = callee_path.join("/");
+                    FunctionId::Method(MethodName::new(
+                        filename,
+                        struct_name.to_string(),
+                        trait_name.map(String::from),
+                        method_name.to_string(),
+                    ))
+                } else {
+                    FunctionId::Free(FreeFunctionName::from_path_and_name(
+                        callee_path,
+                        &func_name,
+                    ))
+                }
             };
             analysis.callees.insert(callee_id);
 

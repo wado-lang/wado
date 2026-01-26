@@ -217,6 +217,116 @@ pub trait Ord {
     fn lt(&self, other: &Self) -> bool;
 }
 
+// ============================================================================
+// Arithmetic Operator Traits
+// ============================================================================
+
+/// Trait for the `+` operator.
+/// Types implementing this trait can use the `+` operator for addition.
+pub trait Add {
+    type Output;
+
+    /// Adds two values and returns the result.
+    fn add(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the `-` operator (binary subtraction).
+/// Types implementing this trait can use the `-` operator for subtraction.
+pub trait Sub {
+    type Output;
+
+    /// Subtracts rhs from self and returns the result.
+    fn sub(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the `*` operator.
+/// Types implementing this trait can use the `*` operator for multiplication.
+pub trait Mul {
+    type Output;
+
+    /// Multiplies two values and returns the result.
+    fn mul(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the `/` operator.
+/// Types implementing this trait can use the `/` operator for division.
+pub trait Div {
+    type Output;
+
+    /// Divides self by rhs and returns the result.
+    fn div(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the `%` operator.
+/// Types implementing this trait can use the `%` operator for remainder.
+pub trait Rem {
+    type Output;
+
+    /// Returns the remainder of dividing self by rhs.
+    fn rem(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the unary `-` operator (negation).
+/// Types implementing this trait can use the `-` prefix operator.
+pub trait Neg {
+    type Output;
+
+    /// Returns the negation of self.
+    fn neg(&self) -> Self::Output;
+}
+
+// ============================================================================
+// Bitwise Operator Traits
+// ============================================================================
+
+/// Trait for the `&` operator (bitwise AND).
+pub trait BitAnd {
+    type Output;
+
+    /// Returns the bitwise AND of self and rhs.
+    fn bitand(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the `|` operator (bitwise OR).
+pub trait BitOr {
+    type Output;
+
+    /// Returns the bitwise OR of self and rhs.
+    fn bitor(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the `^` operator (bitwise XOR).
+pub trait BitXor {
+    type Output;
+
+    /// Returns the bitwise XOR of self and rhs.
+    fn bitxor(&self, rhs: &Self) -> Self::Output;
+}
+
+/// Trait for the `~` operator (bitwise NOT).
+pub trait BitNot {
+    type Output;
+
+    /// Returns the bitwise NOT of self.
+    fn bitnot(&self) -> Self::Output;
+}
+
+/// Trait for the `<<` operator (left shift).
+pub trait Shl {
+    type Output;
+
+    /// Returns self shifted left by rhs bits.
+    fn shl(&self, rhs: u32) -> Self::Output;
+}
+
+/// Trait for the `>>` operator (right shift).
+pub trait Shr {
+    type Output;
+
+    /// Returns self shifted right by rhs bits.
+    fn shr(&self, rhs: u32) -> Self::Output;
+}
+
 /// Trait for callable types (closures and function references).
 /// This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
 /// are desugared to generic functions with `Fn<[A], R>` bounds.

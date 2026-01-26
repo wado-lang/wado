@@ -86,8 +86,8 @@ impl SyntaxDefinition {
                 other: vec!["->", "=>", "::", "?"],
             },
             builtin_types: vec![
-                "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
-                "bool", "char", "String", "Array", "Option", "Result", "Fn",
+                "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char",
+                "String", "Array", "Option", "Result", "Fn",
             ],
             constants: vec!["true", "false", "null", "self"],
             comments: CommentStyles {

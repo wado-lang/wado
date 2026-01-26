@@ -8124,12 +8124,33 @@ impl Codegen {
         let to = type_table.get(to_type);
 
         match (from, to) {
-            // i32 -> i64
+            // i32 -> i64 (signed extend)
             (
                 ResolvedType::Primitive(PrimitiveType::I32),
                 ResolvedType::Primitive(PrimitiveType::I64),
             ) => {
                 func.instruction(&Instruction::I64ExtendI32S);
+            }
+            // i32 -> u64 (unsigned extend)
+            (
+                ResolvedType::Primitive(PrimitiveType::I32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
+            }
+            // u32 -> i64 (unsigned extend)
+            (
+                ResolvedType::Primitive(PrimitiveType::U32),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
+            }
+            // u32 -> u64 (unsigned extend)
+            (
+                ResolvedType::Primitive(PrimitiveType::U32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
             }
             // i64 -> i32 (truncate)
             (
@@ -10115,6 +10136,44 @@ impl Codegen {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 func.instruction(&Instruction::I32Eqz);
+            }
+            // Wide Arithmetic builtins - map directly to Wasm wide-arithmetic instructions
+            // These return multi-value [i64, i64] which needs to be wrapped in a tuple struct
+            "builtin::i64_add128" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64Add128);
+                // Convert multi-value return to tuple struct
+                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                func.instruction(&Instruction::StructNew(tuple_type_idx));
+            }
+            "builtin::i64_sub128" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64Sub128);
+                // Convert multi-value return to tuple struct
+                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                func.instruction(&Instruction::StructNew(tuple_type_idx));
+            }
+            "builtin::i64_mul_wide_u" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64MulWideU);
+                // Convert multi-value return to tuple struct
+                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                func.instruction(&Instruction::StructNew(tuple_type_idx));
+            }
+            "builtin::i64_mul_wide_s" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64MulWideS);
+                // Convert multi-value return to tuple struct
+                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                func.instruction(&Instruction::StructNew(tuple_type_idx));
             }
             "builtin::call_indirect_stdout_write_via_stream" => {
                 for arg in args {

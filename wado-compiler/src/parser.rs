@@ -76,6 +76,22 @@ impl Parser {
         }
     }
 
+    /// Check if a name looks like a primitive type name (e.g., i32, u64, f32, i128, u128).
+    /// This allows struct literals with these names: `u128 { low: 0, high: 0 }`
+    fn looks_like_primitive_type(name: &str) -> bool {
+        if name.len() < 2 {
+            return false;
+        }
+        let mut chars = name.chars();
+        match chars.next() {
+            Some('i' | 'u' | 'f') => {
+                let rest: String = chars.collect();
+                !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+            }
+            _ => false,
+        }
+    }
+
     pub fn parse(&mut self) -> ParseResult<Module> {
         let mut items = Vec::new();
 
@@ -1824,7 +1840,11 @@ impl Parser {
         match self.peek_kind().clone() {
             TokenKind::Ident(name) => {
                 self.advance();
-                let is_type_name = name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+                // A name is considered a type name if:
+                // 1. It starts with uppercase (UpperCamelCase convention), OR
+                // 2. It looks like a primitive type (i32, u64, i128, u128, f32, etc.)
+                let is_type_name = name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                    || Self::looks_like_primitive_type(&name);
 
                 // Check for qualified name (Effect::function) or static method call
                 if self.check(&TokenKind::ColonColon) {

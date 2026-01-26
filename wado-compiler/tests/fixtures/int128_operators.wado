@@ -1,0 +1,35 @@
+use {println, Stdout} from "core:cli";
+use {u128, i128} from "core:int128";
+
+fn run() with Stdout {
+    // Test u128 operator overloading
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(50 as u64);
+
+    // Test u128 addition with + operator
+    let sum = a + b;
+    println(`u128 100 + 50 = {sum.low()}`);
+
+    // Test u128 subtraction with - operator
+    let diff = a - b;
+    println(`u128 100 - 50 = {diff.low()}`);
+
+    // Test i128 operator overloading
+    let x = i128::from_i64(100 as i64);
+    let y = i128::from_i64(-50 as i64);
+
+    // Test i128 addition with + operator
+    let sum2 = x + y;
+    println(`i128 100 + (-50) = {sum2.low()}`);
+
+    // Test i128 negation with unary - operator
+    let neg_x = -x;
+    if neg_x.is_negative() {
+        println("i128: -100 is negative");
+    }
+
+    println("All operator overloading tests passed!");
+}
+
+__DATA__
+{"stdout": "u128 100 + 50 = 150\nu128 100 - 50 = 50\ni128 100 + (-50) = 50\ni128: -100 is negative\nAll operator overloading tests passed!\n"}
