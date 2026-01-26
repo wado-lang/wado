@@ -1,0 +1,27 @@
+// Test: custom variant type as struct field
+// Issue: https://github.com/wado-lang/wado/issues/149
+// Error: "Variant type not registered: JsonValue" during codegen
+
+use { println, Stdout } from "core:cli";
+
+variant JsonValue {
+    Null,
+    Number(i32),
+}
+
+struct ParseResult {
+    ok: bool,
+    value: JsonValue,
+}
+
+fn parse() -> ParseResult {
+    return ParseResult { ok: true, value: JsonValue::Number(42) };
+}
+
+fn run() with Stdout {
+    let result = parse();
+    println("variant in struct field works");
+}
+
+__DATA__
+{"TODO": true, "stdout": "variant in struct field works\n"}
