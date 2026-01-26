@@ -51,12 +51,12 @@ This approach:
 
 Wado variants support exactly four payload forms with **consistent syntax**:
 
-| Form       | Syntax                    | Example                              | Description                |
-| ---------- | ------------------------- | ------------------------------------ | -------------------------- |
-| **Unit**   | `Name`                    | `Point`                              | No payload                 |
-| **Scalar** | `Name(T)`                 | `Circle(f64)`                        | Single value               |
-| **Tuple**  | `Name([T, U, ...])`       | `Rectangle([f64, f64])`              | Explicit tuple type        |
-| **Struct** | `Name({ field: T, ... })` | `Named({ width: f64, height: f64 })` | Anonymous struct in parens |
+| Form       | Syntax                    | Example                              | Description                           |
+| ---------- | ------------------------- | ------------------------------------ | ------------------------------------- |
+| **Unit**   | `Name`                    | `Point`                              | Sugar for `Name(())`, payload is `()` |
+| **Scalar** | `Name(T)`                 | `Circle(f64)`                        | Single value                          |
+| **Tuple**  | `Name([T, U, ...])`       | `Rectangle([f64, f64])`              | Explicit tuple type                   |
+| **Struct** | `Name({ field: T, ... })` | `Named({ width: f64, height: f64 })` | Anonymous struct in parens            |
 
 Key principles:
 
@@ -179,6 +179,7 @@ fn circle_area(c: Shape::Circle) -> f64 {
 
 | Payload Type | Access Syntax              | Example                           |
 | ------------ | -------------------------- | --------------------------------- |
+| Unit         | `.0`                       | `point.0` → `()`                  |
 | Scalar       | `.0`                       | `circle.0` → the value            |
 | Tuple        | `.0` then `.0`, `.1`, etc. | `rect.0.0`, `rect.0.1`            |
 | Struct       | `.0` then `.field`         | `named.0.width`, `named.0.height` |
@@ -372,6 +373,43 @@ let list = List::Cons({
 });
 ```
 
+### Unit Variants as Syntactic Sugar
+
+Unit variants are syntactic sugar for `Name(())` - a variant with unit type payload:
+
+```wado
+variant Maybe<T> {
+    Some(T),
+    None,        // internally None(())
+}
+
+// Construction - all equivalent
+let n = Maybe::<i32>::None;
+let n = Maybe::<i32>::None();
+let n = Maybe::<i32>::None(());
+
+// Access - .0 returns unit
+let unit = n.0;  // ()
+
+// Pattern matching - all equivalent
+match maybe {
+    Some(x) => ...,
+    None => ...,      // preferred (short form)
+}
+match maybe {
+    Some(x) => ...,
+    None() => ...,    // also valid
+}
+match maybe {
+    Some(x) => ...,
+    None(()) => ...,  // also valid (explicit)
+}
+```
+
+This ensures **all variant cases have a payload** (unit cases have `()` payload), making `.0` access uniformly valid.
+
+Display/debug output uses the short form: `None` not `None(())`.
+
 ### Single-Element and Zero-Element Tuples
 
 No special rules - these are allowed even if rarely useful:
@@ -379,15 +417,21 @@ No special rules - these are allowed even if rarely useful:
 ```wado
 variant Wrapper {
     Single([i32]),     // single-element tuple payload
-    Empty([]),         // zero-element tuple payload (not same as unit)
+    Empty([]),         // zero-element tuple payload
+    Unit,              // unit payload = Unit(())
 }
 
 let s = Wrapper::Single([42]);
 let val = s.0.0;  // 42
 
 let e = Wrapper::Empty([]);
-// e.0 is [] (empty tuple)
+// e.0 is [] (empty tuple), NOT same as ()
+
+let u = Wrapper::Unit;
+// u.0 is () (unit value)
 ```
+
+Note: `[]` (empty tuple) and `()` (unit) are distinct types.
 
 ### Pattern Matching Syntax
 
