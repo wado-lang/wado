@@ -145,6 +145,33 @@ impl CoreModuleBuilder {
         idx
     }
 
+    /// Define a GC struct subtype (with a supertype) and return its index
+    /// The subtype must include all fields from the supertype as a prefix
+    pub fn define_gc_struct_subtype(
+        &mut self,
+        name: &str,
+        supertype_idx: u32,
+        fields: &[FieldType],
+    ) -> u32 {
+        use wasm_encoder::StructType;
+        let idx = self.next_type_idx;
+        self.types.ty().subtype(&SubType {
+            is_final: true, // Subtypes are final (no further subtyping)
+            supertype_idx: Some(supertype_idx),
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Struct(StructType {
+                    fields: fields.to_vec().into_boxed_slice(),
+                }),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
+        });
+        self.type_names.insert(name.to_string(), idx);
+        self.next_type_idx += 1;
+        idx
+    }
+
     /// Reserve a type index for future use (for forward references in rec groups)
     pub fn reserve_type_idx(&mut self, name: &str) -> u32 {
         let idx = self.next_type_idx;
