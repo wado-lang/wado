@@ -347,6 +347,30 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 let resolved = resolve_module_path(from_url, import_source);
                 return Ok(ModuleSource::Remote { url: resolved });
             }
+            // Handle relative imports from core: modules
+            // e.g., from "core:prelude" importing "./prelude/int128.wado" -> "core:prelude/int128"
+            if let ModuleSource::Core { name: from_name } = from_module_source {
+                let relative = import_source
+                    .strip_prefix("./")
+                    .unwrap_or(import_source)
+                    .strip_suffix(".wado")
+                    .unwrap_or(import_source.strip_prefix("./").unwrap_or(import_source));
+                // Resolve relative to the core module's "directory"
+                // e.g., "prelude" + "./prelude/int128.wado" -> "prelude/int128"
+                let resolved = if from_name.contains('/') {
+                    // from_name is like "prelude/submod", get parent
+                    let parent = from_name.rsplit_once('/').map_or("", |(p, _)| p);
+                    if parent.is_empty() {
+                        relative.to_string()
+                    } else {
+                        format!("{parent}/{relative}")
+                    }
+                } else {
+                    // from_name is like "prelude", relative path is the new name
+                    relative.to_string()
+                };
+                return Ok(ModuleSource::Core { name: resolved });
+            }
             // Entry point or stdlib: treat as relative to project root
             let canonical = normalize_module_path(import_source);
             return Ok(ModuleSource::Local { path: canonical });

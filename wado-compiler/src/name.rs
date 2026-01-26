@@ -997,6 +997,33 @@ pub fn resolve_import_path(from_module: &[String], import_source: &str) -> Vec<S
         return vec![import_source.to_string()];
     }
 
+    // Handle relative imports from core: modules
+    // e.g., from ["core", "prelude"] importing "./prelude/int128.wado" -> ["core", "prelude/int128"]
+    if from_module.first().is_some_and(|s| s == "core")
+        && (import_source.starts_with("./") || import_source.starts_with("../"))
+    {
+        let from_name = from_module.get(1).map_or("", |s| s.as_str());
+        let relative = import_source
+            .strip_prefix("./")
+            .unwrap_or(import_source)
+            .strip_suffix(".wado")
+            .unwrap_or(import_source.strip_prefix("./").unwrap_or(import_source));
+        // Resolve relative to the core module's "directory"
+        let resolved = if from_name.contains('/') {
+            // from_name is like "prelude/submod", get parent
+            let parent = from_name.rsplit_once('/').map_or("", |(p, _)| p);
+            if parent.is_empty() {
+                relative.to_string()
+            } else {
+                format!("{parent}/{relative}")
+            }
+        } else {
+            // from_name is like "prelude", relative path is the new name
+            relative.to_string()
+        };
+        return vec!["core".to_string(), resolved];
+    }
+
     // For relative imports, resolve against the from_module path
     if let Some(from_path) = from_module.first()
         && (from_path.starts_with("./") || from_path.starts_with("../"))
