@@ -74,7 +74,7 @@ String                  // UTF-8 string
 Array<T>                // dynamic array
 [T, U, V]               // tuple type
 Option<T>               // optional value
-Result<T, E>            // result type (not yet implemented)
+Result<T, E>            // result type
 
 // Reference
 &T                      // immutable reference
@@ -151,7 +151,9 @@ let sum = p.x + p.y;
 let v = b.value;
 ```
 
-## Enums (parsing only, codegen not yet implemented)
+## Enums
+
+Enums are discriminated values without payloads:
 
 ```wado
 enum Color {
@@ -160,8 +162,10 @@ enum Color {
     Blue,
 }
 
-let c = Color::Red;  // not yet implemented
+let c = Color::Red;  // enum value (i32 discriminant)
 ```
+
+Note: Enum pattern matching is not yet implemented.
 
 ## Variants
 
@@ -934,8 +938,8 @@ Wado intentionally does not support macros.
 
 ## Not Yet Implemented
 
-- `enum` construction (parsed but no codegen)
 - `match` statements/expressions
+- `enum` pattern matching
 - `flags` (parsed but no codegen)
 - `resource` (Wasm CM resource handles)
 - Trait bounds (`T: Display`)

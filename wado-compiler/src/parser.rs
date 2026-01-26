@@ -233,7 +233,7 @@ impl Parser {
             TokenKind::Fn => self.parse_function(is_pub, attrs).map(Item::Function),
             TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
-            TokenKind::Enum => self.parse_enum_decl(is_pub).map(Item::Enum),
+            TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub).map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
             TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
@@ -331,12 +331,29 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Resource)?;
         let name = self.consume_ident()?;
-        self.expect(&TokenKind::Semicolon)?;
+
+        // Either `resource Name;` (opaque) or `resource Name { ... }` (with methods)
+        let (methods, end_span) = if self.check(&TokenKind::LBrace) {
+            self.advance(); // consume '{'
+
+            let mut methods = Vec::new();
+            while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+                // Reuse effect method parser for resource methods
+                methods.push(self.parse_effect_method()?);
+            }
+
+            let end = self.expect(&TokenKind::RBrace)?.span;
+            (methods, end)
+        } else {
+            let end = self.expect(&TokenKind::Semicolon)?.span;
+            (Vec::new(), end)
+        };
 
         Ok(ResourceDecl {
             name,
             attrs,
-            span: start_span,
+            methods,
+            span: start_span.merge(&end_span),
         })
     }
 
@@ -2563,7 +2580,7 @@ impl Parser {
         Ok(fields)
     }
 
-    fn parse_enum_decl(&mut self, is_pub: bool) -> ParseResult<EnumDecl> {
+    fn parse_enum_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<EnumDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Enum)?;
         let name = self.consume_ident()?;
@@ -2588,6 +2605,7 @@ impl Parser {
             is_pub,
             type_params,
             cases,
+            attrs,
             span: start_span.merge(&end_span),
         })
     }

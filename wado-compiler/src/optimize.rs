@@ -171,8 +171,10 @@ pub enum OptLevel {
 pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     match opt_level {
         OptLevel::O0 => {
-            // No optimizations - just enable all features for codegen
+            // No optimizations - enable all standard features
             populate_all_features(&mut project);
+            // Note: O0 mode only enables standard WASI functions from the stdlib.
+            // Non-standard functions like sockets require O2+ to be detected via DCE analysis.
         }
         OptLevel::O1 => {
             // Development mode: all optimizations except DCE

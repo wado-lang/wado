@@ -1,0 +1,15 @@
+// Test: Resource static method call (wasi:sockets)
+//
+// This test verifies that resource types and static methods can be imported
+// from wasi:sockets.
+use {println, Stdout} from "core:cli";
+use {TcpSocket, IpAddressFamily} from "wasi:sockets";
+
+fn run() with Stdout {
+    let family = IpAddressFamily::Ipv4;
+    let result = TcpSocket::static_tcp_socket_create(family);
+    println("Resource static method called");
+}
+
+__DATA__
+{"stdout": "Resource static method called\n", "skip_o0": true}

@@ -44,6 +44,9 @@ fn is_fresh_value(expr: &TirExpr) -> bool {
         // VariantConstruct is fresh (it's a literal-like construction)
         TirExprKind::VariantConstruct { .. } => true,
 
+        // EnumConstruct is fresh (it's a literal-like construction)
+        TirExprKind::EnumConstruct { .. } => true,
+
         // Move is already marked as fresh
         TirExprKind::Move { .. } => true,
 
@@ -319,7 +322,8 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. } => {}
+        | TirExprKind::Match { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -570,7 +574,8 @@ fn collect_value_copy_types_in_expr(
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. } => {}
+        | TirExprKind::Match { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 

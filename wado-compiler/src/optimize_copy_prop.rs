@@ -323,7 +323,8 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::Null
-        | TirExprKind::Unit => {}
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -563,7 +564,8 @@ fn collect_usage_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -891,7 +893,8 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -1115,7 +1118,8 @@ fn collect_copy_bindings_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -1326,7 +1330,8 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 

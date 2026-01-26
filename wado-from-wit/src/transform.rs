@@ -405,6 +405,19 @@ impl<'a> Transformer<'a> {
                     target,
                 })))
             }
+            TypeDefKind::Tuple(t) => {
+                // Tuple type alias (e.g., `type ipv4-address = tuple<u8, u8, u8, u8>;`)
+                let types = t
+                    .types
+                    .iter()
+                    .map(|ty| self.transform_type(*ty))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(Some(WadoTypeDef::TypeAlias(WadoTypeAlias {
+                    name,
+                    wasi_attr: Some(wasi_attr),
+                    target: WadoType::Tuple(types),
+                })))
+            }
             _ => Ok(None),
         }
     }
@@ -434,27 +447,42 @@ impl<'a> Transformer<'a> {
         if let TypeOwner::Interface(iface_id) = ty.owner {
             let iface = &self.resolve.interfaces[iface_id];
             for (func_name, func) in &iface.functions {
-                match &func.kind {
-                    FunctionKind::Method(resource_id) | FunctionKind::Static(resource_id)
-                        if *resource_id == type_id =>
-                    {
-                        let method_attr = format!(
-                            "{}#[method]{}.{}",
-                            wasi_interface,
-                            ty.name.as_ref().unwrap(),
-                            func_name
-                        );
-                        methods.push(WadoFunction {
-                            name: to_snake_case(func_name),
-                            doc_comment: func.docs.contents.clone(),
-                            wasi_attr: method_attr,
-                            params: self.transform_params(&func.params)?,
-                            return_type: self.transform_result(func.result.as_ref())?,
-                            is_async: false,
-                            never_returns: false,
-                        });
+                // Determine the method kind prefix for the WASI attribute
+                let method_kind = match &func.kind {
+                    FunctionKind::Method(resource_id) if *resource_id == type_id => {
+                        Some("[method]")
                     }
-                    _ => {}
+                    FunctionKind::Static(resource_id) if *resource_id == type_id => {
+                        Some("[static]")
+                    }
+                    _ => None,
+                };
+
+                if let Some(kind_prefix) = method_kind {
+                    let method_attr = format!(
+                        "{}#{}{}{}",
+                        wasi_interface,
+                        kind_prefix,
+                        ty.name.as_ref().unwrap(),
+                        // The WIT function name format is [kind]resource-name.method-name
+                        // But func_name already includes the resource prefix for methods,
+                        // so we use the raw func_name which is just the method part
+                        if func_name.contains('.') {
+                            // func_name is already in "resource.method" format
+                            format!(".{}", func_name.split('.').next_back().unwrap_or(func_name))
+                        } else {
+                            format!(".{func_name}")
+                        }
+                    );
+                    methods.push(WadoFunction {
+                        name: to_snake_case(func_name),
+                        doc_comment: func.docs.contents.clone(),
+                        wasi_attr: method_attr,
+                        params: self.transform_params(&func.params)?,
+                        return_type: self.transform_result(func.result.as_ref())?,
+                        is_async: false,
+                        never_returns: false,
+                    });
                 }
             }
         }

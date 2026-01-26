@@ -409,7 +409,8 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => false,
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => false,
     }
 }
 
@@ -656,7 +657,8 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -2442,7 +2444,8 @@ fn remap_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => expr.kind.clone(),
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => expr.kind.clone(),
     };
 
     TirExpr::new(kind, expr.type_id, expr.span)

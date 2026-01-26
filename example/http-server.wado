@@ -1,0 +1,58 @@
+// Basic HTTP server example using wasi:sockets
+//
+// This example demonstrates TCP socket creation and binding.
+// Full HTTP handling requires additional features not yet implemented.
+
+use {println, Stdout} from "core:cli";
+use {
+    TcpSocket,
+    IpAddressFamily,
+    IpSocketAddress,
+    Ipv4SocketAddress,
+    Ipv4Address,
+    ErrorCode,
+} from "wasi:sockets";
+
+fn run() with Stdout {
+    println("HTTP Server Example");
+    println("");
+
+    // Create an IPv4 TCP socket
+    let family = IpAddressFamily::Ipv4;
+    let result = TcpSocket::static_tcp_socket_create(family);
+    println("Socket created successfully!");
+
+    // TODO: The following requires features not yet implemented:
+    //
+    // 1. Result<T, E> pattern matching for error handling:
+    //    if let Ok(socket) = result {
+    //        ...
+    //    }
+    //
+    // 2. Variant construction for IpSocketAddress:
+    //    let addr: Ipv4Address = [127, 0, 0, 1];
+    //    let socket_addr = Ipv4SocketAddress { port: 8080, address: addr };
+    //    let ip_addr = IpSocketAddress::Ipv4(socket_addr);
+    //
+    // 3. Resource instance method calls:
+    //    socket.bind(ip_addr);
+    //    let connections = socket.listen();
+    //
+    // 4. Stream<T> iteration for accepting connections:
+    //    for let client of connections {
+    //        handle_client(client);
+    //    }
+    //
+    // 5. Stream<u8> for reading/writing HTTP data:
+    //    let [rx_stream, rx_future] = client.receive();
+    //    let tx_stream = client.send();
+    //
+    println("");
+    println("Current implementation status:");
+    println("- [x] Enum construction (IpAddressFamily::Ipv4)");
+    println("- [x] Resource static method (TcpSocket::static_tcp_socket_create)");
+    println("- [ ] Result<T, E> pattern matching");
+    println("- [ ] Variant construction (IpSocketAddress::Ipv4)");
+    println("- [ ] Resource instance methods (socket.bind, socket.listen)");
+    println("- [ ] Stream<T> iteration");
+}

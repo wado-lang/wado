@@ -239,6 +239,11 @@ pub enum ResolvedType {
         name: String,
         module_source: ModuleSource,
     },
+    /// Resource type - opaque handle (i32) to a Component Model resource
+    Resource {
+        name: String,
+        module_source: ModuleSource,
+    },
     Variant {
         name: String,
         module_source: ModuleSource,
@@ -499,6 +504,13 @@ impl TypeTable {
         })
     }
 
+    pub fn make_resource(&mut self, name: String, module_source: ModuleSource) -> TypeId {
+        self.intern(ResolvedType::Resource {
+            name,
+            module_source,
+        })
+    }
+
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
         self.intern(ResolvedType::Ref(inner))
     }
@@ -683,6 +695,7 @@ impl TypeTable {
             }
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::Enum { name, .. } => name.clone(),
+            ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
                 params,
                 return_type,
@@ -1060,6 +1073,17 @@ pub enum TirExprKind {
         case_name: String,
         /// Field values (empty for unit variants)
         fields: Vec<TirExpr>,
+    },
+
+    /// Enum construction: `Color::Red`
+    /// Enums have no payload, just a discriminant value.
+    EnumConstruct {
+        /// The enum type (e.g., `ResolvedType::Enum` { name: "Color", ... })
+        enum_type: TypeId,
+        /// The case index (0-based position in enum declaration)
+        case_index: u32,
+        /// The case name (for debugging/error messages)
+        case_name: String,
     },
 
     /// Move semantics: the inner value is moved without copying.

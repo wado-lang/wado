@@ -63,6 +63,31 @@ struct VariantInfo {
     cases: Vec<VariantCaseData>,
 }
 
+/// Enum case info: case name and discriminant index
+#[derive(Clone)]
+struct EnumCaseData {
+    name: String,
+    index: u32,
+}
+
+/// Enum info: module source and cases (enums have no type parameters or payloads)
+#[derive(Clone)]
+struct EnumInfo {
+    module_source: ModuleSource,
+    cases: Vec<EnumCaseData>,
+}
+
+/// Resource info: module source and method names
+/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
+/// Keep it for when wasi:sockets registration is re-enabled.
+#[allow(dead_code)]
+#[derive(Clone)]
+struct ResourceInfo {
+    module_source: ModuleSource,
+    /// Method names defined on this resource (both static and instance)
+    methods: Vec<String>,
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -409,6 +434,10 @@ pub struct Resolver<'a> {
     struct_fields: HashMap<String, StructFieldInfo>,
     /// Variant case info (variant name -> (`module_path`, `type_params`, cases))
     variant_cases: HashMap<String, VariantInfo>,
+    /// Enum case info (enum name -> (`module_path`, cases))
+    enum_cases: HashMap<String, EnumInfo>,
+    /// Resource info (resource name -> module source and methods)
+    resource_types: HashMap<String, ResourceInfo>,
     /// Function return types (name -> return type)
     function_return_types: HashMap<String, TypeId>,
     /// Imported function names for the current module
@@ -499,6 +528,8 @@ impl<'a> Resolver<'a> {
             type_aliases: HashMap::new(),
             struct_fields: HashMap::new(),
             variant_cases: HashMap::new(),
+            enum_cases: HashMap::new(),
+            resource_types: HashMap::new(),
             function_return_types: HashMap::new(),
             imported_functions: HashSet::new(),
             errors: Vec::new(),
@@ -663,8 +694,10 @@ impl<'a> Resolver<'a> {
         let mut type_aliases = HashMap::new();
         let mut struct_fields = HashMap::new();
         let mut variant_cases: HashMap<String, VariantInfo> = HashMap::new();
+        let mut enum_cases: HashMap<String, EnumInfo> = HashMap::new();
+        let mut resource_types: HashMap<String, ResourceInfo> = HashMap::new();
 
-        // First pass: collect struct and variant names from all modules (for forward references)
+        // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (path, module) in modules {
             // Use the provided entry_module_source for the entry module (empty path)
             // to preserve filename information
@@ -705,6 +738,29 @@ impl<'a> Resolver<'a> {
                                 module_source: module_source.clone(),
                                 type_params,
                                 cases: Vec::new(),
+                            },
+                        );
+                    }
+                    Item::Enum(enum_decl) => {
+                        // Insert with empty cases first - will be populated in second sub-pass
+                        enum_cases.insert(
+                            enum_decl.name.clone(),
+                            EnumInfo {
+                                module_source: module_source.clone(),
+                                cases: Vec::new(),
+                            },
+                        );
+                    }
+                    Item::Resource(resource_decl) => {
+                        resource_types.insert(
+                            resource_decl.name.clone(),
+                            ResourceInfo {
+                                module_source: module_source.clone(),
+                                methods: resource_decl
+                                    .methods
+                                    .iter()
+                                    .map(|m| m.name.clone())
+                                    .collect(),
                             },
                         );
                     }
@@ -797,6 +853,25 @@ impl<'a> Resolver<'a> {
                             },
                         );
                     }
+                    Item::Enum(enum_decl) => {
+                        // Populate enum cases (no field types, just names and indices)
+                        let cases: Vec<EnumCaseData> = enum_decl
+                            .cases
+                            .iter()
+                            .enumerate()
+                            .map(|(index, case)| EnumCaseData {
+                                name: case.name.clone(),
+                                index: index as u32,
+                            })
+                            .collect();
+                        enum_cases.insert(
+                            enum_decl.name.clone(),
+                            EnumInfo {
+                                module_source: module_source.clone(),
+                                cases,
+                            },
+                        );
+                    }
                     _ => {}
                 }
             }
@@ -864,6 +939,8 @@ impl<'a> Resolver<'a> {
                 type_aliases: type_aliases.clone(),
                 struct_fields: struct_fields.clone(),
                 variant_cases: variant_cases.clone(),
+                enum_cases: enum_cases.clone(),
+                resource_types: resource_types.clone(),
                 function_return_types,
                 imported_functions,
                 errors: Vec::new(),
@@ -1046,21 +1123,6 @@ impl<'a> Resolver<'a> {
                     );
                     type_table.intern(ResolvedType::Option(inner))
                 }
-                "Result" if generic.args.len() >= 2 => {
-                    let ok = Self::resolve_type_static(
-                        &generic.args[0],
-                        type_table,
-                        type_aliases,
-                        struct_fields,
-                    );
-                    let err = Self::resolve_type_static(
-                        &generic.args[1],
-                        type_table,
-                        type_aliases,
-                        struct_fields,
-                    );
-                    type_table.intern(ResolvedType::Result { ok, err })
-                }
                 _ => {
                     // Check if it's a generic struct type
                     if let Some(info) = struct_fields.get(&generic.name) {
@@ -1234,6 +1296,25 @@ impl<'a> Resolver<'a> {
 
                     // Restore type params scope
                     self.current_type_params = old_type_params;
+                }
+                Item::Enum(enum_decl) => {
+                    // Collect enum cases (no field types, just names and indices)
+                    let cases: Vec<EnumCaseData> = enum_decl
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .map(|(index, case)| EnumCaseData {
+                            name: case.name.clone(),
+                            index: index as u32,
+                        })
+                        .collect();
+                    self.enum_cases.insert(
+                        enum_decl.name.clone(),
+                        EnumInfo {
+                            module_source: self.current_module_source.clone(),
+                            cases,
+                        },
+                    );
                 }
                 _ => {}
             }
@@ -3111,6 +3192,27 @@ impl<'a> Resolver<'a> {
                     );
                 }
             }
+
+            // Check for enum case: Color::Red (enums have no payload)
+            if let Some(enum_info) = self.enum_cases.get(prefix)
+                && let Some(case_data) = enum_info.cases.iter().find(|c| c.name == suffix)
+            {
+                // Create enum type
+                let enum_type = self
+                    .type_table
+                    .borrow_mut()
+                    .make_enum(prefix.to_string(), enum_info.module_source.clone());
+
+                return TirExpr::new(
+                    TirExprKind::EnumConstruct {
+                        enum_type,
+                        case_index: case_data.index,
+                        case_name: case_data.name.clone(),
+                    },
+                    enum_type,
+                    ident.span,
+                );
+            }
         }
 
         // Otherwise it's a global reference (function, constant, etc.)
@@ -4384,12 +4486,65 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Handle generic variant construction: Result::<i32, String>::Ok(42)
+        if let ResolvedType::GenericInstance {
+            name,
+            module_source: _,
+            type_args: _,
+        } = self.type_table.borrow().get(target_type_id).clone()
+        {
+            // Check if the base type is a variant
+            if let Some(variant_info) = self.variant_cases.get(&name).cloned() {
+                // This is a generic variant like Result<T, E>
+                // Find the case by name
+                if let Some((case_index, case_data)) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| c.name == static_call.method)
+                {
+                    // Validate argument count
+                    if args.len() != case_data.field_types.len() {
+                        self.errors.push(TypeError::ArgumentCountMismatch {
+                            expected: case_data.field_types.len(),
+                            found: args.len(),
+                            span: static_call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                    }
+
+                    // Create VariantConstruct expression
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type: target_type_id,
+                            case_index: case_index as u32,
+                            case_name: case_data.name.clone(),
+                            fields: args,
+                        },
+                        target_type_id,
+                        static_call.span,
+                    );
+                } else {
+                    // Unknown case name
+                    self.errors.push(TypeError::UnknownFunction {
+                        name: format!("{}::{}", name, static_call.method),
+                        span: static_call.span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                }
+            }
+        }
+
         let (struct_name, module_path, mangled_struct_name, struct_type_args) =
             match self.type_table.borrow().get(target_type_id) {
                 ResolvedType::Struct {
                     name,
                     module_source,
                     ..
+                } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+                ResolvedType::Resource {
+                    name,
+                    module_source,
                 } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
                 ResolvedType::GenericInstance {
                     name,
@@ -4498,6 +4653,7 @@ impl<'a> Resolver<'a> {
             && let Some(module) = self.loaded_modules.get(module_path)
         {
             for item in &module.items {
+                // Check impl blocks
                 if let Item::Impl(impl_block) = item {
                     let impl_struct_name = self.get_type_name(&impl_block.ty);
                     if impl_struct_name == struct_name {
@@ -4539,6 +4695,27 @@ impl<'a> Resolver<'a> {
 
                                 return result;
                             }
+                        }
+                    }
+                }
+
+                // Check resource declarations
+                if let Item::Resource(resource) = item
+                    && resource.name == struct_name
+                {
+                    for method in &resource.methods {
+                        // Static methods have no self parameter (no &TcpSocket or &Self)
+                        let has_self = method.params.iter().any(|p| {
+                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
+                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
+                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
+                            });
+                        if method.name == method_name && !has_self {
+                            return method
+                                .return_type
+                                .as_ref()
+                                .map(|t| self.resolve_type(t))
+                                .unwrap_or(TypeTable::UNIT);
                         }
                     }
                 }
@@ -4597,6 +4774,32 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Search resource declarations in all modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Resource(resource) = item
+                    && resource.name == struct_name
+                {
+                    // Find the method in the resource
+                    for method in &resource.methods {
+                        // Static methods have no self parameter
+                        let has_self = method.params.iter().any(|p| {
+                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
+                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
+                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
+                            });
+                        if method.name == method_name && !has_self {
+                            return method
+                                .return_type
+                                .as_ref()
+                                .map(|t| self.resolve_type(t))
+                                .unwrap_or(TypeTable::UNIT);
+                        }
+                    }
+                }
+            }
+        }
+
         TypeTable::UNKNOWN
     }
 
@@ -4641,6 +4844,27 @@ impl<'a> Resolver<'a> {
                             .params
                             .iter()
                             .any(|p| p.self_kind != ast::SelfKind::None);
+                        if method.name == method_name && !has_self {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check resource declarations in loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Resource(resource) = item
+                    && resource.name == struct_name
+                {
+                    for method in &resource.methods {
+                        // Static methods have no self parameter
+                        let has_self = method.params.iter().any(|p| {
+                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
+                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
+                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
+                            });
                         if method.name == method_name && !has_self {
                             return true;
                         }
@@ -4696,20 +4920,28 @@ impl<'a> Resolver<'a> {
     fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
         // Check current module
         for item in &self.current_module_items {
-            if let Item::Struct(s) = item
-                && s.name == struct_name
-            {
-                return self.current_module_source.clone();
+            match item {
+                Item::Struct(s) if s.name == struct_name => {
+                    return self.current_module_source.clone();
+                }
+                Item::Resource(r) if r.name == struct_name => {
+                    return self.current_module_source.clone();
+                }
+                _ => {}
             }
         }
 
         // Check loaded modules
         for (path, module) in self.loaded_modules {
             for item in &module.items {
-                if let Item::Struct(s) = item
-                    && s.name == struct_name
-                {
-                    return ModuleSource::from_path(path);
+                match item {
+                    Item::Struct(s) if s.name == struct_name => {
+                        return ModuleSource::from_path(path);
+                    }
+                    Item::Resource(r) if r.name == struct_name => {
+                        return ModuleSource::from_path(path);
+                    }
+                    _ => {}
                 }
             }
         }
@@ -7312,6 +7544,16 @@ impl<'a> Resolver<'a> {
                     self.type_table
                         .borrow_mut()
                         .make_variant(name.to_string(), variant_info.module_source.clone())
+                } else if let Some(enum_info) = self.enum_cases.get(name) {
+                    // It's an enum - use the module source where it was defined
+                    self.type_table
+                        .borrow_mut()
+                        .make_enum(name.to_string(), enum_info.module_source.clone())
+                } else if let Some(resource_info) = self.resource_types.get(name) {
+                    // It's a resource - use the module source where it was defined
+                    self.type_table
+                        .borrow_mut()
+                        .make_resource(name.to_string(), resource_info.module_source.clone())
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN
@@ -7347,32 +7589,6 @@ impl<'a> Resolver<'a> {
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.type_table.borrow_mut().make_option(inner)
-            }
-            "Result" => {
-                // Verify Result variant exists in symbol table (declared in prelude)
-                // First check local imports, then fall back to prelude module
-                let found_as_variant = self
-                    .symbols
-                    .lookup("Result")
-                    .or_else(|| self.symbols.lookup_in_module(&prelude_path, "Result"))
-                    .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
-
-                if !found_as_variant {
-                    // Result not found as a variant - likely #![no_prelude] without explicit import
-                    self.errors.push(TypeError::UnknownType {
-                        name: "Result".to_string(),
-                        span,
-                    });
-                }
-                let ok = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                let err = args
-                    .get(1)
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.borrow_mut().make_result(ok, err)
             }
             "Stream" => {
                 let elem = args
@@ -7432,6 +7648,19 @@ impl<'a> Resolver<'a> {
                         module_source,
                         type_args,
                     )
+                } else if let Some(variant_info) = self.variant_cases.get(name).cloned() {
+                    // Check if it's a generic variant (like Result<T, E>)
+                    if variant_info.type_params.is_empty() {
+                        TypeTable::UNKNOWN
+                    } else {
+                        let type_args: Vec<TypeId> =
+                            args.iter().map(|t| self.resolve_type(t)).collect();
+                        self.type_table.borrow_mut().make_generic_instance(
+                            name.to_string(),
+                            variant_info.module_source,
+                            type_args,
+                        )
+                    }
                 } else {
                     TypeTable::UNKNOWN
                 }

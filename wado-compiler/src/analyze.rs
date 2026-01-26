@@ -240,12 +240,35 @@ impl Analyzer {
 
                 Item::Resource(resource) => {
                     let kind = SymbolKind::Resource(ResourceSymbol {
-                        methods: vec![],
+                        methods: resource.methods.iter().map(|m| m.name.clone()).collect(),
                         wasi_import: resource.attrs.first().and_then(|a| a.wasi_import.clone()),
                     });
 
                     self.symbols
                         .define(&resource.name, kind, module_path, Some(resource.span));
+
+                    // Register each resource method as a function symbol
+                    // with the fully qualified name "{Resource}::{method}"
+                    for method in &resource.methods {
+                        let wasi_import = method.attrs.first().and_then(|a| a.wasi_import.clone());
+
+                        let func_kind = SymbolKind::Function(FunctionSymbol {
+                            params: method.params.iter().map(|p| p.name.clone()).collect(),
+                            return_type: method.return_type.as_ref().map(|_| "unknown".to_string()),
+                            effects: vec![], // Resource methods don't have effect requirements
+                            is_builtin: module_path.first().map(|s| s == "core").unwrap_or(false),
+                            wasi_import,
+                        });
+
+                        // Register as "{Resource}::{method}"
+                        let qualified_name = format!("{}::{}", resource.name, method.name);
+                        self.symbols.define(
+                            &qualified_name,
+                            func_kind,
+                            module_path,
+                            Some(method.span),
+                        );
+                    }
                 }
 
                 Item::World(world) => {
