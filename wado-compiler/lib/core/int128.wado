@@ -1,0 +1,267 @@
+// 128-bit Integer Types
+// Note: Named Uint128/Int128 to avoid collision with reserved primitive type names.
+// These will be renamed to u128/i128 when the primitive type codegen is implemented.
+
+/// Unsigned 128-bit integer
+/// Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
+pub struct Uint128 {
+    low: u64,
+    high: u64,
+}
+
+impl Uint128 {
+    /// Create a Uint128 from a u64 value (zero-extended)
+    pub fn from_u64(value: u64) -> Uint128 {
+        return Uint128 { low: value, high: 0 as u64 };
+    }
+
+    /// Create a zero Uint128
+    pub fn zero() -> Uint128 {
+        return Uint128 { low: 0 as u64, high: 0 as u64 };
+    }
+
+    /// Create a Uint128 with value 1
+    pub fn one() -> Uint128 {
+        return Uint128 { low: 1 as u64, high: 0 as u64 };
+    }
+
+    /// Get the low 64 bits
+    pub fn low(&self) -> u64 {
+        return self.low;
+    }
+
+    /// Get the high 64 bits
+    pub fn high(&self) -> u64 {
+        return self.high;
+    }
+
+    /// Add two Uint128 values
+    pub fn add(&self, other: &Uint128) -> Uint128 {
+        let result = builtin::i64_add128(
+            self.low as i64,
+            self.high as i64,
+            other.low as i64,
+            other.high as i64,
+        );
+        return Uint128 {
+            low: result.0 as u64,
+            high: result.1 as u64,
+        };
+    }
+
+    /// Subtract two Uint128 values (self - other)
+    pub fn sub(&self, other: &Uint128) -> Uint128 {
+        let result = builtin::i64_sub128(
+            self.low as i64,
+            self.high as i64,
+            other.low as i64,
+            other.high as i64,
+        );
+        return Uint128 {
+            low: result.0 as u64,
+            high: result.1 as u64,
+        };
+    }
+}
+
+// Eq implementation for Uint128
+impl Eq for Uint128 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return self.low == other.low && self.high == other.high;
+    }
+}
+
+// Ord implementation for Uint128
+impl Ord for Uint128 {
+    pub fn lt(&self, other: &Self) -> bool {
+        if self.high < other.high {
+            return true;
+        }
+        if self.high > other.high {
+            return false;
+        }
+        return self.low < other.low;
+    }
+}
+
+// Add implementation for Uint128
+impl Add for Uint128 {
+    type Output = Uint128;
+
+    pub fn add(&self, other: &Self) -> Self::Output {
+        let result = builtin::i64_add128(
+            self.low as i64,
+            self.high as i64,
+            other.low as i64,
+            other.high as i64,
+        );
+        return Uint128 {
+            low: result.0 as u64,
+            high: result.1 as u64,
+        };
+    }
+}
+
+// Sub implementation for Uint128
+impl Sub for Uint128 {
+    type Output = Uint128;
+
+    pub fn sub(&self, other: &Self) -> Self::Output {
+        let result = builtin::i64_sub128(
+            self.low as i64,
+            self.high as i64,
+            other.low as i64,
+            other.high as i64,
+        );
+        return Uint128 {
+            low: result.0 as u64,
+            high: result.1 as u64,
+        };
+    }
+}
+
+/// Signed 128-bit integer
+/// Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, signed)
+pub struct Int128 {
+    low: u64,
+    high: i64,
+}
+
+impl Int128 {
+    /// Create an Int128 from an i64 value (sign-extended)
+    pub fn from_i64(value: i64) -> Int128 {
+        // Sign extend: if value is negative, high bits are all 1s (-1)
+        let high = if value < 0 as i64 { -1 as i64 } else { 0 as i64 };
+        return Int128 { low: value as u64, high };
+    }
+
+    /// Create a zero Int128
+    pub fn zero() -> Int128 {
+        return Int128 { low: 0 as u64, high: 0 as i64 };
+    }
+
+    /// Create an Int128 with value 1
+    pub fn one() -> Int128 {
+        return Int128 { low: 1 as u64, high: 0 as i64 };
+    }
+
+    /// Get the low 64 bits (unsigned)
+    pub fn low(&self) -> u64 {
+        return self.low;
+    }
+
+    /// Get the high 64 bits (signed)
+    pub fn high(&self) -> i64 {
+        return self.high;
+    }
+
+    /// Check if this Int128 is negative
+    pub fn is_negative(&self) -> bool {
+        return self.high < 0 as i64;
+    }
+
+    /// Add two Int128 values
+    pub fn add(&self, other: &Int128) -> Int128 {
+        let result = builtin::i64_add128(
+            self.low as i64,
+            self.high,
+            other.low as i64,
+            other.high,
+        );
+        return Int128 {
+            low: result.0 as u64,
+            high: result.1,
+        };
+    }
+
+    /// Subtract two Int128 values (self - other)
+    pub fn sub(&self, other: &Int128) -> Int128 {
+        let result = builtin::i64_sub128(
+            self.low as i64,
+            self.high,
+            other.low as i64,
+            other.high,
+        );
+        return Int128 {
+            low: result.0 as u64,
+            high: result.1,
+        };
+    }
+
+    /// Negate this Int128 value
+    pub fn neg(&self) -> Int128 {
+        // -x = ~x + 1 = 0 - x
+        let zero = Int128 { low: 0 as u64, high: 0 as i64 };
+        return zero.sub(self);
+    }
+}
+
+// Eq implementation for Int128
+impl Eq for Int128 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return self.low == other.low && self.high == other.high;
+    }
+}
+
+// Ord implementation for Int128 (signed comparison)
+impl Ord for Int128 {
+    pub fn lt(&self, other: &Self) -> bool {
+        // For signed comparison:
+        // 1. Compare high parts as signed
+        // 2. If equal, compare low parts as unsigned
+        if self.high < other.high {
+            return true;
+        }
+        if self.high > other.high {
+            return false;
+        }
+        return self.low < other.low;
+    }
+}
+
+// Add implementation for Int128
+impl Add for Int128 {
+    type Output = Int128;
+
+    pub fn add(&self, other: &Self) -> Self::Output {
+        let result = builtin::i64_add128(
+            self.low as i64,
+            self.high,
+            other.low as i64,
+            other.high,
+        );
+        return Int128 {
+            low: result.0 as u64,
+            high: result.1,
+        };
+    }
+}
+
+// Sub implementation for Int128
+impl Sub for Int128 {
+    type Output = Int128;
+
+    pub fn sub(&self, other: &Self) -> Self::Output {
+        let result = builtin::i64_sub128(
+            self.low as i64,
+            self.high,
+            other.low as i64,
+            other.high,
+        );
+        return Int128 {
+            low: result.0 as u64,
+            high: result.1,
+        };
+    }
+}
+
+// Neg implementation for Int128
+impl Neg for Int128 {
+    type Output = Int128;
+
+    pub fn neg(&self) -> Self::Output {
+        // -x = ~x + 1 = 0 - x
+        let zero = Int128 { low: 0 as u64, high: 0 as i64 };
+        return zero.sub(self);
+    }
+}

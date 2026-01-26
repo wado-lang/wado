@@ -517,6 +517,16 @@ struct ComparisonTraitInfo {
     trait_name: String,
 }
 
+/// Info about an arithmetic trait implementation (`Add`, `Sub`, `Mul`, `Div`, `Rem`)
+struct ArithmeticTraitInfo {
+    /// The Output associated type
+    output_type: TypeId,
+    /// Self kind for the method (&self)
+    self_kind: ast::SelfKind,
+    /// The trait name (e.g., "Add", "Sub")
+    trait_name: String,
+}
+
 impl<'a> Resolver<'a> {
     /// Create a new resolver
     pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
@@ -3347,6 +3357,88 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Check if this is an arithmetic operation on a non-primitive type
+        // Non-primitives use Add/Sub/Mul/Div/Rem traits instead of direct Wasm instructions
+        let is_arithmetic = matches!(
+            binary.op,
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
+        );
+
+        if is_arithmetic {
+            // Get struct name for trait lookup
+            let struct_name = match &left_type {
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
+
+            if let Some(struct_name) = struct_name {
+                // Determine which trait and method to use based on operator
+                let (trait_name, method_name) = match binary.op {
+                    BinaryOp::Add => ("Add", "add"),
+                    BinaryOp::Sub => ("Sub", "sub"),
+                    BinaryOp::Mul => ("Mul", "mul"),
+                    BinaryOp::Div => ("Div", "div"),
+                    BinaryOp::Mod => ("Rem", "rem"),
+                    _ => unreachable!(),
+                };
+
+                // Find the arithmetic trait implementation
+                if let Some(trait_info) = self.find_arithmetic_trait_impl(
+                    &struct_name,
+                    left.type_id,
+                    trait_name,
+                    method_name,
+                ) {
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        left.clone(),
+                        trait_info.self_kind,
+                        binary.span,
+                    );
+
+                    // Create reference type for the argument (rhs: &Self)
+                    let arg_ref_type = self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(right.type_id));
+
+                    let arg_ref = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(right.clone()),
+                        },
+                        arg_ref_type,
+                        binary.span,
+                    );
+
+                    // Get the mangled method name: StructName^Add::add
+                    let mangled_method_name =
+                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    method_name.to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![arg_ref],
+                        },
+                        trait_info.output_type,
+                        binary.span,
+                    );
+                }
+            }
+        }
+
         let op = convert_binary_op(binary.op);
 
         // Determine result type based on operator
@@ -3396,6 +3488,54 @@ impl<'a> Resolver<'a> {
                 found: format!("immutable variable '{name}'"),
                 span: unary.span,
             });
+        }
+
+        // Check for negation on non-primitive types that implement Neg trait
+        if unary.op == UnaryOp::Neg {
+            let expr_type = self.type_table.borrow().get(expr.type_id).clone();
+            let struct_name = match &expr_type {
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
+
+            if let Some(struct_name) = struct_name {
+                // Find the Neg trait implementation
+                if let Some(trait_info) =
+                    self.find_arithmetic_trait_impl(&struct_name, expr.type_id, "Neg", "neg")
+                {
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        expr.clone(),
+                        trait_info.self_kind,
+                        unary.span,
+                    );
+
+                    // Get the mangled method name: StructName^Neg::neg
+                    let mangled_method_name =
+                        format!("{}^{}::neg", struct_name, trait_info.trait_name);
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    "neg".to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![],
+                        },
+                        trait_info.output_type,
+                        unary.span,
+                    );
+                }
+            }
         }
 
         let type_id = match unary.op {
@@ -4065,6 +4205,14 @@ impl<'a> Resolver<'a> {
             "stream_new" => TypeTable::I64, // Returns i64 (two i32s packed)
             "stream_write" => TypeTable::I32, // Returns result code
             "stream_drop_writable" | "stream_drop_readable" => TypeTable::UNIT,
+
+            // Wide arithmetic operations - return [i64, i64] tuple
+            "i64_add128" | "i64_sub128" | "i64_mul_wide_u" | "i64_mul_wide_s" => {
+                // Returns a tuple of two i64 values: [i64, i64]
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Tuple(vec![TypeTable::I64, TypeTable::I64]))
+            }
 
             // Unknown builtin - default to UNIT
             _ => TypeTable::UNIT,
@@ -5881,6 +6029,115 @@ impl<'a> Resolver<'a> {
         base_type_id: TypeId,
     ) -> Option<ComparisonTraitInfo> {
         self.find_comparison_trait_impl(struct_name, base_type_id, "Ord", "lt")
+    }
+
+    /// Find arithmetic trait implementation (`Add`, `Sub`, `Mul`, `Div`, `Rem`)
+    fn find_arithmetic_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        trait_name: &str,
+        method_name: &str,
+    ) -> Option<ArithmeticTraitInfo> {
+        // Get concrete type arguments from the base type (for generic instances)
+        let concrete_type_args: Vec<TypeId> =
+            if let ResolvedType::GenericInstance { type_args, .. } =
+                self.type_table.borrow().get(base_type_id).clone()
+            {
+                type_args
+            } else {
+                Vec::new()
+            };
+
+        // Collect impl blocks to check
+        let mut impl_blocks_to_check: Vec<(
+            Type,
+            Type,
+            Vec<Function>,
+            Vec<crate::ast::AssociatedTypeBinding>,
+        )> = Vec::new();
+
+        // Check all loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Check current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                impl_blocks_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.methods.clone(),
+                    impl_block.associated_types.clone(),
+                ));
+            }
+        }
+
+        // Process collected impl blocks
+        for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
+            let impl_struct_name = self.get_type_name(&impl_ty);
+            if impl_struct_name != struct_name {
+                continue;
+            }
+
+            // Check if this is the target trait
+            let found_trait_name = self.get_type_name(&trait_type);
+            if found_trait_name != trait_name {
+                continue;
+            }
+
+            // Build type parameter mapping from impl_ty to concrete types
+            let type_param_mapping = Self::build_type_param_mapping(&impl_ty, &concrete_type_args);
+
+            // Find the method
+            for method in &methods {
+                if method.name == method_name {
+                    // Set up associated type bindings
+                    let mut assoc_type_map: HashMap<String, TypeId> = HashMap::new();
+
+                    // Process associated types (e.g., `type Output = Self`)
+                    for assoc in &associated_types {
+                        let resolved_type =
+                            self.resolve_type_with_param_mapping(&assoc.ty, &type_param_mapping);
+                        assoc_type_map.insert(assoc.name.clone(), resolved_type);
+                    }
+
+                    // Get the output type from associated types
+                    let output_type = assoc_type_map
+                        .get("Output")
+                        .copied()
+                        .unwrap_or(base_type_id);
+
+                    let self_kind = method
+                        .params
+                        .first()
+                        .map(|p| p.self_kind)
+                        .unwrap_or(ast::SelfKind::None);
+
+                    return Some(ArithmeticTraitInfo {
+                        output_type,
+                        self_kind,
+                        trait_name: trait_name.to_string(),
+                    });
+                }
+            }
+        }
+
+        None
     }
 
     /// Check if a type implements a specific trait (for trait bound checking)

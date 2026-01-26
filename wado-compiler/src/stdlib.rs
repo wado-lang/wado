@@ -42,6 +42,9 @@ pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
 /// Embedded source for core:clocks
 pub const CORE_CLOCKS: &str = include_str!("../lib/core/clocks.wado");
 
+/// Embedded source for core:int128 (128-bit integer types)
+pub const CORE_INT128: &str = include_str!("../lib/core/int128.wado");
+
 /// Embedded source for wasi:cli
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
 
@@ -78,6 +81,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:internal" => Some(CORE_INTERNAL),
         "core:builtin" => Some(CORE_BUILTIN),
         "core:clocks" => Some(CORE_CLOCKS),
+        "core:int128" => Some(CORE_INT128),
 
         // WASI library
         "wasi:cli" => Some(WASI_CLI),
