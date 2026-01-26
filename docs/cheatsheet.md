@@ -207,9 +207,20 @@ if let Some(x) = some_val {
 if let None = none_val {
     println("It's none");
 }
+
+// Custom variant pattern matching (non-generic)
+variant ParseResult {
+    Fail,
+    Number(i32),
+}
+let r = ParseResult::Number(42);
+if let Number(n) = r {
+    // pattern uses case name only, not Type::CaseName
+    println(`Got: {n}`);
+}
 ```
 
-Note: Generic variants (custom `Maybe<T>`) and `Result<T, E>` pattern matching are not yet implemented.
+Note: Generic variants (custom `Maybe<T>`) and `Result<T, E>` pattern matching are not yet implemented. Non-generic custom variants work with `if let`.
 
 ## Functions
 
@@ -774,9 +785,12 @@ let result = compute(4);  // 20
 
 // Closure returning struct literal
 let make_point = |x: i32, y: i32| Point { x, y };
-```
 
-Note: Closures that capture outer variables are not yet implemented (pure closures work).
+// Capturing outer variables (value semantics - copy)
+let multiplier = 10;
+let scale = |x: i32| x * multiplier;  // Captures `multiplier` by value
+let result = scale(5);  // 50
+```
 
 ## Iterators
 
@@ -898,7 +912,30 @@ for let x of stack {
 }
 ```
 
-Note: Iterator combinators (`map`, `filter`, `fold`) are not yet implemented (requires closures with captures).
+### Iterator Combinators
+
+```wado
+let arr: Array<i32> = [1, 2, 3, 4, 5];
+
+// map - transform each element
+let doubled = arr.iter().map(|x: i32| x * 2).collect();
+// [2, 4, 6, 8, 10]
+
+// filter - keep elements matching predicate
+let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+// [2, 4]
+
+// fold - reduce to single value
+let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+// 15
+
+// Chaining combinators
+let result = arr.iter()
+    .filter(|x: i32| x > 2)
+    .map(|x: i32| x * 10)
+    .collect();
+// [30, 40, 50]
+```
 
 ## Compile-Time Location Literals
 
@@ -946,8 +983,6 @@ Wado intentionally does not support macros.
 - Default trait method implementations
 - Effect handlers
 - `reactive` values and `observe()`
-- Closures that capture outer variables (pure closures work)
-- Iterator combinators (`map`, `filter`, `fold`) - requires closures with captures
 - `stores[...]` syntax for reference storage
 - `Dict<K, V>`
 - postfix `?` operator (error propagation)
