@@ -211,6 +211,17 @@ impl Symbol {
     }
 }
 
+/// Target of a re-export (`pub use`)
+///
+/// Represents where a re-exported symbol originally comes from.
+#[derive(Debug, Clone)]
+pub struct ReExportTarget {
+    /// Module path where the symbol is originally defined (or re-exported from)
+    pub source_module: Vec<String>,
+    /// Original name in the source module
+    pub source_name: String,
+}
+
 /// The symbol table
 ///
 /// Tracks all symbols organized by module and supports scoped lookups
@@ -221,6 +232,8 @@ pub struct SymbolTable {
     symbols: SymbolVec,
     /// Module path → symbol name → symbol id
     modules: HashMap<Vec<String>, HashMap<String, SymbolId>>,
+    /// Re-exports: module path → exported name → re-export target
+    reexports: HashMap<Vec<String>, HashMap<String, ReExportTarget>>,
     /// Imported symbols in the current module (name → symbol id)
     imports: HashMap<String, SymbolId>,
     /// Current scope stack for local variables (innermost scope last)
@@ -279,6 +292,40 @@ impl SymbolTable {
         self.imports.clear();
     }
 
+    /// Register a re-export in a module
+    ///
+    /// This records that `export_name` in `module_path` is a re-export of
+    /// `source_name` from `source_module`.
+    ///
+    /// # Arguments
+    /// * `module_path` - Module where the re-export is declared
+    /// * `export_name` - Name under which the symbol is re-exported
+    /// * `source_module` - Module from which the symbol is imported
+    /// * `source_name` - Original name in the source module
+    pub fn register_reexport(
+        &mut self,
+        module_path: &[String],
+        export_name: &str,
+        source_module: &[String],
+        source_name: &str,
+    ) {
+        let module_reexports = self.reexports.entry(module_path.to_vec()).or_default();
+        module_reexports.insert(
+            export_name.to_string(),
+            ReExportTarget {
+                source_module: source_module.to_vec(),
+                source_name: source_name.to_string(),
+            },
+        );
+    }
+
+    /// Check if a name is re-exported from a module
+    pub fn get_reexport(&self, module_path: &[String], name: &str) -> Option<&ReExportTarget> {
+        self.reexports
+            .get(module_path)
+            .and_then(|reexports| reexports.get(name))
+    }
+
     /// Get all struct import aliases
     ///
     /// Returns tuples of (`alias_name`, `module_path`, `original_struct_name`) for imports where:
@@ -326,11 +373,47 @@ impl SymbolTable {
     }
 
     /// Look up a symbol in a specific module
+    ///
+    /// This resolves re-exports transparently, following re-export chains
+    /// to find the original symbol definition.
     pub fn lookup_in_module(&self, module_path: &[String], name: &str) -> Option<&Symbol> {
-        self.modules
+        self.lookup_in_module_with_visited(module_path, name, &mut Vec::new())
+    }
+
+    /// Internal lookup that tracks visited modules to detect cycles
+    fn lookup_in_module_with_visited(
+        &self,
+        module_path: &[String],
+        name: &str,
+        visited: &mut Vec<(Vec<String>, String)>,
+    ) -> Option<&Symbol> {
+        // Check for cycles
+        let key = (module_path.to_vec(), name.to_string());
+        if visited.contains(&key) {
+            return None; // Cycle detected
+        }
+        visited.push(key);
+
+        // First, try direct lookup in the module
+        if let Some(symbol) = self
+            .modules
             .get(module_path)
             .and_then(|module| module.get(name))
             .map(|&id| &self.symbols[id])
+        {
+            return Some(symbol);
+        }
+
+        // If not found directly, check re-exports
+        if let Some(reexport) = self.get_reexport(module_path, name) {
+            return self.lookup_in_module_with_visited(
+                &reexport.source_module,
+                &reexport.source_name,
+                visited,
+            );
+        }
+
+        None
     }
 
     /// Get a symbol by its ID

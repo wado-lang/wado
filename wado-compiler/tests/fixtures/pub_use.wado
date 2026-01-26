@@ -1,0 +1,20 @@
+// Test pub use re-export
+// Import from facade instead of directly from lib
+
+use { println, Stdout } from "core:cli";
+use { multiply, greet } from "./pub_use_facade.wado";
+
+fn run() with Stdout {
+    let result = multiply(6, 7);
+    if result == 42 {
+        println("multiply ok");
+    } else {
+        println("multiply fail");
+    }
+
+    let msg = greet();
+    println(msg);
+}
+
+__DATA__
+{"stdout": "multiply ok\nhello from lib\n"}

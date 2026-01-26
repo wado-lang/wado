@@ -378,6 +378,10 @@ impl Analyzer {
     }
 
     /// Process pub use declarations (re-exports) in a module
+    ///
+    /// This registers re-export relationships without creating new symbols.
+    /// The actual symbol resolution happens in `lookup_in_module` which
+    /// follows re-export chains transparently.
     fn process_pub_use(
         &mut self,
         module: &Module,
@@ -403,41 +407,32 @@ impl Analyzer {
                     continue; // Error already collected in validate_imports
                 }
 
-                // Re-export each item to the current module's namespace
+                // Register re-exports (without creating new symbols)
                 for use_item in &use_decl.items {
                     match use_item {
                         UseItem::Simple { name, alias } => {
-                            if let Some(symbol) = self.symbols.lookup_in_module(&source_path, name)
-                            {
-                                let export_name = alias.as_ref().unwrap_or(name);
-                                self.symbols.define(
-                                    export_name,
-                                    symbol.kind.clone(),
-                                    module_path,
-                                    symbol.span,
-                                );
-                            }
-                            // Error case handled in validate_imports
+                            let export_name = alias.as_ref().unwrap_or(name);
+                            self.symbols.register_reexport(
+                                module_path,
+                                export_name,
+                                &source_path,
+                                name,
+                            );
                         }
                         UseItem::EffectFunctions {
                             effect_name,
                             functions,
                         } => {
                             for func_item in functions {
-                                let lookup_name = format!("{}::{}", effect_name, func_item.name);
-                                if let Some(symbol) =
-                                    self.symbols.lookup_in_module(&source_path, &lookup_name)
-                                {
-                                    let export_name =
-                                        func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                    self.symbols.define(
-                                        export_name,
-                                        symbol.kind.clone(),
-                                        module_path,
-                                        symbol.span,
-                                    );
-                                }
-                                // Error case handled in validate_imports
+                                let source_name = format!("{}::{}", effect_name, func_item.name);
+                                let export_name =
+                                    func_item.alias.as_ref().unwrap_or(&func_item.name);
+                                self.symbols.register_reexport(
+                                    module_path,
+                                    export_name,
+                                    &source_path,
+                                    &source_name,
+                                );
                             }
                         }
                     }
