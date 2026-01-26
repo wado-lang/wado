@@ -1198,6 +1198,7 @@ impl Codegen {
         // Skip generic templates and monomorphized types
         // Sort structs and variants together topologically to handle mutual dependencies
         // (e.g., struct with variant field, variant with struct payload)
+        // Note: Non-mono structs that depend on mono structs will be deferred to PHASE 4
         let non_mono_structs: Vec<_> = entry_tir
             .structs
             .iter()
@@ -1216,12 +1217,36 @@ impl Codegen {
             .collect();
         let sorted_types =
             Self::sort_types_topologically(&non_mono_structs, &non_mono_variants, type_table);
+        // Track which non-mono structs depend on mono structs (to be deferred to PHASE 4)
+        let mono_struct_names: HashSet<String> = entry_tir
+            .structs
+            .iter()
+            .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_some())
+            .map(|s| s.name.clone())
+            .collect();
+        let mut deferred_non_mono_structs: Vec<crate::tir::TirStruct> = Vec::new();
         for type_decl in sorted_types {
             match type_decl {
                 TypeDecl::Struct(tir_struct) => {
-                    let struct_name =
-                        StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
-                    self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
+                    // Check if this struct depends on any mono structs
+                    let deps = tir_struct
+                        .fields
+                        .iter()
+                        .flat_map(|f| Self::get_type_dependencies(type_table, f.type_id))
+                        .collect::<HashSet<_>>();
+                    if deps.iter().any(|d| mono_struct_names.contains(d)) {
+                        // Defer to PHASE 4
+                        deferred_non_mono_structs.push(tir_struct.clone());
+                    } else {
+                        let struct_name =
+                            StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
+                        self.register_struct_type(
+                            struct_name,
+                            tir_struct,
+                            type_table,
+                            &mut builder,
+                        );
+                    }
                 }
                 TypeDecl::Variant(tir_variant) => {
                     self.register_variant_type(tir_variant, type_table, &mut builder);
@@ -1356,7 +1381,8 @@ impl Codegen {
             );
         }
 
-        // PHASE 4: Register MONOMORPHIZED main module structs
+        // PHASE 4: Register MONOMORPHIZED main module structs AND deferred non-mono structs
+        // Deferred non-mono structs are those that depend on mono structs (e.g., Container with Box<i32>)
         // Note: Array<T> is now treated like any other generic struct.
         let mono_structs: Vec<_> = entry_tir
             .structs
@@ -1364,14 +1390,16 @@ impl Codegen {
             .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_some())
             .cloned()
             .collect();
-        let sorted_mono = Self::sort_structs_topologically(&mono_structs, type_table);
-        for tir_struct in sorted_mono {
+        // Combine mono structs with deferred non-mono structs
+        let all_phase4_structs: Vec<_> = mono_structs
+            .iter()
+            .chain(deferred_non_mono_structs.iter())
+            .cloned()
+            .collect();
+        let sorted_phase4 = Self::sort_structs_topologically(&all_phase4_structs, type_table);
+        for tir_struct in sorted_phase4 {
             let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
-            // For monomorphized structs, use the FULL mangled name (e.g., "AANode<String,i32>")
-            // to detect true self-references, not just base name matches.
-            // This prevents Box<Box<i32>> from being incorrectly detected as self-referential
-            // when it contains Box<i32> (a different instantiation).
             let self_ref_fields =
                 Self::get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
             if self_ref_fields.is_empty() {
