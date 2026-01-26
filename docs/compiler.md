@@ -847,11 +847,11 @@ pub struct i128 {
 
 **Available operations:**
 
-| Category   | Operations                                                      |
-| ---------- | --------------------------------------------------------------- |
-| Arithmetic | `+`, `-` (via `Add`/`Sub` traits), `mul_u64()` method           |
-| Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=` (via `Eq`/`Ord` traits)        |
-| Negation   | Unary `-` for i128 (via `Neg` trait)                            |
+| Category   | Operations                                                     |
+| ---------- | -------------------------------------------------------------- |
+| Arithmetic | `+`, `-` (via `Add`/`Sub` traits), `mul_u64()` method          |
+| Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=` (via `Eq`/`Ord` traits)       |
+| Negation   | Unary `-` for i128 (via `Neg` trait)                           |
 | Conversion | `from_u64()`, `from_i64()`, `from_string()`, `low()`, `high()` |
 
 **Wasm Wide Arithmetic instructions** are used for efficient add/sub:
