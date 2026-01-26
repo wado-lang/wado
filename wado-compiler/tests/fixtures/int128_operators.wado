@@ -1,35 +1,35 @@
 use {println, Stdout} from "core:cli";
-use {Uint128, Int128} from "core:int128";
+use {u128, i128} from "core:int128";
 
 fn run() with Stdout {
-    // Test Uint128 operator overloading
-    let a = Uint128::from_u64(100 as u64);
-    let b = Uint128::from_u64(50 as u64);
+    // Test u128 operator overloading
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(50 as u64);
 
-    // Test Uint128 addition with + operator
+    // Test u128 addition with + operator
     let sum = a + b;
-    println(`Uint128 100 + 50 = {sum.low()}`);
+    println(`u128 100 + 50 = {sum.low()}`);
 
-    // Test Uint128 subtraction with - operator
+    // Test u128 subtraction with - operator
     let diff = a - b;
-    println(`Uint128 100 - 50 = {diff.low()}`);
+    println(`u128 100 - 50 = {diff.low()}`);
 
-    // Test Int128 operator overloading
-    let x = Int128::from_i64(100 as i64);
-    let y = Int128::from_i64(-50 as i64);
+    // Test i128 operator overloading
+    let x = i128::from_i64(100 as i64);
+    let y = i128::from_i64(-50 as i64);
 
-    // Test Int128 addition with + operator
+    // Test i128 addition with + operator
     let sum2 = x + y;
-    println(`Int128 100 + (-50) = {sum2.low()}`);
+    println(`i128 100 + (-50) = {sum2.low()}`);
 
-    // Test Int128 negation with unary - operator
+    // Test i128 negation with unary - operator
     let neg_x = -x;
     if neg_x.is_negative() {
-        println("Int128: -100 is negative");
+        println("i128: -100 is negative");
     }
 
     println("All operator overloading tests passed!");
 }
 
 __DATA__
-{"stdout": "Uint128 100 + 50 = 150\nUint128 100 - 50 = 50\nInt128 100 + (-50) = 50\nInt128: -100 is negative\nAll operator overloading tests passed!\n"}
+{"stdout": "u128 100 + 50 = 150\nu128 100 - 50 = 50\ni128 100 + (-50) = 50\ni128: -100 is negative\nAll operator overloading tests passed!\n"}

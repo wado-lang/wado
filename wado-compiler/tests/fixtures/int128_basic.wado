@@ -1,53 +1,53 @@
 use {println, Stdout} from "core:cli";
-use {Uint128, Int128} from "core:int128";
+use {u128, i128} from "core:int128";
 
 fn run() with Stdout {
-    // Test Uint128 creation
-    let a = Uint128::from_u64(100 as u64);
-    let b = Uint128::from_u64(50 as u64);
+    // Test u128 creation
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(50 as u64);
 
-    // Test Uint128 addition
+    // Test u128 addition
     let sum = a.add(&b);
-    println(`Uint128 100 + 50 = {sum.low()}`);
+    println(`u128 100 + 50 = {sum.low()}`);
 
-    // Test Uint128 subtraction
+    // Test u128 subtraction
     let diff = a.sub(&b);
-    println(`Uint128 100 - 50 = {diff.low()}`);
+    println(`u128 100 - 50 = {diff.low()}`);
 
-    // Test Uint128 equality
-    let c = Uint128::from_u64(100 as u64);
+    // Test u128 equality
+    let c = u128::from_u64(100 as u64);
     if a == c {
-        println("Uint128: 100 == 100 is true");
+        println("u128: 100 == 100 is true");
     }
 
-    // Test Uint128 comparison
+    // Test u128 comparison
     if b < a {
-        println("Uint128: 50 < 100 is true");
+        println("u128: 50 < 100 is true");
     }
 
-    // Test Int128 creation
-    let x = Int128::from_i64(100 as i64);
-    let y = Int128::from_i64(-50 as i64);
+    // Test i128 creation
+    let x = i128::from_i64(100 as i64);
+    let y = i128::from_i64(-50 as i64);
 
-    // Test Int128 addition
+    // Test i128 addition
     let sum2 = x.add(&y);
-    println(`Int128 100 + (-50) = {sum2.low()}`);
+    println(`i128 100 + (-50) = {sum2.low()}`);
 
-    // Test Int128 with negative result
-    let z = Int128::from_i64(30 as i64);
+    // Test i128 with negative result
+    let z = i128::from_i64(30 as i64);
     let diff2 = z.sub(&x);
     if diff2.is_negative() {
-        println("Int128: 30 - 100 is negative");
+        println("i128: 30 - 100 is negative");
     }
 
-    // Test Int128 negation
+    // Test i128 negation
     let neg_x = x.neg();
     if neg_x.is_negative() {
-        println("Int128: -100 is negative");
+        println("i128: -100 is negative");
     }
 
-    println("All Int128/Uint128 tests passed!");
+    println("All i128/u128 tests passed!");
 }
 
 __DATA__
-{"stdout": "Uint128 100 + 50 = 150\nUint128 100 - 50 = 50\nUint128: 100 == 100 is true\nUint128: 50 < 100 is true\nInt128 100 + (-50) = 50\nInt128: 30 - 100 is negative\nInt128: -100 is negative\nAll Int128/Uint128 tests passed!\n"}
+{"stdout": "u128 100 + 50 = 150\nu128 100 - 50 = 50\nu128: 100 == 100 is true\nu128: 50 < 100 is true\ni128 100 + (-50) = 50\ni128: 30 - 100 is negative\ni128: -100 is negative\nAll i128/u128 tests passed!\n"}
