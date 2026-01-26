@@ -1,0 +1,28 @@
+// Test integer literal coercion in static method arguments
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: u64,
+}
+
+impl Counter {
+    fn new(initial: u64) -> Counter {
+        return Counter { value: initial };
+    }
+
+    fn get(&self) -> u64 {
+        return self.value;
+    }
+}
+
+fn run() with Stdout {
+    // Integer literal should coerce to u64 for static method argument
+    let counter = Counter::new(0);
+    println(`value: {counter.get()}`);
+
+    let counter2 = Counter::new(42);
+    println(`value: {counter2.get()}`);
+}
+
+__DATA__
+{"stdout": "value: 0\nvalue: 42\n"}

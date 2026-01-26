@@ -49,15 +49,20 @@ impl RomuState {
         let yp = self.y;
         let zp = self.z;
         self.x = zp * 0xD3833E804F4C574B as u64;
-        self.y = rotl(yp - xp, 12 as u64);
-        self.z = rotl(zp - yp, 44 as u64);
+        self.y = rotl(yp - xp, 12);  // Literal coerced to u64
+        self.z = rotl(zp - yp, 44);  // Literal coerced to u64
         return xp;
     }
 }
 
+test {
+    let mut rng = RomuState::new(0);  // Literal coerced to u64
+    assert rng.next() == 16294208416658607535;  // Literal coerced via bidirectional coercion
+}
+
 fn run() with Stdout {
     // Initialize with seed 12345
-    let mut rng = RomuState::new(12345 as u64);
+    let mut rng = RomuState::new(12345);  // Literal coerced to u64
 
     // Generate and print 10 random numbers
     println("Romu Random Number Generator (RomuTrio)");

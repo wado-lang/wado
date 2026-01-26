@@ -1,0 +1,34 @@
+// Test integer literal coercion in function arguments
+use { println, Stdout } from "core:cli";
+
+fn take_i64(x: i64) -> i64 {
+    return x;
+}
+
+fn take_u64(x: u64) -> u64 {
+    return x;
+}
+
+fn take_i8(x: i8) -> i8 {
+    return x;
+}
+
+fn take_u8(x: u8) -> u8 {
+    return x;
+}
+
+fn run() with Stdout {
+    // Integer literals should coerce to the parameter type
+    let a = take_i64(42);
+    let b = take_u64(100);
+    let c = take_i8(10);
+    let d = take_u8(200);
+
+    println(`i64: {a}`);
+    println(`u64: {b}`);
+    println(`i8: {c}`);
+    println(`u8: {d}`);
+}
+
+__DATA__
+{"stdout": "i64: 42\nu64: 100\ni8: 10\nu8: 200\n"}

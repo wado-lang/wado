@@ -2026,7 +2026,9 @@ impl<'a> Resolver<'a> {
                     (value, target_type)
                 }
             } else {
-                let value = self.resolve_expr(&let_stmt.value, ctx);
+                // Use expected type for numeric literal coercion
+                let value =
+                    self.resolve_expr_with_expected_type(&let_stmt.value, ctx, Some(target_type));
                 (value, target_type)
             }
         } else {
@@ -2057,37 +2059,10 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a return statement
     fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) -> TirStmt {
+        let return_type = ctx.return_type;
         let value = ret_stmt.value.as_ref().map(|expr| {
-            // Check for tuple literal to array coercion based on function return type
-            let element_type_opt = self.type_table.borrow().as_array(ctx.return_type);
-            if let ast::Expr::TupleLiteral(tuple_lit) = expr
-                && let Some(element_type) = element_type_opt
-            {
-                let elements: Vec<TirExpr> = tuple_lit
-                    .elements
-                    .iter()
-                    .map(|elem| {
-                        let resolved = self.resolve_expr(elem, ctx);
-                        if resolved.type_id != element_type
-                            && resolved.type_id != TypeTable::UNKNOWN
-                        {
-                            self.errors.push(TypeError::TypeMismatch {
-                                expected: self.type_table.borrow().type_name(element_type),
-                                found: self.type_table.borrow().type_name(resolved.type_id),
-                                span: elem.span(),
-                            });
-                        }
-                        resolved
-                    })
-                    .collect();
-
-                return TirExpr::new(
-                    TirExprKind::ArrayLiteral { elements },
-                    ctx.return_type,
-                    expr.span(),
-                );
-            }
-            self.resolve_expr(expr, ctx)
+            // Use expected type for coercion (numeric literals, tuple to array, etc.)
+            self.resolve_expr_with_expected_type(expr, ctx, Some(return_type))
         });
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
     }
@@ -3229,8 +3204,37 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a binary expression
     fn resolve_binary(&mut self, binary: &ast::BinaryExpr, ctx: &mut FunctionContext) -> TirExpr {
-        let left = self.resolve_expr(&binary.left, ctx);
-        let right = self.resolve_expr(&binary.right, ctx);
+        // Bidirectional coercion: if one operand is a numeric literal and the other is not,
+        // resolve the non-literal first and use its type to coerce the literal
+        let left_is_numeric_literal = self.is_numeric_literal(&binary.left);
+        let right_is_numeric_literal = self.is_numeric_literal(&binary.right);
+
+        let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
+            // Resolve right first, then coerce left to right's type
+            let right = self.resolve_expr(&binary.right, ctx);
+            let expected_type = if self.type_table.borrow().is_numeric(right.type_id) {
+                Some(right.type_id)
+            } else {
+                None
+            };
+            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, expected_type);
+            (left, right)
+        } else if right_is_numeric_literal && !left_is_numeric_literal {
+            // Resolve left first, then coerce right to left's type
+            let left = self.resolve_expr(&binary.left, ctx);
+            let expected_type = if self.type_table.borrow().is_numeric(left.type_id) {
+                Some(left.type_id)
+            } else {
+                None
+            };
+            let right = self.resolve_expr_with_expected_type(&binary.right, ctx, expected_type);
+            (left, right)
+        } else {
+            // Both literals or both non-literals - resolve normally
+            let left = self.resolve_expr(&binary.left, ctx);
+            let right = self.resolve_expr(&binary.right, ctx);
+            (left, right)
+        };
 
         // Check if this is a comparison operation on a non-primitive type
         // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
@@ -4071,8 +4075,14 @@ impl<'a> Resolver<'a> {
     fn lookup_function_param_types(&mut self, callee: &Expr) -> Vec<TypeId> {
         match callee {
             Expr::Ident(ident) => {
-                // Check for qualified name (Effect::operation)
-                if ident.name.contains("::") {
+                // Check for qualified name (Type::method or Effect::operation)
+                if let Some(pos) = ident.name.find("::") {
+                    let prefix = &ident.name[..pos];
+                    let suffix = &ident.name[pos + 2..];
+                    // Check if it's a static method
+                    if self.is_static_method(prefix, suffix) {
+                        return self.lookup_static_method_param_types(prefix, suffix);
+                    }
                     return Vec::new(); // Effect operations handled separately
                 }
 
@@ -4126,6 +4136,75 @@ impl<'a> Resolver<'a> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
+        // Handle numeric literal coercion
+        if let Some(target_type) = expected_type {
+            // Integer literal coercion
+            if let Expr::Literal(lit) = expr
+                && let Literal::Int(int_lit) = &lit.value
+                && self.type_table.borrow().is_integer(target_type)
+            {
+                match Self::parse_int_literal(&int_lit.repr) {
+                    Ok(value) => {
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value,
+                                repr: int_lit.repr.clone(),
+                            },
+                            target_type,
+                            lit.span,
+                        );
+                    }
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: 0,
+                                repr: int_lit.repr.clone(),
+                            },
+                            target_type,
+                            lit.span,
+                        );
+                    }
+                }
+            }
+
+            // Float literal coercion
+            if let Expr::Literal(lit) = expr
+                && let Literal::Float(float_lit) = &lit.value
+                && self.type_table.borrow().is_float(target_type)
+            {
+                match Self::parse_float_literal(&float_lit.repr) {
+                    Ok(value) => {
+                        return TirExpr::new(
+                            TirExprKind::FloatLiteral {
+                                value,
+                                repr: float_lit.repr.clone(),
+                            },
+                            target_type,
+                            lit.span,
+                        );
+                    }
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        return TirExpr::new(
+                            TirExprKind::FloatLiteral {
+                                value: 0.0,
+                                repr: float_lit.repr.clone(),
+                            },
+                            target_type,
+                            lit.span,
+                        );
+                    }
+                }
+            }
+        }
+
         // Handle tuple literal to array coercion
         let element_type_opt = expected_type.and_then(|t| self.type_table.borrow().as_array(t));
         if let Some(target_type) = expected_type
@@ -4136,15 +4215,8 @@ impl<'a> Resolver<'a> {
                 .elements
                 .iter()
                 .map(|elem| {
-                    let resolved = self.resolve_expr(elem, ctx);
-                    if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
-                        self.errors.push(TypeError::TypeMismatch {
-                            expected: self.type_table.borrow().type_name(element_type),
-                            found: self.type_table.borrow().type_name(resolved.type_id),
-                            span: elem.span(),
-                        });
-                    }
-                    resolved
+                    // Pass the element type as expected type for recursive coercion
+                    self.resolve_expr_with_expected_type(elem, ctx, Some(element_type))
                 })
                 .collect();
 
@@ -4377,15 +4449,32 @@ impl<'a> Resolver<'a> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Resolve arguments
+        // Resolve the target type first to get struct name for parameter type lookup
+        let target_type_id = self.resolve_type(&static_call.target_type);
+
+        // Extract struct name for parameter type lookup
+        let struct_name_for_lookup = match self.type_table.borrow().get(target_type_id).clone() {
+            ResolvedType::Struct { name, .. } => Some(name),
+            ResolvedType::GenericInstance { name, .. } => Some(name),
+            _ => None,
+        };
+
+        // Look up parameter types for coercion
+        let param_types = struct_name_for_lookup
+            .as_ref()
+            .map(|name| self.lookup_static_method_param_types(name, &static_call.method))
+            .unwrap_or_default();
+
+        // Resolve arguments with expected types for coercion
         let args: Vec<TirExpr> = static_call
             .args
             .iter()
-            .map(|a| self.resolve_expr(a, ctx))
+            .enumerate()
+            .map(|(i, a)| {
+                let expected_type = param_types.get(i).copied();
+                self.resolve_expr_with_expected_type(a, ctx, expected_type)
+            })
             .collect();
-
-        // Resolve the target type to get struct name, module path, and type args (for generics)
-        let target_type_id = self.resolve_type(&static_call.target_type);
 
         // Special handling for Option::Some and Option::None
         if let ResolvedType::Option(inner_type) =
@@ -4801,6 +4890,71 @@ impl<'a> Resolver<'a> {
         }
 
         TypeTable::UNKNOWN
+    }
+
+    /// Look up static method parameter types for coercion
+    fn lookup_static_method_param_types(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Vec<TypeId> {
+        // Check in current module's impl blocks
+        let params: Option<Vec<_>> = self.current_module_items.iter().find_map(|item| {
+            if let Item::Impl(impl_block) = item {
+                let impl_struct_name = self.get_type_name(&impl_block.ty);
+                if impl_struct_name == struct_name {
+                    for method in &impl_block.methods {
+                        let has_self = method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if method.name == method_name && !has_self {
+                            return Some(method.params.clone());
+                        }
+                    }
+                }
+            }
+            None
+        });
+
+        if let Some(params) = params {
+            return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+        }
+
+        // Check loaded modules' impl blocks
+        for module in self.loaded_modules.values() {
+            let params: Option<Vec<_>> = module.items.iter().find_map(|item| {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = self.get_type_name(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                return Some(method.params.clone());
+                            }
+                        }
+                    }
+                }
+                None
+            });
+
+            if let Some(params) = params {
+                return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+            }
+        }
+
+        Vec::new()
+    }
+
+    /// Check if an expression is a numeric literal (integer or float)
+    fn is_numeric_literal(&self, expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::Literal(lit) if matches!(lit.value, Literal::Int(_) | Literal::Float(_))
+        )
     }
 
     /// Check if a qualified name `struct_name::method_name` is a static method

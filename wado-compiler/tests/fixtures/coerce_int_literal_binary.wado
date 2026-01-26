@@ -1,0 +1,23 @@
+// Test integer literal coercion in binary operations via bidirectional coercion
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let x: i64 = 1000000000000;
+    let y: u64 = 10000000000000000000;
+
+    // Literals on right side coerce to left operand type
+    let a = x + 42;
+    let b = y * 2;
+
+    // Literals on left side coerce to right operand type
+    let c = 100 + x;
+    let d = 3 * y;
+
+    println(`i64 + 42: {a}`);
+    println(`u64 * 2: {b}`);
+    println(`100 + i64: {c}`);
+    println(`3 * u64: {d}`);
+}
+
+__DATA__
+{"stdout": "i64 + 42: 1000000000042\nu64 * 2: 1553255926290448384\n100 + i64: 1000000000100\n3 * u64: 11553255926290448384\n"}
