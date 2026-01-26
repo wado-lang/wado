@@ -130,6 +130,10 @@ pub struct Codegen {
     /// Key: variant name (e.g., "Shape")
     /// Value: `VariantTypeInfo` with struct type index and case metadata
     variant_types: RefCell<HashMap<String, VariantTypeInfo>>,
+    /// Pre-allocated type indices for user types during rec group construction.
+    /// This allows `type_id_to_valtype` to resolve forward references within a rec group.
+    /// Cleared after the rec group is defined.
+    pending_type_indices: RefCell<HashMap<String, u32>>,
 }
 
 /// Information about a custom variant type's Wasm GC representation
@@ -452,6 +456,7 @@ impl Codegen {
             pending_closures: RefCell::new(Vec::new()),
             closure_codegen_counter: RefCell::new(0),
             variant_types: RefCell::new(HashMap::new()),
+            pending_type_indices: RefCell::new(HashMap::new()),
         }
     }
 
@@ -5501,6 +5506,13 @@ impl Codegen {
                 module_source,
                 ..
             } => {
+                // Check pending_type_indices first (for rec group construction)
+                if let Some(&type_idx) = self.pending_type_indices.borrow().get(name) {
+                    return ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(type_idx),
+                    });
+                }
                 // Special case: String struct - always use the canonical module source
                 let lookup_source = if name == "String" {
                     string_module_source()
@@ -5665,6 +5677,13 @@ impl Codegen {
                 panic!("Result type codegen not yet implemented")
             }
             ResolvedType::Variant { name, .. } => {
+                // Check pending_type_indices first (for rec group construction)
+                if let Some(&type_idx) = self.pending_type_indices.borrow().get(name) {
+                    return ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(type_idx),
+                    });
+                }
                 // Custom variant types are represented as GC struct references
                 let variant_types = self.variant_types.borrow();
                 if let Some(info) = variant_types.get(name) {
@@ -5690,6 +5709,13 @@ impl Codegen {
             // Look up the monomorphized struct or variant type
             ResolvedType::GenericInstance { .. } => {
                 let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                // Check pending_type_indices first (for rec group construction)
+                if let Some(&type_idx) = self.pending_type_indices.borrow().get(&mangled_name) {
+                    return ValType::Ref(RefType {
+                        nullable: false,
+                        heap_type: HeapType::Concrete(type_idx),
+                    });
+                }
                 if let Some(struct_info) =
                     self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
                 {
