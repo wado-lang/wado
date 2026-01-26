@@ -695,79 +695,6 @@ impl Codegen {
         }
     }
 
-    /// Sort structs topologically so dependencies are registered before dependents
-    fn sort_structs_topologically<'a>(
-        structs: &'a [crate::tir::TirStruct],
-        type_table: &TypeTable,
-    ) -> Vec<&'a crate::tir::TirStruct> {
-        // Build dependency graph: deps[A] = [B] means A depends on B (B must come before A)
-        let struct_names: HashSet<String> = structs.iter().map(|s| s.name.clone()).collect();
-        let mut deps: HashMap<String, Vec<String>> = HashMap::new();
-
-        for s in structs {
-            let mut struct_deps = Vec::new();
-            for field in &s.fields {
-                let field_deps = Self::get_type_dependencies(type_table, field.type_id);
-                for dep in field_deps {
-                    // Only count dependencies on structs in our set
-                    if struct_names.contains(&dep) && dep != s.name {
-                        struct_deps.push(dep);
-                    }
-                }
-            }
-            deps.insert(s.name.clone(), struct_deps);
-        }
-
-        // Topological sort using Kahn's algorithm
-        // in_degree[A] = number of dependencies A has (structs that A needs)
-        let mut in_degree: HashMap<String, usize> = HashMap::new();
-        for s in structs {
-            let struct_deps = deps.get(&s.name).map(std::vec::Vec::len).unwrap_or(0);
-            in_degree.insert(s.name.clone(), struct_deps);
-        }
-
-        // Build reverse mapping: dependents[B] = list of structs that depend on B
-        let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
-        for (s_name, struct_deps) in &deps {
-            for dep in struct_deps {
-                dependents
-                    .entry(dep.clone())
-                    .or_default()
-                    .push(s_name.clone());
-            }
-        }
-
-        // Start with structs that have no dependencies
-        let mut queue: Vec<String> = in_degree
-            .iter()
-            .filter(|&(_, deg)| *deg == 0)
-            .map(|(name, _)| name.clone())
-            .collect();
-
-        let mut sorted_names = Vec::new();
-        while let Some(name) = queue.pop() {
-            sorted_names.push(name.clone());
-            // For each struct that depends on 'name', decrement its in_degree
-            if let Some(deps_on_name) = dependents.get(&name) {
-                for dependent in deps_on_name {
-                    let deg = in_degree.get_mut(dependent).unwrap();
-                    *deg -= 1;
-                    if *deg == 0 {
-                        queue.push(dependent.clone());
-                    }
-                }
-            }
-        }
-
-        // Map names back to structs
-        let name_to_struct: HashMap<&str, &crate::tir::TirStruct> =
-            structs.iter().map(|s| (s.name.as_str(), s)).collect();
-        sorted_names
-            .iter()
-            .filter_map(|name| name_to_struct.get(name.as_str()).copied())
-            .collect()
-    }
-
     /// Sort structs and variants together topologically so dependencies are registered before dependents.
     /// This handles mutual dependencies between structs and variants (e.g., struct with variant field,
     /// variant with struct payload).
@@ -1335,10 +1262,13 @@ impl Codegen {
 
             // Sort topologically to ensure dependencies come before dependents
             let lib_type_table = tir_mod.type_table.borrow();
-            let sorted_lib_structs =
-                Self::sort_structs_topologically(&mono_lib_structs, &lib_type_table);
+            let sorted_lib_types =
+                Self::sort_types_topologically(&mono_lib_structs, &[], &lib_type_table);
 
-            for tir_struct in sorted_lib_structs {
+            for type_decl in sorted_lib_types {
+                let TypeDecl::Struct(tir_struct) = type_decl else {
+                    continue;
+                };
                 let struct_name =
                     StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
                 // Check for self-referential structs using full struct name
@@ -1396,8 +1326,11 @@ impl Codegen {
             .chain(deferred_non_mono_structs.iter())
             .cloned()
             .collect();
-        let sorted_phase4 = Self::sort_structs_topologically(&all_phase4_structs, type_table);
-        for tir_struct in sorted_phase4 {
+        let sorted_phase4 = Self::sort_types_topologically(&all_phase4_structs, &[], type_table);
+        for type_decl in sorted_phase4 {
+            let TypeDecl::Struct(tir_struct) = type_decl else {
+                continue;
+            };
             let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
             let self_ref_fields =
