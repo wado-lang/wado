@@ -8845,14 +8845,17 @@ impl Codegen {
                     panic!("Variant type not registered: {name}");
                 });
 
-                // Find the case info for this pattern
-                let case_info = variant_info
+                // Find the case info and case index for this pattern
+                let (case_index, case_info) = variant_info
                     .cases
                     .iter()
-                    .find(|info| info.name == *case_name)
-                    .cloned()
+                    .enumerate()
+                    .find(|(_, info)| info.name == *case_name)
+                    .map(|(i, info)| (i, info.clone()))
                     .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
                 let case_type_idx = case_info.type_idx;
+                let base_type_idx = variant_info.base_type_idx;
+                let is_unit_variant = case_info.field_types.is_empty();
                 drop(variant_types);
 
                 // Stack: [variant_value]
@@ -8865,11 +8868,24 @@ impl Codegen {
                 let scrutinee_local = ctx.alloc_local(&local_name, variant_valtype);
                 func.instruction(&Instruction::LocalSet(scrutinee_local));
 
-                // Use ref.test to check if the value is of the expected case type
+                // For unit variants (no payload), check discriminator value directly
+                // because structurally identical subtypes can't be distinguished by ref.test.
+                // For payload variants, use ref.test since they have different structures.
                 func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
-                    case_type_idx,
-                )));
+                if is_unit_variant {
+                    // Read discriminator and compare with case index
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    func.instruction(&Instruction::I32Const(case_index as i32));
+                    func.instruction(&Instruction::I32Eq);
+                } else {
+                    // Use ref.test to check if the value is of the expected case type
+                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                }
 
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
