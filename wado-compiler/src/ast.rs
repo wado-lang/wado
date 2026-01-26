@@ -145,11 +145,13 @@ impl WasiImport {
     }
 }
 
-/// Resource declaration like `resource Foo;`
+/// Resource declaration like `resource Foo;` or `resource Foo { fn method(...); }`
 #[derive(Debug, Clone)]
 pub struct ResourceDecl {
     pub name: String,
     pub attrs: Vec<Attribute>,
+    /// Methods declared within the resource block (reuses `EffectMethod` structure)
+    pub methods: Vec<EffectMethod>,
     pub span: Span,
 }
 
@@ -976,6 +978,8 @@ pub struct EnumDecl {
     /// Generic type parameters: `enum Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<EnumCase>,
+    /// Attributes like #[wasi("...")]
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 

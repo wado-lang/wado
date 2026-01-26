@@ -4,7 +4,7 @@
 //! - WASI import registry: collects WASI imports from effect definitions in lib/wasi/*.wado
 //! - Component Model ABI: type conversion and support checking for CM codegen
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use heck::ToKebabCase;
 use wasm_encoder::ValType;
@@ -112,6 +112,10 @@ pub struct WasiRegistry {
     /// Resource types collected from WASI modules (e.g., `TerminalInput`, `TerminalOutput`)
     /// Maps resource name -> CM resource name (kebab-case)
     resources: HashMap<String, String>,
+
+    /// Enum types collected from WASI modules (e.g., `ErrorCode`, `IpAddressFamily`)
+    /// Maps Wado enum name -> (CM enum name kebab-case, variant names in kebab-case)
+    enums: HashMap<String, (String, Vec<String>)>,
 }
 
 impl WasiRegistry {
@@ -153,6 +157,10 @@ impl WasiRegistry {
         let wasi_random = parse_module(stdlib::WASI_RANDOM);
         registry.register_module(&wasi_random, &mut world_registry);
 
+        // Parse and register wasi:sockets
+        let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
+        registry.register_module(&wasi_sockets, &mut world_registry);
+
         // Note: wasi:filesystem uses `flags` syntax which isn't supported yet
         // TODO: Add wasi:filesystem registration when `flags` parsing is implemented
 
@@ -181,6 +189,44 @@ impl WasiRegistry {
                 // Convert PascalCase to kebab-case for CM
                 let cm_name = to_kebab_case(&resource.name);
                 self.resources.insert(resource.name.clone(), cm_name);
+            }
+        }
+
+        // Collect enum types from this module
+        // Use interface path from #[wasi] attribute as key to distinguish same-named enums
+        for item in &module.items {
+            if let Item::Enum(enum_def) = item {
+                // Convert PascalCase to kebab-case for CM
+                let cm_name = to_kebab_case(&enum_def.name);
+                // Also collect variant names in kebab-case
+                let variant_names: Vec<String> = enum_def
+                    .cases
+                    .iter()
+                    .map(|c| to_kebab_case(&c.name))
+                    .collect();
+
+                // Extract interface path from #[wasi] attribute if present
+                // Format: #[wasi("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
+                let interface_path = enum_def
+                    .attrs
+                    .iter()
+                    .find(|a| a.name == "wasi")
+                    .and_then(|a| a.args.first())
+                    .and_then(|s| s.split('#').next())
+                    .map(std::string::ToString::to_string);
+
+                // Store by Wado name for backward compatibility
+                // but also store by interface path for interface-specific lookups
+                self.enums.insert(
+                    enum_def.name.clone(),
+                    (cm_name.clone(), variant_names.clone()),
+                );
+
+                // Also store by interface path + name for disambiguation
+                if let Some(path) = interface_path {
+                    let full_key = format!("{path}#{}", enum_def.name);
+                    self.enums.insert(full_key, (cm_name, variant_names));
+                }
             }
         }
 
@@ -227,6 +273,35 @@ impl WasiRegistry {
             }
         }
 
+        // Register resource methods with resolved types
+        for item in &module.items {
+            if let Item::Resource(resource) = item {
+                for method in &resource.methods {
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.wasi_import.as_ref()) {
+                        let params: Vec<(String, Type)> = method
+                            .params
+                            .iter()
+                            .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.type_aliases)))
+                            .collect();
+
+                        let return_type = method
+                            .return_type
+                            .as_ref()
+                            .map(|ty| resolve_type(ty, &self.type_aliases));
+
+                        self.register(
+                            &resource.name,
+                            &method.name,
+                            wasi,
+                            method.is_async,
+                            params,
+                            return_type,
+                        );
+                    }
+                }
+            }
+        }
+
         // Register world definitions
         for item in &module.items {
             if let Item::World(world) = item {
@@ -255,6 +330,47 @@ impl WasiRegistry {
         self.resources.get(name).map(String::as_str)
     }
 
+    /// Check if a type name is a registered enum
+    pub fn is_enum(&self, name: &str) -> bool {
+        self.enums.contains_key(name)
+    }
+
+    /// Get the CM kebab-case name for an enum
+    pub fn get_enum_cm_name(&self, name: &str) -> Option<&str> {
+        self.enums.get(name).map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Get the CM enum variant names (in kebab-case)
+    pub fn get_enum_variants(&self, name: &str) -> Option<&[String]> {
+        self.enums
+            .get(name)
+            .map(|(_, variants)| variants.as_slice())
+    }
+
+    /// Get the CM enum variant names by interface path + name
+    /// This is used to disambiguate enums with the same Wado name but different interfaces
+    /// (e.g., wasi:cli/types#ErrorCode vs wasi:sockets/types#ErrorCode)
+    pub fn get_enum_variants_by_interface(
+        &self,
+        interface_path: &str,
+        name: &str,
+    ) -> Option<&[String]> {
+        let full_key = format!("{interface_path}#{name}");
+        self.enums
+            .get(&full_key)
+            .or_else(|| self.enums.get(name))
+            .map(|(_, variants)| variants.as_slice())
+    }
+
+    /// Get the CM enum name by interface path + name
+    pub fn get_enum_cm_name_by_interface(&self, interface_path: &str, name: &str) -> Option<&str> {
+        let full_key = format!("{interface_path}#{name}");
+        self.enums
+            .get(&full_key)
+            .or_else(|| self.enums.get(name))
+            .map(|(cm_name, _)| cm_name.as_str())
+    }
+
     /// Get the resource type from a return type (if it's Option<ResourceName>)
     /// Returns (Wado name, CM name) if the return type references a resource
     pub fn get_resource_from_return_type(
@@ -274,6 +390,30 @@ impl WasiRegistry {
         }
 
         None
+    }
+
+    /// Check if a WASI function is supported for Component Model generation.
+    ///
+    /// This uses the registry's known enums and resources to determine if
+    /// all types in the function signature are supported.
+    pub fn is_function_supported(&self, func: &WasiFunctionInfo) -> bool {
+        // Build sets of known enum and resource names
+        let enums: HashSet<&str> = self.enums.keys().map(String::as_str).collect();
+        let resources: HashSet<&str> = self.resources.keys().map(String::as_str).collect();
+
+        // Check all parameter types
+        for (_, ty) in &func.params {
+            if !is_param_type_supported_with_types(ty, &enums, &resources) {
+                return false;
+            }
+        }
+        // Check return type if present
+        if let Some(ret_ty) = &func.return_type
+            && !is_return_type_supported_with_types(ret_ty, &enums, &resources)
+        {
+            return false;
+        }
+        true
     }
 
     /// Register a WASI function from an effect method
@@ -488,15 +628,21 @@ impl WasiRegistry {
     ///
     /// Some effects are not included by default because:
     /// - Exit: May not be supported by all runtimes
+    /// - Timezone: May not be available in all runtimes (wasi:clocks/timezone)
     /// - Terminal*: May not be available in non-terminal environments
+    /// - `TcpSocket`, `UdpSocket`, `IpNameLookup`: Network interfaces require explicit usage
     ///
     /// These effects are only included when explicitly used in the program.
     pub fn standard_function_names(&self) -> impl Iterator<Item = &str> {
         self.all_function_names().filter(|name| {
             !name.starts_with("Exit::")
+                && !name.starts_with("Timezone::")
                 && !name.starts_with("TerminalStdin::")
                 && !name.starts_with("TerminalStdout::")
                 && !name.starts_with("TerminalStderr::")
+                && !name.starts_with("TcpSocket::")
+                && !name.starts_with("UdpSocket::")
+                && !name.starts_with("IpNameLookup::")
         })
     }
 
@@ -614,22 +760,34 @@ pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
 ///
 /// Type aliases (like Instant, Duration) should already be resolved to their
 /// underlying types before this check.
-pub fn is_param_type_supported(ty: &Type) -> bool {
+/// The `enums` and `resources` sets contain known enum/resource type names.
+fn is_param_type_supported_with_types(
+    ty: &Type,
+    enums: &HashSet<&str>,
+    resources: &HashSet<&str>,
+) -> bool {
     match ty {
-        Type::Named(named) => matches!(
-            named.name.as_str(),
-            "i32"
-                | "i64"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "f32"
-                | "f64"
-                | "bool"
-                | "char"
-                | "String"
-        ),
+        Type::Named(named) => {
+            let name = named.name.as_str();
+            // Check primitives and unit type
+            // Unit type () is parsed as Named("()"), not Tuple([])
+            matches!(
+                name,
+                "i32"
+                    | "i64"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+                    | "()"
+            ) || enums.contains(name)
+                || resources.contains(name)
+        }
         Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
         _ => false,
     }
@@ -639,69 +797,134 @@ pub fn is_param_type_supported(ty: &Type) -> bool {
 ///
 /// Type aliases (like Instant, Duration) should already be resolved to their
 /// underlying types before this check.
-pub fn is_return_type_supported(ty: &Type) -> bool {
+/// The `enums` and `resources` sets contain known enum/resource type names.
+fn is_return_type_supported_with_types(
+    ty: &Type,
+    enums: &HashSet<&str>,
+    resources: &HashSet<&str>,
+) -> bool {
     match ty {
-        Type::Named(named) => matches!(
-            named.name.as_str(),
-            "i32"
-                | "i64"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "f32"
-                | "f64"
-                | "bool"
-                | "char"
-                | "String"
-        ),
+        Type::Named(named) => {
+            let name = named.name.as_str();
+            // Check primitives, enums, resources, and unit type
+            // Unit type () is parsed as Named("()"), not Tuple([])
+            matches!(
+                name,
+                "i32"
+                    | "i64"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+                    | "()"
+            ) || enums.contains(name)
+                || resources.contains(name)
+        }
         Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" | "Result" => true,
+            "Stream" => true,
+            "Result" => {
+                // Result<T, E> - both T and E must be supported
+                generic
+                    .args
+                    .iter()
+                    .all(|arg| is_return_type_supported_with_types(arg, enums, resources))
+            }
             "Array" | "Option" => {
                 // Recursively check that inner types are supported primitives
-                generic.args.iter().all(is_primitive_type_supported)
+                generic
+                    .args
+                    .iter()
+                    .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
             }
             "Tuple" => {
                 // All tuple elements must be supported primitives (Tuple<...> syntax)
-                generic.args.iter().all(is_primitive_type_supported)
+                generic
+                    .args
+                    .iter()
+                    .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
             }
             _ => false,
         },
         // Handle [...] tuple syntax
-        Type::Tuple(elements) => elements.iter().all(is_primitive_type_supported),
+        Type::Tuple(elements) => {
+            // Empty tuple () is the unit type, which is always supported
+            if elements.is_empty() {
+                return true;
+            }
+            elements
+                .iter()
+                .all(|el| is_primitive_type_supported_with_types(el, enums, resources))
+        }
         _ => false,
     }
 }
 
 /// Check if a type is a supported primitive type (for inner types of Array/Option/Tuple)
-fn is_primitive_type_supported(ty: &Type) -> bool {
+fn is_primitive_type_supported_with_types(
+    ty: &Type,
+    enums: &HashSet<&str>,
+    resources: &HashSet<&str>,
+) -> bool {
     match ty {
-        Type::Named(named) => matches!(
-            named.name.as_str(),
-            "i32"
-                | "i64"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "f32"
-                | "f64"
-                | "bool"
-                | "char"
-                | "String"
-        ),
+        Type::Named(named) => {
+            let name = named.name.as_str();
+            // Unit type () is parsed as Named("()"), not Tuple([])
+            matches!(
+                name,
+                "i32"
+                    | "i64"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+                    | "()"
+            ) || enums.contains(name)
+                || resources.contains(name)
+        }
         // Handle Tuple<...> syntax
         Type::Generic(generic) if generic.name == "Tuple" => {
             // Tuples are allowed if all elements are primitives
-            generic.args.iter().all(is_primitive_type_supported)
+            generic
+                .args
+                .iter()
+                .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
         }
         // Handle [...] tuple syntax
-        Type::Tuple(elements) => elements.iter().all(is_primitive_type_supported),
+        Type::Tuple(elements) => elements
+            .iter()
+            .all(|el| is_primitive_type_supported_with_types(el, enums, resources)),
         _ => false,
     }
 }
 
+/// Check if a parameter type is supported (without enum/resource knowledge)
+pub fn is_param_type_supported(ty: &Type) -> bool {
+    is_param_type_supported_with_types(ty, &HashSet::new(), &HashSet::new())
+}
+
+/// Check if a return type is supported (without enum/resource knowledge)
+pub fn is_return_type_supported(ty: &Type) -> bool {
+    is_return_type_supported_with_types(ty, &HashSet::new(), &HashSet::new())
+}
+
+/// Check if a type is a supported primitive type (for inner types of Array/Option/Tuple)
+#[allow(dead_code)]
+fn is_primitive_type_supported(ty: &Type) -> bool {
+    is_primitive_type_supported_with_types(ty, &HashSet::new(), &HashSet::new())
+}
+
 /// Check if all types in a WASI function are supported for Component Model generation
+/// (without enum/resource knowledge - use `WasiRegistry::is_function_supported` instead)
 pub fn is_wasi_function_supported(func: &WasiFunctionInfo) -> bool {
     // Check all parameter types (Result not allowed in params)
     for (_, ty) in &func.params {
@@ -795,6 +1018,10 @@ pub struct CmCallConvention {
     pub tuple_return: Option<Vec<CmPrimitiveType>>,
     /// For option<own<resource>>: true if needs boxing to Option<i32>
     pub option_resource_return: bool,
+    /// For result<T, E> returns: `Some((ok_is_resource`, `err_is_enum`))
+    /// `ok_is_resource`: if true, Ok payload is a resource handle (i32)
+    /// `err_is_enum`: if true, Err payload is an enum (i32)
+    pub result_return: Option<(bool, bool)>,
 }
 
 impl CmCallConvention {
@@ -813,7 +1040,15 @@ impl CmCallConvention {
                 "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" => {
                     Self::default()
                 }
-                // String is not a primitive in CM, but we don't have a list<u8> return yet
+                // String return type needs memory/realloc for CM lowering
+                // (string is lowered as list<u8> which requires memory allocation)
+                "String" => Self {
+                    needs_memory: true,
+                    needs_realloc: true,
+                    outptr_alloc: Some((8, 4)), // ptr + len
+                    ..Self::default()
+                },
+                // Other named types (resources, enums) - use default
                 _ => Self::default(),
             },
 
@@ -828,8 +1063,13 @@ impl CmCallConvention {
                 // Tuple<T, U, ...> -> needs outptr + tuple struct creation
                 "Tuple" if !generic.args.is_empty() => Self::for_tuple_return(&generic.args),
 
-                // Stream<T>, Future<T>, Result<T, E> - handle returns
-                "Stream" | "Future" | "Result" => Self::default(),
+                // Result<T, E> -> needs outptr
+                "Result" if generic.args.len() == 2 => {
+                    Self::for_result_return(&generic.args[0], &generic.args[1])
+                }
+
+                // Stream<T>, Future<T> - handle returns
+                "Stream" | "Future" => Self::default(),
 
                 _ => Self::default(),
             },
@@ -879,6 +1119,7 @@ impl CmCallConvention {
             result_converter: converter,
             tuple_return: None,
             option_resource_return: false,
+            result_return: None,
         }
     }
 
@@ -894,6 +1135,7 @@ impl CmCallConvention {
                 result_converter: Some("core/internal/cm_option_string_to_option".to_string()),
                 tuple_return: None,
                 option_resource_return: false,
+                result_return: None,
             },
 
             // option<own<resource>> -> outptr (4 bytes: 0=none, non-zero=handle)
@@ -906,6 +1148,7 @@ impl CmCallConvention {
                 result_converter: None,
                 tuple_return: None,
                 option_resource_return: true,
+                result_return: None,
             },
 
             // option<primitive> - simple case, but still needs outptr
@@ -923,6 +1166,7 @@ impl CmCallConvention {
                             result_converter: None,
                             tuple_return: None,
                             option_resource_return: true,
+                            result_return: None,
                         };
                     }
                 };
@@ -937,6 +1181,7 @@ impl CmCallConvention {
                     result_converter: None,
                     tuple_return: None,
                     option_resource_return: false,
+                    result_return: None,
                 }
             }
 
@@ -979,6 +1224,35 @@ impl CmCallConvention {
             result_converter: None,
             tuple_return: Some(primitives),
             option_resource_return: false,
+            result_return: None,
+        }
+    }
+
+    /// Convention for result<T, E> return types
+    fn for_result_return(ok_type: &Type, err_type: &Type) -> Self {
+        // Check if ok_type is a resource (named type that's not a primitive)
+        let ok_is_resource = matches!(ok_type, Type::Named(named) if !matches!(
+            named.name.as_str(),
+            "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String"
+        ));
+
+        // Check if err_type is an enum (named type that's not a primitive)
+        let err_is_enum = matches!(err_type, Type::Named(named) if !matches!(
+            named.name.as_str(),
+            "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String"
+        ));
+
+        // Result layout in CM: discriminant (i32) + max(ok_size, err_size)
+        // For Result<Resource, Enum>: discriminant (4) + payload (4) = 8 bytes
+        Self {
+            is_async: false,
+            needs_memory: true,
+            needs_realloc: true,
+            outptr_alloc: Some((8, 4)), // discriminant + payload
+            result_converter: None,
+            tuple_return: None,
+            option_resource_return: false,
+            result_return: Some((ok_is_resource, err_is_enum)),
         }
     }
 
@@ -1338,6 +1612,29 @@ mod tests {
         assert!(
             random_interface.is_some(),
             "wasi:random/random interface should be registered"
+        );
+    }
+
+    #[test]
+    fn test_sockets_resource_methods_registered() {
+        let (registry, _) = WasiRegistry::build_from_stdlib();
+
+        // Check that TcpSocket resource methods are registered
+        let resolved = registry.resolve("TcpSocket::static_tcp_socket_create");
+        assert!(
+            resolved.is_some(),
+            "TcpSocket::static_tcp_socket_create should be resolved, got {:?}",
+            resolved
+        );
+
+        // Check that the sockets types interface is included
+        let interfaces: Vec<_> = registry.interfaces().collect();
+        let sockets_interface = interfaces
+            .iter()
+            .find(|i| i.interface == "types" && i.package == "sockets");
+        assert!(
+            sockets_interface.is_some(),
+            "wasi:sockets/types interface should be registered"
         );
     }
 }

@@ -247,6 +247,18 @@ pub variant Result<T, E> {
     Err(E),
 }
 
+/// Stream type - an async sequence of values (WASI Component Model primitive)
+/// This is an opaque handle managed by the runtime.
+pub struct Stream<T> {
+    handle: i32,
+}
+
+/// Future type - an async value that will resolve (WASI Component Model primitive)
+/// This is an opaque handle managed by the runtime.
+pub struct Future<T> {
+    handle: i32,
+}
+
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 pub trait Iterator {

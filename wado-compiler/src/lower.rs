@@ -473,7 +473,8 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -702,7 +703,8 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -1210,7 +1212,8 @@ impl ClosureLowerer {
             | TirExprKind::StringLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
-            | TirExprKind::Global { .. } => expr.clone(),
+            | TirExprKind::Global { .. }
+            | TirExprKind::EnumConstruct { .. } => expr.clone(),
             // For remaining expression types, clone as-is
             // (IndirectCall, Closure, etc. - rare in closure bodies)
             _ => expr.clone(),
@@ -1623,7 +1626,8 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => false,
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => false,
         }
     }
 
@@ -1902,7 +1906,8 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -2788,6 +2793,19 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
+            TirExprKind::EnumConstruct {
+                enum_type,
+                case_index,
+                case_name,
+            } => TirExpr::new(
+                TirExprKind::EnumConstruct {
+                    enum_type: *enum_type,
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                },
+                expr.type_id,
+                expr.span,
+            ),
         }
     }
 
@@ -3081,7 +3099,8 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -3465,7 +3484,8 @@ impl StringCollector {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 }

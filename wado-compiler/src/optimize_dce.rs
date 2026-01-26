@@ -873,6 +873,22 @@ fn analyze_expr(
             };
             analysis.callees.insert(callee_id);
 
+            // Detect resource method calls from WASI modules
+            // Static methods on resources (e.g., TcpSocket::static_tcp_socket_create)
+            // need to be tracked as effect calls for proper import generation
+            let module_path = func.module_path();
+            if module_path.len() >= 2 && module_path[0] == "wasi" {
+                // This is a WASI module - check for "Type::method" pattern
+                if let Some(pos) = func_name.find("::") {
+                    let resource_name = &func_name[..pos];
+                    let method_name = &func_name[pos + 2..];
+                    // Record as effect call (effect_name = resource name, op_name = method name)
+                    analysis
+                        .effect_calls
+                        .insert((resource_name.to_string(), method_name.to_string()));
+                }
+            }
+
             for arg in args {
                 analyze_expr(arg, current_module, type_table, analysis);
             }
@@ -931,7 +947,10 @@ fn analyze_expr(
             }
         }
         TirExprKind::VariantConstruct {
-            case_name, fields, ..
+            variant_type,
+            case_name,
+            fields,
+            ..
         } => {
             for field in fields {
                 analyze_expr(field, current_module, type_table, analysis);
@@ -942,6 +961,16 @@ fn analyze_expr(
                 && let ResolvedType::Primitive(prim) = type_table.get(fields[0].type_id)
             {
                 analysis.used_box_primitives.insert(*prim);
+            }
+            // Generic variants (like Result<i32, String>) may need boxing for primitives
+            // if the variant has heterogeneous field types (uses eqref).
+            // To be safe, mark all primitive fields in generic variants as needing boxing.
+            if let ResolvedType::GenericInstance { .. } = type_table.get(*variant_type) {
+                for field in fields {
+                    if let ResolvedType::Primitive(prim) = type_table.get(field.type_id) {
+                        analysis.used_box_primitives.insert(*prim);
+                    }
+                }
             }
         }
         TirExprKind::Move { value } => {
@@ -960,7 +989,8 @@ fn analyze_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 

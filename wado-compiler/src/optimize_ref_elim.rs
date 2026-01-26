@@ -220,7 +220,8 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
         | TirExprKind::Unit
         | TirExprKind::Local { .. } // Different local
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => (true, 0),
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => (true, 0),
     }
 }
 
@@ -469,7 +470,8 @@ fn replace_ref_field_access_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -843,7 +845,8 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -1062,7 +1065,8 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
-        | TirExprKind::Capture { .. } => {}
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 

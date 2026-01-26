@@ -501,7 +501,8 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. } => {}
+        | TirExprKind::Match { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -802,7 +803,8 @@ fn collect_licm_ref_bindings_in_expr(
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. } => {}
+        | TirExprKind::Match { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -1464,7 +1466,8 @@ fn find_hoist_candidates_in_expr(
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. } => {}
+        | TirExprKind::Match { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -1723,6 +1726,7 @@ fn replace_hoisted_in_expr(
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. } => {}
+        | TirExprKind::Match { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }

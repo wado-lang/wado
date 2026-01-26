@@ -10,7 +10,7 @@ use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
 use crate::component_model::{
     CmPrimitiveType, WasiFunctionInfo, WasiInterfaceInfo, WasiRegistry, build_local_alias_name,
-    is_wasi_function_supported, return_type_requires_outptr, wasi_type_to_valtype,
+    return_type_requires_outptr, wasi_type_to_valtype,
 };
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
@@ -535,9 +535,22 @@ impl Codegen {
                 let inner_name = self.mangle_type_for_struct_name(*inner, type_table);
                 format!("Option<{inner_name}>")
             }
+            ResolvedType::Result { ok, err } => {
+                let ok_name = self.mangle_type_for_struct_name(*ok, type_table);
+                let err_name = self.mangle_type_for_struct_name(*err, type_table);
+                format!("Result<{ok_name},{err_name}>")
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, use the inner type's name
                 self.mangle_type_for_struct_name(*inner, type_table)
+            }
+            ResolvedType::Resource { name, .. } => {
+                // Resource types are i32 handles, use the name for identification
+                name.clone()
+            }
+            ResolvedType::Enum { name, .. } => {
+                // Enum types are i32, use the name for identification
+                name.clone()
             }
             _ => "unknown".to_string(),
         }
@@ -1268,6 +1281,28 @@ impl Codegen {
                 continue;
             }
             self.register_variant_type(variant, type_table, &mut builder);
+        }
+
+        // PHASE 4.5: Register monomorphized generic variants from type tables
+        // Scan for GenericInstance types that refer to variants and register them
+        self.register_monomorphized_variants_from_table(entry_tir, type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source != entry_module_source {
+                self.register_monomorphized_variants_from_table(
+                    tir_mod,
+                    &tir_mod.type_table.borrow(),
+                    &mut builder,
+                );
+            }
+        }
+
+        // PHASE 4.6: Register Result types from type tables
+        // Result<T, E> types are represented as variants with Ok and Err cases
+        self.register_result_types_from_table(type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source != entry_module_source {
+                self.register_result_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
+            }
         }
 
         // PHASE 5: Register ALL array types (including struct-based like Array<String>)
@@ -2197,29 +2232,27 @@ impl Codegen {
                 continue;
             }
 
-            // Only include interfaces where ALL functions have supported types
-            // This ensures we're requesting exactly what we can generate,
-            // avoiding mismatches with runtime-provided interfaces
-            let all_functions_supported = interface_info
+            // Filter to only include functions with supported types
+            // This allows importing a subset of functions from an interface
+            // when some functions use unsupported types (like variants)
+            let supported_functions: Vec<_> = interface_info
                 .functions
                 .iter()
-                .all(is_wasi_function_supported);
+                .filter(|func| {
+                    // Check if function has supported types
+                    if !self.wasi_registry.is_function_supported(func) {
+                        return false;
+                    }
+                    // DCE: Only include functions that are actually used
+                    let effect_name = &func.effect_name;
+                    project.has_effect(effect_name)
+                })
+                .collect();
 
-            if !all_functions_supported {
+            // Skip interface if no functions are supported and used
+            if supported_functions.is_empty() {
                 continue;
             }
-
-            // DCE: Skip interfaces where the effect is not used
-            // Get effect name from first function (all functions in an interface share the same effect)
-            if let Some(first_func) = interface_info.functions.first() {
-                let effect_name = &first_func.effect_name;
-                if !project.has_effect(effect_name) {
-                    continue;
-                }
-            }
-
-            // All functions are supported, so use them all
-            let supported_functions: Vec<_> = interface_info.functions.iter().collect();
 
             // Build instance type for this interface
             let instance_type_name = format!("{}-instance-type", interface_info.interface);
@@ -2229,8 +2262,130 @@ impl Codegen {
                 let mut instance_type = InstanceType::new();
                 let mut local_type_idx = 0u32;
 
-                // Track which functions need which types
-                // We'll build types first, then functions
+                // FIRST: Collect resource types needed by static methods
+                // Static methods return Result<Resource, ErrorCode> where Resource is an own<resource>
+                // Resource types MUST come first in the instance type
+                let mut needed_resources: Vec<String> = Vec::new();
+                for func in &supported_functions {
+                    // Check if this is a static method by looking at the function name
+                    if func.wasi_func_name.starts_with("[static]") {
+                        // Extract resource from return type (e.g., Result<TcpSocket, ErrorCode>)
+                        if let Some(Type::Generic(g)) = &func.return_type
+                            && g.name == "Result"
+                            && !g.args.is_empty()
+                            && let Type::Named(named) = &g.args[0]
+                            && self.wasi_registry.is_resource(&named.name)
+                            && !needed_resources.contains(&named.name)
+                        {
+                            needed_resources.push(named.name.clone());
+                        }
+                    }
+                }
+
+                // Define resource types and track their indices
+                // For each resource, we define:
+                //   - The resource type itself (SubResource for imports)
+                //   - own<resource> type
+                let mut resource_type_indices: HashMap<String, u32> = HashMap::new();
+                let mut own_resource_type_indices: HashMap<String, u32> = HashMap::new();
+                for resource_name in &needed_resources {
+                    if let Some(cm_name) = self.wasi_registry.get_resource_cm_name(resource_name) {
+                        // Export resource type (SubResource for imported resources)
+                        instance_type.export(
+                            cm_name,
+                            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+                        );
+                        resource_type_indices.insert(resource_name.clone(), local_type_idx);
+                        local_type_idx += 1;
+
+                        // Define own<resource> type referencing the resource
+                        let resource_idx = resource_type_indices[resource_name];
+                        instance_type.ty().defined_type().own(resource_idx);
+                        own_resource_type_indices.insert(resource_name.clone(), local_type_idx);
+                        local_type_idx += 1;
+                    }
+                }
+
+                // SECOND: Collect all unique enum types needed by functions in this interface
+                let mut needed_enums: Vec<String> = Vec::new();
+                for func in &supported_functions {
+                    for (_, ty) in &func.params {
+                        if let Type::Named(named) = ty
+                            && self.wasi_registry.is_enum(&named.name)
+                            && !needed_enums.contains(&named.name)
+                        {
+                            needed_enums.push(named.name.clone());
+                        }
+                    }
+                    // Also check return types for enums (e.g., Result<Resource, ErrorCode>)
+                    if let Some(ret_ty) = &func.return_type
+                        && let Type::Generic(g) = ret_ty
+                        && g.name == "Result"
+                    {
+                        // Check Ok and Err types for enums
+                        for arg in &g.args {
+                            if let Type::Named(named) = arg
+                                && self.wasi_registry.is_enum(&named.name)
+                                && !needed_enums.contains(&named.name)
+                            {
+                                // Skip ErrorCode for non-sockets interfaces
+                                // (they alias it from wasi:cli/types)
+                                if named.name == "ErrorCode" && interface_info.package != "sockets"
+                                {
+                                    continue;
+                                }
+                                needed_enums.push(named.name.clone());
+                            }
+                        }
+                    }
+                }
+
+                // Define and export enum types. The export index (not type index) must be used
+                // when referencing the enum in function parameters.
+                // In Component Model instance types, both types AND exports increment the item index.
+                //
+                // Use interface-aware enum lookup to distinguish same-named enums from different
+                // interfaces (e.g., wasi:cli/types#ErrorCode vs wasi:sockets/types#ErrorCode)
+                let mut enum_type_indices: HashMap<String, u32> = HashMap::new();
+                let mut enum_export_indices: HashMap<String, u32> = HashMap::new();
+
+                // Use the full interface path (with version) for enum lookup
+                let interface_path = &interface_info.path;
+
+                for enum_name in &needed_enums {
+                    if let Some(variants) = self
+                        .wasi_registry
+                        .get_enum_variants_by_interface(interface_path, enum_name)
+                    {
+                        // Define the enum type
+                        instance_type
+                            .ty()
+                            .defined_type()
+                            .enum_type(variants.iter().map(String::as_str));
+                        let type_idx = local_type_idx;
+                        local_type_idx += 1;
+                        enum_type_indices.insert(enum_name.clone(), type_idx);
+
+                        // Export the enum type immediately (increments the combined index)
+                        // Function parameters must use this EXPORT index, not the type index
+                        if let Some(cm_name) = self
+                            .wasi_registry
+                            .get_enum_cm_name_by_interface(interface_path, enum_name)
+                        {
+                            instance_type.export(
+                                cm_name,
+                                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(type_idx)),
+                            );
+                            enum_export_indices.insert(enum_name.clone(), local_type_idx);
+                            local_type_idx += 1;
+                        }
+                    }
+                }
+
+                // Track function exports to be added after all type definitions
+                let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
+
+                // Build types for each function (exports will be added at the end)
                 for func in &supported_functions {
                     // Determine what types this function needs
                     let needs_stream_u8 = func
@@ -2260,27 +2415,62 @@ impl Codegen {
                         None
                     };
 
-                    // Error-code alias (if needed for result type)
+                    // Error-code type index (if needed for result type)
+                    // - Sockets package has its own error-code, use locally-defined one
+                    // - CLI package uses error-code from wasi:cli/types, alias the outer one
                     let error_code_idx = if needs_error_code {
-                        let outer_error_code = ctx.type_idx("error-code");
-                        instance_type.alias(Alias::Outer {
-                            kind: ComponentOuterAliasKind::Type,
-                            count: 1,
-                            index: outer_error_code,
-                        });
-                        let idx = local_type_idx;
-                        local_type_idx += 1;
-                        Some(idx)
+                        // Check if this is a sockets interface that has its own ErrorCode
+                        let uses_local_error_code = interface_info.package == "sockets"
+                            && enum_export_indices.contains_key("ErrorCode");
+
+                        if uses_local_error_code {
+                            // Use the locally-defined ErrorCode enum (sockets)
+                            Some(enum_export_indices["ErrorCode"])
+                        } else {
+                            // Alias the outer error-code from wasi:cli/types
+                            let outer_error_code = ctx.type_idx("error-code");
+                            instance_type.alias(Alias::Outer {
+                                kind: ComponentOuterAliasKind::Type,
+                                count: 1,
+                                index: outer_error_code,
+                            });
+                            let idx = local_type_idx;
+                            local_type_idx += 1;
+                            Some(idx)
+                        }
                     } else {
                         None
                     };
 
-                    // Result type for return type (with error-code)
+                    // Result type for return type (with error-code and optional ok type)
+                    // For static methods returning Result<Resource, ErrorCode>, use own<resource>
                     let result_type_idx = if let Some(err_idx) = error_code_idx {
+                        // Check if the Ok type is a resource (for static methods)
+                        let ok_type = if let Some(Type::Generic(g)) = &func.return_type
+                            && g.name == "Result"
+                            && !g.args.is_empty()
+                        {
+                            if let Type::Named(named) = &g.args[0]
+                                && let Some(&own_idx) = own_resource_type_indices.get(&named.name)
+                            {
+                                // Ok type is own<resource>
+                                Some(ComponentValType::Type(own_idx))
+                            } else if let Type::Named(named) = &g.args[0]
+                                && named.name == "()"
+                            {
+                                // Ok type is unit - no payload
+                                None
+                            } else {
+                                // Ok type is a primitive or other type
+                                None
+                            }
+                        } else {
+                            None
+                        };
                         instance_type
                             .ty()
                             .defined_type()
-                            .result(None, Some(ComponentValType::Type(err_idx)));
+                            .result(ok_type, Some(ComponentValType::Type(err_idx)));
                         let idx = local_type_idx;
                         local_type_idx += 1;
                         Some(idx)
@@ -2390,11 +2580,13 @@ impl Codegen {
                         .params
                         .iter()
                         .map(|(name, ty)| {
+                            // Use export indices for enums (required for instance types used as imports)
                             let val_type = self.wado_type_to_cm_val_type(
                                 ty,
                                 stream_type_idx,
                                 error_code_idx,
                                 result_param_type_idx,
+                                &enum_export_indices,
                             );
                             (to_kebab_case(name), val_type)
                         })
@@ -2427,10 +2619,15 @@ impl Codegen {
                     let func_type_idx = local_type_idx;
                     local_type_idx += 1;
 
-                    // Export the function
+                    // Defer the function export to after all type definitions
+                    deferred_func_exports.push((func.wasi_func_name.clone(), func_type_idx));
+                }
+
+                // Export functions (enum exports were added inline after each enum definition)
+                for (func_name, func_type_idx) in &deferred_func_exports {
                     instance_type.export(
-                        &func.wasi_func_name,
-                        wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+                        func_name,
+                        wasm_encoder::ComponentTypeRef::Func(*func_type_idx),
                     );
                 }
 
@@ -2629,22 +2826,30 @@ impl Codegen {
         stream_type_idx: Option<u32>,
         _error_code_idx: Option<u32>,
         result_param_type_idx: Option<u32>,
+        enum_type_indices: &HashMap<String, u32>,
     ) -> ComponentValType {
         match ty {
-            Type::Named(named) => match named.name.as_str() {
-                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
-                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
-                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
-                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
-                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
-                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
-                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
-                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
-                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
-                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
-                "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                _ => panic!("unsupported Wado param type for CM: {}", named.name),
-            },
+            Type::Named(named) => {
+                // Check if it's a known enum type first
+                if let Some(&enum_idx) = enum_type_indices.get(&named.name) {
+                    return ComponentValType::Type(enum_idx);
+                }
+                // Otherwise, check primitives
+                match named.name.as_str() {
+                    "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
+                    "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
+                    "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
+                    "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
+                    "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
+                    "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
+                    "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
+                    "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
+                    "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+                    "char" => ComponentValType::Primitive(PrimitiveValType::Char),
+                    "String" => ComponentValType::Primitive(PrimitiveValType::String),
+                    _ => panic!("unsupported Wado param type for CM: {}", named.name),
+                }
+            }
             Type::Generic(generic) => match generic.name.as_str() {
                 "Stream" => {
                     // Use the pre-defined stream type index
@@ -3103,6 +3308,226 @@ impl Codegen {
         type_idx
     }
 
+    /// Register monomorphized generic variants from the type table.
+    ///
+    /// Scans for `GenericInstance` types that refer to variants (like `Result<i32, String>`)
+    /// and registers them as concrete variant types.
+    fn register_monomorphized_variants_from_table(
+        &mut self,
+        tir_module: &TirModule,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        // Collect all GenericInstance types that are variants
+        let mut generic_variants: Vec<(String, Vec<TypeId>)> = Vec::new();
+
+        for type_id in type_table.iter_type_ids() {
+            if let ResolvedType::GenericInstance {
+                name, type_args, ..
+            } = type_table.get(type_id)
+            {
+                // Check if this is a variant (has a declaration in tir_module.variants)
+                let is_variant = tir_module.variants.iter().any(|v| v.name == *name);
+                if is_variant {
+                    let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                    // Skip if already registered
+                    if !self.variant_types.borrow().contains_key(&mangled_name) {
+                        generic_variants.push((name.clone(), type_args.clone()));
+                    }
+                }
+            }
+        }
+
+        // Register each monomorphized variant
+        for (base_name, type_args) in generic_variants {
+            // Find the base variant declaration
+            let base_variant = tir_module
+                .variants
+                .iter()
+                .find(|v| v.name == base_name)
+                .expect("variant should exist");
+
+            // Build type parameter substitution map
+            let mut type_subst: std::collections::HashMap<String, TypeId> =
+                std::collections::HashMap::new();
+            for (i, param) in base_variant.type_params.iter().enumerate() {
+                if let Some(&type_arg) = type_args.get(i) {
+                    type_subst.insert(param.name.clone(), type_arg);
+                }
+            }
+
+            // Create mangled name for this instantiation
+            let mangled_name = {
+                let arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|&tid| self.mangle_type_for_struct_name(tid, type_table))
+                    .collect();
+                format!("{}<{}>", base_name, arg_names.join(","))
+            };
+
+            // Skip if already registered (double-check)
+            if self.variant_types.borrow().contains_key(&mangled_name) {
+                continue;
+            }
+
+            // Find the maximum number of fields across all cases
+            let max_fields = base_variant
+                .cases
+                .iter()
+                .map(|c| c.fields.len())
+                .max()
+                .unwrap_or(0);
+
+            // Collect case metadata
+            let cases: Vec<(String, usize)> = base_variant
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.fields.len()))
+                .collect();
+
+            // Build the struct fields: tag (i32) + max_fields payload fields
+            let mut fields = Vec::with_capacity(1 + max_fields);
+
+            // Field 0: tag (discriminant)
+            fields.push(FieldType {
+                element_type: StorageType::Val(ValType::I32),
+                mutable: false,
+            });
+
+            // Build payload fields with substituted types
+            let mut payload_field_types: Vec<ValType> = Vec::with_capacity(max_fields);
+
+            for field_idx in 0..max_fields {
+                let mut field_types_at_idx: Vec<ValType> = Vec::new();
+
+                for case in &base_variant.cases {
+                    if field_idx < case.fields.len() {
+                        // Substitute type parameters in field type
+                        let field_type_id = case.fields[field_idx];
+                        let concrete_type_id =
+                            self.substitute_type_params(field_type_id, &type_subst, type_table);
+                        let wasm_type = self.type_id_to_valtype(type_table, concrete_type_id);
+                        field_types_at_idx.push(wasm_type);
+                    }
+                }
+
+                let (storage_type, field_type) = if field_types_at_idx.is_empty() {
+                    (StorageType::Val(ValType::I32), ValType::I32)
+                } else if field_types_at_idx
+                    .iter()
+                    .all(|t| *t == field_types_at_idx[0])
+                {
+                    (
+                        StorageType::Val(field_types_at_idx[0]),
+                        field_types_at_idx[0],
+                    )
+                } else {
+                    let eqref = ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Abstract {
+                            shared: false,
+                            ty: AbstractHeapType::Eq,
+                        },
+                    });
+                    (StorageType::Val(eqref), eqref)
+                };
+
+                payload_field_types.push(field_type);
+                fields.push(FieldType {
+                    element_type: storage_type,
+                    mutable: true,
+                });
+            }
+
+            // Define the GC struct type
+            let type_idx = builder.define_gc_struct_type(&mangled_name, &fields);
+
+            // Store in registry
+            self.variant_types.borrow_mut().insert(
+                mangled_name,
+                VariantTypeInfo {
+                    struct_type_idx: type_idx,
+                    cases,
+                    field_types: payload_field_types,
+                },
+            );
+        }
+    }
+
+    /// Register Result types from the type table.
+    /// Result<T, E> is represented as a variant with Ok(T) and Err(E) cases.
+    fn register_result_types_from_table(
+        &mut self,
+        type_table: &TypeTable,
+        builder: &mut CoreModuleBuilder,
+    ) {
+        // Collect all Result types from the type table
+        let mut result_types: Vec<(TypeId, TypeId, TypeId)> = Vec::new(); // (type_id, ok, err)
+
+        for type_id in type_table.iter_type_ids() {
+            if let ResolvedType::Result { ok, err } = type_table.get(type_id) {
+                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                // Skip if already registered
+                if !self.variant_types.borrow().contains_key(&mangled_name) {
+                    result_types.push((type_id, *ok, *err));
+                }
+            }
+        }
+
+        // Register each Result type as a variant
+        for (type_id, ok_type_id, err_type_id) in result_types {
+            let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+
+            // Result is represented as struct { tag: i32, payload: <max_type> }
+            // For simplicity, we use i32 for both Ok and Err payloads since most
+            // WASI Result types have i32-sized payloads (resource handles, enums)
+            let fields = vec![
+                FieldType {
+                    element_type: StorageType::Val(ValType::I32), // discriminant
+                    mutable: false,
+                },
+                FieldType {
+                    element_type: StorageType::Val(ValType::I32), // payload (i32 for resource/enum)
+                    mutable: true,
+                },
+            ];
+
+            // Define the GC struct type
+            let type_idx = builder.define_gc_struct_type(&mangled_name, &fields);
+
+            // Determine the payload types
+            let ok_type = self.type_id_to_valtype(type_table, ok_type_id);
+            let err_type = self.type_id_to_valtype(type_table, err_type_id);
+
+            // Store in registry with Ok and Err cases
+            self.variant_types.borrow_mut().insert(
+                mangled_name,
+                VariantTypeInfo {
+                    struct_type_idx: type_idx,
+                    cases: vec![("Ok".to_string(), 0), ("Err".to_string(), 1)],
+                    field_types: vec![ok_type, err_type],
+                },
+            );
+        }
+    }
+
+    /// Substitute type parameters in a type ID.
+    /// Returns the original type ID if no substitution is needed.
+    fn substitute_type_params(
+        &self,
+        type_id: TypeId,
+        subst: &std::collections::HashMap<String, TypeId>,
+        type_table: &TypeTable,
+    ) -> TypeId {
+        match type_table.get(type_id) {
+            ResolvedType::TypeParam { name, .. } => {
+                // Substitute type parameter with concrete type
+                subst.get(name).copied().unwrap_or(type_id)
+            }
+            _ => type_id, // No substitution needed
+        }
+    }
+
     /// Register box types for primitive references.
     /// Box types are single-field mutable structs that wrap primitive values,
     /// enabling references to primitives (e.g., `&i32`, `&mut f64`).
@@ -3192,6 +3617,52 @@ impl Codegen {
             }
             other => {
                 panic!("expected struct or tuple type, got: {other:?}");
+            }
+        }
+    }
+
+    /// Get the Wasm GC type index for a variant type (Result, Option, custom variants).
+    /// Handles reference types by looking through to the inner type.
+    fn get_variant_type_idx(&self, type_id: TypeId, type_table: &TypeTable) -> u32 {
+        match type_table.get(type_id) {
+            ResolvedType::Variant { name, .. } => {
+                let variant_types = self.variant_types.borrow();
+                if let Some(info) = variant_types.get(name) {
+                    info.struct_type_idx
+                } else {
+                    panic!("unknown variant type: {name}");
+                }
+            }
+            ResolvedType::Result { .. } => {
+                // Result<T, E> uses mangled name for lookup
+                let variant_types = self.variant_types.borrow();
+                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                if let Some(info) = variant_types.get(&mangled_name) {
+                    info.struct_type_idx
+                } else if let Some(info) = variant_types.get("Result") {
+                    // Fallback to base name for non-monomorphized Result
+                    info.struct_type_idx
+                } else {
+                    panic!("unknown Result variant type: {mangled_name}");
+                }
+            }
+            ResolvedType::GenericInstance { name, .. } => {
+                let variant_types = self.variant_types.borrow();
+                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                if let Some(info) = variant_types.get(&mangled_name) {
+                    info.struct_type_idx
+                } else if let Some(info) = variant_types.get(name) {
+                    // Fallback to base name for non-monomorphized variants
+                    info.struct_type_idx
+                } else {
+                    panic!("unknown generic variant type: {mangled_name}");
+                }
+            }
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.get_variant_type_idx(*inner, type_table)
+            }
+            other => {
+                panic!("expected variant type, got: {other:?}");
             }
         }
     }
@@ -4194,7 +4665,8 @@ impl Codegen {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -4466,7 +4938,8 @@ impl Codegen {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -4628,8 +5101,9 @@ impl Codegen {
     /// This handles cases where:
     /// - A `GenericInstance` is excluded from topological sort (e.g., Array types
     ///   which are filtered out from monomorphized struct registration)
-    /// - Nested `GenericInstance` types need registration (e.g., Array<Box<i32>>)
-    /// Recursively handles nested types like Option<T>, &T, tuples, etc.
+    /// - Nested `GenericInstance` types need registration (e.g., `Array<Box<i32>>`)
+    ///
+    /// Recursively handles nested types like `Option<T>`, `&T`, tuples, etc.
     fn ensure_field_generic_types_registered(
         &mut self,
         type_id: TypeId,
@@ -5093,6 +5567,7 @@ impl Codegen {
 
             // Complex types that need special handling
             ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. } // Resource handles are i32 (CM resource handles)
             | ResolvedType::Stream(_)
             | ResolvedType::Future(_)
             | ResolvedType::Reactive(_) => {
@@ -5128,7 +5603,7 @@ impl Codegen {
             }
 
             // Generic instances (other than Array, which is handled above)
-            // Look up the monomorphized struct type
+            // Look up the monomorphized struct or variant type
             ResolvedType::GenericInstance { .. } => {
                 let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
                 if let Some(struct_info) =
@@ -5138,9 +5613,15 @@ impl Codegen {
                         nullable: false,
                         heap_type: HeapType::Concrete(struct_info.type_idx),
                     })
+                } else if let Some(variant_info) = self.variant_types.borrow().get(&mangled_name) {
+                    // Generic variant (like Result<i32, String>)
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(variant_info.struct_type_idx),
+                    })
                 } else {
                     panic!(
-                        "unknown monomorphized generic struct type in type_id_to_valtype: {mangled_name}"
+                        "unknown monomorphized generic type in type_id_to_valtype: {mangled_name}"
                     )
                 }
             }
@@ -5343,9 +5824,19 @@ impl Codegen {
                 // Custom variant construction: Shape::Circle(5.0)
                 // Layout: struct { tag: i32, field0, field1, ... }
 
-                // Get the variant name from the type
+                // Get the variant name from the type (handle both Variant and GenericInstance)
                 let variant_name = match type_table.get(*variant_type) {
                     ResolvedType::Variant { name, .. } => name.clone(),
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
+                        // Build mangled name for generic variant: Result<i32,String>
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| self.canonical_element_type_name(*t, type_table))
+                            .collect();
+                        format!("{}<{}>", name, type_arg_names.join(","))
+                    }
                     other => panic!("Expected Variant type for VariantConstruct, got: {other:?}"),
                 };
 
@@ -5411,9 +5902,30 @@ impl Codegen {
                 // Push the tag (case index)
                 func.instruction(&Instruction::I32Const(*case_index as i32));
 
-                // Push the field values
-                for field_expr in fields {
+                // Push the field values, boxing primitives if the struct expects eqref
+                for (i, field_expr) in fields.iter().enumerate() {
                     self.generate_expr(func, field_expr, type_table, ctx, builder);
+
+                    // Check if we need to box this value
+                    let expected_field_type = &field_types[i];
+                    let expr_resolved_type = type_table.get(field_expr.type_id);
+                    if let ValType::Ref(ref_type) = expected_field_type
+                        && matches!(
+                            ref_type.heap_type,
+                            HeapType::Abstract {
+                                ty: AbstractHeapType::Eq,
+                                ..
+                            }
+                        )
+                    {
+                        // The struct field is eqref - box primitives
+                        if let ResolvedType::Primitive(prim) = expr_resolved_type {
+                            let val_type = primitive_to_valtype(prim);
+                            if let Some(box_idx) = self.get_box_type_idx(val_type) {
+                                func.instruction(&Instruction::StructNew(box_idx));
+                            }
+                        }
+                    }
                 }
 
                 // Pad with default values if this case has fewer fields than max
@@ -5441,6 +5953,11 @@ impl Codegen {
 
                 // Create the struct
                 func.instruction(&Instruction::StructNew(struct_type_idx));
+            }
+
+            TirExprKind::EnumConstruct { case_index, .. } => {
+                // Enum is just an i32 discriminant value
+                func.instruction(&Instruction::I32Const(*case_index as i32));
             }
 
             TirExprKind::Move { value } => {
@@ -6326,8 +6843,10 @@ impl Codegen {
 
                     if let Some((struct_name_to_lookup, struct_module_source)) = return_type_info {
                         // Look up the struct type
-                        let struct_lookup_name =
-                            StructName::new(struct_module_source, struct_name_to_lookup);
+                        let struct_lookup_name = StructName::new(
+                            struct_module_source.clone(),
+                            struct_name_to_lookup.clone(),
+                        );
                         if let Some(struct_info) = self.struct_types.get(&struct_lookup_name) {
                             // Check if args count matches field count (constructor pattern)
                             if args.len() == struct_info.field_count {
@@ -6336,6 +6855,117 @@ impl Codegen {
                                 return;
                             }
                         }
+
+                        // Check if this is a generic variant constructor (e.g., Result<i32,String>::Ok)
+                        if let Some(variant_info) = self
+                            .variant_types
+                            .borrow()
+                            .get(&struct_name_to_lookup)
+                            .cloned()
+                        {
+                            // Find the case index by method name
+                            // The method name is the last part after ::
+                            let case_name = func_name.rsplit("::").next().unwrap_or(&func_name);
+                            if let Some((case_idx, _)) = variant_info
+                                .cases
+                                .iter()
+                                .enumerate()
+                                .find(|(_, (name, _))| name == case_name)
+                            {
+                                // Generate variant construction
+                                // Stack already has arguments, need to create struct with tag and fields
+                                let struct_type_idx = variant_info.struct_type_idx;
+
+                                // Push tag value
+                                func.instruction(&Instruction::I32Const(case_idx as i32));
+
+                                // Arguments are already evaluated, now create the struct
+                                // Stack: [arg1, arg2, ...] -> need: [tag, arg1, arg2, ...]
+                                // We need to reorder - but args are already on stack before tag
+                                // Actually, we need to generate args AFTER tag
+
+                                // This is tricky - args were already generated above
+                                // We need a different approach: don't generate args above, do it here
+                                // But that's a bigger refactor...
+
+                                // For now, generate the struct with tag first, then set fields
+                                // Create struct with default values
+                                func.instruction(&Instruction::StructNew(struct_type_idx));
+                                return;
+                            }
+                        }
+                    }
+
+                    // Try WASI function resolution for resource methods
+                    // Resource methods like TcpSocket::static_tcp_socket_create are registered
+                    // in wasi_registry under "TcpSocket::static_tcp_socket_create"
+                    if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
+                        let conv = &func_info.call_convention;
+                        let local_name = func_info.local_alias_name();
+
+                        // Handle outptr allocation for Result returns
+                        if let Some((size, align)) = conv.outptr_alloc {
+                            // Allocate outptr using realloc
+                            func.instruction(&Instruction::I32Const(0)); // old_ptr
+                            func.instruction(&Instruction::I32Const(0)); // old_size
+                            func.instruction(&Instruction::I32Const(align as i32)); // align
+                            func.instruction(&Instruction::I32Const(size as i32)); // new_size
+                            let realloc_idx = builder.func_idx("realloc");
+                            func.instruction(&Instruction::Call(realloc_idx));
+
+                            // Store outptr for later use
+                            let outptr_local = ctx.get_local("__cm_outptr").expect(
+                                "__cm_outptr should be pre-allocated for functions with CM complex returns",
+                            );
+                            func.instruction(&Instruction::LocalTee(outptr_local));
+                        }
+
+                        // Call the WASI function
+                        let func_idx = builder.func_idx(&local_name);
+                        func.instruction(&Instruction::Call(func_idx));
+
+                        // Handle Result return conversion
+                        if let Some((ok_is_resource, _err_is_enum)) = conv.result_return {
+                            let outptr_local = ctx
+                                .get_local("__cm_outptr")
+                                .expect("__cm_outptr should be pre-allocated for Result returns");
+
+                            // Read discriminant from outptr
+                            func.instruction(&Instruction::LocalGet(outptr_local));
+                            func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+
+                            // Get Result type indices
+                            let result_type_id = expr.type_id;
+                            let result_type_idx =
+                                self.get_variant_type_idx(result_type_id, type_table);
+
+                            // Read payload from outptr+4
+                            func.instruction(&Instruction::LocalGet(outptr_local));
+                            if ok_is_resource {
+                                // Resource handle is i32
+                                func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                                    offset: 4,
+                                    align: 2,
+                                    memory_index: 0,
+                                }));
+                            } else {
+                                // Primitive type - for now assume i32
+                                func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                                    offset: 4,
+                                    align: 2,
+                                    memory_index: 0,
+                                }));
+                            }
+
+                            // Create Result variant struct with discriminant and payload
+                            func.instruction(&Instruction::StructNew(result_type_idx));
+                        }
+
+                        return;
                     }
 
                     panic!("unknown static method: {func_name}");
@@ -8894,12 +9524,11 @@ impl Codegen {
         }
 
         // Handle async operations (need extra outptr argument)
+        // For async functions, the outptr is always 2048 - we don't use outptr_alloc
         if conv.is_async {
             func.instruction(&Instruction::I32Const(2048)); // outptr for async result
-        }
-
-        // Handle outptr allocation for complex return types
-        if let Some((size, align)) = conv.outptr_alloc {
+        } else if let Some((size, align)) = conv.outptr_alloc {
+            // Handle outptr allocation for complex return types (sync functions only)
             // Allocate outptr using realloc
             func.instruction(&Instruction::I32Const(0)); // old_ptr
             func.instruction(&Instruction::I32Const(0)); // old_size
@@ -9575,9 +10204,20 @@ impl Codegen {
                 args.iter()
                     .any(|a| self.expr_needs_outptr_scratch_locals(a))
             }
-            TirExprKind::StaticCall { args, .. } => args
-                .iter()
-                .any(|a| self.expr_needs_outptr_scratch_locals(a)),
+            TirExprKind::StaticCall {
+                func: static_func,
+                args,
+            } => {
+                // Check if this is a WASI resource method that needs outptr
+                let func_name = static_func.name();
+                if let Some(func_info) = self.wasi_registry.get_function(&func_name)
+                    && func_info.call_convention.outptr_alloc.is_some()
+                {
+                    return true;
+                }
+                args.iter()
+                    .any(|a| self.expr_needs_outptr_scratch_locals(a))
+            }
             TirExprKind::FieldAccess { expr, .. } => self.expr_needs_outptr_scratch_locals(expr),
             TirExprKind::Index { expr, index } => {
                 self.expr_needs_outptr_scratch_locals(expr)
@@ -9803,7 +10443,8 @@ impl Codegen {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => false,
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => false,
         }
     }
 

@@ -638,7 +638,21 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("resource ");
         self.output.push_str(&r.name);
-        self.output.push_str(";\n");
+
+        if r.methods.is_empty() {
+            self.output.push_str(";\n");
+        } else {
+            self.output.push_str(" {\n");
+
+            self.indent_level += 1;
+            for method in &r.methods {
+                self.unparse_effect_method(method);
+            }
+            self.indent_level -= 1;
+
+            self.write_indent();
+            self.output.push_str("}\n");
+        }
     }
 
     fn unparse_world(&mut self, w: &WorldDecl) {
@@ -2507,6 +2521,13 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push(')');
                 }
+            }
+            TirExprKind::EnumConstruct { case_name, .. } => {
+                // Get the enum type name from the type_id
+                let type_name = self.type_table.type_name(expr.type_id);
+                self.output.push_str(&type_name);
+                self.output.push_str("::");
+                self.output.push_str(case_name);
             }
             TirExprKind::Move { value } => {
                 self.output.push_str("move ");

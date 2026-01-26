@@ -861,7 +861,8 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
             TirExprKind::OptionSome { value } => {
                 self.rewrite_types_in_expr(value, type_table);
             }
@@ -1938,7 +1939,8 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -2685,7 +2687,8 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
@@ -3265,7 +3268,8 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
-            | TirExprKind::Capture { .. } => {}
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
         }
     }
 
