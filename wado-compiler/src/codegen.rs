@@ -422,6 +422,13 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
     }
 }
 
+/// A type declaration that can be either a struct or a variant.
+/// Used for unified topological sorting of type declarations.
+enum TypeDecl<'a> {
+    Struct(&'a crate::tir::TirStruct),
+    Variant(&'a crate::tir::TirVariantDecl),
+}
+
 impl Codegen {
     /// Create a new code generator with registries built from stdlib
     pub fn new() -> Self {
@@ -558,9 +565,12 @@ impl Codegen {
 
     /// Extract struct names that a type depends on (for field types)
     /// Returns mangled names for `GenericInstance` types (e.g., "`BTreeNode`<String,i32>")
-    fn get_struct_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
+    /// Get type dependencies (struct and variant names) for a given type.
+    /// Used for topological sorting of type declarations.
+    fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => vec![name.clone()],
+            ResolvedType::Variant { name, .. } => vec![name.clone()],
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -569,7 +579,7 @@ impl Codegen {
                 let mangled_name = Self::mangle_generic_instance_name(name, type_args, type_table);
                 let mut deps = vec![mangled_name];
                 for arg in type_args {
-                    deps.extend(Self::get_struct_dependencies(type_table, *arg));
+                    deps.extend(Self::get_type_dependencies(type_table, *arg));
                 }
                 deps
             }
@@ -579,15 +589,15 @@ impl Codegen {
             | ResolvedType::MutRef(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
-            | ResolvedType::Reactive(inner) => Self::get_struct_dependencies(type_table, *inner),
+            | ResolvedType::Reactive(inner) => Self::get_type_dependencies(type_table, *inner),
             ResolvedType::Result { ok, err } => {
-                let mut deps = Self::get_struct_dependencies(type_table, *ok);
-                deps.extend(Self::get_struct_dependencies(type_table, *err));
+                let mut deps = Self::get_type_dependencies(type_table, *ok);
+                deps.extend(Self::get_type_dependencies(type_table, *err));
                 deps
             }
             ResolvedType::Tuple(elems) => elems
                 .iter()
-                .flat_map(|e| Self::get_struct_dependencies(type_table, *e))
+                .flat_map(|e| Self::get_type_dependencies(type_table, *e))
                 .collect(),
             _ => vec![],
         }
@@ -697,7 +707,7 @@ impl Codegen {
         for s in structs {
             let mut struct_deps = Vec::new();
             for field in &s.fields {
-                let field_deps = Self::get_struct_dependencies(type_table, field.type_id);
+                let field_deps = Self::get_type_dependencies(type_table, field.type_id);
                 for dep in field_deps {
                     // Only count dependencies on structs in our set
                     if struct_names.contains(&dep) && dep != s.name {
@@ -755,6 +765,112 @@ impl Codegen {
         sorted_names
             .iter()
             .filter_map(|name| name_to_struct.get(name.as_str()).copied())
+            .collect()
+    }
+
+    /// Sort structs and variants together topologically so dependencies are registered before dependents.
+    /// This handles mutual dependencies between structs and variants (e.g., struct with variant field,
+    /// variant with struct payload).
+    fn sort_types_topologically<'a>(
+        structs: &'a [crate::tir::TirStruct],
+        variants: &'a [crate::tir::TirVariantDecl],
+        type_table: &TypeTable,
+    ) -> Vec<TypeDecl<'a>> {
+        // Collect all type names
+        let struct_names: HashSet<String> = structs.iter().map(|s| s.name.clone()).collect();
+        let variant_names: HashSet<String> = variants.iter().map(|v| v.name.clone()).collect();
+        let all_names: HashSet<String> = struct_names.union(&variant_names).cloned().collect();
+
+        // Build dependency graph: deps[A] = [B] means A depends on B (B must come before A)
+        let mut deps: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Add struct dependencies
+        for s in structs {
+            let mut type_deps = Vec::new();
+            for field in &s.fields {
+                let field_deps = Self::get_type_dependencies(type_table, field.type_id);
+                for dep in field_deps {
+                    // Only count dependencies on types in our set
+                    if all_names.contains(&dep) && dep != s.name {
+                        type_deps.push(dep);
+                    }
+                }
+            }
+            deps.insert(s.name.clone(), type_deps);
+        }
+
+        // Add variant dependencies (from payload types)
+        for v in variants {
+            let mut type_deps = Vec::new();
+            for case in &v.cases {
+                for field_type_id in &case.fields {
+                    let field_deps = Self::get_type_dependencies(type_table, *field_type_id);
+                    for dep in field_deps {
+                        if all_names.contains(&dep) && dep != v.name {
+                            type_deps.push(dep);
+                        }
+                    }
+                }
+            }
+            deps.insert(v.name.clone(), type_deps);
+        }
+
+        // Topological sort using Kahn's algorithm
+        let mut in_degree: HashMap<String, usize> = HashMap::new();
+        for name in &all_names {
+            let type_deps = deps.get(name).map(std::vec::Vec::len).unwrap_or(0);
+            in_degree.insert(name.clone(), type_deps);
+        }
+
+        // Build reverse mapping: dependents[B] = list of types that depend on B
+        let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
+        for (name, type_deps) in &deps {
+            for dep in type_deps {
+                dependents
+                    .entry(dep.clone())
+                    .or_default()
+                    .push(name.clone());
+            }
+        }
+
+        // Start with types that have no dependencies
+        let mut queue: Vec<String> = in_degree
+            .iter()
+            .filter(|&(_, deg)| *deg == 0)
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        let mut sorted_names = Vec::new();
+        while let Some(name) = queue.pop() {
+            sorted_names.push(name.clone());
+            if let Some(deps_on_name) = dependents.get(&name) {
+                for dependent in deps_on_name {
+                    let deg = in_degree.get_mut(dependent).unwrap();
+                    *deg -= 1;
+                    if *deg == 0 {
+                        queue.push(dependent.clone());
+                    }
+                }
+            }
+        }
+
+        // Map names back to TypeDecl
+        let name_to_struct: HashMap<&str, &crate::tir::TirStruct> =
+            structs.iter().map(|s| (s.name.as_str(), s)).collect();
+        let name_to_variant: HashMap<&str, &crate::tir::TirVariantDecl> =
+            variants.iter().map(|v| (v.name.as_str(), v)).collect();
+
+        sorted_names
+            .iter()
+            .filter_map(|name| {
+                if let Some(s) = name_to_struct.get(name.as_str()) {
+                    Some(TypeDecl::Struct(s))
+                } else {
+                    name_to_variant
+                        .get(name.as_str())
+                        .map(|v| TypeDecl::Variant(v))
+                }
+            })
             .collect()
     }
 
@@ -1078,9 +1194,10 @@ impl Codegen {
             }
         }
 
-        // PHASE 2: Register NON-MONOMORPHIZED main module structs
-        // Skip generic struct templates and monomorphized structs
-        // Sort structs topologically to ensure dependencies are registered before dependents
+        // PHASE 2: Register NON-MONOMORPHIZED main module structs AND variants
+        // Skip generic templates and monomorphized types
+        // Sort structs and variants together topologically to handle mutual dependencies
+        // (e.g., struct with variant field, variant with struct payload)
         let non_mono_structs: Vec<_> = entry_tir
             .structs
             .iter()
@@ -1091,10 +1208,25 @@ impl Codegen {
             })
             .cloned()
             .collect();
-        let sorted_non_mono = Self::sort_structs_topologically(&non_mono_structs, type_table);
-        for tir_struct in sorted_non_mono {
-            let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
-            self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
+        let non_mono_variants: Vec<_> = entry_tir
+            .variants
+            .iter()
+            .filter(|v| v.type_params.is_empty())
+            .cloned()
+            .collect();
+        let sorted_types =
+            Self::sort_types_topologically(&non_mono_structs, &non_mono_variants, type_table);
+        for type_decl in sorted_types {
+            match type_decl {
+                TypeDecl::Struct(tir_struct) => {
+                    let struct_name =
+                        StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
+                    self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
+                }
+                TypeDecl::Variant(tir_variant) => {
+                    self.register_variant_type(tir_variant, type_table, &mut builder);
+                }
+            }
         }
 
         // Register struct type aliases (e.g., `Point as OtherPoint`)
@@ -1256,8 +1388,8 @@ impl Codegen {
             }
         }
 
-        // PHASE 4.5: Register variant types (tagged unions)
-        // Register variants from imported modules first
+        // PHASE 4.5: Register variant types (tagged unions) from imported modules
+        // Note: Main module non-generic variants are already registered in PHASE 2
         for (module_source, tir_mod) in all_tir_modules {
             if module_source == entry_module_source {
                 continue;
@@ -1274,16 +1406,7 @@ impl Codegen {
             }
         }
 
-        // Register variants from main module
-        for variant in &entry_tir.variants {
-            // Skip generic variants - they will be registered when monomorphized
-            if !variant.type_params.is_empty() {
-                continue;
-            }
-            self.register_variant_type(variant, type_table, &mut builder);
-        }
-
-        // PHASE 4.5: Register monomorphized generic variants from type tables
+        // PHASE 4.5b: Register monomorphized generic variants from type tables
         // Scan for GenericInstance types that refer to variants and register them
         self.register_monomorphized_variants_from_table(entry_tir, type_table, &mut builder);
         for (module_source, tir_mod) in all_tir_modules {
