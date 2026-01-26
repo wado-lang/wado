@@ -157,7 +157,7 @@ struct VariantCaseInfo {
 struct VariantTypeInfo {
     /// The GC struct type index for the base variant type (discriminator only)
     base_type_idx: u32,
-    /// Information about each case (indexed by case_index)
+    /// Information about each case (indexed by `case_index`)
     cases: Vec<VariantCaseInfo>,
 }
 
@@ -3530,7 +3530,7 @@ impl Codegen {
             let err_type = self.type_id_to_valtype(type_table, err_type_id);
 
             // Define Ok case subtype
-            let ok_case_name = format!("{}::Ok", mangled_name);
+            let ok_case_name = format!("{mangled_name}::Ok");
             let mut ok_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
@@ -3543,7 +3543,7 @@ impl Codegen {
                 builder.define_gc_struct_subtype(&ok_case_name, base_type_idx, &ok_fields);
 
             // Define Err case subtype
-            let err_case_name = format!("{}::Err", mangled_name);
+            let err_case_name = format!("{mangled_name}::Err");
             let mut err_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
@@ -6059,7 +6059,7 @@ impl Codegen {
                 func.instruction(&Instruction::I32Const(*case_index as i32));
 
                 // Push the field values directly (no boxing needed with subtype-based approach)
-                for field_expr in fields.iter() {
+                for field_expr in fields {
                     self.generate_expr(func, field_expr, type_table, ctx, builder);
                 }
 
@@ -7046,9 +7046,10 @@ impl Codegen {
                             let mangled_name =
                                 self.mangle_type_for_struct_name(result_type_id, type_table);
                             let variant_types = self.variant_types.borrow();
-                            let result_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
-                                panic!("Result type not registered: {mangled_name}")
-                            });
+                            let result_info =
+                                variant_types.get(&mangled_name).unwrap_or_else(|| {
+                                    panic!("Result type not registered: {mangled_name}")
+                                });
                             // Result has cases [Ok (0), Err (1)]
                             let ok_type_idx = result_info.cases[0].type_idx;
                             let err_type_idx = result_info.cases[1].type_idx;
@@ -8866,7 +8867,9 @@ impl Codegen {
 
                 // Use ref.test to check if the value is of the expected case type
                 func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(case_type_idx)));
+                func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                    case_type_idx,
+                )));
 
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
