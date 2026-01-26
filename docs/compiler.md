@@ -973,9 +973,8 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 - [x] Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
 - [x] Option pattern matching (`if let Some(x) = ...`)
 - [x] Custom variant pattern matching (single-payload: `if let Circle(r) = shape`)
-- [ ] Custom variant pattern matching (multi-payload)
-- [ ] Custom variant pattern matching (no-payload cases with binding)
-- [ ] Match expressions
+- [ ] Custom variant pattern matching (tuple/struct payloads, see WEP)
+- [ ] Match expressions (see WEP)
 - [x] Closures - pure (no captures)
 - [ ] Closures - with captures (see WEP)
 - [ ] Effect handlers
@@ -1048,19 +1047,9 @@ fn run() with Stdout {
 
 ---
 
-## Variant Implementation Roadmap
+## Variant Implementation
 
-Current status: variant construction, single-payload if-let pattern matching, and value semantics work.
-
-### TODO
-
-- [ ] Multi-payload variant patterns (`if let Rect(w, h) = shape`)
-- [ ] No-payload variant patterns with else binding (`if let Point = shape`)
-- [ ] while let / for let with custom variants
-- [ ] `match` expressions and statements
-- [ ] Generic variant pattern matching (`if let Just(x) = maybe` for `Maybe<T>`)
-- [ ] `Result<T, E>` pattern matching (`if let Ok(v) = result`, `if let Err(e) = result`)
-- [x] Value semantics (copy) for custom variants
+See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md) for the variant system design and implementation roadmap.
 
 ---
 
