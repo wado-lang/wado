@@ -1156,22 +1156,20 @@ let result = compute(4);  // 20
 
 **Current Limitations:**
 
-- **Pure closures only**: Closures cannot currently capture variables from outer scopes
 - **Type annotations required**: Parameter types must be explicitly specified
 - **No inference**: Unlike some languages, closure parameter types are not inferred
 
 ```wado
-// Works: pure closure (no captures)
+// Pure closure (no captures)
 let pure = |x: i32| x * 2;
 
-// Not yet implemented: capturing outer variables
+// Capturing outer variables (value semantics - copy)
 let outer = 10;
-let capture = |x: i32| x + outer;  // Error: closures cannot capture variables
+let capture = |x: i32| x + outer;  // Captures `outer` by value
+capture(5);  // Returns 15
 ```
 
-**Future Work:**
-
-Closure captures will be implemented with value semantics (capturing by copy). For capturing by reference, see the `stores[...]` syntax in the Effect System section.
+Closures capture variables by value (copy semantics). For capturing by reference, see the `stores[...]` syntax in the Effect System section.
 
 ### Tagged Template Literals
 
@@ -1725,6 +1723,20 @@ if let Some(x) = opt {
     println(`Got: {x}`);
 }
 
+// Custom variant pattern matching (non-generic)
+// Note: pattern uses case name only, not Type::CaseName
+variant ParseResult {
+    Fail,
+    Number(i32),
+}
+let r = ParseResult::Number(42);
+if let Number(n) = r {
+    println(`Got number: {n}`);
+}
+if let Fail = r {
+    println("Failed");
+}
+
 // match is not yet implemented
 // match s {
 //     Shape::Circle(r) => calculate_circle_area(r),
@@ -1733,7 +1745,16 @@ if let Some(x) = opt {
 // }
 ```
 
-**Implementation Status**: Variant declarations, construction, and basic `if let` pattern matching for `Option<T>` are implemented. `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`. Custom variant pattern matching with `if let` and `match` statements are not yet implemented.
+**Implementation Status**:
+
+- Variant declarations and construction: implemented
+- `if let` pattern matching for `Option<T>`: implemented
+- `if let` pattern matching for non-generic custom variants: implemented
+- Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
+- `Result<T, E>` pattern matching: not yet implemented
+- `match` statements: not yet implemented
+
+Note: `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
 
 **Flags** (bit flags - Component Model `flags`):
 
