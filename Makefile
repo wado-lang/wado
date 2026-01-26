@@ -39,6 +39,10 @@ hello-run-wasmtime: hello
 test:
 	cargo test
 
+.PHONY: test-wado
+test-wado:
+	cargo run -p wado-cli --quiet -- test example/*.wado
+
 .PHONY: test-cov
 test-cov:
 	cargo llvm-cov --all-features --workspace
@@ -49,7 +53,7 @@ test-cov-html:
 	@echo "Coverage report generated at target/llvm-cov/html/index.html"
 
 .PHONY: on-task-done
-on-task-done: clippy-fix update-bundled update-golden-fixtures test format
+on-task-done: clippy-fix update-bundled update-golden-fixtures format test test-wado
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: format
