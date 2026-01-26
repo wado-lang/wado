@@ -8089,12 +8089,33 @@ impl Codegen {
         let to = type_table.get(to_type);
 
         match (from, to) {
-            // i32 -> i64
+            // i32 -> i64 (signed extend)
             (
                 ResolvedType::Primitive(PrimitiveType::I32),
                 ResolvedType::Primitive(PrimitiveType::I64),
             ) => {
                 func.instruction(&Instruction::I64ExtendI32S);
+            }
+            // i32 -> u64 (unsigned extend)
+            (
+                ResolvedType::Primitive(PrimitiveType::I32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
+            }
+            // u32 -> i64 (unsigned extend)
+            (
+                ResolvedType::Primitive(PrimitiveType::U32),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
+            }
+            // u32 -> u64 (unsigned extend)
+            (
+                ResolvedType::Primitive(PrimitiveType::U32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
             }
             // i64 -> i32 (truncate)
             (

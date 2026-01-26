@@ -14,6 +14,24 @@ impl u128 {
         return u128 { low: value, high: 0 as u64 };
     }
 
+    /// Create a u128 from a string (decimal representation)
+    /// Used for literal coercion: `let x: u128 = "12345678901234567890"`
+    pub fn from_string(s: String) -> u128 {
+        let mut result = u128::zero();
+        let mut i = 0;
+        let len = s.len();
+        while i < len {
+            let byte = s.get(i);
+            let digit = byte - ('0' as i32);
+            if 0 <= digit && digit <= 9 {
+                let digit_u64: u64 = digit as u64;
+                result = result.mul_u64(10 as u64).add(&u128::from_u64(digit_u64));
+            }
+            i += 1;
+        }
+        return result;
+    }
+
     /// Create a zero u128
     pub fn zero() -> u128 {
         return u128 { low: 0 as u64, high: 0 as u64 };
@@ -32,6 +50,21 @@ impl u128 {
     /// Get the high 64 bits
     pub fn high(&self) -> u64 {
         return self.high;
+    }
+
+    /// Multiply u128 by a u64 value
+    pub fn mul_u64(&self, multiplier: u64) -> u128 {
+        // (high, low) * multiplier
+        // = low * multiplier + (high * multiplier) << 64
+        let low_prod = builtin::i64_mul_wide_u(self.low as i64, multiplier as i64);
+        let high_prod = builtin::i64_mul_wide_u(self.high as i64, multiplier as i64);
+        // result.low = low_prod.0
+        // result.high = low_prod.1 + high_prod.0 (ignore overflow)
+        let result_high = (low_prod.1 as u64) + (high_prod.0 as u64);
+        return u128 {
+            low: low_prod.0 as u64,
+            high: result_high,
+        };
     }
 
     /// Add two u128 values
@@ -130,8 +163,41 @@ impl i128 {
     /// Create an i128 from an i64 value (sign-extended)
     pub fn from_i64(value: i64) -> i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
-        let high = if value < 0 as i64 { -1 as i64 } else { 0 as i64 };
+        let high: i64 = if value < (0 as i64) { -1 as i64 } else { 0 as i64 };
         return i128 { low: value as u64, high };
+    }
+
+    /// Create an i128 from a string (decimal representation, optionally prefixed with '-')
+    /// Used for literal coercion: `let x: i128 = "-12345678901234567890"`
+    pub fn from_string(s: String) -> i128 {
+        let len = s.len();
+        if len == 0 {
+            return i128::zero();
+        }
+
+        // Check for negative sign
+        let first_byte = s.get(0);
+        let is_negative = first_byte == ('-' as i32);
+        let start_idx = if is_negative { 1 } else { 0 };
+
+        // Parse the absolute value as u128
+        let mut abs_value = u128::zero();
+        let mut i = start_idx;
+        while i < len {
+            let byte = s.get(i);
+            let digit = byte - ('0' as i32);
+            if 0 <= digit && digit <= 9 {
+                abs_value = abs_value.mul_u64(10 as u64).add(&u128::from_u64(digit as u64));
+            }
+            i += 1;
+        }
+
+        // Convert to i128
+        let result = i128 { low: abs_value.low, high: abs_value.high as i64 };
+        if is_negative {
+            return result.neg();
+        }
+        return result;
     }
 
     /// Create a zero i128
@@ -156,7 +222,7 @@ impl i128 {
 
     /// Check if this i128 is negative
     pub fn is_negative(&self) -> bool {
-        return self.high < 0 as i64;
+        return self.high < (0 as i64);
     }
 
     /// Add two i128 values
@@ -190,7 +256,7 @@ impl i128 {
     /// Negate this i128 value
     pub fn neg(&self) -> i128 {
         // -x = ~x + 1 = 0 - x
-        let zero = i128 { low: 0 as u64, high: 0 as i64 };
+        let zero = i128::zero();
         return zero.sub(self);
     }
 }
@@ -260,7 +326,7 @@ impl Neg for i128 {
 
     pub fn neg(&self) -> Self::Output {
         // -x = ~x + 1 = 0 - x
-        let zero = i128 { low: 0 as u64, high: 0 as i64 };
+        let zero = i128::zero();
         return zero.sub(self);
     }
 }
