@@ -18,6 +18,7 @@ mod compiler_host;
 mod dump;
 mod format;
 mod run;
+mod runtime;
 mod syntax;
 mod test;
 
