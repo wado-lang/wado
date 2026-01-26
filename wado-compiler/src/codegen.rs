@@ -3914,16 +3914,12 @@ impl Codegen {
             .copy_context
             .get_struct_copy_local(type_idx)
             .unwrap_or_else(|| {
-                // Fallback: allocate if not pre-allocated (indicates a bug in pre-allocation)
-                let local_name = format!("__copy_source_{type_idx}");
-                eprintln!(
-                    "WARNING: struct copy local {} not pre-allocated, allocating now (next_local={})",
-                    local_name, ctx.next_local
-                );
-                let local_idx = ctx.alloc_local(&local_name, CopyContext::nullable_ref(type_idx));
-                ctx.copy_context
-                    .register_struct_copy_local(type_idx, local_idx);
-                local_idx
+                panic!(
+                    "BUG: struct copy local for type_idx {} not pre-allocated. \
+                     This indicates a missing case in preallocate_value_copy_locals or \
+                     CopyContext::expand_copy_types.",
+                    type_idx
+                )
             });
 
         // Store source to temp local (stack is now empty)
@@ -3953,39 +3949,20 @@ impl Codegen {
         is_packed: bool,
         ctx: &mut FunctionContext,
     ) {
-        // Use CopyContext to get pre-allocated locals, with fallback allocation
-        let (source_local, dest_local, counter_local, len_local) = if let Some(locals) =
-            ctx.copy_context.get_array_copy_locals(array_type_idx)
-        {
-            (locals.source, locals.dest, locals.counter, locals.len)
-        } else {
-            // Fallback: allocate if not pre-allocated (indicates a bug in pre-allocation)
-            eprintln!("WARNING: array copy locals for type {array_type_idx} not pre-allocated");
-            let source = ctx.alloc_local(
-                &format!("__copy_array_source_{array_type_idx}"),
-                CopyContext::nullable_ref(array_type_idx),
-            );
-            let dest = ctx.alloc_local(
-                &format!("__copy_array_dest_{array_type_idx}"),
-                CopyContext::nullable_ref(array_type_idx),
-            );
-            let counter = ctx.alloc_local(
-                &format!("__copy_array_counter_{array_type_idx}"),
-                ValType::I32,
-            );
-            let len = ctx.alloc_local(&format!("__copy_array_len_{array_type_idx}"), ValType::I32);
-            ctx.copy_context.register_array_copy_locals(
-                array_type_idx,
-                ArrayCopyLocals {
-                    struct_source: 0,
-                    source,
-                    dest,
-                    counter,
-                    len,
-                },
-            );
-            (source, dest, counter, len)
-        };
+        // Use CopyContext to get pre-allocated locals
+        let locals = ctx
+            .copy_context
+            .get_array_copy_locals(array_type_idx)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: array copy locals for type_idx {} not pre-allocated. \
+                     This indicates a missing case in preallocate_value_copy_locals or \
+                     CopyContext::expand_copy_types.",
+                    array_type_idx
+                )
+            });
+        let (source_local, dest_local, counter_local, len_local) =
+            (locals.source, locals.dest, locals.counter, locals.len);
 
         // Store source to temp local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -4127,23 +4104,23 @@ impl Codegen {
         };
 
         // Use CopyContext to get the pre-allocated local, keyed by inner type
-        let source_local = inner_type_idx
-            .and_then(|idx| ctx.copy_context.get_option_copy_local(idx))
+        let inner_idx = inner_type_idx.unwrap_or_else(|| {
+            panic!(
+                "BUG: Option copy called for non-reference inner type. \
+                 inner_type_id = {:?}",
+                inner_type_id
+            )
+        });
+        let source_local = ctx
+            .copy_context
+            .get_option_copy_local(inner_idx)
             .unwrap_or_else(|| {
-                // Fallback: allocate if not pre-allocated (indicates a bug in pre-allocation)
-                let local_name = if let Some(idx) = inner_type_idx {
-                    format!("__copy_option_source_{idx}")
-                } else {
-                    "__copy_option_source".to_string()
-                };
-                eprintln!(
-                    "WARNING: option copy local {local_name} not pre-allocated, allocating now"
-                );
-                let local_idx = ctx.alloc_local(&local_name, option_valtype);
-                if let Some(idx) = inner_type_idx {
-                    ctx.copy_context.register_option_copy_local(idx, local_idx);
-                }
-                local_idx
+                panic!(
+                    "BUG: option copy local for inner_type_idx {} not pre-allocated. \
+                     This indicates a missing case in preallocate_value_copy_locals or \
+                     CopyContext::expand_copy_types.",
+                    inner_idx
+                )
             });
 
         // Store source to local
