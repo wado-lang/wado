@@ -1,0 +1,18 @@
+// Test float literal coercion in return statements
+use { println, Stdout } from "core:cli";
+
+fn get_f32() -> f32 {
+    return 3.14;
+}
+
+fn get_f64() -> f64 {
+    return 2.718;
+}
+
+fn run() with Stdout {
+    println(`f32: {get_f32()}`);
+    println(`f64: {get_f64()}`);
+}
+
+__DATA__
+{"stdout_contains": ["f32: 3.14", "f64: 2.718"]}

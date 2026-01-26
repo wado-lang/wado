@@ -5,12 +5,12 @@ use anyhow::Result;
 use glob::glob;
 use lexopt::Arg::{Long, Short, Value};
 use tokio::sync::mpsc;
-use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{Config, Engine, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
+use wasmtime::Engine;
+use wasmtime::component::Component;
 
 use crate::args::{next_arg, unexpected_arg};
 use crate::compile;
+use crate::runtime;
 
 pub struct TestOptions {
     pub paths: Vec<String>,
@@ -104,20 +104,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
     }
 }
 
-struct WasiState {
-    ctx: WasiCtx,
-    table: ResourceTable,
-}
-
-impl WasiView for WasiState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.ctx,
-            table: &mut self.table,
-        }
-    }
-}
-
 /// A compiled test module ready for parallel execution
 struct CompiledTestModule {
     path: String,
@@ -139,22 +125,6 @@ struct TestResult {
     display_name: String,
     passed: bool,
     error: Option<String>,
-}
-
-fn create_engine() -> Result<Engine> {
-    let mut config = Config::new();
-    config.async_support(true);
-    config.wasm_component_model(true);
-    config.wasm_component_model_gc(true);
-    config.wasm_component_model_async(true);
-    config.wasm_component_model_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_simd(true);
-    config.wasm_wide_arithmetic(true);
-    config.wasm_threads(true);
-    config.wasm_gc(true);
-    config.wasm_function_references(true);
-    Engine::new(&config)
 }
 
 /// Extract display name from test function name
@@ -182,7 +152,7 @@ async fn collect_test_jobs(
 
     for (module_idx, path) in paths.iter().enumerate() {
         let wasm = compile::compile(path).await;
-        let engine = Arc::new(create_engine()?);
+        let engine = Arc::new(runtime::create_engine()?);
         let component = Arc::new(Component::new(&engine, &wasm)?);
 
         // Find test functions from exports
@@ -221,23 +191,20 @@ async fn collect_test_jobs(
 
 /// Run a single test in its own Store
 async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResult {
-    // Create fresh Store for this test
-    let ctx = WasiCtx::builder().inherit_stdio().build();
-    let table = ResourceTable::new();
-    let state = WasiState { ctx, table };
-    let mut store = Store::new(module.engine.as_ref(), state);
-
-    // Set up linker
-    let mut linker: Linker<WasiState> = Linker::new(&module.engine);
-    if let Err(e) = wasmtime_wasi::p3::add_to_linker(&mut linker) {
-        return TestResult {
-            file_path: module.path.clone(),
-            test_name: job.test_name.clone(),
-            display_name: job.display_name.clone(),
-            passed: false,
-            error: Some(format!("failed to set up linker: {e}")),
-        };
-    }
+    // Create fresh Store and Linker for this test
+    let mut store = runtime::create_store(&module.engine);
+    let linker = match runtime::create_linker(&module.engine) {
+        Ok(l) => l,
+        Err(e) => {
+            return TestResult {
+                file_path: module.path.clone(),
+                test_name: job.test_name.clone(),
+                display_name: job.display_name.clone(),
+                passed: false,
+                error: Some(format!("failed to set up linker: {e}")),
+            };
+        }
+    };
 
     // Instantiate and run
     let instance = match linker

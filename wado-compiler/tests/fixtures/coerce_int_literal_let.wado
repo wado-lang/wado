@@ -1,0 +1,26 @@
+// Test integer literal coercion in let statements with type annotations
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // Integer literals should coerce to any integer type
+    let a: i8 = 42;
+    let b: i16 = 1000;
+    let c: i32 = 100000;
+    let d: i64 = 10000000000;
+    let e: u8 = 200;
+    let f: u16 = 50000;
+    let g: u32 = 3000000000;
+    let h: u64 = 10000000000000000000;
+
+    println(`i8: {a}`);
+    println(`i16: {b}`);
+    println(`i32: {c}`);
+    println(`i64: {d}`);
+    println(`u8: {e}`);
+    println(`u16: {f}`);
+    println(`u32: {g}`);
+    println(`u64: {h}`);
+}
+
+__DATA__
+{"stdout": "i8: 42\ni16: 1000\ni32: 100000\ni64: 10000000000\nu8: 200\nu16: 50000\nu32: 3000000000\nu64: 10000000000000000000\n"}

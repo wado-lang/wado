@@ -1,0 +1,22 @@
+// Test float literal coercion in function arguments
+use { println, Stdout } from "core:cli";
+
+fn take_f32(x: f32) -> f32 {
+    return x;
+}
+
+fn take_f64(x: f64) -> f64 {
+    return x;
+}
+
+fn run() with Stdout {
+    // Float literals should coerce to the parameter type
+    let a = take_f32(3.14);
+    let b = take_f64(2.718);
+
+    println(`f32: {a}`);
+    println(`f64: {b}`);
+}
+
+__DATA__
+{"stdout_contains": ["f32: 3.14", "f64: 2.718"]}
