@@ -12,6 +12,7 @@ use crate::component_model::{
     CmPrimitiveType, WasiFunctionInfo, WasiInterfaceInfo, WasiRegistry, build_local_alias_name,
     return_type_requires_outptr, wasi_type_to_valtype,
 };
+use crate::copy_context::{ArrayCopyLocals, CopyContext};
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
 };
@@ -241,6 +242,8 @@ struct FunctionContext {
     /// Counter for generating unique `IfPattern` temp locals per scrutinee type
     /// Key is the `ValType` (as string), value is the counter for that type
     if_pattern_counters: HashMap<String, u32>,
+    /// Context for managing value copy scratch locals
+    copy_context: CopyContext,
 }
 
 impl FunctionContext {
@@ -265,6 +268,7 @@ impl FunctionContext {
             local_closure_ids: HashMap::new(),
             indirect_call_counters: HashMap::new(),
             if_pattern_counters: HashMap::new(),
+            copy_context: CopyContext::new(),
         }
     }
 
@@ -289,6 +293,7 @@ impl FunctionContext {
             if_pattern_counters: HashMap::new(),
             local_index_offset: 0,
             local_closure_ids: HashMap::new(),
+            copy_context: CopyContext::new(),
         }
     }
 
@@ -3904,22 +3909,17 @@ impl Codegen {
         field_count: usize,
         ctx: &mut FunctionContext,
     ) {
-        // Use pre-allocated temp local for the source struct reference
-        let local_name = format!("__copy_source_{type_idx}");
-        let source_local = ctx.get_local(&local_name).unwrap_or_else(|| {
-            // Fallback: allocate if not pre-allocated (shouldn't happen normally)
-            eprintln!(
-                "WARNING: struct copy local {} not pre-allocated, allocating now (next_local={})",
-                local_name, ctx.next_local
-            );
-            ctx.alloc_local(
-                &local_name,
-                ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: HeapType::Concrete(type_idx),
-                }),
-            )
-        });
+        // Use CopyContext to get the pre-allocated local
+        let source_local = ctx
+            .copy_context
+            .get_struct_copy_local(type_idx)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: struct copy local for type_idx {type_idx} not pre-allocated. \
+                     This indicates a missing case in preallocate_value_copy_locals or \
+                     CopyContext::expand_copy_types."
+                )
+            });
 
         // Store source to temp local (stack is now empty)
         func.instruction(&Instruction::LocalSet(source_local));
@@ -3948,35 +3948,19 @@ impl Codegen {
         is_packed: bool,
         ctx: &mut FunctionContext,
     ) {
-        // Use pre-allocated temp locals for the array copy
-        let source_name = format!("__copy_array_source_{array_type_idx}");
-        let source_local = ctx.get_local(&source_name).unwrap_or_else(|| {
-            ctx.alloc_local(
-                &source_name,
-                ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: HeapType::Concrete(array_type_idx),
-                }),
-            )
-        });
-        let counter_name = format!("__copy_array_counter_{array_type_idx}");
-        let counter_local = ctx
-            .get_local(&counter_name)
-            .unwrap_or_else(|| ctx.alloc_local(&counter_name, ValType::I32));
-        let dest_name = format!("__copy_array_dest_{array_type_idx}");
-        let dest_local = ctx.get_local(&dest_name).unwrap_or_else(|| {
-            ctx.alloc_local(
-                &dest_name,
-                ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: HeapType::Concrete(array_type_idx),
-                }),
-            )
-        });
-        let len_name = format!("__copy_array_len_{array_type_idx}");
-        let len_local = ctx
-            .get_local(&len_name)
-            .unwrap_or_else(|| ctx.alloc_local(&len_name, ValType::I32));
+        // Use CopyContext to get pre-allocated locals
+        let locals = ctx
+            .copy_context
+            .get_array_copy_locals(array_type_idx)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: array copy locals for type_idx {array_type_idx} not pre-allocated. \
+                     This indicates a missing case in preallocate_value_copy_locals or \
+                     CopyContext::expand_copy_types."
+                )
+            });
+        let (source_local, dest_local, counter_local, len_local) =
+            (locals.source, locals.dest, locals.counter, locals.len);
 
         // Store source to temp local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -4101,11 +4085,15 @@ impl Codegen {
     ) {
         // Get the Wasm type for the option (nullable ref)
         let inner_valtype = self.type_id_to_valtype(type_table, inner_type_id);
-        let option_valtype = match inner_valtype {
-            ValType::Ref(ref_type) => ValType::Ref(RefType {
-                nullable: true,
-                ..ref_type
-            }),
+        let (option_valtype, inner_type_idx) = match inner_valtype {
+            ValType::Ref(ref_type) => {
+                let option_valtype = ValType::Ref(RefType {
+                    nullable: true,
+                    ..ref_type
+                });
+                let inner_type_idx = CopyContext::heap_type_to_idx(ref_type.heap_type);
+                (option_valtype, inner_type_idx)
+            }
             _ => {
                 // For primitive inner types, option is boxed - but primitives don't need copying
                 // This shouldn't happen since we check needs_value_copy first
@@ -4113,10 +4101,23 @@ impl Codegen {
             }
         };
 
-        // Use pre-allocated temp local or allocate if not found
+        // Use CopyContext to get the pre-allocated local, keyed by inner type
+        let inner_idx = inner_type_idx.unwrap_or_else(|| {
+            panic!(
+                "BUG: Option copy called for non-reference inner type. \
+                 inner_type_id = {inner_type_id:?}"
+            )
+        });
         let source_local = ctx
-            .get_local("__copy_option_source")
-            .unwrap_or_else(|| ctx.alloc_local("__copy_option_source", option_valtype));
+            .copy_context
+            .get_option_copy_local(inner_idx)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: option copy local for inner_type_idx {inner_idx} not pre-allocated. \
+                     This indicates a missing case in preallocate_value_copy_locals or \
+                     CopyContext::expand_copy_types."
+                )
+            });
 
         // Store source to local
         func.instruction(&Instruction::LocalSet(source_local));
@@ -10558,14 +10559,22 @@ impl Codegen {
         }
     }
 
-    /// Pre-allocate locals for value copy operations (struct, array, tuple).
+    /// Pre-allocate locals for value copy operations (struct, array, tuple, option).
+    ///
+    /// Uses `CopyContext` to:
+    /// 1. Recursively expand types to include nested types (e.g., Option<Variant>)
+    /// 2. Pre-allocate all required scratch locals
+    /// 3. Register them in the `CopyContext` for type-safe lookup during code generation
     fn preallocate_value_copy_locals(
         &self,
         needed_types: &std::collections::HashSet<TypeId>,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
     ) {
-        for &type_id in needed_types {
+        // Expand types to include nested types that need copy locals
+        let expanded_types = CopyContext::expand_copy_types(needed_types, type_table);
+
+        for &type_id in &expanded_types {
             match type_table.get(type_id) {
                 ResolvedType::Struct {
                     name,
@@ -10574,24 +10583,20 @@ impl Codegen {
                 } => {
                     if let Some(info) = self.lookup_struct_type(name, module_source) {
                         let local_name = format!("__copy_source_{}", info.type_idx);
-                        ctx.alloc_local(
-                            &local_name,
-                            ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(info.type_idx),
-                            }),
-                        );
+                        let local_idx =
+                            ctx.alloc_local(&local_name, CopyContext::nullable_ref(info.type_idx));
+                        ctx.copy_context
+                            .register_struct_copy_local(info.type_idx, local_idx);
                     }
                 }
                 ResolvedType::Tuple(elements) => {
                     if let Some(type_idx) = self.get_tuple_type_idx(elements) {
-                        ctx.alloc_local(
+                        let local_idx = ctx.alloc_local(
                             &format!("__copy_source_{type_idx}"),
-                            ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(type_idx),
-                            }),
+                            CopyContext::nullable_ref(type_idx),
                         );
+                        ctx.copy_context
+                            .register_struct_copy_local(type_idx, local_idx);
                     }
                 }
                 ResolvedType::GenericInstance {
@@ -10600,39 +10605,44 @@ impl Codegen {
                     let elem_type = type_args[0];
                     if let Some(&raw_array_type_idx) = self.array_types.get(&elem_type) {
                         // Allocate locals for the Array struct wrapper
-                        if let Some(array_struct_type_idx) =
+                        let struct_source = if let Some(array_struct_type_idx) =
                             self.lookup_array_struct_type(elem_type, type_table)
                         {
                             ctx.alloc_local(
                                 &format!("__copy_array_struct_source_{raw_array_type_idx}"),
-                                ValType::Ref(RefType {
-                                    nullable: true,
-                                    heap_type: HeapType::Concrete(array_struct_type_idx),
-                                }),
-                            );
-                        }
+                                CopyContext::nullable_ref(array_struct_type_idx),
+                            )
+                        } else {
+                            0 // Fallback, should not happen
+                        };
+
                         // Allocate locals for raw array copy operations
-                        ctx.alloc_local(
+                        let source = ctx.alloc_local(
                             &format!("__copy_array_source_{raw_array_type_idx}"),
-                            ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(raw_array_type_idx),
-                            }),
+                            CopyContext::nullable_ref(raw_array_type_idx),
                         );
-                        ctx.alloc_local(
+                        let dest = ctx.alloc_local(
                             &format!("__copy_array_dest_{raw_array_type_idx}"),
-                            ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(raw_array_type_idx),
-                            }),
+                            CopyContext::nullable_ref(raw_array_type_idx),
                         );
-                        ctx.alloc_local(
+                        let counter = ctx.alloc_local(
                             &format!("__copy_array_counter_{raw_array_type_idx}"),
                             ValType::I32,
                         );
-                        ctx.alloc_local(
+                        let len = ctx.alloc_local(
                             &format!("__copy_array_len_{raw_array_type_idx}"),
                             ValType::I32,
+                        );
+
+                        ctx.copy_context.register_array_copy_locals(
+                            raw_array_type_idx,
+                            ArrayCopyLocals {
+                                struct_source,
+                                source,
+                                dest,
+                                counter,
+                                len,
+                            },
                         );
                     }
                 }
@@ -10641,13 +10651,35 @@ impl Codegen {
                     if let Some(info) = variant_types.get(name) {
                         let struct_type_idx = info.struct_type_idx;
                         drop(variant_types);
-                        ctx.alloc_local(
+                        let local_idx = ctx.alloc_local(
                             &format!("__copy_source_{struct_type_idx}"),
-                            ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(struct_type_idx),
-                            }),
+                            CopyContext::nullable_ref(struct_type_idx),
                         );
+                        ctx.copy_context
+                            .register_struct_copy_local(struct_type_idx, local_idx);
+                    }
+                }
+                ResolvedType::Option(inner) => {
+                    // Option<T> needs a copy source local if T needs copying
+                    if self.needs_value_copy(*inner, type_table) {
+                        // Get the inner type's Wasm type index for keying
+                        let inner_valtype = self.type_id_to_valtype(type_table, *inner);
+                        if let ValType::Ref(ref_type) = inner_valtype
+                            && let Some(inner_type_idx) =
+                                CopyContext::heap_type_to_idx(ref_type.heap_type)
+                        {
+                            // Option's ValType is nullable version of inner
+                            let option_valtype = ValType::Ref(RefType {
+                                nullable: true,
+                                ..ref_type
+                            });
+                            let local_idx = ctx.alloc_local(
+                                &format!("__copy_option_source_{inner_type_idx}"),
+                                option_valtype,
+                            );
+                            ctx.copy_context
+                                .register_option_copy_local(inner_type_idx, local_idx);
+                        }
                     }
                 }
                 _ => {}

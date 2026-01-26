@@ -77,6 +77,7 @@ pub mod codegen;
 pub mod comment;
 pub mod compiler_host;
 pub mod component_model;
+pub mod copy_context;
 pub mod desugar;
 pub mod lexer;
 pub mod loader;

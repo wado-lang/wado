@@ -1,0 +1,22 @@
+// Test: Option<CustomVariant> as return type
+// Issue: https://github.com/wado-lang/wado/issues/150
+// Error: "local index out of bounds" during codegen due to improper local allocation
+
+use { println, Stdout } from "core:cli";
+
+variant JsonValue {
+    Null,
+    Number(i32),
+}
+
+fn parse() -> Option<JsonValue> {
+    return Option::<JsonValue>::Some(JsonValue::Number(42));
+}
+
+fn run() with Stdout {
+    let result = parse();
+    println("Option of variant works");
+}
+
+__DATA__
+{"stdout": "Option of variant works\n"}
