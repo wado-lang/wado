@@ -1,0 +1,1982 @@
+// Float-to-String conversion using Russ Cox's unrounded scaling algorithm
+// Ported from rsc.io/fpfmt (https://research.swtch.com/fp)
+//
+// Copyright 2025 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+// See https://github.com/rsc/fpfmt/blob/main/LICENSE
+
+use {println, Stdout} from "core:cli";
+use {now, MonotonicClock} from "core:clocks";
+use {f64_to_string as ryu_f64_to_string} from "core:internal";
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+fn POW10_MIN() -> i32 { return -348; }
+
+// Powers of 10 from 10^0 to 10^19
+fn pow10(n: i32) -> i64 {
+    if n == 0 { return 1 as i64; }
+    if n == 1 { return 10 as i64; }
+    if n == 2 { return 100 as i64; }
+    if n == 3 { return 1000 as i64; }
+    if n == 4 { return 10000 as i64; }
+    if n == 5 { return 100000 as i64; }
+    if n == 6 { return 1000000 as i64; }
+    if n == 7 { return 10000000 as i64; }
+    if n == 8 { return 100000000 as i64; }
+    if n == 9 { return 1000000000 as i64; }
+    if n == 10 { return 10000000000 as i64; }
+    if n == 11 { return 100000000000 as i64; }
+    if n == 12 { return 1000000000000 as i64; }
+    if n == 13 { return 10000000000000 as i64; }
+    if n == 14 { return 100000000000000 as i64; }
+    if n == 15 { return 1000000000000000 as i64; }
+    if n == 16 { return 10000000000000000 as i64; }
+    if n == 17 { return 100000000000000000 as i64; }
+    if n == 18 { return 1000000000000000000 as i64; }
+    return 0x8AC7230489E80000 as i64; // 10^19
+}
+
+// ============================================================================
+// Bit utilities
+// ============================================================================
+
+// Returns the bit length of x (position of highest set bit + 1)
+fn i64_bit_len(x: i64) -> i32 {
+    if x == 0 as i64 {
+        return 0;
+    }
+    return 64 - (builtin::i64_clz(x) as i32);
+}
+
+fn bool2int(b: bool) -> i64 {
+    if b { return 1 as i64; }
+    return 0 as i64;
+}
+
+fn bool2int32(b: bool) -> i32 {
+    if b { return 1; }
+    return 0;
+}
+
+// ============================================================================
+// Logarithm approximations
+// ============================================================================
+
+// log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
+fn log10_pow2(x: i32) -> i32 {
+    return (x * 78913) >> 18;
+}
+
+// log2_pow10(x) returns floor(log2(10^x)) = floor(x * log2(10))
+fn log2_pow10(x: i32) -> i32 {
+    return (x * 108853) >> 15;
+}
+
+// ============================================================================
+// Float unpacking
+// ============================================================================
+
+// Result of unpacking a float64
+struct UnpackResult {
+    mantissa: i64,
+    exponent: i32,
+}
+
+// unpack64 returns (mantissa, exponent) such that f = mantissa * 2^exponent
+fn unpack64(f: f64) -> UnpackResult {
+    let bits = builtin::i64_reinterpret_f64(f);
+
+    let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
+    let exp_mask = 0x7FF as i64;
+    let shift = 11;  // 64 - 53
+    let min_exp = -1085;  // -(1074 + 11)
+
+    let raw_mantissa = bits & mantissa_mask;
+    let raw_exp = ((bits >> 52) & exp_mask) as i32;
+
+    if raw_exp == 0 {
+        if raw_mantissa == 0 as i64 {
+            return UnpackResult { mantissa: 0 as i64, exponent: 0 };
+        }
+        let m = raw_mantissa << shift;
+        let e = min_exp;
+        let s = 64 - i64_bit_len(m);
+        return UnpackResult { mantissa: m << s, exponent: e - s };
+    }
+
+    let m = (0x8000000000000000 as i64) | (raw_mantissa << shift);
+    let e = (raw_exp - 1) + min_exp;
+    return UnpackResult { mantissa: m, exponent: e };
+}
+
+// ============================================================================
+// Unrounded arithmetic
+// ============================================================================
+
+fn unrounded_floor(u: i64) -> i64 {
+    return (u + 0 as i64) >> 2;
+}
+
+fn unrounded_round(u: i64) -> i64 {
+    return (u + 1 as i64 + ((u >> 2) & 1 as i64)) >> 2;
+}
+
+fn unrounded_ceil(u: i64) -> i64 {
+    return (u + 3 as i64) >> 2;
+}
+
+fn unrounded_nudge(u: i64, delta: i32) -> i64 {
+    return u + (delta as i64);
+}
+
+fn unrounded_div(u: i64, d: i64) -> i64 {
+    let q = u / d;
+    let r = u % d;
+    return q | (u & 1 as i64) | bool2int(r != 0 as i64);
+}
+
+// ============================================================================
+// Unsigned comparisons (treating i64 as u64)
+// ============================================================================
+
+fn u64_lt(a: i64, b: i64) -> bool {
+    let sign_bit = 0x8000000000000000 as i64;
+    return (a ^ sign_bit) < (b ^ sign_bit);
+}
+
+fn u64_ge(a: i64, b: i64) -> bool {
+    let sign_bit = 0x8000000000000000 as i64;
+    return (a ^ sign_bit) >= (b ^ sign_bit);
+}
+
+fn u64_le(a: i64, b: i64) -> bool {
+    let sign_bit = 0x8000000000000000 as i64;
+    return (a ^ sign_bit) <= (b ^ sign_bit);
+}
+
+// ============================================================================
+// Power of 10 table entry
+// ============================================================================
+
+struct PmHiLo {
+    hi: i64,
+    lo: i64,
+}
+
+// ============================================================================
+// Scaling
+// ============================================================================
+
+fn get_pow10(p: i32) -> PmHiLo {
+    let idx = p - POW10_MIN();
+    return pow10_tab(idx);
+}
+
+// uscale computes unround(x * 2^e * 10^p) using the pow10 table
+fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
+    // Note: i64_mul_wide_u returns (low, high) but Go's bits.Mul64 returns (high, low)
+    let mul_result = builtin::i64_mul_wide_u(x, pm_hi);
+    let mut hi = mul_result.1;   // HIGH part (like Go's first return value)
+    let mid = mul_result.0;      // LOW part (like Go's second return value)
+
+    let mut sticky = 1 as i64;
+
+    let s_mod_64 = s & 63;
+    let check_mask = (1 as i64 << s_mod_64) - 1 as i64;
+    if (hi & check_mask) == 0 as i64 {
+        let mul_result2 = builtin::i64_mul_wide_u(x, pm_lo);
+        let mid2 = mul_result2.0;  // LOW part
+        sticky = bool2int((mid - mid2) > 1 as i64);
+        hi = hi - bool2int(u64_lt(mid, mid2));
+    }
+
+    // Use logical shift (not arithmetic) for unsigned semantics
+    return logical_shr(hi, s) | sticky;
+}
+
+// ============================================================================
+// Main formatting functions
+// ============================================================================
+
+// Result of formatting
+struct FormatResult {
+    digits: i64,
+    exponent: i32,
+}
+
+// FixedWidth returns the n-digit decimal form of f
+fn fixed_width(f: f64, n: i32) -> FormatResult {
+    if n > 18 {
+        panic("too many digits");
+    }
+
+    let unpack = unpack64(f);
+    let m = unpack.mantissa;
+    let e = unpack.exponent;
+
+    let p = n - 1 - log10_pow2(e + 63);
+    let lp = log2_pow10(p);
+    let pm = get_pow10(p);
+    let s = -(e + lp + 3);
+
+    let u = uscale(m, pm.hi, pm.lo, s);
+    let mut d = unrounded_round(u);
+
+    if u64_ge(d, pow10(n)) {
+        d = unrounded_round(unrounded_div(u, 10 as i64));
+        return FormatResult { digits: d, exponent: -p + 1 };
+    }
+
+    return FormatResult { digits: d, exponent: -p };
+}
+
+// Short computes the shortest formatting of f that round-trips
+fn short(f: f64) -> FormatResult {
+    let min_exp = -1085;
+
+    let unpack = unpack64(f);
+    let m = unpack.mantissa;
+    let e = unpack.exponent;
+
+    let mut min_m: i64 = 0 as i64;
+    let mut z = 11;
+    let mut p: i32 = 0;
+
+    let m_is_power_of_2 = m == (0x8000000000000000 as i64);
+    if m_is_power_of_2 && e > min_exp {
+        p = -skewed(e + z);
+        min_m = m - (1 as i64 << (z - 2));
+    } else {
+        if e < min_exp {
+            z = 11 + (min_exp - e);
+        }
+        p = -log10_pow2(e + z);
+        min_m = m - (1 as i64 << (z - 1));
+    }
+
+    let max_m = m + (1 as i64 << (z - 1));
+    let odd = ((m >> z) & 1 as i64) as i32;
+
+    let lp = log2_pow10(p);
+    let pm = get_pow10(p);
+    let s = -(e + lp + 3);
+
+    let dmin = unrounded_ceil(unrounded_nudge(uscale(min_m, pm.hi, pm.lo, s), odd));
+    let dmax = unrounded_floor(unrounded_nudge(uscale(max_m, pm.hi, pm.lo, s), -odd));
+
+    // Check if we can trim to fewer digits
+    let d_div_10 = dmax / 10 as i64;
+    let can_trim = d_div_10 * 10 as i64 >= dmin;
+
+    if can_trim {
+        let trimmed = trim_zeros(d_div_10, -(p - 1));
+        return FormatResult { digits: trimmed.0, exponent: trimmed.1 };
+    }
+
+    let mut d = dmin;
+    if dmin < dmax {
+        d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
+    }
+    return FormatResult { digits: d, exponent: -p };
+}
+
+fn skewed(e: i32) -> i32 {
+    return (e * 631305 - 261663) >> 21;
+}
+
+// Unsigned multiply (low 64 bits only, modular)
+fn u64_mul(a: i64, b: i64) -> i64 {
+    // Use wide multiply and take the low part
+    let result = builtin::i64_mul_wide_u(a, b);
+    return result.0;  // Low 64 bits
+}
+
+fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
+    let max_u64 = 0xFFFFFFFFFFFFFFFF as i64;
+    let inv5 = 0xcccccccccccccccd as i64;
+    let inv5p2 = 0x8f5c28f5c28f5c29 as i64;
+    let inv5p4 = 0xd288ce703afb7e91 as i64;
+    let inv5p8 = 0xc767074b22e90e21 as i64;
+
+    // Threshold values (need unsigned comparison)
+    let thresh_10 = 1844674407370955161 as i64;  // maxUint64 / 10
+    let thresh_100 = 184467440737095516 as i64;  // maxUint64 / 100
+    let thresh_10000 = 1844674407370955 as i64;  // maxUint64 / 10000
+    let thresh_1e8 = 184467440737 as i64;        // maxUint64 / 100000000
+
+    let mut xv = x;
+    let mut pv = p;
+
+    let d1 = rotate_right(u64_mul(xv, inv5), 1);
+    if u64_le(d1, thresh_10) {
+        xv = d1;
+        pv = pv + 1;
+    } else {
+        return [xv, pv];
+    }
+
+    let d8 = rotate_right(u64_mul(xv, inv5p8), 8);
+    if u64_le(d8, thresh_1e8) {
+        xv = d8;
+        pv = pv + 8;
+    }
+
+    let d4 = rotate_right(u64_mul(xv, inv5p4), 4);
+    if u64_le(d4, thresh_10000) {
+        xv = d4;
+        pv = pv + 4;
+    }
+
+    let d2 = rotate_right(u64_mul(xv, inv5p2), 2);
+    if u64_le(d2, thresh_100) {
+        xv = d2;
+        pv = pv + 2;
+    }
+
+    let d1b = rotate_right(u64_mul(xv, inv5), 1);
+    if u64_le(d1b, thresh_10) {
+        xv = d1b;
+        pv = pv + 1;
+    }
+
+    return [xv, pv];
+}
+
+// Logical right shift for unsigned semantics on i64
+fn logical_shr(x: i64, n: i32) -> i64 {
+    if n <= 0 { return x; }
+    if n >= 64 { return 0 as i64; }
+    // Use arithmetic shift, then mask off sign-extended bits
+    // The mask has (64-n) ones in the low bits
+    let mask = shr_mask(n);
+    return (x >> n) & mask;
+}
+
+// Get mask for logical shift: (1 << (64-n)) - 1
+fn shr_mask(n: i32) -> i64 {
+    if n <= 0 { return 0xFFFFFFFFFFFFFFFF as i64; }
+    if n >= 64 { return 0 as i64; }
+    // Build the mask: all 1s in the low (64-n) bits
+    // For n=1: 0x7FFFFFFFFFFFFFFF
+    // For n=8: 0x00FFFFFFFFFFFFFF
+    // We can compute this as: if (64-n) >= 64 then -1, else (1 << (64-n)) - 1
+    let remaining = 64 - n;
+    if remaining >= 63 {
+        return 0x7FFFFFFFFFFFFFFF as i64;
+    }
+    return (1 as i64 << remaining) - 1 as i64;
+}
+
+fn rotate_right(x: i64, n: i32) -> i64 {
+    return logical_shr(x, n) | (x << (64 - n));
+}
+
+// digits returns the number of decimal digits in d
+fn digits(d: i64) -> i32 {
+    let nd = log10_pow2(i64_bit_len(d));
+    return nd + bool2int32(u64_ge(d, pow10(nd)));
+}
+
+// ============================================================================
+// String formatting helpers
+// ============================================================================
+
+fn i2a_first(n: i32) -> i32 {
+    return '0' as i32 + n / 10;
+}
+
+fn i2a_second(n: i32) -> i32 {
+    return '0' as i32 + n % 10;
+}
+
+// Format result to exponential string
+pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
+    let mut buf = String::with_capacity(30);
+
+    // Format digits
+    let mut val = d;
+    let mut digit_chars: Array<i32> = [];
+    for let mut i = 0; i < nd; i += 1 {
+        digit_chars.append(0);
+    }
+
+    let mut idx = nd - 1;
+    while idx >= 0 {
+        digit_chars.set(idx, ('0' as i32) + ((val % 10 as i64) as i32));
+        val = val / 10 as i64;
+        idx = idx - 1;
+    }
+
+    // First digit
+    append_char(&mut buf, digit_chars.get(0));
+
+    // Decimal point and remaining digits
+    if nd > 1 {
+        append_char(&mut buf, '.' as i32);
+        for let mut i = 1; i < nd; i += 1 {
+            append_char(&mut buf, digit_chars.get(i));
+        }
+    }
+
+    // Exponent
+    let exp = p + nd - 1;
+    append_char(&mut buf, 'e' as i32);
+    if exp < 0 {
+        append_char(&mut buf, '-' as i32);
+    } else {
+        append_char(&mut buf, '+' as i32);
+    }
+
+    let abs_exp = if exp < 0 { -exp } else { exp };
+    if abs_exp < 10 {
+        append_char(&mut buf, '0' as i32);
+        append_char(&mut buf, '0' as i32 + abs_exp);
+    } else if abs_exp < 100 {
+        append_char(&mut buf, i2a_first(abs_exp));
+        append_char(&mut buf, i2a_second(abs_exp));
+    } else {
+        append_char(&mut buf, '0' as i32 + abs_exp / 100);
+        append_char(&mut buf, i2a_first(abs_exp % 100));
+        append_char(&mut buf, i2a_second(abs_exp % 100));
+    }
+
+    return buf;
+}
+
+// Convert ASCII char code to single-character string
+fn char_to_string(c: i32) -> String {
+    if c == '0' as i32 { return "0"; }
+    if c == '1' as i32 { return "1"; }
+    if c == '2' as i32 { return "2"; }
+    if c == '3' as i32 { return "3"; }
+    if c == '4' as i32 { return "4"; }
+    if c == '5' as i32 { return "5"; }
+    if c == '6' as i32 { return "6"; }
+    if c == '7' as i32 { return "7"; }
+    if c == '8' as i32 { return "8"; }
+    if c == '9' as i32 { return "9"; }
+    if c == '.' as i32 { return "."; }
+    if c == 'e' as i32 { return "e"; }
+    if c == 'E' as i32 { return "E"; }
+    if c == '+' as i32 { return "+"; }
+    if c == '-' as i32 { return "-"; }
+    return "?";
+}
+
+fn append_char(buf: &mut String, c: i32) {
+    buf.append(char_to_string(c));
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+// Convert f64 to string using shortest representation
+pub fn f64_to_string(f: f64) -> String {
+    let bits = builtin::i64_reinterpret_f64(f);
+
+    // Check for zero
+    if bits == 0 as i64 {
+        return "0e+00";
+    }
+    if bits == 0x8000000000000000 as i64 {
+        return "-0e+00";
+    }
+
+    let is_neg = bits < 0 as i64;
+    let abs_f = if is_neg { -f } else { f };
+
+    // Check for infinity/NaN
+    let exp_mask = 0x7FF0000000000000 as i64;
+    let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
+    if (bits & exp_mask) == exp_mask {
+        if (bits & mantissa_mask) != 0 as i64 {
+            return "NaN";
+        }
+        if is_neg {
+            return "-Inf";
+        }
+        return "Inf";
+    }
+
+    let result = short(abs_f);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+
+    let formatted = format_exp(d, p, nd);
+
+    if is_neg {
+        return String::concat("-", formatted);
+    }
+    return formatted;
+}
+
+// ============================================================================
+// Power of 10 table
+// ============================================================================
+
+
+// ============================================================================
+// Power of 10 table
+// ============================================================================
+
+fn pow10_tab_0(idx: i32) -> PmHiLo {
+    if idx == 0 { return PmHiLo { hi: 0xfa8fd5a0081c0289 as i64, lo: 0xe8cd3796329f1bac as i64 }; }
+    if idx == 1 { return PmHiLo { hi: 0x9c99e58405118196 as i64, lo: 0xf18042bddfa3714b as i64 }; }
+    if idx == 2 { return PmHiLo { hi: 0xc3c05ee50655e1fb as i64, lo: 0xade0536d578c4d9e as i64 }; }
+    if idx == 3 { return PmHiLo { hi: 0xf4b0769e47eb5a79 as i64, lo: 0x19586848ad6f6106 as i64 }; }
+    if idx == 4 { return PmHiLo { hi: 0x98ee4a22ecf3188c as i64, lo: 0x6fd7412d6c659ca3 as i64 }; }
+    if idx == 5 { return PmHiLo { hi: 0xbf29dcaba82fdeaf as i64, lo: 0x8bcd1178c77f03cc as i64 }; }
+    if idx == 6 { return PmHiLo { hi: 0xeef453d6923bd65b as i64, lo: 0xeec055d6f95ec4c0 as i64 }; }
+    if idx == 7 { return PmHiLo { hi: 0x9558b4661b6565f9 as i64, lo: 0xb53835a65bdb3af8 as i64 }; }
+    if idx == 8 { return PmHiLo { hi: 0xbaaee17fa23ebf77 as i64, lo: 0xa286430ff2d209b6 as i64 }; }
+    if idx == 9 { return PmHiLo { hi: 0xe95a99df8ace6f54 as i64, lo: 0x0b27d3d3ef868c23 as i64 }; }
+    if idx == 10 { return PmHiLo { hi: 0x91d8a02bb6c10595 as i64, lo: 0x86f8e46475b41796 as i64 }; }
+    if idx == 11 { return PmHiLo { hi: 0xb64ec836a47146fa as i64, lo: 0x68b71d7d93211d7b as i64 }; }
+    if idx == 12 { return PmHiLo { hi: 0xe3e27a444d8d98b8 as i64, lo: 0x02e4e4dcf7e964da as i64 }; }
+    if idx == 13 { return PmHiLo { hi: 0x8e6d8c6ab0787f73 as i64, lo: 0x01cf0f0a1af1df08 as i64 }; }
+    if idx == 14 { return PmHiLo { hi: 0xb208ef855c969f50 as i64, lo: 0x4242d2cca1ae56ca as i64 }; }
+    if idx == 15 { return PmHiLo { hi: 0xde8b2b66b3bc4724 as i64, lo: 0x52d3877fca19ec7d as i64 }; }
+    if idx == 16 { return PmHiLo { hi: 0x8b16fb203055ac77 as i64, lo: 0xb3c434afde5033ce as i64 }; }
+    if idx == 17 { return PmHiLo { hi: 0xaddcb9e83c6b1794 as i64, lo: 0x20b541dbd5e440c2 as i64 }; }
+    if idx == 18 { return PmHiLo { hi: 0xd953e8624b85dd79 as i64, lo: 0x28e29252cb5d50f2 as i64 }; }
+    if idx == 19 { return PmHiLo { hi: 0x87d4713d6f33aa6c as i64, lo: 0x798d9b73bf1a5297 as i64 }; }
+    if idx == 20 { return PmHiLo { hi: 0xa9c98d8ccb009507 as i64, lo: 0x97f10250aee0e73d as i64 }; }
+    if idx == 21 { return PmHiLo { hi: 0xd43bf0effdc0ba49 as i64, lo: 0xfded42e4da99210d as i64 }; }
+    if idx == 22 { return PmHiLo { hi: 0x84a57695fe98746e as i64, lo: 0xfeb449cf089fb4a8 as i64 }; }
+    if idx == 23 { return PmHiLo { hi: 0xa5ced43b7e3e9189 as i64, lo: 0xbe615c42cac7a1d2 as i64 }; }
+    if idx == 24 { return PmHiLo { hi: 0xcf42894a5dce35eb as i64, lo: 0xadf9b3537d798a46 as i64 }; }
+    if idx == 25 { return PmHiLo { hi: 0x818995ce7aa0e1b3 as i64, lo: 0x8cbc10142e6bf66c as i64 }; }
+    if idx == 26 { return PmHiLo { hi: 0xa1ebfb4219491a20 as i64, lo: 0xefeb14193a06f407 as i64 }; }
+    if idx == 27 { return PmHiLo { hi: 0xca66fa129f9b60a7 as i64, lo: 0x2be5d91f8888b109 as i64 }; }
+    if idx == 28 { return PmHiLo { hi: 0xfd00b897478238d1 as i64, lo: 0x76df4f676aaadd4b as i64 }; }
+    if idx == 29 { return PmHiLo { hi: 0x9e20735e8cb16383 as i64, lo: 0xaa4b91a0a2aaca4f as i64 }; }
+    if idx == 30 { return PmHiLo { hi: 0xc5a890362fddbc63 as i64, lo: 0x14de7608cb557ce2 as i64 }; }
+    if idx == 31 { return PmHiLo { hi: 0xf712b443bbd52b7c as i64, lo: 0x5a16138afe2adc1b as i64 }; }
+    if idx == 32 { return PmHiLo { hi: 0x9a6bb0aa55653b2e as i64, lo: 0xb84dcc36dedac991 as i64 }; }
+    if idx == 33 { return PmHiLo { hi: 0xc1069cd4eabe89f9 as i64, lo: 0x66613f4496917bf5 as i64 }; }
+    if idx == 34 { return PmHiLo { hi: 0xf148440a256e2c77 as i64, lo: 0x3ff98f15bc35daf2 as i64 }; }
+    if idx == 35 { return PmHiLo { hi: 0x96cd2a865764dbcb as i64, lo: 0xc7fbf96d95a1a8d7 as i64 }; }
+    if idx == 36 { return PmHiLo { hi: 0xbc807527ed3e12bd as i64, lo: 0x39faf7c8fb0a130d as i64 }; }
+    if idx == 37 { return PmHiLo { hi: 0xeba09271e88d976c as i64, lo: 0x0879b5bb39cc97d1 as i64 }; }
+    if idx == 38 { return PmHiLo { hi: 0x93445b8731587ea4 as i64, lo: 0x854c1195041fdee2 as i64 }; }
+    if idx == 39 { return PmHiLo { hi: 0xb8157268fdae9e4d as i64, lo: 0xa69f15fa4527d69b as i64 }; }
+    if idx == 40 { return PmHiLo { hi: 0xe61acf033d1a45e0 as i64, lo: 0x9046db78d671cc42 as i64 }; }
+    if idx == 41 { return PmHiLo { hi: 0x8fd0c16206306bac as i64, lo: 0x5a2c492b86071fa9 as i64 }; }
+    if idx == 42 { return PmHiLo { hi: 0xb3c4f1ba87bc8697 as i64, lo: 0x70b75b766788e793 as i64 }; }
+    if idx == 43 { return PmHiLo { hi: 0xe0b62e2929aba83d as i64, lo: 0xcce53254016b2178 as i64 }; }
+    if idx == 44 { return PmHiLo { hi: 0x8c71dcd9ba0b4926 as i64, lo: 0x600f3f7480e2f4eb as i64 }; }
+    if idx == 45 { return PmHiLo { hi: 0xaf8e5410288e1b70 as i64, lo: 0xf8130f51a11bb226 as i64 }; }
+    if idx == 46 { return PmHiLo { hi: 0xdb71e91432b1a24b as i64, lo: 0x3617d32609629eaf as i64 }; }
+    if idx == 47 { return PmHiLo { hi: 0x892731ac9faf056f as i64, lo: 0x41cee3f7c5dda32d as i64 }; }
+    if idx == 48 { return PmHiLo { hi: 0xab70fe17c79ac6cb as i64, lo: 0x92429cf5b7550bf9 as i64 }; }
+    if idx == 49 { return PmHiLo { hi: 0xd64d3d9db981787e as i64, lo: 0xf6d34433252a4ef7 as i64 }; }
+    if idx == 50 { return PmHiLo { hi: 0x85f0468293f0eb4f as i64, lo: 0xda440a9ff73a715a as i64 }; }
+    if idx == 51 { return PmHiLo { hi: 0xa76c582338ed2622 as i64, lo: 0x50d50d47f5090db1 as i64 }; }
+    if idx == 52 { return PmHiLo { hi: 0xd1476e2c07286fab as i64, lo: 0xe50a5099f24b511e as i64 }; }
+    if idx == 53 { return PmHiLo { hi: 0x82cca4db847945cb as i64, lo: 0xaf267260376f12b2 as i64 }; }
+    if idx == 54 { return PmHiLo { hi: 0xa37fce126597973d as i64, lo: 0x1af00ef8454ad75f as i64 }; }
+    if idx == 55 { return PmHiLo { hi: 0xcc5fc196fefd7d0d as i64, lo: 0xe1ac12b6569d8d37 as i64 }; }
+    if idx == 56 { return PmHiLo { hi: 0xff77b1fcbebcdc50 as i64, lo: 0xda171763ec44f085 as i64 }; }
+    if idx == 57 { return PmHiLo { hi: 0x9faacf3df73609b2 as i64, lo: 0x884e6e9e73ab1653 as i64 }; }
+    if idx == 58 { return PmHiLo { hi: 0xc795830d75038c1e as i64, lo: 0x2a620a461095dbe8 as i64 }; }
+    if idx == 59 { return PmHiLo { hi: 0xf97ae3d0d2446f26 as i64, lo: 0xb4fa8cd794bb52e2 as i64 }; }
+    if idx == 60 { return PmHiLo { hi: 0x9becce62836ac578 as i64, lo: 0xb11c9806bcf513cd as i64 }; }
+    if idx == 61 { return PmHiLo { hi: 0xc2e801fb244576d6 as i64, lo: 0xdd63be086c3258c0 as i64 }; }
+    if idx == 62 { return PmHiLo { hi: 0xf3a20279ed56d48b as i64, lo: 0x94bcad8a873eeef0 as i64 }; }
+    if idx == 63 { return PmHiLo { hi: 0x9845418c345644d7 as i64, lo: 0x7cf5ec7694875556 as i64 }; }
+    if idx == 64 { return PmHiLo { hi: 0xbe5691ef416bd60d as i64, lo: 0xdc33679439a92aac as i64 }; }
+    if idx == 65 { return PmHiLo { hi: 0xedec366b11c6cb90 as i64, lo: 0xd340417948137557 as i64 }; }
+    if idx == 66 { return PmHiLo { hi: 0x94b3a202eb1c3f3a as i64, lo: 0x840828ebcd0c2956 as i64 }; }
+    if idx == 67 { return PmHiLo { hi: 0xb9e08a83a5e34f08 as i64, lo: 0x250a3326c04f33ac as i64 }; }
+    if idx == 68 { return PmHiLo { hi: 0xe858ad248f5c22ca as i64, lo: 0x2e4cbff070630097 as i64 }; }
+    if idx == 69 { return PmHiLo { hi: 0x91376c36d99995bf as i64, lo: 0xdceff7f6463de05e as i64 }; }
+    if idx == 70 { return PmHiLo { hi: 0xb58547448ffffb2e as i64, lo: 0x542bf5f3d7cd5875 as i64 }; }
+    if idx == 71 { return PmHiLo { hi: 0xe2e69915b3fff9fa as i64, lo: 0xe936f370cdc0ae93 as i64 }; }
+    if idx == 72 { return PmHiLo { hi: 0x8dd01fad907ffc3c as i64, lo: 0x51c2582680986d1c as i64 }; }
+    if idx == 73 { return PmHiLo { hi: 0xb1442798f49ffb4b as i64, lo: 0x6632ee3020be8863 as i64 }; }
+    if idx == 74 { return PmHiLo { hi: 0xdd95317f31c7fa1e as i64, lo: 0xbfbfa9bc28ee2a7c as i64 }; }
+    if idx == 75 { return PmHiLo { hi: 0x8a7d3eef7f1cfc53 as i64, lo: 0xb7d7ca159994da8d as i64 }; }
+    if idx == 76 { return PmHiLo { hi: 0xad1c8eab5ee43b67 as i64, lo: 0x25cdbc9afffa1130 as i64 }; }
+    if idx == 77 { return PmHiLo { hi: 0xd863b256369d4a41 as i64, lo: 0x6f412bc1bff8957d as i64 }; }
+    if idx == 78 { return PmHiLo { hi: 0x873e4f75e2224e69 as i64, lo: 0xa588bb5917fb5d6e as i64 }; }
+    if idx == 79 { return PmHiLo { hi: 0xa90de3535aaae203 as i64, lo: 0x8eeaea2f5dfa34c9 as i64 }; }
+    if idx == 80 { return PmHiLo { hi: 0xd3515c2831559a84 as i64, lo: 0xf2a5a4bb3578c1fc as i64 }; }
+    if idx == 81 { return PmHiLo { hi: 0x8412d9991ed58092 as i64, lo: 0x17a786f5016b793d as i64 }; }
+    if idx == 82 { return PmHiLo { hi: 0xa5178fff668ae0b7 as i64, lo: 0x9d9168b241c6578d as i64 }; }
+    if idx == 83 { return PmHiLo { hi: 0xce5d73ff402d98e4 as i64, lo: 0x04f5c2ded237ed70 as i64 }; }
+    if idx == 84 { return PmHiLo { hi: 0x80fa687f881c7f8f as i64, lo: 0x831999cb4362f466 as i64 }; }
+    if idx == 85 { return PmHiLo { hi: 0xa139029f6a239f73 as i64, lo: 0xe3e0003e143bb17f as i64 }; }
+    if idx == 86 { return PmHiLo { hi: 0xc987434744ac874f as i64, lo: 0x5cd8004d994a9ddf as i64 }; }
+    if idx == 87 { return PmHiLo { hi: 0xfbe9141915d7a923 as i64, lo: 0xb40e0060ff9d4557 as i64 }; }
+    if idx == 88 { return PmHiLo { hi: 0x9d71ac8fada6c9b6 as i64, lo: 0x9088c03c9fc24b56 as i64 }; }
+    if idx == 89 { return PmHiLo { hi: 0xc4ce17b399107c23 as i64, lo: 0x34aaf04bc7b2de2c as i64 }; }
+    if idx == 90 { return PmHiLo { hi: 0xf6019da07f549b2c as i64, lo: 0x81d5ac5eb99f95b7 as i64 }; }
+    if idx == 91 { return PmHiLo { hi: 0x99c102844f94e0fc as i64, lo: 0xd1258bbb3403bd92 as i64 }; }
+    if idx == 92 { return PmHiLo { hi: 0xc0314325637a193a as i64, lo: 0x056eeeaa0104acf7 as i64 }; }
+    if idx == 93 { return PmHiLo { hi: 0xf03d93eebc589f89 as i64, lo: 0x86caaa548145d835 as i64 }; }
+    if idx == 94 { return PmHiLo { hi: 0x96267c7535b763b6 as i64, lo: 0xb43eaa74d0cba721 as i64 }; }
+    if idx == 95 { return PmHiLo { hi: 0xbbb01b9283253ca3 as i64, lo: 0x614e551204fe90e9 as i64 }; }
+    if idx == 96 { return PmHiLo { hi: 0xea9c227723ee8bcc as i64, lo: 0xb9a1ea56863e3523 as i64 }; }
+    if idx == 97 { return PmHiLo { hi: 0x92a1958a76751760 as i64, lo: 0xf405327613e6e136 as i64 }; }
+    if idx == 98 { return PmHiLo { hi: 0xb749faed14125d37 as i64, lo: 0x31067f1398e09984 as i64 }; }
+    if idx == 99 { return PmHiLo { hi: 0xe51c79a85916f485 as i64, lo: 0x7d481ed87f18bfe5 as i64 }; }
+    return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
+}
+
+fn pow10_tab_1(idx: i32) -> PmHiLo {
+    if idx == 100 { return PmHiLo { hi: 0x8f31cc0937ae58d3 as i64, lo: 0x2e4d13474f6f77ef as i64 }; }
+    if idx == 101 { return PmHiLo { hi: 0xb2fe3f0b8599ef08 as i64, lo: 0x79e05819234b55ea as i64 }; }
+    if idx == 102 { return PmHiLo { hi: 0xdfbdcece67006aca as i64, lo: 0x98586e1f6c1e2b65 as i64 }; }
+    if idx == 103 { return PmHiLo { hi: 0x8bd6a141006042be as i64, lo: 0x1f3744d3a392db1f as i64 }; }
+    if idx == 104 { return PmHiLo { hi: 0xaecc49914078536e as i64, lo: 0xa70516088c7791e7 as i64 }; }
+    if idx == 105 { return PmHiLo { hi: 0xda7f5bf590966849 as i64, lo: 0x50c65b8aaf957661 as i64 }; }
+    if idx == 106 { return PmHiLo { hi: 0x888f99797a5e012e as i64, lo: 0x927bf936adbd69fc as i64 }; }
+    if idx == 107 { return PmHiLo { hi: 0xaab37fd7d8f58179 as i64, lo: 0x371af784592cc47c as i64 }; }
+    if idx == 108 { return PmHiLo { hi: 0xd5605fcdcf32e1d7 as i64, lo: 0x04e1b5656f77f59b as i64 }; }
+    if idx == 109 { return PmHiLo { hi: 0x855c3be0a17fcd27 as i64, lo: 0xa30d115f65aaf980 as i64 }; }
+    if idx == 110 { return PmHiLo { hi: 0xa6b34ad8c9dfc070 as i64, lo: 0x0bd055b73f15b7e1 as i64 }; }
+    if idx == 111 { return PmHiLo { hi: 0xd0601d8efc57b08c as i64, lo: 0x0ec46b250edb25d9 as i64 }; }
+    if idx == 112 { return PmHiLo { hi: 0x823c12795db6ce58 as i64, lo: 0x893ac2f72948f7a7 as i64 }; }
+    if idx == 113 { return PmHiLo { hi: 0xa2cb1717b52481ee as i64, lo: 0xab8973b4f39b3591 as i64 }; }
+    if idx == 114 { return PmHiLo { hi: 0xcb7ddcdda26da269 as i64, lo: 0x566bd0a2308202f6 as i64 }; }
+    if idx == 115 { return PmHiLo { hi: 0xfe5d54150b090b03 as i64, lo: 0x2c06c4cabca283b3 as i64 }; }
+    if idx == 116 { return PmHiLo { hi: 0x9efa548d26e5a6e2 as i64, lo: 0x3b843afeb5e59250 as i64 }; }
+    if idx == 117 { return PmHiLo { hi: 0xc6b8e9b0709f109b as i64, lo: 0xca6549be635ef6e4 as i64 }; }
+    if idx == 118 { return PmHiLo { hi: 0xf867241c8cc6d4c1 as i64, lo: 0x3cfe9c2dfc36b49d as i64 }; }
+    if idx == 119 { return PmHiLo { hi: 0x9b407691d7fc44f9 as i64, lo: 0x861f219cbda230e2 as i64 }; }
+    if idx == 120 { return PmHiLo { hi: 0xc21094364dfb5637 as i64, lo: 0x67a6ea03ed0abd1b as i64 }; }
+    if idx == 121 { return PmHiLo { hi: 0xf294b943e17a2bc5 as i64, lo: 0xc190a484e84d6c62 as i64 }; }
+    if idx == 122 { return PmHiLo { hi: 0x979cf3ca6cec5b5b as i64, lo: 0x58fa66d3113063bd as i64 }; }
+    if idx == 123 { return PmHiLo { hi: 0xbd8430bd08277232 as i64, lo: 0xaf390087d57c7cac as i64 }; }
+    if idx == 124 { return PmHiLo { hi: 0xece53cec4a314ebe as i64, lo: 0x5b0740a9cadb9bd7 as i64 }; }
+    if idx == 125 { return PmHiLo { hi: 0x940f4613ae5ed137 as i64, lo: 0x78e4886a1ec94166 as i64 }; }
+    if idx == 126 { return PmHiLo { hi: 0xb913179899f68585 as i64, lo: 0xd71daa84a67b91c0 as i64 }; }
+    if idx == 127 { return PmHiLo { hi: 0xe757dd7ec07426e6 as i64, lo: 0xcce51525d01a7630 as i64 }; }
+    if idx == 128 { return PmHiLo { hi: 0x9096ea6f38489850 as i64, lo: 0xc00f2d37a21089de as i64 }; }
+    if idx == 129 { return PmHiLo { hi: 0xb4bca50b065abe64 as i64, lo: 0xf012f8858a94ac56 as i64 }; }
+    if idx == 130 { return PmHiLo { hi: 0xe1ebce4dc7f16dfc as i64, lo: 0x2c17b6a6ed39d76b as i64 }; }
+    if idx == 131 { return PmHiLo { hi: 0x8d3360f09cf6e4be as i64, lo: 0x9b8ed228544426a3 as i64 }; }
+    if idx == 132 { return PmHiLo { hi: 0xb080392cc4349ded as i64, lo: 0x427286b26955304c as i64 }; }
+    if idx == 133 { return PmHiLo { hi: 0xdca04777f541c568 as i64, lo: 0x130f285f03aa7c5f as i64 }; }
+    if idx == 134 { return PmHiLo { hi: 0x89e42caaf9491b61 as i64, lo: 0x0be9793b624a8dbb as i64 }; }
+    if idx == 135 { return PmHiLo { hi: 0xac5d37d5b79b623a as i64, lo: 0xcee3d78a3add312a as i64 }; }
+    if idx == 136 { return PmHiLo { hi: 0xd77485cb25823ac8 as i64, lo: 0x829ccd6cc9947d74 as i64 }; }
+    if idx == 137 { return PmHiLo { hi: 0x86a8d39ef77164bd as i64, lo: 0x51a20063fdfcce68 as i64 }; }
+    if idx == 138 { return PmHiLo { hi: 0xa8530886b54dbdec as i64, lo: 0x260a807cfd7c0203 as i64 }; }
+    if idx == 139 { return PmHiLo { hi: 0xd267caa862a12d67 as i64, lo: 0x2f8d209c3cdb0284 as i64 }; }
+    if idx == 140 { return PmHiLo { hi: 0x8380dea93da4bc61 as i64, lo: 0xbdb83461a608e192 as i64 }; }
+    if idx == 141 { return PmHiLo { hi: 0xa46116538d0deb79 as i64, lo: 0xad26417a0f8b19f7 as i64 }; }
+    if idx == 142 { return PmHiLo { hi: 0xcd795be870516657 as i64, lo: 0x986fd1d8936de074 as i64 }; }
+    if idx == 143 { return PmHiLo { hi: 0x806bd9714632dff7 as i64, lo: 0xff45e3275c24ac49 as i64 }; }
+    if idx == 144 { return PmHiLo { hi: 0xa086cfcd97bf97f4 as i64, lo: 0x7f175bf1332dd75b as i64 }; }
+    if idx == 145 { return PmHiLo { hi: 0xc8a883c0fdaf7df1 as i64, lo: 0x9edd32ed7ff94d32 as i64 }; }
+    if idx == 146 { return PmHiLo { hi: 0xfad2a4b13d1b5d6d as i64, lo: 0x86947fa8dff7a07e as i64 }; }
+    if idx == 147 { return PmHiLo { hi: 0x9cc3a6eec6311a64 as i64, lo: 0x341ccfc98bfac44f as i64 }; }
+    if idx == 148 { return PmHiLo { hi: 0xc3f490aa77bd60fd as i64, lo: 0x412403bbeef97563 as i64 }; }
+    if idx == 149 { return PmHiLo { hi: 0xf4f1b4d515acb93c as i64, lo: 0x116d04aaeab7d2bb as i64 }; }
+    if idx == 150 { return PmHiLo { hi: 0x991711052d8bf3c6 as i64, lo: 0x8ae422ead2b2e3b5 as i64 }; }
+    if idx == 151 { return PmHiLo { hi: 0xbf5cd54678eef0b7 as i64, lo: 0x2d9d2ba5875f9ca2 as i64 }; }
+    if idx == 152 { return PmHiLo { hi: 0xef340a98172aace5 as i64, lo: 0x7904768ee93783cb as i64 }; }
+    if idx == 153 { return PmHiLo { hi: 0x9580869f0e7aac0f as i64, lo: 0x2ba2ca1951c2b25f as i64 }; }
+    if idx == 154 { return PmHiLo { hi: 0xbae0a846d2195713 as i64, lo: 0x768b7c9fa6335ef6 as i64 }; }
+    if idx == 155 { return PmHiLo { hi: 0xe998d258869facd8 as i64, lo: 0xd42e5bc78fc036b4 as i64 }; }
+    if idx == 156 { return PmHiLo { hi: 0x91ff83775423cc07 as i64, lo: 0x849cf95cb9d82230 as i64 }; }
+    if idx == 157 { return PmHiLo { hi: 0xb67f6455292cbf09 as i64, lo: 0xe5c437b3e84e2abd as i64 }; }
+    if idx == 158 { return PmHiLo { hi: 0xe41f3d6a7377eecb as i64, lo: 0xdf3545a0e261b56c as i64 }; }
+    if idx == 159 { return PmHiLo { hi: 0x8e938662882af53f as i64, lo: 0xab814b848d7d1163 as i64 }; }
+    if idx == 160 { return PmHiLo { hi: 0xb23867fb2a35b28e as i64, lo: 0x16619e65b0dc55bc as i64 }; }
+    if idx == 161 { return PmHiLo { hi: 0xdec681f9f4c31f32 as i64, lo: 0x9bfa05ff1d136b2b as i64 }; }
+    if idx == 162 { return PmHiLo { hi: 0x8b3c113c38f9f37f as i64, lo: 0x217c43bf722c22fb as i64 }; }
+    if idx == 163 { return PmHiLo { hi: 0xae0b158b4738705f as i64, lo: 0x69db54af4eb72bba as i64 }; }
+    if idx == 164 { return PmHiLo { hi: 0xd98ddaee19068c77 as i64, lo: 0xc45229db2264f6a8 as i64 }; }
+    if idx == 165 { return PmHiLo { hi: 0x87f8a8d4cfa417ca as i64, lo: 0x1ab35a28f57f1a29 as i64 }; }
+    if idx == 166 { return PmHiLo { hi: 0xa9f6d30a038d1dbd as i64, lo: 0xa16030b332dee0b3 as i64 }; }
+    if idx == 167 { return PmHiLo { hi: 0xd47487cc8470652c as i64, lo: 0x89b83cdfff9698e0 as i64 }; }
+    if idx == 168 { return PmHiLo { hi: 0x84c8d4dfd2c63f3c as i64, lo: 0xd613260bffbe1f8c as i64 }; }
+    if idx == 169 { return PmHiLo { hi: 0xa5fb0a17c777cf0a as i64, lo: 0x0b97ef8effada76f as i64 }; }
+    if idx == 170 { return PmHiLo { hi: 0xcf79cc9db955c2cd as i64, lo: 0x8e7deb72bf99114b as i64 }; }
+    if idx == 171 { return PmHiLo { hi: 0x81ac1fe293d599c0 as i64, lo: 0x390eb327b7bfaacf as i64 }; }
+    if idx == 172 { return PmHiLo { hi: 0xa21727db38cb0030 as i64, lo: 0x47525ff1a5af9583 as i64 }; }
+    if idx == 173 { return PmHiLo { hi: 0xca9cf1d206fdc03c as i64, lo: 0x5926f7ee0f1b7ae3 as i64 }; }
+    if idx == 174 { return PmHiLo { hi: 0xfd442e4688bd304b as i64, lo: 0x6f70b5e992e2599c as i64 }; }
+    if idx == 175 { return PmHiLo { hi: 0x9e4a9cec15763e2f as i64, lo: 0x65a671b1fbcd7801 as i64 }; }
+    if idx == 176 { return PmHiLo { hi: 0xc5dd44271ad3cdbb as i64, lo: 0xbf100e1e7ac0d602 as i64 }; }
+    if idx == 177 { return PmHiLo { hi: 0xf7549530e188c129 as i64, lo: 0x2ed411a619710b83 as i64 }; }
+    if idx == 178 { return PmHiLo { hi: 0x9a94dd3e8cf578ba as i64, lo: 0x7d448b07cfe6a731 as i64 }; }
+    if idx == 179 { return PmHiLo { hi: 0xc13a148e3032d6e8 as i64, lo: 0x1c95adc9c3e050fe as i64 }; }
+    if idx == 180 { return PmHiLo { hi: 0xf18899b1bc3f8ca2 as i64, lo: 0x23bb193c34d8653e as i64 }; }
+    if idx == 181 { return PmHiLo { hi: 0x96f5600f15a7b7e6 as i64, lo: 0xd654efc5a1073f46 as i64 }; }
+    if idx == 182 { return PmHiLo { hi: 0xbcb2b812db11a5df as i64, lo: 0x8bea2bb709490f18 as i64 }; }
+    if idx == 183 { return PmHiLo { hi: 0xebdf661791d60f57 as i64, lo: 0xeee4b6a4cb9b52de as i64 }; }
+    if idx == 184 { return PmHiLo { hi: 0x936b9fcebb25c996 as i64, lo: 0x354ef226ff4113cb as i64 }; }
+    if idx == 185 { return PmHiLo { hi: 0xb84687c269ef3bfc as i64, lo: 0xc2a2aeb0bf1158bd as i64 }; }
+    if idx == 186 { return PmHiLo { hi: 0xe65829b3046b0afb as i64, lo: 0xf34b5a5ceed5aeed as i64 }; }
+    if idx == 187 { return PmHiLo { hi: 0x8ff71a0fe2c2e6dd as i64, lo: 0xb80f187a15458d54 as i64 }; }
+    if idx == 188 { return PmHiLo { hi: 0xb3f4e093db73a094 as i64, lo: 0xa612de989a96f0a9 as i64 }; }
+    if idx == 189 { return PmHiLo { hi: 0xe0f218b8d25088b9 as i64, lo: 0xcf97963ec13cacd3 as i64 }; }
+    if idx == 190 { return PmHiLo { hi: 0x8c974f7383725574 as i64, lo: 0xe1bebde738c5ec04 as i64 }; }
+    if idx == 191 { return PmHiLo { hi: 0xafbd2350644eead0 as i64, lo: 0x1a2e6d6106f76705 as i64 }; }
+    if idx == 192 { return PmHiLo { hi: 0xdbac6c247d62a584 as i64, lo: 0x20ba08b948b540c6 as i64 }; }
+    if idx == 193 { return PmHiLo { hi: 0x894bc396ce5da773 as i64, lo: 0x94744573cd71487c as i64 }; }
+    if idx == 194 { return PmHiLo { hi: 0xab9eb47c81f51150 as i64, lo: 0xf99156d0c0cd9a9b as i64 }; }
+    if idx == 195 { return PmHiLo { hi: 0xd686619ba27255a3 as i64, lo: 0x37f5ac84f1010142 as i64 }; }
+    if idx == 196 { return PmHiLo { hi: 0x8613fd0145877586 as i64, lo: 0x42f98bd316a0a0c9 as i64 }; }
+    if idx == 197 { return PmHiLo { hi: 0xa798fc4196e952e8 as i64, lo: 0xd3b7eec7dc48c8fb as i64 }; }
+    if idx == 198 { return PmHiLo { hi: 0xd17f3b51fca3a7a1 as i64, lo: 0x08a5ea79d35afb3a as i64 }; }
+    if idx == 199 { return PmHiLo { hi: 0x82ef85133de648c5 as i64, lo: 0x6567b28c2418dd04 as i64 }; }
+    return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
+}
+
+fn pow10_tab_2(idx: i32) -> PmHiLo {
+    if idx == 200 { return PmHiLo { hi: 0xa3ab66580d5fdaf6 as i64, lo: 0x3ec19f2f2d1f1445 as i64 }; }
+    if idx == 201 { return PmHiLo { hi: 0xcc963fee10b7d1b4 as i64, lo: 0xce7206faf866d957 as i64 }; }
+    if idx == 202 { return PmHiLo { hi: 0xffbbcfe994e5c620 as i64, lo: 0x020e88b9b6808fad as i64 }; }
+    if idx == 203 { return PmHiLo { hi: 0x9fd561f1fd0f9bd4 as i64, lo: 0x01491574121059cc as i64 }; }
+    if idx == 204 { return PmHiLo { hi: 0xc7caba6e7c5382c9 as i64, lo: 0x019b5ad11694703f as i64 }; }
+    if idx == 205 { return PmHiLo { hi: 0xf9bd690a1b68637c as i64, lo: 0xc20231855c398c4f as i64 }; }
+    if idx == 206 { return PmHiLo { hi: 0x9c1661a651213e2e as i64, lo: 0xf9415ef359a3f7b1 as i64 }; }
+    if idx == 207 { return PmHiLo { hi: 0xc31bfa0fe5698db9 as i64, lo: 0xb791b6b0300cf59d as i64 }; }
+    if idx == 208 { return PmHiLo { hi: 0xf3e2f893dec3f127 as i64, lo: 0xa576245c3c103305 as i64 }; }
+    if idx == 209 { return PmHiLo { hi: 0x986ddb5c6b3a76b8 as i64, lo: 0x0769d6b9a58a1fe3 as i64 }; }
+    if idx == 210 { return PmHiLo { hi: 0xbe89523386091466 as i64, lo: 0x09444c680eeca7dc as i64 }; }
+    if idx == 211 { return PmHiLo { hi: 0xee2ba6c0678b5980 as i64, lo: 0x8b955f8212a7d1d3 as i64 }; }
+    if idx == 212 { return PmHiLo { hi: 0x94db483840b717f0 as i64, lo: 0x573d5bb14ba8e323 as i64 }; }
+    if idx == 213 { return PmHiLo { hi: 0xba121a4650e4ddec as i64, lo: 0x6d0cb29d9e931bec as i64 }; }
+    if idx == 214 { return PmHiLo { hi: 0xe896a0d7e51e1567 as i64, lo: 0x884fdf450637e2e8 as i64 }; }
+    if idx == 215 { return PmHiLo { hi: 0x915e2486ef32cd61 as i64, lo: 0xf531eb8b23e2edd1 as i64 }; }
+    if idx == 216 { return PmHiLo { hi: 0xb5b5ada8aaff80b9 as i64, lo: 0xf27e666decdba945 as i64 }; }
+    if idx == 217 { return PmHiLo { hi: 0xe3231912d5bf60e7 as i64, lo: 0xef1e000968129396 as i64 }; }
+    if idx == 218 { return PmHiLo { hi: 0x8df5efabc5979c90 as i64, lo: 0x3572c005e10b9c3e as i64 }; }
+    if idx == 219 { return PmHiLo { hi: 0xb1736b96b6fd83b4 as i64, lo: 0x42cf7007594e834d as i64 }; }
+    if idx == 220 { return PmHiLo { hi: 0xddd0467c64bce4a1 as i64, lo: 0x53834c092fa22421 as i64 }; }
+    if idx == 221 { return PmHiLo { hi: 0x8aa22c0dbef60ee5 as i64, lo: 0x94320f85bdc55694 as i64 }; }
+    if idx == 222 { return PmHiLo { hi: 0xad4ab7112eb3929e as i64, lo: 0x793e93672d36ac39 as i64 }; }
+    if idx == 223 { return PmHiLo { hi: 0xd89d64d57a607745 as i64, lo: 0x178e3840f8845748 as i64 }; }
+    if idx == 224 { return PmHiLo { hi: 0x87625f056c7c4a8c as i64, lo: 0xeeb8e3289b52b68d as i64 }; }
+    if idx == 225 { return PmHiLo { hi: 0xa93af6c6c79b5d2e as i64, lo: 0x2a671bf2c2276430 as i64 }; }
+    if idx == 226 { return PmHiLo { hi: 0xd389b4787982347a as i64, lo: 0xb500e2ef72b13d3c as i64 }; }
+    if idx == 227 { return PmHiLo { hi: 0x843610cb4bf160cc as i64, lo: 0x31208dd5a7aec645 as i64 }; }
+    if idx == 228 { return PmHiLo { hi: 0xa54394fe1eedb8ff as i64, lo: 0x3d68b14b119a77d7 as i64 }; }
+    if idx == 229 { return PmHiLo { hi: 0xce947a3da6a9273f as i64, lo: 0x8cc2dd9dd60115cd as i64 }; }
+    if idx == 230 { return PmHiLo { hi: 0x811ccc668829b888 as i64, lo: 0xf7f9ca82a5c0ada0 as i64 }; }
+    if idx == 231 { return PmHiLo { hi: 0xa163ff802a3426a9 as i64, lo: 0x35f83d234f30d908 as i64 }; }
+    if idx == 232 { return PmHiLo { hi: 0xc9bcff6034c13053 as i64, lo: 0x03764c6c22fd0f4a as i64 }; }
+    if idx == 233 { return PmHiLo { hi: 0xfc2c3f3841f17c68 as i64, lo: 0x4453df872bbc531d as i64 }; }
+    if idx == 234 { return PmHiLo { hi: 0x9d9ba7832936edc1 as i64, lo: 0x2ab46bb47b55b3f2 as i64 }; }
+    if idx == 235 { return PmHiLo { hi: 0xc5029163f384a932 as i64, lo: 0xf56186a19a2b20ee as i64 }; }
+    if idx == 236 { return PmHiLo { hi: 0xf64335bcf065d37e as i64, lo: 0xb2b9e84a00b5e92a as i64 }; }
+    if idx == 237 { return PmHiLo { hi: 0x99ea0196163fa42f as i64, lo: 0xafb4312e4071b1ba as i64 }; }
+    if idx == 238 { return PmHiLo { hi: 0xc06481fb9bcf8d3a as i64, lo: 0x1ba13d79d08e1e29 as i64 }; }
+    if idx == 239 { return PmHiLo { hi: 0xf07da27a82c37089 as i64, lo: 0xa2898cd844b1a5b3 as i64 }; }
+    if idx == 240 { return PmHiLo { hi: 0x964e858c91ba2656 as i64, lo: 0xc595f8072aef0790 as i64 }; }
+    if idx == 241 { return PmHiLo { hi: 0xbbe226efb628afeb as i64, lo: 0x76fb7608f5aac974 as i64 }; }
+    if idx == 242 { return PmHiLo { hi: 0xeadab0aba3b2dbe6 as i64, lo: 0xd4ba538b33157bd1 as i64 }; }
+    if idx == 243 { return PmHiLo { hi: 0x92c8ae6b464fc970 as i64, lo: 0xc4f47436ffed6d62 as i64 }; }
+    if idx == 244 { return PmHiLo { hi: 0xb77ada0617e3bbcc as i64, lo: 0xf6319144bfe8c8bb as i64 }; }
+    if idx == 245 { return PmHiLo { hi: 0xe55990879ddcaabe as i64, lo: 0x33bdf595efe2faea as i64 }; }
+    if idx == 246 { return PmHiLo { hi: 0x8f57fa54c2a9eab7 as i64, lo: 0x6056b97db5eddcd2 as i64 }; }
+    if idx == 247 { return PmHiLo { hi: 0xb32df8e9f3546565 as i64, lo: 0xb86c67dd23695406 as i64 }; }
+    if idx == 248 { return PmHiLo { hi: 0xdff9772470297ebe as i64, lo: 0xa68781d46c43a908 as i64 }; }
+    if idx == 249 { return PmHiLo { hi: 0x8bfbea76c619ef37 as i64, lo: 0xa814b124c3aa49a5 as i64 }; }
+    if idx == 250 { return PmHiLo { hi: 0xaefae51477a06b04 as i64, lo: 0x1219dd6df494dc0e as i64 }; }
+    if idx == 251 { return PmHiLo { hi: 0xdab99e59958885c5 as i64, lo: 0x16a054c971ba1312 as i64 }; }
+    if idx == 252 { return PmHiLo { hi: 0x88b402f7fd75539c as i64, lo: 0xee2434fde7144beb as i64 }; }
+    if idx == 253 { return PmHiLo { hi: 0xaae103b5fcd2a882 as i64, lo: 0x29ad423d60d95ee6 as i64 }; }
+    if idx == 254 { return PmHiLo { hi: 0xd59944a37c0752a3 as i64, lo: 0xb41892ccb90fb6a0 as i64 }; }
+    if idx == 255 { return PmHiLo { hi: 0x857fcae62d8493a6 as i64, lo: 0x908f5bbff3a9d224 as i64 }; }
+    if idx == 256 { return PmHiLo { hi: 0xa6dfbd9fb8e5b88f as i64, lo: 0x34b332aff09446ad as i64 }; }
+    if idx == 257 { return PmHiLo { hi: 0xd097ad07a71f26b3 as i64, lo: 0x81dfff5becb95858 as i64 }; }
+    if idx == 258 { return PmHiLo { hi: 0x825ecc24c8737830 as i64, lo: 0x712bff9973f3d737 as i64 }; }
+    if idx == 259 { return PmHiLo { hi: 0xa2f67f2dfa90563c as i64, lo: 0x8d76ff7fd0f0cd05 as i64 }; }
+    if idx == 260 { return PmHiLo { hi: 0xcbb41ef979346bcb as i64, lo: 0xb0d4bf5fc52d0046 as i64 }; }
+    if idx == 261 { return PmHiLo { hi: 0xfea126b7d78186bd as i64, lo: 0x1d09ef37b6784057 as i64 }; }
+    if idx == 262 { return PmHiLo { hi: 0x9f24b832e6b0f437 as i64, lo: 0xf2263582d20b2836 as i64 }; }
+    if idx == 263 { return PmHiLo { hi: 0xc6ede63fa05d3144 as i64, lo: 0x6eafc2e3868df244 as i64 }; }
+    if idx == 264 { return PmHiLo { hi: 0xf8a95fcf88747d95 as i64, lo: 0x8a5bb39c68316ed5 as i64 }; }
+    if idx == 265 { return PmHiLo { hi: 0x9b69dbe1b548ce7d as i64, lo: 0x36795041c11ee545 as i64 }; }
+    if idx == 266 { return PmHiLo { hi: 0xc24452da229b021c as i64, lo: 0x0417a45231669e97 as i64 }; }
+    if idx == 267 { return PmHiLo { hi: 0xf2d56790ab41c2a3 as i64, lo: 0x051d8d66bdc0463c as i64 }; }
+    if idx == 268 { return PmHiLo { hi: 0x97c560ba6b0919a6 as i64, lo: 0x2332786036982be5 as i64 }; }
+    if idx == 269 { return PmHiLo { hi: 0xbdb6b8e905cb6010 as i64, lo: 0xabff1678443e36df as i64 }; }
+    if idx == 270 { return PmHiLo { hi: 0xed246723473e3814 as i64, lo: 0xd6fedc16554dc497 as i64 }; }
+    if idx == 271 { return PmHiLo { hi: 0x9436c0760c86e30c as i64, lo: 0x065f498df5509ade as i64 }; }
+    if idx == 272 { return PmHiLo { hi: 0xb94470938fa89bcf as i64, lo: 0x07f71bf172a4c196 as i64 }; }
+    if idx == 273 { return PmHiLo { hi: 0xe7958cb87392c2c3 as i64, lo: 0x49f4e2edcf4df1fb as i64 }; }
+    if idx == 274 { return PmHiLo { hi: 0x90bd77f3483bb9ba as i64, lo: 0x4e390dd4a190b73d as i64 }; }
+    if idx == 275 { return PmHiLo { hi: 0xb4ecd5f01a4aa829 as i64, lo: 0xe1c75149c9f4e50c as i64 }; }
+    if idx == 276 { return PmHiLo { hi: 0xe2280b6c20dd5233 as i64, lo: 0xda39259c3c721e4f as i64 }; }
+    if idx == 277 { return PmHiLo { hi: 0x8d590723948a5360 as i64, lo: 0xa863b781a5c752f1 as i64 }; }
+    if idx == 278 { return PmHiLo { hi: 0xb0af48ec79ace838 as i64, lo: 0xd27ca5620f3927ae as i64 }; }
+    if idx == 279 { return PmHiLo { hi: 0xdcdb1b2798182245 as i64, lo: 0x071bceba9307719a as i64 }; }
+    if idx == 280 { return PmHiLo { hi: 0x8a08f0f8bf0f156c as i64, lo: 0xe47161349be4a700 as i64 }; }
+    if idx == 281 { return PmHiLo { hi: 0xac8b2d36eed2dac6 as i64, lo: 0x1d8db981c2ddd0c0 as i64 }; }
+    if idx == 282 { return PmHiLo { hi: 0xd7adf884aa879178 as i64, lo: 0xa4f127e2339544f0 as i64 }; }
+    if idx == 283 { return PmHiLo { hi: 0x86ccbb52ea94baeb as i64, lo: 0x6716b8ed603d4b16 as i64 }; }
+    if idx == 284 { return PmHiLo { hi: 0xa87fea27a539e9a6 as i64, lo: 0xc0dc6728b84c9ddb as i64 }; }
+    if idx == 285 { return PmHiLo { hi: 0xd29fe4b18e88640f as i64, lo: 0x711380f2e65fc552 as i64 }; }
+    if idx == 286 { return PmHiLo { hi: 0x83a3eeeef9153e8a as i64, lo: 0xe6ac3097cffbdb53 as i64 }; }
+    if idx == 287 { return PmHiLo { hi: 0xa48ceaaab75a8e2c as i64, lo: 0xa0573cbdc3fad228 as i64 }; }
+    if idx == 288 { return PmHiLo { hi: 0xcdb02555653131b7 as i64, lo: 0xc86d0bed34f986b2 as i64 }; }
+    if idx == 289 { return PmHiLo { hi: 0x808e17555f3ebf12 as i64, lo: 0x1d442774411bf42f as i64 }; }
+    if idx == 290 { return PmHiLo { hi: 0xa0b19d2ab70e6ed7 as i64, lo: 0xa49531515162f13b as i64 }; }
+    if idx == 291 { return PmHiLo { hi: 0xc8de047564d20a8c as i64, lo: 0x0dba7da5a5bbad8a as i64 }; }
+    if idx == 292 { return PmHiLo { hi: 0xfb158592be068d2f as i64, lo: 0x11291d0f0f2a98ed as i64 }; }
+    if idx == 293 { return PmHiLo { hi: 0x9ced737bb6c4183e as i64, lo: 0xaab9b229697a9f94 as i64 }; }
+    if idx == 294 { return PmHiLo { hi: 0xc428d05aa4751e4d as i64, lo: 0x55681eb3c3d94779 as i64 }; }
+    if idx == 295 { return PmHiLo { hi: 0xf53304714d9265e0 as i64, lo: 0x2ac22660b4cf9957 as i64 }; }
+    if idx == 296 { return PmHiLo { hi: 0x993fe2c6d07b7fac as i64, lo: 0x1ab957fc7101bfd6 as i64 }; }
+    if idx == 297 { return PmHiLo { hi: 0xbf8fdb78849a5f97 as i64, lo: 0x2167adfb8d422fcc as i64 }; }
+    if idx == 298 { return PmHiLo { hi: 0xef73d256a5c0f77d as i64, lo: 0x69c1997a7092bbbf as i64 }; }
+    if idx == 299 { return PmHiLo { hi: 0x95a8637627989aae as i64, lo: 0x2218ffec865bb557 as i64 }; }
+    return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
+}
+
+fn pow10_tab_3(idx: i32) -> PmHiLo {
+    if idx == 300 { return PmHiLo { hi: 0xbb127c53b17ec15a as i64, lo: 0xaa9f3fe7a7f2a2ad as i64 }; }
+    if idx == 301 { return PmHiLo { hi: 0xe9d71b689dde71b0 as i64, lo: 0x55470fe191ef4b59 as i64 }; }
+    if idx == 302 { return PmHiLo { hi: 0x9226712162ab070e as i64, lo: 0x354c69ecfb358f17 as i64 }; }
+    if idx == 303 { return PmHiLo { hi: 0xb6b00d69bb55c8d2 as i64, lo: 0xc29f84683a02f2dd as i64 }; }
+    if idx == 304 { return PmHiLo { hi: 0xe45c10c42a2b3b06 as i64, lo: 0x734765824883af95 as i64 }; }
+    if idx == 305 { return PmHiLo { hi: 0x8eb98a7a9a5b04e4 as i64, lo: 0x880c9f716d524dbd as i64 }; }
+    if idx == 306 { return PmHiLo { hi: 0xb267ed1940f1c61d as i64, lo: 0xaa0fc74dc8a6e12c as i64 }; }
+    if idx == 307 { return PmHiLo { hi: 0xdf01e85f912e37a4 as i64, lo: 0x9493b9213ad09977 as i64 }; }
+    if idx == 308 { return PmHiLo { hi: 0x8b61313bbabce2c7 as i64, lo: 0xdcdc53b4c4c25fea as i64 }; }
+    if idx == 309 { return PmHiLo { hi: 0xae397d8aa96c1b78 as i64, lo: 0x541368a1f5f2f7e5 as i64 }; }
+    if idx == 310 { return PmHiLo { hi: 0xd9c7dced53c72256 as i64, lo: 0x691842ca736fb5de as i64 }; }
+    if idx == 311 { return PmHiLo { hi: 0x881cea14545c7576 as i64, lo: 0x81af29be8825d1ab as i64 }; }
+    if idx == 312 { return PmHiLo { hi: 0xaa242499697392d3 as i64, lo: 0x221af42e2a2f4616 as i64 }; }
+    if idx == 313 { return PmHiLo { hi: 0xd4ad2dbfc3d07788 as i64, lo: 0x6aa1b139b4bb179b as i64 }; }
+    if idx == 314 { return PmHiLo { hi: 0x84ec3c97da624ab5 as i64, lo: 0x42a50ec410f4eec1 as i64 }; }
+    if idx == 315 { return PmHiLo { hi: 0xa6274bbdd0fadd62 as i64, lo: 0x134e527515322a71 as i64 }; }
+    if idx == 316 { return PmHiLo { hi: 0xcfb11ead453994bb as i64, lo: 0x9821e7125a7eb50d as i64 }; }
+    if idx == 317 { return PmHiLo { hi: 0x81ceb32c4b43fcf5 as i64, lo: 0x7f15306b788f3128 as i64 }; }
+    if idx == 318 { return PmHiLo { hi: 0xa2425ff75e14fc32 as i64, lo: 0x5eda7c8656b2fd72 as i64 }; }
+    if idx == 319 { return PmHiLo { hi: 0xcad2f7f5359a3b3f as i64, lo: 0xf6911ba7ec5fbccf as i64 }; }
+    if idx == 320 { return PmHiLo { hi: 0xfd87b5f28300ca0e as i64, lo: 0x74356291e777ac03 as i64 }; }
+    if idx == 321 { return PmHiLo { hi: 0x9e74d1b791e07e49 as i64, lo: 0x88a15d9b30aacb82 as i64 }; }
+    if idx == 322 { return PmHiLo { hi: 0xc612062576589ddb as i64, lo: 0x6ac9b501fcd57e62 as i64 }; }
+    if idx == 323 { return PmHiLo { hi: 0xf79687aed3eec552 as i64, lo: 0xc57c22427c0addfb as i64 }; }
+    if idx == 324 { return PmHiLo { hi: 0x9abe14cd44753b53 as i64, lo: 0x3b6d95698d86cabd as i64 }; }
+    if idx == 325 { return PmHiLo { hi: 0xc16d9a0095928a28 as i64, lo: 0x8a48fac3f0e87d6c as i64 }; }
+    if idx == 326 { return PmHiLo { hi: 0xf1c90080baf72cb2 as i64, lo: 0xacdb3974ed229cc7 as i64 }; }
+    if idx == 327 { return PmHiLo { hi: 0x971da05074da7bef as i64, lo: 0x2c0903e91435a1fc as i64 }; }
+    if idx == 328 { return PmHiLo { hi: 0xbce5086492111aeb as i64, lo: 0x770b44e359430a7b as i64 }; }
+    if idx == 329 { return PmHiLo { hi: 0xec1e4a7db69561a6 as i64, lo: 0xd4ce161c2f93cd1a as i64 }; }
+    if idx == 330 { return PmHiLo { hi: 0x9392ee8e921d5d08 as i64, lo: 0xc500cdd19dbc6030 as i64 }; }
+    if idx == 331 { return PmHiLo { hi: 0xb877aa3236a4b44a as i64, lo: 0xf6410146052b783d as i64 }; }
+    if idx == 332 { return PmHiLo { hi: 0xe69594bec44de15c as i64, lo: 0xb3d141978676564c as i64 }; }
+    if idx == 333 { return PmHiLo { hi: 0x901d7cf73ab0acda as i64, lo: 0xf062c8feb409f5ef as i64 }; }
+    if idx == 334 { return PmHiLo { hi: 0xb424dc35095cd810 as i64, lo: 0xac7b7b3e610c736b as i64 }; }
+    if idx == 335 { return PmHiLo { hi: 0xe12e13424bb40e14 as i64, lo: 0xd79a5a0df94f9046 as i64 }; }
+    if idx == 336 { return PmHiLo { hi: 0x8cbccc096f5088cc as i64, lo: 0x06c07848bbd1ba2c as i64 }; }
+    if idx == 337 { return PmHiLo { hi: 0xafebff0bcb24aaff as i64, lo: 0x0870965aeac628b7 as i64 }; }
+    if idx == 338 { return PmHiLo { hi: 0xdbe6fecebdedd5bf as i64, lo: 0x4a8cbbf1a577b2e4 as i64 }; }
+    if idx == 339 { return PmHiLo { hi: 0x89705f4136b4a598 as i64, lo: 0xce97f577076acfcf as i64 }; }
+    if idx == 340 { return PmHiLo { hi: 0xabcc77118461cefd as i64, lo: 0x023df2d4c94583c2 as i64 }; }
+    if idx == 341 { return PmHiLo { hi: 0xd6bf94d5e57a42bd as i64, lo: 0xc2cd6f89fb96e4b3 as i64 }; }
+    if idx == 342 { return PmHiLo { hi: 0x8637bd05af6c69b6 as i64, lo: 0x59c065b63d3e4ef0 as i64 }; }
+    if idx == 343 { return PmHiLo { hi: 0xa7c5ac471b478424 as i64, lo: 0xf0307f23cc8de2ac as i64 }; }
+    if idx == 344 { return PmHiLo { hi: 0xd1b71758e219652c as i64, lo: 0x2c3c9eecbfb15b57 as i64 }; }
+    if idx == 345 { return PmHiLo { hi: 0x83126e978d4fdf3c as i64, lo: 0x9ba5e353f7ced916 as i64 }; }
+    if idx == 346 { return PmHiLo { hi: 0xa3d70a3d70a3d70b as i64, lo: 0xc28f5c28f5c28f5c as i64 }; }
+    if idx == 347 { return PmHiLo { hi: 0xcccccccccccccccd as i64, lo: 0x3333333333333333 as i64 }; }
+    if idx == 348 { return PmHiLo { hi: 0x8000000000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 349 { return PmHiLo { hi: 0xa000000000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 350 { return PmHiLo { hi: 0xc800000000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 351 { return PmHiLo { hi: 0xfa00000000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 352 { return PmHiLo { hi: 0x9c40000000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 353 { return PmHiLo { hi: 0xc350000000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 354 { return PmHiLo { hi: 0xf424000000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 355 { return PmHiLo { hi: 0x9896800000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 356 { return PmHiLo { hi: 0xbebc200000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 357 { return PmHiLo { hi: 0xee6b280000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 358 { return PmHiLo { hi: 0x9502f90000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 359 { return PmHiLo { hi: 0xba43b74000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 360 { return PmHiLo { hi: 0xe8d4a51000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 361 { return PmHiLo { hi: 0x9184e72a00000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 362 { return PmHiLo { hi: 0xb5e620f480000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 363 { return PmHiLo { hi: 0xe35fa931a0000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 364 { return PmHiLo { hi: 0x8e1bc9bf04000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 365 { return PmHiLo { hi: 0xb1a2bc2ec5000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 366 { return PmHiLo { hi: 0xde0b6b3a76400000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 367 { return PmHiLo { hi: 0x8ac7230489e80000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 368 { return PmHiLo { hi: 0xad78ebc5ac620000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 369 { return PmHiLo { hi: 0xd8d726b7177a8000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 370 { return PmHiLo { hi: 0x878678326eac9000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 371 { return PmHiLo { hi: 0xa968163f0a57b400 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 372 { return PmHiLo { hi: 0xd3c21bcecceda100 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 373 { return PmHiLo { hi: 0x84595161401484a0 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 374 { return PmHiLo { hi: 0xa56fa5b99019a5c8 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 375 { return PmHiLo { hi: 0xcecb8f27f4200f3a as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 376 { return PmHiLo { hi: 0x813f3978f8940985 as i64, lo: 0xc000000000000000 as i64 }; }
+    if idx == 377 { return PmHiLo { hi: 0xa18f07d736b90be6 as i64, lo: 0xb000000000000000 as i64 }; }
+    if idx == 378 { return PmHiLo { hi: 0xc9f2c9cd04674edf as i64, lo: 0x5c00000000000000 as i64 }; }
+    if idx == 379 { return PmHiLo { hi: 0xfc6f7c4045812297 as i64, lo: 0xb300000000000000 as i64 }; }
+    if idx == 380 { return PmHiLo { hi: 0x9dc5ada82b70b59e as i64, lo: 0x0fe0000000000000 as i64 }; }
+    if idx == 381 { return PmHiLo { hi: 0xc5371912364ce306 as i64, lo: 0x93d8000000000000 as i64 }; }
+    if idx == 382 { return PmHiLo { hi: 0xf684df56c3e01bc7 as i64, lo: 0x38ce000000000000 as i64 }; }
+    if idx == 383 { return PmHiLo { hi: 0x9a130b963a6c115d as i64, lo: 0xc380c00000000000 as i64 }; }
+    if idx == 384 { return PmHiLo { hi: 0xc097ce7bc90715b4 as i64, lo: 0xb460f00000000000 as i64 }; }
+    if idx == 385 { return PmHiLo { hi: 0xf0bdc21abb48db21 as i64, lo: 0xe1792c0000000000 as i64 }; }
+    if idx == 386 { return PmHiLo { hi: 0x96769950b50d88f5 as i64, lo: 0xecebbb8000000000 as i64 }; }
+    if idx == 387 { return PmHiLo { hi: 0xbc143fa4e250eb32 as i64, lo: 0xe826aa6000000000 as i64 }; }
+    if idx == 388 { return PmHiLo { hi: 0xeb194f8e1ae525fe as i64, lo: 0xa23054f800000000 as i64 }; }
+    if idx == 389 { return PmHiLo { hi: 0x92efd1b8d0cf37bf as i64, lo: 0xa55e351b00000000 as i64 }; }
+    if idx == 390 { return PmHiLo { hi: 0xb7abc627050305ae as i64, lo: 0x0eb5c261c0000000 as i64 }; }
+    if idx == 391 { return PmHiLo { hi: 0xe596b7b0c643c71a as i64, lo: 0x926332fa30000000 as i64 }; }
+    if idx == 392 { return PmHiLo { hi: 0x8f7e32ce7bea5c70 as i64, lo: 0x1b7dffdc5e000000 as i64 }; }
+    if idx == 393 { return PmHiLo { hi: 0xb35dbf821ae4f38c as i64, lo: 0x225d7fd375800000 as i64 }; }
+    if idx == 394 { return PmHiLo { hi: 0xe0352f62a19e306f as i64, lo: 0x2af4dfc852e00000 as i64 }; }
+    if idx == 395 { return PmHiLo { hi: 0x8c213d9da502de46 as i64, lo: 0xbad90bdd33cc0000 as i64 }; }
+    if idx == 396 { return PmHiLo { hi: 0xaf298d050e4395d7 as i64, lo: 0x698f4ed480bf0000 as i64 }; }
+    if idx == 397 { return PmHiLo { hi: 0xdaf3f04651d47b4d as i64, lo: 0xc3f32289a0eec000 as i64 }; }
+    if idx == 398 { return PmHiLo { hi: 0x88d8762bf324cd10 as i64, lo: 0x5a77f59604953800 as i64 }; }
+    if idx == 399 { return PmHiLo { hi: 0xab0e93b6efee0054 as i64, lo: 0x7115f2fb85ba8600 as i64 }; }
+    return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
+}
+
+fn pow10_tab_4(idx: i32) -> PmHiLo {
+    if idx == 400 { return PmHiLo { hi: 0xd5d238a4abe98069 as i64, lo: 0x8d5b6fba67292780 as i64 }; }
+    if idx == 401 { return PmHiLo { hi: 0x85a36366eb71f042 as i64, lo: 0xb85925d48079b8b0 as i64 }; }
+    if idx == 402 { return PmHiLo { hi: 0xa70c3c40a64e6c52 as i64, lo: 0x666f6f49a09826dc as i64 }; }
+    if idx == 403 { return PmHiLo { hi: 0xd0cf4b50cfe20766 as i64, lo: 0x000b4b1c08be3093 as i64 }; }
+    if idx == 404 { return PmHiLo { hi: 0x82818f1281ed44a0 as i64, lo: 0x40070ef18576de5b as i64 }; }
+    if idx == 405 { return PmHiLo { hi: 0xa321f2d7226895c8 as i64, lo: 0x5008d2ade6d495f2 as i64 }; }
+    if idx == 406 { return PmHiLo { hi: 0xcbea6f8ceb02bb3a as i64, lo: 0x640b07596089bb6f as i64 }; }
+    if idx == 407 { return PmHiLo { hi: 0xfee50b7025c36a09 as i64, lo: 0xfd0dc92fb8ac2a4b as i64 }; }
+    if idx == 408 { return PmHiLo { hi: 0x9f4f2726179a2246 as i64, lo: 0xfe289dbdd36b9a6f as i64 }; }
+    if idx == 409 { return PmHiLo { hi: 0xc722f0ef9d80aad7 as i64, lo: 0xbdb2c52d4846810a as i64 }; }
+    if idx == 410 { return PmHiLo { hi: 0xf8ebad2b84e0d58c as i64, lo: 0x2d1f76789a58214d as i64 }; }
+    if idx == 411 { return PmHiLo { hi: 0x9b934c3b330c8578 as i64, lo: 0x9c33aa0b607714d0 as i64 }; }
+    if idx == 412 { return PmHiLo { hi: 0xc2781f49ffcfa6d6 as i64, lo: 0xc340948e3894da04 as i64 }; }
+    if idx == 413 { return PmHiLo { hi: 0xf316271c7fc3908b as i64, lo: 0x7410b9b1c6ba1085 as i64 }; }
+    if idx == 414 { return PmHiLo { hi: 0x97edd871cfda3a57 as i64, lo: 0x688a740f1c344a53 as i64 }; }
+    if idx == 415 { return PmHiLo { hi: 0xbde94e8e43d0c8ed as i64, lo: 0xc2ad1112e3415ce8 as i64 }; }
+    if idx == 416 { return PmHiLo { hi: 0xed63a231d4c4fb28 as i64, lo: 0xb35855579c11b422 as i64 }; }
+    if idx == 417 { return PmHiLo { hi: 0x945e455f24fb1cf9 as i64, lo: 0x70173556c18b1095 as i64 }; }
+    if idx == 418 { return PmHiLo { hi: 0xb975d6b6ee39e437 as i64, lo: 0x4c1d02ac71edd4bb as i64 }; }
+    if idx == 419 { return PmHiLo { hi: 0xe7d34c64a9c85d45 as i64, lo: 0x9f2443578e6949e9 as i64 }; }
+    if idx == 420 { return PmHiLo { hi: 0x90e40fbeea1d3a4b as i64, lo: 0x4376aa16b901ce32 as i64 }; }
+    if idx == 421 { return PmHiLo { hi: 0xb51d13aea4a488de as i64, lo: 0x9454549c674241be as i64 }; }
+    if idx == 422 { return PmHiLo { hi: 0xe264589a4dcdab15 as i64, lo: 0x396969c38112d22e as i64 }; }
+    if idx == 423 { return PmHiLo { hi: 0x8d7eb76070a08aed as i64, lo: 0x03e1e21a30abc35d as i64 }; }
+    if idx == 424 { return PmHiLo { hi: 0xb0de65388cc8ada9 as i64, lo: 0xc4da5aa0bcd6b434 as i64 }; }
+    if idx == 425 { return PmHiLo { hi: 0xdd15fe86affad913 as i64, lo: 0xb610f148ec0c6141 as i64 }; }
+    if idx == 426 { return PmHiLo { hi: 0x8a2dbf142dfcc7ac as i64, lo: 0x91ca96cd9387bcc8 as i64 }; }
+    if idx == 427 { return PmHiLo { hi: 0xacb92ed9397bf997 as i64, lo: 0xb63d3c80f869abfb as i64 }; }
+    if idx == 428 { return PmHiLo { hi: 0xd7e77a8f87daf7fc as i64, lo: 0x23cc8ba1368416f9 as i64 }; }
+    if idx == 429 { return PmHiLo { hi: 0x86f0ac99b4e8dafe as i64, lo: 0x965fd744c2128e5c as i64 }; }
+    if idx == 430 { return PmHiLo { hi: 0xa8acd7c0222311bd as i64, lo: 0x3bf7cd15f29731f3 as i64 }; }
+    if idx == 431 { return PmHiLo { hi: 0xd2d80db02aabd62c as i64, lo: 0x0af5c05b6f3cfe6f as i64 }; }
+    if idx == 432 { return PmHiLo { hi: 0x83c7088e1aab65dc as i64, lo: 0x86d9983925861f05 as i64 }; }
+    if idx == 433 { return PmHiLo { hi: 0xa4b8cab1a1563f53 as i64, lo: 0xa88ffe476ee7a6c7 as i64 }; }
+    if idx == 434 { return PmHiLo { hi: 0xcde6fd5e09abcf27 as i64, lo: 0x12b3fdd94aa19079 as i64 }; }
+    if idx == 435 { return PmHiLo { hi: 0x80b05e5ac60b6179 as i64, lo: 0xabb07ea7cea4fa4b as i64 }; }
+    if idx == 436 { return PmHiLo { hi: 0xa0dc75f1778e39d7 as i64, lo: 0x969c9e51c24e38de as i64 }; }
+    if idx == 437 { return PmHiLo { hi: 0xc913936dd571c84d as i64, lo: 0xfc43c5e632e1c716 as i64 }; }
+    if idx == 438 { return PmHiLo { hi: 0xfb5878494ace3a60 as i64, lo: 0xfb54b75fbf9a38dc as i64 }; }
+    if idx == 439 { return PmHiLo { hi: 0x9d174b2dcec0e47c as i64, lo: 0x9d14f29bd7c06389 as i64 }; }
+    if idx == 440 { return PmHiLo { hi: 0xc45d1df942711d9b as i64, lo: 0xc45a2f42cdb07c6b as i64 }; }
+    if idx == 441 { return PmHiLo { hi: 0xf5746577930d6501 as i64, lo: 0x3570bb13811c9b86 as i64 }; }
+    if idx == 442 { return PmHiLo { hi: 0x9968bf6abbe85f21 as i64, lo: 0x816674ec30b1e134 as i64 }; }
+    if idx == 443 { return PmHiLo { hi: 0xbfc2ef456ae276e9 as i64, lo: 0x61c012273cde5981 as i64 }; }
+    if idx == 444 { return PmHiLo { hi: 0xefb3ab16c59b14a3 as i64, lo: 0x3a3016b10c15efe1 as i64 }; }
+    if idx == 445 { return PmHiLo { hi: 0x95d04aee3b80ece6 as i64, lo: 0x445e0e2ea78db5ed as i64 }; }
+    if idx == 446 { return PmHiLo { hi: 0xbb445da9ca612820 as i64, lo: 0xd57591ba51712368 as i64 }; }
+    if idx == 447 { return PmHiLo { hi: 0xea1575143cf97227 as i64, lo: 0x0ad2f628e5cd6c42 as i64 }; }
+    if idx == 448 { return PmHiLo { hi: 0x924d692ca61be759 as i64, lo: 0xa6c3d9d98fa063a9 as i64 }; }
+    if idx == 449 { return PmHiLo { hi: 0xb6e0c377cfa2e12f as i64, lo: 0x9074d04ff3887c93 as i64 }; }
+    if idx == 450 { return PmHiLo { hi: 0xe498f455c38b997b as i64, lo: 0xf4920463f06a9bb8 as i64 }; }
+    if idx == 451 { return PmHiLo { hi: 0x8edf98b59a373fed as i64, lo: 0xb8db42be7642a153 as i64 }; }
+    if idx == 452 { return PmHiLo { hi: 0xb2977ee300c50fe8 as i64, lo: 0xa712136e13d349a8 as i64 }; }
+    if idx == 453 { return PmHiLo { hi: 0xdf3d5e9bc0f653e2 as i64, lo: 0xd0d6984998c81c12 as i64 }; }
+    if idx == 454 { return PmHiLo { hi: 0x8b865b215899f46d as i64, lo: 0x42861f2dff7d118b as i64 }; }
+    if idx == 455 { return PmHiLo { hi: 0xae67f1e9aec07188 as i64, lo: 0x1327a6f97f5c55ee as i64 }; }
+    if idx == 456 { return PmHiLo { hi: 0xda01ee641a708dea as i64, lo: 0x17f190b7df336b6a as i64 }; }
+    if idx == 457 { return PmHiLo { hi: 0x884134fe908658b3 as i64, lo: 0xcef6fa72eb802322 as i64 }; }
+    if idx == 458 { return PmHiLo { hi: 0xaa51823e34a7eedf as i64, lo: 0x42b4b90fa6602bea as i64 }; }
+    if idx == 459 { return PmHiLo { hi: 0xd4e5e2cdc1d1ea97 as i64, lo: 0x9361e7538ff836e5 as i64 }; }
+    if idx == 460 { return PmHiLo { hi: 0x850fadc09923329f as i64, lo: 0xfc1d309439fb224f as i64 }; }
+    if idx == 461 { return PmHiLo { hi: 0xa6539930bf6bff46 as i64, lo: 0x7b247cb94879eae3 as i64 }; }
+    if idx == 462 { return PmHiLo { hi: 0xcfe87f7cef46ff17 as i64, lo: 0x19ed9be79a98659c as i64 }; }
+    if idx == 463 { return PmHiLo { hi: 0x81f14fae158c5f6f as i64, lo: 0xb0348170c09f3f81 as i64 }; }
+    if idx == 464 { return PmHiLo { hi: 0xa26da3999aef774a as i64, lo: 0x1c41a1ccf0c70f62 as i64 }; }
+    if idx == 465 { return PmHiLo { hi: 0xcb090c8001ab551d as i64, lo: 0xa3520a402cf8d33a as i64 }; }
+    if idx == 466 { return PmHiLo { hi: 0xfdcb4fa002162a64 as i64, lo: 0x8c268cd038370809 as i64 }; }
+    if idx == 467 { return PmHiLo { hi: 0x9e9f11c4014dda7f as i64, lo: 0xd798180223226505 as i64 }; }
+    if idx == 468 { return PmHiLo { hi: 0xc646d63501a1511e as i64, lo: 0x4d7e1e02abeafe47 as i64 }; }
+    if idx == 469 { return PmHiLo { hi: 0xf7d88bc24209a566 as i64, lo: 0xe0dda58356e5bdd9 as i64 }; }
+    if idx == 470 { return PmHiLo { hi: 0x9ae7575969460760 as i64, lo: 0xcc8a8772164f96a7 as i64 }; }
+    if idx == 471 { return PmHiLo { hi: 0xc1a12d2fc3978938 as i64, lo: 0xffad294e9be37c51 as i64 }; }
+    if idx == 472 { return PmHiLo { hi: 0xf209787bb47d6b85 as i64, lo: 0x3f9873a242dc5b65 as i64 }; }
+    if idx == 473 { return PmHiLo { hi: 0x9745eb4d50ce6333 as i64, lo: 0x07bf484569c9b91f as i64 }; }
+    if idx == 474 { return PmHiLo { hi: 0xbd176620a501fc00 as i64, lo: 0x49af1a56c43c2767 as i64 }; }
+    if idx == 475 { return PmHiLo { hi: 0xec5d3fa8ce427b00 as i64, lo: 0x5c1ae0ec754b3141 as i64 }; }
+    if idx == 476 { return PmHiLo { hi: 0x93ba47c980e98ce0 as i64, lo: 0x3990cc93c94efec8 as i64 }; }
+    if idx == 477 { return PmHiLo { hi: 0xb8a8d9bbe123f018 as i64, lo: 0x47f4ffb8bba2be7b as i64 }; }
+    if idx == 478 { return PmHiLo { hi: 0xe6d3102ad96cec1e as i64, lo: 0x59f23fa6ea8b6e1a as i64 }; }
+    if idx == 479 { return PmHiLo { hi: 0x9043ea1ac7e41393 as i64, lo: 0x783767c8529724d0 as i64 }; }
+    if idx == 480 { return PmHiLo { hi: 0xb454e4a179dd1878 as i64, lo: 0xd64541ba673cee04 as i64 }; }
+    if idx == 481 { return PmHiLo { hi: 0xe16a1dc9d8545e95 as i64, lo: 0x0bd69229010c2985 as i64 }; }
+    if idx == 482 { return PmHiLo { hi: 0x8ce2529e2734bb1e as i64, lo: 0xe7661b59a0a799f3 as i64 }; }
+    if idx == 483 { return PmHiLo { hi: 0xb01ae745b101e9e5 as i64, lo: 0xa13fa23008d18070 as i64 }; }
+    if idx == 484 { return PmHiLo { hi: 0xdc21a1171d42645e as i64, lo: 0x898f8abc0b05e08c as i64 }; }
+    if idx == 485 { return PmHiLo { hi: 0x899504ae72497ebb as i64, lo: 0x95f9b6b586e3ac57 as i64 }; }
+    if idx == 486 { return PmHiLo { hi: 0xabfa45da0edbde6a as i64, lo: 0xfb782462e89c976d as i64 }; }
+    if idx == 487 { return PmHiLo { hi: 0xd6f8d7509292d604 as i64, lo: 0xba562d7ba2c3bd49 as i64 }; }
+    if idx == 488 { return PmHiLo { hi: 0x865b86925b9bc5c3 as i64, lo: 0xf475dc6d45ba564d as i64 }; }
+    if idx == 489 { return PmHiLo { hi: 0xa7f26836f282b733 as i64, lo: 0x719353889728ebe1 as i64 }; }
+    if idx == 490 { return PmHiLo { hi: 0xd1ef0244af236500 as i64, lo: 0xcdf8286abcf326d9 as i64 }; }
+    if idx == 491 { return PmHiLo { hi: 0x8335616aed761f20 as i64, lo: 0x80bb1942b617f847 as i64 }; }
+    if idx == 492 { return PmHiLo { hi: 0xa402b9c5a8d3a6e8 as i64, lo: 0xa0e9df93639df659 as i64 }; }
+    if idx == 493 { return PmHiLo { hi: 0xcd036837130890a2 as i64, lo: 0xc92457783c8573f0 as i64 }; }
+    if idx == 494 { return PmHiLo { hi: 0x802221226be55a65 as i64, lo: 0x3db6b6ab25d36876 as i64 }; }
+    if idx == 495 { return PmHiLo { hi: 0xa02aa96b06deb0fe as i64, lo: 0x0d246455ef484293 as i64 }; }
+    if idx == 496 { return PmHiLo { hi: 0xc83553c5c8965d3e as i64, lo: 0x906d7d6b6b1a5338 as i64 }; }
+    if idx == 497 { return PmHiLo { hi: 0xfa42a8b73abbf48d as i64, lo: 0x3488dcc645e0e806 as i64 }; }
+    if idx == 498 { return PmHiLo { hi: 0x9c69a97284b578d8 as i64, lo: 0x00d589fbebac9104 as i64 }; }
+    if idx == 499 { return PmHiLo { hi: 0xc38413cf25e2d70e as i64, lo: 0x010aec7ae697b545 as i64 }; }
+    return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
+}
+
+fn pow10_tab_5(idx: i32) -> PmHiLo {
+    if idx == 500 { return PmHiLo { hi: 0xf46518c2ef5b8cd2 as i64, lo: 0x814da799a03da296 as i64 }; }
+    if idx == 501 { return PmHiLo { hi: 0x98bf2f79d5993803 as i64, lo: 0x10d088c00426859e as i64 }; }
+    if idx == 502 { return PmHiLo { hi: 0xbeeefb584aff8604 as i64, lo: 0x5504aaf005302705 as i64 }; }
+    if idx == 503 { return PmHiLo { hi: 0xeeaaba2e5dbf6785 as i64, lo: 0x6a45d5ac067c30c7 as i64 }; }
+    if idx == 504 { return PmHiLo { hi: 0x952ab45cfa97a0b3 as i64, lo: 0x226ba58b840d9e7c as i64 }; }
+    if idx == 505 { return PmHiLo { hi: 0xba756174393d88e0 as i64, lo: 0x6b068eee6511061b as i64 }; }
+    if idx == 506 { return PmHiLo { hi: 0xe912b9d1478ceb18 as i64, lo: 0x85c832a9fe5547a2 as i64 }; }
+    if idx == 507 { return PmHiLo { hi: 0x91abb422ccb812ef as i64, lo: 0x539d1faa3ef54cc5 as i64 }; }
+    if idx == 508 { return PmHiLo { hi: 0xb616a12b7fe617ab as i64, lo: 0xa8846794ceb29ff6 as i64 }; }
+    if idx == 509 { return PmHiLo { hi: 0xe39c49765fdf9d95 as i64, lo: 0x12a5817a025f47f4 as i64 }; }
+    if idx == 510 { return PmHiLo { hi: 0x8e41ade9fbebc27e as i64, lo: 0xeba770ec417b8cf8 as i64 }; }
+    if idx == 511 { return PmHiLo { hi: 0xb1d219647ae6b31d as i64, lo: 0xa6914d2751da7037 as i64 }; }
+    if idx == 512 { return PmHiLo { hi: 0xde469fbd99a05fe4 as i64, lo: 0x9035a07126510c44 as i64 }; }
+    if idx == 513 { return PmHiLo { hi: 0x8aec23d680043bef as i64, lo: 0xda218446b7f2a7ab as i64 }; }
+    if idx == 514 { return PmHiLo { hi: 0xada72ccc20054aea as i64, lo: 0x50a9e55865ef5195 as i64 }; }
+    if idx == 515 { return PmHiLo { hi: 0xd910f7ff28069da5 as i64, lo: 0xe4d45eae7f6b25fb as i64 }; }
+    if idx == 516 { return PmHiLo { hi: 0x87aa9aff79042287 as i64, lo: 0x6f04bb2d0fa2f7bd as i64 }; }
+    if idx == 517 { return PmHiLo { hi: 0xa99541bf57452b29 as i64, lo: 0xcac5e9f8538bb5ac as i64 }; }
+    if idx == 518 { return PmHiLo { hi: 0xd3fa922f2d1675f3 as i64, lo: 0xbd776476686ea317 as i64 }; }
+    if idx == 519 { return PmHiLo { hi: 0x847c9b5d7c2e09b8 as i64, lo: 0x966a9eca014525ee as i64 }; }
+    if idx == 520 { return PmHiLo { hi: 0xa59bc234db398c26 as i64, lo: 0xbc05467c81966f6a as i64 }; }
+    if idx == 521 { return PmHiLo { hi: 0xcf02b2c21207ef2f as i64, lo: 0x6b06981ba1fc0b44 as i64 }; }
+    if idx == 522 { return PmHiLo { hi: 0x8161afb94b44f57e as i64, lo: 0xe2e41f11453d870a as i64 }; }
+    if idx == 523 { return PmHiLo { hi: 0xa1ba1ba79e1632dd as i64, lo: 0x9b9d26d5968ce8cd as i64 }; }
+    if idx == 524 { return PmHiLo { hi: 0xca28a291859bbf94 as i64, lo: 0x8284708afc302301 as i64 }; }
+    if idx == 525 { return PmHiLo { hi: 0xfcb2cb35e702af79 as i64, lo: 0xa3258cadbb3c2bc1 as i64 }; }
+    if idx == 526 { return PmHiLo { hi: 0x9defbf01b061adac as i64, lo: 0xc5f777ec95059b58 as i64 }; }
+    if idx == 527 { return PmHiLo { hi: 0xc56baec21c7a1917 as i64, lo: 0xf77555e7ba47022f as i64 }; }
+    if idx == 528 { return PmHiLo { hi: 0xf6c69a72a3989f5c as i64, lo: 0x7552ab61a8d8c2ba as i64 }; }
+    if idx == 529 { return PmHiLo { hi: 0x9a3c2087a63f639a as i64, lo: 0xc953ab1d098779b4 as i64 }; }
+    if idx == 530 { return PmHiLo { hi: 0xc0cb28a98fcf3c80 as i64, lo: 0x7ba895e44be95822 as i64 }; }
+    if idx == 531 { return PmHiLo { hi: 0xf0fdf2d3f3c30ba0 as i64, lo: 0x9a92bb5d5ee3ae2a as i64 }; }
+    if idx == 532 { return PmHiLo { hi: 0x969eb7c47859e744 as i64, lo: 0x609bb51a5b4e4cda as i64 }; }
+    if idx == 533 { return PmHiLo { hi: 0xbc4665b596706115 as i64, lo: 0x78c2a260f221e011 as i64 }; }
+    if idx == 534 { return PmHiLo { hi: 0xeb57ff22fc0c795a as i64, lo: 0x56f34af92eaa5815 as i64 }; }
+    if idx == 535 { return PmHiLo { hi: 0x9316ff75dd87cbd9 as i64, lo: 0xf6580edbbd2a770d as i64 }; }
+    if idx == 536 { return PmHiLo { hi: 0xb7dcbf5354e9becf as i64, lo: 0xf3ee1292ac7514d0 as i64 }; }
+    if idx == 537 { return PmHiLo { hi: 0xe5d3ef282a242e82 as i64, lo: 0x70e9973757925a05 as i64 }; }
+    if idx == 538 { return PmHiLo { hi: 0x8fa475791a569d11 as i64, lo: 0x0691fe8296bb7843 as i64 }; }
+    if idx == 539 { return PmHiLo { hi: 0xb38d92d760ec4456 as i64, lo: 0xc8367e233c6a5653 as i64 }; }
+    if idx == 540 { return PmHiLo { hi: 0xe070f78d3927556b as i64, lo: 0x7a441dac0b84ebe8 as i64 }; }
+    if idx == 541 { return PmHiLo { hi: 0x8c469ab843b89563 as i64, lo: 0x6c6a928b87331371 as i64 }; }
+    if idx == 542 { return PmHiLo { hi: 0xaf58416654a6babc as i64, lo: 0xc785372e68ffd84d as i64 }; }
+    if idx == 543 { return PmHiLo { hi: 0xdb2e51bfe9d0696b as i64, lo: 0xf96684fa033fce61 as i64 }; }
+    if idx == 544 { return PmHiLo { hi: 0x88fcf317f22241e3 as i64, lo: 0xbbe0131c4207e0fc as i64 }; }
+    if idx == 545 { return PmHiLo { hi: 0xab3c2fddeeaad25b as i64, lo: 0x2ad817e35289d93c as i64 }; }
+    if idx == 546 { return PmHiLo { hi: 0xd60b3bd56a5586f2 as i64, lo: 0x758e1ddc272c4f8b as i64 }; }
+    if idx == 547 { return PmHiLo { hi: 0x85c7056562757457 as i64, lo: 0x0978d2a9987bb1b6 as i64 }; }
+    if idx == 548 { return PmHiLo { hi: 0xa738c6bebb12d16d as i64, lo: 0x4bd70753fe9a9e24 as i64 }; }
+    if idx == 549 { return PmHiLo { hi: 0xd106f86e69d785c8 as i64, lo: 0x1eccc928fe4145ad as i64 }; }
+    if idx == 550 { return PmHiLo { hi: 0x82a45b450226b39d as i64, lo: 0x133ffdb99ee8cb8c as i64 }; }
+    if idx == 551 { return PmHiLo { hi: 0xa34d721642b06085 as i64, lo: 0xd80ffd2806a2fe6f as i64 }; }
+    if idx == 552 { return PmHiLo { hi: 0xcc20ce9bd35c78a6 as i64, lo: 0xce13fc72084bbe0b as i64 }; }
+    if idx == 553 { return PmHiLo { hi: 0xff290242c83396cf as i64, lo: 0x8198fb8e8a5ead8e as i64 }; }
+    if idx == 554 { return PmHiLo { hi: 0x9f79a169bd203e42 as i64, lo: 0xf0ff9d39167b2c79 as i64 }; }
+    if idx == 555 { return PmHiLo { hi: 0xc75809c42c684dd2 as i64, lo: 0xad3f84875c19f797 as i64 }; }
+    if idx == 556 { return PmHiLo { hi: 0xf92e0c3537826146 as i64, lo: 0x588f65a93320757d as i64 }; }
+    if idx == 557 { return PmHiLo { hi: 0x9bbcc7a142b17ccc as i64, lo: 0x77599f89bff4496e as i64 }; }
+    if idx == 558 { return PmHiLo { hi: 0xc2abf989935ddbff as i64, lo: 0x9530076c2ff15bca as i64 }; }
+    if idx == 559 { return PmHiLo { hi: 0xf356f7ebf83552ff as i64, lo: 0xfa7c09473bedb2bc as i64 }; }
+    if idx == 560 { return PmHiLo { hi: 0x98165af37b2153df as i64, lo: 0x3c8d85cc85748fb5 as i64 }; }
+    if idx == 561 { return PmHiLo { hi: 0xbe1bf1b059e9a8d7 as i64, lo: 0x8bb0e73fa6d1b3a3 as i64 }; }
+    if idx == 562 { return PmHiLo { hi: 0xeda2ee1c7064130d as i64, lo: 0xee9d210f9086208c as i64 }; }
+    if idx == 563 { return PmHiLo { hi: 0x9485d4d1c63e8be8 as i64, lo: 0x752234a9ba53d457 as i64 }; }
+    if idx == 564 { return PmHiLo { hi: 0xb9a74a0637ce2ee2 as i64, lo: 0x926ac1d428e8c96d as i64 }; }
+    if idx == 565 { return PmHiLo { hi: 0xe8111c87c5c1ba9a as i64, lo: 0x370572493322fbc8 as i64 }; }
+    if idx == 566 { return PmHiLo { hi: 0x910ab1d4db9914a1 as i64, lo: 0xe263676dbff5dd5d as i64 }; }
+    if idx == 567 { return PmHiLo { hi: 0xb54d5e4a127f59c9 as i64, lo: 0xdafc41492ff354b4 as i64 }; }
+    if idx == 568 { return PmHiLo { hi: 0xe2a0b5dc971f303b as i64, lo: 0xd1bb519b7bf029e2 as i64 }; }
+    if idx == 569 { return PmHiLo { hi: 0x8da471a9de737e25 as i64, lo: 0xa31513012d761a2d as i64 }; }
+    if idx == 570 { return PmHiLo { hi: 0xb10d8e1456105dae as i64, lo: 0x8bda57c178d3a0b8 as i64 }; }
+    if idx == 571 { return PmHiLo { hi: 0xdd50f1996b947519 as i64, lo: 0x2ed0edb1d70888e6 as i64 }; }
+    if idx == 572 { return PmHiLo { hi: 0x8a5296ffe33cc930 as i64, lo: 0x7d42948f26655590 as i64 }; }
+    if idx == 573 { return PmHiLo { hi: 0xace73cbfdc0bfb7c as i64, lo: 0x9c9339b2effeaaf4 as i64 }; }
+    if idx == 574 { return PmHiLo { hi: 0xd8210befd30efa5b as i64, lo: 0xc3b8081fabfe55b1 as i64 }; }
+    if idx == 575 { return PmHiLo { hi: 0x8714a775e3e95c79 as i64, lo: 0x9a530513cb7ef58e as i64 }; }
+    if idx == 576 { return PmHiLo { hi: 0xa8d9d1535ce3b397 as i64, lo: 0x80e7c658be5eb2f2 as i64 }; }
+    if idx == 577 { return PmHiLo { hi: 0xd31045a8341ca07d as i64, lo: 0xe121b7eeedf65faf as i64 }; }
+    if idx == 578 { return PmHiLo { hi: 0x83ea2b892091e44e as i64, lo: 0x6cb512f554b9fbcd as i64 }; }
+    if idx == 579 { return PmHiLo { hi: 0xa4e4b66b68b65d61 as i64, lo: 0x07e257b2a9e87ac0 as i64 }; }
+    if idx == 580 { return PmHiLo { hi: 0xce1de40642e3f4ba as i64, lo: 0xc9daed9f54629971 as i64 }; }
+    if idx == 581 { return PmHiLo { hi: 0x80d2ae83e9ce78f4 as i64, lo: 0x3e28d48394bd9fe6 as i64 }; }
+    if idx == 582 { return PmHiLo { hi: 0xa1075a24e4421731 as i64, lo: 0x4db309a479ed07e0 as i64 }; }
+    if idx == 583 { return PmHiLo { hi: 0xc94930ae1d529cfd as i64, lo: 0x211fcc0d986849d8 as i64 }; }
+    if idx == 584 { return PmHiLo { hi: 0xfb9b7cd9a4a7443d as i64, lo: 0xe967bf10fe825c4e as i64 }; }
+    if idx == 585 { return PmHiLo { hi: 0x9d412e0806e88aa6 as i64, lo: 0x71e0d76a9f1179b1 as i64 }; }
+    if idx == 586 { return PmHiLo { hi: 0xc491798a08a2ad4f as i64, lo: 0x0e590d4546d5d81d as i64 }; }
+    if idx == 587 { return PmHiLo { hi: 0xf5b5d7ec8acb58a3 as i64, lo: 0x51ef5096988b4e24 as i64 }; }
+    if idx == 588 { return PmHiLo { hi: 0x9991a6f3d6bf1766 as i64, lo: 0x5335925e1f5710d6 as i64 }; }
+    if idx == 589 { return PmHiLo { hi: 0xbff610b0cc6edd40 as i64, lo: 0xe802f6f5a72cd50c as i64 }; }
+    if idx == 590 { return PmHiLo { hi: 0xeff394dcff8a948f as i64, lo: 0x2203b4b310f80a4f as i64 }; }
+    if idx == 591 { return PmHiLo { hi: 0x95f83d0a1fb69cda as i64, lo: 0xb54250efea9b0671 as i64 }; }
+    if idx == 592 { return PmHiLo { hi: 0xbb764c4ca7a44410 as i64, lo: 0x6292e52be541c80e as i64 }; }
+    if idx == 593 { return PmHiLo { hi: 0xea53df5fd18d5514 as i64, lo: 0x7b379e76de923a12 as i64 }; }
+    if idx == 594 { return PmHiLo { hi: 0x92746b9be2f8552d as i64, lo: 0xcd02c30a4b1b644b as i64 }; }
+    if idx == 595 { return PmHiLo { hi: 0xb7118682dbb66a78 as i64, lo: 0xc04373ccdde23d5e as i64 }; }
+    if idx == 596 { return PmHiLo { hi: 0xe4d5e82392a40516 as i64, lo: 0xf05450c0155accb5 as i64 }; }
+    if idx == 597 { return PmHiLo { hi: 0x8f05b1163ba6832e as i64, lo: 0xd634b2780d58bff1 as i64 }; }
+    if idx == 598 { return PmHiLo { hi: 0xb2c71d5bca9023f9 as i64, lo: 0x8bc1df1610aeefed as i64 }; }
+    if idx == 599 { return PmHiLo { hi: 0xdf78e4b2bd342cf7 as i64, lo: 0x6eb256db94daabe9 as i64 }; }
+    return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
+}
+
+fn pow10_tab_6(idx: i32) -> PmHiLo {
+    if idx == 600 { return PmHiLo { hi: 0x8bab8eefb6409c1b as i64, lo: 0xe52f76493d08ab71 as i64 }; }
+    if idx == 601 { return PmHiLo { hi: 0xae9672aba3d0c321 as i64, lo: 0x5e7b53db8c4ad64e as i64 }; }
+    if idx == 602 { return PmHiLo { hi: 0xda3c0f568cc4f3e9 as i64, lo: 0x361a28d26f5d8be1 as i64 }; }
+    if idx == 603 { return PmHiLo { hi: 0x8865899617fb1872 as i64, lo: 0x81d05983859a776d as i64 }; }
+    if idx == 604 { return PmHiLo { hi: 0xaa7eebfb9df9de8e as i64, lo: 0x22446fe467011548 as i64 }; }
+    if idx == 605 { return PmHiLo { hi: 0xd51ea6fa85785632 as i64, lo: 0xaad58bdd80c15a9a as i64 }; }
+    if idx == 606 { return PmHiLo { hi: 0x8533285c936b35df as i64, lo: 0x2ac5776a7078d8a0 as i64 }; }
+    if idx == 607 { return PmHiLo { hi: 0xa67ff273b8460357 as i64, lo: 0x7576d5450c970ec8 as i64 }; }
+    if idx == 608 { return PmHiLo { hi: 0xd01fef10a657842d as i64, lo: 0xd2d48a964fbcd27a as i64 }; }
+    if idx == 609 { return PmHiLo { hi: 0x8213f56a67f6b29c as i64, lo: 0x63c4d69df1d6038c as i64 }; }
+    if idx == 610 { return PmHiLo { hi: 0xa298f2c501f45f43 as i64, lo: 0x7cb60c456e4b8470 as i64 }; }
+    if idx == 611 { return PmHiLo { hi: 0xcb3f2f7642717714 as i64, lo: 0xdbe38f56c9de658c as i64 }; }
+    if idx == 612 { return PmHiLo { hi: 0xfe0efb53d30dd4d8 as i64, lo: 0x12dc732c7c55feef as i64 }; }
+    if idx == 613 { return PmHiLo { hi: 0x9ec95d1463e8a507 as i64, lo: 0x0bc9c7fbcdb5bf55 as i64 }; }
+    if idx == 614 { return PmHiLo { hi: 0xc67bb4597ce2ce49 as i64, lo: 0x4ebc39fac1232f2a as i64 }; }
+    if idx == 615 { return PmHiLo { hi: 0xf81aa16fdc1b81db as i64, lo: 0x226b4879716bfaf5 as i64 }; }
+    if idx == 616 { return PmHiLo { hi: 0x9b10a4e5e9913129 as i64, lo: 0x35830d4be6e37cd9 as i64 }; }
+    if idx == 617 { return PmHiLo { hi: 0xc1d4ce1f63f57d73 as i64, lo: 0x02e3d09ee09c5c0f as i64 }; }
+    if idx == 618 { return PmHiLo { hi: 0xf24a01a73cf2dcd0 as i64, lo: 0x439cc4c698c37313 as i64 }; }
+    if idx == 619 { return PmHiLo { hi: 0x976e41088617ca02 as i64, lo: 0x2a41fafc1f7a27ec as i64 }; }
+    if idx == 620 { return PmHiLo { hi: 0xbd49d14aa79dbc83 as i64, lo: 0xb4d279bb2758b1e7 as i64 }; }
+    if idx == 621 { return PmHiLo { hi: 0xec9c459d51852ba3 as i64, lo: 0x22071829f12ede61 as i64 }; }
+    if idx == 622 { return PmHiLo { hi: 0x93e1ab8252f33b46 as i64, lo: 0x35446f1a36bd4afc as i64 }; }
+    if idx == 623 { return PmHiLo { hi: 0xb8da1662e7b00a18 as i64, lo: 0xc2958ae0c46c9dbc as i64 }; }
+    if idx == 624 { return PmHiLo { hi: 0xe7109bfba19c0c9e as i64, lo: 0xf33aed98f587c52b as i64 }; }
+    if idx == 625 { return PmHiLo { hi: 0x906a617d450187e3 as i64, lo: 0xd804d47f9974db3a as i64 }; }
+    if idx == 626 { return PmHiLo { hi: 0xb484f9dc9641e9db as i64, lo: 0x4e06099f7fd21209 as i64 }; }
+    if idx == 627 { return PmHiLo { hi: 0xe1a63853bbd26452 as i64, lo: 0xa1878c075fc6968c as i64 }; }
+    if idx == 628 { return PmHiLo { hi: 0x8d07e33455637eb3 as i64, lo: 0x24f4b7849bdc1e17 as i64 }; }
+    if idx == 629 { return PmHiLo { hi: 0xb049dc016abc5e60 as i64, lo: 0x6e31e565c2d3259d as i64 }; }
+    if idx == 630 { return PmHiLo { hi: 0xdc5c5301c56b75f8 as i64, lo: 0x89be5ebf3387ef04 as i64 }; }
+    if idx == 631 { return PmHiLo { hi: 0x89b9b3e11b6329bb as i64, lo: 0x5616fb378034f562 as i64 }; }
+    if idx == 632 { return PmHiLo { hi: 0xac2820d9623bf42a as i64, lo: 0xab9cba05604232bb as i64 }; }
+    if idx == 633 { return PmHiLo { hi: 0xd732290fbacaf134 as i64, lo: 0x5683e886b852bf6a as i64 }; }
+    if idx == 634 { return PmHiLo { hi: 0x867f59a9d4bed6c1 as i64, lo: 0xb61271543333b7a2 as i64 }; }
+    if idx == 635 { return PmHiLo { hi: 0xa81f301449ee8c71 as i64, lo: 0xa3970da94000a58b as i64 }; }
+    if idx == 636 { return PmHiLo { hi: 0xd226fc195c6a2f8d as i64, lo: 0x8c7cd1139000ceee as i64 }; }
+    if idx == 637 { return PmHiLo { hi: 0x83585d8fd9c25db8 as i64, lo: 0x37ce02ac3a008154 as i64 }; }
+    if idx == 638 { return PmHiLo { hi: 0xa42e74f3d032f526 as i64, lo: 0x45c183574880a1aa as i64 }; }
+    if idx == 639 { return PmHiLo { hi: 0xcd3a1230c43fb270 as i64, lo: 0xd731e42d1aa0ca14 as i64 }; }
+    if idx == 640 { return PmHiLo { hi: 0x80444b5e7aa7cf86 as i64, lo: 0x867f2e9c30a47e4c as i64 }; }
+    if idx == 641 { return PmHiLo { hi: 0xa0555e361951c367 as i64, lo: 0x281efa433ccd9de0 as i64 }; }
+    if idx == 642 { return PmHiLo { hi: 0xc86ab5c39fa63441 as i64, lo: 0x7226b8d40c010558 as i64 }; }
+    if idx == 643 { return PmHiLo { hi: 0xfa856334878fc151 as i64, lo: 0x4eb067090f0146ae as i64 }; }
+    if idx == 644 { return PmHiLo { hi: 0x9c935e00d4b9d8d3 as i64, lo: 0x912e4065a960cc2c as i64 }; }
+    if idx == 645 { return PmHiLo { hi: 0xc3b8358109e84f08 as i64, lo: 0xf579d07f13b8ff37 as i64 }; }
+    if idx == 646 { return PmHiLo { hi: 0xf4a642e14c6262c9 as i64, lo: 0x32d8449ed8a73f05 as i64 }; }
+    if idx == 647 { return PmHiLo { hi: 0x98e7e9cccfbd7dbe as i64, lo: 0x7fc72ae347688763 as i64 }; }
+    if idx == 648 { return PmHiLo { hi: 0xbf21e44003acdd2d as i64, lo: 0x1fb8f59c1942a93c as i64 }; }
+    if idx == 649 { return PmHiLo { hi: 0xeeea5d5004981479 as i64, lo: 0xe7a733031f93538b as i64 }; }
+    if idx == 650 { return PmHiLo { hi: 0x95527a5202df0ccc as i64, lo: 0xf0c87fe1f3bc1437 as i64 }; }
+    if idx == 651 { return PmHiLo { hi: 0xbaa718e68396cffe as i64, lo: 0x2cfa9fda70ab1945 as i64 }; }
+    if idx == 652 { return PmHiLo { hi: 0xe950df20247c83fe as i64, lo: 0xb83947d10cd5df96 as i64 }; }
+    if idx == 653 { return PmHiLo { hi: 0x91d28b7416cdd27f as i64, lo: 0xb323cce2a805abbe as i64 }; }
+    if idx == 654 { return PmHiLo { hi: 0xb6472e511c81471e as i64, lo: 0x1fecc01b520716ad as i64 }; }
+    if idx == 655 { return PmHiLo { hi: 0xe3d8f9e563a198e6 as i64, lo: 0xa7e7f0222688dc59 as i64 }; }
+    if idx == 656 { return PmHiLo { hi: 0x8e679c2f5e44ff90 as i64, lo: 0xa8f0f615581589b7 as i64 }; }
+    if idx == 657 { return PmHiLo { hi: 0xb201833b35d63f74 as i64, lo: 0xd32d339aae1aec25 as i64 }; }
+    if idx == 658 { return PmHiLo { hi: 0xde81e40a034bcf50 as i64, lo: 0x07f8808159a1a72e as i64 }; }
+    if idx == 659 { return PmHiLo { hi: 0x8b112e86420f6192 as i64, lo: 0x04fb5050d805087d as i64 }; }
+    if idx == 660 { return PmHiLo { hi: 0xadd57a27d29339f7 as i64, lo: 0x863a24650e064a9c as i64 }; }
+    if idx == 661 { return PmHiLo { hi: 0xd94ad8b1c7380875 as i64, lo: 0xe7c8ad7e5187dd43 as i64 }; }
+    if idx == 662 { return PmHiLo { hi: 0x87cec76f1c830549 as i64, lo: 0x70dd6c6ef2f4ea4a as i64 }; }
+    if idx == 663 { return PmHiLo { hi: 0xa9c2794ae3a3c69b as i64, lo: 0x4d14c78aafb224dd as i64 }; }
+    if idx == 664 { return PmHiLo { hi: 0xd433179d9c8cb842 as i64, lo: 0xa059f96d5b9eae14 as i64 }; }
+    if idx == 665 { return PmHiLo { hi: 0x849feec281d7f329 as i64, lo: 0x24383be459432ccc as i64 }; }
+    if idx == 666 { return PmHiLo { hi: 0xa5c7ea73224deff4 as i64, lo: 0xed464add6f93f7ff as i64 }; }
+    if idx == 667 { return PmHiLo { hi: 0xcf39e50feae16bf0 as i64, lo: 0x2897dd94cb78f5ff as i64 }; }
+    if idx == 668 { return PmHiLo { hi: 0x81842f29f2cce376 as i64, lo: 0x195eea7cff2b99bf as i64 }; }
+    if idx == 669 { return PmHiLo { hi: 0xa1e53af46f801c54 as i64, lo: 0x9fb6a51c3ef6802f as i64 }; }
+    if idx == 670 { return PmHiLo { hi: 0xca5e89b18b602369 as i64, lo: 0xc7a44e634eb4203b as i64 }; }
+    if idx == 671 { return PmHiLo { hi: 0xfcf62c1dee382c43 as i64, lo: 0xb98d61fc2261284a as i64 }; }
+    if idx == 672 { return PmHiLo { hi: 0x9e19db92b4e31baa as i64, lo: 0x93f85d3d957cb92e as i64 }; }
+    if idx == 673 { return PmHiLo { hi: 0xc5a05277621be294 as i64, lo: 0x38f6748cfadbe77a as i64 }; }
+    if idx == 674 { return PmHiLo { hi: 0xf70867153aa2db39 as i64, lo: 0x473411b03992e158 as i64 }; }
+    if idx == 675 { return PmHiLo { hi: 0x9a65406d44a5c904 as i64, lo: 0x8c808b0e23fbccd7 as i64 }; }
+    if idx == 676 { return PmHiLo { hi: 0xc0fe908895cf3b45 as i64, lo: 0xafa0add1acfac00d as i64 }; }
+    if idx == 677 { return PmHiLo { hi: 0xf13e34aabb430a16 as i64, lo: 0x9b88d94618397010 as i64 }; }
+    if idx == 678 { return PmHiLo { hi: 0x96c6e0eab509e64e as i64, lo: 0xa13587cbcf23e60a as i64 }; }
+    if idx == 679 { return PmHiLo { hi: 0xbc789925624c5fe1 as i64, lo: 0x4982e9bec2ecdf8d as i64 }; }
+    if idx == 680 { return PmHiLo { hi: 0xeb96bf6ebadf77d9 as i64, lo: 0x1be3a42e73a81770 as i64 }; }
+    if idx == 681 { return PmHiLo { hi: 0x933e37a534cbaae8 as i64, lo: 0x716e469d08490ea6 as i64 }; }
+    if idx == 682 { return PmHiLo { hi: 0xb80dc58e81fe95a2 as i64, lo: 0x8dc9d8444a5b524f as i64 }; }
+    if idx == 683 { return PmHiLo { hi: 0xe61136f2227e3b0a as i64, lo: 0x313c4e555cf226e3 as i64 }; }
+    if idx == 684 { return PmHiLo { hi: 0x8fcac257558ee4e7 as i64, lo: 0xdec5b0f55a17584e as i64 }; }
+    if idx == 685 { return PmHiLo { hi: 0xb3bd72ed2af29e20 as i64, lo: 0x56771d32b09d2e62 as i64 }; }
+    if idx == 686 { return PmHiLo { hi: 0xe0accfa875af45a8 as i64, lo: 0x6c14e47f5cc479fa as i64 }; }
+    if idx == 687 { return PmHiLo { hi: 0x8c6c01c9498d8b89 as i64, lo: 0x438d0ecf99facc3c as i64 }; }
+    if idx == 688 { return PmHiLo { hi: 0xaf87023b9bf0ee6b as i64, lo: 0x1470528380797f4b as i64 }; }
+    if idx == 689 { return PmHiLo { hi: 0xdb68c2ca82ed2a06 as i64, lo: 0x598c67246097df1e as i64 }; }
+    if idx == 690 { return PmHiLo { hi: 0x892179be91d43a44 as i64, lo: 0x77f7c076bc5eeb73 as i64 }; }
+    if idx == 691 { return PmHiLo { hi: 0xab69d82e364948d5 as i64, lo: 0x95f5b0946b76a64f as i64 }; }
+    if idx == 692 { return PmHiLo { hi: 0xd6444e39c3db9b0a as i64, lo: 0x7b731cb986544fe3 as i64 }; }
+    if idx == 693 { return PmHiLo { hi: 0x85eab0e41a6940e6 as i64, lo: 0x0d27f1f3f3f4b1ee as i64 }; }
+    if idx == 694 { return PmHiLo { hi: 0xa7655d1d21039120 as i64, lo: 0x9071ee70f0f1de6a as i64 }; }
+    if idx == 695 { return PmHiLo { hi: 0xd13eb46469447568 as i64, lo: 0xb48e6a0d2d2e5604 as i64 }; }
+    return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
+}
+
+// Power of 10 table: 10^-348 to 10^347 (696 entries)
+// Generated from rsc.io/fpfmt pow10tab.go
+fn pow10_tab(idx: i32) -> PmHiLo {
+    if idx < 100 { return pow10_tab_0(idx); }
+    if idx < 200 { return pow10_tab_1(idx); }
+    if idx < 300 { return pow10_tab_2(idx); }
+    if idx < 400 { return pow10_tab_3(idx); }
+    if idx < 500 { return pow10_tab_4(idx); }
+    if idx < 600 { return pow10_tab_5(idx); }
+    return pow10_tab_6(idx);
+}
+
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test "log approximations" {
+    assert log10_pow2(10) == 3;
+    assert log10_pow2(100) == 30;
+    assert log2_pow10(3) == 9;
+    assert log2_pow10(10) == 33;
+}
+
+test "bit length" {
+    assert i64_bit_len(0 as i64) == 0;
+    assert i64_bit_len(1 as i64) == 1;
+    assert i64_bit_len(2 as i64) == 2;
+    assert i64_bit_len(3 as i64) == 2;
+    assert i64_bit_len(255 as i64) == 8;
+    assert i64_bit_len(256 as i64) == 9;
+}
+
+test "unpack64 basic" {
+    let r1 = unpack64(1.0);
+    assert r1.mantissa != 0 as i64;
+
+    let r2 = unpack64(2.0);
+    assert r2.mantissa != 0 as i64;
+}
+
+test "pow10 function" {
+    assert pow10(0) == 1 as i64;
+    assert pow10(1) == 10 as i64;
+    assert pow10(2) == 100 as i64;
+    assert pow10(9) == 1000000000 as i64;
+}
+
+test "digits count" {
+    assert digits(1 as i64) == 1;
+    assert digits(9 as i64) == 1;
+    assert digits(10 as i64) == 2;
+    assert digits(99 as i64) == 2;
+    assert digits(100 as i64) == 3;
+    assert digits(999 as i64) == 3;
+}
+
+test "unsigned comparisons" {
+    // Test that u64_lt handles sign bit correctly
+    let a = 0x7FFFFFFFFFFFFFFF as i64;  // Max positive i64
+    let b = 0x8000000000000000 as i64;  // Min negative i64, but largest u64/2
+    // As unsigned: a < b
+    assert u64_lt(a, b);
+    assert !u64_lt(b, a);
+}
+
+test "short formatting basic values" {
+    // 1.0 should format to 1 * 10^0
+    let r1 = short(1.0);
+    assert r1.digits == 1 as i64;
+    assert r1.exponent == 0;
+
+    // 10.0 should format to 1 * 10^1
+    let r10 = short(10.0);
+    assert r10.digits == 1 as i64;
+    assert r10.exponent == 1;
+
+    // 100.0 should format to 1 * 10^2
+    let r100 = short(100.0);
+    assert r100.digits == 1 as i64;
+    assert r100.exponent == 2;
+
+    // 2.0 should format to 2 * 10^0
+    let r2 = short(2.0);
+    assert r2.digits == 2 as i64;
+    assert r2.exponent == 0;
+}
+
+test "short formatting pi" {
+    let pi = 3.141592653589793;
+    let r = short(pi);
+    // Pi should produce many digits
+    assert r.digits > 0 as i64;
+    // The digit count should be reasonable
+    assert digits(r.digits) <= 17;
+}
+
+test "short formatting small values" {
+    // 0.1 cannot be exactly represented in binary
+    let r01 = short(0.1);
+    assert r01.digits > 0 as i64;
+    assert r01.exponent < 0;
+
+    // 0.5 = 1/2 can be exactly represented
+    let r05 = short(0.5);
+    assert r05.digits == 5 as i64;
+    assert r05.exponent == -1;
+}
+
+test "short formatting large values" {
+    // Large power of 2
+    let r = short(1048576.0);  // 2^20
+    assert r.digits > 0 as i64;
+}
+
+test "fixed_width formatting" {
+    // fixed_width(1.0, 1) should give 1 digit
+    let r1 = fixed_width(1.0, 1);
+    assert r1.digits == 1 as i64;
+
+    // fixed_width(pi, 4) should give 4 digits
+    let pi = 3.141592653589793;
+    let r4 = fixed_width(pi, 4);
+    // Should be 3142 (rounded)
+    assert digits(r4.digits) == 4;
+}
+
+test "f64_to_string special values" {
+    // Zero
+    let s0 = f64_to_string(0.0);
+    assert s0 == "0e+00";
+
+    // Negative zero
+    let sn0 = f64_to_string(-0.0);
+    assert sn0 == "-0e+00";
+}
+
+test "f64_to_string basic" {
+    // 1.0 should format to "1e+00"
+    let s1 = f64_to_string(1.0);
+    assert s1 == "1e+00";
+
+    // 10.0 should format to "1e+01"
+    let s10 = f64_to_string(10.0);
+    assert s10 == "1e+01";
+
+    // 100.0 should format to "1e+02"
+    let s100 = f64_to_string(100.0);
+    assert s100 == "1e+02";
+}
+
+test "f64_to_string small values" {
+    // 0.5 should format to "5e-01"
+    let s05 = f64_to_string(0.5);
+    assert s05 == "5e-01";
+
+    // 0.01 should format to "1e-02"
+    let s001 = f64_to_string(0.01);
+    assert s001 == "1e-02";
+}
+
+test "trim_zeros" {
+    // 1000 should trim to 1 with exponent +3
+    let t1 = trim_zeros(1000 as i64, 0);
+    assert t1.0 == 1 as i64;
+    assert t1.1 == 3;
+
+    // 1200 should trim to 12 with exponent +2
+    let t2 = trim_zeros(1200 as i64, 0);
+    assert t2.0 == 12 as i64;
+    assert t2.1 == 2;
+
+    // 123 has no trailing zeros
+    let t3 = trim_zeros(123 as i64, 0);
+    assert t3.0 == 123 as i64;
+    assert t3.1 == 0;
+}
+
+test "rotate_right" {
+    // Rotate 0x80 right by 4 should give 0x08 (for 8-bit value conceptually)
+    // For 64-bit: rotating 1 right by 1 puts 1 in MSB
+    let r1 = rotate_right(1 as i64, 1);
+    assert r1 == 0x8000000000000000 as i64;
+
+    // Rotate 0x8000000000000000 right by 1 should give 0x4000000000000000
+    let r2 = rotate_right(0x8000000000000000 as i64, 1);
+    assert r2 == 0x4000000000000000 as i64;
+}
+
+test "logical_shr" {
+    // Logical shift of negative number should not sign-extend
+    let neg = 0x8000000000000000 as i64;  // -9223372036854775808
+    let shifted = logical_shr(neg, 1);
+    // Should be 0x4000000000000000, not 0xC000000000000000
+    assert shifted == 0x4000000000000000 as i64;
+
+    // Shift by 63 should leave just the sign bit
+    let shifted63 = logical_shr(neg, 63);
+    assert shifted63 == 1 as i64;
+}
+
+test "f64_to_string negative values" {
+    // Negative 1.0
+    let sn1 = f64_to_string(-1.0);
+    assert sn1 == "-1e+00";
+
+    // Negative pi
+    let snpi = f64_to_string(-3.141592653589793);
+    // Should start with "-"
+    assert snpi.get(0) == '-' as i32;
+}
+
+test "f64_to_string powers of 10" {
+    // Large powers
+    let s10 = f64_to_string(10.0);
+    assert s10 == "1e+01";
+
+    let s100 = f64_to_string(100.0);
+    assert s100 == "1e+02";
+
+    let s1000 = f64_to_string(1000.0);
+    assert s1000 == "1e+03";
+
+    // Small powers
+    let s01 = f64_to_string(0.01);
+    assert s01 == "1e-02";
+
+    let s001 = f64_to_string(0.001);
+    assert s001 == "1e-03";
+}
+
+test "f64_to_string precision" {
+    // Verify that non-round values have correct precision
+    let pi = 3.141592653589793;
+    let s = f64_to_string(pi);
+    // Should have many digits
+    assert s.len() > 10;
+    // Should start with "3.14"
+    assert s.get(0) == '3' as i32;
+    assert s.get(1) == '.' as i32;
+    assert s.get(2) == '1' as i32;
+    assert s.get(3) == '4' as i32;
+}
+
+// ============================================================================
+// Extended test cases ported from Go fpfmt_test.go
+// ============================================================================
+
+test "powers of 2" {
+    // Test powers of 2 which have exact binary representations
+    // 2^0 = 1
+    let r0 = short(1.0);
+    assert r0.digits == 1 as i64;
+    assert r0.exponent == 0;
+
+    // 2^1 = 2
+    let r1 = short(2.0);
+    assert r1.digits == 2 as i64;
+    assert r1.exponent == 0;
+
+    // 2^10 = 1024
+    let r10 = short(1024.0);
+    assert r10.digits > 0 as i64;
+
+    // 2^-1 = 0.5
+    let rm1 = short(0.5);
+    assert rm1.digits == 5 as i64;
+    assert rm1.exponent == -1;
+
+    // 2^-2 = 0.25
+    let rm2 = short(0.25);
+    assert rm2.digits == 25 as i64;
+    assert rm2.exponent == -2;
+
+    // 2^-10 = 0.0009765625
+    let rm10 = short(0.0009765625);
+    assert rm10.digits > 0 as i64;
+}
+
+test "extended powers of 10" {
+    // 10^0 = 1
+    let r0 = short(1.0);
+    assert r0.digits == 1 as i64;
+    assert r0.exponent == 0;
+
+    // 10^1 = 10
+    let r1 = short(10.0);
+    assert r1.digits == 1 as i64;
+    assert r1.exponent == 1;
+
+    // 10^2 = 100
+    let r2 = short(100.0);
+    assert r2.digits == 1 as i64;
+    assert r2.exponent == 2;
+
+    // 10^6 = 1000000
+    let r6 = short(1000000.0);
+    assert r6.digits == 1 as i64;
+    assert r6.exponent == 6;
+
+    // 10^9 = 1000000000
+    let r9 = short(1000000000.0);
+    assert r9.digits == 1 as i64;
+    assert r9.exponent == 9;
+
+    // 10^-1 = 0.1
+    let rm1 = short(0.1);
+    assert rm1.exponent < 0;
+
+    // 10^-6 = 0.000001
+    let rm6 = short(0.000001);
+    assert rm6.exponent < 0;
+}
+
+test "short specific values" {
+    // Test specific values that have known shortest representations
+    // 1.5
+    let r15 = short(1.5);
+    assert r15.digits == 15 as i64;
+    assert r15.exponent == -1;
+
+    // 1.25
+    let r125 = short(1.25);
+    assert r125.digits == 125 as i64;
+    assert r125.exponent == -2;
+
+    // 1.125
+    let r1125 = short(1.125);
+    assert r1125.digits == 1125 as i64;
+    assert r1125.exponent == -3;
+
+    // 0.125 = 1/8
+    let r0125 = short(0.125);
+    assert r0125.digits == 125 as i64;
+    assert r0125.exponent == -3;
+}
+
+test "fixed_width various digits" {
+    // Test fixed_width with different digit counts
+    let pi = 3.141592653589793;
+
+    // 1 digit
+    let f1 = fixed_width(pi, 1);
+    assert digits(f1.digits) == 1;
+
+    // 3 digits
+    let f3 = fixed_width(pi, 3);
+    assert digits(f3.digits) == 3;
+
+    // 6 digits
+    let f6 = fixed_width(pi, 6);
+    assert digits(f6.digits) == 6;
+
+    // 10 digits
+    let f10 = fixed_width(pi, 10);
+    assert digits(f10.digits) == 10;
+
+    // 17 digits (max precision for f64)
+    let f17 = fixed_width(pi, 17);
+    assert digits(f17.digits) == 17;
+}
+
+test "negative values symmetry" {
+    // Test that negative values produce same digits with negative sign
+    let pos = short(123.456);
+    let neg = short(-123.456);
+    assert pos.digits == neg.digits;
+    assert pos.exponent == neg.exponent;
+}
+
+test "f64_to_string extended" {
+    // Very large value
+    let large = f64_to_string(1.0e100);
+    assert large.len() > 0;
+    // Should contain e+100
+    assert large.get(large.len() - 3) == '1' as i32;
+    assert large.get(large.len() - 2) == '0' as i32;
+    assert large.get(large.len() - 1) == '0' as i32;
+
+    // Very small value
+    let small = f64_to_string(1.0e-100);
+    assert small.len() > 0;
+    // Should contain e-100
+
+    // Value near 1
+    let near1 = f64_to_string(1.0000001);
+    assert near1.len() > 0;
+}
+
+test "round trip consistency" {
+    // Test that short produces consistent results for values
+    // that should have short representations
+
+    // Integers up to certain size should be exact
+    let i1 = short(1.0);
+    let i2 = short(2.0);
+    let i3 = short(3.0);
+    let i9 = short(9.0);
+
+    assert i1.digits == 1 as i64;
+    assert i2.digits == 2 as i64;
+    assert i3.digits == 3 as i64;
+    assert i9.digits == 9 as i64;
+
+    assert i1.exponent == 0;
+    assert i2.exponent == 0;
+    assert i3.exponent == 0;
+    assert i9.exponent == 0;
+}
+
+test "boundary digits" {
+    // Test values at digit boundaries
+    // 9, 99, 999, etc. - values just before power of 10
+    let r9 = short(9.0);
+    assert r9.digits == 9 as i64;
+    assert r9.exponent == 0;
+
+    let r99 = short(99.0);
+    assert r99.digits == 99 as i64;
+    assert r99.exponent == 0;
+
+    let r999 = short(999.0);
+    assert r999.digits == 999 as i64;
+    assert r999.exponent == 0;
+
+    // 11, 101, 1001, etc. - values just after power of 10
+    let r11 = short(11.0);
+    assert r11.digits == 11 as i64;
+    assert r11.exponent == 0;
+
+    let r101 = short(101.0);
+    assert r101.digits == 101 as i64;
+    assert r101.exponent == 0;
+}
+
+test "hard boundary cases from bits" {
+    // Test specific IEEE 754 bit patterns that are known hard cases
+    // These are values near rounding boundaries
+
+    // Smallest positive normal number: 2^-1022
+    // Bit pattern: 0x0010000000000000
+    let min_normal_bits = 0x0010000000000000 as i64;
+    let min_normal = builtin::f64_reinterpret_i64(min_normal_bits);
+    let r_min = short(min_normal);
+    assert r_min.digits > 0 as i64;
+
+    // Largest positive finite number: (2-2^-52) * 2^1023
+    // Bit pattern: 0x7FEFFFFFFFFFFFFF
+    let max_finite_bits = 0x7FEFFFFFFFFFFFFF as i64;
+    let max_finite = builtin::f64_reinterpret_i64(max_finite_bits);
+    let r_max = short(max_finite);
+    assert r_max.digits > 0 as i64;
+
+    // 1.0 exactly: bit pattern 0x3FF0000000000000
+    let one_bits = 0x3FF0000000000000 as i64;
+    let one = builtin::f64_reinterpret_i64(one_bits);
+    let r_one = short(one);
+    assert r_one.digits == 1 as i64;
+    assert r_one.exponent == 0;
+
+    // 2.0 exactly: bit pattern 0x4000000000000000
+    let two_bits = 0x4000000000000000 as i64;
+    let two = builtin::f64_reinterpret_i64(two_bits);
+    let r_two = short(two);
+    assert r_two.digits == 2 as i64;
+    assert r_two.exponent == 0;
+}
+
+test "nextafter boundary cases" {
+    // Test values just above and below powers of 10
+    // These are typically hard cases for float-to-string conversion
+
+    // Just above 1.0: nextafter(1.0, 2.0)
+    // Bit pattern: 0x3FF0000000000001
+    let above_one_bits = 0x3FF0000000000001 as i64;
+    let above_one = builtin::f64_reinterpret_i64(above_one_bits);
+    let r_above = short(above_one);
+    // Should produce more digits than just "1"
+    assert r_above.digits > 1 as i64;
+
+    // Just below 1.0: nextafter(1.0, 0.0)
+    // Bit pattern: 0x3FEFFFFFFFFFFFFF
+    let below_one_bits = 0x3FEFFFFFFFFFFFFF as i64;
+    let below_one = builtin::f64_reinterpret_i64(below_one_bits);
+    let r_below = short(below_one);
+    // Should produce digits with negative exponent
+    assert r_below.digits > 0 as i64;
+}
+
+test "subnormal numbers" {
+    // Test subnormal (denormalized) numbers
+    // Smallest positive subnormal: 2^-1074
+    // Bit pattern: 0x0000000000000001
+    let min_subnormal_bits = 0x0000000000000001 as i64;
+    let min_subnormal = builtin::f64_reinterpret_i64(min_subnormal_bits);
+    let r_min_sub = short(min_subnormal);
+    assert r_min_sub.digits > 0 as i64;
+    // Exponent should be very negative (around -324)
+    assert r_min_sub.exponent < -300;
+
+    // Largest subnormal: just below 2^-1022
+    // Bit pattern: 0x000FFFFFFFFFFFFF
+    let max_subnormal_bits = 0x000FFFFFFFFFFFFF as i64;
+    let max_subnormal = builtin::f64_reinterpret_i64(max_subnormal_bits);
+    let r_max_sub = short(max_subnormal);
+    assert r_max_sub.digits > 0 as i64;
+}
+
+test "scientific notation extremes" {
+    // Test extreme values that require large exponents
+    // 1e200 (large but within range)
+    let large = 1.0e200;
+    let s_large = f64_to_string(large);
+    assert s_large.len() > 0;
+
+    // 1e-200 (small but within range)
+    let small = 1.0e-200;
+    let s_small = f64_to_string(small);
+    assert s_small.len() > 0;
+}
+
+test "specific hard values from Go tests" {
+    // Values extracted from Go fpfmt_test.go
+    // These are at decimal rounding boundaries
+
+    // Test value in middle range
+    let val2 = 1.23456789012345678;
+    let r2 = short(val2);
+    // Should have approximately 17 digits of precision
+    assert digits(r2.digits) <= 17;
+
+    // Test exact power of 2
+    let val3 = 1.0 / 1024.0;  // 2^-10 = 0.0009765625
+    let r3 = short(val3);
+    assert r3.digits > 0 as i64;
+}
+
+test "format consistency" {
+    // Test that f64_to_string and short produce consistent results
+    let pi = 3.141592653589793;
+    let short_result = short(pi);
+    let str_result = f64_to_string(pi);
+
+    // The string should start with the digits from short
+    assert str_result.len() > 0;
+    // First digit should match
+    let mut first_digit = short_result.digits;
+    while first_digit >= 10 as i64 {
+        first_digit = first_digit / 10 as i64;
+    }
+    assert str_result.get(0) == ('0' as i32) + (first_digit as i32);
+}
+
+// ============================================================================
+// Benchmark helper functions
+// ============================================================================
+
+fn truncate_str(s: String, max_len: i32) -> String {
+    if s.len() <= max_len {
+        return s;
+    }
+    let mut result = String::with_capacity(max_len + 3);
+    for let mut i = 0; i < max_len - 3; i += 1 {
+        result.append(char_to_string(s.get(i)));
+    }
+    result.append("...");
+    return result;
+}
+
+fn pad_right(s: String, width: i32) -> String {
+    let mut result = s;
+    while result.len() < width {
+        result.append(" ");
+    }
+    return result;
+}
+
+fn i32_to_str(n: i32) -> String {
+    if n == 0 { return "0"; }
+    let mut result = String::with_capacity(12);
+    let mut val = n;
+    let is_neg = val < 0;
+    if is_neg { val = -val; }
+
+    let mut digits: Array<i32> = [];
+    while val > 0 {
+        digits.append(val % 10);
+        val = val / 10;
+    }
+
+    if is_neg { result.append("-"); }
+    let mut i = digits.len() - 1;
+    while i >= 0 {
+        result.append(char_to_string('0' as i32 + digits.get(i)));
+        i = i - 1;
+    }
+    return result;
+}
+
+fn u64_to_str(n: u64) -> String {
+    if n == 0 as u64 { return "0"; }
+    let mut result = String::with_capacity(20);
+    let mut val = n;
+
+    let mut digits: Array<i32> = [];
+    while val > 0 as u64 {
+        digits.append((val % 10 as u64) as i32);
+        val = val / 10 as u64;
+    }
+
+    let mut i = digits.len() - 1;
+    while i >= 0 {
+        result.append(char_to_string('0' as i32 + digits.get(i)));
+        i = i - 1;
+    }
+    return result;
+}
+
+// Entry point for running
+fn run() with Stdout, MonotonicClock {
+    println("======================================================================");
+    println("Float-to-String Benchmark: fpfmt vs ryu (internal::f64_to_string)");
+    println("======================================================================");
+    println("");
+    println("fpfmt: Russ Cox's unrounded scaling algorithm (this file)");
+    println("ryu:   Bundled ryu-based f64_to_buffer (wado-bundled)");
+    println("");
+
+    // Number of iterations per test
+    let iterations = 10000;
+
+    // Test categories
+    benchmark_category("Integers", iterations, [1.0, 10.0, 100.0, 1000.0, 10000.0]);
+    benchmark_category("Decimals", iterations, [0.1, 0.01, 0.001, 0.0001, 0.00001]);
+    benchmark_category("Pi variants", iterations, [3.141592653589793, 31.41592653589793, 0.3141592653589793]);
+    benchmark_category("Large values", iterations, [1.0e50, 1.0e100, 1.0e200]);
+    benchmark_category("Small values", iterations, [1.0e-50, 1.0e-100, 1.0e-200]);
+    benchmark_category("Powers of 2", iterations, [0.5, 0.25, 0.125, 1024.0, 65536.0]);
+    benchmark_category("Mixed precision", iterations, [1.23456789, 9.87654321, 1.111111111111111]);
+
+    println("");
+    println("======================================================================");
+    println("Benchmark complete.");
+    println("======================================================================");
+}
+
+fn benchmark_category(name: String, iterations: i32, values: Array<f64>) with Stdout, MonotonicClock {
+    println(`\n--- {name} ---`);
+    println("Value                      fpfmt(ns)    ryu(ns)       ratio");
+    println("-----------------------------------------------------------------");
+
+    for let val of values {
+        benchmark_value(val, iterations);
+    }
+}
+
+fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
+    // Benchmark fpfmt (this implementation)
+    let start_fpfmt = now();
+    for let mut i = 0; i < iterations; i += 1 {
+        let _ = f64_to_string(val);
+    }
+    let end_fpfmt = now();
+    let fpfmt_time = (end_fpfmt - start_fpfmt) / (iterations as u64);
+
+    // Benchmark ryu (internal::f64_to_string)
+    let start_ryu = now();
+    for let mut i = 0; i < iterations; i += 1 {
+        let _ = ryu_f64_to_string(val);
+    }
+    let end_ryu = now();
+    let ryu_time = (end_ryu - start_ryu) / (iterations as u64);
+
+    // Calculate ratio (fpfmt / ryu)
+    let ratio = if ryu_time > 0 as u64 {
+        (fpfmt_time as f64) / (ryu_time as f64)
+    } else {
+        0.0
+    };
+
+    // Format value for display (use our fpfmt implementation)
+    let val_str = f64_to_string(val);
+    let display_val = truncate_str(val_str, 24);
+    let padded_val = pad_right(display_val, 25);
+
+    // Build output line
+    let fpfmt_str = format_ns(fpfmt_time);
+    let ryu_str = format_ns(ryu_time);
+    let ratio_str = format_ratio(ratio);
+
+    let mut line = String::with_capacity(80);
+    line.append(padded_val);
+    line.append(" ");
+    line.append(fpfmt_str);
+    line.append("    ");
+    line.append(ryu_str);
+    line.append("     ");
+    line.append(ratio_str);
+    println(line);
+}
+
+fn format_ns(ns: u64) -> String {
+    // Format nanoseconds with padding to 8 chars
+    let s = u64_to_str(ns);
+    let mut result = String::with_capacity(12);
+    // Pad left with spaces
+    let padding = 8 - s.len();
+    for let mut i = 0; i < padding; i += 1 {
+        result.append(" ");
+    }
+    result.append(s);
+    return result;
+}
+
+fn format_ratio(ratio: f64) -> String {
+    // Format ratio with 2 decimal places
+    if ratio < 0.01 {
+        return "~0.00x";
+    }
+    let whole = ratio as i32;
+    let frac = ((ratio - (whole as f64)) * 100.0) as i32;
+    let mut result = String::with_capacity(10);
+    result.append(i32_to_str(whole));
+    result.append(".");
+    if frac < 10 {
+        result.append("0");
+    }
+    result.append(i32_to_str(frac));
+    result.append("x");
+    return result;
+}
+

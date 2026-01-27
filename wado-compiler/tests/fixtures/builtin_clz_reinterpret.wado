@@ -1,0 +1,55 @@
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test i32_clz
+    let clz32_1 = builtin::i32_clz(0);
+    println(`i32_clz(0) = {clz32_1}`);  // 32
+
+    let clz32_2 = builtin::i32_clz(1);
+    println(`i32_clz(1) = {clz32_2}`);  // 31
+
+    let clz32_3 = builtin::i32_clz(0x80000000 as i32);
+    println(`i32_clz(0x80000000) = {clz32_3}`);  // 0
+
+    let clz32_4 = builtin::i32_clz(0x00010000 as i32);
+    println(`i32_clz(0x00010000) = {clz32_4}`);  // 15
+
+    // Test i64_clz
+    let clz64_1 = builtin::i64_clz(0 as i64);
+    println(`i64_clz(0) = {clz64_1}`);  // 64
+
+    let clz64_2 = builtin::i64_clz(1 as i64);
+    println(`i64_clz(1) = {clz64_2}`);  // 63
+
+    let clz64_3 = builtin::i64_clz(0x8000000000000000 as i64);
+    println(`i64_clz(0x8000000000000000) = {clz64_3}`);  // 0
+
+    // Test f64 <-> i64 reinterpret
+    let pi = 3.141592653589793;
+    let pi_bits = builtin::i64_reinterpret_f64(pi);
+    println(`f64 pi bits = {pi_bits}`);  // 4614256656552045848
+
+    let back_to_pi = builtin::f64_reinterpret_i64(pi_bits);
+    println(`back to pi = {back_to_pi}`);  // 3.141592653589793
+
+    // Test with special values
+    let zero_bits = builtin::i64_reinterpret_f64(0.0);
+    println(`f64 0.0 bits = {zero_bits}`);  // 0
+
+    let neg_zero_bits = builtin::i64_reinterpret_f64(-0.0);
+    println(`f64 -0.0 bits = {neg_zero_bits}`);  // -9223372036854775808 (0x8000000000000000)
+
+    // Test f32 <-> i32 reinterpret
+    let pi32 = 3.14159265 as f32;
+    let pi32_bits = builtin::i32_reinterpret_f32(pi32);
+    println(`f32 pi bits = {pi32_bits}`);  // 1078530011
+
+    let back_to_pi32 = builtin::f32_reinterpret_i32(pi32_bits);
+    println(`back to f32 pi = {back_to_pi32}`);  // approximately 3.1415927
+
+    let zero32_bits = builtin::i32_reinterpret_f32(0.0 as f32);
+    println(`f32 0.0 bits = {zero32_bits}`);  // 0
+}
+
+__DATA__
+{"stdout": "i32_clz(0) = 32\ni32_clz(1) = 31\ni32_clz(0x80000000) = 0\ni32_clz(0x00010000) = 15\ni64_clz(0) = 64\ni64_clz(1) = 63\ni64_clz(0x8000000000000000) = 0\nf64 pi bits = 4614256656552045848\nback to pi = 3.141592653589793\nf64 0.0 bits = 0\nf64 -0.0 bits = -9223372036854775808\nf32 pi bits = 1078530011\nback to f32 pi = 3.1415927\nf32 0.0 bits = 0\n"}

@@ -1,0 +1,48 @@
+// Test u64 arithmetic and casts to i32
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test basic u64 to i32 cast (this was previously broken)
+    let val = 12345 as u64;
+    let mut digits: Array<i32> = [];
+
+    let mut v = val;
+    while v > 0 as u64 {
+        // This cast from u64 to i32 was previously broken in codegen
+        digits.append((v % 10 as u64) as i32);
+        v = v / 10 as u64;
+    }
+
+    // Verify the digits were captured correctly
+    assert digits.len() == 5;
+    assert digits.get(0) == 5;  // last digit
+    assert digits.get(1) == 4;
+    assert digits.get(2) == 3;
+    assert digits.get(3) == 2;
+    assert digits.get(4) == 1;  // first digit
+
+    // Test other u64 to i32 casts
+    let a = 255 as u64;
+    let b = a as i32;
+    assert b == 255;
+
+    // Test u64 to u32 cast
+    let c = 1000 as u64;
+    let d = c as u32;
+    assert d == 1000 as u32;
+
+    // Test i64 to i32 cast
+    let e = 42 as i64;
+    let f = e as i32;
+    assert f == 42;
+
+    // Test i64 to u32 cast
+    let g = 100 as i64;
+    let h = g as u32;
+    assert h == 100 as u32;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
