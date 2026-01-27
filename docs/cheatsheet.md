@@ -64,9 +64,9 @@ let z: i64 = 100;       // with type annotation
 
 ```wado
 // Primitives
-i8, i16, i32, i64       // signed integers
-u8, u16, u32, u64       // unsigned integers
-f32, f64                // floats
+i8, i16, i32, i64, i128  // signed integers
+u8, u16, u32, u64, u128  // unsigned integers
+f32, f64                 // floats
 bool, char
 
 // Composite
@@ -670,6 +670,10 @@ use utils from "./utils.wado";
 
 // Rename
 use {foo as bar} from "./mod.wado";
+
+// Re-export (pub use)
+pub use {foo, bar} from "./internal.wado";  // re-export for other modules
+pub use {foo as baz} from "./internal.wado"; // re-export with rename
 ```
 
 ## Effects

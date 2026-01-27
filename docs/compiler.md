@@ -241,16 +241,16 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 
 **Core Library (`core/`):**
 
-| Module            | File              | Status                                             |
-| ----------------- | ----------------- | -------------------------------------------------- |
-| `core:prelude`    | `prelude.wado`    | Partial (parser doesn't support generic resources) |
-| `core:cli`        | `cli.wado`        | Complete                                           |
-| `core:clocks`     | `clocks.wado`     | Complete (MonotonicClock, now())                   |
-| `core:filesystem` | `filesystem.wado` | Complete                                           |
-| `core:stream`     | `stream.wado`     | Complete                                           |
-| `core:int128`     | `int128.wado`     | Complete (u128/i128 structs with operator traits)  |
-| `core:internal`   | `internal.wado`   | Internal (compiler-generated code support)         |
-| `core:builtin`    | `builtin.wado`    | Compiler intrinsics with `#[canonical(...)]` attrs |
+| Module                | File                  | Status                                             |
+| --------------------- | --------------------- | -------------------------------------------------- |
+| `core:prelude`        | `prelude.wado`        | Partial (parser doesn't support generic resources) |
+| `core:cli`            | `cli.wado`            | Complete                                           |
+| `core:clocks`         | `clocks.wado`         | Complete (MonotonicClock, now())                   |
+| `core:filesystem`     | `filesystem.wado`     | Complete                                           |
+| `core:stream`         | `stream.wado`         | Complete                                           |
+| `core:prelude/int128` | `prelude/int128.wado` | Complete (u128/i128, re-exported from prelude)     |
+| `core:internal`       | `internal.wado`       | Internal (compiler-generated code support)         |
+| `core:builtin`        | `builtin.wado`        | Compiler intrinsics with `#[canonical(...)]` attrs |
 
 **WASI Library (`wasi/`):**
 
@@ -824,7 +824,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 
 ### 128-bit Integer Types (i128/u128)
 
-Unlike primitive types (`i32`, `i64`, etc.), Wado's 128-bit integers are implemented as **structs** in `core:int128`, not as compiler builtins:
+Unlike primitive types (`i32`, `i64`, etc.), Wado's 128-bit integers are implemented as **structs** in `core:prelude/int128` and re-exported from the prelude, making them available without explicit imports:
 
 ```wado
 pub struct u128 {

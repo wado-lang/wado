@@ -121,6 +121,17 @@ utils::helper();
 3. Name resolution: Follow re-export chains during lookup
 4. Error reporting: Include re-export path in "symbol not found" errors
 
+### Implementation Status
+
+Implemented. Key components:
+
+- `ReExportTarget` struct in `symbol.rs` tracks re-export relationships
+- `register_reexport()` registers re-exports without creating duplicate symbols
+- `lookup_in_module()` resolves re-export chains transparently
+- Circular re-export detection via visited set
+
+First use case: `i128`/`u128` types are defined in `core:prelude/int128` and re-exported from `core:prelude`.
+
 ## Not in Scope
 
 - `pub(crate)` or other visibility modifiers (Wado has no crate concept)
