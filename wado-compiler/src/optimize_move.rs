@@ -161,6 +161,18 @@ fn insert_moves_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) {
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            insert_moves_in_expr(value, type_table);
+            // Wrap the tuple value in Move if eligible
+            let TirStmtKind::LetPattern { value, .. } = &mut stmt.kind else {
+                unreachable!()
+            };
+            let old_value = std::mem::replace(
+                value,
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, stmt.span),
+            );
+            *value = wrap_in_move_if_eligible(old_value, type_table);
+        }
         TirStmtKind::IfPattern {
             scrutinee,
             then_block,
@@ -427,6 +439,21 @@ fn collect_value_copy_types_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            // The tuple value needs copying if it's not fresh
+            if needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
+                copy_types.insert(value.type_id);
+            }
+            // Also collect element types that need copying for destructuring
+            if let ResolvedType::Tuple(elem_types) = type_table.get(value.type_id) {
+                for &elem_type in elem_types {
+                    if needs_value_copy(elem_type, type_table) {
+                        copy_types.insert(elem_type);
+                    }
+                }
+            }
+            collect_value_copy_types_in_expr(value, type_table, copy_types);
+        }
         TirStmtKind::IfPattern {
             scrutinee,
             then_block,

@@ -329,6 +329,7 @@ fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> boo
             .as_ref()
             .is_some_and(|e| expr_has_complex_generic_types(e, type_table)),
         TirStmtKind::Continue => false,
+        TirStmtKind::LetPattern { value, .. } => expr_has_complex_generic_types(value, type_table),
     }
 }
 
@@ -541,6 +542,9 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
             }
         }
         TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_callees_from_expr(value, callees);
+        }
     }
 }
 
@@ -1325,6 +1329,32 @@ fn inline_calls_in_block(
             TirStmtKind::Continue => {
                 new_stmts.push(TirStmt::new(TirStmtKind::Continue, stmt.span));
             }
+            TirStmtKind::LetPattern {
+                pattern,
+                is_mut,
+                value,
+            } => {
+                let mut new_value = value;
+                inline_calls_in_expr(
+                    &mut new_value,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                    inline_counter,
+                );
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::LetPattern {
+                        pattern,
+                        is_mut,
+                        value: new_value,
+                    },
+                    stmt.span,
+                ));
+            }
         }
     }
 
@@ -2007,6 +2037,21 @@ fn remap_stmt_with_label(
                 .map(|v| remap_expr(v, param_to_local, local_offset, param_count, source_module)),
         },
         TirStmtKind::Continue => TirStmtKind::Continue,
+        TirStmtKind::LetPattern {
+            pattern,
+            is_mut,
+            value,
+        } => TirStmtKind::LetPattern {
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            is_mut: *is_mut,
+            value: remap_expr(
+                value,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+        },
     };
 
     TirStmt::new(kind, stmt.span)
@@ -2760,6 +2805,21 @@ fn remap_stmt(
                 .map(|v| remap_expr(v, param_to_local, local_offset, param_count, source_module)),
         },
         TirStmtKind::Continue => TirStmtKind::Continue,
+        TirStmtKind::LetPattern {
+            pattern,
+            is_mut,
+            value,
+        } => TirStmtKind::LetPattern {
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            is_mut: *is_mut,
+            value: remap_expr(
+                value,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
+        },
     };
 
     TirStmt::new(kind, stmt.span)

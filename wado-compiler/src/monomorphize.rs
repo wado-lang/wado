@@ -718,6 +718,10 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(upd, type_table);
                 }
             }
+            TirStmtKind::LetPattern { pattern, value, .. } => {
+                self.rewrite_types_in_pattern(pattern, type_table);
+                self.rewrite_types_in_expr(value, type_table);
+            }
         }
     }
 
@@ -1506,6 +1510,9 @@ impl Monomorphizer {
                         type_table,
                     );
                 }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
             }
         }
     }
@@ -2328,6 +2335,10 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(upd, substitution, type_table);
                 }
             }
+            TirStmtKind::LetPattern { pattern, value, .. } => {
+                self.substitute_types_in_pattern(pattern, substitution, type_table);
+                self.substitute_types_in_expr(value, substitution, type_table);
+            }
         }
     }
 
@@ -2998,6 +3009,9 @@ impl Monomorphizer {
                 if let Some(upd) = update {
                     self.rewrite_function_calls_in_expr(upd, type_table);
                 }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.rewrite_function_calls_in_expr(value, type_table);
             }
         }
     }

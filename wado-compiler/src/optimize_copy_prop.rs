@@ -222,6 +222,9 @@ fn collect_assigned_in_stmt(stmt: &TirStmt, assigned: &mut HashSet<u32>) {
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_assigned_in_expr(value, assigned);
+        }
     }
 }
 
@@ -434,6 +437,9 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut HashMap<u32, LocalUsage>, i
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_usage_in_expr(value, usage, in_loop, false);
+        }
     }
 }
 
@@ -762,6 +768,9 @@ fn substitute_in_stmt(stmt: &mut TirStmt, from_local: u32, source: &CopySource) 
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            substitute_in_expr(value, from_local, source);
+        }
     }
 }
 
@@ -1027,6 +1036,9 @@ fn collect_copy_bindings_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_copy_bindings_in_expr(value, bindings, block_local_assigned);
+        }
     }
 }
 
@@ -1249,6 +1261,9 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u32>) 
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            remove_copy_bindings_in_expr(value, dead_locals);
+        }
     }
 }
 

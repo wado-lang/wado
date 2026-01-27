@@ -206,6 +206,9 @@ impl<'a> EffectChecker<'a> {
                     self.check_expr(upd);
                 }
             }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.check_expr(value);
+            }
         }
     }
 

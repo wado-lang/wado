@@ -137,6 +137,9 @@ pub enum TypeError {
         param_name: String,
         span: Span,
     },
+
+    /// Invalid pattern in context
+    InvalidPattern { message: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -219,6 +222,13 @@ impl std::fmt::Display for TypeError {
                     f,
                     "{}:{}: type '{}' does not implement trait '{}' required by bound on '{}'",
                     span.line, span.column, type_name, trait_name, param_name
+                )
+            }
+            TypeError::InvalidPattern { message, span } => {
+                write!(
+                    f,
+                    "{}:{}: invalid pattern: {}",
+                    span.line, span.column, message
                 )
             }
         }
@@ -2102,19 +2112,128 @@ impl<'a> Resolver<'a> {
             (value.clone(), value.type_id)
         };
 
-        let local_index = ctx.add_local(let_stmt.name.clone(), type_id, let_stmt.is_mut);
+        // Handle different pattern types
+        match &let_stmt.pattern {
+            ast::Pattern::Ident(name) => {
+                let local_index = ctx.add_local(name.clone(), type_id, let_stmt.is_mut);
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut: let_stmt.is_mut,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value,
+                    },
+                    let_stmt.span,
+                )
+            }
+            ast::Pattern::Tuple(_) => {
+                // Tuple destructuring: let [a, b] = tuple_expr;
+                let tir_pattern = self.resolve_let_pattern(
+                    &let_stmt.pattern,
+                    type_id,
+                    let_stmt.is_mut,
+                    let_stmt.span,
+                    ctx,
+                );
+                TirStmt::new(
+                    TirStmtKind::LetPattern {
+                        pattern: tir_pattern,
+                        is_mut: let_stmt.is_mut,
+                        value,
+                    },
+                    let_stmt.span,
+                )
+            }
+            ast::Pattern::Wildcard => {
+                // Wildcard pattern: let _ = expr; - evaluate but don't bind
+                // We still need a local to store the value temporarily
+                TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
+            }
+            ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
+                // These patterns are not valid in let statements
+                self.errors.push(TypeError::InvalidPattern {
+                    message: "literal and variant patterns are not allowed in let statements"
+                        .to_string(),
+                    span: let_stmt.span,
+                });
+                // Return a dummy statement
+                TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
+            }
+        }
+    }
 
-        TirStmt::new(
-            TirStmtKind::Let {
-                name: let_stmt.name.clone(),
-                local_index,
-                is_mut: let_stmt.is_mut,
-                is_reactive: let_stmt.is_reactive,
-                type_id,
-                value,
-            },
-            let_stmt.span,
-        )
+    /// Resolve a let pattern (for tuple destructuring)
+    fn resolve_let_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+        type_id: TypeId,
+        is_mut: bool,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        match pattern {
+            ast::Pattern::Ident(name) => {
+                let local_index = ctx.add_local(name.clone(), type_id, is_mut);
+                TirPattern::Binding {
+                    name: name.clone(),
+                    local_index,
+                    type_id,
+                }
+            }
+            ast::Pattern::Tuple(patterns) => {
+                // Get element types from the tuple type
+                let elem_types = {
+                    let type_table = self.type_table.borrow();
+                    if let ResolvedType::Tuple(elem_types) = type_table.get(type_id) {
+                        elem_types.clone()
+                    } else {
+                        // Error: expected tuple type
+                        self.errors.push(TypeError::TypeMismatch {
+                            expected: "tuple type".to_string(),
+                            found: type_table.type_name(type_id),
+                            span,
+                        });
+                        vec![TypeTable::UNKNOWN; patterns.len()]
+                    }
+                };
+
+                // Check length
+                if patterns.len() != elem_types.len() {
+                    self.errors.push(TypeError::TypeMismatch {
+                        expected: format!("tuple with {} elements", elem_types.len()),
+                        found: format!("pattern with {} elements", patterns.len()),
+                        span,
+                    });
+                }
+
+                // Resolve each sub-pattern with its corresponding element type
+                let tir_patterns: Vec<TirPattern> = patterns
+                    .iter()
+                    .zip(
+                        elem_types
+                            .iter()
+                            .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
+                    )
+                    .map(|(p, &elem_type)| {
+                        self.resolve_let_pattern(p, elem_type, is_mut, span, ctx)
+                    })
+                    .collect();
+
+                TirPattern::Tuple(tir_patterns)
+            }
+            ast::Pattern::Wildcard => TirPattern::Wildcard,
+            ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
+                // These patterns are not valid in let statements
+                self.errors.push(TypeError::InvalidPattern {
+                    message: "literal and variant patterns are not allowed in let statements"
+                        .to_string(),
+                    span,
+                });
+                TirPattern::Wildcard
+            }
+        }
     }
 
     /// Resolve an expression statement

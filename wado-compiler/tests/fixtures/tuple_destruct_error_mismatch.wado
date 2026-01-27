@@ -1,0 +1,15 @@
+// Tuple destructuring with element count mismatch should fail
+
+use { println, Stdout } from "core:cli";
+
+fn make_pair() -> [i32, i32] {
+    return [1, 2];
+}
+
+fn run() with Stdout {
+    let [a, b, c] = make_pair();
+    println(`{a}`);
+}
+
+__DATA__
+{"compile_error": "pattern with 3 elements"}

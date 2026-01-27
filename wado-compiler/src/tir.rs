@@ -1324,6 +1324,15 @@ pub enum TirStmtKind {
         /// Optional update expression (executed after body, before next iteration)
         update: Option<TirExpr>,
     },
+    /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
+    LetPattern {
+        /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
+        pattern: TirPattern,
+        /// Whether bindings are mutable
+        is_mut: bool,
+        /// The value expression (must be a tuple)
+        value: TirExpr,
+    },
 }
 
 // ============================================================================

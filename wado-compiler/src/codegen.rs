@@ -253,6 +253,8 @@ struct FunctionContext {
     /// Counter for generating unique `IfPattern` temp locals per scrutinee type
     /// Key is the `ValType` (as string), value is the counter for that type
     if_pattern_counters: HashMap<String, u32>,
+    /// Counter for generating unique `LetPattern` temp locals
+    let_pattern_counter: u32,
     /// Context for managing value copy scratch locals
     copy_context: CopyContext,
 }
@@ -279,6 +281,7 @@ impl FunctionContext {
             local_closure_ids: HashMap::new(),
             indirect_call_counters: HashMap::new(),
             if_pattern_counters: HashMap::new(),
+            let_pattern_counter: 0,
             copy_context: CopyContext::new(),
         }
     }
@@ -302,6 +305,7 @@ impl FunctionContext {
             closure_captures: Vec::new(),
             indirect_call_counters: HashMap::new(),
             if_pattern_counters: HashMap::new(),
+            let_pattern_counter: 0,
             local_index_offset: 0,
             local_closure_ids: HashMap::new(),
             copy_context: CopyContext::new(),
@@ -327,6 +331,18 @@ impl FunctionContext {
         for counter in self.if_pattern_counters.values_mut() {
             *counter = 0;
         }
+    }
+
+    /// Reset let-pattern counter (called between pre-allocation and code generation phases)
+    fn reset_let_pattern_counter(&mut self) {
+        self.let_pattern_counter = 0;
+    }
+
+    /// Get the next let-pattern temp local name and increment counter
+    fn next_let_pattern_local_name(&mut self) -> String {
+        let name = format!("__let_pattern_temp_{}", self.let_pattern_counter);
+        self.let_pattern_counter += 1;
+        name
     }
 
     /// Get next for-of loop ID and increment counter
@@ -4690,6 +4706,9 @@ impl Codegen {
                     Self::collect_closures_from_expr(upd, closures);
                 }
             }
+            TirStmtKind::LetPattern { value, .. } => {
+                Self::collect_closures_from_expr(value, closures);
+            }
             TirStmtKind::Return { value: None }
             | TirStmtKind::Break { .. }
             | TirStmtKind::Continue => {}
@@ -4985,6 +5004,9 @@ impl Codegen {
                 if let Some(upd) = update {
                     Self::find_closure_locals_in_expr(upd, result, closure_counter);
                 }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                Self::find_closure_locals_in_expr(value, result, closure_counter);
             }
             TirStmtKind::Return { value: None }
             | TirStmtKind::Break { .. }
@@ -8544,6 +8566,32 @@ impl Codegen {
                 func.instruction(&Instruction::LocalSet(adjusted_index));
             }
 
+            TirStmtKind::LetPattern {
+                pattern,
+                is_mut: _,
+                value,
+            } => {
+                // Generate the value expression (should be a tuple)
+                self.generate_expr(func, value, type_table, ctx, builder);
+
+                // Apply value copy for tuple types (value semantics)
+                if self.needs_value_copy(value.type_id, type_table)
+                    && !matches!(value.kind, TirExprKind::Move { .. })
+                {
+                    self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
+                }
+
+                // Destructure the tuple according to the pattern
+                self.generate_let_pattern_binding(
+                    func,
+                    pattern,
+                    value.type_id,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+            }
+
             TirStmtKind::Expr(expr) => {
                 // Use optimized statement generation to avoid drop-tee pattern
                 self.generate_expr_as_stmt(func, expr, type_table, ctx, builder);
@@ -8958,6 +9006,124 @@ impl Codegen {
                 self.generate_for_pattern(
                     func, init, scrutinee, pattern, body, update, type_table, ctx, builder,
                 );
+            }
+        }
+    }
+
+    /// Generate code for let pattern binding (tuple destructuring)
+    /// The tuple value should already be on the stack
+    fn generate_let_pattern_binding(
+        &self,
+        func: &mut Function,
+        pattern: &TirPattern,
+        tuple_type_id: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        _builder: &CoreModuleBuilder,
+    ) {
+        match pattern {
+            TirPattern::Tuple(patterns) => {
+                // Get element types from the tuple
+                let elem_types = if let ResolvedType::Tuple(types) = type_table.get(tuple_type_id) {
+                    types.clone()
+                } else {
+                    // Error: expected tuple type, but we'll handle gracefully
+                    vec![TypeTable::UNKNOWN; patterns.len()]
+                };
+
+                // Get the tuple type index
+                let tuple_type_idx = if let Some(idx) = self.get_tuple_type_idx(&elem_types) {
+                    idx
+                } else {
+                    panic!("tuple type not registered for destructuring");
+                };
+
+                // Get the ValType for the tuple to allocate a temporary local
+                let tuple_val_type = self.type_id_to_valtype(type_table, tuple_type_id);
+
+                // Store the tuple in a temporary local (using pre-allocated local)
+                let local_name = ctx.next_let_pattern_local_name();
+                let temp_local = ctx.alloc_local(&local_name, tuple_val_type);
+                func.instruction(&Instruction::LocalSet(temp_local));
+
+                // Bind each element
+                for (i, (sub_pattern, elem_type)) in patterns
+                    .iter()
+                    .zip(
+                        elem_types
+                            .iter()
+                            .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
+                    )
+                    .enumerate()
+                {
+                    match sub_pattern {
+                        TirPattern::Binding {
+                            local_index,
+                            type_id: _,
+                            ..
+                        } => {
+                            // Get tuple element and store in local
+                            func.instruction(&Instruction::LocalGet(temp_local));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: tuple_type_idx,
+                                field_index: i as u32,
+                            });
+
+                            // Apply value copy if needed
+                            if self.needs_value_copy(*elem_type, type_table) {
+                                self.generate_value_copy(
+                                    func, *elem_type, type_table, ctx, _builder,
+                                );
+                            }
+
+                            let adjusted_index = *local_index + ctx.local_index_offset;
+                            func.instruction(&Instruction::LocalSet(adjusted_index));
+                        }
+                        TirPattern::Tuple(_) => {
+                            // Nested tuple destructuring
+                            func.instruction(&Instruction::LocalGet(temp_local));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: tuple_type_idx,
+                                field_index: i as u32,
+                            });
+
+                            // Recursively bind the nested tuple
+                            self.generate_let_pattern_binding(
+                                func,
+                                sub_pattern,
+                                *elem_type,
+                                type_table,
+                                ctx,
+                                _builder,
+                            );
+                        }
+                        TirPattern::Wildcard => {
+                            // Wildcard - don't bind anything
+                        }
+                        TirPattern::Literal(_) | TirPattern::Variant { .. } => {
+                            // These patterns are not valid in let statements
+                            // Should have been caught by resolver
+                        }
+                    }
+                }
+            }
+            TirPattern::Binding {
+                local_index,
+                type_id: _,
+                ..
+            } => {
+                // Single binding - just store the value directly
+                let adjusted_index = *local_index + ctx.local_index_offset;
+                func.instruction(&Instruction::LocalSet(adjusted_index));
+            }
+            TirPattern::Wildcard => {
+                // Wildcard - just drop the value
+                func.instruction(&Instruction::Drop);
+            }
+            TirPattern::Literal(_) | TirPattern::Variant { .. } => {
+                // These patterns are not valid in let statements
+                // Drop the value
+                func.instruction(&Instruction::Drop);
             }
         }
     }
@@ -9555,6 +9721,11 @@ impl Codegen {
             self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
         }
 
+        // Pre-allocate locals for LetPattern statements (tuple destructuring)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_let_pattern_locals(body, type_table, &mut func_ctx);
+        }
+
         // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
         if let Some(body) = &tir_func.body {
             self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
@@ -9564,6 +9735,8 @@ impl Codegen {
         func_ctx.reset_for_of_counter();
         // Reset if-pattern counters so code generation uses the same indices as pre-allocation
         func_ctx.reset_if_pattern_counters();
+        // Reset let-pattern counter so code generation uses the same indices as pre-allocation
+        func_ctx.reset_let_pattern_counter();
 
         // Generate the function code
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
@@ -9784,6 +9957,11 @@ impl Codegen {
             self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
         }
 
+        // Pre-allocate locals for LetPattern statements (tuple destructuring)
+        if let Some(body) = &tir_func.body {
+            self.preallocate_let_pattern_locals(body, type_table, &mut func_ctx);
+        }
+
         // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
         if let Some(body) = &tir_func.body {
             self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
@@ -9793,6 +9971,8 @@ impl Codegen {
         func_ctx.reset_for_of_counter();
         // Reset if-pattern counters so code generation uses the same indices as pre-allocation
         func_ctx.reset_if_pattern_counters();
+        // Reset let-pattern counter so code generation uses the same indices as pre-allocation
+        func_ctx.reset_let_pattern_counter();
 
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
 
@@ -11374,6 +11554,210 @@ impl Codegen {
             }
             _ => {
                 // Other expressions don't contain blocks
+            }
+        }
+    }
+
+    /// Pre-allocate temp locals for `LetPattern` statements (tuple destructuring).
+    /// This must be called before the Function is created.
+    fn preallocate_let_pattern_locals(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        for stmt in &block.stmts {
+            self.preallocate_let_pattern_locals_from_stmt(stmt, type_table, ctx);
+        }
+    }
+
+    /// Recursively pre-allocate temp locals for tuple patterns (including nested ones).
+    /// Must be called in the same order as code generation to ensure counter alignment.
+    fn preallocate_let_pattern_for_pattern(
+        &self,
+        pattern: &TirPattern,
+        type_id: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        if let TirPattern::Tuple(sub_patterns) = pattern {
+            // Allocate a temp local for this tuple
+            let tuple_val_type = self.type_id_to_valtype(type_table, type_id);
+            let local_name = ctx.next_let_pattern_local_name();
+            ctx.alloc_local(&local_name, tuple_val_type);
+
+            // Recursively handle nested tuple patterns
+            if let ResolvedType::Tuple(elem_types) = type_table.get(type_id) {
+                for (sub_pattern, elem_type) in sub_patterns.iter().zip(elem_types.iter()) {
+                    self.preallocate_let_pattern_for_pattern(
+                        sub_pattern,
+                        *elem_type,
+                        type_table,
+                        ctx,
+                    );
+                }
+            }
+        }
+    }
+
+    fn preallocate_let_pattern_locals_from_stmt(
+        &self,
+        stmt: &TirStmt,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::LetPattern { pattern, value, .. } => {
+                // Pre-allocate temp locals for all tuple patterns (including nested ones)
+                self.preallocate_let_pattern_for_pattern(pattern, value.type_id, type_table, ctx);
+                // Check value expression for nested blocks
+                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
+            }
+            TirStmtKind::Let { value, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
+            }
+            TirStmtKind::Expr(expr) => {
+                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(v) = value {
+                    self.preallocate_let_pattern_locals_from_expr(v, type_table, ctx);
+                }
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.preallocate_let_pattern_locals_from_expr(condition, type_table, ctx);
+                self.preallocate_let_pattern_locals(then_block, type_table, ctx);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_let_pattern_locals(else_blk, type_table, ctx);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                self.preallocate_let_pattern_locals_from_expr(condition, type_table, ctx);
+                self.preallocate_let_pattern_locals(body, type_table, ctx);
+            }
+            TirStmtKind::Loop { body } => {
+                self.preallocate_let_pattern_locals(body, type_table, ctx);
+            }
+            TirStmtKind::For {
+                init,
+                condition,
+                body,
+                update,
+            } => {
+                for s in init {
+                    self.preallocate_let_pattern_locals_from_stmt(s, type_table, ctx);
+                }
+                if let Some(c) = condition {
+                    self.preallocate_let_pattern_locals_from_expr(c, type_table, ctx);
+                }
+                self.preallocate_let_pattern_locals(body, type_table, ctx);
+                if let Some(u) = update {
+                    self.preallocate_let_pattern_locals_from_expr(u, type_table, ctx);
+                }
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(iterable, type_table, ctx);
+                self.preallocate_let_pattern_locals(body, type_table, ctx);
+            }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.preallocate_let_pattern_locals(block, type_table, ctx);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.preallocate_let_pattern_locals_from_expr(scrutinee, type_table, ctx);
+                self.preallocate_let_pattern_locals(then_block, type_table, ctx);
+                if let Some(else_blk) = else_block {
+                    self.preallocate_let_pattern_locals(else_blk, type_table, ctx);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.preallocate_let_pattern_locals_from_expr(scrutinee, type_table, ctx);
+                self.preallocate_let_pattern_locals(body, type_table, ctx);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    self.preallocate_let_pattern_locals_from_stmt(s, type_table, ctx);
+                }
+                self.preallocate_let_pattern_locals_from_expr(scrutinee, type_table, ctx);
+                self.preallocate_let_pattern_locals(body, type_table, ctx);
+                if let Some(u) = update {
+                    self.preallocate_let_pattern_locals_from_expr(u, type_table, ctx);
+                }
+            }
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.preallocate_let_pattern_locals_from_expr(v, type_table, ctx);
+                }
+            }
+            TirStmtKind::Continue => {}
+        }
+    }
+
+    fn preallocate_let_pattern_locals_from_expr(
+        &self,
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+                self.preallocate_let_pattern_locals(block, type_table, ctx);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.preallocate_let_pattern_locals_from_expr(condition, type_table, ctx);
+                self.preallocate_let_pattern_locals(then_branch, type_table, ctx);
+                if let Some(else_blk) = else_branch {
+                    self.preallocate_let_pattern_locals(else_blk, type_table, ctx);
+                }
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    self.preallocate_let_pattern_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(callee, type_table, ctx);
+                for arg in args {
+                    self.preallocate_let_pattern_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(receiver, type_table, ctx);
+                for arg in args {
+                    self.preallocate_let_pattern_locals_from_expr(arg, type_table, ctx);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(left, type_table, ctx);
+                self.preallocate_let_pattern_locals_from_expr(right, type_table, ctx);
+            }
+            TirExprKind::Unary { expr: inner, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(inner, type_table, ctx);
+            }
+            _ => {
+                // Other expressions don't contain nested blocks or let patterns
             }
         }
     }
