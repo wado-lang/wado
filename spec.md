@@ -533,7 +533,6 @@ This separation allows Wado to use optimal internal representations (e.g., Wasm 
 | `f16`                     | -                            | -                                    | TODO: Wasm half-precision proposal (Phase 1)     |
 | `String`                  | GC `array i8` (UTF-8)        | `string`                             | UTF-8 string, GC-managed internally              |
 | `Array<T>`                | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally             |
-| `Dict<K, V>`              | GC struct (hash table)       | `list<tuple<K, V>>`                  | Hash map internally, list at boundary            |
 | `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`    | `tuple<T1, T2, ...>`                 | Tuple types                                      |
 | `Option<T>`               | GC variant                   | `option<T>`                          | Optional value                                   |
 | `Result<T, E>`            | GC variant                   | `result<T, E>`                       | Result type                                      |
@@ -554,7 +553,6 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 
 - `String` - UTF-8 string type
 - `Array<T>` - Dynamic array type
-- `Dict<K, V>` - Dictionary type
 - `Tuple<T1, T2, ...>` - Alias for `[T1, T2, ...]`
 - `Reactive<T>` - Reactive value
 - `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
@@ -569,7 +567,7 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use {String, Array, Dict, Tuple, Reactive, Option, Result, Stream, Future, Pollable} from "core:prelude";
+use {String, Array, Tuple, Reactive, Option, Result, Stream, Future, Pollable} from "core:prelude";
 ```
 
 ### Primitive Types
@@ -1812,25 +1810,23 @@ let bob: User = { name, age, active: false };
 // Computed keys not allowed in structs
 ```
 
-### Dictionaries
+### TreeMap (Sorted Map)
+
+For associative arrays, use `TreeMap` from `core:collections`:
 
 ```wado
-// String keys
-let d: Dict<String, i32> = { x: 10, y: 20 };
+use { TreeMap } from "core:collections";
 
-// Computed key
-let key = "dynamic";
-let d: Dict<String, i32> = {
-    static_key: 1,
-    [key]: 2,
-    [get_key()]: 3,
-};
+let mut map = TreeMap::<String, i32>::new();
+map.insert("x", 10);
+map.insert("y", 20);
 
-// Non-String keys
-let nums: Dict<i32, String> = {
-    [1]: "one",
-    [2]: "two",
-};
+// Index syntax
+map["z"] = 30;                    // assignment
+if let Some(v) = map["x"] { ... } // access returns Option<V>
+
+// Keys are stored in sorted order
+let keys = map.keys();  // returns Array<K> in sorted order
 ```
 
 ### Access Methods
@@ -1839,8 +1835,9 @@ let nums: Dict<i32, String> = {
 // Struct: dot notation
 user.name
 
-// Dict: bracket notation
-d["key"]
+// TreeMap: bracket notation or methods
+map["key"]        // returns Option<V>
+map.get("key")    // returns Option<V>
 ```
 
 ## Module System

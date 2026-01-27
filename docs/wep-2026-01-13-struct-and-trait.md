@@ -307,7 +307,7 @@ trait Clone {
 impl Clone for String { ... }
 impl<T: Clone> Clone for Array<T> { ... }
 impl<T: Clone> Clone for Option<T> { ... }
-impl<K: Clone, V: Clone> Clone for Dict<K, V> { ... }
+impl<K: Clone, V: Clone> Clone for TreeMap<K, V> { ... }
 ```
 
 #### Drop
@@ -429,13 +429,15 @@ trait Ord: Eq + PartialOrd {
 
 #### Hash
 
-For hashable types (used by `Dict`):
+For hashable types:
 
 ```wado
 trait Hash {
     fn hash(&self) -> u64;
 }
 ```
+
+Note: `TreeMap` (the default associative array in Wado) uses `Ord` for key ordering, not `Hash`.
 
 #### Iterator
 

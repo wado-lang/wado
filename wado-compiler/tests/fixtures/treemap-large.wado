@@ -1,20 +1,21 @@
 // TreeMap with many elements
 use { println } from "core:cli";
+use { TreeMap } from "core:collections";
 
 fn run() with Stdout {
     let mut map = TreeMap::<String, i32>::new();
 
     // Insert 50 items
     for let mut i = 0; i < 50; i += 1 {
-        map.insert(`item{i}`, i);
+        map[`item{i}`] = i;
     }
     assert map.len() == 50;
 
     // Verify some values
-    if let Some(v0) = map.get("item0") {
+    if let Some(v0) = map["item0"] {
         assert v0 == 0;
     }
-    if let Some(v49) = map.get("item49") {
+    if let Some(v49) = map["item49"] {
         assert v49 == 49;
     }
 

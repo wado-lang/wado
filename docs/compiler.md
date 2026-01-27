@@ -935,7 +935,6 @@ See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full d
 - [x] Implicit struct literals with type context (`let p: Point = { x: 1, y: 2 }`)
 - [x] Tuple literals (`[1, 2, 3]` creates `[i32, i32, i32]`)
 - [x] Array literals (`[1, 2, 3] as Array<i32>` or via type coercion)
-- [ ] Dict literals (`{ "key": "value" }`)
 - [ ] Range expressions
 - [ ] `?` operator (error propagation)
 
@@ -1028,7 +1027,6 @@ See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full d
 - [x] Value semantics for Option<T> (conditional copy of inner value)
 - [ ] Value semantics for Result<T, E> (blocked on Result codegen)
 - [x] Value semantics for Variant (copy tag + all fields)
-- [ ] Value semantics for Dict<K, V> (blocked on Dict codegen)
 - [x] Template string array concatenation
 - [ ] String UTF-8 validation (reject invalid byte sequences at construction)
 - [ ] Reactive signals (source values)
@@ -1400,7 +1398,6 @@ Wado uses value semantics for composite types: assignment creates a copy rather 
 | Option<T>   | Conditional copy if non-null                      | ✅     |
 | Result<T,E> | Not yet implemented (codegen blocked)             | ❌     |
 | Variant     | Not yet implemented (codegen blocked)             | ❌     |
-| Dict<K,V>   | Not yet implemented (codegen blocked)             | ❌     |
 
 ### Reference Types
 

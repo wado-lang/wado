@@ -124,6 +124,33 @@ let first = arr[0];                      // index access (read)
 arr[0] = 100;                            // index assignment (write, requires mut)
 ```
 
+## Strings
+
+```wado
+// String literals
+let s = "hello";                         // String literal (UTF-8)
+
+// String constructors
+let s = String::with_capacity(100);      // empty string with pre-allocated capacity
+
+// String methods
+let s = "hello";
+let n = s.len();                         // get length in bytes (5)
+let empty = s.is_empty();                // check if empty (false)
+let byte = s.get(0);                     // get byte at index
+s.set(0, 72);                            // set byte at index (requires mut)
+
+// String building (O(1) amortized append)
+let mut builder = String::with_capacity(20);
+builder.append("Hello");
+builder.append(", ");
+builder.append("World!");
+// builder is now "Hello, World!"
+
+// String concatenation (static method)
+let combined = String::concat("Hello, ", "World!");  // "Hello, World!"
+```
+
 ## Structs
 
 ```wado
@@ -742,6 +769,15 @@ eprintln("error line");
 // core:clocks
 use {now, MonotonicClock} from "core:clocks";
 let t = now();            // current time in nanoseconds
+
+// core:collections - TreeMap (sorted map)
+use {TreeMap} from "core:collections";
+let mut map = TreeMap::<String, i32>::new();
+map["key"] = 42;          // index assignment
+map["key2"] = 100;
+if let Some(v) = map["key"] { ... }  // index access returns Option<V>
+let keys = map.keys();    // keys in sorted order
+map.remove("key");
 ```
 
 ## Generic Functions and Methods
@@ -988,7 +1024,6 @@ Wado intentionally does not support macros.
 - Effect handlers
 - `reactive` values and `observe()`
 - `stores[...]` syntax for reference storage
-- `Dict<K, V>`
 - postfix `?` operator (error propagation)
 - JSX
 - Generic function/method type inference

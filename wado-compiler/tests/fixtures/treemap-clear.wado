@@ -1,12 +1,13 @@
 // TreeMap clear operation
 use { println } from "core:cli";
+use { TreeMap } from "core:collections";
 
 fn run() with Stdout {
     let mut map = TreeMap::<String, i32>::new();
 
-    map.insert("a", 1);
-    map.insert("b", 2);
-    map.insert("c", 3);
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
 
     assert map.len() == 3;
 
@@ -19,7 +20,7 @@ fn run() with Stdout {
     assert !map.contains_key("c");
 
     // Can insert after clear
-    map.insert("new", 42);
+    map["new"] = 42;
     assert map.len() == 1;
     assert map.contains_key("new");
 

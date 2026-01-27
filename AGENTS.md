@@ -70,9 +70,10 @@ __DATA__
 // Test runs but MUST fail (compile/runtime error or wrong output)
 // If it passes, the test fails to remind you to remove TODO
 fn run() {
-    let dict = MiniDict::new();  // Not yet implemented
-    dict.set("key", "value");
-    println(dict.get("key"));
+    let r: Result<i32, String> = Result::<i32, String>::Ok(42);
+    if let Ok(value) = r {  // Result pattern matching not yet implemented
+        println(`{value}`);
+    }
 }
 
 __DATA__

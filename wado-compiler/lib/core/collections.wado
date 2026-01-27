@@ -1,0 +1,272 @@
+// Collections module for Wado.
+//
+// This module provides collection types beyond the built-in Array.
+
+// ============================================================================
+// TreeMap - A sorted map backed by a self-balancing binary search tree
+// ============================================================================
+
+// A node in the tree (internal implementation detail)
+struct TreeMapNode<K, V> {
+    key: K,
+    value: V,
+    level: i32,
+    left: Option<&mut TreeMapNode<K, V>>,
+    right: Option<&mut TreeMapNode<K, V>>,
+    deleted: bool,
+}
+
+impl TreeMapNode<K, V> {
+    fn new(key: K, value: V) -> TreeMapNode<K, V> {
+        return TreeMapNode {
+            key,
+            value,
+            level: 1,
+            left: null,
+            right: null,
+            deleted: false,
+        };
+    }
+}
+
+/// A sorted map backed by a self-balancing binary search tree (AA tree).
+/// Keys are stored in sorted order, enabling efficient range queries.
+pub struct TreeMap<K, V> {
+    root: Option<&mut TreeMapNode<K, V>>,
+    size: i32,
+    deleted_count: i32,
+}
+
+impl TreeMap<K, V> {
+    /// Creates a new empty TreeMap
+    pub fn new() -> TreeMap<K, V> {
+        return TreeMap {
+            root: null,
+            size: 0,
+            deleted_count: 0,
+        };
+    }
+
+    /// Returns the number of key-value pairs in the map
+    pub fn len(&self) -> i32 { return self.size; }
+
+    /// Returns true if the map contains no elements
+    pub fn is_empty(&self) -> bool { return self.size == 0; }
+
+    // Skew: right rotation to fix left horizontal link
+    fn skew(&mut self, node: Option<&mut TreeMapNode<K, V>>) -> Option<&mut TreeMapNode<K, V>> {
+        if let Some(n) = node {
+            if let Some(left) = n.left {
+                if left.level == n.level {
+                    n.left = left.right;
+                    left.right = Option::Some(n);
+                    return Option::Some(left);
+                }
+            }
+            return Option::Some(n);
+        }
+        return null;
+    }
+
+    // Split: left rotation to fix consecutive right horizontal links
+    fn split(&mut self, node: Option<&mut TreeMapNode<K, V>>) -> Option<&mut TreeMapNode<K, V>> {
+        if let Some(n) = node {
+            if let Some(right) = n.right {
+                if let Some(rr) = right.right {
+                    if rr.level == n.level {
+                        n.right = right.left;
+                        right.left = Option::Some(n);
+                        right.level = right.level + 1;
+                        return Option::Some(right);
+                    }
+                }
+            }
+            return Option::Some(n);
+        }
+        return null;
+    }
+
+    fn insert_at(
+        &mut self,
+        node: Option<&mut TreeMapNode<K, V>>,
+        key: K,
+        value: V,
+        inserted: &mut bool,
+    ) -> Option<&mut TreeMapNode<K, V>> {
+        if let Some(n) = node {
+            if n.deleted && key == n.key {
+                n.value = value;
+                n.deleted = false;
+                *inserted = true;
+                return Option::Some(n);
+            }
+
+            if !n.deleted && key == n.key {
+                n.value = value;
+                return Option::Some(n);
+            }
+
+            if key < n.key {
+                n.left = self.insert_at(n.left, key, value, inserted);
+            } else {
+                n.right = self.insert_at(n.right, key, value, inserted);
+            }
+
+            let after_skew = self.skew(Option::Some(n));
+            return self.split(after_skew);
+        }
+
+        let mut new_node = TreeMapNode::<K, V>::new(key, value);
+        *inserted = true;
+        return Option::Some(&mut new_node);
+    }
+
+    /// Inserts a key-value pair into the map.
+    /// If the key already exists, the value is updated.
+    fn insert(&mut self, key: K, value: V) {
+        let mut inserted = false;
+        self.root = self.insert_at(self.root, key, value, &mut inserted);
+        if inserted {
+            self.size = self.size + 1;
+        }
+    }
+
+    fn find_node(&self, key: K) -> Option<&TreeMapNode<K, V>> {
+        let mut current = self.root;
+        while let Some(n) = current {
+            if !n.deleted && key == n.key {
+                return Option::Some(n);
+            }
+            if key < n.key {
+                current = n.left;
+            } else {
+                current = n.right;
+            }
+        }
+        return null;
+    }
+
+    /// Returns true if the map contains a value for the specified key
+    pub fn contains_key(&self, key: K) -> bool {
+        return self.find_node(key) != null;
+    }
+
+    /// Returns the value corresponding to the key, or null if not found
+    fn get(&self, key: K) -> Option<V> {
+        if let Some(node) = self.find_node(key) {
+            return Option::Some(node.value);
+        }
+        return null;
+    }
+
+    fn find_node_mut(&mut self, key: K) -> Option<&mut TreeMapNode<K, V>> {
+        let mut current = self.root;
+        while let Some(n) = current {
+            if !n.deleted && key == n.key {
+                return Option::Some(n);
+            }
+            if key < n.key {
+                current = n.left;
+            } else {
+                current = n.right;
+            }
+        }
+        return null;
+    }
+
+    /// Removes a key from the map. Returns true if the key was present.
+    pub fn remove(&mut self, key: K) -> bool {
+        if let Some(node) = self.find_node_mut(key) {
+            node.deleted = true;
+            self.deleted_count = self.deleted_count + 1;
+            self.size = self.size - 1;
+            if self.deleted_count > self.size {
+                self.compact();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    fn collect_pairs(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<[K, V]>) {
+        if let Some(n) = node {
+            self.collect_pairs(n.left, result);
+            if !n.deleted {
+                result.append([n.key, n.value]);
+            }
+            self.collect_pairs(n.right, result);
+        }
+    }
+
+    fn compact(&mut self) {
+        if self.deleted_count == 0 { return; }
+
+        let mut pairs: Array<[K, V]> = [];
+        self.collect_pairs(self.root, &mut pairs);
+
+        self.root = null;
+        self.deleted_count = 0;
+        self.size = 0;
+
+        for let pair of pairs {
+            self.insert(pair.0, pair.1);
+        }
+    }
+
+    fn collect_keys(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<K>) {
+        if let Some(n) = node {
+            self.collect_keys(n.left, result);
+            if !n.deleted {
+                result.append(n.key);
+            }
+            self.collect_keys(n.right, result);
+        }
+    }
+
+    /// Returns all keys in sorted order
+    pub fn keys(&self) -> Array<K> {
+        let mut result: Array<K> = [];
+        self.collect_keys(self.root, &mut result);
+        return result;
+    }
+
+    fn collect_values(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<V>) {
+        if let Some(n) = node {
+            self.collect_values(n.left, result);
+            if !n.deleted {
+                result.append(n.value);
+            }
+            self.collect_values(n.right, result);
+        }
+    }
+
+    /// Returns all values in key-sorted order
+    pub fn values(&self) -> Array<V> {
+        let mut result: Array<V> = [];
+        self.collect_values(self.root, &mut result);
+        return result;
+    }
+
+    /// Removes all key-value pairs from the map
+    pub fn clear(&mut self) {
+        self.root = null;
+        self.size = 0;
+        self.deleted_count = 0;
+    }
+}
+
+// IndexAssign for map[key] = value
+impl IndexAssign<K> for TreeMap<K, V> {
+    type Input = V;
+    fn index_assign(&mut self, key: K, value: Self::Input) {
+        self.insert(key, value);
+    }
+}
+
+// IndexValue for map[key] -> Option<V>
+impl IndexValue<K> for TreeMap<K, V> {
+    type Output = Option<V>;
+    fn index_value(&self, key: K) -> Self::Output {
+        return self.get(key);
+    }
+}

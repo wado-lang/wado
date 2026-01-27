@@ -5885,7 +5885,7 @@ impl Codegen {
             }
 
             TirExprKind::StringLiteral(s) => {
-                // String is a struct with one field: repr (builtin::array<u8>)
+                // String is a struct with two fields: repr (builtin::array<u8>) and used (i32)
                 // 1. Create the raw byte array
                 let len = s.len();
                 let u8_array_idx = *self
@@ -5908,7 +5908,10 @@ impl Codegen {
                     });
                 }
 
-                // 2. Create the String struct
+                // 2. Push the length for the `used` field
+                func.instruction(&Instruction::I32Const(len as i32));
+
+                // 3. Create the String struct with (repr, used)
                 let string_struct_info = self
                     .lookup_struct_type("String", &string_module_source())
                     .expect("String struct not found");
@@ -9957,13 +9960,21 @@ impl Codegen {
                 func.instruction(&Instruction::ArraySet(u8_array_idx));
             }
             "builtin::string_new" => {
+                // String struct has two fields: repr (array) and used (i32)
+                // Creates a String with the given length as both capacity and used size
                 if let Some(len_arg) = args.first() {
+                    // Generate length for ArrayNewDefault
                     self.generate_expr(func, len_arg, type_table, ctx, builder);
                     let u8_array_idx = *self
                         .array_types
                         .get(&TypeTable::U8)
                         .expect("u8 array type should be registered");
                     func.instruction(&Instruction::ArrayNewDefault(u8_array_idx));
+
+                    // Generate length again for the `used` field
+                    // (len_arg is typically a simple variable or literal, so this is safe)
+                    self.generate_expr(func, len_arg, type_table, ctx, builder);
+
                     let string_struct_info = self
                         .lookup_struct_type("String", &string_module_source())
                         .expect("String struct not found");

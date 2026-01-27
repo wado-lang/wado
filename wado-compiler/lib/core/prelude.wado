@@ -5,15 +5,54 @@
 
 use {log_stderr} from "core:internal";
 
-/// UTF-8 encoded string type
+// ============================================================================
+// Re-exports from prelude sub-modules
+// ============================================================================
+
+/// Traits (Eq, Ord, Index*, Iterator, Add, Sub, etc.)
+pub use {
+    Eq, Ord,
+    Index, IndexMut, IndexAssign, IndexValue,
+    Add, Sub, Mul, Div, Rem, Neg,
+    BitAnd, BitOr, BitXor, BitNot, Shl, Shr,
+    Fn,
+    Iterator, IntoIterator, FromIterator,
+} from "./prelude/traits.wado";
+
+/// 128-bit integer types (i128 and u128)
+pub use { i128, u128 } from "./prelude/int128.wado";
+
+/// Core variant types (Option, Result, Stream, Future)
+pub use { Option, Result, Stream, Future } from "./prelude/types.wado";
+
+// ============================================================================
+// String Type
+// ============================================================================
+
+/// UTF-8 encoded string type with O(1) amortized append
 pub struct String {
     repr: builtin::array<u8>,
+    used: i32,
 }
 
 impl String {
+    /// Create a new empty string with the specified capacity
+    /// The string starts empty but has space for `capacity` bytes
+    pub fn with_capacity(capacity: i32) -> String {
+        return String {
+            repr: builtin::array_new::<u8>(capacity),
+            used: 0,
+        };
+    }
+
     /// Get the length of the string in bytes
     pub fn len(&self) -> i32 {
-        return builtin::array_len(self.repr);
+        return self.used;
+    }
+
+    /// Check if the string is empty
+    pub fn is_empty(&self) -> bool {
+        return self.used == 0;
     }
 
     /// Get a byte at the given index
@@ -24,6 +63,70 @@ impl String {
     /// Set a byte at the given index
     pub fn set(&mut self, index: i32, value: i32) {
         builtin::array_set_u8(self.repr, index, value);
+    }
+
+    /// Append another string to this string
+    /// Grows the string if necessary (O(1) amortized)
+    pub fn append(&mut self, other: String) {
+        let other_len = other.len();
+        if other_len == 0 {
+            return;
+        }
+
+        let new_used = self.used + other_len;
+        let capacity = builtin::array_len(self.repr);
+
+        // Grow if needed
+        if builtin::unlikely(new_used > capacity) {
+            // Calculate new capacity: double or at least new_used
+            let mut new_capacity = capacity * 2;
+            if new_capacity < new_used {
+                new_capacity = new_used;
+            }
+            if new_capacity < 8 {
+                new_capacity = 8;
+            }
+
+            // Create new array and copy existing bytes
+            let new_repr = builtin::array_new::<u8>(new_capacity);
+            for let mut i = 0; i < self.used; i += 1 {
+                let byte = builtin::array_get_u8(self.repr, i);
+                builtin::array_set_u8(new_repr, i, byte);
+            }
+            self.repr = new_repr;
+        }
+
+        // Copy bytes from other
+        for let mut i = 0; i < other_len; i += 1 {
+            let byte = other.get(i);
+            builtin::array_set_u8(self.repr, self.used + i, byte);
+        }
+        self.used = new_used;
+    }
+
+    /// Concatenate two strings into a new string
+    /// This is a static method: String::concat(a, b)
+    pub fn concat(a: String, b: String) -> String {
+        let len_a = a.len();
+        let len_b = b.len();
+        let total = len_a + len_b;
+
+        // Create new string with exact capacity needed
+        let repr = builtin::array_new::<u8>(total);
+
+        // Copy bytes from a
+        for let mut i = 0; i < len_a; i += 1 {
+            let byte = a.get(i);
+            builtin::array_set_u8(repr, i, byte);
+        }
+
+        // Copy bytes from b
+        for let mut i = 0; i < len_b; i += 1 {
+            let byte = b.get(i);
+            builtin::array_set_u8(repr, len_a + i, byte);
+        }
+
+        return String { repr, used: total };
     }
 }
 
@@ -70,6 +173,10 @@ impl Ord for String {
     }
 }
 
+// ============================================================================
+// Array Type
+// ============================================================================
+
 /// Dynamic array type with O(1) amortized append
 pub struct Array<T> {
     repr: builtin::array<T>,
@@ -99,11 +206,6 @@ impl Array<T> {
     /// Get the number of elements in the array
     pub fn len(&self) -> i32 {
         return self.used;
-    }
-
-    /// Get the capacity (allocated size) of the array
-    pub fn capacity(&self) -> i32 {
-        return builtin::array_len(self.repr);
     }
 
     /// Append an element to the end of the array
@@ -162,233 +264,43 @@ impl IndexAssign<i32> for Array<T> {
     }
 }
 
-/// Trait for immutable indexing operations.
-/// Types implementing this trait can be indexed with the `[]` operator for reading.
-pub trait Index<IndexType> {
-    type Output;
-
-    /// Returns a reference to the element at the given index.
-    fn index(&self, index: IndexType) -> &Self::Output;
+// Eq implementation for Array<T>
+impl Eq for Array<T> {
+    pub fn eq(&self, other: &Self) -> bool {
+        if self.used != other.used {
+            return false;
+        }
+        for let mut i = 0; i < self.used; i += 1 {
+            if builtin::array_get::<T>(self.repr, i) != builtin::array_get::<T>(other.repr, i) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
-/// Trait for mutable indexing operations.
-/// Types implementing this trait can be indexed with the `[]` operator to get
-/// a mutable reference: `container[i].mutating_method()`.
-/// Note: Requires Index to be implemented (supertrait relationship).
-pub trait IndexMut<IndexType> {
-    type Output;
-
-    /// Returns a mutable reference to the element at the given index.
-    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
+// Ord implementation for Array<T> - lexicographic ordering
+impl Ord for Array<T> {
+    pub fn lt(&self, other: &Self) -> bool {
+        let min_len = if other.used < self.used { other.used } else { self.used };
+        for let mut i = 0; i < min_len; i += 1 {
+            let a = builtin::array_get::<T>(self.repr, i);
+            let b = builtin::array_get::<T>(other.repr, i);
+            if a < b {
+                return true;
+            }
+            if a > b {
+                return false;
+            }
+        }
+        return self.used < other.used;
+    }
 }
 
-/// Trait for index assignment operations.
-/// Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
-/// This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
-/// to primitive array elements - reading and writing are fundamentally different operations.
-pub trait IndexAssign<IndexType> {
-    type Input;
-
-    /// Assigns a value to the element at the given index.
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
-}
-
-/// Trait for value-returning indexing operations.
-/// Use this for containers of primitives where references cannot be returned.
-/// Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
-pub trait IndexValue<IndexType> {
-    type Output;
-
-    /// Returns a copy of the element at the given index.
-    fn index_value(&self, index: IndexType) -> Self::Output;
-}
-
-/// Trait for equality comparisons.
-/// Types implementing this trait can be compared with `==` and `!=` operators.
-pub trait Eq {
-    /// Returns true if self equals other.
-    fn eq(&self, other: &Self) -> bool;
-}
-
-/// Trait for ordering comparisons.
-/// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
-pub trait Ord {
-    /// Returns true if self is less than other.
-    fn lt(&self, other: &Self) -> bool;
-}
 
 // ============================================================================
-// Arithmetic Operator Traits
+// ArrayIter - Iterator over Array<T>
 // ============================================================================
-
-/// Trait for the `+` operator.
-/// Types implementing this trait can use the `+` operator for addition.
-pub trait Add {
-    type Output;
-
-    /// Adds two values and returns the result.
-    fn add(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `-` operator (binary subtraction).
-/// Types implementing this trait can use the `-` operator for subtraction.
-pub trait Sub {
-    type Output;
-
-    /// Subtracts rhs from self and returns the result.
-    fn sub(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `*` operator.
-/// Types implementing this trait can use the `*` operator for multiplication.
-pub trait Mul {
-    type Output;
-
-    /// Multiplies two values and returns the result.
-    fn mul(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `/` operator.
-/// Types implementing this trait can use the `/` operator for division.
-pub trait Div {
-    type Output;
-
-    /// Divides self by rhs and returns the result.
-    fn div(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `%` operator.
-/// Types implementing this trait can use the `%` operator for remainder.
-pub trait Rem {
-    type Output;
-
-    /// Returns the remainder of dividing self by rhs.
-    fn rem(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the unary `-` operator (negation).
-/// Types implementing this trait can use the `-` prefix operator.
-pub trait Neg {
-    type Output;
-
-    /// Returns the negation of self.
-    fn neg(&self) -> Self::Output;
-}
-
-// ============================================================================
-// Bitwise Operator Traits
-// ============================================================================
-
-/// Trait for the `&` operator (bitwise AND).
-pub trait BitAnd {
-    type Output;
-
-    /// Returns the bitwise AND of self and rhs.
-    fn bitand(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `|` operator (bitwise OR).
-pub trait BitOr {
-    type Output;
-
-    /// Returns the bitwise OR of self and rhs.
-    fn bitor(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `^` operator (bitwise XOR).
-pub trait BitXor {
-    type Output;
-
-    /// Returns the bitwise XOR of self and rhs.
-    fn bitxor(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `~` operator (bitwise NOT).
-pub trait BitNot {
-    type Output;
-
-    /// Returns the bitwise NOT of self.
-    fn bitnot(&self) -> Self::Output;
-}
-
-/// Trait for the `<<` operator (left shift).
-pub trait Shl {
-    type Output;
-
-    /// Returns self shifted left by rhs bits.
-    fn shl(&self, rhs: u32) -> Self::Output;
-}
-
-/// Trait for the `>>` operator (right shift).
-pub trait Shr {
-    type Output;
-
-    /// Returns self shifted right by rhs bits.
-    fn shr(&self, rhs: u32) -> Self::Output;
-}
-
-/// Trait for callable types (closures and function references).
-/// This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
-/// are desugared to generic functions with `Fn<[A], R>` bounds.
-///
-/// Type parameters:
-/// - `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
-/// - `Ret`: Return type
-/// - `Effects`: Tuple of effect types, defaults to `[]` (pure)
-///
-/// Examples:
-/// - `Fn<[i32], bool>` - takes i32, returns bool, pure
-/// - `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
-/// - `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
-pub trait Fn<Args, Ret, Effects> {
-    /// Call the function with the given arguments.
-    fn call(&self, args: Args) -> Ret with Effects;
-}
-
-/// Optional value - either Some(T) or None
-pub variant Option<T> {
-    Some(T),
-    None,
-}
-
-/// Result type - either Ok(T) or Err(E)
-pub variant Result<T, E> {
-    Ok(T),
-    Err(E),
-}
-
-/// Stream type - an async sequence of values (WASI Component Model primitive)
-/// This is an opaque handle managed by the runtime.
-pub struct Stream<T> {
-    handle: i32,
-}
-
-/// Future type - an async value that will resolve (WASI Component Model primitive)
-/// This is an opaque handle managed by the runtime.
-pub struct Future<T> {
-    handle: i32,
-}
-
-/// The core iterator trait for sequences of values.
-/// Types implementing this trait can be iterated over using `for-of` loops.
-pub trait Iterator {
-    type Item;
-
-    /// Advances the iterator and returns the next value.
-    /// Returns None when iteration is complete.
-    fn next(&mut self) -> Option<Self::Item>;
-}
-
-/// Conversion into an Iterator.
-/// Types implementing this trait can be used in `for-of` loops directly.
-pub trait IntoIterator {
-    type Item;
-    type Iter;
-
-    /// Creates an iterator from a value.
-    /// Note: Uses &self due to parser limitation (self by value not yet supported in traits).
-    fn into_iter(&self) -> Self::Iter;
-}
 
 /// Iterator over Array<T> elements.
 /// Yields copies of each element (value semantics).
@@ -434,14 +346,6 @@ impl Array<T> {
             index: 0,
         };
     }
-}
-
-/// Trait for creating a collection from an iterator.
-/// This is a simplified version - the full Rust-style trait requires `impl Iterator`
-/// syntax which is not yet supported.
-trait FromIterator<T> {
-    type Iter;
-    fn from_iter(iter: Self::Iter) -> Self;
 }
 
 impl FromIterator<T> for Array<T> {
@@ -523,6 +427,10 @@ impl ArrayIter<T> {
     }
 }
 
+// ============================================================================
+// EnumerateIter - Iterator that yields (index, element) tuples
+// ============================================================================
+
 /// Iterator that yields (index, element) tuples.
 pub struct EnumerateIter<T> {
     repr: builtin::array<T>,
@@ -560,6 +468,10 @@ impl EnumerateIter<T> {
         return result;
     }
 }
+
+// ============================================================================
+// MapIter - Iterator that transforms elements
+// ============================================================================
 
 /// Iterator that transforms elements using a function.
 pub struct MapIter<T, U> {
@@ -609,6 +521,10 @@ impl MapIter<T, U> {
         return acc;
     }
 }
+
+// ============================================================================
+// FilterIter - Iterator that filters elements
+// ============================================================================
 
 /// Iterator that filters elements using a predicate.
 pub struct FilterIter<T> {
@@ -664,275 +580,6 @@ impl FilterIter<T> {
 }
 
 // ============================================================================
-// TreeMap - A sorted map backed by a self-balancing binary search tree
-// ============================================================================
-
-// A node in the tree (internal implementation detail)
-struct TreeMapNode<K, V> {
-    key: K,
-    value: V,
-    level: i32,
-    left: Option<&mut TreeMapNode<K, V>>,
-    right: Option<&mut TreeMapNode<K, V>>,
-    deleted: bool,
-}
-
-impl TreeMapNode<K, V> {
-    fn new(key: K, value: V) -> TreeMapNode<K, V> {
-        return TreeMapNode {
-            key,
-            value,
-            level: 1,
-            left: null,
-            right: null,
-            deleted: false,
-        };
-    }
-}
-
-/// A sorted map backed by a self-balancing binary search tree (AA tree).
-/// Keys are stored in sorted order, enabling efficient range queries.
-pub struct TreeMap<K, V> {
-    root: Option<&mut TreeMapNode<K, V>>,
-    size: i32,
-    deleted_count: i32,
-}
-
-impl TreeMap<K, V> {
-    /// Creates a new empty TreeMap
-    pub fn new() -> TreeMap<K, V> {
-        return TreeMap {
-            root: null,
-            size: 0,
-            deleted_count: 0,
-        };
-    }
-
-    /// Returns the number of key-value pairs in the map
-    pub fn len(&self) -> i32 { return self.size; }
-
-    /// Returns true if the map contains no elements
-    pub fn is_empty(&self) -> bool { return self.size == 0; }
-
-    // Skew: right rotation to fix left horizontal link
-    fn skew(&mut self, node: Option<&mut TreeMapNode<K, V>>) -> Option<&mut TreeMapNode<K, V>> {
-        if let Some(n) = node {
-            if let Some(left) = n.left {
-                if left.level == n.level {
-                    n.left = left.right;
-                    left.right = Option::Some(n);
-                    return Option::Some(left);
-                }
-            }
-            return Option::Some(n);
-        }
-        return null;
-    }
-
-    // Split: left rotation to fix consecutive right horizontal links
-    fn split(&mut self, node: Option<&mut TreeMapNode<K, V>>) -> Option<&mut TreeMapNode<K, V>> {
-        if let Some(n) = node {
-            if let Some(right) = n.right {
-                if let Some(rr) = right.right {
-                    if rr.level == n.level {
-                        n.right = right.left;
-                        right.left = Option::Some(n);
-                        right.level = right.level + 1;
-                        return Option::Some(right);
-                    }
-                }
-            }
-            return Option::Some(n);
-        }
-        return null;
-    }
-
-    fn insert_at(
-        &mut self,
-        node: Option<&mut TreeMapNode<K, V>>,
-        key: K,
-        value: V,
-        inserted: &mut bool,
-    ) -> Option<&mut TreeMapNode<K, V>> {
-        if let Some(n) = node {
-            if n.deleted && key == n.key {
-                n.value = value;
-                n.deleted = false;
-                *inserted = true;
-                return Option::Some(n);
-            }
-
-            if !n.deleted && key == n.key {
-                n.value = value;
-                return Option::Some(n);
-            }
-
-            if key < n.key {
-                n.left = self.insert_at(n.left, key, value, inserted);
-            } else {
-                n.right = self.insert_at(n.right, key, value, inserted);
-            }
-
-            let after_skew = self.skew(Option::Some(n));
-            return self.split(after_skew);
-        }
-
-        let mut new_node = TreeMapNode::<K, V>::new(key, value);
-        *inserted = true;
-        return Option::Some(&mut new_node);
-    }
-
-    /// Inserts a key-value pair into the map.
-    /// If the key already exists, the value is updated.
-    pub fn insert(&mut self, key: K, value: V) {
-        let mut inserted = false;
-        self.root = self.insert_at(self.root, key, value, &mut inserted);
-        if inserted {
-            self.size = self.size + 1;
-        }
-    }
-
-    fn find_node(&self, key: K) -> Option<&TreeMapNode<K, V>> {
-        let mut current = self.root;
-        while let Some(n) = current {
-            if !n.deleted && key == n.key {
-                return Option::Some(n);
-            }
-            if key < n.key {
-                current = n.left;
-            } else {
-                current = n.right;
-            }
-        }
-        return null;
-    }
-
-    /// Returns true if the map contains a value for the specified key
-    pub fn contains_key(&self, key: K) -> bool {
-        return self.find_node(key) != null;
-    }
-
-    /// Returns the value corresponding to the key, or null if not found
-    pub fn get(&self, key: K) -> Option<V> {
-        if let Some(node) = self.find_node(key) {
-            return Option::Some(node.value);
-        }
-        return null;
-    }
-
-    fn find_node_mut(&mut self, key: K) -> Option<&mut TreeMapNode<K, V>> {
-        let mut current = self.root;
-        while let Some(n) = current {
-            if !n.deleted && key == n.key {
-                return Option::Some(n);
-            }
-            if key < n.key {
-                current = n.left;
-            } else {
-                current = n.right;
-            }
-        }
-        return null;
-    }
-
-    /// Removes a key from the map. Returns true if the key was present.
-    pub fn remove(&mut self, key: K) -> bool {
-        if let Some(node) = self.find_node_mut(key) {
-            node.deleted = true;
-            self.deleted_count = self.deleted_count + 1;
-            self.size = self.size - 1;
-            if self.deleted_count > self.size {
-                self.compact();
-            }
-            return true;
-        }
-        return false;
-    }
-
-    fn collect_pairs(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<[K, V]>) {
-        if let Some(n) = node {
-            self.collect_pairs(n.left, result);
-            if !n.deleted {
-                result.append([n.key, n.value]);
-            }
-            self.collect_pairs(n.right, result);
-        }
-    }
-
-    fn compact(&mut self) {
-        if self.deleted_count == 0 { return; }
-
-        let mut pairs: Array<[K, V]> = [];
-        self.collect_pairs(self.root, &mut pairs);
-
-        self.root = null;
-        self.deleted_count = 0;
-        self.size = 0;
-
-        for let pair of pairs {
-            self.insert(pair.0, pair.1);
-        }
-    }
-
-    fn collect_keys(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<K>) {
-        if let Some(n) = node {
-            self.collect_keys(n.left, result);
-            if !n.deleted {
-                result.append(n.key);
-            }
-            self.collect_keys(n.right, result);
-        }
-    }
-
-    /// Returns all keys in sorted order
-    pub fn keys(&self) -> Array<K> {
-        let mut result: Array<K> = [];
-        self.collect_keys(self.root, &mut result);
-        return result;
-    }
-
-    fn collect_values(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<V>) {
-        if let Some(n) = node {
-            self.collect_values(n.left, result);
-            if !n.deleted {
-                result.append(n.value);
-            }
-            self.collect_values(n.right, result);
-        }
-    }
-
-    /// Returns all values in key-sorted order
-    pub fn values(&self) -> Array<V> {
-        let mut result: Array<V> = [];
-        self.collect_values(self.root, &mut result);
-        return result;
-    }
-
-    /// Removes all key-value pairs from the map
-    pub fn clear(&mut self) {
-        self.root = null;
-        self.size = 0;
-        self.deleted_count = 0;
-    }
-}
-
-// IndexAssign for map[key] = value
-impl IndexAssign<K> for TreeMap<K, V> {
-    type Input = V;
-    fn index_assign(&mut self, key: K, value: Self::Input) {
-        self.insert(key, value);
-    }
-}
-
-// IndexValue for map[key] -> Option<V>
-impl IndexValue<K> for TreeMap<K, V> {
-    type Output = Option<V>;
-    fn index_value(&self, key: K) -> Self::Output {
-        return self.get(key);
-    }
-}
-
-// ============================================================================
 // Core functions
 // ============================================================================
 
@@ -948,9 +595,3 @@ pub fn unreachable() -> ! {
     builtin::unreachable();
 }
 
-// ============================================================================
-// Re-exports from prelude sub-modules
-// ============================================================================
-
-/// 128-bit integer types (i128 and u128)
-pub use { i128, u128 } from "./prelude/int128.wado";

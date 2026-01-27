@@ -8,8 +8,8 @@ Wado allows literals to be coerced to collection types in certain contexts:
 // Tuple literal → Array
 let a: Array<i32> = [1, 2, 3];
 
-// Object literal → Dict
-let d: Dict<String, i32> = { "width": 1920, "height": 1080 };
+// Object literal → TreeMap
+let d: TreeMap<String, i32> = { "width": 1920, "height": 1080 };
 ```
 
 This coercion is currently **hardcoded** in the compiler. We need a trait-based mechanism that:
@@ -242,42 +242,42 @@ let arr: Array<i32> = [1, 2, 3];
 }
 ```
 
-### 11. Dict Implementation
+### 11. TreeMap Implementation
 
-Dict also serves as its own builder:
+TreeMap also serves as its own builder:
 
 ```wado
-impl ObjectBuilder for Dict<String, V> {
+impl ObjectBuilder for TreeMap<String, V> {
     type Value = V;
-    type Output = Dict<String, V>;
+    type Output = TreeMap<String, V>;
 
     fn with_capacity(n: i32) -> Self {
-        return Dict::<String, V>::with_capacity(n);
+        return TreeMap::<String, V>::with_capacity(n);
     }
 
     fn insert(&mut self, key: String, value: V) {
         self.insert(key, value);  // Existing method
     }
 
-    fn build(self) -> Dict<String, V> {
+    fn build(self) -> TreeMap<String, V> {
         return self;  // Identity
     }
 }
 
-impl FromObject for Dict<String, V> {
+impl FromObject for TreeMap<String, V> {
     type Value = V;
-    type Builder = Dict<String, V>;
+    type Builder = TreeMap<String, V>;
 }
 ```
 
-Expansion for Dict:
+Expansion for TreeMap:
 
 ```wado
-let config: Dict<String, i32> = { "width": 1920, "height": 1080 };
+let config: TreeMap<String, i32> = { "width": 1920, "height": 1080 };
 
 // →
 {
-    let mut __builder = Dict::<String, i32>::with_capacity(2);
+    let mut __builder = TreeMap::<String, i32>::with_capacity(2);
     __builder.insert("width", 1920);
     __builder.insert("height", 1080);
     __builder.build()
@@ -295,7 +295,7 @@ pub variant JSONValue {
     Number(f64),
     String(String),
     Array(Array<JSONValue>),
-    Object(Dict<String, JSONValue>),
+    Object(TreeMap<String, JSONValue>),
 }
 
 // Into implementations for JSONValue
@@ -361,7 +361,7 @@ impl FromTuple for JSONValue {
 ```wado
 // Builder for object literals → JSONValue::Object
 pub struct JSONValueObjectBuilder {
-    entries: Dict<String, JSONValue>,
+    entries: TreeMap<String, JSONValue>,
 }
 
 impl ObjectBuilder for JSONValueObjectBuilder {
@@ -369,7 +369,7 @@ impl ObjectBuilder for JSONValueObjectBuilder {
     type Output = JSONValue;
 
     fn with_capacity(n: i32) -> Self {
-        return JSONValueObjectBuilder { entries: Dict::<String, JSONValue>::with_capacity(n) };
+        return JSONValueObjectBuilder { entries: TreeMap::<String, JSONValue>::with_capacity(n) };
     }
 
     fn insert(&mut self, key: String, value: JSONValue) {
@@ -463,7 +463,7 @@ Empty literals coerce to empty collections:
 
 ```wado
 let empty_arr: Array<i32> = [];
-let empty_dict: Dict<String, i32> = {};
+let empty_dict: TreeMap<String, i32> = {};
 
 // Expand to:
 // C::Builder::with_capacity(0).build()
@@ -546,8 +546,8 @@ Define traits in prelude:
 
 - `impl TupleBuilder for Array<T>`
 - `impl FromTuple for Array<T>`
-- `impl ObjectBuilder for Dict<String, V>`
-- `impl FromObject for Dict<String, V>`
+- `impl ObjectBuilder for TreeMap<String, V>`
+- `impl FromObject for TreeMap<String, V>`
 
 #### Phase 3: Compiler Coercion Logic
 
@@ -597,7 +597,7 @@ fn try_tuple_coercion(elements: &[Expr], target_type: &Type) -> Option<Expr> {
 3. **Immutable containers**: Collections need not expose mutation
 4. **User extensibility**: Any type can implement `FromTuple` / `FromObject`
 5. **Compile-time expansion**: No runtime overhead for literals
-6. **Self-as-builder optimization**: `Array` and `Dict` are their own builders
+6. **Self-as-builder optimization**: `Array` and `TreeMap` are their own builders
 
 ### Negative
 
@@ -625,8 +625,8 @@ fn run() with Stdout {
     // Tuple literal → Array
     let numbers: Array<i32> = [1, 2, 3, 4, 5];
 
-    // Object literal → Dict
-    let config: Dict<String, i32> = {
+    // Object literal → TreeMap
+    let config: TreeMap<String, i32> = {
         "width": 1920,
         "height": 1080,
     };
@@ -705,6 +705,6 @@ fn run() {
 ## References
 
 - [Swift ExpressibleByArrayLiteral](https://developer.apple.com/documentation/swift/expressiblebyarrayliteral)
-- [Swift ExpressibleByDictionaryLiteral](https://developer.apple.com/documentation/swift/expressiblebydictionaryliteral)
+- [Swift ExpressibleByTreeMapionaryLiteral](https://developer.apple.com/documentation/swift/expressiblebydictionaryliteral)
 - [C# Collection Initializers](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/object-and-collection-initializers)
 - [Kotlin buildList / buildMap](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin.collections/build-list.html)

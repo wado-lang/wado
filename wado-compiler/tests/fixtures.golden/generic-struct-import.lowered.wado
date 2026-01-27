@@ -19,13 +19,21 @@ struct "TreeMapNode<String,i32>" {
 
 fn run() with Stdout {
     let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
-    "TreeMap<String,i32>::insert"(&mut map, move "hello", 42);
-    if Some(val) = "TreeMap<String,i32>::get"(&map, &"hello") {
-        core::cli::println(move core::internal::string_concat(move "value: ", move "i32::to_string"(val)));
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_0: {
+        let self: &mut TreeMap<String,i32> = &mut map;
+        let key: String = move "hello";
+        "TreeMap<String,i32>::insert"(self, key, 42);
+    };
+    if Some(val) = __inline_TreeMap_String_i32__IndexValue__index_value_1: {
+        let self: &TreeMap<String,i32> = &map;
+        let key: String = move "hello";
+        break __inline_TreeMap_String_i32__IndexValue__index_value_1: "TreeMap<String,i32>::get"(self, key);
+    } {
+        core::cli::println(move "String::concat"(move "value: ", move "i32::to_string"(val)));
     }
 }
 
-pub fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
+fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
     if Some(node) = "TreeMap<String,i32>::find_node"(self, key) {
         return Option::Some(node.value);
     }
@@ -47,7 +55,7 @@ fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: String) -> 
     return null;
 }
 
-pub fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
+fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     let mut inserted: bool = false;
     self.root = "TreeMap<String,i32>::insert_at"(self, self.root, key, value, &mut inserted);
     if inserted {

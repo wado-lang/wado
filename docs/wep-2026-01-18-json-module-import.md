@@ -76,7 +76,7 @@ JSON data is parsed and embedded into the Wasm binary at compile time:
 1. Compiler reads the JSON file
 2. Parses it according to the specified type (`json` or `jsonc`)
 3. Converts JSON types to Wado types:
-   - JSON object → `Dict<String, Value>` (or inferred struct type)
+   - JSON object → `TreeMap<String, Value>` (or inferred struct type)
    - JSON array → `Array<T>` or tuple `[T, U, V]` (depending on context)
    - JSON string → `String`
    - JSON number → `i32`, `f64`, etc. (inferred from usage)
