@@ -123,9 +123,13 @@ with Stdin = MockStdin, Stdout = MockStdout {
 
 #### Inline Handler
 
+Uses the same method definition style as named handlers:
+
 ```wado
 with Stdin as {
-    read_line() => "simple mock",
+    fn read_line() -> String {
+        resume "simple mock"
+    }
 } do {
     let line = Stdin::read_line();
 }
@@ -135,11 +139,13 @@ With arguments and complex logic:
 
 ```wado
 with FileSystem as {
-    read_file(path) => `contents of {path}`,
-    write_file(path, data) => {
+    fn read_file(path: String) -> String {
+        resume `contents of {path}`
+    }
+    fn write_file(path: String, data: String) {
         log.push([path, data]);
         resume;
-    },
+    }
 } do {
     let content = FileSystem::read_file("test.txt");
 }
@@ -149,7 +155,10 @@ with FileSystem as {
 
 ```wado
 with Stdin = MockStdin, Stdout as {
-    write(s) => captured.push(s),
+    fn write(s: String) {
+        captured.push(s);
+        resume;
+    }
 } do {
     // ...
 }
@@ -161,7 +170,9 @@ Use `resume` to return a value to the computation:
 
 ```wado
 with Stdin as {
-    read_line() => resume "value",
+    fn read_line() -> String {
+        resume "value"
+    }
 } do { ... }
 ```
 
@@ -169,11 +180,11 @@ For post-processing (one-shot continuations):
 
 ```wado
 with FileSystem as {
-    open_file(path) => {
+    fn open_file(path: String) -> Handle {
         let handle = real_open(path);
         resume handle;
         real_close(handle);  // runs after computation uses handle
-    },
+    }
 } do { ... }
 ```
 
