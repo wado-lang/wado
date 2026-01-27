@@ -374,8 +374,7 @@ impl Parser {
 test "parse-number-positive" {
     let mut p = Parser::new("42");
     let r = p.parse_number();
-    if let Number(pos) = r {
-        let [start, end] = pos;
+    if let Number([start, end]) = r {
         assert start == 0;
         assert end == 2;
     } else {
@@ -386,8 +385,7 @@ test "parse-number-positive" {
 test "parse-number-negative" {
     let mut p = Parser::new("-123");
     let r = p.parse_number();
-    if let Number(pos) = r {
-        let [start, end] = pos;
+    if let Number([start, end]) = r {
         assert start == 0;
         assert end == 4;
     } else {
@@ -398,8 +396,7 @@ test "parse-number-negative" {
 test "parse-number-float" {
     let mut p = Parser::new("3.14");
     let r = p.parse_number();
-    if let Number(pos) = r {
-        let [start, end] = pos;
+    if let Number([start, end]) = r {
         assert start == 0;
         assert end == 4;
     } else {
@@ -410,8 +407,7 @@ test "parse-number-float" {
 test "parse-number-exponent" {
     let mut p = Parser::new("1e10");
     let r = p.parse_number();
-    if let Number(pos) = r {
-        let [_start, end] = pos;
+    if let Number([_start, end]) = r {
         assert end == 4;
     } else {
         assert false;
@@ -469,8 +465,7 @@ impl Parser {
 test "parse-string-simple" {
     let mut p = Parser::new("\"hello\"");
     let r = p.parse_string();
-    if let Str(pos) = r {
-        let [start, end] = pos;
+    if let Str([start, end]) = r {
         assert start == 1;
         assert end == 6;
     } else {
@@ -481,8 +476,7 @@ test "parse-string-simple" {
 test "parse-string-empty" {
     let mut p = Parser::new("\"\"");
     let r = p.parse_string();
-    if let Str(pos) = r {
-        let [start, end] = pos;
+    if let Str([start, end]) = r {
         assert start == 1;
         assert end == 1;
     } else {
@@ -514,8 +508,7 @@ test "parse-string-unicode-escape" {
     // \u0041 = 'A'
     let mut p = Parser::new("\"\\u0041\"");
     let r = p.parse_string();
-    if let Str(pos) = r {
-        let [start, end] = pos;
+    if let Str([start, end]) = r {
         assert start == 1;
         assert end == 7;  // includes \u0041
     } else {
@@ -527,8 +520,7 @@ test "parse-string-unicode-escape-japanese" {
     // \u3042 = 'あ'
     let mut p = Parser::new("\"\\u3042\"");
     let r = p.parse_string();
-    if let Str(pos) = r {
-        let [start, end] = pos;
+    if let Str([start, end]) = r {
         assert end - start == 6;  // \u3042 is 6 bytes
     } else {
         assert false;
@@ -539,8 +531,7 @@ test "parse-string-direct-utf8" {
     // Direct UTF-8: "日本語" (9 bytes in UTF-8)
     let mut p = Parser::new("\"日本語\"");
     let r = p.parse_string();
-    if let Str(pos) = r {
-        let [start, end] = pos;
+    if let Str([start, end]) = r {
         assert start == 1;
         // "日本語" = 3 characters × 3 bytes each = 9 bytes
         assert end == 10;
@@ -553,8 +544,7 @@ test "parse-string-mixed-unicode" {
     // Mix of ASCII, escape, and UTF-8: "Hello\u0020世界"
     let mut p = Parser::new("\"Hello\\u0020世界\"");
     let r = p.parse_string();
-    if let Str(pos) = r {
-        let [start, end] = pos;
+    if let Str([start, end]) = r {
         assert start == 1;
         // "Hello" (5) + "\u0020" (6) + "世界" (6) = 17
         assert end == 18;
@@ -567,8 +557,7 @@ test "parse-string-surrogate-pair" {
     // Surrogate pair for emoji: \uD83D\uDE00 = 😀
     let mut p = Parser::new("\"\\uD83D\\uDE00\"");
     let r = p.parse_string();
-    if let Str(pos) = r {
-        let [start, end] = pos;
+    if let Str([start, end]) = r {
         // \uD83D (6) + \uDE00 (6) = 12 bytes
         assert end - start == 12;
     } else {
