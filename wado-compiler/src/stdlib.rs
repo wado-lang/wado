@@ -50,6 +50,13 @@ pub const CORE_PRELUDE_TRAITS: &str = include_str!("../lib/core/prelude/traits.w
 /// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.wado");
 
+/// Embedded source for core:prelude/types (Option, Result, Stream, Future)
+/// Located in prelude/ subdirectory and re-exported by prelude.wado
+pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
+
+/// Embedded source for core:collections (TreeMap)
+pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
+
 /// Embedded source for wasi:cli
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
 
@@ -82,6 +89,8 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:prelude" => Some(CORE_PRELUDE),
         "core:prelude/traits" => Some(CORE_PRELUDE_TRAITS),
         "core:prelude/int128" => Some(CORE_PRELUDE_INT128),
+        "core:prelude/types" => Some(CORE_PRELUDE_TYPES),
+        "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),
         "core:filesystem" => Some(CORE_FILESYSTEM),

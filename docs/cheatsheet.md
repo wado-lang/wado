@@ -769,6 +769,16 @@ eprintln("error line");
 // core:clocks
 use {now, MonotonicClock} from "core:clocks";
 let t = now();            // current time in nanoseconds
+
+// core:collections - TreeMap (sorted map)
+use {TreeMap} from "core:collections";
+let mut map = TreeMap::<String, i32>::new();
+map.insert("key", 42);
+map["key2"] = 100;        // index assignment
+if let Some(v) = map.get("key") { ... }
+if let Some(v) = map["key"] { ... }  // index access returns Option<V>
+let keys = map.keys();    // keys in sorted order
+map.remove("key");
 ```
 
 ## Generic Functions and Methods
@@ -1015,7 +1025,6 @@ Wado intentionally does not support macros.
 - Effect handlers
 - `reactive` values and `observe()`
 - `stores[...]` syntax for reference storage
-- `Dict<K, V>`
 - postfix `?` operator (error propagation)
 - JSX
 - Generic function/method type inference
