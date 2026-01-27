@@ -54,7 +54,7 @@ pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.w
 /// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
 
-/// Embedded source for core:collections (TreeMap)
+/// Embedded source for core:collections (`TreeMap`)
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 
 /// Embedded source for wasi:cli
