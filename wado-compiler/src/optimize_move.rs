@@ -295,9 +295,9 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         TirExprKind::OptionSome { value } => {
             insert_moves_in_expr(value, type_table);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                insert_moves_in_expr(field, type_table);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                insert_moves_in_expr(payload_expr, type_table);
             }
         }
         TirExprKind::Move { value } => {
@@ -566,9 +566,9 @@ fn collect_value_copy_types_in_expr(
         TirExprKind::OptionSome { value } => {
             collect_value_copy_types_in_expr(value, type_table, copy_types);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_value_copy_types_in_expr(field, type_table, copy_types);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_value_copy_types_in_expr(payload_expr, type_table, copy_types);
             }
         }
         TirExprKind::Move { value } => {

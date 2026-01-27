@@ -321,9 +321,9 @@ impl<'a> EffectChecker<'a> {
                 // Closures inherit effects from enclosing function, so we continue checking
                 self.check_expr(body);
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.check_expr(field);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.check_expr(payload_expr);
                 }
             }
             TirExprKind::OptionSome { value } => {

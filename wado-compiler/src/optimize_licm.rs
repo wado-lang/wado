@@ -485,9 +485,9 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
         TirExprKind::OptionSome { value } => {
             collect_modified_vars_in_expr(value, modified);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_modified_vars_in_expr(field, modified);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_modified_vars_in_expr(payload_expr, modified);
             }
         }
         TirExprKind::Move { value } => {
@@ -797,9 +797,9 @@ fn collect_licm_ref_bindings_in_expr(
         TirExprKind::OptionSome { value } => {
             collect_licm_ref_bindings_in_expr(value, type_table, bindings);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_licm_ref_bindings_in_expr(field, type_table, bindings);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_licm_ref_bindings_in_expr(payload_expr, type_table, bindings);
             }
         }
         TirExprKind::Move { value } => {
@@ -1450,10 +1450,10 @@ fn find_hoist_candidates_in_expr(
                 next_local,
             );
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
                 find_hoist_candidates_in_expr(
-                    field,
+                    payload_expr,
                     modified_vars,
                     ref_bindings,
                     candidates,
@@ -1745,9 +1745,9 @@ fn replace_hoisted_in_expr(
         TirExprKind::OptionSome { value } => {
             replace_hoisted_in_expr(value, candidates, ref_bindings);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                replace_hoisted_in_expr(field, candidates, ref_bindings);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                replace_hoisted_in_expr(payload_expr, candidates, ref_bindings);
             }
         }
         TirExprKind::Move { value } => {

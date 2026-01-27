@@ -186,15 +186,12 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             (all_ok, total)
         }
         TirExprKind::OptionSome { value } => track_local_uses_in_expr(value, local_index),
-        TirExprKind::VariantConstruct { fields, .. } => {
-            let mut total = 0;
-            let mut all_ok = true;
-            for field in fields {
-                let (ok, count) = track_local_uses_in_expr(field, local_index);
-                all_ok = all_ok && ok;
-                total += count;
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                track_local_uses_in_expr(payload_expr, local_index)
+            } else {
+                (true, 0)
             }
-            (all_ok, total)
         }
         TirExprKind::Move { value } => track_local_uses_in_expr(value, local_index),
         TirExprKind::LabeledBlock { block, .. } => track_local_uses_in_block(block, local_index),
@@ -438,9 +435,14 @@ fn replace_ref_field_access_in_expr(
         TirExprKind::OptionSome { value } => {
             replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                replace_ref_field_access_in_expr(field, ref_local, target_local, target_name);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                replace_ref_field_access_in_expr(
+                    payload_expr,
+                    ref_local,
+                    target_local,
+                    target_name,
+                );
             }
         }
         TirExprKind::Move { value } => {
@@ -831,9 +833,9 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         TirExprKind::OptionSome { value } => {
             collect_ref_bindings_in_expr(value, bindings);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_ref_bindings_in_expr(field, bindings);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_ref_bindings_in_expr(payload_expr, bindings);
             }
         }
         TirExprKind::Move { value } => {
@@ -1058,9 +1060,9 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
         TirExprKind::OptionSome { value } => {
             remove_dead_ref_bindings_in_expr(value, dead_locals);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                remove_dead_ref_bindings_in_expr(field, dead_locals);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                remove_dead_ref_bindings_in_expr(payload_expr, dead_locals);
             }
         }
         TirExprKind::Move { value } => {

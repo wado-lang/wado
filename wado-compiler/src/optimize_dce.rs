@@ -982,28 +982,27 @@ fn analyze_expr(
         TirExprKind::VariantConstruct {
             variant_type,
             case_name,
-            fields,
+            payload,
             ..
         } => {
-            for field in fields {
-                analyze_expr(field, current_module, type_table, analysis);
+            if let Some(payload_expr) = payload {
+                analyze_expr(payload_expr, current_module, type_table, analysis);
             }
             // Option::Some with primitive value needs box type
             if case_name == "Some"
-                && fields.len() == 1
-                && let ResolvedType::Primitive(prim) = type_table.get(fields[0].type_id)
+                && let Some(payload_expr) = payload
+                && let ResolvedType::Primitive(prim) = type_table.get(payload_expr.type_id)
             {
                 analysis.used_box_primitives.insert(*prim);
             }
             // Generic variants (like Result<i32, String>) may need boxing for primitives
             // if the variant has heterogeneous field types (uses eqref).
             // To be safe, mark all primitive fields in generic variants as needing boxing.
-            if let ResolvedType::GenericInstance { .. } = type_table.get(*variant_type) {
-                for field in fields {
-                    if let ResolvedType::Primitive(prim) = type_table.get(field.type_id) {
-                        analysis.used_box_primitives.insert(*prim);
-                    }
-                }
+            if let ResolvedType::GenericInstance { .. } = type_table.get(*variant_type)
+                && let Some(payload_expr) = payload
+                && let ResolvedType::Primitive(prim) = type_table.get(payload_expr.type_id)
+            {
+                analysis.used_box_primitives.insert(*prim);
             }
         }
         TirExprKind::Move { value } => {

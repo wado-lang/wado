@@ -1082,8 +1082,8 @@ pub enum TirExprKind {
         case_index: u32,
         /// The case name (for debugging/error messages)
         case_name: String,
-        /// Field values (empty for unit variants)
-        fields: Vec<TirExpr>,
+        /// Payload value (None for unit variants constructed without explicit payload)
+        payload: Option<Box<TirExpr>>,
     },
 
     /// Enum construction: `Color::Red`
@@ -1168,6 +1168,8 @@ pub enum TirPattern {
         enum_type: TypeId,
         variant_name: String,
         bindings: Vec<TirPattern>,
+        /// Payload type for the matched variant case (unit for no-payload cases)
+        payload_type: TypeId,
     },
 }
 
@@ -1480,13 +1482,18 @@ pub struct TirVariantDecl {
 
 /// A case in a variant declaration
 /// e.g., `Circle(f64)` or `Point`
+///
+/// Each variant case has exactly one payload type:
+/// - Unit variants: `None` → payload is `()` (unit type)
+/// - Scalar payloads: `Some(T)` → payload is `T`
+/// - Tuple payloads: `Rectangle([f64, f64])` → payload is `[f64, f64]`
 #[derive(Debug, Clone)]
 pub struct TirVariantCase {
     pub name: String,
     /// Case index (0-based)
     pub index: u32,
-    /// Payload field types (empty for unit cases like `None`)
-    pub fields: Vec<TypeId>,
+    /// Payload type for this case. Unit variants have `()` (unit type) payload.
+    pub payload: TypeId,
     pub span: Span,
 }
 
