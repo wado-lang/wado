@@ -46,14 +46,14 @@ fn bad() {
 
 ### Generic Effects
 
-For callbacks and higher-order functions, use generic effect parameters:
+Use `<effect E>` to declare a generic effect parameter. `E` can represent multiple effects.
 
 ```wado
-fn wrapper<E>(f: fn() with E) with E {
+fn wrapper<effect E>(f: fn() with E) with E {
     f();
 }
 
-fn map<T, U, E>(arr: Array<T>, f: fn(T) -> U with E) -> Array<U> with E {
+fn map<T, U, effect E>(arr: Array<T>, f: fn(T) -> U with E) -> Array<U> with E {
     // ...
 }
 ```
@@ -76,7 +76,7 @@ let f: fn(i32) -> i32 with Stdout = |x| {
 Test functions implicitly have generic effects:
 
 ```wado
-// Equivalent to: test<E> "name" with E { ... }
+// Equivalent to: test<effect E> "name" with E { ... }
 test "can use any effect" {
     println("stdout");
     eprintln("stderr");
@@ -106,7 +106,7 @@ handler MockStdin for Stdin {
 }
 
 fn test_input() {
-    with Stdin = MockStdin {
+    with Stdin = MockStdin do {
         let line = Stdin::read_line();
         assert line == "mocked input";
     }
@@ -116,8 +116,26 @@ fn test_input() {
 Multiple handlers:
 
 ```wado
-with Stdin = MockStdin, Stdout = MockStdout {
+with Stdin = MockStdin, Stdout = MockStdout do {
     // ...
+}
+```
+
+Handler methods can have their own effect requirements:
+
+```wado
+handler LoggingStdin for Stdin {
+    fn read_line() -> String with Stdout {
+        println("reading...");
+        resume "mocked"
+    }
+}
+
+// Caller must have Stdout
+fn test_logging() with Stdout {
+    with Stdin = LoggingStdin do {
+        let line = Stdin::read_line();
+    }
 }
 ```
 
@@ -166,7 +184,7 @@ with Stdin = MockStdin, Stdout as {
 
 ### Resume Keyword
 
-Use `resume` to return a value to the computation:
+`resume` is an expression that returns `()`. Use it to return a value to the computation:
 
 ```wado
 with Stdin as {
@@ -183,7 +201,7 @@ with FileSystem as {
     fn open_file(path: String) -> Handle {
         let handle = real_open(path);
         resume handle;
-        real_close(handle);  // runs after computation uses handle
+        real_close(handle);  // runs after do block completes
     }
 } do { ... }
 ```
@@ -208,4 +226,4 @@ fn register(data: &Data) -> Handle with Stdout, stores[data] {
 - Effect violations produce clear compile errors
 - Handlers enable testing and dependency injection
 - One-shot semantics ensure resource safety
-- Generic effects support higher-order functions without effect polymorphism complexity
+- Generic effects (`<effect E>`) support higher-order functions without effect polymorphism complexity
