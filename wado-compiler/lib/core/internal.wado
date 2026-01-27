@@ -20,6 +20,9 @@ pub fn f64_to_string(value: f64) -> String {
         result.set(i, byte);
     }
 
+    // Free linear memory buffer
+    builtin::realloc(ptr, 24, 1, 0);
+
     return result;
 }
 
@@ -37,6 +40,9 @@ pub fn f32_to_string(value: f32) -> String {
         let byte = builtin::memory_load8_u(ptr + i);
         result.set(i, byte);
     }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 16, 1, 0);
 
     return result;
 }
@@ -85,6 +91,9 @@ pub fn i32_to_string(value: i32) -> String {
         result.set(i, byte);
     }
 
+    // Free linear memory buffer
+    builtin::realloc(ptr, 12, 1, 0);
+
     return result;
 }
 
@@ -126,6 +135,9 @@ pub fn u32_to_string(value: i32) -> String {
         let byte = builtin::memory_load8_u(ptr + pos + i);
         result.set(i, byte);
     }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 11, 1, 0);
 
     return result;
 }
@@ -178,6 +190,9 @@ pub fn i64_to_string(value: i64) -> String {
         let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
         result.set(i, byte);
     }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 21, 1, 0);
 
     return result;
 }
@@ -246,6 +261,9 @@ pub fn u64_to_string(value: i64) -> String {
         result.set(i, byte);
     }
 
+    // Free linear memory buffer
+    builtin::realloc(ptr, 21, 1, 0);
+
     return result;
 }
 
@@ -282,6 +300,9 @@ pub fn u128_to_string(value: u128) -> String {
         let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
         result.set(i, byte);
     }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 40, 1, 0);
 
     return result;
 }
@@ -375,6 +396,10 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
         builtin::memory_store8(ptr + len, '\n');
     }
     builtin::stream_write(tx, ptr, alloc_size);
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, alloc_size, 1, 0);
+
     builtin::stream_drop_writable(tx);
 }
 
