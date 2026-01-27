@@ -60,6 +60,25 @@ let mut y = 0;          // mutable
 let z: i64 = 100;       // with type annotation
 ```
 
+## Global Variables
+
+```wado
+// Module-level globals (compile to Wasm globals)
+global PI: f64 = 3.14159;           // immutable
+global mut counter: i32 = 0;        // mutable
+
+// With visibility
+pub global VERSION: i32 = 1;        // accessible from other modules
+
+// Usage
+fn example() {
+    println(`{PI}`);                // read global
+    counter = counter + 1;          // write mutable global
+}
+```
+
+Global variables map directly to WebAssembly globals. Only literal initializers are currently supported.
+
 ## Types
 
 ```wado

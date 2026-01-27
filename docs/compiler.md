@@ -882,6 +882,7 @@ See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full d
 - [x] `impl Trait for Type` (trait implementations)
 - [x] Associated types in traits (`type Output;` and `type Output = T;`)
 - [x] `enum` declarations (payload-free, CM semantics)
+- [x] `global` declarations (module-level Wasm globals)
 - [x] `type` aliases
 - [x] `impl` blocks
 - [x] `resource` declarations
@@ -987,6 +988,7 @@ See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full d
 - [x] Async function lifting/lowering
 - [x] Template strings (literals, integer interpolation, float interpolation via wado-bundled)
 - [x] Variables and locals (`let`, `let mut`)
+- [x] Global variables (`global`, `global mut`) with Wasm global section
 - [x] Control flow (`if` statements, `if let init`, `while`, `for`, `loop`, `for-of`)
 - [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
 - [x] Type cast (`as T`) for primitive types (i32, i64, f32, f64)
