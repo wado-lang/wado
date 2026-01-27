@@ -4147,21 +4147,21 @@ impl<'a> Resolver<'a> {
         }
 
         // Check for imported functions in symbol table
-        if let Some(symbol) = self.symbols.lookup(func_name) {
-            if let SymbolKind::Function(func_symbol) = &symbol.kind {
-                return func_symbol.effects.clone();
-            }
+        if let Some(symbol) = self.symbols.lookup(func_name)
+            && let SymbolKind::Function(func_symbol) = &symbol.kind
+        {
+            return func_symbol.effects.clone();
         }
 
         // Look up in loaded modules by module path
-        if !module_path.is_empty() {
-            if let Some(module) = self.loaded_modules.get(module_path) {
-                for item in &module.items {
-                    if let Item::Function(func) = item {
-                        if func.name == func_name {
-                            return func.effects.clone();
-                        }
-                    }
+        if !module_path.is_empty()
+            && let Some(module) = self.loaded_modules.get(module_path)
+        {
+            for item in &module.items {
+                if let Item::Function(func) = item
+                    && func.name == func_name
+                {
+                    return func.effects.clone();
                 }
             }
         }
