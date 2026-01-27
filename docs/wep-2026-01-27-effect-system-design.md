@@ -44,6 +44,20 @@ fn bad() {
 }
 ```
 
+### Entry Point
+
+The `run()` function can use generic effects:
+
+```wado
+fn run<effect E>() with E {
+    println("hello");
+}
+```
+
+### Ambient Effects
+
+`log_stdout` and `log_stderr` from `core:internal` are effect-less by compiler magic. They can be called from any function without effect declaration.
+
 ### Generic Effects
 
 Use `<effect E>` to declare a generic effect parameter. `E` can represent multiple effects.
@@ -95,6 +109,12 @@ fn safe_div(a: i32, b: i32) -> i32 {
 ```
 
 ### Handlers
+
+Handlers satisfy effects. Inside a `with ... do` block, the handled effect is provided by the handler, not required from the caller.
+
+Only the effects actually needed are required on the calling function:
+- The handled effect itself: **not required** (handler satisfies it)
+- Effects used by handler methods: **required** on the caller
 
 #### DI-Style (Named Handler)
 
@@ -182,9 +202,24 @@ with Stdin = MockStdin, Stdout as {
 }
 ```
 
+Inline handler methods can also have effect requirements:
+
+```wado
+fn test_with_logging() with Stderr {
+    with Stdin as {
+        fn read_line() -> String with Stderr {
+            eprintln("debug: reading");
+            resume "mocked"
+        }
+    } do {
+        let line = Stdin::read_line();
+    }
+}
+```
+
 ### Resume Keyword
 
-`resume` is an expression that returns `()`. Use it to return a value to the computation:
+`resume` is a control flow expression similar to `return`. It passes a value to the computation and transfers control. The expression `resume` itself evaluates to `()`.
 
 ```wado
 with Stdin as {
