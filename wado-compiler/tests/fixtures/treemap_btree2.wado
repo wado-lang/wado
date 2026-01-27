@@ -1,7 +1,7 @@
 // TreeMap B-tree implementation test with Index traits
 // Tests basic operations with index syntax: map["key"], map["key"] = value
 
-use { println } from "core:cli";
+use { println, Stdout } from "core:cli";
 
 // B-tree node
 struct BTreeNode<K, V> {
@@ -352,7 +352,7 @@ impl IndexAssign<K> for TreeMap<K, V> {
     }
 }
 
-fn run() {
+fn run() with Stdout {
     let mut map = TreeMap::<String, i32>::with_default_degree();
 
     // Test insertion using IndexAssign (map[key] = value)

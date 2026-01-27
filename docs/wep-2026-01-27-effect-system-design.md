@@ -44,16 +44,6 @@ fn bad() {
 }
 ```
 
-### Entry Point
-
-The `run()` function can use generic effects:
-
-```wado
-fn run<effect E>() with E {
-    println("hello");
-}
-```
-
 ### Ambient Effects
 
 `log_stdout` and `log_stderr` from `core:internal` are effect-less by compiler magic. They can be called from any function without effect declaration.
