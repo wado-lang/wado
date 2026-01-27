@@ -1,0 +1,62 @@
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // u128 max value: 2^128 - 1 = 340282366920938463463374607431768211455
+    let u128_max = u128::from_string("340282366920938463463374607431768211455");
+    println(`u128 max: {u128_max}`);
+
+    // u128 zero
+    let u128_zero: u128 = 0;
+    println(`u128 zero: {u128_zero}`);
+
+    // u128 one
+    let u128_one: u128 = 1;
+    println(`u128 one: {u128_one}`);
+
+    // u128 max u64
+    let u128_max_u64 = u128::from_u64(18446744073709551615 as u64);
+    println(`u128 max_u64: {u128_max_u64}`);
+
+    // i128 max value: 2^127 - 1 = 170141183460469231731687303715884105727
+    let i128_max = i128::from_string("170141183460469231731687303715884105727");
+    println(`i128 max: {i128_max}`);
+
+    // i128 min value: -2^127 = -170141183460469231731687303715884105728
+    let i128_min = i128::from_string("-170141183460469231731687303715884105728");
+    println(`i128 min: {i128_min}`);
+
+    // i128 zero
+    let i128_zero: i128 = 0;
+    println(`i128 zero: {i128_zero}`);
+
+    // i128 one
+    let i128_one: i128 = 1;
+    println(`i128 one: {i128_one}`);
+
+    // i128 negative one via coercion
+    let i128_neg_one: i128 = -1;
+    println(`i128 neg_one: {i128_neg_one}`);
+
+    // i128 max i64
+    let i128_max_i64 = i128::from_i64(9223372036854775807 as i64);
+    println(`i128 max_i64: {i128_max_i64}`);
+
+    // i128 min i64
+    let i128_min_i64 = i128::from_i64(-9223372036854775808 as i64);
+    println(`i128 min_i64: {i128_min_i64}`);
+
+    // Verify u128 max low/high
+    if u128_max.low() == (18446744073709551615 as u64) && u128_max.high() == (18446744073709551615 as u64) {
+        println("u128 max low/high correct");
+    }
+
+    // Verify i128 min is negative
+    if i128_min.is_negative() {
+        println("i128 min is negative");
+    }
+
+    println("All edge case tests passed!");
+}
+
+__DATA__
+{"stdout": "u128 max: 340282366920938463463374607431768211455\nu128 zero: 0\nu128 one: 1\nu128 max_u64: 18446744073709551615\ni128 max: 170141183460469231731687303715884105727\ni128 min: -170141183460469231731687303715884105728\ni128 zero: 0\ni128 one: 1\ni128 neg_one: -1\ni128 max_i64: 9223372036854775807\ni128 min_i64: -9223372036854775808\nu128 max low/high correct\ni128 min is negative\nAll edge case tests passed!\n"}
