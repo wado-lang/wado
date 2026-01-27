@@ -8162,6 +8162,27 @@ impl Codegen {
             ) => {
                 func.instruction(&Instruction::I32WrapI64);
             }
+            // u64 -> i32 (truncate)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::I32),
+            ) => {
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            // i64 -> u32 (truncate)
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            // u64 -> u32 (truncate)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                func.instruction(&Instruction::I32WrapI64);
+            }
             // i32 -> f64
             (
                 ResolvedType::Primitive(PrimitiveType::I32),
@@ -8203,6 +8224,90 @@ impl Codegen {
                 ResolvedType::Primitive(PrimitiveType::F32),
             ) => {
                 func.instruction(&Instruction::F32DemoteF64);
+            }
+            // i64 -> f64
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::F64),
+            ) => {
+                func.instruction(&Instruction::F64ConvertI64S);
+            }
+            // u64 -> f64
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::F64),
+            ) => {
+                func.instruction(&Instruction::F64ConvertI64U);
+            }
+            // i64 -> f32
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => {
+                func.instruction(&Instruction::F32ConvertI64S);
+            }
+            // u64 -> f32
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => {
+                func.instruction(&Instruction::F32ConvertI64U);
+            }
+            // f64 -> i64
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF64S);
+            }
+            // f64 -> u64
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF64U);
+            }
+            // f32 -> i64
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF32S);
+            }
+            // f32 -> u64
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF32U);
+            }
+            // u64 -> i64 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                // No instruction needed
+            }
+            // i64 -> u64 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                // No instruction needed
+            }
+            // u32 -> i32 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::U32),
+                ResolvedType::Primitive(PrimitiveType::I32),
+            ) => {
+                // No instruction needed
+            }
+            // i32 -> u32 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::I32),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                // No instruction needed
             }
             // Same type - no conversion needed
             _ if from_type == to_type => {}

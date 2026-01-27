@@ -6,6 +6,8 @@
 // See https://github.com/rsc/fpfmt/blob/main/LICENSE
 
 use {println, Stdout} from "core:cli";
+use {now, MonotonicClock} from "core:clocks";
+// Note: internal stringify functions use template strings, e.g., `{val}`
 
 // ============================================================================
 // Constants
@@ -1799,23 +1801,179 @@ test "format consistency" {
     assert str_result.get(0) == ('0' as i32) + (first_digit as i32);
 }
 
-// Entry point for running
-fn run() with Stdout {
-    println("Float-to-String (fpfmt) conversion examples:");
+// ============================================================================
+// Benchmark helper functions
+// ============================================================================
 
-    // Basic values
-    println(`1.0 -> {f64_to_string(1.0)}`);
-    println(`3.141592653589793 -> {f64_to_string(3.141592653589793)}`);
-    println(`0.1 -> {f64_to_string(0.1)}`);
-    println(`123.456 -> {f64_to_string(123.456)}`);
-
-    // Special values
-    println(`0.0 -> {f64_to_string(0.0)}`);
-    println(`-0.0 -> {f64_to_string(-0.0)}`);
-
-    // Powers of 10
-    println(`1e10 -> {f64_to_string(10000000000.0)}`);
-    println(`1e-10 -> {f64_to_string(0.0000000001)}`);
-
-    println("All examples printed.");
+fn truncate_str(s: String, max_len: i32) -> String {
+    if s.len() <= max_len {
+        return s;
+    }
+    let mut result = String::with_capacity(max_len + 3);
+    for let mut i = 0; i < max_len - 3; i += 1 {
+        result.append(char_to_string(s.get(i)));
+    }
+    result.append("...");
+    return result;
 }
+
+fn pad_right(s: String, width: i32) -> String {
+    let mut result = s;
+    while result.len() < width {
+        result.append(" ");
+    }
+    return result;
+}
+
+fn i32_to_str(n: i32) -> String {
+    if n == 0 { return "0"; }
+    let mut result = String::with_capacity(12);
+    let mut val = n;
+    let is_neg = val < 0;
+    if is_neg { val = -val; }
+
+    let mut digits: Array<i32> = [];
+    while val > 0 {
+        digits.append(val % 10);
+        val = val / 10;
+    }
+
+    if is_neg { result.append("-"); }
+    let mut i = digits.len() - 1;
+    while i >= 0 {
+        result.append(char_to_string('0' as i32 + digits.get(i)));
+        i = i - 1;
+    }
+    return result;
+}
+
+fn u64_to_str(n: u64) -> String {
+    if n == 0 as u64 { return "0"; }
+    let mut result = String::with_capacity(20);
+    let mut val = n;
+
+    let mut digits: Array<i32> = [];
+    while val > 0 as u64 {
+        digits.append((val % 10 as u64) as i32);
+        val = val / 10 as u64;
+    }
+
+    let mut i = digits.len() - 1;
+    while i >= 0 {
+        result.append(char_to_string('0' as i32 + digits.get(i)));
+        i = i - 1;
+    }
+    return result;
+}
+
+// Entry point for running
+fn run() with Stdout, MonotonicClock {
+    println("======================================================================");
+    println("Float-to-String Benchmark: f64_to_string() vs short()");
+    println("======================================================================");
+    println("");
+
+    // Number of iterations per test
+    let iterations = 10000;
+
+    // Test categories
+    benchmark_category("Integers", iterations, [1.0, 10.0, 100.0, 1000.0, 10000.0]);
+    benchmark_category("Decimals", iterations, [0.1, 0.01, 0.001, 0.0001, 0.00001]);
+    benchmark_category("Pi variants", iterations, [3.141592653589793, 31.41592653589793, 0.3141592653589793]);
+    benchmark_category("Large values", iterations, [1.0e50, 1.0e100, 1.0e200]);
+    benchmark_category("Small values", iterations, [1.0e-50, 1.0e-100, 1.0e-200]);
+    benchmark_category("Powers of 2", iterations, [0.5, 0.25, 0.125, 1024.0, 65536.0]);
+    benchmark_category("Mixed precision", iterations, [1.23456789, 9.87654321, 1.111111111111111]);
+
+    println("");
+    println("======================================================================");
+    println("Benchmark complete.");
+    println("======================================================================");
+}
+
+fn benchmark_category(name: String, iterations: i32, values: Array<f64>) with Stdout, MonotonicClock {
+    println(`\n--- {name} ---`);
+    println("Value                      full(ns)     short(ns)     ratio");
+    println("-----------------------------------------------------------------");
+
+    for let val of values {
+        benchmark_value(val, iterations);
+    }
+}
+
+fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
+    // Benchmark fpfmt (this implementation)
+    let start_fpfmt = now();
+    for let mut i = 0; i < iterations; i += 1 {
+        let _ = f64_to_string(val);
+    }
+    let end_fpfmt = now();
+    let fpfmt_time = (end_fpfmt - start_fpfmt) / (iterations as u64);
+
+    // Benchmark short() only (not converting to string)
+    let start_internal = now();
+    for let mut i = 0; i < iterations; i += 1 {
+        let _ = short(val);
+    }
+    let end_internal = now();
+    let internal_time = (end_internal - start_internal) / (iterations as u64);
+
+    // Calculate ratio (fpfmt / internal)
+    let ratio = if internal_time > 0 as u64 {
+        (fpfmt_time as f64) / (internal_time as f64)
+    } else {
+        0.0
+    };
+
+    // Format value for display (use our fpfmt implementation)
+    let val_str = f64_to_string(val);
+    let display_val = truncate_str(val_str, 24);
+    let padded_val = pad_right(display_val, 25);
+
+    // Build output line
+    let fpfmt_str = format_ns(fpfmt_time);
+    let internal_str = format_ns(internal_time);
+    let ratio_str = format_ratio(ratio);
+
+    let mut line = String::with_capacity(80);
+    line.append(padded_val);
+    line.append(" ");
+    line.append(fpfmt_str);
+    line.append("    ");
+    line.append(internal_str);
+    line.append("     ");
+    line.append(ratio_str);
+    println(line);
+}
+
+fn format_ns(ns: u64) -> String {
+    // Format nanoseconds with padding to 8 chars
+    let s = u64_to_str(ns);
+    let mut result = String::with_capacity(12);
+    // Pad left with spaces
+    let padding = 8 - s.len();
+    for let mut i = 0; i < padding; i += 1 {
+        result.append(" ");
+    }
+    result.append(s);
+    return result;
+}
+
+fn format_ratio(ratio: f64) -> String {
+    // Format ratio with 2 decimal places
+    if ratio < 0.01 {
+        return "~0.00x";
+    }
+    let whole = ratio as i32;
+    let frac = ((ratio - (whole as f64)) * 100.0) as i32;
+    let mut result = String::with_capacity(10);
+    result.append(i32_to_str(whole));
+    result.append(".");
+    if frac < 10 {
+        result.append("0");
+    }
+    result.append(i32_to_str(frac));
+    result.append("x");
+    return result;
+}
+
