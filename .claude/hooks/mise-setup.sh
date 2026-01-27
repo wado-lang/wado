@@ -38,10 +38,9 @@ fi
 # Persist PATH and mise settings to CLAUDE_ENV_FILE
 if [ -n "$CLAUDE_ENV_FILE" ]; then
     cat >> "$CLAUDE_ENV_FILE" << 'EOF'
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH"
 export MISE_YES=true
 export MISE_TRUSTED_CONFIG_PATHS="$HOME:$PWD"
-eval "$(mise activate bash)"
 EOF
     log "Environment persisted to CLAUDE_ENV_FILE"
 fi
