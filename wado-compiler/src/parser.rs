@@ -902,7 +902,7 @@ impl Parser {
             false
         };
 
-        let name = self.consume_ident()?;
+        let pattern = self.parse_let_pattern()?;
 
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
@@ -915,7 +915,7 @@ impl Parser {
         let value = self.parse_expr()?;
 
         Ok(Stmt::Let(LetStmt {
-            name,
+            pattern,
             is_mut,
             is_reactive,
             ty,
@@ -1048,7 +1048,7 @@ impl Parser {
             false
         };
 
-        let name = self.consume_ident()?;
+        let pattern = self.parse_let_pattern()?;
 
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
@@ -1061,7 +1061,7 @@ impl Parser {
         let value = self.parse_expr()?;
 
         Ok(LetStmt {
-            name,
+            pattern,
             is_mut,
             is_reactive: false,
             ty,
@@ -1288,7 +1288,7 @@ impl Parser {
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::LParen) {
-            // Tuple pattern: (a, b, c)
+            // Tuple pattern with parentheses: (a, b, c)
             self.advance();
             let mut patterns = Vec::new();
             if !self.check(&TokenKind::RParen) {
@@ -1302,6 +1302,22 @@ impl Parser {
                 }
             }
             self.expect(&TokenKind::RParen)?;
+            Ok(Pattern::Tuple(patterns))
+        } else if self.check(&TokenKind::LBracket) {
+            // Tuple pattern with brackets: [a, b, c]
+            self.advance();
+            let mut patterns = Vec::new();
+            if !self.check(&TokenKind::RBracket) {
+                patterns.push(self.parse_pattern()?);
+                while self.check(&TokenKind::Comma) {
+                    self.advance();
+                    if self.check(&TokenKind::RBracket) {
+                        break;
+                    }
+                    patterns.push(self.parse_pattern()?);
+                }
+            }
+            self.expect(&TokenKind::RBracket)?;
             Ok(Pattern::Tuple(patterns))
         } else if let TokenKind::Ident(name) = self.peek_kind().clone() {
             let start_span = self.peek().span;
@@ -1345,6 +1361,43 @@ impl Parser {
         } else {
             Err(ParseError {
                 message: format!("expected pattern, found {:?}", self.peek_kind()),
+                span: self.peek().span,
+            })
+        }
+    }
+
+    /// Parse a pattern for let statements
+    /// Supports: identifier, wildcard `_`, and tuple pattern `[a, b, c]`
+    fn parse_let_pattern(&mut self) -> ParseResult<Pattern> {
+        if self.check(&TokenKind::LBracket) {
+            // Tuple pattern: [a, b, c]
+            self.advance();
+            let mut patterns = Vec::new();
+            if !self.check(&TokenKind::RBracket) {
+                patterns.push(self.parse_let_pattern()?);
+                while self.check(&TokenKind::Comma) {
+                    self.advance();
+                    if self.check(&TokenKind::RBracket) {
+                        break;
+                    }
+                    patterns.push(self.parse_let_pattern()?);
+                }
+            }
+            self.expect(&TokenKind::RBracket)?;
+            Ok(Pattern::Tuple(patterns))
+        } else if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            self.advance();
+            if name == "_" {
+                Ok(Pattern::Wildcard)
+            } else {
+                Ok(Pattern::Ident(name))
+            }
+        } else {
+            Err(ParseError {
+                message: format!(
+                    "expected identifier or tuple pattern, found {:?}",
+                    self.peek_kind()
+                ),
                 span: self.peek().span,
             })
         }
@@ -3727,7 +3780,11 @@ mod tests {
                 // Check init
                 assert!(for_stmt.init.is_some());
                 if let Stmt::Let(let_stmt) = for_stmt.init.as_ref().unwrap().as_ref() {
-                    assert_eq!(let_stmt.name, "i");
+                    if let Pattern::Ident(name) = &let_stmt.pattern {
+                        assert_eq!(name, "i");
+                    } else {
+                        panic!("expected ident pattern");
+                    }
                     assert!(let_stmt.is_mut);
                 }
 

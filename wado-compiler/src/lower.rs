@@ -355,6 +355,9 @@ impl ClosureLowerer {
                     self.collect_closures_in_expr(upd);
                 }
             }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.collect_closures_in_expr(value);
+            }
         }
     }
 
@@ -586,6 +589,9 @@ impl ClosureLowerer {
                 if let Some(upd) = update {
                     self.analyze_closure_safety_expr(upd, false);
                 }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.analyze_closure_safety_expr(value, false);
             }
         }
     }
@@ -1529,6 +1535,9 @@ impl ClosureLowerer {
                         .as_ref()
                         .is_some_and(|u| self.fn_param_in_struct_field_expr(u, fn_param_indices))
             }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.fn_param_in_struct_field_expr(value, fn_param_indices)
+            }
         }
     }
 
@@ -1745,6 +1754,9 @@ impl ClosureLowerer {
                 if let Some(upd) = update {
                     self.collect_fn_param_specs_expr(upd, func_by_name, type_table, requests);
                 }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
             }
         }
     }
@@ -2393,6 +2405,15 @@ impl ClosureLowerer {
                     .as_ref()
                     .map(|u| self.specialize_expr(u, param_to_functor, type_table)),
             },
+            TirStmtKind::LetPattern {
+                pattern,
+                is_mut,
+                value,
+            } => TirStmtKind::LetPattern {
+                pattern: pattern.clone(),
+                is_mut: *is_mut,
+                value: self.specialize_expr(value, param_to_functor, type_table),
+            },
         };
         TirStmt::new(kind, stmt.span)
     }
@@ -2950,6 +2971,9 @@ impl ClosureLowerer {
                     self.transform_expr(upd, type_table);
                 }
             }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.transform_expr(value, type_table);
+            }
         }
     }
 
@@ -3420,6 +3444,9 @@ impl StringCollector {
                 if let Some(upd) = update {
                     self.collect_expr(upd);
                 }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.collect_expr(value);
             }
         }
     }

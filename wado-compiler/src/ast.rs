@@ -357,7 +357,7 @@ pub struct AssertStmt {
 
 #[derive(Debug, Clone)]
 pub struct LetStmt {
-    pub name: String,
+    pub pattern: Pattern,
     pub is_mut: bool,
     pub is_reactive: bool,
     pub ty: Option<Type>,

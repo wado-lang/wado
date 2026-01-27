@@ -884,7 +884,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("mut ");
         }
 
-        self.output.push_str(&l.name);
+        self.unparse_let_pattern(&l.pattern);
 
         if let Some(ty) = &l.ty {
             self.output.push_str(": ");
@@ -922,7 +922,7 @@ impl<'a> Unparser<'a> {
             if init.is_mut {
                 self.output.push_str("mut ");
             }
-            self.output.push_str(&init.name);
+            self.unparse_let_pattern(&init.pattern);
             if let Some(ty) = &init.ty {
                 self.output.push_str(": ");
                 self.unparse_type(ty);
@@ -973,7 +973,7 @@ impl<'a> Unparser<'a> {
             if init.is_mut {
                 self.output.push_str("mut ");
             }
-            self.output.push_str(&init.name);
+            self.unparse_let_pattern(&init.pattern);
             if let Some(ty) = &init.ty {
                 self.output.push_str(": ");
                 self.unparse_type(ty);
@@ -1097,7 +1097,7 @@ impl<'a> Unparser<'a> {
                 if l.is_mut {
                     self.output.push_str("mut ");
                 }
-                self.output.push_str(&l.name);
+                self.unparse_let_pattern(&l.pattern);
                 if let Some(ty) = &l.ty {
                     self.output.push_str(": ");
                     self.unparse_type(ty);
@@ -1415,7 +1415,7 @@ impl<'a> Unparser<'a> {
             if init.is_mut {
                 self.output.push_str("mut ");
             }
-            self.output.push_str(&init.name);
+            self.unparse_let_pattern(&init.pattern);
             if let Some(ty) = &init.ty {
                 self.output.push_str(": ");
                 self.unparse_type(ty);
@@ -1508,6 +1508,42 @@ impl<'a> Unparser<'a> {
                             self.output.push_str(", ");
                         }
                         self.unparse_pattern(p);
+                    }
+                    self.output.push(')');
+                }
+            }
+        }
+    }
+
+    /// Unparse a pattern for let statements (uses brackets for tuples)
+    fn unparse_let_pattern(&mut self, pattern: &Pattern) {
+        match pattern {
+            Pattern::Ident(name) => self.output.push_str(name),
+            Pattern::Wildcard => self.output.push('_'),
+            Pattern::Tuple(patterns) => {
+                self.output.push('[');
+                for (i, p) in patterns.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_let_pattern(p);
+                }
+                self.output.push(']');
+            }
+            Pattern::Literal(lit) => self.unparse_literal(lit),
+            Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } => {
+                self.output.push_str(variant_name);
+                if !bindings.is_empty() {
+                    self.output.push('(');
+                    for (i, p) in bindings.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.unparse_let_pattern(p);
                     }
                     self.output.push(')');
                 }
@@ -2462,6 +2498,21 @@ impl<'a> TirUnparser<'a> {
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push_str("}\n");
+            }
+            TirStmtKind::LetPattern {
+                pattern,
+                is_mut,
+                value,
+            } => {
+                self.write_indent();
+                self.output.push_str("let ");
+                if *is_mut {
+                    self.output.push_str("mut ");
+                }
+                self.unparse_tir_pattern(pattern);
+                self.output.push_str(" = ");
+                self.unparse_expr(value);
+                self.output.push_str(";\n");
             }
         }
     }

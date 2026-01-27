@@ -10,7 +10,7 @@ use crate::ast::{
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt,
-    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Pattern,
     ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField,
     TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr,
     UnaryOp, WhileStmt,
@@ -146,7 +146,7 @@ fn desugar_block(block: &Block, ctx: &mut DesugarContext) -> Block {
 
 fn desugar_let_stmt(l: &LetStmt) -> LetStmt {
     LetStmt {
-        name: l.name.clone(),
+        pattern: desugar_pattern(&l.pattern),
         is_mut: l.is_mut,
         is_reactive: l.is_reactive,
         ty: l.ty.clone(),
@@ -155,10 +155,28 @@ fn desugar_let_stmt(l: &LetStmt) -> LetStmt {
     }
 }
 
+fn desugar_pattern(p: &Pattern) -> Pattern {
+    match p {
+        Pattern::Ident(name) => Pattern::Ident(name.clone()),
+        Pattern::Literal(lit) => Pattern::Literal(lit.clone()),
+        Pattern::Wildcard => Pattern::Wildcard,
+        Pattern::Tuple(patterns) => Pattern::Tuple(patterns.iter().map(desugar_pattern).collect()),
+        Pattern::Variant {
+            variant_name,
+            bindings,
+            span,
+        } => Pattern::Variant {
+            variant_name: variant_name.clone(),
+            bindings: bindings.iter().map(desugar_pattern).collect(),
+            span: *span,
+        },
+    }
+}
+
 fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
     match stmt {
         Stmt::Let(l) => Stmt::Let(LetStmt {
-            name: l.name.clone(),
+            pattern: desugar_pattern(&l.pattern),
             is_mut: l.is_mut,
             is_reactive: l.is_reactive,
             ty: l.ty.clone(),
@@ -528,7 +546,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
 
     for (var_name, _source, expr) in &intermediates {
         stmts.push(Stmt::Let(LetStmt {
-            name: var_name.clone(),
+            pattern: Pattern::Ident(var_name.clone()),
             is_mut: false,
             is_reactive: false,
             ty: None,
@@ -544,7 +562,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     // Store condition in a variable (scoped to this labeled block)
     let cond_var = "__cond".to_string();
     stmts.push(Stmt::Let(LetStmt {
-        name: cond_var.clone(),
+        pattern: Pattern::Ident(cond_var.clone()),
         is_mut: false,
         is_reactive: false,
         ty: None,

@@ -579,6 +579,9 @@ fn analyze_block(
                 }
             }
             TirStmtKind::Continue => {}
+            TirStmtKind::LetPattern { value, .. } => {
+                analyze_expr(value, current_module, type_table, analysis);
+            }
         }
     }
 }

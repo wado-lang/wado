@@ -217,13 +217,40 @@ impl Binder {
         // First bind the value expression (uses variables from outer scope)
         self.bind_expr(&let_stmt.value);
 
-        // Then define the variable
-        self.define(
-            &let_stmt.name,
+        // Then define the variables from the pattern
+        self.bind_let_pattern(
+            &let_stmt.pattern,
             let_stmt.is_mut,
             let_stmt.is_reactive,
             let_stmt.span,
         );
+    }
+
+    /// Bind a let pattern with mutability and reactivity information
+    fn bind_let_pattern(
+        &mut self,
+        pattern: &crate::ast::Pattern,
+        is_mut: bool,
+        is_reactive: bool,
+        span: Span,
+    ) {
+        match pattern {
+            crate::ast::Pattern::Ident(name) => {
+                self.define(name, is_mut, is_reactive, span);
+            }
+            crate::ast::Pattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.bind_let_pattern(p, is_mut, is_reactive, span);
+                }
+            }
+            crate::ast::Pattern::Wildcard => {
+                // No variable introduced for wildcard
+            }
+            crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Variant { .. } => {
+                // Literal and variant patterns are not valid in let statements
+                // This would be caught by the type checker
+            }
+        }
     }
 
     /// Bind an expression statement

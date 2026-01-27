@@ -342,6 +342,7 @@ fn track_local_uses_in_stmt(stmt: &TirStmt, local_index: u32) -> (bool, u32) {
             .as_ref()
             .map_or((true, 0), |v| track_local_uses_in_expr(v, local_index)),
         TirStmtKind::Continue => (true, 0),
+        TirStmtKind::LetPattern { value, .. } => track_local_uses_in_expr(value, local_index),
     }
 }
 
@@ -594,6 +595,9 @@ fn replace_ref_field_access_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
+        }
     }
 }
 
@@ -748,6 +752,9 @@ fn collect_ref_bindings_in_stmt(stmt: &TirStmt, bindings: &mut Vec<RefBinding>) 
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_ref_bindings_in_expr(value, bindings);
+        }
     }
 }
 
@@ -972,6 +979,9 @@ fn remove_dead_ref_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u3
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            remove_dead_ref_bindings_in_expr(value, dead_locals);
+        }
     }
 }
 

@@ -365,6 +365,12 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { pattern, value, .. } => {
+            // Collect pattern bindings as they are assigned
+            collect_pattern_bindings(pattern, modified);
+            // Also check the value expression for mutable references
+            collect_modified_vars_in_expr(value, modified);
+        }
     }
 }
 
@@ -702,6 +708,9 @@ fn collect_licm_ref_bindings_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
+        }
     }
 }
 
@@ -1129,6 +1138,16 @@ fn find_hoist_candidates_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            find_hoist_candidates_in_expr(
+                value,
+                modified_vars,
+                ref_bindings,
+                candidates,
+                seen,
+                next_local,
+            );
+        }
     }
 }
 
@@ -1599,6 +1618,9 @@ fn replace_hoisted_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            replace_hoisted_in_expr(value, candidates, ref_bindings);
+        }
     }
 }
 
