@@ -1,8 +1,8 @@
-# Wado Compiler Status
+# Wado Compiler
 
-This document tracks the current implementation status of the Wado compiler.
+This document describes the Wado compiler architecture and implementation status.
 
-## Architecture
+## Compiler Architecture
 
 The compiler follows a multi-phase pipeline:
 
@@ -69,6 +69,10 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | Codegen          | `codegen.rs`            | Generates Component Model Wasm via wasm-encoder       |
 | Bundled          | `bundled.rs`            | Loads pre-compiled Wasm builtins (wado-bundled)       |
 | Postproc         | `wasm_postprocess.rs`   | Wasm binary transformations                           |
+
+---
+
+## Module Details
 
 ### Parser and Desugar Separation
 
@@ -243,25 +247,26 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 
 **Core Library (`core/`):**
 
-| Module                | File                  | Status                                             |
+| Module                | File                  | Description                                        |
 | --------------------- | --------------------- | -------------------------------------------------- |
-| `core:prelude`        | `prelude.wado`        | Partial (parser doesn't support generic resources) |
-| `core:cli`            | `cli.wado`            | Complete                                           |
-| `core:clocks`         | `clocks.wado`         | Complete (MonotonicClock, now())                   |
-| `core:filesystem`     | `filesystem.wado`     | Complete                                           |
-| `core:stream`         | `stream.wado`         | Complete                                           |
-| `core:prelude/int128` | `prelude/int128.wado` | Complete (u128/i128, re-exported from prelude)     |
-| `core:internal`       | `internal.wado`       | Internal (compiler-generated code support)         |
+| `core:prelude`        | `prelude.wado`        | Auto-imported types and functions                  |
+| `core:cli`            | `cli.wado`            | CLI output (println, eprintln, etc.)               |
+| `core:clocks`         | `clocks.wado`         | MonotonicClock, now()                              |
+| `core:filesystem`     | `filesystem.wado`     | Filesystem operations                              |
+| `core:stream`         | `stream.wado`         | Stream utilities                                   |
+| `core:collections`    | `collections.wado`    | TreeMap and other collections                      |
+| `core:prelude/int128` | `prelude/int128.wado` | u128/i128 types (re-exported from prelude)         |
+| `core:internal`       | `internal.wado`       | Compiler-generated code support                    |
 | `core:builtin`        | `builtin.wado`        | Compiler intrinsics with `#[canonical(...)]` attrs |
 
 **WASI Library (`wasi/`):**
 
-| Module            | File              | Status   |
-| ----------------- | ----------------- | -------- |
-| `wasi:io`         | `io.wado`         | Complete |
-| `wasi:cli`        | `cli.wado`        | Complete |
-| `wasi:clocks`     | `clocks.wado`     | Complete |
-| `wasi:filesystem` | `filesystem.wado` | Complete |
+| Module            | File              | Description      |
+| ----------------- | ----------------- | ---------------- |
+| `wasi:io`         | `io.wado`         | I/O interfaces   |
+| `wasi:cli`        | `cli.wado`        | CLI interfaces   |
+| `wasi:clocks`     | `clocks.wado`     | Clock interfaces |
+| `wasi:filesystem` | `filesystem.wado` | FS interfaces    |
 
 ### WASI Registry
 
@@ -471,6 +476,31 @@ When resolving relative imports, the path is resolved against the importing modu
 
 The analyzer validates module paths before loading to provide better error messages for invalid paths. Paths must be valid URI references per RFC 3986.
 
+### Module Loader
+
+The module loader validates module paths before loading:
+
+**Namespace Validation:**
+
+```rust
+pub enum ModuleSource {
+    Core { name: String },      // core:prelude, core:cli
+    Wasi { interface: String }, // wasi:cli, wasi:io
+    Local { path: String },     // ./module.wado, ../lib.wado
+    Remote { url: String },     // https://example.com/lib.wado
+    EntryPoint,                 // The main entry module
+}
+```
+
+**Resolution Rules:**
+
+1. `core:*` → `ModuleSource::Core` → embedded stdlib
+2. `wasi:*` → `ModuleSource::Wasi` → embedded stdlib
+3. `http://` or `https://` → `ModuleSource::Remote` → host.load_remote()
+4. `./` or `../` → `ModuleSource::Local` → host.load_source()
+5. Unknown `xxx:` → Error: `unknown module namespace`
+6. Other → Error: `invalid module path`
+
 ### Trait Static Dispatch
 
 Wado traits use **static dispatch** (also known as "static resolution" or "monomorphization"). All trait method calls are resolved at compile time to concrete implementations. There is no runtime vtable or dynamic dispatch.
@@ -659,31 +689,6 @@ IndexAssign::index_assign(&mut arr, i, value)
 
 **Design Note:** `IndexValue` returns by value because Wasm GC's `array.get` copies elements. For primitive arrays, you cannot get a reference to an element. `Index` is only used for containers of reference-type elements.
 
-### Module Loader
-
-The module loader validates module paths before loading:
-
-**Namespace Validation:**
-
-```rust
-pub enum ModuleSource {
-    Core { name: String },      // core:prelude, core:cli
-    Wasi { interface: String }, // wasi:cli, wasi:io
-    Local { path: String },     // ./module.wado, ../lib.wado
-    Remote { url: String },     // https://example.com/lib.wado
-    EntryPoint,                 // The main entry module
-}
-```
-
-**Resolution Rules:**
-
-1. `core:*` → `ModuleSource::Core` → embedded stdlib
-2. `wasi:*` → `ModuleSource::Wasi` → embedded stdlib
-3. `http://` or `https://` → `ModuleSource::Remote` → host.load_remote()
-4. `./` or `../` → `ModuleSource::Local` → host.load_source()
-5. Unknown `xxx:` → Error: `unknown module namespace`
-6. Other → Error: `invalid module path`
-
 ### Type System
 
 **Primitive Layer (`builtin::`):**
@@ -864,243 +869,11 @@ pub struct i128 {
 
 See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full design rationale.
 
----
-
-## Feature Checklist
-
-### Parser
-
-#### Items
-
-- [x] `use` declarations
-- [x] `fn` declarations (with params, return type, effects)
-- [x] `pub` modifier
-- [x] `effect` declarations
-- [x] `struct` declarations
-- [x] `impl` blocks
-- [x] `trait` declarations (static dispatch)
-- [x] `impl Trait for Type` (trait implementations)
-- [x] Associated types in traits (`type Output;` and `type Output = T;`)
-- [x] `enum` declarations (payload-free, CM semantics)
-- [x] `global` declarations (module-level Wasm globals)
-- [x] `type` aliases
-- [x] `impl` blocks
-- [x] `resource` declarations
-- [x] `world` declarations (with imports/exports)
-- [x] Attributes (`#[...]`)
-- [ ] `#[data]` attribute for data section injection
-- [x] `variant` declarations (with payloads, construction, if let pattern matching for single-payload cases)
-- [ ] `flags` declarations (bit flags)
-- [ ] Inner attributes (`#![...]`)
-- [x] Generic parameters on structs (monomorphization)
-
-#### Statements
-
-- [x] `let` statements (with `mut`, `reactive`, type annotation)
-- [x] Expression statements
-- [x] `return` statements
-- [x] `assert` statements with optional message (power-assert style error messages)
-- [x] `if` statements
-- [x] `while` loops
-- [x] C-style `for` loops
-- [x] `loop` loops
-- [x] `for-of` loops
-- [ ] `match` statements
-
-#### Expressions
-
-- [x] Identifiers
-- [x] Integer literals
-- [x] Float literals
-- [x] String literals
-- [x] Character literals
-- [x] Boolean literals (`true`, `false`)
-- [x] Null literal (`null`)
-- [x] Unit `()`
-- [x] Template string interpolation (`` `Hello, {name}!` ``)
-- [x] Compile-time location literals (`#file`, `#line`, `#function`)
-- [x] Binary operators (arithmetic, comparison, logical, bitwise)
-- [x] Comparison chaining (`a < b < c` → `a < b && b < c`)
-- [x] Unary operators (`-`, `!`, `~`, `&`, `*`)
-- [x] Parentheses for grouping `(expr)`
-- [x] Function calls
-- [x] Method calls
-- [x] Static method calls (`Point::origin()`)
-- [x] Static method calls on generic types (`Array::<i32>::with_capacity()`)
-- [x] Field access
-- [x] Index access (`[]`)
-- [x] Type cast (`as T`) for primitive types
-- [x] Closures (`|params| expr`)
-- [ ] `if` expressions
-- [ ] `match` expressions
-- [ ] Block expressions
-- [x] Struct literals (`Point { x: 1, y: 2 }`)
-- [x] Implicit struct literals with type context (`let p: Point = { x: 1, y: 2 }`)
-- [x] Tuple literals (`[1, 2, 3]` creates `[i32, i32, i32]`)
-- [x] Array literals (`[1, 2, 3] as Array<i32>` or via type coercion)
-- [ ] Range expressions
-- [ ] `?` operator (error propagation)
-
-#### Types
-
-- [x] Named types
-- [x] Generic types (`Array<T>`, `Result<T, E>`)
-- [x] Reference types (`&T`)
-- [x] Tuple types (`[T, U]`)
-- [x] Unit type `()`
-- [x] Never type `!`
-- [ ] Function types
-
-#### Patterns
-
-- [x] Identifier patterns
-- [x] Wildcard `_`
-- [x] Tuple patterns
-- [ ] Literal patterns
-- [ ] Struct patterns
-- [x] Variant patterns in if let (single-payload: `if let Circle(r) = shape`)
-- [x] Option variant patterns (`if let Some(x) = ...`, `if let None = ...`)
-
-### Semantic Analysis
-
-- [x] Symbol table construction
-- [x] Module resolution (core library)
-- [x] Import resolution
-- [x] Builtin function detection
-- [ ] Simple type checking
-- [ ] Generic type checking
-- [ ] Type inference
-- [x] Effect checking (validates function calls have required effects)
-- [ ] Borrow checking / move analysis
-- [x] Scope analysis for variables
-- [x] Immutable variable reassignment detection
-- [ ] Unused variable warnings
-
-### Code Generation
-
-- [x] Component Model binary output
-- [x] WASI P3 imports (`wasi:cli/stdout`, `wasi:cli/types`)
-- [x] Stream intrinsics (`stream.new`, `stream.write`, `stream.drop-*`)
-- [x] Async task intrinsics (`task.return`, `waitable-set.*`, `subtask.drop`)
-- [x] Memory module with string data
-- [x] `println` function (core::cli)
-- [x] Multiple function calls
-- [x] Async function lifting/lowering
-- [x] Template strings (literals, integer interpolation, float interpolation via wado-bundled)
-- [x] Variables and locals (`let`, `let mut`)
-- [x] Global variables (`global`, `global mut`) with Wasm global section
-- [x] Control flow (`if` statements, `if let init`, `while`, `for`, `loop`, `for-of`)
-- [x] Binary/unary operations (arithmetic, comparison, logical, bitwise)
-- [x] Type cast (`as T`) for primitive types (i32, i64, f32, f64)
-- [x] Assert statements with power-assert style error messages (intermediate values, value caching)
-- [x] User-defined functions (from core:: modules)
-- [x] Branch hinting (`builtin::likely`, `builtin::unlikely`)
-- [x] WASI clocks (`wasi:clocks/monotonic-clock`, `now()`)
-- [x] Mixed-type arithmetic (i64 vs i32 literal promotion)
-- [x] Struct construction and field access
-- [x] Tuple construction and index access
-- [x] Array construction, index access, and iteration
-- [x] Reference types (`&T`, `&mut T`) for primitives, structs, tuples, and arrays
-- [x] Dereference operator (`*ref`)
-- [x] Auto-dereference for method calls (`ref.method()` auto-derefs to `(*ref).method()`)
-- [x] String equality (`==`, `!=`) with value semantics (desugared to `string_eq(&a, &b)`)
-- [x] Generic structs with monomorphization (`Box<T>`, `Pair<A, B>`)
-- [x] Generic struct instantiation with type inference
-- [x] Generic struct field access
-- [x] Impl blocks on generic struct specializations (`impl Box<i32>`)
-- [x] Nested generic types (`Box<Box<i32>>`, `Array<Pair<i32, String>>`)
-- [x] Generic structs as function parameters and return types
-- [x] Generic functions with explicit turbofish syntax (`identity::<i32>(x)`)
-- [x] Generic methods with explicit turbofish syntax (`obj.method::<T, U>(...)`)
-- [x] Double generics with mixed types (`Container<T>.combine::<U, V>()` where T, U, V are different)
-- [ ] Generic function/method type inference
-- [x] Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
-- [x] Option pattern matching (`if let Some(x) = ...`)
-- [x] Custom variant pattern matching (single-payload: `if let Circle(r) = shape`)
-- [ ] Custom variant pattern matching (tuple/struct payloads, see WEP)
-- [ ] Match expressions (see WEP)
-- [x] Closures - pure (no captures)
-- [ ] Closures - with captures (see WEP)
-- [ ] Effect handlers
-- [x] Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
-- [ ] Template string format specifiers (`.2f`, `0.3f`, etc.)
-- [x] Value semantics for structs (field-by-field copy on assignment)
-- [x] Value semantics for arrays (element-by-element copy on assignment)
-- [x] Value semantics for tuples (field-by-field copy on assignment)
-- [x] Value semantics for strings (element-by-element copy on assignment)
-- [x] Value semantics for Option<T> (conditional copy of inner value)
-- [ ] Value semantics for Result<T, E> (blocked on Result codegen)
-- [x] Value semantics for Variant (copy tag + all fields)
-- [x] Template string array concatenation
-- [ ] String UTF-8 validation (reject invalid byte sequences at construction)
-- [ ] Reactive signals (source values)
-- [ ] Reactive signals (derived values)
-- [ ] Reactive effect blocks (syntax TBD)
-- [ ] Reactive references (`&reactive T`)
-- [ ] Multiple modules/files
-- [ ] Other WASI interfaces (filesystem, etc.)
-
----
-
-## Current Capabilities
-
-The compiler can currently:
-
-1. **Parse** basic Wado programs with:
-   - `use` imports from `core::cli`
-   - `fn main()` with effect declarations
-   - `println("...")` calls
-
-2. **Generate** Component Model Wasm that:
-   - Imports WASI P3 `wasi:cli/stdout` and `wasi:cli/types`
-   - Uses async stream intrinsics for stdout
-   - Runs successfully on wasmtime with P3 support
-
-### Example Working Program
-
-```wado
-use {println, Stdout} from "core:cli";
-
-fn run() with Stdout {
-    println("Hello, world!");
-}
-```
-
----
-
-## Known Limitations
-
-1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
-2. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
-3. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
-4. **Template strings - mostly implemented**:
-   - [x] Syntax parsing with interpolation `{expr}` works
-   - [x] Format specifiers (`:`) vs scope resolution (`::`) correctly distinguished
-   - [x] Nested template strings supported
-   - [x] Integer interpolation (i32/i64 → string)
-   - [x] Float interpolation (f32/f64 → string via wado-bundled)
-   - [x] Boolean interpolation (bool → "true"/"false")
-   - [x] Char interpolation (char → UTF-8 string)
-   - [x] String concatenation with GC array copy
-   - [ ] Format specifiers (`.2f`, etc.) not implemented in codegen
-5. **No type checking**: The analyzer doesn't perform type checking yet
-6. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
-7. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
-8. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
-
----
-
-## Variant Implementation
-
-See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md) for the variant system design and implementation roadmap.
-
----
-
-## Template String Interpolation
+### Template String Interpolation
 
 Wado supports template strings with interpolation using backticks and `{expr}` syntax, similar to JavaScript but with Python-like format specifiers.
 
-### Syntax
+**Syntax:**
 
 ```wado
 let name = "Alice";
@@ -1124,11 +897,7 @@ let text = `Length: {name.len()}`;
 let outer = `Outer {`Inner {x}`}`;
 ```
 
-### Implementation Status
-
-#### ✅ Fully Implemented (Lexer & Parser)
-
-**Lexer (`lexer.rs`)**:
+**Lexer (`lexer.rs`):**
 
 - Backtick string tokenization with `TemplateStringLit` token
 - Brace depth tracking to handle nested `{}` in interpolations
@@ -1136,7 +905,7 @@ let outer = `Outer {`Inner {x}`}`;
 - Escape sequence support (`\n`, `\t`, `\uHHHH`, etc.)
 - Nested template string support
 
-**Parser (`parser.rs`)**:
+**Parser (`parser.rs`):**
 
 - Template string AST nodes (`TemplateStringExpr`, `TemplatePart`, `FormatSpec`)
 - Interpolation expression parsing (any valid expression)
@@ -1147,40 +916,7 @@ let outer = `Outer {`Inner {x}`}`;
 - Recursive parsing for nested template strings
 - Comprehensive error handling
 
-**Test Coverage**:
-
-- 20 comprehensive test cases covering:
-  - Basic interpolation
-  - Complex expressions
-  - Format specifiers
-  - Nested templates
-  - Edge cases (empty, consecutive interpolations, etc.)
-  - Error cases (unterminated, empty interpolation, etc.)
-
-#### ✅ Implemented (Codegen)
-
-**What Works (`codegen.rs`)**:
-
-- String literal parts are collected and embedded in data section
-- Interpolation expressions are evaluated
-- Template strings produce `ref (array u8)` type
-- Integer interpolation (signed i8/i16/i32/i64 and unsigned u8/u16/u32/u64 converted to decimal string)
-- Float interpolation (f32/f64 via `wado-bundled` functions using the `ryu` algorithm)
-- String concatenation using GC array allocation and `array.copy`
-
-**What's Missing (TODO)**:
-
-1. **Format Specifiers**:
-
-   ```wado
-   `{pi:.2f}`       // Decimal precision
-   `{x:0.3f}`       // Zero padding
-   `{n:d}`          // Integer formatting
-   ```
-
-   Format specs are parsed but ignored in codegen.
-
-### AST Structure
+**AST Structure:**
 
 ```rust
 pub struct TemplateStringExpr {
@@ -1201,11 +937,20 @@ pub struct FormatSpec {
 }
 ```
 
-## The `assert` Statement Implementation
+**Codegen (`codegen.rs`):**
+
+- String literal parts are collected and embedded in data section
+- Interpolation expressions are evaluated
+- Template strings produce `ref (array u8)` type
+- Integer interpolation (signed i8/i16/i32/i64 and unsigned u8/u16/u32/u64 converted to decimal string)
+- Float interpolation (f32/f64 via `wado-bundled` functions using the `ryu` algorithm)
+- String concatenation using GC array allocation and `array.copy`
+
+### The `assert` Statement
 
 `assert` behaves like a power-assert, which shows source conditions, collects intermediate values, and prints them if the assertion fails.
 
-### Basic Assert
+**Basic Assert:**
 
 `assert x > 0;` is compiled into:
 
@@ -1215,7 +960,7 @@ if builtin::unlikely(!condition) {
 }
 ```
 
-### Assert with Custom Message
+**Assert with Custom Message:**
 
 `assert x > 0, "x must be checked elsewhere";` is compiled into:
 
@@ -1225,7 +970,7 @@ if builtin::unlikely(!condition) {
 }
 ```
 
-### Intermediate Values
+**Intermediate Values:**
 
 Each intermediate value is collected and printed if the assertion fails.
 
@@ -1237,7 +982,7 @@ if builtin::unlikely(!condition) {
 }
 ```
 
-### Value Caching for Side-Effect Safety
+**Value Caching for Side-Effect Safety:**
 
 When the condition contains function calls with side effects, values are cached in Wasm locals to ensure each function is called exactly once:
 
@@ -1254,11 +999,11 @@ The compiler:
 
 This ensures that `get_value()` is called only once, not twice (once for caching and once for condition evaluation).
 
-## Reactive Signals Implementation
+### Reactive Signals
 
 Wado's `reactive` keyword compiles to efficient Wasm code with minimal runtime overhead.
 
-### Reactive Value Categories
+**Reactive Value Categories:**
 
 ```wado
 let reactive mut count = 0;           // Source: mutable reactive state
@@ -1268,7 +1013,7 @@ let reactive doubled = || count * 2;  // Derived: computed from sources
 **Sources** are mutable reactive values that can be directly assigned.
 **Derived** values are computed from other reactive values (sources or other derived).
 
-### Compilation Strategy
+**Compilation Strategy:**
 
 The compiler uses static analysis to build a dependency graph at compile-time:
 
@@ -1297,7 +1042,7 @@ count = 5;  // Mutation site
 (local.set $quadrupled (i32.mul (local.get $doubled) (i32.const 2)))
 ```
 
-### Effect Blocks (TBD)
+**Effect Blocks (TBD):**
 
 > **Note**: The syntax for reactive side effects is under discussion. See spec.md for alternatives.
 
@@ -1315,11 +1060,11 @@ The compiler:
 2. Generates a closure for the effect body
 3. Inserts calls to this closure after any mutation of its dependencies
 
-### Execution Context
+**Execution Context:**
 
 The compiler generates different code depending on the target world:
 
-#### CLI World (Synchronous)
+CLI World (Synchronous):
 
 - Updates propagate immediately at each mutation site
 - Effect closures are called inline, synchronously
@@ -1332,7 +1077,7 @@ The compiler generates different code depending on the target world:
 ;; Next statement executes after effect completes
 ```
 
-#### Event-looped World (Browser/GUI)
+Event-looped World (Browser/GUI):
 
 - Updates may be batched within an event handler
 - Compiler generates a scheduler that collects mutations and flushes at end of event
@@ -1346,7 +1091,7 @@ The compiler generates different code depending on the target world:
 (call $reactive_flush)  ;; Runs all effects once with final values
 ```
 
-### Wasm Representation
+**Wasm Representation:**
 
 | Wado Construct            | Wasm Representation                             |
 | ------------------------- | ----------------------------------------------- |
@@ -1355,7 +1100,7 @@ The compiler generates different code depending on the target world:
 | `effect { ... }`          | Closure called after dependency mutations       |
 | `&reactive T` (reference) | Wasm GC struct ref with getter/setter           |
 
-### Dynamic Dependencies (Future)
+**Dynamic Dependencies (Future):**
 
 For cases where dependencies aren't statically known:
 
@@ -1371,7 +1116,7 @@ let reactive computed = || {
 
 The compiler may generate runtime tracking when static analysis is insufficient. This uses a lightweight subscription mechanism stored in Wasm GC structs.
 
-### Reactive References
+**Reactive References:**
 
 Passing reactive values by reference:
 
@@ -1387,31 +1132,31 @@ increment(&reactive count);  // doubled gets updated
 
 This requires the reactive reference to carry update callback information, implemented as a Wasm GC struct containing the value and a reference to the update dispatcher.
 
-## Value Semantics Implementation
+### Value Semantics
 
 Wado uses value semantics for composite types: assignment creates a copy rather than sharing references. This matches the behavior users expect from languages like Swift and differs from reference semantics in languages like JavaScript.
 
-### Supported Types
+**Supported Types:**
 
-| Type        | Copy Strategy                                     | Status |
-| ----------- | ------------------------------------------------- | ------ |
-| Struct      | Field-by-field copy via `struct.get`/`struct.new` | ✅     |
-| Array<T>    | Element-by-element copy with loop                 | ✅     |
-| Tuple       | Same as struct (implemented as Wasm GC struct)    | ✅     |
-| String      | Element copy with `ArrayGetU` (packed i8)         | ✅     |
-| Option<T>   | Conditional copy if non-null                      | ✅     |
-| Result<T,E> | Not yet implemented (codegen blocked)             | ❌     |
-| Variant     | Not yet implemented (codegen blocked)             | ❌     |
+| Type        | Copy Strategy                                     |
+| ----------- | ------------------------------------------------- |
+| Struct      | Field-by-field copy via `struct.get`/`struct.new` |
+| Array<T>    | Element-by-element copy with loop                 |
+| Tuple       | Same as struct (implemented as Wasm GC struct)    |
+| String      | Element copy with `ArrayGetU` (packed i8)         |
+| Option<T>   | Conditional copy if non-null                      |
+| Result<T,E> | Not yet implemented (codegen blocked)             |
+| Variant     | Copy tag + all fields                             |
 
-### Reference Types
+**Reference Types:**
 
 Reference types (`&T`, `&mut T`) do **not** have value semantics - they share the underlying value. This is intentional: references provide a way to share data when needed.
 
-## Auto-Dereference for Method Calls
+### Auto-Dereference for Method Calls
 
 When calling a method on a reference type, the compiler automatically inserts dereference operations to reach the underlying value type.
 
-### How It Works
+**How It Works:**
 
 ```wado
 let p = Point { x: 10, y: 20 };
@@ -1429,7 +1174,7 @@ The resolver (`resolver.rs`) handles auto-deref in `resolve_method_call()`:
 3. Repeat until receiver is not a reference type
 4. Proceed with normal method resolution on the dereferenced type
 
-### Supported Cases
+**Supported Cases:**
 
 | Receiver Type | Auto-Deref | Example                                      |
 | ------------- | ---------- | -------------------------------------------- |
@@ -1441,15 +1186,11 @@ The resolver (`resolver.rs`) handles auto-deref in `resolve_method_call()`:
 | `&String`     | ✅         | String methods like `.len()` work            |
 | `&Array<T>`   | ❌         | See Known Limitations                        |
 
-### Known Limitations
-
-- **Array auto-deref not working**: Method calls on `&Array<T>` fail with "unknown function: Array<T>::len". This is due to how Array methods are resolved with monomorphized names. The workaround is to dereference explicitly: `(*arr_ref).len()`.
-
-## String Equality Implementation
+### String Equality
 
 String equality (`==` and `!=`) uses value semantics - comparing the actual string contents rather than reference identity.
 
-### Desugaring
+**Desugaring:**
 
 The resolver desugars string comparisons to calls to `core::internal::string_eq`:
 
@@ -1463,7 +1204,7 @@ core::internal::string_eq(&a, &b)
 !core::internal::string_eq(&a, &b)
 ```
 
-### Implementation
+**Implementation:**
 
 The `string_eq` function in `lib/core/internal.wado`:
 
@@ -1488,3 +1229,244 @@ Key design decisions:
 - Takes `&String` parameters to avoid copying strings
 - Uses auto-dereference so `a.len()` and `a.get(i)` work on references
 - Byte-by-byte comparison (UTF-8 safe since equal strings have identical byte sequences)
+
+---
+
+## Implemented
+
+### Parser
+
+#### Items
+
+- `use` declarations
+- `fn` declarations (with params, return type, effects)
+- `pub` modifier
+- `effect` declarations
+- `struct` declarations
+- `impl` blocks
+- `trait` declarations (static dispatch)
+- `impl Trait for Type` (trait implementations)
+- Associated types in traits (`type Output;` and `type Output = T;`)
+- `enum` declarations (payload-free, CM semantics)
+- `global` declarations (module-level Wasm globals)
+- `type` aliases
+- `resource` declarations
+- `world` declarations (with imports/exports)
+- Attributes (`#[...]`)
+- `variant` declarations (with payloads, construction, if let pattern matching for single-payload cases)
+- Generic parameters on structs (monomorphization)
+
+#### Statements
+
+- `let` statements (with `mut`, `reactive`, type annotation)
+- Expression statements
+- `return` statements
+- `assert` statements with optional message (power-assert style error messages)
+- `if` statements
+- `while` loops
+- C-style `for` loops
+- `loop` loops
+- `for-of` loops
+
+#### Expressions
+
+- Identifiers
+- Integer literals
+- Float literals
+- String literals
+- Character literals
+- Boolean literals (`true`, `false`)
+- Null literal (`null`)
+- Unit `()`
+- Template string interpolation (`` `Hello, {name}!` ``)
+- Compile-time location literals (`#file`, `#line`, `#function`)
+- Binary operators (arithmetic, comparison, logical, bitwise)
+- Comparison chaining (`a < b < c` → `a < b && b < c`)
+- Unary operators (`-`, `!`, `~`, `&`, `*`)
+- Parentheses for grouping `(expr)`
+- Function calls
+- Method calls
+- Static method calls (`Point::origin()`)
+- Static method calls on generic types (`Array::<i32>::with_capacity()`)
+- Field access
+- Index access (`[]`)
+- Type cast (`as T`) for primitive types
+- Closures (`|params| expr`)
+- Struct literals (`Point { x: 1, y: 2 }`)
+- Implicit struct literals with type context (`let p: Point = { x: 1, y: 2 }`)
+- Tuple literals (`[1, 2, 3]` creates `[i32, i32, i32]`)
+- Array literals (`[1, 2, 3] as Array<i32>` or via type coercion)
+
+#### Types
+
+- Named types
+- Generic types (`Array<T>`, `Result<T, E>`)
+- Reference types (`&T`)
+- Tuple types (`[T, U]`)
+- Unit type `()`
+- Never type `!`
+
+#### Patterns
+
+- Identifier patterns
+- Wildcard `_`
+- Tuple patterns
+- Variant patterns in if let (single-payload: `if let Circle(r) = shape`)
+- Option variant patterns (`if let Some(x) = ...`, `if let None = ...`)
+
+### Semantic Analysis
+
+- Symbol table construction
+- Module resolution (core library)
+- Import resolution
+- Builtin function detection
+- Effect checking (validates function calls have required effects)
+- Scope analysis for variables
+- Immutable variable reassignment detection
+
+### Code Generation
+
+- Component Model binary output
+- WASI P3 imports (`wasi:cli/stdout`, `wasi:cli/types`)
+- Stream intrinsics (`stream.new`, `stream.write`, `stream.drop-*`)
+- Async task intrinsics (`task.return`, `waitable-set.*`, `subtask.drop`)
+- Memory module with string data
+- `println` function (core::cli)
+- Multiple function calls
+- Async function lifting/lowering
+- Template strings (literals, integer interpolation, float interpolation via wado-bundled)
+- Variables and locals (`let`, `let mut`)
+- Global variables (`global`, `global mut`) with Wasm global section
+- Control flow (`if` statements, `if let init`, `while`, `for`, `loop`, `for-of`)
+- Binary/unary operations (arithmetic, comparison, logical, bitwise)
+- Type cast (`as T`) for primitive types (i32, i64, f32, f64)
+- Assert statements with power-assert style error messages (intermediate values, value caching)
+- User-defined functions (from core:: modules)
+- Branch hinting (`builtin::likely`, `builtin::unlikely`)
+- WASI clocks (`wasi:clocks/monotonic-clock`, `now()`)
+- Mixed-type arithmetic (i64 vs i32 literal promotion)
+- Struct construction and field access
+- Tuple construction and index access
+- Array construction, index access, and iteration
+- Reference types (`&T`, `&mut T`) for primitives, structs, tuples, and arrays
+- Dereference operator (`*ref`)
+- Auto-dereference for method calls (`ref.method()` auto-derefs to `(*ref).method()`)
+- String equality (`==`, `!=`) with value semantics (desugared to `string_eq(&a, &b)`)
+- Generic structs with monomorphization (`Box<T>`, `Pair<A, B>`)
+- Generic struct instantiation with type inference
+- Generic struct field access
+- Impl blocks on generic struct specializations (`impl Box<i32>`)
+- Nested generic types (`Box<Box<i32>>`, `Array<Pair<i32, String>>`)
+- Generic structs as function parameters and return types
+- Generic functions with explicit turbofish syntax (`identity::<i32>(x)`)
+- Generic methods with explicit turbofish syntax (`obj.method::<T, U>(...)`)
+- Double generics with mixed types (`Container<T>.combine::<U, V>()` where T, U, V are different)
+- Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
+- Option pattern matching (`if let Some(x) = ...`)
+- Custom variant pattern matching (single-payload: `if let Circle(r) = shape`)
+- Closures - pure (no captures)
+- Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
+- Value semantics for structs (field-by-field copy on assignment)
+- Value semantics for arrays (element-by-element copy on assignment)
+- Value semantics for tuples (field-by-field copy on assignment)
+- Value semantics for strings (element-by-element copy on assignment)
+- Value semantics for Option<T> (conditional copy of inner value)
+- Value semantics for Variant (copy tag + all fields)
+- Template string array concatenation
+
+### Current Capabilities
+
+The compiler can currently:
+
+1. **Parse** basic Wado programs with:
+   - `use` imports from `core::cli`
+   - `fn main()` with effect declarations
+   - `println("...")` calls
+
+2. **Generate** Component Model Wasm that:
+   - Imports WASI P3 `wasi:cli/stdout` and `wasi:cli/types`
+   - Uses async stream intrinsics for stdout
+   - Runs successfully on wasmtime with P3 support
+
+**Example Working Program:**
+
+```wado
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    println("Hello, world!");
+}
+```
+
+---
+
+## In Progress
+
+### Partial Implementations
+
+- **Template strings**: Syntax and basic interpolation work. Format specifiers (`.2f`, `0.3f`, etc.) are parsed but not implemented in codegen.
+- **Variant pattern matching**: Single-payload cases work (`if let Circle(r) = shape`). Tuple/struct payloads not yet supported. See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
+- **`core:prelude`**: Partial (parser doesn't support generic resources)
+
+### Known Limitations
+
+1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
+2. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
+3. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
+4. **No type checking**: The analyzer doesn't perform type checking yet
+5. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
+6. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
+7. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
+
+---
+
+## Not Yet Implemented
+
+### Parser
+
+- `#[data]` attribute for data section injection
+- `flags` declarations (bit flags)
+- Inner attributes (`#![...]`)
+- `match` statements
+
+### Expressions
+
+- `if` expressions
+- `match` expressions
+- Block expressions
+- Range expressions
+- `?` operator (error propagation)
+
+### Types
+
+- Function types
+
+### Patterns
+
+- Literal patterns
+- Struct patterns
+
+### Semantic Analysis
+
+- Simple type checking
+- Generic type checking
+- Type inference
+- Borrow checking / move analysis
+- Unused variable warnings
+
+### Code Generation
+
+- Custom variant pattern matching (tuple/struct payloads, see WEP)
+- Match expressions (see WEP)
+- Closures - with captures (see WEP)
+- Effect handlers
+- Template string format specifiers (`.2f`, etc.)
+- Value semantics for Result<T, E> (blocked on Result codegen)
+- String UTF-8 validation (reject invalid byte sequences at construction)
+- Reactive signals (source values)
+- Reactive signals (derived values)
+- Reactive effect blocks (syntax TBD)
+- Reactive references (`&reactive T`)
+- Multiple modules/files
+- Other WASI interfaces (filesystem, etc.)
+- Generic function/method type inference
