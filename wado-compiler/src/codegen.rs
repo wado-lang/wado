@@ -10186,6 +10186,42 @@ impl Codegen {
                 let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
                 func.instruction(&Instruction::StructNew(tuple_type_idx));
             }
+            "builtin::i32_clz" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I32Clz);
+            }
+            "builtin::i64_clz" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64Clz);
+            }
+            "builtin::i64_reinterpret_f64" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64ReinterpretF64);
+            }
+            "builtin::f64_reinterpret_i64" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64ReinterpretI64);
+            }
+            "builtin::i32_reinterpret_f32" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I32ReinterpretF32);
+            }
+            "builtin::f32_reinterpret_i32" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32ReinterpretI32);
+            }
             "builtin::call_indirect_stdout_write_via_stream" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);

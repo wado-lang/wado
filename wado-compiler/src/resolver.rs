@@ -4434,6 +4434,16 @@ impl<'a> Resolver<'a> {
                     .intern(ResolvedType::Tuple(vec![TypeTable::I64, TypeTable::I64]))
             }
 
+            // Bit counting operations
+            "i32_clz" => TypeTable::I32,
+            "i64_clz" => TypeTable::I64,
+
+            // Float/integer reinterpret operations
+            "i64_reinterpret_f64" => TypeTable::I64,
+            "f64_reinterpret_i64" => TypeTable::F64,
+            "i32_reinterpret_f32" => TypeTable::I32,
+            "f32_reinterpret_i32" => TypeTable::F32,
+
             // Unknown builtin - default to UNIT
             _ => TypeTable::UNIT,
         }
