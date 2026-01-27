@@ -32,9 +32,9 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Helper to get the `ModuleSource` for String type (core:prelude)
+/// Helper to get the `ModuleSource` for String type (core:string)
 fn string_module_source() -> ModuleSource {
-    ModuleSource::core("prelude")
+    ModuleSource::core("string")
 }
 
 /// Struct field info: module source and field definitions
@@ -3070,6 +3070,57 @@ impl<'a> Resolver<'a> {
             .map_err(|_| format!("invalid float literal: {repr}"))
     }
 
+    /// Parse an unsigned integer literal into a u128 value (low, high)
+    /// Supports decimal, hex, binary, and octal formats
+    fn parse_u128_literal(repr: &str) -> Result<(u64, u64), String> {
+        let clean: String = repr.chars().filter(|&c| c != '_').collect();
+
+        let value: u128 = if clean.starts_with("0x") || clean.starts_with("0X") {
+            u128::from_str_radix(&clean[2..], 16)
+                .map_err(|_| format!("invalid hex literal: {repr}"))?
+        } else if clean.starts_with("0b") || clean.starts_with("0B") {
+            u128::from_str_radix(&clean[2..], 2)
+                .map_err(|_| format!("invalid binary literal: {repr}"))?
+        } else if clean.starts_with("0o") || clean.starts_with("0O") {
+            u128::from_str_radix(&clean[2..], 8)
+                .map_err(|_| format!("invalid octal literal: {repr}"))?
+        } else {
+            clean
+                .parse()
+                .map_err(|_| format!("invalid integer literal: {repr}"))?
+        };
+
+        Ok((value as u64, (value >> 64) as u64))
+    }
+
+    /// Parse a signed integer literal into an i128 value (low as u64, high as i64)
+    /// Supports decimal, hex, binary, and octal formats
+    fn parse_i128_literal(repr: &str) -> Result<(u64, i64), String> {
+        let clean: String = repr.chars().filter(|&c| c != '_').collect();
+
+        let value: i128 = if clean.starts_with("0x") || clean.starts_with("0X") {
+            i128::from_str_radix(&clean[2..], 16)
+                .map_err(|_| format!("invalid hex literal: {repr}"))?
+        } else if clean.starts_with("0b") || clean.starts_with("0B") {
+            i128::from_str_radix(&clean[2..], 2)
+                .map_err(|_| format!("invalid binary literal: {repr}"))?
+        } else if clean.starts_with("0o") || clean.starts_with("0O") {
+            i128::from_str_radix(&clean[2..], 8)
+                .map_err(|_| format!("invalid octal literal: {repr}"))?
+        } else {
+            clean
+                .parse()
+                .map_err(|_| format!("invalid integer literal: {repr}"))?
+        };
+
+        Ok((value as u64, (value >> 64) as i64))
+    }
+
+    /// Get the clean representation of a literal (without underscores)
+    fn clean_literal_repr(repr: &str) -> String {
+        repr.chars().filter(|&c| c != '_').collect()
+    }
+
     /// Resolve a literal expression
     fn resolve_literal(&mut self, lit: &ast::LiteralExpr, ctx: &FunctionContext) -> TirExpr {
         let (kind, type_id) = match &lit.value {
@@ -3425,14 +3476,21 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Check if this is an arithmetic operation on a non-primitive type
-        // Non-primitives use Add/Sub/Mul/Div/Rem traits instead of direct Wasm instructions
-        let is_arithmetic = matches!(
+        // Check if this is an arithmetic or bitwise operation on a non-primitive type
+        // Non-primitives use Add/Sub/Mul/Div/Rem/BitAnd/BitOr/BitXor traits
+        let is_arithmetic_or_bitwise = matches!(
             binary.op,
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
+            BinaryOp::Add
+                | BinaryOp::Sub
+                | BinaryOp::Mul
+                | BinaryOp::Div
+                | BinaryOp::Mod
+                | BinaryOp::BitAnd
+                | BinaryOp::BitOr
+                | BinaryOp::BitXor
         );
 
-        if is_arithmetic {
+        if is_arithmetic_or_bitwise {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
@@ -3448,6 +3506,9 @@ impl<'a> Resolver<'a> {
                     BinaryOp::Mul => ("Mul", "mul"),
                     BinaryOp::Div => ("Div", "div"),
                     BinaryOp::Mod => ("Rem", "rem"),
+                    BinaryOp::BitAnd => ("BitAnd", "bitand"),
+                    BinaryOp::BitOr => ("BitOr", "bitor"),
+                    BinaryOp::BitXor => ("BitXor", "bitxor"),
                     _ => unreachable!(),
                 };
 
@@ -3499,6 +3560,68 @@ impl<'a> Resolver<'a> {
                             },
                             type_args: vec![],
                             args: vec![arg_ref],
+                        },
+                        trait_info.output_type,
+                        binary.span,
+                    );
+                }
+            }
+        }
+
+        // Check if this is a shift operation on a non-primitive type
+        // Non-primitives use Shl/Shr traits (with rhs: u32, not &Self)
+        let is_shift = matches!(binary.op, BinaryOp::Shl | BinaryOp::Shr);
+
+        if is_shift {
+            // Get struct name for trait lookup
+            let struct_name = match &left_type {
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
+
+            if let Some(struct_name) = struct_name {
+                // Determine which trait and method to use based on operator
+                let (trait_name, method_name) = match binary.op {
+                    BinaryOp::Shl => ("Shl", "shl"),
+                    BinaryOp::Shr => ("Shr", "shr"),
+                    _ => unreachable!(),
+                };
+
+                // Find the shift trait implementation
+                if let Some(trait_info) = self.find_arithmetic_trait_impl(
+                    &struct_name,
+                    left.type_id,
+                    trait_name,
+                    method_name,
+                ) {
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        left.clone(),
+                        trait_info.self_kind,
+                        binary.span,
+                    );
+
+                    // For shift operations, rhs is u32 (not &Self), so pass directly
+                    // Get the mangled method name: StructName^Shl::shl
+                    let mangled_method_name =
+                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    method_name.to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![right.clone()], // Pass rhs directly (u32)
                         },
                         trait_info.output_type,
                         binary.span,
@@ -3594,6 +3717,54 @@ impl<'a> Resolver<'a> {
                                     struct_name.clone(),
                                     Some(trait_info.trait_name.clone()),
                                     "neg".to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![],
+                        },
+                        trait_info.output_type,
+                        unary.span,
+                    );
+                }
+            }
+        }
+
+        // Check for bitwise NOT on non-primitive types that implement BitNot trait
+        if unary.op == UnaryOp::BitNot {
+            let expr_type = self.type_table.borrow().get(expr.type_id).clone();
+            let struct_name = match &expr_type {
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
+
+            if let Some(struct_name) = struct_name {
+                // Find the BitNot trait implementation
+                if let Some(trait_info) =
+                    self.find_arithmetic_trait_impl(&struct_name, expr.type_id, "BitNot", "bitnot")
+                {
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        expr.clone(),
+                        trait_info.self_kind,
+                        unary.span,
+                    );
+
+                    // Get the mangled method name: StructName^BitNot::bitnot
+                    let mangled_method_name =
+                        format!("{}^{}::bitnot", struct_name, trait_info.trait_name);
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    "bitnot".to_string(),
                                 )),
                             },
                             type_args: vec![],
@@ -4231,11 +4402,60 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Get the String struct type (from prelude)
+    /// Get the String struct type (from core:string)
     fn get_string_struct_type(&mut self) -> TypeId {
         self.type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::core("prelude"))
+            .make_struct("String".to_string(), ModuleSource::core("string"))
+    }
+
+    /// Build a `from_pair` call for i128/u128 large literal construction
+    fn build_from_pair_call(
+        &self,
+        type_name: &str,
+        low: u64,
+        high: i64,
+        target_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
+        let low_literal = TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: low,
+                repr: low.to_string(),
+            },
+            TypeTable::U64,
+            span,
+        );
+        let high_literal = TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: high as u64,
+                repr: high.to_string(),
+            },
+            if type_name == "u128" {
+                TypeTable::U64
+            } else {
+                TypeTable::I64
+            },
+            span,
+        );
+
+        let mangled_func_name = format!("{type_name}::from_pair");
+        let method_info =
+            LocalMethodName::new(type_name.to_string(), None, "from_pair".to_string());
+
+        TirExpr::new(
+            TirExprKind::StaticCall {
+                func: FunctionRef::External {
+                    module_source: ModuleSource::core("prelude/int128"),
+                    name: mangled_func_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                },
+                args: vec![low_literal, high_literal],
+            },
+            target_type,
+            span,
+        )
     }
 
     /// Get the return type of a builtin function
@@ -4445,6 +4665,135 @@ impl<'a> Resolver<'a> {
                             lit.span,
                         );
                     }
+                }
+            }
+
+            // i128/u128 literal coercion: let x: u128 = 42 → u128::from_u64(42 as u64)
+            // For values larger than u64, use from_pair: let x: u128 = 340... → u128::from_pair(low, high)
+            if let Expr::Literal(lit) = expr
+                && let Literal::Int(int_lit) = &lit.value
+            {
+                let struct_name = match self.type_table.borrow().get(target_type).clone() {
+                    ResolvedType::Struct { name, .. } => Some(name),
+                    _ => None,
+                };
+
+                if let Some(name) = struct_name
+                    && (name == "u128" || name == "i128")
+                {
+                    // Try to parse the literal value as u64 first (most efficient path)
+                    if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                        // For u128: value fits in u64, use from_u64
+                        // For i128: value must also fit in i64 (positive range)
+                        let use_from_u64_or_i64 = if name == "u128" {
+                            true // u64 always works for u128
+                        } else {
+                            // For i128, check if value fits in i64 positive range
+                            i64::try_from(value).is_ok()
+                        };
+
+                        if use_from_u64_or_i64 {
+                            let (inner_type, method_name) = if name == "u128" {
+                                (TypeTable::U64, "from_u64")
+                            } else {
+                                (TypeTable::I64, "from_i64")
+                            };
+
+                            let inner_literal = TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value,
+                                    repr: int_lit.repr.clone(),
+                                },
+                                inner_type,
+                                lit.span,
+                            );
+
+                            // Build static call: u128::from_u64(value) or i128::from_i64(value)
+                            let mangled_func_name = format!("{name}::{method_name}");
+                            let method_info =
+                                LocalMethodName::new(name.clone(), None, method_name.to_string());
+
+                            return TirExpr::new(
+                                TirExprKind::StaticCall {
+                                    func: FunctionRef::External {
+                                        module_source: ModuleSource::core("prelude/int128"),
+                                        name: mangled_func_name,
+                                        monomorph_info: None,
+                                        method_info: Some(method_info),
+                                    },
+                                    args: vec![inner_literal],
+                                },
+                                target_type,
+                                lit.span,
+                            );
+                        }
+                    }
+
+                    // Value doesn't fit in u64 (or i64 for i128), use from_pair
+                    // Parse at compile time and generate from_pair(low, high)
+                    if name == "u128" {
+                        if let Ok((low, high)) = Self::parse_u128_literal(&int_lit.repr) {
+                            return self.build_from_pair_call(
+                                &name,
+                                low,
+                                high as i64,
+                                target_type,
+                                lit.span,
+                            );
+                        }
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message: format!("invalid u128 literal: {}", int_lit.repr),
+                            span: lit.span,
+                        });
+                    } else {
+                        // i128: parse as i128 (handles positive values > i64::MAX)
+                        if let Ok((low, high)) = Self::parse_i128_literal(&int_lit.repr) {
+                            return self.build_from_pair_call(
+                                &name,
+                                low,
+                                high,
+                                target_type,
+                                lit.span,
+                            );
+                        }
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message: format!("invalid i128 literal: {}", int_lit.repr),
+                            span: lit.span,
+                        });
+                    }
+                }
+            }
+
+            // Handle negated integer literal to i128: let x: i128 = -100
+            // For large values: let x: i128 = -170... → i128::from_pair(low, high)
+            if let Expr::Unary(unary) = expr
+                && unary.op == ast::UnaryOp::Neg
+                && let Expr::Literal(lit) = &unary.expr
+                && let Literal::Int(int_lit) = &lit.value
+            {
+                let struct_name = match self.type_table.borrow().get(target_type).clone() {
+                    ResolvedType::Struct { name, .. } => Some(name),
+                    _ => None,
+                };
+
+                if let Some(name) = struct_name
+                    && name == "i128"
+                {
+                    // Parse the negated value directly using Rust's i128
+                    let negated_repr = format!("-{}", Self::clean_literal_repr(&int_lit.repr));
+                    if let Ok((low, high)) = Self::parse_i128_literal(&negated_repr) {
+                        return self.build_from_pair_call(
+                            &name,
+                            low,
+                            high,
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!("invalid i128 literal: -{}", int_lit.repr),
+                        span: unary.span,
+                    });
                 }
             }
         }
@@ -7485,7 +7834,7 @@ impl<'a> Resolver<'a> {
             result = TirExpr::new(
                 TirExprKind::StaticCall {
                     func: FunctionRef::External {
-                        module_source: ModuleSource::core("prelude"),
+                        module_source: string_module_source(),
                         name: "String::concat".to_string(),
                         monomorph_info: None,
                         method_info: Some(LocalMethodName::new(
@@ -7536,6 +7885,158 @@ impl<'a> Resolver<'a> {
                 target_type,
                 cast.span,
             );
+        }
+
+        // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
+        // For large literals: 170... as i128 → i128::from_string("170...")
+        let struct_name = match self.type_table.borrow().get(target_type).clone() {
+            ResolvedType::Struct { name, .. } => Some(name),
+            _ => None,
+        };
+
+        if let Some(ref name) = struct_name
+            && (name == "u128" || name == "i128")
+        {
+            // Handle integer literal cast specially to support values > u64
+            if let ast::Expr::Literal(lit) = &cast.expr
+                && let Literal::Int(int_lit) = &lit.value
+            {
+                // Try to parse as u64
+                if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                    // For u128: value fits in u64, use from_u64
+                    // For i128: value must also fit in i64 (positive range), otherwise use from_string
+                    let use_from_u64_or_i64 = if name == "u128" {
+                        true // u64 always works for u128
+                    } else {
+                        // For i128, check if value fits in i64 positive range
+                        i64::try_from(value).is_ok()
+                    };
+
+                    if use_from_u64_or_i64 {
+                        let (inner_type, method_name) = if name == "u128" {
+                            (TypeTable::U64, "from_u64")
+                        } else {
+                            (TypeTable::I64, "from_i64")
+                        };
+
+                        let inner_literal = TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value,
+                                repr: int_lit.repr.clone(),
+                            },
+                            inner_type,
+                            lit.span,
+                        );
+
+                        let mangled_func_name = format!("{name}::{method_name}");
+                        let method_info =
+                            LocalMethodName::new(name.clone(), None, method_name.to_string());
+
+                        return TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/int128"),
+                                    name: mangled_func_name,
+                                    monomorph_info: None,
+                                    method_info: Some(method_info),
+                                },
+                                args: vec![inner_literal],
+                            },
+                            target_type,
+                            cast.span,
+                        );
+                    }
+                }
+
+                // Value doesn't fit in u64 (or i64 for i128), use from_pair
+                if name == "u128" {
+                    if let Ok((low, high)) = Self::parse_u128_literal(&int_lit.repr) {
+                        return self.build_from_pair_call(
+                            name,
+                            low,
+                            high as i64,
+                            target_type,
+                            cast.span,
+                        );
+                    }
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!("invalid u128 literal: {}", int_lit.repr),
+                        span: lit.span,
+                    });
+                } else {
+                    // i128
+                    if let Ok((low, high)) = Self::parse_i128_literal(&int_lit.repr) {
+                        return self.build_from_pair_call(name, low, high, target_type, cast.span);
+                    }
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!("invalid i128 literal: {}", int_lit.repr),
+                        span: lit.span,
+                    });
+                }
+            }
+
+            // Handle negated integer literal cast: -170... as i128
+            if let ast::Expr::Unary(unary) = &cast.expr
+                && unary.op == ast::UnaryOp::Neg
+                && let ast::Expr::Literal(lit) = &unary.expr
+                && let Literal::Int(int_lit) = &lit.value
+                && name == "i128"
+            {
+                // Parse the negated value directly using Rust's i128
+                let negated_repr = format!("-{}", Self::clean_literal_repr(&int_lit.repr));
+                if let Ok((low, high)) = Self::parse_i128_literal(&negated_repr) {
+                    return self.build_from_pair_call(name, low, high, target_type, unary.span);
+                }
+                self.errors.push(TypeError::InvalidLiteral {
+                    message: format!("invalid i128 literal: -{}", int_lit.repr),
+                    span: unary.span,
+                });
+            }
+
+            // General expression cast (not a literal)
+            let expr_resolved = self.resolve_expr(&cast.expr, ctx);
+            let source_type = expr_resolved.type_id;
+
+            // Check if source type is a numeric type we can convert from
+            if self.type_table.borrow().is_integer(source_type)
+                || self.type_table.borrow().is_float(source_type)
+            {
+                // Determine intermediate type and method based on target
+                let (intermediate_type, method_name) = if name == "u128" {
+                    (TypeTable::U64, "from_u64")
+                } else {
+                    (TypeTable::I64, "from_i64")
+                };
+
+                // Cast the expression to intermediate type first
+                let casted_expr = TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(expr_resolved),
+                        target_type: intermediate_type,
+                    },
+                    intermediate_type,
+                    cast.span,
+                );
+
+                // Build static call: u128::from_u64(expr as u64)
+                // Note: i128/u128 are defined in core:prelude/int128
+                let mangled_func_name = format!("{name}::{method_name}");
+                let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
+
+                return TirExpr::new(
+                    TirExprKind::StaticCall {
+                        func: FunctionRef::External {
+                            module_source: ModuleSource::core("prelude/int128"),
+                            name: mangled_func_name,
+                            monomorph_info: None,
+                            method_info: Some(method_info),
+                        },
+                        args: vec![casted_expr],
+                    },
+                    target_type,
+                    cast.span,
+                );
+            }
         }
 
         // Normal cast
@@ -7640,7 +8141,27 @@ impl<'a> Resolver<'a> {
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                let mut value = self.resolve_expr(&field.value, ctx);
+                // Find expected field type for literal coercion (only for numeric literals)
+                // We only use expected type for integer/float literals to avoid interfering
+                // with tuple-to-array coercion for generic struct fields
+                let expected_field_type = if matches!(
+                    &field.value,
+                    ast::Expr::Literal(lit) if matches!(
+                        &lit.value,
+                        ast::Literal::Int(_) | ast::Literal::Float(_)
+                    )
+                ) {
+                    struct_field_types
+                        .iter()
+                        .find(|(name, _)| name == &field.name)
+                        .map(|(_, type_id)| *type_id)
+                } else {
+                    None
+                };
+
+                // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
+                let mut value =
+                    self.resolve_expr_with_expected_type(&field.value, ctx, expected_field_type);
 
                 // Check if this is a tuple literal that should become an array
                 // This happens when the struct field expects Array<T> and we have [...]

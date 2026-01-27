@@ -32,6 +32,7 @@ pub fn desugar_module(module: &Module) -> Module {
             .iter()
             .map(|item| desugar_item(item, &mut ctx))
             .collect(),
+        module.inner_attributes().to_vec(),
         module.shebang().map(String::from),
         module.data_section().map(String::from),
     )

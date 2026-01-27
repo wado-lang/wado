@@ -39,9 +39,9 @@ use wasm_encoder::{
 };
 use wasmparser::{Validator, WasmFeatures};
 
-/// Module path for the String struct in core/prelude
+/// Module path for the String struct in core:string
 /// Used to avoid repeated allocations when looking up String type
-const STRING_MODULE_PATH: &[&str] = &["core", "prelude"];
+const STRING_MODULE_PATH: &[&str] = &["core", "string"];
 
 /// Helper to convert `STRING_MODULE_PATH` to Vec<String> (for APIs requiring owned strings)
 fn string_module_path() -> Vec<String> {
@@ -51,9 +51,9 @@ fn string_module_path() -> Vec<String> {
         .collect()
 }
 
-/// Helper to get the `ModuleSource` for String type (core:prelude)
+/// Helper to get the `ModuleSource` for String type (core:string)
 fn string_module_source() -> ModuleSource {
-    ModuleSource::core("prelude")
+    ModuleSource::core("string")
 }
 
 /// Information about a user-defined struct type
@@ -6751,7 +6751,7 @@ impl Codegen {
                                     // Generate the receiver (the string)
                                     self.generate_expr(func, receiver, type_table, ctx, builder);
                                     // Call String::len method
-                                    let len_func_idx = builder.func_idx("core/prelude/String::len");
+                                    let len_func_idx = builder.func_idx("core/string/String::len");
                                     func.instruction(&Instruction::Call(len_func_idx));
                                     return;
                                 }
@@ -6763,7 +6763,7 @@ impl Codegen {
                                             func, index_arg, type_table, ctx, builder,
                                         );
                                     }
-                                    let get_func_idx = builder.func_idx("core/prelude/String::get");
+                                    let get_func_idx = builder.func_idx("core/string/String::get");
                                     func.instruction(&Instruction::Call(get_func_idx));
                                     return;
                                 }
@@ -6780,7 +6780,7 @@ impl Codegen {
                                             func, value_arg, type_table, ctx, builder,
                                         );
                                     }
-                                    let set_func_idx = builder.func_idx("core/prelude/String::set");
+                                    let set_func_idx = builder.func_idx("core/string/String::set");
                                     func.instruction(&Instruction::Call(set_func_idx));
                                     return;
                                 }

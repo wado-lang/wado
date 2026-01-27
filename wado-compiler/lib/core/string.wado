@@ -1,0 +1,155 @@
+// String Type Module
+// Separated from prelude to allow other stdlib modules to depend on String
+// without creating circular dependencies.
+
+#![no_prelude]
+
+use {Eq, Ord} from "core:prelude/traits";
+
+// ============================================================================
+// String Type
+// ============================================================================
+
+/// UTF-8 encoded string type with O(1) amortized append
+pub struct String {
+    repr: builtin::array<u8>,
+    used: i32,
+}
+
+impl String {
+    /// Create a new empty string with the specified capacity
+    /// The string starts empty but has space for `capacity` bytes
+    pub fn with_capacity(capacity: i32) -> String {
+        return String {
+            repr: builtin::array_new::<u8>(capacity),
+            used: 0,
+        };
+    }
+
+    /// Get the length of the string in bytes
+    pub fn len(&self) -> i32 {
+        return self.used;
+    }
+
+    /// Check if the string is empty
+    pub fn is_empty(&self) -> bool {
+        return self.used == 0;
+    }
+
+    /// Get a byte at the given index
+    pub fn get(&self, index: i32) -> i32 {
+        return builtin::array_get_u8(self.repr, index);
+    }
+
+    /// Set a byte at the given index
+    pub fn set(&mut self, index: i32, value: i32) {
+        builtin::array_set_u8(self.repr, index, value);
+    }
+
+    /// Append another string to this string
+    /// Grows the string if necessary (O(1) amortized)
+    pub fn append(&mut self, other: String) {
+        let other_len = other.len();
+        if other_len == 0 {
+            return;
+        }
+
+        let new_used = self.used + other_len;
+        let capacity = builtin::array_len(self.repr);
+
+        // Grow if needed
+        if builtin::unlikely(new_used > capacity) {
+            // Calculate new capacity: double or at least new_used
+            let mut new_capacity = capacity * 2;
+            if new_capacity < new_used {
+                new_capacity = new_used;
+            }
+            if new_capacity < 8 {
+                new_capacity = 8;
+            }
+
+            // Create new array and copy existing bytes
+            let new_repr = builtin::array_new::<u8>(new_capacity);
+            for let mut i = 0; i < self.used; i += 1 {
+                let byte = builtin::array_get_u8(self.repr, i);
+                builtin::array_set_u8(new_repr, i, byte);
+            }
+            self.repr = new_repr;
+        }
+
+        // Copy bytes from other
+        for let mut i = 0; i < other_len; i += 1 {
+            let byte = other.get(i);
+            builtin::array_set_u8(self.repr, self.used + i, byte);
+        }
+        self.used = new_used;
+    }
+
+    /// Concatenate two strings into a new string
+    /// This is a static method: String::concat(a, b)
+    pub fn concat(a: String, b: String) -> String {
+        let len_a = a.len();
+        let len_b = b.len();
+        let total = len_a + len_b;
+
+        // Create new string with exact capacity needed
+        let repr = builtin::array_new::<u8>(total);
+
+        // Copy bytes from a
+        for let mut i = 0; i < len_a; i += 1 {
+            let byte = a.get(i);
+            builtin::array_set_u8(repr, i, byte);
+        }
+
+        // Copy bytes from b
+        for let mut i = 0; i < len_b; i += 1 {
+            let byte = b.get(i);
+            builtin::array_set_u8(repr, len_a + i, byte);
+        }
+
+        return String { repr, used: total };
+    }
+}
+
+// Eq implementation for String - lexicographic equality
+impl Eq for String {
+    pub fn eq(&self, other: &Self) -> bool {
+        let len_a = self.len();
+        let len_b = other.len();
+
+        if len_a != len_b {
+            return false;
+        }
+
+        for let mut i = 0; i < len_a; i += 1 {
+            if self.get(i) != other.get(i) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+// Ord implementation for String - lexicographic ordering
+impl Ord for String {
+    pub fn lt(&self, other: &Self) -> bool {
+        let len_a = self.len();
+        let len_b = other.len();
+        let min_len = if len_b < len_a { len_b } else { len_a };
+
+        for let mut i = 0; i < min_len; i += 1 {
+            let a_byte = self.get(i);
+            let b_byte = other.get(i);
+            if a_byte < b_byte {
+                return true;
+            }
+            if a_byte > b_byte {
+                return false;
+            }
+        }
+
+        // All compared bytes are equal, shorter string is less
+        return len_a < len_b;
+    }
+}

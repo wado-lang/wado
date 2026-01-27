@@ -504,7 +504,7 @@ impl fmt::Display for MethodName {
 ///
 /// Examples:
 /// - `"./main.wado/Point::sum"` → `"Point::sum"`
-/// - `"core/prelude/String::len"` → `"String::len"`
+/// - `"core/string/String::len"` → `"String::len"`
 /// - `"Point::sum"` → `"Point::sum"`
 pub fn extract_local_name(name: &str) -> &str {
     // Find the last '/' which separates module path from local name

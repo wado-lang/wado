@@ -36,6 +36,9 @@ pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 /// Embedded source for core:internal
 pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
 
+/// Embedded source for core:string (String type, separated from prelude)
+pub const CORE_STRING: &str = include_str!("../lib/core/string.wado");
+
 /// Embedded source for core:builtin (compiler intrinsic declarations)
 pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
 
@@ -95,6 +98,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:stream" => Some(CORE_STREAM),
         "core:filesystem" => Some(CORE_FILESYSTEM),
         "core:internal" => Some(CORE_INTERNAL),
+        "core:string" => Some(CORE_STRING),
         "core:builtin" => Some(CORE_BUILTIN),
         "core:clocks" => Some(CORE_CLOCKS),
 

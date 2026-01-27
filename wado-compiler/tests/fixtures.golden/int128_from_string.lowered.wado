@@ -4,17 +4,15 @@
 
 fn run() with Stdout {
     let a: u128 = move "u128::from_string"(move "100");
-    core::cli::println(move "String::concat"(move "u128 from \"100\": low=", move "u64::to_string"("u128::low"(&a))));
+    core::cli::println(move "String::concat"(move "u128 from \"100\": ", move "u128::to_string"(a)));
     let b: u128 = move "u128::from_string"(move "18446744073709551616");
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "u128 from \"2^64\": low=", move "u64::to_string"("u128::low"(&b))), move ", high="), move "u64::to_string"("u128::high"(&b))));
+    core::cli::println(move "String::concat"(move "u128 from \"2^64\": ", move "u128::to_string"(b)));
     let x: i128 = move "i128::from_string"(move "100");
-    core::cli::println(move "String::concat"(move "i128 from \"100\": low=", move "u64::to_string"("i128::low"(&x))));
+    core::cli::println(move "String::concat"(move "i128 from \"100\": ", move "i128::to_string"(x)));
     let y: i128 = move "i128::from_string"(move "-100");
-    if "i128::is_negative"(&y) {
-        core::cli::println(move "i128 from \"-100\" is negative");
-    }
+    core::cli::println(move "String::concat"(move "i128 from \"-100\": ", move "i128::to_string"(y)));
     let sum: u128 = move "u128^Add::add"(&a, &"u128::from_string"(move "50"));
-    core::cli::println(move "String::concat"(move "100 + 50 = ", move "u64::to_string"("u128::low"(&sum))));
+    core::cli::println(move "String::concat"(move "100 + 50 = ", move "u128::to_string"(sum)));
     core::cli::println(move "All from_string tests passed!");
 }
 
