@@ -173,11 +173,11 @@ pub global VERSION: i32 = 1;
 
 **Why `global` instead of `let` or `static`?**
 
-| Keyword  | Issue                                                         |
-| -------- | ------------------------------------------------------------- |
-| `let`    | Conflates fundamentally different concepts (scope, lifetime)  |
-| `static` | Implies memory model semantics that don't apply to Wasm       |
-| `global` | Directly reflects Wasm semantics - makes the target visible   |
+| Keyword  | Issue                                                        |
+| -------- | ------------------------------------------------------------ |
+| `let`    | Conflates fundamentally different concepts (scope, lifetime) |
+| `static` | Implies memory model semantics that don't apply to Wasm      |
+| `global` | Directly reflects Wasm semantics - makes the target visible  |
 
 **Initialization:**
 

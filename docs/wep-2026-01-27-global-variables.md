@@ -8,14 +8,14 @@ Wado needs module-level state for various use cases: configuration values, count
 
 Wasm globals are a distinct concept from local variables:
 
-| Aspect | Local Variables | Wasm Globals |
-|--------|-----------------|--------------|
-| Scope | Function-scoped | Module-scoped |
-| Lifetime | Stack frame | Module lifetime |
-| Access | Direct (stack slot) | Indexed (`global.get`/`global.set`) |
-| Initialization | On function entry | On module instantiation |
-| Mutability | Always mutable | Explicitly declared |
-| Types | All Wasm types | Restricted (no `funcref` in some contexts) |
+| Aspect         | Local Variables     | Wasm Globals                               |
+| -------------- | ------------------- | ------------------------------------------ |
+| Scope          | Function-scoped     | Module-scoped                              |
+| Lifetime       | Stack frame         | Module lifetime                            |
+| Access         | Direct (stack slot) | Indexed (`global.get`/`global.set`)        |
+| Initialization | On function entry   | On module instantiation                    |
+| Mutability     | Always mutable      | Explicitly declared                        |
+| Types          | All Wasm types      | Restricted (no `funcref` in some contexts) |
 
 Wasm globals are initialized with **constant expressions** - a limited subset of Wasm that can be evaluated at instantiation time without executing arbitrary code.
 
@@ -23,12 +23,12 @@ Wasm globals are initialized with **constant expressions** - a limited subset of
 
 Several alternatives were considered:
 
-| Keyword | Precedent | Issue |
-|---------|-----------|-------|
-| `let` | JavaScript, Rust | Conflates two fundamentally different concepts |
-| `static` | Rust, C | Implies memory model semantics that don't apply to Wasm |
-| `const` | Many languages | Already reserved for compile-time constants |
-| `global` | WebAssembly | Directly reflects the underlying Wasm concept |
+| Keyword  | Precedent        | Issue                                                   |
+| -------- | ---------------- | ------------------------------------------------------- |
+| `let`    | JavaScript, Rust | Conflates two fundamentally different concepts          |
+| `static` | Rust, C          | Implies memory model semantics that don't apply to Wasm |
+| `const`  | Many languages   | Already reserved for compile-time constants             |
+| `global` | WebAssembly      | Directly reflects the underlying Wasm concept           |
 
 **Decision**: Use `global` to make the Wasm semantics visible.
 
@@ -98,6 +98,7 @@ global mut cache: Array<i32> = Array::<i32>::with_capacity(100);
 ```
 
 This would require:
+
 1. Initialize to a default/null value in Wasm global section
 2. Generate a `__init_globals()` function with actual initialization logic
 3. Ensure `__init_globals()` is called before any access
