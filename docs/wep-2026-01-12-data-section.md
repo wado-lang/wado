@@ -78,7 +78,7 @@ In a future version, `#[data("format")]` will parse the data section:
 
 ```wado
 #[data("json")]
-let config: Dict<String, Any>;
+let config: TreeMap<String, Any>;
 
 #[data("jsonc")]  // JSON with comments
 let test_spec: TestSpec;

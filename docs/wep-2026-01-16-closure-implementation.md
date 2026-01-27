@@ -325,7 +325,7 @@ struct ClosureEnv {
 }
 
 // Global handle table (runtime-managed)
-static mut CLOSURE_TABLE: Dict<i32, (ClosureEnv, FnRef)> = {};
+static mut CLOSURE_TABLE: TreeMap<i32, (ClosureEnv, FnRef)> = TreeMap::new();
 static mut NEXT_HANDLE: i32 = 0;
 
 fn create_closure(env: ClosureEnv, func: FnRef) -> i32 {
