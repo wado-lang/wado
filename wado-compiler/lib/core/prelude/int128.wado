@@ -170,6 +170,45 @@ impl u128 {
             };
         }
     }
+
+    /// Convert u128 to String (for template string interpolation)
+    pub fn to_string(&self) -> String {
+        // Handle zero case
+        if *self == u128::zero() {
+            return "0";
+        }
+
+        // Allocate buffer in linear memory (40 bytes max: 39 digits + safety)
+        let ptr: i32 = builtin::realloc(0, 0, 1, 40);
+
+        // Convert digits in reverse order by repeatedly dividing by 10
+        let mut pos: i32 = 39;
+        let mut temp = *self;
+        let ten = u128::from_u64(10 as u64);
+
+        while temp > u128::zero() {
+            pos -= 1;
+            let result = temp.div_rem(&ten);
+            let rem: u128 = result[1];
+            let digit_u64: u64 = rem.low();
+            let digit: i32 = (digit_u64 as i64) as i32;
+            builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
+            temp = result[0];
+        }
+
+        // Calculate length and copy to GC string
+        let len: i32 = 39 - pos;
+        let result = builtin::string_new(len);
+        for (let mut i: i32 = 0; i < len; i += 1) {
+            let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
+            result.set(i, byte);
+        }
+
+        // Free linear memory buffer
+        builtin::realloc(ptr, 40, 1, 0);
+
+        return result;
+    }
 }
 
 // Eq implementation for u128
@@ -545,6 +584,34 @@ impl i128 {
         }
 
         return [quotient, remainder];
+    }
+
+    /// Convert i128 to String (for template string interpolation)
+    pub fn to_string(&self) -> String {
+        // Handle zero case
+        if *self == i128::zero() {
+            return "0";
+        }
+
+        // Check for negative
+        let is_negative = self.is_negative();
+
+        // Get absolute value as u128 and convert to string
+        let abs_value = self.abs_u128();
+        let abs_str = abs_value.to_string();
+
+        // Prepend minus sign if negative
+        if is_negative {
+            let len = abs_str.len();
+            let result = builtin::string_new(len + 1);
+            result.set(0, '-' as i32);
+            for (let mut i = 0; i < len; i += 1) {
+                result.set(i + 1, abs_str.get(i));
+            }
+            return result;
+        }
+
+        return abs_str;
     }
 }
 

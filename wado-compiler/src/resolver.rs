@@ -4471,6 +4471,142 @@ impl<'a> Resolver<'a> {
                     }
                 }
             }
+
+            // i128/u128 literal coercion: let x: u128 = 42 → u128::from_u64(42 as u64)
+            if let Expr::Literal(lit) = expr
+                && let Literal::Int(int_lit) = &lit.value
+            {
+                let struct_name = match self.type_table.borrow().get(target_type).clone() {
+                    ResolvedType::Struct { name, .. } => Some(name),
+                    _ => None,
+                };
+
+                if let Some(name) = struct_name
+                    && (name == "u128" || name == "i128")
+                {
+                    // Parse the literal value
+                    if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                        // Create the inner literal with appropriate type
+                        let (inner_type, method_name) = if name == "u128" {
+                            (TypeTable::U64, "from_u64")
+                        } else {
+                            (TypeTable::I64, "from_i64")
+                        };
+
+                        let inner_literal = TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value,
+                                repr: int_lit.repr.clone(),
+                            },
+                            inner_type,
+                            lit.span,
+                        );
+
+                        // Build static call: u128::from_u64(value) or i128::from_i64(value)
+                        // Note: i128/u128 are defined in core:prelude/int128
+                        let mangled_func_name = format!("{name}::{method_name}");
+                        let method_info =
+                            LocalMethodName::new(name.clone(), None, method_name.to_string());
+
+                        return TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/int128"),
+                                    name: mangled_func_name,
+                                    monomorph_info: None,
+                                    method_info: Some(method_info),
+                                },
+                                args: vec![inner_literal],
+                            },
+                            target_type,
+                            lit.span,
+                        );
+                    }
+                }
+            }
+
+            // Handle negated integer literal to i128: let x: i128 = -100
+            if let Expr::Unary(unary) = expr
+                && unary.op == ast::UnaryOp::Neg
+                && let Expr::Literal(lit) = &unary.expr
+                && let Literal::Int(int_lit) = &lit.value
+            {
+                let struct_name = match self.type_table.borrow().get(target_type).clone() {
+                    ResolvedType::Struct { name, .. } => Some(name),
+                    _ => None,
+                };
+
+                if let Some(name) = struct_name
+                    && name == "i128"
+                {
+                    // Parse the literal value
+                    if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                        // Create positive i128 first
+                        let inner_literal = TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value,
+                                repr: int_lit.repr.clone(),
+                            },
+                            TypeTable::I64,
+                            lit.span,
+                        );
+
+                        // Build i128::from_i64(value)
+                        let from_i64_func_name = "i128::from_i64".to_string();
+                        let from_i64_method_info =
+                            LocalMethodName::new("i128".to_string(), None, "from_i64".to_string());
+
+                        let positive_i128 = TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/int128"),
+                                    name: from_i64_func_name,
+                                    monomorph_info: None,
+                                    method_info: Some(from_i64_method_info),
+                                },
+                                args: vec![inner_literal],
+                            },
+                            target_type,
+                            lit.span,
+                        );
+
+                        // Apply negation: i128^Neg::neg
+                        // Need to create a reference first since Neg trait takes &self
+                        let ref_type = self.type_table.borrow_mut().make_ref(target_type);
+                        let ref_expr = TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Ref,
+                                expr: Box::new(positive_i128),
+                            },
+                            ref_type,
+                            unary.span,
+                        );
+
+                        let neg_method_name = "i128^Neg::neg".to_string();
+                        let neg_method_info = LocalMethodName::new(
+                            "i128".to_string(),
+                            Some("Neg".to_string()),
+                            "neg".to_string(),
+                        );
+
+                        return TirExpr::new(
+                            TirExprKind::MethodCall {
+                                receiver: Box::new(ref_expr),
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/int128"),
+                                    name: neg_method_name,
+                                    monomorph_info: None,
+                                    method_info: Some(neg_method_info),
+                                },
+                                type_args: vec![],
+                                args: vec![],
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                }
+            }
         }
 
         // Handle tuple literal to array coercion
@@ -7560,6 +7696,60 @@ impl<'a> Resolver<'a> {
                 target_type,
                 cast.span,
             );
+        }
+
+        // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
+        let struct_name = match self.type_table.borrow().get(target_type).clone() {
+            ResolvedType::Struct { name, .. } => Some(name),
+            _ => None,
+        };
+
+        if let Some(name) = struct_name
+            && (name == "u128" || name == "i128")
+        {
+            let expr_resolved = self.resolve_expr(&cast.expr, ctx);
+            let source_type = expr_resolved.type_id;
+
+            // Check if source type is a numeric type we can convert from
+            if self.type_table.borrow().is_integer(source_type)
+                || self.type_table.borrow().is_float(source_type)
+            {
+                // Determine intermediate type and method based on target
+                let (intermediate_type, method_name) = if name == "u128" {
+                    (TypeTable::U64, "from_u64")
+                } else {
+                    (TypeTable::I64, "from_i64")
+                };
+
+                // Cast the expression to intermediate type first
+                let casted_expr = TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(expr_resolved),
+                        target_type: intermediate_type,
+                    },
+                    intermediate_type,
+                    cast.span,
+                );
+
+                // Build static call: u128::from_u64(expr as u64)
+                // Note: i128/u128 are defined in core:prelude/int128
+                let mangled_func_name = format!("{name}::{method_name}");
+                let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
+
+                return TirExpr::new(
+                    TirExprKind::StaticCall {
+                        func: FunctionRef::External {
+                            module_source: ModuleSource::core("prelude/int128"),
+                            name: mangled_func_name,
+                            monomorph_info: None,
+                            method_info: Some(method_info),
+                        },
+                        args: vec![casted_expr],
+                    },
+                    target_type,
+                    cast.span,
+                );
+            }
         }
 
         // Normal cast
