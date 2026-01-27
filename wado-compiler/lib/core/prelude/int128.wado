@@ -14,6 +14,12 @@ impl u128 {
         return u128 { low: value, high: 0 };
     }
 
+    /// Create a u128 from low and high 64-bit parts
+    /// Used by the compiler for efficient large literal construction
+    pub fn from_pair(low: u64, high: u64) -> u128 {
+        return u128 { low: low, high: high };
+    }
+
     /// Create a u128 from a string (decimal representation)
     /// Used for literal coercion: `let x: u128 = "12345678901234567890"`
     pub fn from_string(s: String) -> u128 {
@@ -438,6 +444,12 @@ impl i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
         let high: i64 = if value < (0 as i64) { -1 as i64 } else { 0 as i64 };
         return i128 { low: value as u64, high };
+    }
+
+    /// Create an i128 from low and high 64-bit parts
+    /// Used by the compiler for efficient large literal construction
+    pub fn from_pair(low: u64, high: i64) -> i128 {
+        return i128 { low: low, high: high };
     }
 
     /// Create an i128 from a string (decimal representation, optionally prefixed with '-')

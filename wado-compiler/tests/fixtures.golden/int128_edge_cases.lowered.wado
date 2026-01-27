@@ -19,14 +19,7 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "i128 zero: ", move "i128::to_string"(i128_zero)));
     let i128_one: i128 = move "i128::from_i64"(1);
     core::cli::println(move "String::concat"(move "i128 one: ", move "i128::to_string"(i128_one)));
-    let i128_neg_one: i128 = __inline_i128_Neg__neg_0: {
-        let self: &i128 = &"i128::from_i64"(1);
-        let zero: i128 = move "i128::zero"();
-        break __inline_i128_Neg__neg_0: __inline_i128__sub_1: {
-            let result: [i64, i64] = move core::builtin::i64_sub128(zero.low as i64, zero.high, self.low as i64, self.high);
-            break __inline_i128__sub_1: i128 { low: result.0 as u64, high: result.1 };
-        };
-    };
+    let i128_neg_one: i128 = move "i128::from_pair"(18446744073709551615, -1);
     core::cli::println(move "String::concat"(move "i128 neg_one: ", move "i128::to_string"(i128_neg_one)));
     let i128_max_i64: i128 = move "i128::from_i64"(9223372036854775807 as i64);
     core::cli::println(move "String::concat"(move "i128 max_i64: ", move "i128::to_string"(i128_max_i64)));

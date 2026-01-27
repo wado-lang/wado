@@ -7,14 +7,7 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "u128 literal coercion: low=", move "u64::to_string"("u128::low"(&a))));
     let b: i128 = move "i128::from_i64"(42);
     core::cli::println(move "String::concat"(move "i128 literal coercion: low=", move "u64::to_string"("i128::low"(&b))));
-    let c: i128 = __inline_i128_Neg__neg_0: {
-        let self: &i128 = &"i128::from_i64"(100);
-        let zero: i128 = move "i128::zero"();
-        break __inline_i128_Neg__neg_0: __inline_i128__sub_1: {
-            let result: [i64, i64] = move core::builtin::i64_sub128(zero.low as i64, zero.high, self.low as i64, self.high);
-            break __inline_i128__sub_1: i128 { low: result.0 as u64, high: result.1 };
-        };
-    };
+    let c: i128 = move "i128::from_pair"(18446744073709551516, -1);
     if "i128::is_negative"(&c) {
         core::cli::println(move "i128 negative literal coercion works");
     }
