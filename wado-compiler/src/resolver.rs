@@ -4175,6 +4175,12 @@ impl<'a> Resolver<'a> {
             "array_len" => TypeTable::I32,
             "array_get_u8" => TypeTable::I32, // Returns u8 as i32
             "array_set_u8" => TypeTable::UNIT,
+            "array_u8_new" => {
+                // Returns builtin::array<u8>
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::BuiltinArray(TypeTable::U8))
+            }
             "string_new" => self.get_string_struct_type(),
 
             // Memory operations
@@ -7382,19 +7388,22 @@ impl<'a> Resolver<'a> {
             );
         }
 
-        // Build a chain of pairwise string concatenations: concat(concat(a, b), c)
-        // string_concat only takes 2 arguments, so we chain them
+        // Build a chain of pairwise string concatenations: String::concat(String::concat(a, b), c)
+        // String::concat only takes 2 arguments, so we chain them
         let mut result = parts.remove(0);
         for part in parts {
             result = TirExpr::new(
-                TirExprKind::Call {
+                TirExprKind::StaticCall {
                     func: FunctionRef::External {
-                        module_source: ModuleSource::core("internal"),
-                        name: "string_concat".to_string(),
+                        module_source: ModuleSource::core("prelude"),
+                        name: "String::concat".to_string(),
                         monomorph_info: None,
-                        method_info: None, // Free function
+                        method_info: Some(LocalMethodName::new(
+                            "String".to_string(),
+                            None, // Static methods are inherent, no trait
+                            "concat".to_string(),
+                        )),
                     },
-                    type_args: vec![],
                     args: vec![result, part],
                 },
                 string_type,

@@ -1,0 +1,38 @@
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test String::concat
+    let a = "Hello";
+    let b = ", ";
+    let c = "World!";
+    let combined = String::concat(String::concat(a, b), c);
+    println(combined);
+
+    // Test String::append (mutator)
+    let mut builder = String::with_capacity(20);
+    builder.append("Hello");
+    builder.append(", ");
+    builder.append("World!");
+    println(builder);
+
+    // Test String length and capacity
+    let mut s = String::with_capacity(10);
+    println(`len: {s.len()}, cap: {s.capacity()}`);
+    s.append("Hi");
+    println(`len: {s.len()}, cap: {s.capacity()}`);
+
+    // Test is_empty
+    let empty = String::with_capacity(0);
+    if empty.is_empty() {
+        println("empty is empty");
+    }
+
+    // Test non-empty string is not empty
+    let nonempty = "test";
+    if !nonempty.is_empty() {
+        println("nonempty is not empty");
+    }
+}
+
+__DATA__
+{"stdout": "Hello, World!\nHello, World!\nlen: 0, cap: 10\nlen: 2, cap: 10\nempty is empty\nnonempty is not empty\n"}
