@@ -154,6 +154,38 @@ fn i64_mul_wide_u(a: i64, b: i64) -> [i64, i64];
 fn i64_mul_wide_s(a: i64, b: i64) -> [i64, i64];
 
 // ============================================================================
+// Bit Counting Operations
+// ============================================================================
+
+/// Count leading zeros in a 32-bit integer
+/// Maps to Wasm i32.clz instruction
+fn i32_clz(x: i32) -> i32;
+
+/// Count leading zeros in a 64-bit integer
+/// Maps to Wasm i64.clz instruction
+fn i64_clz(x: i64) -> i64;
+
+// ============================================================================
+// Float/Integer Reinterpret Operations
+// ============================================================================
+
+/// Reinterpret the bits of an f64 as an i64 (no conversion, just bit cast)
+/// Maps to Wasm i64.reinterpret_f64 instruction
+fn i64_reinterpret_f64(f: f64) -> i64;
+
+/// Reinterpret the bits of an i64 as an f64 (no conversion, just bit cast)
+/// Maps to Wasm f64.reinterpret_i64 instruction
+fn f64_reinterpret_i64(i: i64) -> f64;
+
+/// Reinterpret the bits of an f32 as an i32 (no conversion, just bit cast)
+/// Maps to Wasm i32.reinterpret_f32 instruction
+fn i32_reinterpret_f32(f: f32) -> i32;
+
+/// Reinterpret the bits of an i32 as an f32 (no conversion, just bit cast)
+/// Maps to Wasm f32.reinterpret_i32 instruction
+fn f32_reinterpret_i32(i: i32) -> f32;
+
+// ============================================================================
 // Control Flow
 // ============================================================================
 

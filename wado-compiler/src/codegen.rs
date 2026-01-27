@@ -8284,6 +8284,27 @@ impl Codegen {
             ) => {
                 func.instruction(&Instruction::I32WrapI64);
             }
+            // u64 -> i32 (truncate)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::I32),
+            ) => {
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            // i64 -> u32 (truncate)
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                func.instruction(&Instruction::I32WrapI64);
+            }
+            // u64 -> u32 (truncate)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                func.instruction(&Instruction::I32WrapI64);
+            }
             // i32 -> f64
             (
                 ResolvedType::Primitive(PrimitiveType::I32),
@@ -8325,6 +8346,90 @@ impl Codegen {
                 ResolvedType::Primitive(PrimitiveType::F32),
             ) => {
                 func.instruction(&Instruction::F32DemoteF64);
+            }
+            // i64 -> f64
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::F64),
+            ) => {
+                func.instruction(&Instruction::F64ConvertI64S);
+            }
+            // u64 -> f64
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::F64),
+            ) => {
+                func.instruction(&Instruction::F64ConvertI64U);
+            }
+            // i64 -> f32
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => {
+                func.instruction(&Instruction::F32ConvertI64S);
+            }
+            // u64 -> f32
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => {
+                func.instruction(&Instruction::F32ConvertI64U);
+            }
+            // f64 -> i64
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF64S);
+            }
+            // f64 -> u64
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF64U);
+            }
+            // f32 -> i64
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF32S);
+            }
+            // f32 -> u64
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64TruncF32U);
+            }
+            // u64 -> i64 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                // No instruction needed
+            }
+            // i64 -> u64 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                // No instruction needed
+            }
+            // u32 -> i32 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::U32),
+                ResolvedType::Primitive(PrimitiveType::I32),
+            ) => {
+                // No instruction needed
+            }
+            // i32 -> u32 (no-op, same representation)
+            (
+                ResolvedType::Primitive(PrimitiveType::I32),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                // No instruction needed
             }
             // Same type - no conversion needed
             _ if from_type == to_type => {}
@@ -10307,6 +10412,42 @@ impl Codegen {
                 // Convert multi-value return to tuple struct
                 let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
                 func.instruction(&Instruction::StructNew(tuple_type_idx));
+            }
+            "builtin::i32_clz" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I32Clz);
+            }
+            "builtin::i64_clz" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64Clz);
+            }
+            "builtin::i64_reinterpret_f64" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I64ReinterpretF64);
+            }
+            "builtin::f64_reinterpret_i64" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64ReinterpretI64);
+            }
+            "builtin::i32_reinterpret_f32" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::I32ReinterpretF32);
+            }
+            "builtin::f32_reinterpret_i32" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32ReinterpretI32);
             }
             "builtin::call_indirect_stdout_write_via_stream" => {
                 for arg in args {
