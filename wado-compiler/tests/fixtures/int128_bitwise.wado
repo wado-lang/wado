@@ -1,0 +1,53 @@
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test u128 bitwise operations
+    let a = u128::from_u64(0xFF00 as u64);
+    let b = u128::from_u64(0x0FF0 as u64);
+
+    // BitAnd
+    let and_result = a & b;
+    println(`u128 AND: {and_result.low()}`);  // 0x0F00 = 3840
+
+    // BitOr
+    let or_result = a | b;
+    println(`u128 OR: {or_result.low()}`);    // 0xFFF0 = 65520
+
+    // BitXor
+    let xor_result = a ^ b;
+    println(`u128 XOR: {xor_result.low()}`);  // 0xF0F0 = 61680
+
+    // BitNot (test low bits)
+    let not_a = ~a;
+    let not_masked = not_a & u128::from_u64(0xFFFF as u64);
+    println(`u128 NOT masked: {not_masked.low()}`);  // ~0xFF00 & 0xFFFF = 0x00FF = 255
+
+    // Shl
+    let shl_result = u128::from_u64(1 as u64) << (4 as u32);
+    println(`u128 SHL: {shl_result.low()}`);  // 16
+
+    // Shr
+    let shr_result = u128::from_u64(256 as u64) >> (4 as u32);
+    println(`u128 SHR: {shr_result.low()}`);  // 16
+
+    // Test i128 bitwise operations
+    let x = i128::from_i64(0xFF00 as i64);
+    let y = i128::from_i64(0x0FF0 as i64);
+
+    let i_and = x & y;
+    println(`i128 AND: {i_and.low()}`);  // 3840
+
+    // Shl for i128
+    let i_shl = i128::from_i64(1 as i64) << (8 as u32);
+    println(`i128 SHL: {i_shl.low()}`);  // 256
+
+    // Shr for i128 (arithmetic shift)
+    let neg = i128::from_i64(-256 as i64);
+    let neg_shr = neg >> (4 as u32);
+    println(`i128 SHR negative: {neg_shr.low()}`);  // -16 as u64
+
+    println("Bitwise tests passed!");
+}
+
+__DATA__
+{"stdout": "u128 AND: 3840\nu128 OR: 65520\nu128 XOR: 61680\nu128 NOT masked: 255\nu128 SHL: 16\nu128 SHR: 16\ni128 AND: 3840\ni128 SHL: 256\ni128 SHR negative: 18446744073709551600\nBitwise tests passed!\n"}
