@@ -136,7 +136,6 @@ let s = String::with_capacity(100);      // empty string with pre-allocated capa
 // String methods
 let s = "hello";
 let n = s.len();                         // get length in bytes (5)
-let cap = s.capacity();                  // get allocated capacity
 let empty = s.is_empty();                // check if empty (false)
 let byte = s.get(0);                     // get byte at index
 s.set(0, 72);                            // set byte at index (requires mut)
