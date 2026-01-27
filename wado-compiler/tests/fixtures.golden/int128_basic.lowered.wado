@@ -6,9 +6,9 @@ fn run() with Stdout {
     let a: u128 = move "u128::from_u64"(100 as u64);
     let b: u128 = move "u128::from_u64"(50 as u64);
     let sum: u128 = move "u128::add"(&a, &b);
-    core::cli::println(move "String::concat"(move "u128 100 + 50 = ", move "u64::to_string"("u128::low"(&sum))));
+    core::cli::println(move "String::concat"(move "u128 100 + 50 = ", move "u128::to_string"(sum)));
     let diff: u128 = move "u128::sub"(&a, &b);
-    core::cli::println(move "String::concat"(move "u128 100 - 50 = ", move "u64::to_string"("u128::low"(&diff))));
+    core::cli::println(move "String::concat"(move "u128 100 - 50 = ", move "u128::to_string"(diff)));
     let c: u128 = move "u128::from_u64"(100 as u64);
     if "u128^Eq::eq"(&a, &c) {
         core::cli::println(move "u128: 100 == 100 is true");
@@ -19,16 +19,12 @@ fn run() with Stdout {
     let x: i128 = move "i128::from_i64"(100 as i64);
     let y: i128 = move "i128::from_i64"(-50 as i64);
     let sum2: i128 = move "i128::add"(&x, &y);
-    core::cli::println(move "String::concat"(move "i128 100 + (-50) = ", move "u64::to_string"("i128::low"(&sum2))));
+    core::cli::println(move "String::concat"(move "i128 100 + (-50) = ", move "i128::to_string"(sum2)));
     let z: i128 = move "i128::from_i64"(30 as i64);
     let diff2: i128 = move "i128::sub"(&z, &x);
-    if "i128::is_negative"(&diff2) {
-        core::cli::println(move "i128: 30 - 100 is negative");
-    }
+    core::cli::println(move "String::concat"(move "i128 30 - 100 = ", move "i128::to_string"(diff2)));
     let neg_x: i128 = move "i128::neg"(&x);
-    if "i128::is_negative"(&neg_x) {
-        core::cli::println(move "i128: -100 is negative");
-    }
+    core::cli::println(move "String::concat"(move "i128 -100 = ", move "i128::to_string"(neg_x)));
     core::cli::println(move "All i128/u128 tests passed!");
 }
 

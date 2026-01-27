@@ -14,6 +14,12 @@ impl u128 {
         return u128 { low: value, high: 0 };
     }
 
+    /// Create a u128 from low and high 64-bit parts
+    /// Used by the compiler for efficient large literal construction
+    pub fn from_pair(low: u64, high: u64) -> u128 {
+        return u128 { low: low, high: high };
+    }
+
     /// Create a u128 from a string (decimal representation)
     /// Used for literal coercion: `let x: u128 = "12345678901234567890"`
     pub fn from_string(s: String) -> u128 {
@@ -169,6 +175,45 @@ impl u128 {
                 high: self.high | ((1 as u64) << (s as u64)),
             };
         }
+    }
+
+    /// Convert u128 to String (for template string interpolation)
+    pub fn to_string(&self) -> String {
+        // Handle zero case
+        if *self == u128::zero() {
+            return "0";
+        }
+
+        // Allocate buffer in linear memory (40 bytes max: 39 digits + safety)
+        let ptr: i32 = builtin::realloc(0, 0, 1, 40);
+
+        // Convert digits in reverse order by repeatedly dividing by 10
+        let mut pos: i32 = 39;
+        let mut temp = *self;
+        let ten = u128::from_u64(10 as u64);
+
+        while temp > u128::zero() {
+            pos -= 1;
+            let result = temp.div_rem(&ten);
+            let rem: u128 = result[1];
+            let digit_u64: u64 = rem.low();
+            let digit: i32 = (digit_u64 as i64) as i32;
+            builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
+            temp = result[0];
+        }
+
+        // Calculate length and copy to GC string
+        let len: i32 = 39 - pos;
+        let result = builtin::string_new(len);
+        for (let mut i: i32 = 0; i < len; i += 1) {
+            let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
+            result.set(i, byte);
+        }
+
+        // Free linear memory buffer
+        builtin::realloc(ptr, 40, 1, 0);
+
+        return result;
     }
 }
 
@@ -401,6 +446,12 @@ impl i128 {
         return i128 { low: value as u64, high };
     }
 
+    /// Create an i128 from low and high 64-bit parts
+    /// Used by the compiler for efficient large literal construction
+    pub fn from_pair(low: u64, high: i64) -> i128 {
+        return i128 { low: low, high: high };
+    }
+
     /// Create an i128 from a string (decimal representation, optionally prefixed with '-')
     /// Used for literal coercion: `let x: i128 = "-12345678901234567890"`
     pub fn from_string(s: String) -> i128 {
@@ -545,6 +596,34 @@ impl i128 {
         }
 
         return [quotient, remainder];
+    }
+
+    /// Convert i128 to String (for template string interpolation)
+    pub fn to_string(&self) -> String {
+        // Handle zero case
+        if *self == i128::zero() {
+            return "0";
+        }
+
+        // Check for negative
+        let is_negative = self.is_negative();
+
+        // Get absolute value as u128 and convert to string
+        let abs_value = self.abs_u128();
+        let abs_str = abs_value.to_string();
+
+        // Prepend minus sign if negative
+        if is_negative {
+            let len = abs_str.len();
+            let result = builtin::string_new(len + 1);
+            result.set(0, '-' as i32);
+            for (let mut i = 0; i < len; i += 1) {
+                result.set(i + 1, abs_str.get(i));
+            }
+            return result;
+        }
+
+        return abs_str;
     }
 }
 
