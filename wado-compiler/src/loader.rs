@@ -224,15 +224,23 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Load implicit modules required by the compiler
     async fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
+        // Order matters: dependencies must be listed before dependents
+        // - builtin: no dependencies
+        // - string: depends on prelude/traits
+        // - prelude: depends on string, prelude/*, internal
+        // - internal: depends on String from prelude
         let implicit_module_sources = [
+            ModuleSource::Core {
+                name: "builtin".to_string(),
+            },
+            ModuleSource::Core {
+                name: "string".to_string(),
+            },
             ModuleSource::Core {
                 name: "prelude".to_string(),
             },
             ModuleSource::Core {
                 name: "internal".to_string(),
-            },
-            ModuleSource::Core {
-                name: "builtin".to_string(),
             },
         ];
 

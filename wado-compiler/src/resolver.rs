@@ -32,9 +32,9 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Helper to get the `ModuleSource` for String type (core:prelude)
+/// Helper to get the `ModuleSource` for String type (core:string)
 fn string_module_source() -> ModuleSource {
-    ModuleSource::core("prelude")
+    ModuleSource::core("string")
 }
 
 /// Struct field info: module source and field definitions
@@ -4255,11 +4255,11 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Get the String struct type (from prelude)
+    /// Get the String struct type (from core:string)
     fn get_string_struct_type(&mut self) -> TypeId {
         self.type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::core("prelude"))
+            .make_struct("String".to_string(), ModuleSource::core("string"))
     }
 
     /// Get the return type of a builtin function
@@ -7509,7 +7509,7 @@ impl<'a> Resolver<'a> {
             result = TirExpr::new(
                 TirExprKind::StaticCall {
                     func: FunctionRef::External {
-                        module_source: ModuleSource::core("prelude"),
+                        module_source: string_module_source(),
                         name: "String::concat".to_string(),
                         monomorph_info: None,
                         method_info: Some(LocalMethodName::new(
