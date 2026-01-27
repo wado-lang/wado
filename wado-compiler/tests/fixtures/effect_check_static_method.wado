@@ -1,0 +1,23 @@
+// Test: calling a static method that requires an effect from a function without that effect
+// This should produce a compile error
+
+use { println, Stdout } from "core:cli";
+
+struct Logger {}
+
+impl Logger {
+    fn log(message: String) with Stdout {
+        println(message);
+    }
+}
+
+fn bad() {
+    Logger::log("Hello");  // ERROR: missing Stdout effect
+}
+
+fn run() with Stdout {
+    println("this test should not run");
+}
+
+__DATA__
+{"compile_error": "missing effect"}

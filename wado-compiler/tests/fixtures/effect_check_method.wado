@@ -1,0 +1,26 @@
+// Test: calling a method that requires an effect from a function without that effect
+// This should produce a compile error
+
+use { println, Stdout } from "core:cli";
+
+struct Greeter {
+    name: String,
+}
+
+impl Greeter {
+    fn greet(&self) with Stdout {
+        println(`Hello, {self.name}!`);
+    }
+}
+
+fn bad() {
+    let g = Greeter { name: "Alice" };
+    g.greet();  // ERROR: missing Stdout effect
+}
+
+fn run() with Stdout {
+    println("this test should not run");
+}
+
+__DATA__
+{"compile_error": "missing effect"}
