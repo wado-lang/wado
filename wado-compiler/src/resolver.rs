@@ -137,6 +137,13 @@ pub enum TypeError {
         param_name: String,
         span: Span,
     },
+
+    /// Missing effect: calling a function requires effects that the caller doesn't have
+    MissingEffect {
+        callee: String,
+        missing_effect: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -221,6 +228,17 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, type_name, trait_name, param_name
                 )
             }
+            TypeError::MissingEffect {
+                callee,
+                missing_effect,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: missing effect '{}' required by '{}'",
+                    span.line, span.column, missing_effect, callee
+                )
+            }
         }
     }
 }
@@ -277,10 +295,12 @@ struct FunctionContext {
     labeled_block_targets: Vec<LabeledBlockTarget>,
     /// Current function name for `#function` compile-time literal
     function_name: String,
+    /// Effects declared by this function (for effect checking)
+    effects: HashSet<String>,
 }
 
 impl FunctionContext {
-    fn new(return_type: TypeId, function_name: String) -> Self {
+    fn new(return_type: TypeId, function_name: String, effects: Vec<String>) -> Self {
         Self {
             scopes: vec![HashMap::new()], // Start with one scope for function parameters
             next_local: 0,
@@ -291,6 +311,7 @@ impl FunctionContext {
             captured_vars: HashMap::new(),
             labeled_block_targets: Vec::new(),
             function_name,
+            effects: effects.into_iter().collect(),
         }
     }
 
@@ -317,6 +338,8 @@ impl FunctionContext {
             captured_vars: HashMap::new(),
             labeled_block_targets: Vec::new(),
             function_name,
+            // Closures inherit effects from outer function
+            effects: outer_ctx.effects.clone(),
         }
     }
 
@@ -440,6 +463,8 @@ pub struct Resolver<'a> {
     resource_types: HashMap<String, ResourceInfo>,
     /// Function return types (name -> return type)
     function_return_types: HashMap<String, TypeId>,
+    /// Function effects (name -> required effects)
+    function_effects: HashMap<String, Vec<String>>,
     /// Imported function names for the current module
     imported_functions: HashSet<String>,
     /// Errors collected during resolution
@@ -541,6 +566,7 @@ impl<'a> Resolver<'a> {
             enum_cases: HashMap::new(),
             resource_types: HashMap::new(),
             function_return_types: HashMap::new(),
+            function_effects: HashMap::new(),
             imported_functions: HashSet::new(),
             errors: Vec::new(),
             current_module_source: ModuleSource::entry_point(),
@@ -895,9 +921,10 @@ impl<'a> Resolver<'a> {
         // Second pass: resolve each module with per-module function_return_types and imports
         for path in &sorted_paths {
             let module = modules.get(path).expect("module should exist");
-            // Build function_return_types for this module only
+            // Build function_return_types and function_effects for this module only
             // (functions defined in this module)
             let mut function_return_types = HashMap::new();
+            let mut function_effects = HashMap::new();
             for item in &module.items {
                 if let Item::Function(func) = item {
                     let return_type = if let Some(ret_ty) = &func.return_type {
@@ -911,6 +938,7 @@ impl<'a> Resolver<'a> {
                         TypeTable::UNIT
                     };
                     function_return_types.insert(func.name.clone(), return_type);
+                    function_effects.insert(func.name.clone(), func.effects.clone());
                 }
             }
 
@@ -952,6 +980,7 @@ impl<'a> Resolver<'a> {
                 enum_cases: enum_cases.clone(),
                 resource_types: resource_types.clone(),
                 function_return_types,
+                function_effects,
                 imported_functions,
                 errors: Vec::new(),
                 current_module_source: ModuleSource::entry_point(), // Set in resolve_module
@@ -1343,6 +1372,9 @@ impl<'a> Resolver<'a> {
                         .unwrap_or(TypeTable::UNIT);
                     self.function_return_types
                         .insert(func.name.clone(), return_type);
+                    // Also store effects for effect checking
+                    self.function_effects
+                        .insert(func.name.clone(), func.effects.clone());
                 }
                 Item::Impl(impl_block) => {
                     // Set up type parameters from impl block before resolving method signatures
@@ -1414,7 +1446,11 @@ impl<'a> Resolver<'a> {
                             }
                             None => format!("{}::{}", struct_name, method.name),
                         };
-                        self.function_return_types.insert(mangled_name, return_type);
+                        self.function_return_types
+                            .insert(mangled_name.clone(), return_type);
+                        // Also store effects for effect checking
+                        self.function_effects
+                            .insert(mangled_name, method.effects.clone());
                     }
 
                     // Restore type parameters and associated type bindings
@@ -1563,7 +1599,7 @@ impl<'a> Resolver<'a> {
         self.function_return_types
             .insert(func.name.clone(), return_type);
 
-        let mut ctx = FunctionContext::new(return_type, func.name.clone());
+        let mut ctx = FunctionContext::new(return_type, func.name.clone(), func.effects.clone());
 
         // Resolve parameters
         let mut params = Vec::new();
@@ -1637,8 +1673,9 @@ impl<'a> Resolver<'a> {
         };
 
         // Create function context - tests have no parameters and return unit
+        // Tests implicitly have "all effects" - we pass empty vec and handle specially in effect checking
         let return_type = TypeTable::UNIT;
-        let mut ctx = FunctionContext::new(return_type, function_name.clone());
+        let mut ctx = FunctionContext::new(return_type, function_name.clone(), vec![]);
 
         // Resolve the test body
         let body = self.resolve_block(&test_decl.body, &mut ctx);
@@ -1746,7 +1783,7 @@ impl<'a> Resolver<'a> {
 
         // Display name for #function: StructName::method_name
         let display_name = format!("{}::{}", struct_name, func.name);
-        let mut ctx = FunctionContext::new(return_type, display_name);
+        let mut ctx = FunctionContext::new(return_type, display_name, func.effects.clone());
 
         // Resolve parameters (including &self)
         let mut params = Vec::new();
@@ -3968,6 +4005,12 @@ impl<'a> Resolver<'a> {
             });
         }
 
+        // Check effects: caller must have all effects required by the callee
+        // Skip for test functions (they implicitly have all effects)
+        if !ctx.function_name.starts_with("__test_") {
+            self.check_function_effects(&func_name, &module_path, &ctx.effects, call.span);
+        }
+
         // Resolve explicit type arguments
         let type_args: Vec<TypeId> = call
             .type_args
@@ -4066,6 +4109,65 @@ impl<'a> Resolver<'a> {
 
         // Default to UNIT for unknown functions (they might be external/builtin)
         TypeTable::UNIT
+    }
+
+    /// Check that a function call has the required effects
+    /// Reports `MissingEffect` errors for any effects the callee requires that the caller lacks.
+    fn check_function_effects(
+        &mut self,
+        func_name: &str,
+        module_path: &[String],
+        caller_effects: &HashSet<String>,
+        span: Span,
+    ) {
+        // Test functions have implicit "all effects" - skip checking
+        // Test functions are named __test_<index>_<name>
+        // Also skip if caller has no effects declared but is a closure (closures inherit effects)
+
+        // Look up the called function's required effects
+        let callee_effects = self.lookup_function_effects(func_name, module_path);
+
+        // Check each required effect
+        for effect in &callee_effects {
+            if !caller_effects.contains(effect) {
+                self.errors.push(TypeError::MissingEffect {
+                    callee: func_name.to_string(),
+                    missing_effect: effect.clone(),
+                    span,
+                });
+            }
+        }
+    }
+
+    /// Look up the effects required by a function
+    fn lookup_function_effects(&self, func_name: &str, module_path: &[String]) -> Vec<String> {
+        // First check locally registered function effects
+        if let Some(effects) = self.function_effects.get(func_name) {
+            return effects.clone();
+        }
+
+        // Check for imported functions in symbol table
+        if let Some(symbol) = self.symbols.lookup(func_name) {
+            if let SymbolKind::Function(func_symbol) = &symbol.kind {
+                return func_symbol.effects.clone();
+            }
+        }
+
+        // Look up in loaded modules by module path
+        if !module_path.is_empty() {
+            if let Some(module) = self.loaded_modules.get(module_path) {
+                for item in &module.items {
+                    if let Item::Function(func) = item {
+                        if func.name == func_name {
+                            return func.effects.clone();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Default: no effects required (builtins, unknown functions)
+        Vec::new()
     }
 
     /// Get the return type of a WASI effect operation from the registry
