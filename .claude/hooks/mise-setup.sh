@@ -1,6 +1,7 @@
 #!/bin/bash
 # .claude/hooks/mise-setup.sh
 # SessionStart hook for Claude Code Web to install mise and project tools
+# cf. https://code.claude.com/docs/en/settings
 
 set -e
 LOG_PREFIX="[mise-setup]"
@@ -35,13 +36,26 @@ else
     log "mise installed: $($LOCAL_BIN/mise --version)"
 fi
 
+# Persist PATH and mise settings to CLAUDE_ENV_FILE
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+    cat >> "$CLAUDE_ENV_FILE" << 'EOF'
+export PATH="$HOME/.local/bin:$PATH"
+export MISE_YES=true
+export MISE_TRUSTED_CONFIG_PATHS="$HOME:$PWD"
+eval "$(mise activate bash)"
+EOF
+    log "Environment persisted to CLAUDE_ENV_FILE"
+fi
+
+# Ensure mise is in PATH for the rest of this script
+export PATH="$LOCAL_BIN:$PATH"
+
 # Trust the mise configuration and install project tools
-# (PATH is set in .claude/settings.json for subsequent commands)
 log "Trusting mise configuration..."
-$LOCAL_BIN/mise trust --all 2>/dev/null || true
+mise trust --all 2>/dev/null || true
 
 log "Installing project tools..."
-if $LOCAL_BIN/mise install; then
+if mise install; then
     log "Project tools installed successfully"
 else
     log "Warning: Some tools may have failed to install"
