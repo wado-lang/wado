@@ -3014,6 +3014,22 @@ impl<'a> Resolver<'a> {
             .map_err(|_| format!("invalid float literal: {repr}"))
     }
 
+    /// Check if an integer literal is a decimal literal (not hex, binary, or octal)
+    fn is_decimal_literal(repr: &str) -> bool {
+        let clean: String = repr.chars().filter(|&c| c != '_').collect();
+        !clean.starts_with("0x")
+            && !clean.starts_with("0X")
+            && !clean.starts_with("0b")
+            && !clean.starts_with("0B")
+            && !clean.starts_with("0o")
+            && !clean.starts_with("0O")
+    }
+
+    /// Get the clean decimal representation of a literal (without underscores)
+    fn clean_literal_repr(repr: &str) -> String {
+        repr.chars().filter(|&c| c != '_').collect()
+    }
+
     /// Resolve a literal expression
     fn resolve_literal(&mut self, lit: &ast::LiteralExpr, ctx: &FunctionContext) -> TirExpr {
         let (kind, type_id) = match &lit.value {
@@ -4473,6 +4489,7 @@ impl<'a> Resolver<'a> {
             }
 
             // i128/u128 literal coercion: let x: u128 = 42 → u128::from_u64(42 as u64)
+            // For values larger than u64, use from_string: let x: u128 = 340... → u128::from_string("340...")
             if let Expr::Literal(lit) = expr
                 && let Literal::Int(int_lit) = &lit.value
             {
@@ -4484,29 +4501,69 @@ impl<'a> Resolver<'a> {
                 if let Some(name) = struct_name
                     && (name == "u128" || name == "i128")
                 {
-                    // Parse the literal value
+                    // Try to parse the literal value
                     if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
-                        // Create the inner literal with appropriate type
-                        let (inner_type, method_name) = if name == "u128" {
-                            (TypeTable::U64, "from_u64")
+                        // For u128: value fits in u64, use from_u64
+                        // For i128: value must also fit in i64 (positive range), otherwise use from_string
+                        let use_from_u64_or_i64 = if name == "u128" {
+                            true // u64 always works for u128
                         } else {
-                            (TypeTable::I64, "from_i64")
+                            // For i128, check if value fits in i64 positive range
+                            i64::try_from(value).is_ok()
                         };
 
-                        let inner_literal = TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value,
-                                repr: int_lit.repr.clone(),
-                            },
-                            inner_type,
+                        if use_from_u64_or_i64 {
+                            let (inner_type, method_name) = if name == "u128" {
+                                (TypeTable::U64, "from_u64")
+                            } else {
+                                (TypeTable::I64, "from_i64")
+                            };
+
+                            let inner_literal = TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value,
+                                    repr: int_lit.repr.clone(),
+                                },
+                                inner_type,
+                                lit.span,
+                            );
+
+                            // Build static call: u128::from_u64(value) or i128::from_i64(value)
+                            // Note: i128/u128 are defined in core:prelude/int128
+                            let mangled_func_name = format!("{name}::{method_name}");
+                            let method_info =
+                                LocalMethodName::new(name.clone(), None, method_name.to_string());
+
+                            return TirExpr::new(
+                                TirExprKind::StaticCall {
+                                    func: FunctionRef::External {
+                                        module_source: ModuleSource::core("prelude/int128"),
+                                        name: mangled_func_name,
+                                        monomorph_info: None,
+                                        method_info: Some(method_info),
+                                    },
+                                    args: vec![inner_literal],
+                                },
+                                target_type,
+                                lit.span,
+                            );
+                        }
+                    }
+
+                    // Value doesn't fit in u64 (or i64 for i128), use from_string
+                    // Only decimal literals are supported for large values
+                    if Self::is_decimal_literal(&int_lit.repr) {
+                        let clean_repr = Self::clean_literal_repr(&int_lit.repr);
+                        let string_type = self.get_string_struct_type();
+                        let string_literal = TirExpr::new(
+                            TirExprKind::StringLiteral(clean_repr),
+                            string_type,
                             lit.span,
                         );
 
-                        // Build static call: u128::from_u64(value) or i128::from_i64(value)
-                        // Note: i128/u128 are defined in core:prelude/int128
-                        let mangled_func_name = format!("{name}::{method_name}");
+                        let mangled_func_name = format!("{name}::from_string");
                         let method_info =
-                            LocalMethodName::new(name.clone(), None, method_name.to_string());
+                            LocalMethodName::new(name.clone(), None, "from_string".to_string());
 
                         return TirExpr::new(
                             TirExprKind::StaticCall {
@@ -4516,16 +4573,26 @@ impl<'a> Resolver<'a> {
                                     monomorph_info: None,
                                     method_info: Some(method_info),
                                 },
-                                args: vec![inner_literal],
+                                args: vec![string_literal],
                             },
                             target_type,
                             lit.span,
                         );
                     }
+
+                    // Non-decimal literal (hex/binary/octal) that doesn't fit in u64
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!(
+                            "hex/binary/octal literal `{}` is too large for {}; use decimal or from_string()",
+                            int_lit.repr, name
+                        ),
+                        span: lit.span,
+                    });
                 }
             }
 
             // Handle negated integer literal to i128: let x: i128 = -100
+            // For large values: let x: i128 = -170... → i128::from_string("-170...")
             if let Expr::Unary(unary) = expr
                 && unary.op == ast::UnaryOp::Neg
                 && let Expr::Literal(lit) = &unary.expr
@@ -4539,9 +4606,9 @@ impl<'a> Resolver<'a> {
                 if let Some(name) = struct_name
                     && name == "i128"
                 {
-                    // Parse the literal value
+                    // Try to parse the literal value
                     if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
-                        // Create positive i128 first
+                        // Value fits in u64, create positive i128 and negate
                         let inner_literal = TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value,
@@ -4605,6 +4672,46 @@ impl<'a> Resolver<'a> {
                             unary.span,
                         );
                     }
+
+                    // Value doesn't fit in u64, use from_string with negated value
+                    // from_string handles the negative sign
+                    if Self::is_decimal_literal(&int_lit.repr) {
+                        let clean_repr = Self::clean_literal_repr(&int_lit.repr);
+                        let negated_repr = format!("-{clean_repr}");
+                        let string_type = self.get_string_struct_type();
+                        let string_literal = TirExpr::new(
+                            TirExprKind::StringLiteral(negated_repr),
+                            string_type,
+                            lit.span,
+                        );
+
+                        let mangled_func_name = "i128::from_string".to_string();
+                        let method_info =
+                            LocalMethodName::new(name.clone(), None, "from_string".to_string());
+
+                        return TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/int128"),
+                                    name: mangled_func_name,
+                                    monomorph_info: None,
+                                    method_info: Some(method_info),
+                                },
+                                args: vec![string_literal],
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+
+                    // Non-decimal literal that doesn't fit in u64
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!(
+                            "hex/binary/octal literal `{}` is too large for i128; use decimal or from_string()",
+                            int_lit.repr
+                        ),
+                        span: lit.span,
+                    });
                 }
             }
         }
@@ -7699,14 +7806,218 @@ impl<'a> Resolver<'a> {
         }
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
+        // For large literals: 170... as i128 → i128::from_string("170...")
         let struct_name = match self.type_table.borrow().get(target_type).clone() {
             ResolvedType::Struct { name, .. } => Some(name),
             _ => None,
         };
 
-        if let Some(name) = struct_name
+        if let Some(ref name) = struct_name
             && (name == "u128" || name == "i128")
         {
+            // Handle integer literal cast specially to support values > u64
+            if let ast::Expr::Literal(lit) = &cast.expr
+                && let Literal::Int(int_lit) = &lit.value
+            {
+                // Try to parse as u64
+                if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                    // For u128: value fits in u64, use from_u64
+                    // For i128: value must also fit in i64 (positive range), otherwise use from_string
+                    let use_from_u64_or_i64 = if name == "u128" {
+                        true // u64 always works for u128
+                    } else {
+                        // For i128, check if value fits in i64 positive range
+                        i64::try_from(value).is_ok()
+                    };
+
+                    if use_from_u64_or_i64 {
+                        let (inner_type, method_name) = if name == "u128" {
+                            (TypeTable::U64, "from_u64")
+                        } else {
+                            (TypeTable::I64, "from_i64")
+                        };
+
+                        let inner_literal = TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value,
+                                repr: int_lit.repr.clone(),
+                            },
+                            inner_type,
+                            lit.span,
+                        );
+
+                        let mangled_func_name = format!("{name}::{method_name}");
+                        let method_info =
+                            LocalMethodName::new(name.clone(), None, method_name.to_string());
+
+                        return TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/int128"),
+                                    name: mangled_func_name,
+                                    monomorph_info: None,
+                                    method_info: Some(method_info),
+                                },
+                                args: vec![inner_literal],
+                            },
+                            target_type,
+                            cast.span,
+                        );
+                    }
+                }
+
+                // Value doesn't fit in u64 (or i64 for i128), use from_string
+                if Self::is_decimal_literal(&int_lit.repr) {
+                    let clean_repr = Self::clean_literal_repr(&int_lit.repr);
+                    let string_type = self.get_string_struct_type();
+                    let string_literal = TirExpr::new(
+                        TirExprKind::StringLiteral(clean_repr),
+                        string_type,
+                        lit.span,
+                    );
+
+                    let mangled_func_name = format!("{name}::from_string");
+                    let method_info =
+                        LocalMethodName::new(name.clone(), None, "from_string".to_string());
+
+                    return TirExpr::new(
+                        TirExprKind::StaticCall {
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude/int128"),
+                                name: mangled_func_name,
+                                monomorph_info: None,
+                                method_info: Some(method_info),
+                            },
+                            args: vec![string_literal],
+                        },
+                        target_type,
+                        cast.span,
+                    );
+                }
+
+                // Non-decimal literal that doesn't fit in u64
+                self.errors.push(TypeError::InvalidLiteral {
+                    message: format!(
+                        "hex/binary/octal literal `{}` is too large for {}; use decimal or from_string()",
+                        int_lit.repr, name
+                    ),
+                    span: lit.span,
+                });
+            }
+
+            // Handle negated integer literal cast: -170... as i128
+            if let ast::Expr::Unary(unary) = &cast.expr
+                && unary.op == ast::UnaryOp::Neg
+                && let ast::Expr::Literal(lit) = &unary.expr
+                && let Literal::Int(int_lit) = &lit.value
+                && name == "i128"
+            {
+                // Try to parse as u64
+                if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                    // Value fits in u64, create positive i128 and negate
+                    let inner_literal = TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value,
+                            repr: int_lit.repr.clone(),
+                        },
+                        TypeTable::I64,
+                        lit.span,
+                    );
+
+                    let from_i64_func_name = "i128::from_i64".to_string();
+                    let from_i64_method_info =
+                        LocalMethodName::new("i128".to_string(), None, "from_i64".to_string());
+
+                    let positive_i128 = TirExpr::new(
+                        TirExprKind::StaticCall {
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude/int128"),
+                                name: from_i64_func_name,
+                                monomorph_info: None,
+                                method_info: Some(from_i64_method_info),
+                            },
+                            args: vec![inner_literal],
+                        },
+                        target_type,
+                        lit.span,
+                    );
+
+                    // Apply negation
+                    let ref_type = self.type_table.borrow_mut().make_ref(target_type);
+                    let ref_expr = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(positive_i128),
+                        },
+                        ref_type,
+                        unary.span,
+                    );
+
+                    let neg_method_name = "i128^Neg::neg".to_string();
+                    let neg_method_info = LocalMethodName::new(
+                        "i128".to_string(),
+                        Some("Neg".to_string()),
+                        "neg".to_string(),
+                    );
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(ref_expr),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude/int128"),
+                                name: neg_method_name,
+                                monomorph_info: None,
+                                method_info: Some(neg_method_info),
+                            },
+                            type_args: vec![],
+                            args: vec![],
+                        },
+                        target_type,
+                        unary.span,
+                    );
+                }
+
+                // Value doesn't fit in u64, use from_string with negated value
+                if Self::is_decimal_literal(&int_lit.repr) {
+                    let clean_repr = Self::clean_literal_repr(&int_lit.repr);
+                    let negated_repr = format!("-{clean_repr}");
+                    let string_type = self.get_string_struct_type();
+                    let string_literal = TirExpr::new(
+                        TirExprKind::StringLiteral(negated_repr),
+                        string_type,
+                        lit.span,
+                    );
+
+                    let mangled_func_name = "i128::from_string".to_string();
+                    let method_info =
+                        LocalMethodName::new(name.clone(), None, "from_string".to_string());
+
+                    return TirExpr::new(
+                        TirExprKind::StaticCall {
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude/int128"),
+                                name: mangled_func_name,
+                                monomorph_info: None,
+                                method_info: Some(method_info),
+                            },
+                            args: vec![string_literal],
+                        },
+                        target_type,
+                        unary.span,
+                    );
+                }
+
+                // Non-decimal literal that doesn't fit in u64
+                self.errors.push(TypeError::InvalidLiteral {
+                    message: format!(
+                        "hex/binary/octal literal `{}` is too large for i128; use decimal or from_string()",
+                        int_lit.repr
+                    ),
+                    span: lit.span,
+                });
+            }
+
+            // General expression cast (not a literal)
             let expr_resolved = self.resolve_expr(&cast.expr, ctx);
             let source_type = expr_resolved.type_id;
 
