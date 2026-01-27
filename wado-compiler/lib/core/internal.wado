@@ -20,6 +20,9 @@ pub fn f64_to_string(value: f64) -> String {
         result.set(i, byte);
     }
 
+    // Free linear memory buffer
+    builtin::realloc(ptr, 24, 1, 0);
+
     return result;
 }
 
@@ -37,6 +40,9 @@ pub fn f32_to_string(value: f32) -> String {
         let byte = builtin::memory_load8_u(ptr + i);
         result.set(i, byte);
     }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 16, 1, 0);
 
     return result;
 }
@@ -85,6 +91,9 @@ pub fn i32_to_string(value: i32) -> String {
         result.set(i, byte);
     }
 
+    // Free linear memory buffer
+    builtin::realloc(ptr, 12, 1, 0);
+
     return result;
 }
 
@@ -126,6 +135,9 @@ pub fn u32_to_string(value: i32) -> String {
         let byte = builtin::memory_load8_u(ptr + pos + i);
         result.set(i, byte);
     }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 11, 1, 0);
 
     return result;
 }
@@ -178,6 +190,9 @@ pub fn i64_to_string(value: i64) -> String {
         let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
         result.set(i, byte);
     }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 21, 1, 0);
 
     return result;
 }
@@ -246,7 +261,82 @@ pub fn u64_to_string(value: i64) -> String {
         result.set(i, byte);
     }
 
+    // Free linear memory buffer
+    builtin::realloc(ptr, 21, 1, 0);
+
     return result;
+}
+
+/// Convert u128 to String (unsigned)
+/// Maximum u128 value is 340282366920938463463374607431768211455 (39 digits)
+pub fn u128_to_string(value: u128) -> String {
+    // Handle zero case
+    if value == u128::zero() {
+        return "0";
+    }
+
+    // Allocate buffer in linear memory (40 bytes max: 39 digits + safety)
+    let ptr: i32 = builtin::realloc(0, 0, 1, 40);
+
+    // Convert digits in reverse order by repeatedly dividing by 10
+    let mut pos: i32 = 39;
+    let mut temp = value;
+    let ten = u128::from_u64(10 as u64);
+
+    while temp > u128::zero() {
+        pos -= 1;
+        let result = temp.div_rem(&ten);
+        let rem: u128 = result[1];
+        let digit_u64: u64 = rem.low();
+        let digit: i32 = (digit_u64 as i64) as i32;
+        builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
+        temp = result[0];
+    }
+
+    // Calculate length and copy to GC string
+    let len: i32 = 39 - pos;
+    let result = builtin::string_new(len);
+    for (let mut i: i32 = 0; i < len; i += 1) {
+        let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
+        result.set(i, byte);
+    }
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, 40, 1, 0);
+
+    return result;
+}
+
+/// Convert i128 to String (signed)
+/// Maximum i128 value is 170141183460469231731687303715884105727 (39 digits)
+/// Minimum i128 value is -170141183460469231731687303715884105728 (40 chars with sign)
+pub fn i128_to_string(value: i128) -> String {
+    // Handle zero case
+    if value == i128::zero() {
+        return "0";
+    }
+
+    // Check for negative
+    let is_negative = value.is_negative();
+
+    // Get absolute value as u128
+    let abs_value = value.abs_u128();
+
+    // Convert absolute value to string
+    let abs_str = u128_to_string(abs_value);
+
+    // Prepend minus sign if negative
+    if is_negative {
+        let len = abs_str.len();
+        let result = builtin::string_new(len + 1);
+        result.set(0, '-' as i32);
+        for (let mut i = 0; i < len; i += 1) {
+            result.set(i + 1, abs_str.get(i));
+        }
+        return result;
+    }
+
+    return abs_str;
 }
 
 /// Convert bool to String ("true" or "false")
@@ -306,6 +396,10 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
         builtin::memory_store8(ptr + len, '\n');
     }
     builtin::stream_write(tx, ptr, alloc_size);
+
+    // Free linear memory buffer
+    builtin::realloc(ptr, alloc_size, 1, 0);
+
     builtin::stream_drop_writable(tx);
 }
 

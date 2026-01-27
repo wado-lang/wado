@@ -7,8 +7,8 @@ use crate::ast::{
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ContinueStmt, EffectDecl,
     EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, IntLiteral, Item, LabeledBlockStmt,
-    LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, IntLiteral, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
     NamespacedGenericType, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
@@ -93,6 +93,9 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> ParseResult<Module> {
+        // Parse inner attributes at the start of the module
+        let inner_attributes = self.parse_inner_attributes()?;
+
         let mut items = Vec::new();
 
         while !self.is_at_end() {
@@ -101,6 +104,7 @@ impl Parser {
 
         Ok(Module::with_metadata(
             items,
+            inner_attributes,
             self.shebang.take(),
             self.data_section.take(),
         ))
@@ -293,10 +297,42 @@ impl Parser {
         let mut attrs = Vec::new();
 
         while self.check(&TokenKind::Hash) {
+            // Check if this is an inner attribute (#![...]) - if so, stop
+            if self.peek_nth(1).kind == TokenKind::Not {
+                break;
+            }
             attrs.push(self.parse_attribute()?);
         }
 
         Ok(attrs)
+    }
+
+    /// Parse inner attributes at the start of a module: `#![name]`
+    fn parse_inner_attributes(&mut self) -> ParseResult<Vec<InnerAttribute>> {
+        let mut attrs = Vec::new();
+
+        while self.check(&TokenKind::Hash) && self.peek_nth(1).kind == TokenKind::Not {
+            attrs.push(self.parse_inner_attribute()?);
+        }
+
+        Ok(attrs)
+    }
+
+    /// Parse a single inner attribute: `#![name]`
+    fn parse_inner_attribute(&mut self) -> ParseResult<InnerAttribute> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Hash)?;
+        self.expect(&TokenKind::Not)?;
+        self.expect(&TokenKind::LBracket)?;
+
+        let name = self.consume_ident()?;
+
+        self.expect(&TokenKind::RBracket)?;
+
+        Ok(InnerAttribute {
+            name,
+            span: start_span,
+        })
     }
 
     fn parse_attribute(&mut self) -> ParseResult<Attribute> {

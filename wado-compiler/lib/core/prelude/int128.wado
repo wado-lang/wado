@@ -11,7 +11,7 @@ pub struct u128 {
 impl u128 {
     /// Create a u128 from a u64 value (zero-extended)
     pub fn from_u64(value: u64) -> u128 {
-        return u128 { low: value, high: 0 as u64 };
+        return u128 { low: value, high: 0 };
     }
 
     /// Create a u128 from a string (decimal representation)
@@ -34,12 +34,12 @@ impl u128 {
 
     /// Create a zero u128
     pub fn zero() -> u128 {
-        return u128 { low: 0 as u64, high: 0 as u64 };
+        return u128 { low: 0, high: 0 };
     }
 
     /// Create a u128 with value 1
     pub fn one() -> u128 {
-        return u128 { low: 1 as u64, high: 0 as u64 };
+        return u128 { low: 1, high: 0 };
     }
 
     /// Get the low 64 bits
@@ -93,6 +93,82 @@ impl u128 {
             low: result.0 as u64,
             high: result.1 as u64,
         };
+    }
+
+    /// Divide self by divisor, returning (quotient, remainder)
+    /// Uses binary long division algorithm (shift-subtract)
+    /// Panics if divisor is zero
+    pub fn div_rem(&self, divisor: &u128) -> [u128, u128] {
+        // Check for division by zero
+        if divisor.low == (0 as u64) && divisor.high == (0 as u64) {
+            panic("division by zero");
+        }
+
+        // Quick return if dividend < divisor
+        if *self < *divisor {
+            return [u128::zero(), *self];
+        }
+
+        // Quick return if dividend == divisor
+        if *self == *divisor {
+            return [u128::one(), u128::zero()];
+        }
+
+        // Binary long division
+        let mut quotient = u128::zero();
+        let mut remainder = u128::zero();
+        let one = u128::one();
+
+        // Process each bit from high to low (bit 127 down to bit 0)
+        let mut i: i32 = 127;
+        while i >= 0 {
+            // remainder = remainder << 1
+            remainder = remainder << (1 as u32);
+
+            // Get bit i of dividend and set bit 0 of remainder
+            let bit = self.get_bit(i);
+            if bit {
+                remainder = remainder | one;
+            }
+
+            // If remainder >= divisor, subtract and set quotient bit
+            if remainder >= *divisor {
+                remainder = remainder - *divisor;
+                quotient = quotient.set_bit(i);
+            }
+
+            i -= 1;
+        }
+
+        return [quotient, remainder];
+    }
+
+    /// Get the bit at position i (0 = LSB, 127 = MSB)
+    pub fn get_bit(&self, i: i32) -> bool {
+        let shift: i64 = i as i64;
+        if i < 64 {
+            return ((self.low >> (shift as u64)) & (1 as u64)) != (0 as u64);
+        } else {
+            let s: i64 = (i - 64) as i64;
+            return ((self.high >> (s as u64)) & (1 as u64)) != (0 as u64);
+        }
+    }
+
+    /// Set the bit at position i to 1, returning a new u128
+    pub fn set_bit(&self, i: i32) -> u128 {
+        let shift: i64 = i as i64;
+        if i < 64 {
+            return u128 {
+                low: self.low | ((1 as u64) << (shift as u64)),
+                high: self.high,
+            };
+        } else {
+            let s: i64 = (i - 64) as i64;
+            return u128 {
+                low: self.low,
+                high: self.high | ((1 as u64) << (s as u64)),
+            };
+        }
     }
 }
 
@@ -152,6 +228,164 @@ impl Sub for u128 {
     }
 }
 
+// Mul implementation for u128
+impl Mul for u128 {
+    type Output = u128;
+
+    pub fn mul(&self, other: &Self) -> Self::Output {
+        // (aH, aL) * (bH, bL) = aL*bL + (aL*bH + aH*bL) << 64 + (aH*bH) << 128
+        // Since we only keep lower 128 bits, aH*bH is ignored (overflow)
+        // aL*bL gives full 128 bits via mul_wide_u
+        // aL*bH and aH*bL only contribute their low 64 bits to result.high
+
+        // aL * bL -> 128-bit result (p0_low, p0_high)
+        let p0 = builtin::i64_mul_wide_u(self.low as i64, other.low as i64);
+        let p0_low = p0.0 as u64;
+        let p0_high = p0.1 as u64;
+
+        // aL * bH -> only need low 64 bits (will be added to high)
+        let p1_low = self.low * other.high;
+
+        // aH * bL -> only need low 64 bits (will be added to high)
+        let p2_low = self.high * other.low;
+
+        // result.low = p0_low
+        // result.high = p0_high + p1_low + p2_low (overflow ignored)
+        return u128 {
+            low: p0_low,
+            high: p0_high + p1_low + p2_low,
+        };
+    }
+}
+
+// BitAnd implementation for u128
+impl BitAnd for u128 {
+    type Output = u128;
+
+    pub fn bitand(&self, other: &Self) -> Self::Output {
+        return u128 {
+            low: self.low & other.low,
+            high: self.high & other.high,
+        };
+    }
+}
+
+// BitOr implementation for u128
+impl BitOr for u128 {
+    type Output = u128;
+
+    pub fn bitor(&self, other: &Self) -> Self::Output {
+        return u128 {
+            low: self.low | other.low,
+            high: self.high | other.high,
+        };
+    }
+}
+
+// BitXor implementation for u128
+impl BitXor for u128 {
+    type Output = u128;
+
+    pub fn bitxor(&self, other: &Self) -> Self::Output {
+        return u128 {
+            low: self.low ^ other.low,
+            high: self.high ^ other.high,
+        };
+    }
+}
+
+// BitNot implementation for u128
+impl BitNot for u128 {
+    type Output = u128;
+
+    pub fn bitnot(&self) -> Self::Output {
+        return u128 {
+            low: ~self.low,
+            high: ~self.high,
+        };
+    }
+}
+
+// Shl implementation for u128
+impl Shl for u128 {
+    type Output = u128;
+
+    pub fn shl(&self, rhs: u32) -> Self::Output {
+        let shift = rhs as i32;
+        if shift >= 128 {
+            return u128::zero();
+        }
+        if shift >= 64 {
+            // All low bits shift into high, low becomes 0
+            let s = (shift - 64) as u64;
+            return u128 {
+                low: 0,
+                high: self.low << s,
+            };
+        }
+        if shift == 0 {
+            return *self;
+        }
+        // 0 < shift < 64
+        let s = shift as u64;
+        let inv_s = (64 - shift) as u64;
+        return u128 {
+            low: self.low << s,
+            high: (self.high << s) | (self.low >> inv_s),
+        };
+    }
+}
+
+// Shr implementation for u128 (logical/unsigned shift)
+impl Shr for u128 {
+    type Output = u128;
+
+    pub fn shr(&self, rhs: u32) -> Self::Output {
+        let shift = rhs as i32;
+        if shift >= 128 {
+            return u128::zero();
+        }
+        if shift >= 64 {
+            // All high bits shift into low, high becomes 0
+            let s = (shift - 64) as u64;
+            return u128 {
+                low: self.high >> s,
+                high: 0,
+            };
+        }
+        if shift == 0 {
+            return *self;
+        }
+        // 0 < shift < 64
+        let s = shift as u64;
+        let inv_s = (64 - shift) as u64;
+        return u128 {
+            low: (self.low >> s) | (self.high << inv_s),
+            high: self.high >> s,
+        };
+    }
+}
+
+// Div implementation for u128
+impl Div for u128 {
+    type Output = u128;
+
+    pub fn div(&self, other: &Self) -> Self::Output {
+        let result = self.div_rem(other);
+        return result[0];
+    }
+}
+
+// Rem implementation for u128
+impl Rem for u128 {
+    type Output = u128;
+
+    pub fn rem(&self, other: &Self) -> Self::Output {
+        let result = self.div_rem(other);
+        return result[1];
+    }
+}
+
 /// Signed 128-bit integer
 /// Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, signed)
 pub struct i128 {
@@ -202,12 +436,12 @@ impl i128 {
 
     /// Create a zero i128
     pub fn zero() -> i128 {
-        return i128 { low: 0 as u64, high: 0 as i64 };
+        return i128 { low: 0, high: 0 };
     }
 
     /// Create an i128 with value 1
     pub fn one() -> i128 {
-        return i128 { low: 1 as u64, high: 0 as i64 };
+        return i128 { low: 1, high: 0 };
     }
 
     /// Get the low 64 bits (unsigned)
@@ -258,6 +492,59 @@ impl i128 {
         // -x = ~x + 1 = 0 - x
         let zero = i128::zero();
         return zero.sub(self);
+    }
+
+    /// Get absolute value as u128
+    pub fn abs_u128(&self) -> u128 {
+        if self.is_negative() {
+            let neg = self.neg();
+            return u128 { low: neg.low, high: neg.high as u64 };
+        }
+        return u128 { low: self.low, high: self.high as u64 };
+    }
+
+    /// Create i128 from u128 (reinterpret bits)
+    pub fn from_u128(val: u128) -> i128 {
+        return i128 { low: val.low, high: val.high as i64 };
+    }
+
+    /// Divide self by divisor, returning (quotient, remainder)
+    /// Uses signed division semantics:
+    /// - quotient is negative if signs differ
+    /// - remainder has the same sign as dividend
+    /// Panics if divisor is zero
+    pub fn div_rem(&self, divisor: &i128) -> [i128, i128] {
+        // Check for division by zero
+        if divisor.low == (0 as u64) && divisor.high == (0 as i64) {
+            panic("division by zero");
+        }
+
+        let dividend_neg = self.is_negative();
+        let divisor_neg = divisor.is_negative();
+
+        // Get absolute values as u128
+        let abs_dividend = self.abs_u128();
+        let abs_divisor = divisor.abs_u128();
+
+        // Perform unsigned division
+        let result = abs_dividend.div_rem(&abs_divisor);
+        let abs_quotient = result[0];
+        let abs_remainder = result[1];
+
+        // Apply signs
+        // Quotient: negative if signs differ
+        let mut quotient = i128::from_u128(abs_quotient);
+        if dividend_neg != divisor_neg {
+            quotient = quotient.neg();
+        }
+
+        // Remainder: same sign as dividend
+        let mut remainder = i128::from_u128(abs_remainder);
+        if dividend_neg {
+            remainder = remainder.neg();
+        }
+
+        return [quotient, remainder];
     }
 }
 
@@ -320,6 +607,36 @@ impl Sub for i128 {
     }
 }
 
+// Mul implementation for i128
+impl Mul for i128 {
+    type Output = i128;
+
+    pub fn mul(&self, other: &Self) -> Self::Output {
+        // Two's complement multiplication: lower 128 bits are the same as unsigned
+        // (aH, aL) * (bH, bL) = aL*bL + (aL*bH + aH*bL) << 64 + (aH*bH) << 128
+        // Since we only keep lower 128 bits, aH*bH is ignored (overflow)
+
+        // aL * bL -> 128-bit result (p0_low, p0_high)
+        let p0 = builtin::i64_mul_wide_u(self.low as i64, other.low as i64);
+        let p0_low = p0.0 as u64;
+        let p0_high = p0.1 as u64;
+
+        // aL * bH -> only need low 64 bits (will be added to high)
+        // Treat as unsigned multiplication (low bits are the same)
+        let p1_low = self.low * (other.high as u64);
+
+        // aH * bL -> only need low 64 bits (will be added to high)
+        let p2_low = (self.high as u64) * other.low;
+
+        // result.low = p0_low
+        // result.high = p0_high + p1_low + p2_low (overflow ignored)
+        return i128 {
+            low: p0_low,
+            high: (p0_high + p1_low + p2_low) as i64,
+        };
+    }
+}
+
 // Neg implementation for i128
 impl Neg for i128 {
     type Output = i128;
@@ -328,5 +645,142 @@ impl Neg for i128 {
         // -x = ~x + 1 = 0 - x
         let zero = i128::zero();
         return zero.sub(self);
+    }
+}
+
+// BitAnd implementation for i128
+impl BitAnd for i128 {
+    type Output = i128;
+
+    pub fn bitand(&self, other: &Self) -> Self::Output {
+        return i128 {
+            low: self.low & other.low,
+            high: self.high & other.high,
+        };
+    }
+}
+
+// BitOr implementation for i128
+impl BitOr for i128 {
+    type Output = i128;
+
+    pub fn bitor(&self, other: &Self) -> Self::Output {
+        return i128 {
+            low: self.low | other.low,
+            high: self.high | other.high,
+        };
+    }
+}
+
+// BitXor implementation for i128
+impl BitXor for i128 {
+    type Output = i128;
+
+    pub fn bitxor(&self, other: &Self) -> Self::Output {
+        return i128 {
+            low: self.low ^ other.low,
+            high: self.high ^ other.high,
+        };
+    }
+}
+
+// BitNot implementation for i128
+impl BitNot for i128 {
+    type Output = i128;
+
+    pub fn bitnot(&self) -> Self::Output {
+        return i128 {
+            low: ~self.low,
+            high: ~self.high,
+        };
+    }
+}
+
+// Shl implementation for i128
+impl Shl for i128 {
+    type Output = i128;
+
+    pub fn shl(&self, rhs: u32) -> Self::Output {
+        let shift = rhs as i32;
+        if shift >= 128 {
+            return i128::zero();
+        }
+        if shift >= 64 {
+            // All low bits shift into high, low becomes 0
+            let s = (shift - 64) as u64;
+            return i128 {
+                low: 0,
+                high: (self.low << s) as i64,
+            };
+        }
+        if shift == 0 {
+            return *self;
+        }
+        // 0 < shift < 64
+        let s = shift as u64;
+        let inv_s = (64 - shift) as u64;
+        return i128 {
+            low: self.low << s,
+            high: ((self.high as u64) << s | (self.low >> inv_s)) as i64,
+        };
+    }
+}
+
+// Shr implementation for i128 (arithmetic/signed shift)
+impl Shr for i128 {
+    type Output = i128;
+
+    pub fn shr(&self, rhs: u32) -> Self::Output {
+        let shift = rhs as i32;
+        if shift >= 128 {
+            // Fill with sign bit
+            if self.high < (0 as i64) {
+                return i128 {
+                    low: 0xFFFFFFFFFFFFFFFF as u64,
+                    high: -1 as i64,
+                };
+            } else {
+                return i128::zero();
+            }
+        }
+        if shift >= 64 {
+            // All high bits shift into low, high becomes sign extension
+            let s = (shift - 64) as i64;
+            let sign_ext: i64 = if self.high < (0 as i64) { -1 as i64 } else { 0 as i64 };
+            return i128 {
+                low: (self.high >> s) as u64,
+                high: sign_ext,
+            };
+        }
+        if shift == 0 {
+            return *self;
+        }
+        // 0 < shift < 64
+        let s = shift as u64;
+        let inv_s = (64 - shift) as u64;
+        return i128 {
+            low: (self.low >> s) | ((self.high as u64) << inv_s),
+            high: self.high >> (s as i64),
+        };
+    }
+}
+
+// Div implementation for i128
+impl Div for i128 {
+    type Output = i128;
+
+    pub fn div(&self, other: &Self) -> Self::Output {
+        let result = self.div_rem(other);
+        return result[0];
+    }
+}
+
+// Rem implementation for i128
+impl Rem for i128 {
+    type Output = i128;
+
+    pub fn rem(&self, other: &Self) -> Self::Output {
+        let result = self.div_rem(other);
+        return result[1];
     }
 }

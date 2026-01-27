@@ -5,6 +5,8 @@ use crate::token::Span;
 #[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<Item>,
+    /// Inner attributes like `#![no_prelude]`
+    pub inner_attributes: Vec<InnerAttribute>,
     /// Shebang line, if present (e.g., "#!/usr/bin/env wado").
     shebang: Option<String>,
     /// Content of the __DATA__ section, if present in the source file.
@@ -12,11 +14,19 @@ pub struct Module {
     data_section: Option<String>,
 }
 
+/// Inner attribute like `#![no_prelude]`
+#[derive(Debug, Clone)]
+pub struct InnerAttribute {
+    pub name: String,
+    pub span: Span,
+}
+
 impl Module {
     /// Creates a new module with the given items and no data section.
     pub fn new(items: Vec<Item>) -> Self {
         Self {
             items,
+            inner_attributes: Vec::new(),
             shebang: None,
             data_section: None,
         }
@@ -25,14 +35,26 @@ impl Module {
     /// Creates a new module with the given items, shebang, and data section.
     pub fn with_metadata(
         items: Vec<Item>,
+        inner_attributes: Vec<InnerAttribute>,
         shebang: Option<String>,
         data_section: Option<String>,
     ) -> Self {
         Self {
             items,
+            inner_attributes,
             shebang,
             data_section,
         }
+    }
+
+    /// Returns the inner attributes.
+    pub fn inner_attributes(&self) -> &[InnerAttribute] {
+        &self.inner_attributes
+    }
+
+    /// Returns true if the module has the `#![no_prelude]` attribute.
+    pub fn has_no_prelude(&self) -> bool {
+        self.inner_attributes.iter().any(|a| a.name == "no_prelude")
     }
 
     /// Returns the shebang line, if present.

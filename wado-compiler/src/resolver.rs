@@ -32,9 +32,9 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Helper to get the `ModuleSource` for String type (core:prelude)
+/// Helper to get the `ModuleSource` for String type (core:string)
 fn string_module_source() -> ModuleSource {
-    ModuleSource::core("prelude")
+    ModuleSource::core("string")
 }
 
 /// Struct field info: module source and field definitions
@@ -3357,14 +3357,21 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Check if this is an arithmetic operation on a non-primitive type
-        // Non-primitives use Add/Sub/Mul/Div/Rem traits instead of direct Wasm instructions
-        let is_arithmetic = matches!(
+        // Check if this is an arithmetic or bitwise operation on a non-primitive type
+        // Non-primitives use Add/Sub/Mul/Div/Rem/BitAnd/BitOr/BitXor traits
+        let is_arithmetic_or_bitwise = matches!(
             binary.op,
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
+            BinaryOp::Add
+                | BinaryOp::Sub
+                | BinaryOp::Mul
+                | BinaryOp::Div
+                | BinaryOp::Mod
+                | BinaryOp::BitAnd
+                | BinaryOp::BitOr
+                | BinaryOp::BitXor
         );
 
-        if is_arithmetic {
+        if is_arithmetic_or_bitwise {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
@@ -3380,6 +3387,9 @@ impl<'a> Resolver<'a> {
                     BinaryOp::Mul => ("Mul", "mul"),
                     BinaryOp::Div => ("Div", "div"),
                     BinaryOp::Mod => ("Rem", "rem"),
+                    BinaryOp::BitAnd => ("BitAnd", "bitand"),
+                    BinaryOp::BitOr => ("BitOr", "bitor"),
+                    BinaryOp::BitXor => ("BitXor", "bitxor"),
                     _ => unreachable!(),
                 };
 
@@ -3431,6 +3441,68 @@ impl<'a> Resolver<'a> {
                             },
                             type_args: vec![],
                             args: vec![arg_ref],
+                        },
+                        trait_info.output_type,
+                        binary.span,
+                    );
+                }
+            }
+        }
+
+        // Check if this is a shift operation on a non-primitive type
+        // Non-primitives use Shl/Shr traits (with rhs: u32, not &Self)
+        let is_shift = matches!(binary.op, BinaryOp::Shl | BinaryOp::Shr);
+
+        if is_shift {
+            // Get struct name for trait lookup
+            let struct_name = match &left_type {
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
+
+            if let Some(struct_name) = struct_name {
+                // Determine which trait and method to use based on operator
+                let (trait_name, method_name) = match binary.op {
+                    BinaryOp::Shl => ("Shl", "shl"),
+                    BinaryOp::Shr => ("Shr", "shr"),
+                    _ => unreachable!(),
+                };
+
+                // Find the shift trait implementation
+                if let Some(trait_info) = self.find_arithmetic_trait_impl(
+                    &struct_name,
+                    left.type_id,
+                    trait_name,
+                    method_name,
+                ) {
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        left.clone(),
+                        trait_info.self_kind,
+                        binary.span,
+                    );
+
+                    // For shift operations, rhs is u32 (not &Self), so pass directly
+                    // Get the mangled method name: StructName^Shl::shl
+                    let mangled_method_name =
+                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    method_name.to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![right.clone()], // Pass rhs directly (u32)
                         },
                         trait_info.output_type,
                         binary.span,
@@ -3526,6 +3598,54 @@ impl<'a> Resolver<'a> {
                                     struct_name.clone(),
                                     Some(trait_info.trait_name.clone()),
                                     "neg".to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![],
+                        },
+                        trait_info.output_type,
+                        unary.span,
+                    );
+                }
+            }
+        }
+
+        // Check for bitwise NOT on non-primitive types that implement BitNot trait
+        if unary.op == UnaryOp::BitNot {
+            let expr_type = self.type_table.borrow().get(expr.type_id).clone();
+            let struct_name = match &expr_type {
+                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                _ => None,
+            };
+
+            if let Some(struct_name) = struct_name {
+                // Find the BitNot trait implementation
+                if let Some(trait_info) =
+                    self.find_arithmetic_trait_impl(&struct_name, expr.type_id, "BitNot", "bitnot")
+                {
+                    // Adjust receiver for self kind (&self)
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        expr.clone(),
+                        trait_info.self_kind,
+                        unary.span,
+                    );
+
+                    // Get the mangled method name: StructName^BitNot::bitnot
+                    let mangled_method_name =
+                        format!("{}^{}::bitnot", struct_name, trait_info.trait_name);
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    "bitnot".to_string(),
                                 )),
                             },
                             type_args: vec![],
@@ -4135,11 +4255,11 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Get the String struct type (from prelude)
+    /// Get the String struct type (from core:string)
     fn get_string_struct_type(&mut self) -> TypeId {
         self.type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::core("prelude"))
+            .make_struct("String".to_string(), ModuleSource::core("string"))
     }
 
     /// Get the return type of a builtin function
@@ -7389,7 +7509,7 @@ impl<'a> Resolver<'a> {
             result = TirExpr::new(
                 TirExprKind::StaticCall {
                     func: FunctionRef::External {
-                        module_source: ModuleSource::core("prelude"),
+                        module_source: string_module_source(),
                         name: "String::concat".to_string(),
                         monomorph_info: None,
                         method_info: Some(LocalMethodName::new(
@@ -7544,7 +7664,27 @@ impl<'a> Resolver<'a> {
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                let mut value = self.resolve_expr(&field.value, ctx);
+                // Find expected field type for literal coercion (only for numeric literals)
+                // We only use expected type for integer/float literals to avoid interfering
+                // with tuple-to-array coercion for generic struct fields
+                let expected_field_type = if matches!(
+                    &field.value,
+                    ast::Expr::Literal(lit) if matches!(
+                        &lit.value,
+                        ast::Literal::Int(_) | ast::Literal::Float(_)
+                    )
+                ) {
+                    struct_field_types
+                        .iter()
+                        .find(|(name, _)| name == &field.name)
+                        .map(|(_, type_id)| *type_id)
+                } else {
+                    None
+                };
+
+                // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
+                let mut value =
+                    self.resolve_expr_with_expected_type(&field.value, ctx, expected_field_type);
 
                 // Check if this is a tuple literal that should become an array
                 // This happens when the struct field expects Array<T> and we have [...]
