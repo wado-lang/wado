@@ -171,14 +171,6 @@ global mut counter: i32 = 0;
 pub global VERSION: i32 = 1;
 ```
 
-**Why `global` instead of `let` or `static`?**
-
-| Keyword  | Issue                                                        |
-| -------- | ------------------------------------------------------------ |
-| `let`    | Conflates fundamentally different concepts (scope, lifetime) |
-| `static` | Implies memory model semantics that don't apply to Wasm      |
-| `global` | Directly reflects Wasm semantics - makes the target visible  |
-
 **Initialization:**
 
 Currently, only literal initializers are supported:
@@ -210,7 +202,7 @@ fn example() {
 - Boolean: `bool`
 - Character: `char`
 
-Reference types (`String`, `Array<T>`, structs) are not yet supported.
+Object types (`String`, `Array<T>`, structs) are not yet supported.
 
 #### Module Initialization (not yet implemented)
 

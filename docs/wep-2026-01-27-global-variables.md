@@ -61,14 +61,14 @@ pub global mut state: bool = false;
 
 ### Supported Types
 
-Global variables support all numeric and reference types that Wasm globals support:
+Global variables support numeric types that Wasm globals support:
 
 - Integers: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `i128`, `u128`
 - Floats: `f32`, `f64`
 - Boolean: `bool`
 - Character: `char`
 
-Note: Reference types (`String`, `Array<T>`, structs) are **not yet supported** as Wasm global initialization for GC types has limitations.
+Note: Object types (`String`, `Array<T>`, structs) are **not yet supported** as Wasm global initialization for GC types has limitations.
 
 ### Initialization
 
@@ -137,12 +137,12 @@ fn example() {
 ### Limitations
 
 1. **Limited initialization**: Complex initialization requires lazy evaluation (not yet implemented)
-2. **No reference type globals**: GC type globals need additional work for proper initialization
+2. **No object type globals**: GC type globals need additional work for proper initialization
 3. **Cross-module access**: Globals are module-private by default; `pub` enables cross-module access but not Component Model export
 
 ### Future Work
 
 1. **Lazy initialization**: Support non-constant initializers with generated init code
-2. **Reference type globals**: Support `String`, `Array<T>`, and struct globals
+2. **Object type globals**: Support `String`, `Array<T>`, and struct globals
 3. **Component Model export**: `export global` syntax for exposing globals at CM boundary
 4. **Thread safety**: Consider `global atomic` for thread-safe mutable globals (requires Wasm threads)
