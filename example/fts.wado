@@ -7,7 +7,7 @@
 
 use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
-// Note: internal stringify functions use template strings, e.g., `{val}`
+use {f64_to_string as ryu_f64_to_string} from "core:internal";
 
 // ============================================================================
 // Constants
@@ -1869,8 +1869,11 @@ fn u64_to_str(n: u64) -> String {
 // Entry point for running
 fn run() with Stdout, MonotonicClock {
     println("======================================================================");
-    println("Float-to-String Benchmark: f64_to_string() vs short()");
+    println("Float-to-String Benchmark: fpfmt vs ryu (internal::f64_to_string)");
     println("======================================================================");
+    println("");
+    println("fpfmt: Russ Cox's unrounded scaling algorithm (this file)");
+    println("ryu:   Bundled ryu-based f64_to_buffer (wado-bundled)");
     println("");
 
     // Number of iterations per test
@@ -1893,7 +1896,7 @@ fn run() with Stdout, MonotonicClock {
 
 fn benchmark_category(name: String, iterations: i32, values: Array<f64>) with Stdout, MonotonicClock {
     println(`\n--- {name} ---`);
-    println("Value                      full(ns)     short(ns)     ratio");
+    println("Value                      fpfmt(ns)    ryu(ns)       ratio");
     println("-----------------------------------------------------------------");
 
     for let val of values {
@@ -1910,17 +1913,17 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
     let end_fpfmt = now();
     let fpfmt_time = (end_fpfmt - start_fpfmt) / (iterations as u64);
 
-    // Benchmark short() only (not converting to string)
-    let start_internal = now();
+    // Benchmark ryu (internal::f64_to_string)
+    let start_ryu = now();
     for let mut i = 0; i < iterations; i += 1 {
-        let _ = short(val);
+        let _ = ryu_f64_to_string(val);
     }
-    let end_internal = now();
-    let internal_time = (end_internal - start_internal) / (iterations as u64);
+    let end_ryu = now();
+    let ryu_time = (end_ryu - start_ryu) / (iterations as u64);
 
-    // Calculate ratio (fpfmt / internal)
-    let ratio = if internal_time > 0 as u64 {
-        (fpfmt_time as f64) / (internal_time as f64)
+    // Calculate ratio (fpfmt / ryu)
+    let ratio = if ryu_time > 0 as u64 {
+        (fpfmt_time as f64) / (ryu_time as f64)
     } else {
         0.0
     };
@@ -1932,7 +1935,7 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
 
     // Build output line
     let fpfmt_str = format_ns(fpfmt_time);
-    let internal_str = format_ns(internal_time);
+    let ryu_str = format_ns(ryu_time);
     let ratio_str = format_ratio(ratio);
 
     let mut line = String::with_capacity(80);
@@ -1940,7 +1943,7 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
     line.append(" ");
     line.append(fpfmt_str);
     line.append("    ");
-    line.append(internal_str);
+    line.append(ryu_str);
     line.append("     ");
     line.append(ratio_str);
     println(line);
