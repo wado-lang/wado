@@ -948,6 +948,17 @@ pub enum TirExprKind {
         module_source: ModuleSource,
         name: String,
     },
+    /// Read a global variable
+    GlobalVarGet {
+        module_source: ModuleSource,
+        name: String,
+    },
+    /// Write to a global variable
+    GlobalVarSet {
+        module_source: ModuleSource,
+        name: String,
+        value: Box<TirExpr>,
+    },
 
     Binary {
         left: Box<TirExpr>,
@@ -1338,6 +1349,19 @@ pub struct MonomorphInfo {
     pub type_args: Vec<TypeId>,
 }
 
+/// Global variable declaration in TIR
+#[derive(Debug, Clone)]
+pub struct TirGlobal {
+    pub name: String,
+    pub ty: TypeId,
+    pub initializer: TirExpr,
+    pub mutable: bool,
+    pub is_pub: bool,
+    /// Module where this global is defined
+    pub module_source: ModuleSource,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct TirFunction {
     pub name: String,
@@ -1577,6 +1601,8 @@ pub struct TirModule {
     pub impls: Vec<TirImpl>,
     /// Test declarations with their metadata
     pub tests: Vec<TirTest>,
+    /// Global variable declarations
+    pub globals: Vec<TirGlobal>,
     pub data_section: Option<String>,
     pub string_literals: Vec<String>,
     /// Map of function name to string literals it contains (for DCE)
@@ -1608,6 +1634,7 @@ impl TirModule {
             traits: Vec::new(),
             impls: Vec::new(),
             tests: Vec::new(),
+            globals: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
             function_strings: HashMap::new(),
@@ -1634,6 +1661,7 @@ impl TirModule {
             traits: Vec::new(),
             impls: Vec::new(),
             tests: Vec::new(),
+            globals: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
             function_strings: HashMap::new(),

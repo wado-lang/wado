@@ -490,6 +490,9 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
         TirExprKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(block, modified);
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_modified_vars_in_expr(value, modified);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -500,6 +503,7 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -792,6 +796,9 @@ fn collect_licm_ref_bindings_in_expr(
         TirExprKind::Move { value } => {
             collect_licm_ref_bindings_in_expr(value, type_table, bindings);
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
+        }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -802,6 +809,7 @@ fn collect_licm_ref_bindings_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -1455,6 +1463,16 @@ fn find_hoist_candidates_in_expr(
                 next_local,
             );
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            find_hoist_candidates_in_expr(
+                value,
+                modified_vars,
+                ref_bindings,
+                candidates,
+                seen,
+                next_local,
+            );
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1465,6 +1483,7 @@ fn find_hoist_candidates_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -1715,6 +1734,9 @@ fn replace_hoisted_in_expr(
         TirExprKind::LabeledBlock { block, .. } => {
             replace_hoisted_in_block(block, candidates, ref_bindings);
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            replace_hoisted_in_expr(value, candidates, ref_bindings);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1725,6 +1747,7 @@ fn replace_hoisted_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}

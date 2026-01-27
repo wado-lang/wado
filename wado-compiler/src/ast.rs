@@ -61,6 +61,7 @@ pub enum Item {
     Resource(ResourceDecl),
     World(WorldDecl),
     Test(TestDecl),
+    Global(GlobalDecl),
 }
 
 /// Test declaration: `test "name" { ... }` or `test { ... }`
@@ -69,6 +70,19 @@ pub struct TestDecl {
     /// Optional test name (string literal). If None, identified by <file:line>.
     pub name: Option<String>,
     pub body: Block,
+    pub span: Span,
+}
+
+/// Global variable declaration: `global name: Type = expr;`
+/// or `pub global mut name: Type = expr;`
+#[derive(Debug, Clone)]
+pub struct GlobalDecl {
+    pub name: String,
+    pub ty: Type,
+    pub initializer: Expr,
+    pub mutable: bool,
+    pub is_pub: bool,
+    pub attributes: Vec<Attribute>,
     pub span: Span,
 }
 

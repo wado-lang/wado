@@ -6,9 +6,9 @@
 use std::collections::{HashMap, HashSet};
 
 use wasm_encoder::{
-    ArrayType, CompositeInnerType, CompositeType, EntityType, ExportKind, ExportSection, FieldType,
-    FunctionSection, ImportSection, MemoryType, NameMap, NameSection, ProducersField,
-    ProducersSection, StorageType, SubType, TypeSection, ValType,
+    ArrayType, CompositeInnerType, CompositeType, ConstExpr, EntityType, ExportKind, ExportSection,
+    FieldType, FunctionSection, GlobalSection, GlobalType, ImportSection, MemoryType, NameMap,
+    NameSection, ProducersField, ProducersSection, StorageType, SubType, TypeSection, ValType,
 };
 
 // ============================================================================
@@ -35,6 +35,7 @@ pub struct CoreModuleBuilder {
     types: TypeSection,
     imports: ImportSection,
     functions: FunctionSection,
+    globals: GlobalSection,
     exports: ExportSection,
     #[allow(dead_code)]
     names: NameSection,
@@ -52,6 +53,10 @@ pub struct CoreModuleBuilder {
     /// Number of imported functions (for branch hint calculation)
     pub import_func_count: u32,
 
+    // Global tracking
+    global_names: HashMap<String, u32>,
+    next_global_idx: u32,
+
     // Memory tracking
     pub has_memory: bool,
 
@@ -66,6 +71,7 @@ impl CoreModuleBuilder {
             types: TypeSection::new(),
             imports: ImportSection::new(),
             functions: FunctionSection::new(),
+            globals: GlobalSection::new(),
             exports: ExportSection::new(),
             names: NameSection::new(),
             type_names: HashMap::new(),
@@ -76,6 +82,8 @@ impl CoreModuleBuilder {
             type_return_type: HashMap::new(),
             next_func_idx: 0,
             import_func_count: 0,
+            global_names: HashMap::new(),
+            next_global_idx: 0,
             has_memory: false,
             internal_functions: HashSet::new(),
         }
@@ -313,6 +321,39 @@ impl CoreModuleBuilder {
         self.func_names.get(name).copied()
     }
 
+    /// Define a global variable and return its index
+    pub fn define_global(
+        &mut self,
+        name: &str,
+        val_type: ValType,
+        mutable: bool,
+        init: ConstExpr,
+    ) -> u32 {
+        let idx = self.next_global_idx;
+        let global_type = GlobalType {
+            val_type,
+            mutable,
+            shared: false,
+        };
+        self.globals.global(global_type, &init);
+        self.global_names.insert(name.to_string(), idx);
+        self.next_global_idx += 1;
+        idx
+    }
+
+    /// Get global index by name
+    pub fn global_idx(&self, name: &str) -> u32 {
+        *self
+            .global_names
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown global: {name}"))
+    }
+
+    /// Try to get global index by name, returns None if not found
+    pub fn try_global_idx(&self, name: &str) -> Option<u32> {
+        self.global_names.get(name).copied()
+    }
+
     /// Get the types section (for module building)
     pub fn types(&self) -> &TypeSection {
         &self.types
@@ -326,6 +367,16 @@ impl CoreModuleBuilder {
     /// Get the functions section (for module building)
     pub fn functions(&self) -> &FunctionSection {
         &self.functions
+    }
+
+    /// Get the globals section (for module building)
+    pub fn globals(&self) -> &GlobalSection {
+        &self.globals
+    }
+
+    /// Check if any globals have been defined
+    pub fn has_globals(&self) -> bool {
+        self.next_global_idx > 0
     }
 
     /// Get the exports section (for module building)

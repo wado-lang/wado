@@ -210,6 +210,7 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             }
             (all_ok, total)
         }
+        TirExprKind::GlobalVarSet { value, .. } => track_local_uses_in_expr(value, local_index),
         // Leaf nodes - no uses
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -220,6 +221,7 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
         | TirExprKind::Unit
         | TirExprKind::Local { .. } // Different local
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => (true, 0),
     }
@@ -460,6 +462,9 @@ fn replace_ref_field_access_in_expr(
                 );
             }
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
+        }
         // Leaf nodes - nothing to replace
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -470,6 +475,7 @@ fn replace_ref_field_access_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
@@ -835,6 +841,9 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
                 collect_ref_bindings_in_expr(&arm.body, bindings);
             }
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_ref_bindings_in_expr(value, bindings);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -845,6 +854,7 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
@@ -1055,6 +1065,9 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
                 remove_dead_ref_bindings_in_expr(&mut arm.body, dead_locals);
             }
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            remove_dead_ref_bindings_in_expr(value, dead_locals);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1065,6 +1078,7 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }

@@ -65,8 +65,8 @@ impl SyntaxDefinition {
                 ],
                 // Declarations
                 declaration: vec![
-                    "fn", "let", "struct", "enum", "variant", "impl", "trait", "type", "use",
-                    "from", "pub", "import", "export", "test",
+                    "fn", "let", "global", "struct", "enum", "variant", "impl", "trait", "type",
+                    "use", "from", "pub", "import", "export", "test",
                 ],
                 // Modifiers
                 modifier: vec!["as", "with", "mut", "async", "move", "unique", "in", "of"],
@@ -156,7 +156,7 @@ mod tests {
             "use", "from", "as", "fn", "with", "let", "mut", "return", "if", "else", "match",
             "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect", "handler",
             "reactive", "move", "unique", "struct", "enum", "variant", "type", "impl", "trait",
-            "resource", "world", "async", "import", "export", "assert",
+            "resource", "world", "async", "import", "export", "assert", "global",
         ];
 
         // Contextual keywords: these are in SyntaxDefinition for highlighting

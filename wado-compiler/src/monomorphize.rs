@@ -861,8 +861,12 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.rewrite_types_in_expr(value, type_table);
+            }
             TirExprKind::OptionSome { value } => {
                 self.rewrite_types_in_expr(value, type_table);
             }
@@ -1929,6 +1933,9 @@ impl Monomorphizer {
                     type_table,
                 );
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1939,6 +1946,7 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -2677,6 +2685,9 @@ impl Monomorphizer {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.substitute_types_in_expr(value, substitution, type_table);
+            }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2687,6 +2698,7 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -3258,6 +3270,9 @@ impl Monomorphizer {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.rewrite_function_calls_in_expr(value, type_table);
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -3268,6 +3283,7 @@ impl Monomorphizer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }

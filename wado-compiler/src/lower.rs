@@ -463,6 +463,9 @@ impl ClosureLowerer {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_closures_in_block(block);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.collect_closures_in_expr(value);
+            }
             // Terminals - no closures
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -473,6 +476,7 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -694,6 +698,9 @@ impl ClosureLowerer {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.analyze_closure_safety_block(block);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.analyze_closure_safety_expr(value, false);
+            }
             // Terminals
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -703,6 +710,7 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -1616,6 +1624,9 @@ impl ClosureLowerer {
             TirExprKind::Closure { body, .. } => {
                 self.fn_param_in_struct_field_expr(body, fn_param_indices)
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.fn_param_in_struct_field_expr(value, fn_param_indices)
+            }
             // Terminals
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1626,6 +1637,7 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => false,
         }
@@ -1896,6 +1908,9 @@ impl ClosureLowerer {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_fn_param_specs(block, func_by_name, type_table, requests);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
+            }
             // Terminals
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -1906,6 +1921,7 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -2785,6 +2801,30 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
+            TirExprKind::GlobalVarGet {
+                name,
+                module_source,
+            } => TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    name: name.clone(),
+                    module_source: module_source.clone(),
+                },
+                expr.type_id,
+                expr.span,
+            ),
+            TirExprKind::GlobalVarSet {
+                name,
+                module_source,
+                value,
+            } => TirExpr::new(
+                TirExprKind::GlobalVarSet {
+                    name: name.clone(),
+                    module_source: module_source.clone(),
+                    value: Box::new(self.specialize_expr(value, param_to_functor, type_table)),
+                },
+                expr.type_id,
+                expr.span,
+            ),
             TirExprKind::Capture { index, name } => TirExpr::new(
                 TirExprKind::Capture {
                     index: *index,
@@ -3089,6 +3129,9 @@ impl ClosureLowerer {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.transform_block(block, type_table);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.transform_expr(value, type_table);
+            }
             // Terminals - nothing to transform
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -3099,6 +3142,7 @@ impl ClosureLowerer {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -3475,6 +3519,9 @@ impl StringCollector {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.collect_expr(value);
+            }
             // Literals and simple expressions don't contain strings
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -3484,6 +3531,7 @@ impl StringCollector {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
