@@ -4,24 +4,22 @@
 
 fn run() with Stdout {
     let a: u128 = move "u128::from_u64"(100);
-    core::cli::println(move "String::concat"(move "u128 literal coercion: low=", move "u64::to_string"("u128::low"(&a))));
+    core::cli::println(move "String::concat"(move "u128 literal coercion: ", move "u128::to_string"(a)));
     let b: i128 = move "i128::from_i64"(42);
-    core::cli::println(move "String::concat"(move "i128 literal coercion: low=", move "u64::to_string"("i128::low"(&b))));
+    core::cli::println(move "String::concat"(move "i128 literal coercion: ", move "i128::to_string"(b)));
     let c: i128 = move "i128::from_pair"(18446744073709551516, -1);
-    if "i128::is_negative"(&c) {
-        core::cli::println(move "i128 negative literal coercion works");
-    }
+    core::cli::println(move "String::concat"(move "i128 negative literal coercion: ", move "i128::to_string"(c)));
     let d: u128 = move "u128::from_u64"(200);
-    core::cli::println(move "String::concat"(move "u128 cast: low=", move "u64::to_string"("u128::low"(&d))));
+    core::cli::println(move "String::concat"(move "u128 cast: ", move "u128::to_string"(d)));
     let e: i128 = move "i128::from_i64"(300);
-    core::cli::println(move "String::concat"(move "i128 cast: low=", move "u64::to_string"("i128::low"(&e))));
+    core::cli::println(move "String::concat"(move "i128 cast: ", move "i128::to_string"(e)));
     let g: u128 = move "u128::from_u64"(500 as u64);
-    core::cli::println(move "String::concat"(move "u128 from i64 variable: low=", move "u64::to_string"("u128::low"(&g))));
+    core::cli::println(move "String::concat"(move "u128 from i64 variable: ", move "u128::to_string"(g)));
     let h: i128 = move "i128::from_i64"(500 as i64);
-    core::cli::println(move "String::concat"(move "i128 from i64 variable: low=", move "u64::to_string"("i128::low"(&h))));
+    core::cli::println(move "String::concat"(move "i128 from i64 variable: ", move "i128::to_string"(h)));
     let sum: u128 = move "u128::from_u64"(10);
     let sum2: u128 = move "u128^Add::add"(&sum, &"u128::from_u64"(5 as u64));
-    core::cli::println(move "String::concat"(move "u128 arithmetic: low=", move "u64::to_string"("u128::low"(&sum2))));
+    core::cli::println(move "String::concat"(move "u128 arithmetic: ", move "u128::to_string"(sum2)));
     core::cli::println(move "All coercion tests passed!");
 }
 

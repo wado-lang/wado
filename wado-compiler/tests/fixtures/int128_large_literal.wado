@@ -4,30 +4,30 @@ use {println, Stdout} from "core:cli";
 fn run() with Stdout {
     // Large u128 literal via coercion (larger than u64::MAX = 18446744073709551615)
     let large_u128: u128 = 18446744073709551616; // u64::MAX + 1
-    println(`large_u128 = {large_u128.to_string()}`);
+    println(`large_u128 = {large_u128}`);
 
     // Maximum u128 via coercion
     let max_u128: u128 = 340282366920938463463374607431768211455;
-    println(`max_u128 = {max_u128.to_string()}`);
+    println(`max_u128 = {max_u128}`);
 
     // Large i128 literal via coercion (larger than i64::MAX = 9223372036854775807)
     let large_i128: i128 = 9223372036854775808; // i64::MAX + 1
-    println(`large_i128 = {large_i128.to_string()}`);
+    println(`large_i128 = {large_i128}`);
 
     // Maximum i128 via coercion
     let max_i128: i128 = 170141183460469231731687303715884105727;
-    println(`max_i128 = {max_i128.to_string()}`);
+    println(`max_i128 = {max_i128}`);
 
     // Minimum i128 via coercion (negative)
     let min_i128: i128 = -170141183460469231731687303715884105728;
-    println(`min_i128 = {min_i128.to_string()}`);
+    println(`min_i128 = {min_i128}`);
 
     // Large literal with cast
     let cast_u128 = 18446744073709551616 as u128;
-    println(`cast_u128 = {cast_u128.to_string()}`);
+    println(`cast_u128 = {cast_u128}`);
 
     let cast_i128 = 9223372036854775808 as i128;
-    println(`cast_i128 = {cast_i128.to_string()}`);
+    println(`cast_i128 = {cast_i128}`);
 
     // Note: `-170141183460469231731687303715884105728 as i128` doesn't work because
     // `as` has higher precedence than unary `-`, so it's parsed as `-(170... as i128)`
@@ -35,25 +35,25 @@ fn run() with Stdout {
 
     // Underscores in large literals should work
     let with_underscores: u128 = 340_282_366_920_938_463_463_374_607_431_768_211_455;
-    println(`with_underscores = {with_underscores.to_string()}`);
+    println(`with_underscores = {with_underscores}`);
 
     // Hex literals larger than u64
     // 0x10000000000000000 = 2^64 = 18446744073709551616
     let hex_large: u128 = 0x10000000000000000;
-    println(`hex_large = {hex_large.to_string()}`);
+    println(`hex_large = {hex_large}`);
 
     // Max u128 in hex: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     let hex_max: u128 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-    println(`hex_max = {hex_max.to_string()}`);
+    println(`hex_max = {hex_max}`);
 
     // Binary literal larger than u64
     // 0b1_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000 = 2^64
     let bin_large: u128 = 0b10000000000000000000000000000000000000000000000000000000000000000;
-    println(`bin_large = {bin_large.to_string()}`);
+    println(`bin_large = {bin_large}`);
 
     // Hex cast
     let hex_cast = 0x10000000000000000 as u128;
-    println(`hex_cast = {hex_cast.to_string()}`);
+    println(`hex_cast = {hex_cast}`);
 }
 
 __DATA__

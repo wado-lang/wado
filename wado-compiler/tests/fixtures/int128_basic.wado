@@ -7,11 +7,11 @@ fn run() with Stdout {
 
     // Test u128 addition
     let sum = a.add(&b);
-    println(`u128 100 + 50 = {sum.low()}`);
+    println(`u128 100 + 50 = {sum}`);
 
     // Test u128 subtraction
     let diff = a.sub(&b);
-    println(`u128 100 - 50 = {diff.low()}`);
+    println(`u128 100 - 50 = {diff}`);
 
     // Test u128 equality
     let c = u128::from_u64(100 as u64);
@@ -30,23 +30,19 @@ fn run() with Stdout {
 
     // Test i128 addition
     let sum2 = x.add(&y);
-    println(`i128 100 + (-50) = {sum2.low()}`);
+    println(`i128 100 + (-50) = {sum2}`);
 
     // Test i128 with negative result
     let z = i128::from_i64(30 as i64);
     let diff2 = z.sub(&x);
-    if diff2.is_negative() {
-        println("i128: 30 - 100 is negative");
-    }
+    println(`i128 30 - 100 = {diff2}`);
 
     // Test i128 negation
     let neg_x = x.neg();
-    if neg_x.is_negative() {
-        println("i128: -100 is negative");
-    }
+    println(`i128 -100 = {neg_x}`);
 
     println("All i128/u128 tests passed!");
 }
 
 __DATA__
-{"stdout": "u128 100 + 50 = 150\nu128 100 - 50 = 50\nu128: 100 == 100 is true\nu128: 50 < 100 is true\ni128 100 + (-50) = 50\ni128: 30 - 100 is negative\ni128: -100 is negative\nAll i128/u128 tests passed!\n"}
+{"stdout": "u128 100 + 50 = 150\nu128 100 - 50 = 50\nu128: 100 == 100 is true\nu128: 50 < 100 is true\ni128 100 + (-50) = 50\ni128 30 - 100 = -70\ni128 -100 = -100\nAll i128/u128 tests passed!\n"}
