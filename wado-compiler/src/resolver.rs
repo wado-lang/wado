@@ -4175,12 +4175,6 @@ impl<'a> Resolver<'a> {
             "array_len" => TypeTable::I32,
             "array_get_u8" => TypeTable::I32, // Returns u8 as i32
             "array_set_u8" => TypeTable::UNIT,
-            "array_u8_new" => {
-                // Returns builtin::array<u8>
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::BuiltinArray(TypeTable::U8))
-            }
             "string_new" => self.get_string_struct_type(),
 
             // Memory operations

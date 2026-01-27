@@ -20,7 +20,7 @@ impl String {
     /// The string starts empty but has space for `capacity` bytes
     pub fn with_capacity(capacity: i32) -> String {
         return String {
-            repr: builtin::array_u8_new(capacity),
+            repr: builtin::array_new::<u8>(capacity),
             used: 0,
         };
     }
@@ -73,7 +73,7 @@ impl String {
             }
 
             // Create new array and copy existing bytes
-            let new_repr = builtin::array_u8_new(new_capacity);
+            let new_repr = builtin::array_new::<u8>(new_capacity);
             for let mut i = 0; i < self.used; i += 1 {
                 let byte = builtin::array_get_u8(self.repr, i);
                 builtin::array_set_u8(new_repr, i, byte);
@@ -97,7 +97,7 @@ impl String {
         let total = len_a + len_b;
 
         // Create new string with exact capacity needed
-        let repr = builtin::array_u8_new(total);
+        let repr = builtin::array_new::<u8>(total);
 
         // Copy bytes from a
         for let mut i = 0; i < len_a; i += 1 {

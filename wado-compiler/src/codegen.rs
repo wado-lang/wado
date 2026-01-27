@@ -10025,17 +10025,6 @@ impl Codegen {
                     panic!("array_new return type must be builtin::array<T>");
                 }
             }
-            "builtin::array_u8_new" => {
-                // Create a new u8 array (specialized version of array_new for byte arrays)
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                let u8_array_idx = *self
-                    .array_types
-                    .get(&TypeTable::U8)
-                    .expect("u8 array type should be registered");
-                func.instruction(&Instruction::ArrayNewDefault(u8_array_idx));
-            }
             "builtin::array_get" => {
                 if let Some(arr_arg) = args.first() {
                     if let ResolvedType::BuiltinArray(element_type) =
