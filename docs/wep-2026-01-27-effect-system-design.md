@@ -113,6 +113,7 @@ fn safe_div(a: i32, b: i32) -> i32 {
 Handlers satisfy effects. Inside a `with ... do` block, the handled effect is provided by the handler, not required from the caller.
 
 Only the effects actually needed are required on the calling function:
+
 - The handled effect itself: **not required** (handler satisfies it)
 - Effects used by handler methods: **required** on the caller
 
