@@ -1410,16 +1410,17 @@ fn run() with Stdout {
 - **Variant pattern matching**: Single-payload cases work (`if let Circle(r) = shape`). Tuple/struct payloads not yet supported. See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
 - **`core:prelude`**: Partial (parser doesn't support generic resources)
 - **Function types**: Parser supports `Fn(T) -> U` syntax, basic closure codegen works, but full function type support is incomplete.
+- **`flags` declarations**: Parser supports `flags` syntax, but no codegen yet.
+- **Inner attributes (`#![...]`)**: Parser supports inner attributes like `#![no_prelude]`, used in semantic analysis.
 
 ### Known Limitations
 
 1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
-2. **No `flags` keyword**: Parser doesn't recognize `flags` declarations (bit flags). This prevents `wasi:filesystem` from being loaded by `build_wasi_registry_from_stdlib()` since it contains `flags` declarations.
-3. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
-4. **No type checking**: The analyzer doesn't perform type checking yet
-5. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
-6. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
-7. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
+2. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
+3. **No type checking**: The analyzer doesn't perform type checking yet
+4. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
+5. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
+6. **Auto-deref doesn't work on `&Array<T>`**: Method calls like `arr_ref.len()` where `arr_ref: &Array<i32>` fail with "unknown function: Array<i32>::len". This is due to how Array methods are resolved with monomorphized type names after auto-deref. Workaround: dereference explicitly `(*arr_ref).len()`.
 
 ---
 
@@ -1428,8 +1429,6 @@ fn run() with Stdout {
 ### Parser
 
 - `#[data]` attribute for data section injection
-- `flags` declarations (bit flags)
-- Inner attributes (`#![...]`)
 - `match` statements
 
 ### Expressions
