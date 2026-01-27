@@ -19,12 +19,24 @@ struct "TreeMapNode<String,i32>" {
 
 fn run() with Stdout {
     let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
-    "TreeMap<String,i32>::insert"(&mut map, move "a", 1);
-    "TreeMap<String,i32>::insert"(&mut map, move "b", 2);
-    "TreeMap<String,i32>::insert"(&mut map, move "c", 3);
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_0: {
+        let self: &mut TreeMap<String,i32> = &mut map;
+        let key: String = move "a";
+        "TreeMap<String,i32>::insert"(self, key, 1);
+    };
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_1: {
+        let self: &mut TreeMap<String,i32> = &mut map;
+        let key: String = move "b";
+        "TreeMap<String,i32>::insert"(self, key, 2);
+    };
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_2: {
+        let self: &mut TreeMap<String,i32> = &mut map;
+        let key: String = move "c";
+        "TreeMap<String,i32>::insert"(self, key, 3);
+    };
     __assert_0: {
-        let __v0: i32 = __inline_TreeMap_String_i32___len_0: {
-            break __inline_TreeMap_String_i32___len_0: map.size;
+        let __v0: i32 = __inline_TreeMap_String_i32___len_3: {
+            break __inline_TreeMap_String_i32___len_3: map.size;
         };
         let __cond: bool = (__v0 == 3);
         if !__cond {
@@ -33,16 +45,16 @@ fn run() with Stdout {
     }
     "TreeMap<String,i32>::clear"(&mut map);
     __assert_1: {
-        let __v0: bool = __inline_TreeMap_String_i32___is_empty_1: {
-            break __inline_TreeMap_String_i32___is_empty_1: (map.size == 0);
+        let __v0: bool = __inline_TreeMap_String_i32___is_empty_4: {
+            break __inline_TreeMap_String_i32___is_empty_4: (map.size == 0);
         };
         if !__v0 {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/treemap-clear.wado"), move ":"), move "i32::to_string"(16)), move "\ncondition: map.is_empty()\n"), move "map.is_empty(): "), move "bool::to_string"(__v0)), move "\n"));
         }
     }
     __assert_2: {
-        let __v0: i32 = __inline_TreeMap_String_i32___len_2: {
-            break __inline_TreeMap_String_i32___len_2: map.size;
+        let __v0: i32 = __inline_TreeMap_String_i32___len_5: {
+            break __inline_TreeMap_String_i32___len_5: map.size;
         };
         let __cond: bool = (__v0 == 0);
         if !__cond {
@@ -70,10 +82,14 @@ fn run() with Stdout {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/treemap-clear.wado"), move ":"), move "i32::to_string"(20)), move "\ncondition: !map.contains_key(\"c\")\n"), move "map.contains_key(\"c\"): "), move "bool::to_string"(__v0)), move "\n"));
         }
     }
-    "TreeMap<String,i32>::insert"(&mut map, move "new", 42);
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_6: {
+        let self: &mut TreeMap<String,i32> = &mut map;
+        let key: String = move "new";
+        "TreeMap<String,i32>::insert"(self, key, 42);
+    };
     __assert_6: {
-        let __v0: i32 = __inline_TreeMap_String_i32___len_3: {
-            break __inline_TreeMap_String_i32___len_3: map.size;
+        let __v0: i32 = __inline_TreeMap_String_i32___len_7: {
+            break __inline_TreeMap_String_i32___len_7: map.size;
         };
         let __cond: bool = (__v0 == 1);
         if !__cond {
@@ -114,7 +130,7 @@ pub fn "TreeMap<String,i32>::clear"(self: &mut TreeMap<String,i32>) {
     self.deleted_count = 0;
 }
 
-pub fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
+fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     let mut inserted: bool = false;
     self.root = "TreeMap<String,i32>::insert_at"(self, self.root, key, value, &mut inserted);
     if inserted {

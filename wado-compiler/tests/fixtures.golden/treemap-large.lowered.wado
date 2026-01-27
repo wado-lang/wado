@@ -20,18 +20,26 @@ struct "TreeMapNode<String,i32>" {
 fn run() with Stdout {
     let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
     for let mut i: i32 = 0; (i < 50); i = (i + 1) {
-        "TreeMap<String,i32>::insert"(&mut map, move "String::concat"(move "item", move "i32::to_string"(i)), i);
+        __inline_TreeMap_String_i32__IndexAssign__index_assign_0: {
+            let self: &mut TreeMap<String,i32> = &mut map;
+            let key: String = move "String::concat"(move "item", move "i32::to_string"(i));
+            "TreeMap<String,i32>::insert"(self, key, i);
+        };
     }
     __assert_0: {
-        let __v0: i32 = __inline_TreeMap_String_i32___len_0: {
-            break __inline_TreeMap_String_i32___len_0: map.size;
+        let __v0: i32 = __inline_TreeMap_String_i32___len_1: {
+            break __inline_TreeMap_String_i32___len_1: map.size;
         };
         let __cond: bool = (__v0 == 50);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/treemap-large.wado"), move ":"), move "i32::to_string"(12)), move "\ncondition: map.len() == 50\n"), move "map.len(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
-    if Some(v0) = "TreeMap<String,i32>::get"(&map, move "item0") {
+    if Some(v0) = __inline_TreeMap_String_i32__IndexValue__index_value_2: {
+        let self: &TreeMap<String,i32> = &map;
+        let key: String = move "item0";
+        break __inline_TreeMap_String_i32__IndexValue__index_value_2: "TreeMap<String,i32>::get"(self, key);
+    } {
         __assert_1: {
             let __cond: bool = (v0 == 0);
             if !__cond {
@@ -39,7 +47,11 @@ fn run() with Stdout {
             }
         }
     }
-    if Some(v49) = "TreeMap<String,i32>::get"(&map, move "item49") {
+    if Some(v49) = __inline_TreeMap_String_i32__IndexValue__index_value_3: {
+        let self: &TreeMap<String,i32> = &map;
+        let key: String = move "item49";
+        break __inline_TreeMap_String_i32__IndexValue__index_value_3: "TreeMap<String,i32>::get"(self, key);
+    } {
         __assert_2: {
             let __cond: bool = (v49 == 49);
             if !__cond {
@@ -51,8 +63,8 @@ fn run() with Stdout {
         "TreeMap<String,i32>::remove"(&mut map, move "String::concat"(move "item", move "i32::to_string"(i)));
     }
     __assert_3: {
-        let __v0: i32 = __inline_TreeMap_String_i32___len_1: {
-            break __inline_TreeMap_String_i32___len_1: map.size;
+        let __v0: i32 = __inline_TreeMap_String_i32___len_4: {
+            break __inline_TreeMap_String_i32___len_4: map.size;
         };
         let __cond: bool = (__v0 == 25);
         if !__cond {
@@ -134,55 +146,7 @@ fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
     }
 }
 
-fn "TreeMap<String,i32>::collect_pairs"(self: &TreeMap<String,i32>, node: Option<&TreeMapNode<String,i32>>, result: &mut Array<[String, i32]>) {
-    if Some(n) = node {
-        "TreeMap<String,i32>::collect_pairs"(self, n.left, result);
-        if !n.deleted {
-            "Array<Tuple<String,i32>>::append"(result, move [n.key, n.value]);
-        }
-        "TreeMap<String,i32>::collect_pairs"(self, n.right, result);
-    }
-}
-
-pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value: [String, i32]) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<[String, i32]> = core::builtin::array_new::<[String, i32]>(new_capacity);
-        core::builtin::array_copy::<[String, i32]>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<[String, i32]>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
-fn "TreeMap<String,i32>::find_node_mut"(self: &mut TreeMap<String,i32>, key: String) -> Option<&mut TreeMapNode<String,i32>> {
-    let mut current: Option<&mut TreeMapNode<String,i32>> = self.root;
-    while let Some(n) = current {
-        if (!n.deleted && "String^Eq::eq"(&key, &n.key)) {
-            return Option::Some(n);
-        }
-        if "String^Ord::lt"(&key, &n.key) {
-            current = n.left;
-        } else {
-            current = n.right;
-        }
-    }
-    return null;
-}
-
-pub fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
-    if Some(node) = "TreeMap<String,i32>::find_node"(self, key) {
-        return Option::Some(node.value);
-    }
-    return null;
-}
-
-pub fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
+fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     let mut inserted: bool = false;
     self.root = "TreeMap<String,i32>::insert_at"(self, self.root, key, value, &mut inserted);
     if inserted {
@@ -246,6 +210,54 @@ fn "TreeMap<String,i32>::skew"(self: &mut TreeMap<String,i32>, node: Option<&mut
             }
         }
         return Option::Some(n);
+    }
+    return null;
+}
+
+fn "TreeMap<String,i32>::collect_pairs"(self: &TreeMap<String,i32>, node: Option<&TreeMapNode<String,i32>>, result: &mut Array<[String, i32]>) {
+    if Some(n) = node {
+        "TreeMap<String,i32>::collect_pairs"(self, n.left, result);
+        if !n.deleted {
+            "Array<Tuple<String,i32>>::append"(result, move [n.key, n.value]);
+        }
+        "TreeMap<String,i32>::collect_pairs"(self, n.right, result);
+    }
+}
+
+pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value: [String, i32]) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
+        }
+        let new_repr: builtin::array<[String, i32]> = core::builtin::array_new::<[String, i32]>(new_capacity);
+        core::builtin::array_copy::<[String, i32]>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<[String, i32]>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
+fn "TreeMap<String,i32>::find_node_mut"(self: &mut TreeMap<String,i32>, key: String) -> Option<&mut TreeMapNode<String,i32>> {
+    let mut current: Option<&mut TreeMapNode<String,i32>> = self.root;
+    while let Some(n) = current {
+        if (!n.deleted && "String^Eq::eq"(&key, &n.key)) {
+            return Option::Some(n);
+        }
+        if "String^Ord::lt"(&key, &n.key) {
+            current = n.left;
+        } else {
+            current = n.right;
+        }
+    }
+    return null;
+}
+
+fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
+    if Some(node) = "TreeMap<String,i32>::find_node"(self, key) {
+        return Option::Some(node.value);
     }
     return null;
 }

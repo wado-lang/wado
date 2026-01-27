@@ -5,9 +5,9 @@ use { TreeMap } from "core:collections";
 fn run() with Stdout {
     let mut map = TreeMap::<String, i32>::new();
 
-    map.insert("a", 1);
-    map.insert("b", 2);
-    map.insert("c", 3);
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
 
     // Remove existing key
     assert map.remove("b");
@@ -21,9 +21,9 @@ fn run() with Stdout {
     assert map.len() == 2;
 
     // Reinsert after remove
-    map.insert("b", 999);
+    map["b"] = 999;
     assert map.contains_key("b");
-    if let Some(val) = map.get("b") {
+    if let Some(val) = map["b"] {
         assert val == 999;
     }
     assert map.len() == 3;

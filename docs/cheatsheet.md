@@ -773,9 +773,8 @@ let t = now();            // current time in nanoseconds
 // core:collections - TreeMap (sorted map)
 use {TreeMap} from "core:collections";
 let mut map = TreeMap::<String, i32>::new();
-map.insert("key", 42);
-map["key2"] = 100;        // index assignment
-if let Some(v) = map.get("key") { ... }
+map["key"] = 42;          // index assignment
+map["key2"] = 100;
 if let Some(v) = map["key"] { ... }  // index access returns Option<V>
 let keys = map.keys();    // keys in sorted order
 map.remove("key");

@@ -4,11 +4,11 @@ use { println } from "core:cli";
 use { TreeMap } from "core:collections";
 
 fn run() with Stdout {
-    // TreeMap is defined in prelude with type params <K, V>
+    // TreeMap is defined in core:collections with type params <K, V>
     let mut map = TreeMap::<String, i32>::new();
-    map.insert("hello", 42);
+    map["hello"] = 42;
 
-    if let Some(val) = map.get(&"hello") {
+    if let Some(val) = map["hello"] {
         println(`value: {val}`);
     }
 }
