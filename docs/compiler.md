@@ -967,7 +967,7 @@ See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full d
 - [ ] Simple type checking
 - [ ] Generic type checking
 - [ ] Type inference
-- [ ] Effect checking
+- [x] Effect checking (basic function call validation)
 - [ ] Borrow checking / move analysis
 - [x] Scope analysis for variables
 - [x] Immutable variable reassignment detection
