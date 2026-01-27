@@ -1,0 +1,29 @@
+// Simulates a split prelude module containing type definitions
+
+use { println, Stdout } from "core:cli";
+
+pub struct MyPoint {
+    x: i32,
+    y: i32,
+}
+
+impl MyPoint {
+    pub fn new(x: i32, y: i32) -> MyPoint {
+        return MyPoint { x, y };
+    }
+
+    pub fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+pub fn helper_fn(n: i32) -> i32 {
+    return n * 2;
+}
+
+fn run() with Stdout {
+    println("prelude_types");
+}
+
+__DATA__
+{"stdout": "prelude_types\n"}

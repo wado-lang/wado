@@ -2040,6 +2040,31 @@ fn log() with Stdout, Stderr {
 }
 ```
 
+### Re-exports (`pub use`)
+
+Re-exports make imported symbols available to other modules that import from this module:
+
+```wado
+// math/internal/trig.wado
+pub fn sin(x: f64) -> f64 { ... }
+pub fn cos(x: f64) -> f64 { ... }
+
+// math/mod.wado - re-export from internal modules
+pub use {sin, cos} from "./internal/trig.wado";
+pub use {sin as sine} from "./internal/trig.wado";  // with rename
+
+// user code - import from the facade
+use {sin, cos, sine} from "math";
+```
+
+Re-export rules:
+
+- `pub use` combines `pub` visibility with import syntax
+- Can only re-export `pub` symbols from the source module
+- Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
+- Circular re-exports are prohibited
+- Wildcards prohibited: `pub use * from "..."` is not allowed
+
 ### Exception: The Prelude
 
 The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports.
