@@ -6,6 +6,23 @@
 use {log_stderr} from "core:internal";
 
 // ============================================================================
+// Re-exports from prelude sub-modules
+// ============================================================================
+
+/// Traits (Eq, Ord, Index*, Iterator, Add, Sub, etc.)
+pub use {
+    Eq, Ord,
+    Index, IndexMut, IndexAssign, IndexValue,
+    Add, Sub, Mul, Div, Rem, Neg,
+    BitAnd, BitOr, BitXor, BitNot, Shl, Shr,
+    Fn,
+    Iterator, IntoIterator, FromIterator,
+} from "./prelude/traits.wado";
+
+/// 128-bit integer types (i128 and u128)
+pub use { i128, u128 } from "./prelude/int128.wado";
+
+// ============================================================================
 // String Type
 // ============================================================================
 
@@ -244,188 +261,42 @@ impl IndexAssign<i32> for Array<T> {
     }
 }
 
-/// Trait for immutable indexing operations.
-/// Types implementing this trait can be indexed with the `[]` operator for reading.
-pub trait Index<IndexType> {
-    type Output;
-
-    /// Returns a reference to the element at the given index.
-    fn index(&self, index: IndexType) -> &Self::Output;
+// Eq implementation for Array<T>
+impl Eq for Array<T> {
+    pub fn eq(&self, other: &Self) -> bool {
+        if self.used != other.used {
+            return false;
+        }
+        for let mut i = 0; i < self.used; i += 1 {
+            if builtin::array_get::<T>(self.repr, i) != builtin::array_get::<T>(other.repr, i) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
-/// Trait for mutable indexing operations.
-/// Types implementing this trait can be indexed with the `[]` operator to get
-/// a mutable reference: `container[i].mutating_method()`.
-/// Note: Requires Index to be implemented (supertrait relationship).
-pub trait IndexMut<IndexType> {
-    type Output;
-
-    /// Returns a mutable reference to the element at the given index.
-    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
-}
-
-/// Trait for index assignment operations.
-/// Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
-/// This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
-/// to primitive array elements - reading and writing are fundamentally different operations.
-pub trait IndexAssign<IndexType> {
-    type Input;
-
-    /// Assigns a value to the element at the given index.
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
-}
-
-/// Trait for value-returning indexing operations.
-/// Use this for containers of primitives where references cannot be returned.
-/// Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
-pub trait IndexValue<IndexType> {
-    type Output;
-
-    /// Returns a copy of the element at the given index.
-    fn index_value(&self, index: IndexType) -> Self::Output;
-}
-
-/// Trait for equality comparisons.
-/// Types implementing this trait can be compared with `==` and `!=` operators.
-pub trait Eq {
-    /// Returns true if self equals other.
-    fn eq(&self, other: &Self) -> bool;
-}
-
-/// Trait for ordering comparisons.
-/// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
-pub trait Ord {
-    /// Returns true if self is less than other.
-    fn lt(&self, other: &Self) -> bool;
+// Ord implementation for Array<T> - lexicographic ordering
+impl Ord for Array<T> {
+    pub fn lt(&self, other: &Self) -> bool {
+        let min_len = if other.used < self.used { other.used } else { self.used };
+        for let mut i = 0; i < min_len; i += 1 {
+            let a = builtin::array_get::<T>(self.repr, i);
+            let b = builtin::array_get::<T>(other.repr, i);
+            if a < b {
+                return true;
+            }
+            if a > b {
+                return false;
+            }
+        }
+        return self.used < other.used;
+    }
 }
 
 // ============================================================================
-// Arithmetic Operator Traits
+// Core Variants
 // ============================================================================
-
-/// Trait for the `+` operator.
-/// Types implementing this trait can use the `+` operator for addition.
-pub trait Add {
-    type Output;
-
-    /// Adds two values and returns the result.
-    fn add(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `-` operator (binary subtraction).
-/// Types implementing this trait can use the `-` operator for subtraction.
-pub trait Sub {
-    type Output;
-
-    /// Subtracts rhs from self and returns the result.
-    fn sub(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `*` operator.
-/// Types implementing this trait can use the `*` operator for multiplication.
-pub trait Mul {
-    type Output;
-
-    /// Multiplies two values and returns the result.
-    fn mul(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `/` operator.
-/// Types implementing this trait can use the `/` operator for division.
-pub trait Div {
-    type Output;
-
-    /// Divides self by rhs and returns the result.
-    fn div(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `%` operator.
-/// Types implementing this trait can use the `%` operator for remainder.
-pub trait Rem {
-    type Output;
-
-    /// Returns the remainder of dividing self by rhs.
-    fn rem(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the unary `-` operator (negation).
-/// Types implementing this trait can use the `-` prefix operator.
-pub trait Neg {
-    type Output;
-
-    /// Returns the negation of self.
-    fn neg(&self) -> Self::Output;
-}
-
-// ============================================================================
-// Bitwise Operator Traits
-// ============================================================================
-
-/// Trait for the `&` operator (bitwise AND).
-pub trait BitAnd {
-    type Output;
-
-    /// Returns the bitwise AND of self and rhs.
-    fn bitand(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `|` operator (bitwise OR).
-pub trait BitOr {
-    type Output;
-
-    /// Returns the bitwise OR of self and rhs.
-    fn bitor(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `^` operator (bitwise XOR).
-pub trait BitXor {
-    type Output;
-
-    /// Returns the bitwise XOR of self and rhs.
-    fn bitxor(&self, rhs: &Self) -> Self::Output;
-}
-
-/// Trait for the `~` operator (bitwise NOT).
-pub trait BitNot {
-    type Output;
-
-    /// Returns the bitwise NOT of self.
-    fn bitnot(&self) -> Self::Output;
-}
-
-/// Trait for the `<<` operator (left shift).
-pub trait Shl {
-    type Output;
-
-    /// Returns self shifted left by rhs bits.
-    fn shl(&self, rhs: u32) -> Self::Output;
-}
-
-/// Trait for the `>>` operator (right shift).
-pub trait Shr {
-    type Output;
-
-    /// Returns self shifted right by rhs bits.
-    fn shr(&self, rhs: u32) -> Self::Output;
-}
-
-/// Trait for callable types (closures and function references).
-/// This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
-/// are desugared to generic functions with `Fn<[A], R>` bounds.
-///
-/// Type parameters:
-/// - `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
-/// - `Ret`: Return type
-/// - `Effects`: Tuple of effect types, defaults to `[]` (pure)
-///
-/// Examples:
-/// - `Fn<[i32], bool>` - takes i32, returns bool, pure
-/// - `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
-/// - `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
-pub trait Fn<Args, Ret, Effects> {
-    /// Call the function with the given arguments.
-    fn call(&self, args: Args) -> Ret with Effects;
-}
 
 /// Optional value - either Some(T) or None
 pub variant Option<T> {
@@ -439,6 +310,10 @@ pub variant Result<T, E> {
     Err(E),
 }
 
+// ============================================================================
+// WASI Component Model Primitives
+// ============================================================================
+
 /// Stream type - an async sequence of values (WASI Component Model primitive)
 /// This is an opaque handle managed by the runtime.
 pub struct Stream<T> {
@@ -451,26 +326,9 @@ pub struct Future<T> {
     handle: i32,
 }
 
-/// The core iterator trait for sequences of values.
-/// Types implementing this trait can be iterated over using `for-of` loops.
-pub trait Iterator {
-    type Item;
-
-    /// Advances the iterator and returns the next value.
-    /// Returns None when iteration is complete.
-    fn next(&mut self) -> Option<Self::Item>;
-}
-
-/// Conversion into an Iterator.
-/// Types implementing this trait can be used in `for-of` loops directly.
-pub trait IntoIterator {
-    type Item;
-    type Iter;
-
-    /// Creates an iterator from a value.
-    /// Note: Uses &self due to parser limitation (self by value not yet supported in traits).
-    fn into_iter(&self) -> Self::Iter;
-}
+// ============================================================================
+// ArrayIter - Iterator over Array<T>
+// ============================================================================
 
 /// Iterator over Array<T> elements.
 /// Yields copies of each element (value semantics).
@@ -516,14 +374,6 @@ impl Array<T> {
             index: 0,
         };
     }
-}
-
-/// Trait for creating a collection from an iterator.
-/// This is a simplified version - the full Rust-style trait requires `impl Iterator`
-/// syntax which is not yet supported.
-trait FromIterator<T> {
-    type Iter;
-    fn from_iter(iter: Self::Iter) -> Self;
 }
 
 impl FromIterator<T> for Array<T> {
@@ -605,6 +455,10 @@ impl ArrayIter<T> {
     }
 }
 
+// ============================================================================
+// EnumerateIter - Iterator that yields (index, element) tuples
+// ============================================================================
+
 /// Iterator that yields (index, element) tuples.
 pub struct EnumerateIter<T> {
     repr: builtin::array<T>,
@@ -642,6 +496,10 @@ impl EnumerateIter<T> {
         return result;
     }
 }
+
+// ============================================================================
+// MapIter - Iterator that transforms elements
+// ============================================================================
 
 /// Iterator that transforms elements using a function.
 pub struct MapIter<T, U> {
@@ -691,6 +549,10 @@ impl MapIter<T, U> {
         return acc;
     }
 }
+
+// ============================================================================
+// FilterIter - Iterator that filters elements
+// ============================================================================
 
 /// Iterator that filters elements using a predicate.
 pub struct FilterIter<T> {
@@ -1029,10 +891,3 @@ pub fn panic(message: String) -> ! {
 pub fn unreachable() -> ! {
     builtin::unreachable();
 }
-
-// ============================================================================
-// Re-exports from prelude sub-modules
-// ============================================================================
-
-/// 128-bit integer types (i128 and u128)
-pub use { i128, u128 } from "./prelude/int128.wado";
