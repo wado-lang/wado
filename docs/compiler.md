@@ -1292,6 +1292,8 @@ Key design decisions:
 - Index access (`[]`)
 - Type cast (`as T`) for primitive types
 - Closures (`|params| expr`)
+- `if` expressions (`let x = if cond { a } else { b }`)
+- Block expressions / Labeled blocks (`scope: { ... }`)
 - Struct literals (`Point { x: 1, y: 2 }`)
 - Implicit struct literals with type context (`let p: Point = { x: 1, y: 2 }`)
 - Tuple literals (`[1, 2, 3]` creates `[i32, i32, i32]`)
@@ -1407,6 +1409,7 @@ fn run() with Stdout {
 - **Template strings**: Syntax and basic interpolation work. Format specifiers (`.2f`, `0.3f`, etc.) are parsed but not implemented in codegen.
 - **Variant pattern matching**: Single-payload cases work (`if let Circle(r) = shape`). Tuple/struct payloads not yet supported. See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
 - **`core:prelude`**: Partial (parser doesn't support generic resources)
+- **Function types**: Parser supports `Fn(T) -> U` syntax, basic closure codegen works, but full function type support is incomplete.
 
 ### Known Limitations
 
@@ -1431,15 +1434,9 @@ fn run() with Stdout {
 
 ### Expressions
 
-- `if` expressions
 - `match` expressions
-- Block expressions
 - Range expressions
 - `?` operator (error propagation)
-
-### Types
-
-- Function types
 
 ### Patterns
 
