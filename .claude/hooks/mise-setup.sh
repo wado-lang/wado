@@ -35,18 +35,9 @@ else
     log "mise installed: $($LOCAL_BIN/mise --version)"
 fi
 
-# Persist PATH and mise settings to CLAUDE_ENV_FILE
-if [ -n "$CLAUDE_ENV_FILE" ]; then
-    cat >> "$CLAUDE_ENV_FILE" << 'EOF'
-export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH"
-export MISE_YES=true
-export MISE_TRUSTED_CONFIG_PATHS="$HOME:$PWD"
-EOF
-    log "Environment persisted to CLAUDE_ENV_FILE"
-fi
-
 # Ensure mise is in PATH for the rest of this script
-export PATH="$LOCAL_BIN:$PATH"
+# (env vars are set in .claude/settings.json for subsequent commands)
+export PATH="$HOME/.local/share/mise/shims:$LOCAL_BIN:$PATH"
 
 # Trust the mise configuration and install project tools
 log "Trusting mise configuration..."
