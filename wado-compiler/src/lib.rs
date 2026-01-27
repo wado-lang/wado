@@ -79,6 +79,7 @@ pub mod compiler_host;
 pub mod component_model;
 pub mod copy_context;
 pub mod desugar;
+pub mod effect_check;
 pub mod lexer;
 pub mod loader;
 pub mod logger;
@@ -115,6 +116,7 @@ pub use logger::Logger;
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
+pub use effect_check::{EffectError, check_effects};
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
@@ -299,16 +301,30 @@ pub async fn compile_with_host<H: CompilerHost>(
         }
     })?;
 
-    // === Phase 7: Monomorphize (Project -> Project) ===
+    // === Phase 7: Effect Check ===
+    let effect_errors = check_effects(&project.tir_modules);
+    if !effect_errors.is_empty() {
+        let msg = effect_errors
+            .into_iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(CompileError::Analyzer {
+            message: msg,
+            filename: filename.clone(),
+        });
+    }
+
+    // === Phase 8: Monomorphize (Project -> Project) ===
     let project = monomorphize_project(project);
 
-    // === Phase 8: Lower (Project -> Project) ===
+    // === Phase 9: Lower (Project -> Project) ===
     let project = lower_project(project);
 
-    // === Phase 9: Optimize (Project -> Project) ===
+    // === Phase 10: Optimize (Project -> Project) ===
     let project = optimize(project, opt_level);
 
-    // === Phase 10: Codegen ===
+    // === Phase 11: Codegen ===
     let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         codegen.generate_wasm(&project)

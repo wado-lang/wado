@@ -7,11 +7,11 @@ This document tracks the current implementation status of the Wado compiler.
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze → Resolve → Monomorphize → Lower → Optimize → Codegen
-                           ↓                                           ↓              ↓          ↓
-                       Unparser                                  TIR (Typed IR) TIR Unparser  TIR Unparser
-                           ↓                                                        ↓              ↓
-                   Formatted Source                                         Pseudo-Wado Source (pre/post lower)
+Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Codegen
+                           ↓                                           ↓                           ↓          ↓
+                       Unparser                                  TIR (Typed IR)              TIR Unparser  TIR Unparser
+                           ↓                                                                      ↓              ↓
+                   Formatted Source                                                       Pseudo-Wado Source (pre/post lower)
 ```
 
 ### Compilation Pipeline
@@ -25,6 +25,7 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | Load         | AST           | All modules  | Load all dependencies recursively        |
 | Analyze      | All modules   | Symbol table | Build symbol table, validate imports     |
 | Resolve      | AST + Symbols | Project      | Type resolution, produce Project         |
+| Effect Check | Project       | Errors       | Validate function effect requirements    |
 | Monomorphize | Project       | Project      | Instantiate generics with concrete types |
 | Lower        | Project       | Project      | String literal collection                |
 | Optimize     | Project       | Project      | DCE, usage analysis, feature flags       |
@@ -42,6 +43,7 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | Bind             | `bind.rs`               | Local name binding, scope analysis, mutability check  |
 | Loader           | `loader.rs`             | Module loading, dependency resolution                 |
 | Desugar          | `desugar.rs`            | AST transformations (compound assign, etc.)           |
+| EffectCheck      | `effect_check.rs`       | Validates effect requirements for function calls      |
 | Unparser         | `unparse.rs`            | Converts AST/TIR back to source code                  |
 | Analyzer         | `analyze.rs`            | Semantic analysis, symbol table construction          |
 | Symbol           | `symbol.rs`             | Symbol table data structures                          |
@@ -967,7 +969,7 @@ See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full d
 - [ ] Simple type checking
 - [ ] Generic type checking
 - [ ] Type inference
-- [x] Effect checking (basic function call validation)
+- [x] Effect checking (validates function calls have required effects)
 - [ ] Borrow checking / move analysis
 - [x] Scope analysis for variables
 - [x] Immutable variable reassignment detection
