@@ -35,16 +35,13 @@ else
     log "mise installed: $($LOCAL_BIN/mise --version)"
 fi
 
-# Ensure mise is in PATH for the rest of this script
-# (env vars are set in .claude/settings.json for subsequent commands)
-export PATH="$HOME/.local/share/mise/shims:$LOCAL_BIN:$PATH"
-
 # Trust the mise configuration and install project tools
+# (PATH is set in .claude/settings.json for subsequent commands)
 log "Trusting mise configuration..."
-mise trust --all 2>/dev/null || true
+$LOCAL_BIN/mise trust --all 2>/dev/null || true
 
 log "Installing project tools..."
-if mise install; then
+if $LOCAL_BIN/mise install; then
     log "Project tools installed successfully"
 else
     log "Warning: Some tools may have failed to install"
