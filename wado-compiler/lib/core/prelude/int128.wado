@@ -11,7 +11,7 @@ pub struct u128 {
 impl u128 {
     /// Create a u128 from a u64 value (zero-extended)
     pub fn from_u64(value: u64) -> u128 {
-        return u128 { low: value, high: 0 as u64 };
+        return u128 { low: value, high: 0 };
     }
 
     /// Create a u128 from a string (decimal representation)
@@ -34,12 +34,12 @@ impl u128 {
 
     /// Create a zero u128
     pub fn zero() -> u128 {
-        return u128 { low: 0 as u64, high: 0 as u64 };
+        return u128 { low: 0, high: 0 };
     }
 
     /// Create a u128 with value 1
     pub fn one() -> u128 {
-        return u128 { low: 1 as u64, high: 0 as u64 };
+        return u128 { low: 1, high: 0 };
     }
 
     /// Get the low 64 bits
@@ -319,7 +319,7 @@ impl Shl for u128 {
             // All low bits shift into high, low becomes 0
             let s = (shift - 64) as u64;
             return u128 {
-                low: 0 as u64,
+                low: 0,
                 high: self.low << s,
             };
         }
@@ -350,7 +350,7 @@ impl Shr for u128 {
             let s = (shift - 64) as u64;
             return u128 {
                 low: self.high >> s,
-                high: 0 as u64,
+                high: 0,
             };
         }
         if shift == 0 {
@@ -436,12 +436,12 @@ impl i128 {
 
     /// Create a zero i128
     pub fn zero() -> i128 {
-        return i128 { low: 0 as u64, high: 0 as i64 };
+        return i128 { low: 0, high: 0 };
     }
 
     /// Create an i128 with value 1
     pub fn one() -> i128 {
-        return i128 { low: 1 as u64, high: 0 as i64 };
+        return i128 { low: 1, high: 0 };
     }
 
     /// Get the low 64 bits (unsigned)
@@ -709,7 +709,7 @@ impl Shl for i128 {
             // All low bits shift into high, low becomes 0
             let s = (shift - 64) as u64;
             return i128 {
-                low: 0 as u64,
+                low: 0,
                 high: (self.low << s) as i64,
             };
         }

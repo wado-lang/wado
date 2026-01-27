@@ -7664,7 +7664,27 @@ impl<'a> Resolver<'a> {
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                let mut value = self.resolve_expr(&field.value, ctx);
+                // Find expected field type for literal coercion (only for numeric literals)
+                // We only use expected type for integer/float literals to avoid interfering
+                // with tuple-to-array coercion for generic struct fields
+                let expected_field_type = if matches!(
+                    &field.value,
+                    ast::Expr::Literal(lit) if matches!(
+                        &lit.value,
+                        ast::Literal::Int(_) | ast::Literal::Float(_)
+                    )
+                ) {
+                    struct_field_types
+                        .iter()
+                        .find(|(name, _)| name == &field.name)
+                        .map(|(_, type_id)| *type_id)
+                } else {
+                    None
+                };
+
+                // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
+                let mut value =
+                    self.resolve_expr_with_expected_type(&field.value, ctx, expected_field_type);
 
                 // Check if this is a tuple literal that should become an array
                 // This happens when the struct field expects Array<T> and we have [...]
