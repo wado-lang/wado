@@ -241,6 +241,13 @@ pub fn analyze_project(project: &mut Project) {
                     used_builtins.insert(CanonBuiltin::StreamWrite);
                     used_builtins.insert(CanonBuiltin::StreamDropWritable);
                 }
+                // Float-to-buffer builtins (called by inlined f64_to_string/f32_to_string)
+                "f64_to_buffer" => {
+                    used_builtins.insert(CanonBuiltin::F64ToBuffer);
+                }
+                "f32_to_buffer" => {
+                    used_builtins.insert(CanonBuiltin::F32ToBuffer);
+                }
                 _ => {}
             }
         }
