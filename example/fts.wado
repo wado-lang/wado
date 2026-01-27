@@ -1,0 +1,878 @@
+// Float-to-String conversion using Russ Cox's unrounded scaling algorithm
+// Ported from rsc.io/fpfmt (https://research.swtch.com/fp)
+//
+// Copyright 2025 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+// See https://github.com/rsc/fpfmt/blob/main/LICENSE
+
+use {println, Stdout} from "core:cli";
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+fn POW10_MIN() -> i32 { return -348; }
+
+// Powers of 10 from 10^0 to 10^19
+fn pow10(n: i32) -> i64 {
+    if n == 0 { return 1 as i64; }
+    if n == 1 { return 10 as i64; }
+    if n == 2 { return 100 as i64; }
+    if n == 3 { return 1000 as i64; }
+    if n == 4 { return 10000 as i64; }
+    if n == 5 { return 100000 as i64; }
+    if n == 6 { return 1000000 as i64; }
+    if n == 7 { return 10000000 as i64; }
+    if n == 8 { return 100000000 as i64; }
+    if n == 9 { return 1000000000 as i64; }
+    if n == 10 { return 10000000000 as i64; }
+    if n == 11 { return 100000000000 as i64; }
+    if n == 12 { return 1000000000000 as i64; }
+    if n == 13 { return 10000000000000 as i64; }
+    if n == 14 { return 100000000000000 as i64; }
+    if n == 15 { return 1000000000000000 as i64; }
+    if n == 16 { return 10000000000000000 as i64; }
+    if n == 17 { return 100000000000000000 as i64; }
+    if n == 18 { return 1000000000000000000 as i64; }
+    return 0x8AC7230489E80000 as i64; // 10^19
+}
+
+// ============================================================================
+// Bit utilities
+// ============================================================================
+
+// Returns the bit length of x (position of highest set bit + 1)
+fn i64_bit_len(x: i64) -> i32 {
+    if x == 0 as i64 {
+        return 0;
+    }
+    return 64 - (builtin::i64_clz(x) as i32);
+}
+
+fn bool2int(b: bool) -> i64 {
+    if b { return 1 as i64; }
+    return 0 as i64;
+}
+
+fn bool2int32(b: bool) -> i32 {
+    if b { return 1; }
+    return 0;
+}
+
+// ============================================================================
+// Logarithm approximations
+// ============================================================================
+
+// log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
+fn log10_pow2(x: i32) -> i32 {
+    return (x * 78913) >> 18;
+}
+
+// log2_pow10(x) returns floor(log2(10^x)) = floor(x * log2(10))
+fn log2_pow10(x: i32) -> i32 {
+    return (x * 108853) >> 15;
+}
+
+// ============================================================================
+// Float unpacking
+// ============================================================================
+
+// Result of unpacking a float64
+struct UnpackResult {
+    mantissa: i64,
+    exponent: i32,
+}
+
+// unpack64 returns (mantissa, exponent) such that f = mantissa * 2^exponent
+fn unpack64(f: f64) -> UnpackResult {
+    let bits = builtin::i64_reinterpret_f64(f);
+
+    let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
+    let exp_mask = 0x7FF as i64;
+    let shift = 11;  // 64 - 53
+    let min_exp = -1085;  // -(1074 + 11)
+
+    let raw_mantissa = bits & mantissa_mask;
+    let raw_exp = ((bits >> 52) & exp_mask) as i32;
+
+    if raw_exp == 0 {
+        if raw_mantissa == 0 as i64 {
+            return UnpackResult { mantissa: 0 as i64, exponent: 0 };
+        }
+        let m = raw_mantissa << shift;
+        let e = min_exp;
+        let s = 64 - i64_bit_len(m);
+        return UnpackResult { mantissa: m << s, exponent: e - s };
+    }
+
+    let m = (0x8000000000000000 as i64) | (raw_mantissa << shift);
+    let e = (raw_exp - 1) + min_exp;
+    return UnpackResult { mantissa: m, exponent: e };
+}
+
+// ============================================================================
+// Unrounded arithmetic
+// ============================================================================
+
+fn unrounded_floor(u: i64) -> i64 {
+    return (u + 0 as i64) >> 2;
+}
+
+fn unrounded_round(u: i64) -> i64 {
+    return (u + 1 as i64 + ((u >> 2) & 1 as i64)) >> 2;
+}
+
+fn unrounded_ceil(u: i64) -> i64 {
+    return (u + 3 as i64) >> 2;
+}
+
+fn unrounded_nudge(u: i64, delta: i32) -> i64 {
+    return u + (delta as i64);
+}
+
+fn unrounded_div(u: i64, d: i64) -> i64 {
+    let q = u / d;
+    let r = u % d;
+    return q | (u & 1 as i64) | bool2int(r != 0 as i64);
+}
+
+// ============================================================================
+// Unsigned comparisons (treating i64 as u64)
+// ============================================================================
+
+fn u64_lt(a: i64, b: i64) -> bool {
+    let sign_bit = 0x8000000000000000 as i64;
+    return (a ^ sign_bit) < (b ^ sign_bit);
+}
+
+fn u64_ge(a: i64, b: i64) -> bool {
+    let sign_bit = 0x8000000000000000 as i64;
+    return (a ^ sign_bit) >= (b ^ sign_bit);
+}
+
+fn u64_le(a: i64, b: i64) -> bool {
+    let sign_bit = 0x8000000000000000 as i64;
+    return (a ^ sign_bit) <= (b ^ sign_bit);
+}
+
+// ============================================================================
+// Power of 10 table entry
+// ============================================================================
+
+struct PmHiLo {
+    hi: i64,
+    lo: i64,
+}
+
+// ============================================================================
+// Scaling
+// ============================================================================
+
+fn get_pow10(p: i32) -> PmHiLo {
+    let idx = p - POW10_MIN();
+    return pow10_tab(idx);
+}
+
+// uscale computes unround(x * 2^e * 10^p) using the pow10 table
+fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
+    // Note: i64_mul_wide_u returns (low, high) but Go's bits.Mul64 returns (high, low)
+    let mul_result = builtin::i64_mul_wide_u(x, pm_hi);
+    let mut hi = mul_result.1;   // HIGH part (like Go's first return value)
+    let mid = mul_result.0;      // LOW part (like Go's second return value)
+
+    let mut sticky = 1 as i64;
+
+    let s_mod_64 = s & 63;
+    let check_mask = (1 as i64 << s_mod_64) - 1 as i64;
+    if (hi & check_mask) == 0 as i64 {
+        let mul_result2 = builtin::i64_mul_wide_u(x, pm_lo);
+        let mid2 = mul_result2.0;  // LOW part
+        sticky = bool2int((mid - mid2) > 1 as i64);
+        hi = hi - bool2int(u64_lt(mid, mid2));
+    }
+
+    // Use logical shift (not arithmetic) for unsigned semantics
+    return logical_shr(hi, s) | sticky;
+}
+
+// ============================================================================
+// Main formatting functions
+// ============================================================================
+
+// Result of formatting
+struct FormatResult {
+    digits: i64,
+    exponent: i32,
+}
+
+// FixedWidth returns the n-digit decimal form of f
+fn fixed_width(f: f64, n: i32) -> FormatResult {
+    if n > 18 {
+        panic("too many digits");
+    }
+
+    let unpack = unpack64(f);
+    let m = unpack.mantissa;
+    let e = unpack.exponent;
+
+    let p = n - 1 - log10_pow2(e + 63);
+    let lp = log2_pow10(p);
+    let pm = get_pow10(p);
+    let s = -(e + lp + 3);
+
+    let u = uscale(m, pm.hi, pm.lo, s);
+    let mut d = unrounded_round(u);
+
+    if u64_ge(d, pow10(n)) {
+        d = unrounded_round(unrounded_div(u, 10 as i64));
+        return FormatResult { digits: d, exponent: -p + 1 };
+    }
+
+    return FormatResult { digits: d, exponent: -p };
+}
+
+// Short computes the shortest formatting of f that round-trips
+fn short(f: f64) -> FormatResult {
+    let min_exp = -1085;
+
+    let unpack = unpack64(f);
+    let m = unpack.mantissa;
+    let e = unpack.exponent;
+
+    let mut min_m: i64 = 0 as i64;
+    let mut z = 11;
+    let mut p: i32 = 0;
+
+    let m_is_power_of_2 = m == (0x8000000000000000 as i64);
+    if m_is_power_of_2 && e > min_exp {
+        p = -skewed(e + z);
+        min_m = m - (1 as i64 << (z - 2));
+    } else {
+        if e < min_exp {
+            z = 11 + (min_exp - e);
+        }
+        p = -log10_pow2(e + z);
+        min_m = m - (1 as i64 << (z - 1));
+    }
+
+    let max_m = m + (1 as i64 << (z - 1));
+    let odd = ((m >> z) & 1 as i64) as i32;
+
+    let lp = log2_pow10(p);
+    let pm = get_pow10(p);
+    let s = -(e + lp + 3);
+
+    let dmin = unrounded_ceil(unrounded_nudge(uscale(min_m, pm.hi, pm.lo, s), odd));
+    let dmax = unrounded_floor(unrounded_nudge(uscale(max_m, pm.hi, pm.lo, s), -odd));
+
+    // Check if we can trim to fewer digits
+    let d_div_10 = dmax / 10 as i64;
+    let can_trim = d_div_10 * 10 as i64 >= dmin;
+
+    if can_trim {
+        let trimmed = trim_zeros(d_div_10, -(p - 1));
+        return FormatResult { digits: trimmed.0, exponent: trimmed.1 };
+    }
+
+    let mut d = dmin;
+    if dmin < dmax {
+        d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
+    }
+    return FormatResult { digits: d, exponent: -p };
+}
+
+fn skewed(e: i32) -> i32 {
+    return (e * 631305 - 261663) >> 21;
+}
+
+// Unsigned multiply (low 64 bits only, modular)
+fn u64_mul(a: i64, b: i64) -> i64 {
+    // Use wide multiply and take the low part
+    let result = builtin::i64_mul_wide_u(a, b);
+    return result.0;  // Low 64 bits
+}
+
+fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
+    let max_u64 = 0xFFFFFFFFFFFFFFFF as i64;
+    let inv5 = 0xcccccccccccccccd as i64;
+    let inv5p2 = 0x8f5c28f5c28f5c29 as i64;
+    let inv5p4 = 0xd288ce703afb7e91 as i64;
+    let inv5p8 = 0xc767074b22e90e21 as i64;
+
+    // Threshold values (need unsigned comparison)
+    let thresh_10 = 1844674407370955161 as i64;  // maxUint64 / 10
+    let thresh_100 = 184467440737095516 as i64;  // maxUint64 / 100
+    let thresh_10000 = 1844674407370955 as i64;  // maxUint64 / 10000
+    let thresh_1e8 = 184467440737 as i64;        // maxUint64 / 100000000
+
+    let mut xv = x;
+    let mut pv = p;
+
+    let d1 = rotate_right(u64_mul(xv, inv5), 1);
+    if u64_le(d1, thresh_10) {
+        xv = d1;
+        pv = pv + 1;
+    } else {
+        return [xv, pv];
+    }
+
+    let d8 = rotate_right(u64_mul(xv, inv5p8), 8);
+    if u64_le(d8, thresh_1e8) {
+        xv = d8;
+        pv = pv + 8;
+    }
+
+    let d4 = rotate_right(u64_mul(xv, inv5p4), 4);
+    if u64_le(d4, thresh_10000) {
+        xv = d4;
+        pv = pv + 4;
+    }
+
+    let d2 = rotate_right(u64_mul(xv, inv5p2), 2);
+    if u64_le(d2, thresh_100) {
+        xv = d2;
+        pv = pv + 2;
+    }
+
+    let d1b = rotate_right(u64_mul(xv, inv5), 1);
+    if u64_le(d1b, thresh_10) {
+        xv = d1b;
+        pv = pv + 1;
+    }
+
+    return [xv, pv];
+}
+
+// Logical right shift for unsigned semantics on i64
+fn logical_shr(x: i64, n: i32) -> i64 {
+    if n <= 0 { return x; }
+    if n >= 64 { return 0 as i64; }
+    // Use arithmetic shift, then mask off sign-extended bits
+    // The mask has (64-n) ones in the low bits
+    let mask = shr_mask(n);
+    return (x >> n) & mask;
+}
+
+// Get mask for logical shift: (1 << (64-n)) - 1
+fn shr_mask(n: i32) -> i64 {
+    if n <= 0 { return 0xFFFFFFFFFFFFFFFF as i64; }
+    if n >= 64 { return 0 as i64; }
+    // Build the mask: all 1s in the low (64-n) bits
+    // For n=1: 0x7FFFFFFFFFFFFFFF
+    // For n=8: 0x00FFFFFFFFFFFFFF
+    // We can compute this as: if (64-n) >= 64 then -1, else (1 << (64-n)) - 1
+    let remaining = 64 - n;
+    if remaining >= 63 {
+        return 0x7FFFFFFFFFFFFFFF as i64;
+    }
+    return (1 as i64 << remaining) - 1 as i64;
+}
+
+fn rotate_right(x: i64, n: i32) -> i64 {
+    return logical_shr(x, n) | (x << (64 - n));
+}
+
+// digits returns the number of decimal digits in d
+fn digits(d: i64) -> i32 {
+    let nd = log10_pow2(i64_bit_len(d));
+    return nd + bool2int32(u64_ge(d, pow10(nd)));
+}
+
+// ============================================================================
+// String formatting helpers
+// ============================================================================
+
+fn i2a_first(n: i32) -> i32 {
+    return '0' as i32 + n / 10;
+}
+
+fn i2a_second(n: i32) -> i32 {
+    return '0' as i32 + n % 10;
+}
+
+// Format result to exponential string
+pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
+    let mut buf = String::with_capacity(30);
+
+    // Format digits
+    let mut val = d;
+    let mut digit_chars: Array<i32> = [];
+    for let mut i = 0; i < nd; i += 1 {
+        digit_chars.append(0);
+    }
+
+    let mut idx = nd - 1;
+    while idx >= 0 {
+        digit_chars.set(idx, ('0' as i32) + ((val % 10 as i64) as i32));
+        val = val / 10 as i64;
+        idx = idx - 1;
+    }
+
+    // First digit
+    append_char(&mut buf, digit_chars.get(0));
+
+    // Decimal point and remaining digits
+    if nd > 1 {
+        append_char(&mut buf, '.' as i32);
+        for let mut i = 1; i < nd; i += 1 {
+            append_char(&mut buf, digit_chars.get(i));
+        }
+    }
+
+    // Exponent
+    let exp = p + nd - 1;
+    append_char(&mut buf, 'e' as i32);
+    if exp < 0 {
+        append_char(&mut buf, '-' as i32);
+    } else {
+        append_char(&mut buf, '+' as i32);
+    }
+
+    let abs_exp = if exp < 0 { -exp } else { exp };
+    if abs_exp < 10 {
+        append_char(&mut buf, '0' as i32);
+        append_char(&mut buf, '0' as i32 + abs_exp);
+    } else if abs_exp < 100 {
+        append_char(&mut buf, i2a_first(abs_exp));
+        append_char(&mut buf, i2a_second(abs_exp));
+    } else {
+        append_char(&mut buf, '0' as i32 + abs_exp / 100);
+        append_char(&mut buf, i2a_first(abs_exp % 100));
+        append_char(&mut buf, i2a_second(abs_exp % 100));
+    }
+
+    return buf;
+}
+
+// Convert ASCII char code to single-character string
+fn char_to_string(c: i32) -> String {
+    if c == '0' as i32 { return "0"; }
+    if c == '1' as i32 { return "1"; }
+    if c == '2' as i32 { return "2"; }
+    if c == '3' as i32 { return "3"; }
+    if c == '4' as i32 { return "4"; }
+    if c == '5' as i32 { return "5"; }
+    if c == '6' as i32 { return "6"; }
+    if c == '7' as i32 { return "7"; }
+    if c == '8' as i32 { return "8"; }
+    if c == '9' as i32 { return "9"; }
+    if c == '.' as i32 { return "."; }
+    if c == 'e' as i32 { return "e"; }
+    if c == 'E' as i32 { return "E"; }
+    if c == '+' as i32 { return "+"; }
+    if c == '-' as i32 { return "-"; }
+    return "?";
+}
+
+fn append_char(buf: &mut String, c: i32) {
+    buf.append(char_to_string(c));
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+// Convert f64 to string using shortest representation
+pub fn f64_to_string(f: f64) -> String {
+    let bits = builtin::i64_reinterpret_f64(f);
+
+    // Check for zero
+    if bits == 0 as i64 {
+        return "0e+00";
+    }
+    if bits == 0x8000000000000000 as i64 {
+        return "-0e+00";
+    }
+
+    let is_neg = bits < 0 as i64;
+    let abs_f = if is_neg { -f } else { f };
+
+    // Check for infinity/NaN
+    let exp_mask = 0x7FF0000000000000 as i64;
+    let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
+    if (bits & exp_mask) == exp_mask {
+        if (bits & mantissa_mask) != 0 as i64 {
+            return "NaN";
+        }
+        if is_neg {
+            return "-Inf";
+        }
+        return "Inf";
+    }
+
+    let result = short(abs_f);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+
+    let formatted = format_exp(d, p, nd);
+
+    if is_neg {
+        return String::concat("-", formatted);
+    }
+    return formatted;
+}
+
+// ============================================================================
+// Power of 10 table
+// ============================================================================
+
+fn pow10_tab(idx: i32) -> PmHiLo {
+    // Table of 128-bit mantissas for 10^p where p = idx - 348
+    // Covers 10^-49 to 10^50 (indices 299-398)
+    if idx == 299 { return PmHiLo { hi: 0x95a8637627989aae as i64, lo: 0x2218ffec865bb557 as i64 }; }
+    if idx == 300 { return PmHiLo { hi: 0xbb127c53b17ec15a as i64, lo: 0xaa9f3fe7a7f2a2ad as i64 }; }
+    if idx == 301 { return PmHiLo { hi: 0xe9d71b689dde71b0 as i64, lo: 0x55470fe191ef4b59 as i64 }; }
+    if idx == 302 { return PmHiLo { hi: 0x9226712162ab070e as i64, lo: 0x354c69ecfb358f17 as i64 }; }
+    if idx == 303 { return PmHiLo { hi: 0xb6b00d69bb55c8d2 as i64, lo: 0xc29f84683a02f2dd as i64 }; }
+    if idx == 304 { return PmHiLo { hi: 0xe45c10c42a2b3b06 as i64, lo: 0x734765824883af95 as i64 }; }
+    if idx == 305 { return PmHiLo { hi: 0x8eb98a7a9a5b04e4 as i64, lo: 0x880c9f716d524dbd as i64 }; }
+    if idx == 306 { return PmHiLo { hi: 0xb267ed1940f1c61d as i64, lo: 0xaa0fc74dc8a6e12c as i64 }; }
+    if idx == 307 { return PmHiLo { hi: 0xdf01e85f912e37a4 as i64, lo: 0x9493b9213ad09977 as i64 }; }
+    if idx == 308 { return PmHiLo { hi: 0x8b61313bbabce2c7 as i64, lo: 0xdcdc53b4c4c25fea as i64 }; }
+    if idx == 309 { return PmHiLo { hi: 0xae397d8aa96c1b78 as i64, lo: 0x541368a1f5f2f7e5 as i64 }; }
+    if idx == 310 { return PmHiLo { hi: 0xd9c7dced53c72256 as i64, lo: 0x691842ca736fb5de as i64 }; }
+    if idx == 311 { return PmHiLo { hi: 0x881cea14545c7576 as i64, lo: 0x81af29be8825d1ab as i64 }; }
+    if idx == 312 { return PmHiLo { hi: 0xaa242499697392d3 as i64, lo: 0x221af42e2a2f4616 as i64 }; }
+    if idx == 313 { return PmHiLo { hi: 0xd4ad2dbfc3d07788 as i64, lo: 0x6aa1b139b4bb179b as i64 }; }
+    if idx == 314 { return PmHiLo { hi: 0x84ec3c97da624ab5 as i64, lo: 0x42a50ec410f4eec1 as i64 }; }
+    if idx == 315 { return PmHiLo { hi: 0xa6274bbdd0fadd62 as i64, lo: 0x134e527515322a71 as i64 }; }
+    if idx == 316 { return PmHiLo { hi: 0xcfb11ead453994bb as i64, lo: 0x9821e7125a7eb50d as i64 }; }
+    if idx == 317 { return PmHiLo { hi: 0x81ceb32c4b43fcf5 as i64, lo: 0x7f15306b788f3128 as i64 }; }
+    if idx == 318 { return PmHiLo { hi: 0xa2425ff75e14fc32 as i64, lo: 0x5eda7c8656b2fd72 as i64 }; }
+    if idx == 319 { return PmHiLo { hi: 0xcad2f7f5359a3b3f as i64, lo: 0xf6911ba7ec5fbccf as i64 }; }
+    if idx == 320 { return PmHiLo { hi: 0xfd87b5f28300ca0e as i64, lo: 0x74356291e777ac03 as i64 }; }
+    if idx == 321 { return PmHiLo { hi: 0x9e74d1b791e07e49 as i64, lo: 0x88a15d9b30aacb82 as i64 }; }
+    if idx == 322 { return PmHiLo { hi: 0xc612062576589ddb as i64, lo: 0x6ac9b501fcd57e62 as i64 }; }
+    if idx == 323 { return PmHiLo { hi: 0xf79687aed3eec552 as i64, lo: 0xc57c22427c0addfb as i64 }; }
+    if idx == 324 { return PmHiLo { hi: 0x9abe14cd44753b53 as i64, lo: 0x3b6d95698d86cabd as i64 }; }
+    if idx == 325 { return PmHiLo { hi: 0xc16d9a0095928a28 as i64, lo: 0x8a48fac3f0e87d6c as i64 }; }
+    if idx == 326 { return PmHiLo { hi: 0xf1c90080baf72cb2 as i64, lo: 0xacdb3974ed229cc7 as i64 }; }
+    if idx == 327 { return PmHiLo { hi: 0x971da05074da7bef as i64, lo: 0x2c0903e91435a1fc as i64 }; }
+    if idx == 328 { return PmHiLo { hi: 0xbce5086492111aeb as i64, lo: 0x770b44e359430a7b as i64 }; }
+    if idx == 329 { return PmHiLo { hi: 0xec1e4a7db69561a6 as i64, lo: 0xd4ce161c2f93cd1a as i64 }; }
+    if idx == 330 { return PmHiLo { hi: 0x9392ee8e921d5d08 as i64, lo: 0xc500cdd19dbc6030 as i64 }; }
+    if idx == 331 { return PmHiLo { hi: 0xb877aa3236a4b44a as i64, lo: 0xf6410146052b783d as i64 }; }
+    if idx == 332 { return PmHiLo { hi: 0xe69594bec44de15c as i64, lo: 0xb3d141978676564c as i64 }; }
+    if idx == 333 { return PmHiLo { hi: 0x901d7cf73ab0acda as i64, lo: 0xf062c8feb409f5ef as i64 }; }
+    if idx == 334 { return PmHiLo { hi: 0xb424dc35095cd810 as i64, lo: 0xac7b7b3e610c736b as i64 }; }
+    if idx == 335 { return PmHiLo { hi: 0xe12e13424bb40e14 as i64, lo: 0xd79a5a0df94f9046 as i64 }; }
+    if idx == 336 { return PmHiLo { hi: 0x8cbccc096f5088cc as i64, lo: 0x06c07848bbd1ba2c as i64 }; }
+    if idx == 337 { return PmHiLo { hi: 0xafebff0bcb24aaff as i64, lo: 0x0870965aeac628b7 as i64 }; }
+    if idx == 338 { return PmHiLo { hi: 0xdbe6fecebdedd5bf as i64, lo: 0x4a8cbbf1a577b2e4 as i64 }; }
+    if idx == 339 { return PmHiLo { hi: 0x89705f4136b4a598 as i64, lo: 0xce97f577076acfcf as i64 }; }
+    if idx == 340 { return PmHiLo { hi: 0xabcc77118461cefd as i64, lo: 0x023df2d4c94583c2 as i64 }; }
+    if idx == 341 { return PmHiLo { hi: 0xd6bf94d5e57a42bd as i64, lo: 0xc2cd6f89fb96e4b3 as i64 }; }
+    if idx == 342 { return PmHiLo { hi: 0x8637bd05af6c69b6 as i64, lo: 0x59c065b63d3e4ef0 as i64 }; }
+    if idx == 343 { return PmHiLo { hi: 0xa7c5ac471b478424 as i64, lo: 0xf0307f23cc8de2ac as i64 }; }
+    if idx == 344 { return PmHiLo { hi: 0xd1b71758e219652c as i64, lo: 0x2c3c9eecbfb15b57 as i64 }; }
+    if idx == 345 { return PmHiLo { hi: 0x83126e978d4fdf3c as i64, lo: 0x9ba5e353f7ced916 as i64 }; }
+    if idx == 346 { return PmHiLo { hi: 0xa3d70a3d70a3d70b as i64, lo: 0xc28f5c28f5c28f5c as i64 }; }
+    if idx == 347 { return PmHiLo { hi: 0xcccccccccccccccd as i64, lo: 0x3333333333333333 as i64 }; }
+    if idx == 348 { return PmHiLo { hi: 0x8000000000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^0
+    if idx == 349 { return PmHiLo { hi: 0xa000000000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^1
+    if idx == 350 { return PmHiLo { hi: 0xc800000000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^2
+    if idx == 351 { return PmHiLo { hi: 0xfa00000000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^3
+    if idx == 352 { return PmHiLo { hi: 0x9c40000000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^4
+    if idx == 353 { return PmHiLo { hi: 0xc350000000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^5
+    if idx == 354 { return PmHiLo { hi: 0xf424000000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^6
+    if idx == 355 { return PmHiLo { hi: 0x9896800000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^7
+    if idx == 356 { return PmHiLo { hi: 0xbebc200000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^8
+    if idx == 357 { return PmHiLo { hi: 0xee6b280000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^9
+    if idx == 358 { return PmHiLo { hi: 0x9502f90000000000 as i64, lo: 0x0000000000000000 as i64 }; } // 10^10
+    if idx == 359 { return PmHiLo { hi: 0xba43b74000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 360 { return PmHiLo { hi: 0xe8d4a51000000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 361 { return PmHiLo { hi: 0x9184e72a00000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 362 { return PmHiLo { hi: 0xb5e620f480000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 363 { return PmHiLo { hi: 0xe35fa931a0000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 364 { return PmHiLo { hi: 0x8e1bc9bf04000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 365 { return PmHiLo { hi: 0xb1a2bc2ec5000000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 366 { return PmHiLo { hi: 0xde0b6b3a76400000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 367 { return PmHiLo { hi: 0x8ac7230489e80000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 368 { return PmHiLo { hi: 0xad78ebc5ac620000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 369 { return PmHiLo { hi: 0xd8d726b7177a8000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 370 { return PmHiLo { hi: 0x878678326eac9000 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 371 { return PmHiLo { hi: 0xa968163f0a57b400 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 372 { return PmHiLo { hi: 0xd3c21bcecceda100 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 373 { return PmHiLo { hi: 0x84595161401484a0 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 374 { return PmHiLo { hi: 0xa56fa5b99019a5c8 as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 375 { return PmHiLo { hi: 0xcecb8f27f4200f3a as i64, lo: 0x0000000000000000 as i64 }; }
+    if idx == 376 { return PmHiLo { hi: 0x813f3978f8940985 as i64, lo: 0xc000000000000000 as i64 }; }
+    if idx == 377 { return PmHiLo { hi: 0xa18f07d736b90be6 as i64, lo: 0xb000000000000000 as i64 }; }
+    if idx == 378 { return PmHiLo { hi: 0xc9f2c9cd04674edf as i64, lo: 0x5c00000000000000 as i64 }; }
+    if idx == 379 { return PmHiLo { hi: 0xfc6f7c4045812297 as i64, lo: 0xb300000000000000 as i64 }; }
+    if idx == 380 { return PmHiLo { hi: 0x9dc5ada82b70b59e as i64, lo: 0x0fe0000000000000 as i64 }; }
+    if idx == 381 { return PmHiLo { hi: 0xc5371912364ce306 as i64, lo: 0x93d8000000000000 as i64 }; }
+    if idx == 382 { return PmHiLo { hi: 0xf684df56c3e01bc7 as i64, lo: 0x38ce000000000000 as i64 }; }
+    if idx == 383 { return PmHiLo { hi: 0x9a130b963a6c115d as i64, lo: 0xc380c00000000000 as i64 }; }
+    if idx == 384 { return PmHiLo { hi: 0xc097ce7bc90715b4 as i64, lo: 0xb460f00000000000 as i64 }; }
+    if idx == 385 { return PmHiLo { hi: 0xf0bdc21abb48db21 as i64, lo: 0xe1792c0000000000 as i64 }; }
+    if idx == 386 { return PmHiLo { hi: 0x96769950b50d88f5 as i64, lo: 0xecebbb8000000000 as i64 }; }
+    if idx == 387 { return PmHiLo { hi: 0xbc143fa4e250eb32 as i64, lo: 0xe826aa6000000000 as i64 }; }
+    if idx == 388 { return PmHiLo { hi: 0xeb194f8e1ae525fe as i64, lo: 0xa23054f800000000 as i64 }; }
+    if idx == 389 { return PmHiLo { hi: 0x92efd1b8d0cf37bf as i64, lo: 0xa55e351b00000000 as i64 }; }
+    if idx == 390 { return PmHiLo { hi: 0xb7abc627050305ae as i64, lo: 0x0eb5c261c0000000 as i64 }; }
+    if idx == 391 { return PmHiLo { hi: 0xe596b7b0c643c71a as i64, lo: 0x926332fa30000000 as i64 }; }
+    if idx == 392 { return PmHiLo { hi: 0x8f7e32ce7bea5c70 as i64, lo: 0x1b7dffdc5e000000 as i64 }; }
+    if idx == 393 { return PmHiLo { hi: 0xb35dbf821ae4f38c as i64, lo: 0x225d7fd375800000 as i64 }; }
+    if idx == 394 { return PmHiLo { hi: 0xe0352f62a19e306f as i64, lo: 0x2af4dfc852e00000 as i64 }; }
+    if idx == 395 { return PmHiLo { hi: 0x8c213d9da502de46 as i64, lo: 0xbad90bdd33cc0000 as i64 }; }
+    if idx == 396 { return PmHiLo { hi: 0xaf298d050e4395d7 as i64, lo: 0x698f4ed480bf0000 as i64 }; }
+    if idx == 397 { return PmHiLo { hi: 0xdaf3f04651d47b4d as i64, lo: 0xc3f32289a0eec000 as i64 }; }
+    if idx == 398 { return PmHiLo { hi: 0x88d8762bf324cd10 as i64, lo: 0x5a77f59604953800 as i64 }; }
+
+    // Fallback for out-of-range indices
+    return PmHiLo { hi: 0x8000000000000000 as i64, lo: 0x0000000000000000 as i64 };
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test "log approximations" {
+    assert log10_pow2(10) == 3;
+    assert log10_pow2(100) == 30;
+    assert log2_pow10(3) == 9;
+    assert log2_pow10(10) == 33;
+}
+
+test "bit length" {
+    assert i64_bit_len(0 as i64) == 0;
+    assert i64_bit_len(1 as i64) == 1;
+    assert i64_bit_len(2 as i64) == 2;
+    assert i64_bit_len(3 as i64) == 2;
+    assert i64_bit_len(255 as i64) == 8;
+    assert i64_bit_len(256 as i64) == 9;
+}
+
+test "unpack64 basic" {
+    let r1 = unpack64(1.0);
+    assert r1.mantissa != 0 as i64;
+
+    let r2 = unpack64(2.0);
+    assert r2.mantissa != 0 as i64;
+}
+
+test "pow10 function" {
+    assert pow10(0) == 1 as i64;
+    assert pow10(1) == 10 as i64;
+    assert pow10(2) == 100 as i64;
+    assert pow10(9) == 1000000000 as i64;
+}
+
+test "digits count" {
+    assert digits(1 as i64) == 1;
+    assert digits(9 as i64) == 1;
+    assert digits(10 as i64) == 2;
+    assert digits(99 as i64) == 2;
+    assert digits(100 as i64) == 3;
+    assert digits(999 as i64) == 3;
+}
+
+test "unsigned comparisons" {
+    // Test that u64_lt handles sign bit correctly
+    let a = 0x7FFFFFFFFFFFFFFF as i64;  // Max positive i64
+    let b = 0x8000000000000000 as i64;  // Min negative i64, but largest u64/2
+    // As unsigned: a < b
+    assert u64_lt(a, b);
+    assert !u64_lt(b, a);
+}
+
+test "short formatting basic values" {
+    // 1.0 should format to 1 * 10^0
+    let r1 = short(1.0);
+    assert r1.digits == 1 as i64;
+    assert r1.exponent == 0;
+
+    // 10.0 should format to 1 * 10^1
+    let r10 = short(10.0);
+    assert r10.digits == 1 as i64;
+    assert r10.exponent == 1;
+
+    // 100.0 should format to 1 * 10^2
+    let r100 = short(100.0);
+    assert r100.digits == 1 as i64;
+    assert r100.exponent == 2;
+
+    // 2.0 should format to 2 * 10^0
+    let r2 = short(2.0);
+    assert r2.digits == 2 as i64;
+    assert r2.exponent == 0;
+}
+
+test "short formatting pi" {
+    let pi = 3.141592653589793;
+    let r = short(pi);
+    // Pi should produce many digits
+    assert r.digits > 0 as i64;
+    // The digit count should be reasonable
+    assert digits(r.digits) <= 17;
+}
+
+test "short formatting small values" {
+    // 0.1 cannot be exactly represented in binary
+    let r01 = short(0.1);
+    assert r01.digits > 0 as i64;
+    assert r01.exponent < 0;
+
+    // 0.5 = 1/2 can be exactly represented
+    let r05 = short(0.5);
+    assert r05.digits == 5 as i64;
+    assert r05.exponent == -1;
+}
+
+test "short formatting large values" {
+    // Large power of 2
+    let r = short(1048576.0);  // 2^20
+    assert r.digits > 0 as i64;
+}
+
+test "fixed_width formatting" {
+    // fixed_width(1.0, 1) should give 1 digit
+    let r1 = fixed_width(1.0, 1);
+    assert r1.digits == 1 as i64;
+
+    // fixed_width(pi, 4) should give 4 digits
+    let pi = 3.141592653589793;
+    let r4 = fixed_width(pi, 4);
+    // Should be 3142 (rounded)
+    assert digits(r4.digits) == 4;
+}
+
+test "f64_to_string special values" {
+    // Zero
+    let s0 = f64_to_string(0.0);
+    assert s0 == "0e+00";
+
+    // Negative zero
+    let sn0 = f64_to_string(-0.0);
+    assert sn0 == "-0e+00";
+}
+
+test "f64_to_string basic" {
+    // 1.0 should format to "1e+00"
+    let s1 = f64_to_string(1.0);
+    assert s1 == "1e+00";
+
+    // 10.0 should format to "1e+01"
+    let s10 = f64_to_string(10.0);
+    assert s10 == "1e+01";
+
+    // 100.0 should format to "1e+02"
+    let s100 = f64_to_string(100.0);
+    assert s100 == "1e+02";
+}
+
+test "f64_to_string small values" {
+    // 0.5 should format to "5e-01"
+    let s05 = f64_to_string(0.5);
+    assert s05 == "5e-01";
+
+    // 0.01 should format to "1e-02"
+    let s001 = f64_to_string(0.01);
+    assert s001 == "1e-02";
+}
+
+test "trim_zeros" {
+    // 1000 should trim to 1 with exponent +3
+    let t1 = trim_zeros(1000 as i64, 0);
+    assert t1.0 == 1 as i64;
+    assert t1.1 == 3;
+
+    // 1200 should trim to 12 with exponent +2
+    let t2 = trim_zeros(1200 as i64, 0);
+    assert t2.0 == 12 as i64;
+    assert t2.1 == 2;
+
+    // 123 has no trailing zeros
+    let t3 = trim_zeros(123 as i64, 0);
+    assert t3.0 == 123 as i64;
+    assert t3.1 == 0;
+}
+
+test "rotate_right" {
+    // Rotate 0x80 right by 4 should give 0x08 (for 8-bit value conceptually)
+    // For 64-bit: rotating 1 right by 1 puts 1 in MSB
+    let r1 = rotate_right(1 as i64, 1);
+    assert r1 == 0x8000000000000000 as i64;
+
+    // Rotate 0x8000000000000000 right by 1 should give 0x4000000000000000
+    let r2 = rotate_right(0x8000000000000000 as i64, 1);
+    assert r2 == 0x4000000000000000 as i64;
+}
+
+test "logical_shr" {
+    // Logical shift of negative number should not sign-extend
+    let neg = 0x8000000000000000 as i64;  // -9223372036854775808
+    let shifted = logical_shr(neg, 1);
+    // Should be 0x4000000000000000, not 0xC000000000000000
+    assert shifted == 0x4000000000000000 as i64;
+
+    // Shift by 63 should leave just the sign bit
+    let shifted63 = logical_shr(neg, 63);
+    assert shifted63 == 1 as i64;
+}
+
+test "f64_to_string negative values" {
+    // Negative 1.0
+    let sn1 = f64_to_string(-1.0);
+    assert sn1 == "-1e+00";
+
+    // Negative pi
+    let snpi = f64_to_string(-3.141592653589793);
+    // Should start with "-"
+    assert snpi.get(0) == '-' as i32;
+}
+
+test "f64_to_string powers of 10" {
+    // Large powers
+    let s10 = f64_to_string(10.0);
+    assert s10 == "1e+01";
+
+    let s100 = f64_to_string(100.0);
+    assert s100 == "1e+02";
+
+    let s1000 = f64_to_string(1000.0);
+    assert s1000 == "1e+03";
+
+    // Small powers
+    let s01 = f64_to_string(0.01);
+    assert s01 == "1e-02";
+
+    let s001 = f64_to_string(0.001);
+    assert s001 == "1e-03";
+}
+
+test "f64_to_string precision" {
+    // Verify that non-round values have correct precision
+    let pi = 3.141592653589793;
+    let s = f64_to_string(pi);
+    // Should have many digits
+    assert s.len() > 10;
+    // Should start with "3.14"
+    assert s.get(0) == '3' as i32;
+    assert s.get(1) == '.' as i32;
+    assert s.get(2) == '1' as i32;
+    assert s.get(3) == '4' as i32;
+}
+
+// Entry point for running
+fn run() with Stdout {
+    println("Float-to-String (fpfmt) conversion examples:");
+
+    // Basic values
+    println(`1.0 -> {f64_to_string(1.0)}`);
+    println(`3.141592653589793 -> {f64_to_string(3.141592653589793)}`);
+    println(`0.1 -> {f64_to_string(0.1)}`);
+    println(`123.456 -> {f64_to_string(123.456)}`);
+
+    // Special values
+    println(`0.0 -> {f64_to_string(0.0)}`);
+    println(`-0.0 -> {f64_to_string(-0.0)}`);
+
+    // Powers of 10
+    println(`1e10 -> {f64_to_string(10000000000.0)}`);
+    println(`1e-10 -> {f64_to_string(0.0000000001)}`);
+
+    println("All examples printed.");
+}
