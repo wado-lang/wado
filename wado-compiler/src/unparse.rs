@@ -6,12 +6,12 @@ use crate::ast::{
     AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, EffectDecl,
     EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    Function, FunctionType, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item,
-    LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
-    Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
-    StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr,
-    Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
-    WhileStmt, WorldDecl,
+    Function, FunctionType, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
+    Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
+    Module, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
+    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
+    TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -101,6 +101,7 @@ impl<'a> Unparser<'a> {
             Item::Resource(r) => self.unparse_resource(r),
             Item::World(w) => self.unparse_world(w),
             Item::Test(t) => self.unparse_test(t),
+            Item::Global(g) => self.unparse_global(g),
         }
 
         // Emit trailing comments
@@ -721,6 +722,31 @@ impl<'a> Unparser<'a> {
         }
         self.unparse_block_expr(&t.body);
         self.output.push('\n');
+    }
+
+    fn unparse_global(&mut self, g: &GlobalDecl) {
+        self.write_indent();
+
+        // Attributes
+        for attr in &g.attributes {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
+        if g.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("global ");
+        if g.mutable {
+            self.output.push_str("mut ");
+        }
+        self.output.push_str(&g.name);
+        self.output.push_str(": ");
+        self.unparse_type(&g.ty);
+        self.output.push_str(" = ");
+        self.unparse_expr(&g.initializer);
+        self.output.push_str(";\n");
     }
 
     fn unparse_type(&mut self, ty: &Type) {
@@ -1689,6 +1715,7 @@ fn get_item_span(item: &Item) -> Span {
         Item::Resource(r) => r.span,
         Item::World(w) => w.span,
         Item::Test(t) => t.span,
+        Item::Global(g) => g.span,
     }
 }
 
@@ -1941,8 +1968,9 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
 
 use crate::lexer::is_valid_ident;
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
-    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeTable,
+    TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
+    TirUnaryOp, TypeTable,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -1980,6 +2008,12 @@ impl<'a> TirUnparser<'a> {
     }
 
     fn unparse_module(&mut self, module: &TirModule) {
+        // Globals
+        for g in &module.globals {
+            self.unparse_tir_global(g);
+            self.output.push('\n');
+        }
+
         // Structs
         for s in &module.structs {
             self.unparse_struct(s);
@@ -2004,6 +2038,23 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str("__DATA__\n");
             self.output.push_str(data);
         }
+    }
+
+    fn unparse_tir_global(&mut self, g: &TirGlobal) {
+        self.write_indent();
+        if g.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("global ");
+        if g.mutable {
+            self.output.push_str("mut ");
+        }
+        self.output.push_str(&g.name);
+        self.output.push_str(": ");
+        self.output.push_str(&self.type_table.type_name(g.ty));
+        self.output.push_str(" = ");
+        self.unparse_expr(&g.initializer);
+        self.output.push_str(";\n");
     }
 
     fn unparse_struct(&mut self, s: &TirStruct) {
@@ -2549,6 +2600,31 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
+            }
+            TirExprKind::GlobalVarGet {
+                name,
+                module_source,
+            } => {
+                let module_path = module_source.to_path();
+                if !module_path.is_empty() {
+                    self.output.push_str(&module_path.join("::"));
+                    self.output.push_str("::");
+                }
+                self.output.push_str(name);
+            }
+            TirExprKind::GlobalVarSet {
+                name,
+                module_source,
+                value,
+            } => {
+                let module_path = module_source.to_path();
+                if !module_path.is_empty() {
+                    self.output.push_str(&module_path.join("::"));
+                    self.output.push_str("::");
+                }
+                self.output.push_str(name);
+                self.output.push_str(" = ");
+                self.unparse_expr(value);
             }
             TirExprKind::Capture { name, index } => {
                 // Display as captured variable with index for debugging

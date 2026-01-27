@@ -313,9 +313,13 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
         TirExprKind::Closure { body, .. } => {
             collect_assigned_in_expr(body, assigned);
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_assigned_in_expr(value, assigned);
+        }
         // Terminals - no nested expressions
         TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -555,6 +559,9 @@ fn collect_usage_in_expr(
                 collect_usage_in_expr(&arm.body, usage, in_loop, in_condition);
             }
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_usage_in_expr(value, usage, in_loop, in_condition);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -564,6 +571,7 @@ fn collect_usage_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
@@ -884,6 +892,9 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
                 substitute_in_expr(&mut arm.body, from_local, source);
             }
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            substitute_in_expr(value, from_local, source);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -893,6 +904,7 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
@@ -1108,6 +1120,9 @@ fn collect_copy_bindings_in_expr(
                 collect_copy_bindings_in_expr(&arm.body, bindings, block_local_assigned);
             }
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_copy_bindings_in_expr(value, bindings, block_local_assigned);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1118,6 +1133,7 @@ fn collect_copy_bindings_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
@@ -1320,6 +1336,9 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
                 remove_copy_bindings_in_expr(&mut arm.body, dead_locals);
             }
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            remove_copy_bindings_in_expr(value, dead_locals);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1330,6 +1349,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }

@@ -1,0 +1,12 @@
+// Test that assigning to an immutable global produces an error
+use { println, Stdout } from "core:cli";
+
+global CONSTANT: i32 = 42;
+
+fn run() with Stdout {
+    CONSTANT = 100;  // Should fail: cannot assign to immutable global
+    println(`{CONSTANT}`);
+}
+
+__DATA__
+{"compile_error": "cannot assign to immutable global variable"}

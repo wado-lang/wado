@@ -399,6 +399,9 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::VariantConstruct { fields, .. } => fields
             .iter()
             .any(|f| expr_has_complex_generic_types(f, type_table)),
+        TirExprKind::GlobalVarSet { value, .. } => {
+            expr_has_complex_generic_types(value, type_table)
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -409,6 +412,7 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => false,
     }
@@ -647,6 +651,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         TirExprKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(block, callees);
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_callees_from_expr(value, callees);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -657,6 +664,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
@@ -2435,6 +2443,21 @@ fn remap_expr(
             ),
             result_type: *result_type,
         },
+        TirExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value,
+        } => TirExprKind::GlobalVarSet {
+            module_source: module_source.clone(),
+            name: name.clone(),
+            value: Box::new(remap_expr(
+                value,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+        },
         // Leaf nodes - no remapping needed
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -2444,6 +2467,7 @@ fn remap_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => expr.kind.clone(),
     };

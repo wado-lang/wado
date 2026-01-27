@@ -19,16 +19,16 @@ use crate::name::{LocalMethodName, ModuleSource, strip_type_params};
 
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
-    IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt,
-    Type, UnaryOp, WhileStmt,
+    GlobalDecl, IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern,
+    ReturnStmt, Stmt, Type, UnaryOp, WhileStmt,
 };
 use crate::project::Project;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock,
-    TirCapture, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTest, TirUnaryOp,
-    TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    TirCapture, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLiteralPattern, TirMatchArm,
+    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTest,
+    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -467,6 +467,8 @@ pub struct Resolver<'a> {
     current_self_type: Option<TypeId>,
     /// WASI registry for looking up effect return types
     wasi_registry: WasiRegistry,
+    /// Global variables in the current module (name -> (type, `is_mutable`))
+    current_module_globals: HashMap<String, (TypeId, bool)>,
 }
 
 /// Info about an Index trait implementation
@@ -552,6 +554,7 @@ impl<'a> Resolver<'a> {
             current_associated_type_bindings: HashMap::new(),
             current_self_type: None,
             wasi_registry,
+            current_module_globals: HashMap::new(),
         }
     }
 
@@ -571,6 +574,16 @@ impl<'a> Resolver<'a> {
 
         // Second pass: collect function signatures (for call resolution)
         self.collect_function_signatures(module);
+
+        // Collect global variable names and types (before resolving functions that may reference them)
+        self.current_module_globals.clear();
+        for item in &module.items {
+            if let Item::Global(global_decl) = item {
+                let ty = self.resolve_type(&global_decl.ty);
+                self.current_module_globals
+                    .insert(global_decl.name.clone(), (ty, global_decl.mutable));
+            }
+        }
 
         // Third pass: resolve functions
         let mut tir_module = TirModule::new(module_source.clone());
@@ -664,6 +677,11 @@ impl<'a> Resolver<'a> {
                     {
                         tir_module.add_function(tir_func);
                         tir_module.tests.push(tir_test);
+                    }
+                }
+                Item::Global(global_decl) => {
+                    if let Some(tir_global) = self.resolve_global(global_decl) {
+                        tir_module.globals.push(tir_global);
                     }
                 }
                 // Other items will be added as needed
@@ -963,6 +981,7 @@ impl<'a> Resolver<'a> {
                 current_associated_type_bindings: HashMap::new(),
                 current_self_type: None,
                 wasi_registry,
+                current_module_globals: HashMap::new(),
             };
 
             // Use the provided entry_module_source for the entry module (empty path)
@@ -1474,6 +1493,43 @@ impl<'a> Resolver<'a> {
             fields,
             span: struct_decl.span,
         }
+    }
+
+    /// Resolve a global variable declaration
+    fn resolve_global(&mut self, global_decl: &GlobalDecl) -> Option<TirGlobal> {
+        // Resolve the type
+        let ty = self.resolve_type(&global_decl.ty);
+
+        // Create a minimal function context for resolving the initializer expression
+        // Global initialization has no locals, but we need the context for expression resolution
+        // The function name is used for #function compile-time literal (empty for global init)
+        let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
+
+        // Resolve the initializer expression with expected type for type inference
+        let initializer =
+            self.resolve_expr_with_expected_type(&global_decl.initializer, &mut ctx, Some(ty));
+
+        // Type check: initializer type must match declared type
+        if initializer.type_id != ty
+            && initializer.type_id != TypeTable::UNKNOWN
+            && ty != TypeTable::UNKNOWN
+        {
+            self.errors.push(TypeError::TypeMismatch {
+                expected: self.type_table.borrow().type_name(ty),
+                found: self.type_table.borrow().type_name(initializer.type_id),
+                span: global_decl.initializer.span(),
+            });
+        }
+
+        Some(TirGlobal {
+            name: global_decl.name.clone(),
+            ty,
+            initializer,
+            mutable: global_decl.mutable,
+            is_pub: global_decl.is_pub,
+            module_source: self.current_module_source.clone(),
+            span: global_decl.span,
+        })
     }
 
     /// Resolve a variant declaration
@@ -3251,6 +3307,18 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Check for global variables
+        if let Some(&(ty, _mutable)) = self.current_module_globals.get(&ident.name) {
+            return TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source: self.current_module_source.clone(),
+                    name: ident.name.clone(),
+                },
+                ty,
+                ident.span,
+            );
+        }
+
         // Otherwise it's a global reference (function, constant, etc.)
         // For now, return Unknown type - will be resolved by looking up in symbol table
         TirExpr::new(
@@ -3812,6 +3880,34 @@ impl<'a> Resolver<'a> {
         // Standard assignment handling
         let target = self.resolve_expr(&assign.target, ctx);
         let value = self.resolve_expr(&assign.value, ctx);
+
+        // Handle assignment to global variables
+        if let TirExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &target.kind
+        {
+            // Check if the global is mutable
+            if let Some(&(_, is_mutable)) = self.current_module_globals.get(name) {
+                if !is_mutable {
+                    self.errors.push(TypeError::CannotAssign {
+                        message: format!("cannot assign to immutable global variable '{name}'"),
+                        span: assign.target.span(),
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, assign.span);
+                }
+                // Generate GlobalVarSet instead of Assign
+                return TirExpr::new(
+                    TirExprKind::GlobalVarSet {
+                        module_source: module_source.clone(),
+                        name: name.clone(),
+                        value: Box::new(value.clone()),
+                    },
+                    value.type_id,
+                    assign.span,
+                );
+            }
+        }
 
         // Validate that the target is a valid l-value
         let is_valid_lvalue = match &target.kind {

@@ -332,6 +332,9 @@ impl<'a> EffectChecker<'a> {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.check_block(block);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.check_expr(value);
+            }
             // Leaf expressions - no sub-expressions to check
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -342,6 +345,7 @@ impl<'a> EffectChecker<'a> {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }

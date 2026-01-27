@@ -6,10 +6,10 @@ use crate::ast::{
     BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ContinueStmt, EffectDecl,
     EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, IntLiteral, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module, NamedType,
-    NamespacedGenericType, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
+    FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
+    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, IntLiteral,
+    Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module,
+    NamedType, NamespacedGenericType, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
     UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport,
@@ -261,6 +261,7 @@ impl Parser {
             TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
             TokenKind::World => self.parse_world_decl().map(Item::World),
+            TokenKind::Global => self.parse_global_decl(is_pub, attrs).map(Item::Global),
             _ => Err(ParseError {
                 message: format!("expected item, found {:?}", self.peek_kind()),
                 span: self.peek().span,
@@ -289,6 +290,48 @@ impl Parser {
         Ok(TestDecl {
             name,
             body,
+            span: start_span.merge(&end_span),
+        })
+    }
+
+    /// Parse global variable declaration: `[pub] global [mut] name: Type = expr;`
+    fn parse_global_decl(
+        &mut self,
+        is_pub: bool,
+        attributes: Vec<Attribute>,
+    ) -> ParseResult<GlobalDecl> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Global)?;
+
+        // Optional mut
+        let mutable = if self.check(&TokenKind::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
+        // Variable name
+        let name = self.consume_ident()?;
+
+        // Type annotation (required)
+        self.expect(&TokenKind::Colon)?;
+        let ty = self.parse_type()?;
+
+        // Initializer (required)
+        self.expect(&TokenKind::Eq)?;
+        let initializer = self.parse_expr()?;
+
+        let end_span = self.peek().span;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(GlobalDecl {
+            name,
+            ty,
+            initializer,
+            mutable,
+            is_pub,
+            attributes,
             span: start_span.merge(&end_span),
         })
     }

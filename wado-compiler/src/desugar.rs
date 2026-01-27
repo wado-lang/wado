@@ -9,11 +9,11 @@ use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    Function, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt, LetStmt,
-    Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, ReturnStmt,
-    StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr, UnaryOp,
-    WhileStmt,
+    Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
+    ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField,
+    TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr,
+    UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -53,6 +53,19 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Resource(r) => Item::Resource(r.clone()),
         Item::World(w) => Item::World(w.clone()),
         Item::Test(t) => Item::Test(desugar_test(t, ctx)),
+        Item::Global(g) => Item::Global(desugar_global(g, ctx)),
+    }
+}
+
+fn desugar_global(global: &GlobalDecl, _ctx: &mut DesugarContext) -> GlobalDecl {
+    GlobalDecl {
+        name: global.name.clone(),
+        ty: global.ty.clone(),
+        initializer: desugar_expr(&global.initializer),
+        mutable: global.mutable,
+        is_pub: global.is_pub,
+        attributes: global.attributes.clone(),
+        span: global.span,
     }
 }
 

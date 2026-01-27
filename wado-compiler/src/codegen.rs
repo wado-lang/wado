@@ -1695,6 +1695,23 @@ impl Codegen {
         module.section(builder.functions());
 
         // ========================================
+        // Global section
+        // ========================================
+        // Define user-defined global variables
+        for global in &entry_tir.globals {
+            let val_type = self.type_id_to_valtype(type_table, global.ty);
+            // Get constant expression for initializer
+            let init_expr = Self::global_init_to_const_expr(&global.initializer, type_table);
+            // Create qualified name for the global
+            let global_name = format!("global:{}", global.name);
+            builder.define_global(&global_name, val_type, global.mutable, init_expr);
+        }
+        // Add globals section only if there are globals
+        if builder.has_globals() {
+            module.section(builder.globals());
+        }
+
+        // ========================================
         // Export section
         // ========================================
         builder.export_func("run", "run");
@@ -4790,6 +4807,9 @@ impl Codegen {
             TirExprKind::LabeledBlock { block, .. } => {
                 Self::collect_closures_from_block(block, closures);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                Self::collect_closures_from_expr(value, closures);
+            }
             // Leaf nodes - no nested expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -4800,6 +4820,7 @@ impl Codegen {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -5063,6 +5084,9 @@ impl Codegen {
             TirExprKind::LabeledBlock { block, .. } => {
                 Self::find_closure_locals_in_block(block, result, closure_counter);
             }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                Self::find_closure_locals_in_expr(value, result, closure_counter);
+            }
             // Terminals - no closures inside
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -5073,6 +5097,7 @@ impl Codegen {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
@@ -5516,6 +5541,68 @@ impl Codegen {
                 self.collect_array_types_recursive(*inner, type_table, found, visited);
             }
             _ => {}
+        }
+    }
+
+    /// Convert a global variable initializer to a Wasm constant expression
+    /// Only supports constant expressions (literals, null)
+    fn global_init_to_const_expr(init: &TirExpr, type_table: &TypeTable) -> ConstExpr {
+        use wasm_encoder::{Ieee32, Ieee64};
+
+        match &init.kind {
+            TirExprKind::IntLiteral { value, .. } => {
+                // Determine the right type of constant based on the expression type
+                match type_table.get(init.type_id) {
+                    ResolvedType::Primitive(prim) => match prim {
+                        PrimitiveType::I8
+                        | PrimitiveType::I16
+                        | PrimitiveType::I32
+                        | PrimitiveType::U8
+                        | PrimitiveType::U16
+                        | PrimitiveType::U32 => ConstExpr::i32_const(*value as i32),
+                        PrimitiveType::I64 | PrimitiveType::U64 => {
+                            ConstExpr::i64_const(*value as i64)
+                        }
+                        _ => panic!(
+                            "unexpected primitive type for int literal: {:?}",
+                            type_table.get(init.type_id)
+                        ),
+                    },
+                    _ => ConstExpr::i32_const(*value as i32), // Default to i32
+                }
+            }
+            TirExprKind::FloatLiteral { value, .. } => {
+                match type_table.get(init.type_id) {
+                    ResolvedType::Primitive(PrimitiveType::F32) => {
+                        ConstExpr::f32_const(Ieee32::from(*value as f32))
+                    }
+                    ResolvedType::Primitive(PrimitiveType::F64) => {
+                        ConstExpr::f64_const(Ieee64::from(*value))
+                    }
+                    _ => ConstExpr::f64_const(Ieee64::from(*value)), // Default to f64
+                }
+            }
+            TirExprKind::BoolLiteral(b) => ConstExpr::i32_const(i32::from(*b)),
+            TirExprKind::Null => {
+                // For null, we need a ref.null of the appropriate type
+                // For Option<T>, null means None
+                ConstExpr::ref_null(HeapType::Abstract {
+                    shared: false,
+                    ty: AbstractHeapType::None,
+                })
+            }
+            TirExprKind::Unit => {
+                // Unit type - use 0
+                ConstExpr::i32_const(0)
+            }
+            _ => {
+                // For non-constant initializers, we'll need lazy initialization
+                // For now, panic with a clear message
+                panic!(
+                    "non-constant global initializer not yet supported: {:?}",
+                    init.kind
+                );
+            }
         }
     }
 
@@ -6125,6 +6212,41 @@ impl Codegen {
                 } else {
                     panic!("unknown global: {full_name}");
                 }
+            }
+
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                // Get the qualified global name
+                let global_name = if module_source.is_entry_point() {
+                    format!("global:{name}")
+                } else {
+                    let module_path = module_source.to_path();
+                    format!("global:{}::{name}", module_path.join("::"))
+                };
+                let global_idx = builder.global_idx(&global_name);
+                func.instruction(&Instruction::GlobalGet(global_idx));
+            }
+
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } => {
+                // First evaluate the value to be assigned
+                self.generate_expr(func, value, type_table, ctx, builder);
+                // Get the qualified global name
+                let global_name = if module_source.is_entry_point() {
+                    format!("global:{name}")
+                } else {
+                    let module_path = module_source.to_path();
+                    format!("global:{}::{name}", module_path.join("::"))
+                };
+                let global_idx = builder.global_idx(&global_name);
+                func.instruction(&Instruction::GlobalSet(global_idx));
+                // Push the assigned value back for expression result
+                func.instruction(&Instruction::GlobalGet(global_idx));
             }
 
             // === Binary Operations ===
@@ -10666,6 +10788,7 @@ impl Codegen {
                 .any(|f| self.expr_needs_async_scratch_locals(f)),
             TirExprKind::Move { value } => self.expr_needs_async_scratch_locals(value),
             TirExprKind::LabeledBlock { block, .. } => self.needs_async_scratch_locals(block),
+            TirExprKind::GlobalVarSet { value, .. } => self.expr_needs_async_scratch_locals(value),
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -10676,6 +10799,7 @@ impl Codegen {
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => false,
         }

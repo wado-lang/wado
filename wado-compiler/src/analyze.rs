@@ -314,6 +314,11 @@ impl Analyzer {
                     // Test declarations are handled in the resolver, not in the symbol table.
                     // Tests are converted to functions with generated names.
                 }
+
+                Item::Global(_global) => {
+                    // Global variables are handled in the resolver phase.
+                    // They are converted to TirGlobal and registered in the TIR module.
+                }
             }
         }
     }

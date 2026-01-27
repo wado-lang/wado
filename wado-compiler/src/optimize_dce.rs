@@ -1002,6 +1002,9 @@ fn analyze_expr(
         TirExprKind::LabeledBlock { block, .. } => {
             analyze_block(block, current_module, type_table, analysis);
         }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            analyze_expr(value, current_module, type_table, analysis);
+        }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1012,6 +1015,7 @@ fn analyze_expr(
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
