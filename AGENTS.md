@@ -198,10 +198,9 @@ This project relies on the following Wasm features:
 ## General Rules
 
 - All the documents and comments must be written in English.
-- Everything is under discussion. We can change the spec at any time.
 - When referring to WAT, use folded style syntax.
 - Do not commit changes unless the user requests so. When commit, no need to explain the implementation details.
-- When you encounter an unrelated problem, don't remove the problematic code. For E2E tests, add the `TODO` field. For other cases, move it elsewhere. Preserve the problem as is.
+- If you find a compiler bug, limitation, or awkward behavior, fix it. Such a problem must be treated as the highest priority.
 
 ## Rules for Rust
 
