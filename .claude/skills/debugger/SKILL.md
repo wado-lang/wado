@@ -60,16 +60,16 @@ rust-gdb ./target/debug/your_binary
 
 ## Common commands
 
-| Command | Description |
-|---------|-------------|
-| `break file.rs:123` | Set breakpoint at line |
-| `run args` | Start program with arguments |
-| `info locals` | Show local variables |
-| `print *ptr` | Dereference and print pointer |
-| `bt` / `bt 5` | Backtrace (full / top 5 frames) |
-| `continue` | Resume execution |
-| `next` | Step over |
-| `step` | Step into |
+| Command             | Description                     |
+| ------------------- | ------------------------------- |
+| `break file.rs:123` | Set breakpoint at line          |
+| `run args`          | Start program with arguments    |
+| `info locals`       | Show local variables            |
+| `print *ptr`        | Dereference and print pointer   |
+| `bt` / `bt 5`       | Backtrace (full / top 5 frames) |
+| `continue`          | Resume execution                |
+| `next`              | Step over                       |
+| `step`              | Step into                       |
 
 ## Notes
 
