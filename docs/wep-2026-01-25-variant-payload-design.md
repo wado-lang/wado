@@ -11,18 +11,6 @@ Rust's enum payload system has been criticized for being ad-hoc:
 
 Wado's variant system should learn from these issues and provide a cleaner, more consistent design.
 
-### Current Wado Syntax
-
-```wado
-variant Shape {
-    Circle(f64),           // single payload
-    Rectangle(f64, f64),   // multiple payloads (implicit tuple)
-    Point,                 // unit
-}
-```
-
-The `Rectangle(f64, f64)` form implicitly creates a tuple, which mirrors Rust's problematic design.
-
 ### TypeScript's Approach
 
 TypeScript uses discriminated unions with literal types:
@@ -467,35 +455,6 @@ if let Shape::Rectangle([w, _]) = shape {
 }
 ```
 
-## Migration from Current Syntax
-
-Current:
-
-```wado
-variant Shape {
-    Rectangle(f64, f64),        // implicit tuple
-    Named { width: f64, height: f64 },  // struct without parens
-}
-let r = Shape::Rectangle(10.0, 20.0);
-let n = Shape::Named { width: 10.0, height: 20.0 };
-```
-
-New:
-
-```wado
-variant Shape {
-    Rectangle([f64, f64]),                   // explicit tuple
-    Named({ width: f64, height: f64 }),      // struct with parens
-}
-let r = Shape::Rectangle([10.0, 20.0]);
-let n = Shape::Named({ width: 10.0, height: 20.0 });
-```
-
-Migration steps:
-
-1. Wrap multiple payload types in `[...]`
-2. Wrap struct payloads in `({})`
-
 ## Consequences
 
 ### Benefits
@@ -527,21 +486,9 @@ Migration steps:
 
 ## Implementation Roadmap
 
-Current status: variant construction, single-payload if-let pattern matching, and value semantics work for the old syntax.
-
-### Phase 1: Syntax Update
-
-- [ ] Update parser for explicit tuple payload `Name([T, U])`
-- [ ] Update parser for struct payload with parens `Name({ field: T })`
-- [ ] Reject implicit tuple expansion `Name(T, U)`
-- [ ] Update existing tests and fixtures
-
 ### Phase 2: Pattern Matching
 
-- [ ] Tuple payload patterns (`if let Rectangle([w, h]) = shape`)
 - [ ] Struct payload patterns (`if let Named({ width, height }) = shape`)
-- [ ] Unit payload patterns with else (`if let Point = shape { ... } else { ... }`)
-- [ ] `while let` / `for let` with custom variants
 - [ ] `match` expressions and statements
 - [ ] Generic variant pattern matching (`if let Some(x) = maybe` for `Maybe<T>`)
 - [ ] `Result<T, E>` pattern matching (`if let Ok(v) = result`, `if let Err(e) = result`)
@@ -568,3 +515,8 @@ Current status: variant construction, single-payload if-let pattern matching, an
 - [x] Option pattern matching (`if let Some(x) = ...`)
 - [x] Custom variant pattern matching (single-payload: `if let Circle(r) = shape`)
 - [x] Value semantics (copy) for custom variants
+- [x] Explicit tuple payload syntax `Name([T, U])` (Phase 1)
+- [x] Reject implicit tuple expansion `Name(T, U)` (Phase 1)
+- [x] Tuple payload patterns (`if let Rectangle([w, h]) = shape`) (Phase 1)
+- [x] Unit payload patterns (`if let Point = shape`) (Phase 1)
+- [x] `while let` / `for let` with custom variants (Phase 1)

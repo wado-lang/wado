@@ -1764,12 +1764,14 @@ let c = Color::Red;
 
 **Variants** (with payloads - Component Model `variant`):
 
+Wado variants have exactly one payload type per case. Unit cases have no payload, and multiple values require explicit tuple syntax `[T, U]`:
+
 ```wado
 // Sum type where variants can carry data
 variant Shape {
-    Circle(f64),           // radius
-    Rectangle(f64, f64),   // width, height
-    Point,                 // no payload
+    Circle(f64),           // single payload (radius)
+    Rectangle([f64, f64]), // explicit tuple payload (width, height)
+    Point,                 // no payload (unit)
 }
 
 // Generic variant
@@ -1780,6 +1782,7 @@ variant Maybe<T> {
 
 // Construction
 let s = Shape::Circle(5.0);
+let r = Shape::Rectangle([10.0, 20.0]);
 let p = Shape::Point;
 
 // Option construction and pattern matching
@@ -1788,24 +1791,24 @@ if let Some(x) = opt {
     println(`Got: {x}`);
 }
 
-// Custom variant pattern matching (non-generic)
+// Custom variant pattern matching with tuple destructuring
 // Note: pattern uses case name only, not Type::CaseName
 variant ParseResult {
     Fail,
-    Number(i32),
+    Number([i32, i32]),  // start, end positions
 }
-let r = ParseResult::Number(42);
-if let Number(n) = r {
-    println(`Got number: {n}`);
+let result = ParseResult::Number([0, 10]);
+if let Number([start, end]) = result {
+    println(`Got number from {start} to {end}`);
 }
-if let Fail = r {
+if let Fail = result {
     println("Failed");
 }
 
 // match is not yet implemented
 // match s {
 //     Shape::Circle(r) => calculate_circle_area(r),
-//     Shape::Rectangle(w, h) => w * h,
+//     Shape::Rectangle([w, h]) => w * h,
 //     Shape::Point => 0.0,
 // }
 ```
@@ -1815,6 +1818,7 @@ if let Fail = r {
 - Variant declarations and construction: implemented
 - `if let` pattern matching for `Option<T>`: implemented
 - `if let` pattern matching for non-generic custom variants: implemented
+- Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
 - `match` statements: not yet implemented

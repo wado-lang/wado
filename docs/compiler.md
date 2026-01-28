@@ -1253,7 +1253,7 @@ Key design decisions:
 - `resource` declarations
 - `world` declarations (with imports/exports)
 - Attributes (`#[...]`)
-- `variant` declarations (with payloads, construction, if let pattern matching for single-payload cases)
+- `variant` declarations (with payloads, construction, if let pattern matching with tuple destructuring)
 - Generic parameters on structs (monomorphization)
 
 #### Statements
@@ -1313,7 +1313,7 @@ Key design decisions:
 - Identifier patterns
 - Wildcard `_`
 - Tuple patterns
-- Variant patterns in if let (single-payload: `if let Circle(r) = shape`)
+- Variant patterns in if let (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`)
 - Option variant patterns (`if let Some(x) = ...`, `if let None = ...`)
 
 ### Semantic Analysis
@@ -1365,7 +1365,7 @@ Key design decisions:
 - Double generics with mixed types (`Container<T>.combine::<U, V>()` where T, U, V are different)
 - Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
 - Option pattern matching (`if let Some(x) = ...`)
-- Custom variant pattern matching (single-payload: `if let Circle(r) = shape`)
+- Custom variant pattern matching (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`)
 - Closures - pure (no captures)
 - Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
 - Value semantics for structs (field-by-field copy on assignment)
@@ -1407,7 +1407,7 @@ fn run() with Stdout {
 ### Partial Implementations
 
 - **Template strings**: Syntax and basic interpolation work. Format specifiers (`.2f`, `0.3f`, etc.) are parsed but not implemented in codegen.
-- **Variant pattern matching**: Single-payload cases work (`if let Circle(r) = shape`). Tuple/struct payloads not yet supported. See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
+- **Variant pattern matching**: Single-payload and tuple-payload cases work (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`). Struct payloads not yet supported. See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
 - **`core:prelude`**: Partial (parser doesn't support generic resources)
 - **Function types**: Parser supports `Fn(T) -> U` syntax, basic closure codegen works, but full function type support is incomplete.
 - **`flags` declarations**: Parser supports `flags` syntax, but no codegen yet.
@@ -1452,7 +1452,7 @@ fn run() with Stdout {
 
 ### Code Generation
 
-- Custom variant pattern matching (tuple/struct payloads, see WEP)
+- Custom variant pattern matching (struct payloads, see WEP)
 - Match expressions (see WEP)
 - Closures - with captures (see WEP)
 - Effect handlers
