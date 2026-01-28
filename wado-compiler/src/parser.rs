@@ -9,11 +9,11 @@ use crate::ast::{
     FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
     IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, IntLiteral,
     Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern, ResourceDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
-    WorldExport, WorldImport,
+    MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern,
+    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport,
+    WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -1987,6 +1987,9 @@ impl Parser {
                         span: start_span,
                     }));
                 }
+                TokenKind::Matches => {
+                    expr = self.parse_matches_expr(expr)?;
+                }
                 _ => break,
             }
         }
@@ -2365,6 +2368,37 @@ impl Parser {
             body,
             span: start_span.merge(&end_span),
         })
+    }
+
+    /// Parse matches expression: `expr matches { pattern [&& guard] }`
+    /// This is an infix operator that returns a boolean.
+    fn parse_matches_expr(&mut self, expr: Expr) -> ParseResult<Expr> {
+        let start_span = expr.span();
+        self.expect(&TokenKind::Matches)?;
+
+        // Expect opening brace
+        self.expect(&TokenKind::LBrace)?;
+
+        // Parse pattern
+        let pattern = self.parse_pattern()?;
+
+        // Check for optional guard: `&& guard_expr`
+        let guard = if self.check(&TokenKind::And) {
+            self.advance();
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        // Expect closing brace
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
+
+        Ok(Expr::Matches(Box::new(MatchesExpr {
+            expr,
+            pattern,
+            guard,
+            span: start_span.merge(&end_span),
+        })))
     }
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`

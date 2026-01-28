@@ -1,0 +1,14 @@
+// Test that pattern bindings don't leak outside matches expression
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+
+    // ERROR: x is bound inside matches, cannot be used outside
+    if opt matches { Some(x) } && x > 0 {
+        println("should not compile");
+    }
+}
+
+__DATA__
+{"compile_error": "'x' is not in scope"}

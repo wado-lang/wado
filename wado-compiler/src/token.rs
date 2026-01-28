@@ -41,6 +41,7 @@ pub enum TokenKind {
     Export,
     Assert,
     Global,
+    Matches,
     // Note: "test" is handled as a contextual keyword in the parser, not as a TokenKind
 
     // Literals
@@ -147,6 +148,7 @@ impl TokenKind {
             Self::Export => Some("export"),
             Self::Assert => Some("assert"),
             Self::Global => Some("global"),
+            Self::Matches => Some("matches"),
             // Note: "test" is a contextual keyword, not listed here
             Self::True => Some("true"),
             Self::False => Some("false"),

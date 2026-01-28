@@ -1,0 +1,33 @@
+// Test matches expression with guard
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let opt1: Option<i32> = Option::<i32>::Some(10);
+    let opt2: Option<i32> = Option::<i32>::Some(3);
+    let none: Option<i32> = null;
+
+    // Test matches with guard - value > 5
+    let is_large = opt1 matches { Some(x) && x > 5 };
+    if is_large {
+        println("opt1 has value > 5");
+    }
+
+    // Test matches with guard - value <= 5
+    let is_small = opt2 matches { Some(x) && x > 5 };
+    if is_small {
+        println("opt2 has value > 5");
+    } else {
+        println("opt2 does not have value > 5");
+    }
+
+    // None doesn't match Some pattern at all
+    let none_large = none matches { Some(x) && x > 5 };
+    if none_large {
+        println("none has value > 5");
+    } else {
+        println("none doesn't match");
+    }
+}
+
+__DATA__
+{"stdout": "opt1 has value > 5\nopt2 does not have value > 5\nnone doesn't match\n"}

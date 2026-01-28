@@ -1,0 +1,16 @@
+// Test that pattern bindings from one match arm don't leak into other arms
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+
+    // x is bound in the Some arm, not visible in None arm
+    let result = match opt {
+        Some(x) => x * 2,
+        None => x,  // ERROR: x is not in scope here
+    };
+    println(`{result}`);
+}
+
+__DATA__
+{"compile_error": "'x' is not in scope"}

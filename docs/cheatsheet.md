@@ -628,6 +628,26 @@ let description = match value {
     },
     None => "no value",
 };
+
+// Matches operator - returns bool for pattern testing
+let is_some = opt matches { Some(_) };
+let is_large = opt matches { Some(x) && x > 10 };  // with guard
+
+// Use matches in conditions
+if shape matches { Circle(_) } {
+    println("it's a circle");
+}
+
+// Pattern bindings are scoped to the guard only
+// This is a compile error - x is not in scope outside matches:
+// if opt matches { Some(x) } && x > 0 { }  // ERROR: 'x' is not in scope
+
+// For value extraction, use if let instead:
+if let Some(x) = opt {
+    if x > 0 {
+        println("positive value");
+    }
+}
 ```
 
 ## Operators
@@ -657,6 +677,10 @@ a == b == c     // same as: a == b && b == c
 
 // Type cast
 42 as f64
+
+// Pattern testing (returns bool)
+opt matches { Some(_) }
+opt matches { Some(x) && x > 0 }  // with guard
 
 // Reference and Dereference
 &x              // create reference

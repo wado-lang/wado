@@ -1,0 +1,18 @@
+// Test that pattern bindings in match expression don't leak outside
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+
+    // Match expression - x is bound inside arm, not visible outside
+    let result = match opt {
+        Some(x) => x * 2,
+        None => 0,
+    };
+
+    // ERROR: x is not in scope here
+    println(`{x}`);
+}
+
+__DATA__
+{"compile_error": "'x' is not in scope"}

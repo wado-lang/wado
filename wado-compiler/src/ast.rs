@@ -476,6 +476,7 @@ pub enum Expr {
     Block(Box<Block>),
     If(Box<IfExpr>),
     Match(Box<MatchExpr>),
+    Matches(Box<MatchesExpr>),
     Closure(Box<ClosureExpr>),
     TemplateString(Box<TemplateStringExpr>),
     Cast(Box<CastExpr>),
@@ -513,6 +514,7 @@ impl Expr {
             Expr::Block(e) => e.span,
             Expr::If(e) => e.span,
             Expr::Match(e) => e.span,
+            Expr::Matches(e) => e.span,
             Expr::Closure(e) => e.span,
             Expr::TemplateString(e) => e.span,
             Expr::Cast(e) => e.span,
@@ -585,6 +587,10 @@ impl Expr {
             Expr::Match(mut e) => {
                 e.span = new_span;
                 Expr::Match(e)
+            }
+            Expr::Matches(mut e) => {
+                e.span = new_span;
+                Expr::Matches(e)
             }
             Expr::Closure(mut e) => {
                 e.span = new_span;
@@ -859,6 +865,17 @@ pub struct MatchExpr {
 pub struct MatchArm {
     pub pattern: Pattern,
     pub body: Expr,
+    pub span: Span,
+}
+
+/// Matches expression: `expr matches { pattern && guard }`
+/// Returns true if the pattern matches and the optional guard is true.
+#[derive(Debug, Clone)]
+pub struct MatchesExpr {
+    pub expr: Expr,
+    pub pattern: Pattern,
+    /// Optional guard expression (the condition after `&&`)
+    pub guard: Option<Expr>,
     pub span: Span,
 }
 

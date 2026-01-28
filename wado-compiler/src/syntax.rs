@@ -62,6 +62,7 @@ impl SyntaxDefinition {
                 // Control flow
                 control: vec![
                     "if", "else", "while", "for", "loop", "break", "continue", "return", "match",
+                    "matches",
                 ],
                 // Declarations
                 declaration: vec![
@@ -154,9 +155,9 @@ mod tests {
         // This is the authoritative list from lexer.rs lex_ident_or_keyword()
         let lexer_keywords = [
             "use", "from", "as", "fn", "with", "let", "mut", "return", "if", "else", "match",
-            "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect", "handler",
-            "reactive", "move", "unique", "struct", "enum", "variant", "type", "impl", "trait",
-            "resource", "world", "async", "import", "export", "assert", "global",
+            "matches", "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect",
+            "handler", "reactive", "move", "unique", "struct", "enum", "variant", "type", "impl",
+            "trait", "resource", "world", "async", "import", "export", "assert", "global",
         ];
 
         // Contextual keywords: these are in SyntaxDefinition for highlighting

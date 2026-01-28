@@ -3165,6 +3165,10 @@ impl<'a> Resolver<'a> {
                     lb.span,
                 )
             }
+            // Matches expressions are desugared to if-let in the desugar phase
+            Expr::Matches(_) => {
+                panic!("Matches expression should have been desugared to if-let before resolver")
+            }
         }
     }
 
