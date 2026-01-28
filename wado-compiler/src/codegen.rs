@@ -21,7 +21,8 @@ use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
-    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
@@ -7436,11 +7437,17 @@ impl Codegen {
             // === Match Expression ===
             TirExprKind::Match {
                 expr: scrutinee,
-                arms: _,
+                arms,
             } => {
-                // TODO: Implement proper pattern matching
-                self.generate_expr(func, scrutinee, type_table, ctx, builder);
-                panic!("match expressions not yet implemented in TIR codegen");
+                self.generate_match_expr(
+                    func,
+                    scrutinee,
+                    arms,
+                    expr.type_id,
+                    type_table,
+                    ctx,
+                    builder,
+                );
             }
 
             // === Struct Literal ===
@@ -9383,6 +9390,441 @@ impl Codegen {
             // Unsupported pattern
             _ => {
                 panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
+            }
+        }
+    }
+
+    /// Generate code for match expression: `match expr { pattern => body, ... }`
+    ///
+    /// Structure (as nested if-else):
+    /// ```text
+    /// block $match (result T)
+    ///   ;; evaluate scrutinee once and store in local
+    ///   local.set $scrutinee
+    ///   ;; arm 0
+    ///   local.get $scrutinee
+    ///   <check pattern 0>
+    ///   if (result T)
+    ///     <bind pattern 0>
+    ///     <body 0>
+    ///   else
+    ///     ;; arm 1
+    ///     local.get $scrutinee
+    ///     <check pattern 1>
+    ///     if (result T)
+    ///       <bind pattern 1>
+    ///       <body 1>
+    ///     else
+    ///       ;; ... more arms
+    ///       unreachable  ;; if no patterns match (non-exhaustive)
+    ///     end
+    ///   end
+    /// end
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    fn generate_match_expr(
+        &self,
+        func: &mut Function,
+        scrutinee: &TirExpr,
+        arms: &[TirMatchArm],
+        result_type_id: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Evaluate scrutinee and store in a local
+        self.generate_expr(func, scrutinee, type_table, ctx, builder);
+
+        let scrutinee_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+        let type_key = format!("match_{:?}", scrutinee.type_id);
+        let counter = ctx.let_pattern_counter;
+        ctx.let_pattern_counter += 1;
+        let local_name = format!("__match_scrutinee_{type_key}_{counter}");
+        let scrutinee_local = ctx.alloc_local(&local_name, scrutinee_valtype);
+        func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+        let result_valtype = self.type_id_to_valtype(type_table, result_type_id);
+
+        // Generate nested if-else chain for arms
+        self.generate_match_arms(
+            func,
+            scrutinee_local,
+            scrutinee.type_id,
+            arms,
+            0,
+            result_valtype,
+            result_type_id,
+            type_table,
+            ctx,
+            builder,
+        );
+    }
+
+    /// Generate match arms as nested if-else chain
+    #[allow(clippy::too_many_arguments)]
+    fn generate_match_arms(
+        &self,
+        func: &mut Function,
+        scrutinee_local: u32,
+        scrutinee_type_id: TypeId,
+        arms: &[TirMatchArm],
+        arm_index: usize,
+        result_valtype: ValType,
+        result_type_id: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        if arm_index >= arms.len() {
+            // No more arms - unreachable (non-exhaustive match)
+            func.instruction(&Instruction::Unreachable);
+            return;
+        }
+
+        let arm = &arms[arm_index];
+        let pattern = &arm.pattern;
+        let scrutinee_type = type_table.get(scrutinee_type_id).clone();
+
+        // Check if this is a wildcard or binding pattern (always matches)
+        let is_irrefutable = matches!(pattern, TirPattern::Wildcard | TirPattern::Binding { .. });
+
+        if is_irrefutable {
+            // Irrefutable pattern - just bind and generate body directly
+            self.generate_match_pattern_binding(
+                func,
+                scrutinee_local,
+                scrutinee_type_id,
+                pattern,
+                type_table,
+                ctx,
+                builder,
+            );
+            self.generate_expr(func, &arm.body, type_table, ctx, builder);
+        } else {
+            // Refutable pattern - generate condition check
+            // Get scrutinee value on stack
+            func.instruction(&Instruction::LocalGet(scrutinee_local));
+
+            // Generate pattern match check (leaves bool on stack)
+            let condition_generated =
+                self.generate_match_pattern_check(func, &scrutinee_type, pattern, type_table, ctx);
+
+            if condition_generated {
+                // Open if block with result type
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                    result_valtype,
+                )));
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                // Then: pattern matches - bind and generate body
+                self.generate_match_pattern_binding(
+                    func,
+                    scrutinee_local,
+                    scrutinee_type_id,
+                    pattern,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+                self.generate_expr(func, &arm.body, type_table, ctx, builder);
+
+                // Else: try next arm
+                func.instruction(&Instruction::Else);
+                self.generate_match_arms(
+                    func,
+                    scrutinee_local,
+                    scrutinee_type_id,
+                    arms,
+                    arm_index + 1,
+                    result_valtype,
+                    result_type_id,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::End);
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            } else {
+                // Pattern check not generated (unsupported pattern) - skip to next arm
+                func.instruction(&Instruction::Drop);
+                self.generate_match_arms(
+                    func,
+                    scrutinee_local,
+                    scrutinee_type_id,
+                    arms,
+                    arm_index + 1,
+                    result_valtype,
+                    result_type_id,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+            }
+        }
+    }
+
+    /// Generate code to check if a pattern matches (leaves bool on stack)
+    /// Returns true if condition was generated, false if pattern is unsupported
+    fn generate_match_pattern_check(
+        &self,
+        func: &mut Function,
+        scrutinee_type: &ResolvedType,
+        pattern: &TirPattern,
+        _type_table: &TypeTable,
+        _ctx: &mut FunctionContext,
+    ) -> bool {
+        match (scrutinee_type, pattern) {
+            // Wildcard always matches
+            (_, TirPattern::Wildcard) => {
+                func.instruction(&Instruction::Drop);
+                func.instruction(&Instruction::I32Const(1));
+                true
+            }
+
+            // Binding always matches
+            (_, TirPattern::Binding { .. }) => {
+                func.instruction(&Instruction::Drop);
+                func.instruction(&Instruction::I32Const(1));
+                true
+            }
+
+            // Literal patterns
+            (_, TirPattern::Literal(lit)) => {
+                match lit {
+                    TirLiteralPattern::Int(value) => {
+                        func.instruction(&Instruction::I64Const(*value as i64));
+                        func.instruction(&Instruction::I64Eq);
+                    }
+                    TirLiteralPattern::Bool(value) => {
+                        func.instruction(&Instruction::I32Const(i32::from(*value)));
+                        func.instruction(&Instruction::I32Eq);
+                    }
+                    TirLiteralPattern::Char(value) => {
+                        func.instruction(&Instruction::I32Const(*value as i32));
+                        func.instruction(&Instruction::I32Eq);
+                    }
+                    TirLiteralPattern::Null => {
+                        func.instruction(&Instruction::RefIsNull);
+                    }
+                    TirLiteralPattern::String(_value) => {
+                        // String comparison requires calling string equality function
+                        // For now, just return false (unsupported)
+                        func.instruction(&Instruction::Drop);
+                        func.instruction(&Instruction::I32Const(0));
+                    }
+                }
+                true
+            }
+
+            // Option<T> with Some pattern - check for non-null
+            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
+                if variant_name == "Some" =>
+            {
+                func.instruction(&Instruction::RefIsNull);
+                func.instruction(&Instruction::I32Eqz); // NOT null = Some
+                true
+            }
+
+            // Option<T> with None pattern - check for null
+            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
+                if variant_name == "None" =>
+            {
+                func.instruction(&Instruction::RefIsNull); // null = None
+                true
+            }
+
+            // Custom variant patterns
+            (
+                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    ..
+                },
+            ) => {
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(name).unwrap_or_else(|| {
+                    panic!("Variant type not registered: {name}");
+                });
+
+                let (case_index, case_info) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, info)| info.name == *case_name)
+                    .map(|(i, info)| (i, info.clone()))
+                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
+                let case_type_idx = case_info.type_idx;
+                let base_type_idx = variant_info.base_type_idx;
+                let is_unit_variant = case_info.payload_type.is_none();
+                drop(variant_types);
+
+                if is_unit_variant {
+                    // Read discriminator and compare with case index
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    func.instruction(&Instruction::I32Const(case_index as i32));
+                    func.instruction(&Instruction::I32Eq);
+                } else {
+                    // Use ref.test to check if the value is of the expected case type
+                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                }
+                true
+            }
+
+            _ => {
+                // Unsupported pattern
+                false
+            }
+        }
+    }
+
+    /// Generate code to bind pattern variables after a successful match
+    #[allow(clippy::too_many_arguments)]
+    fn generate_match_pattern_binding(
+        &self,
+        func: &mut Function,
+        scrutinee_local: u32,
+        scrutinee_type_id: TypeId,
+        pattern: &TirPattern,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        let scrutinee_type = type_table.get(scrutinee_type_id).clone();
+
+        match (scrutinee_type, pattern) {
+            // Wildcard - no binding needed
+            (_, TirPattern::Wildcard) => {}
+
+            // Simple binding - bind scrutinee value
+            (_, TirPattern::Binding { local_index, .. }) => {
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::LocalSet(*local_index));
+            }
+
+            // Literal - no binding needed
+            (_, TirPattern::Literal(_)) => {}
+
+            // Option<T> with Some(x) pattern - extract inner value
+            (
+                ResolvedType::Option(inner_type),
+                TirPattern::Variant {
+                    variant_name,
+                    bindings,
+                    payload_type,
+                    ..
+                },
+            ) if variant_name == "Some" => {
+                if let Some(binding) = bindings.first() {
+                    // Get the inner value (non-null reference)
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefAsNonNull);
+
+                    // Unbox primitive if needed
+                    if let TirPattern::Binding { local_index, .. } = binding {
+                        let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                        if !is_address_taken
+                            && let ResolvedType::Primitive(prim) = type_table.get(inner_type)
+                        {
+                            let val_type = primitive_to_valtype(prim);
+                            if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                                func.instruction(&Instruction::StructGet {
+                                    struct_type_index: box_type_idx,
+                                    field_index: 0,
+                                });
+                            }
+                        }
+                    }
+
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
+            }
+
+            // Option<T> with None pattern - no binding needed
+            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
+                if variant_name == "None" => {}
+
+            // Custom variant patterns
+            (
+                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    bindings,
+                    payload_type,
+                    ..
+                },
+            ) => {
+                if let Some(binding) = bindings.first() {
+                    let variant_types = self.variant_types.borrow();
+                    let variant_info = variant_types.get(&name).unwrap();
+                    let case_info = variant_info
+                        .cases
+                        .iter()
+                        .find(|info| info.name == *case_name)
+                        .unwrap()
+                        .clone();
+                    let case_type_idx = case_info.type_idx;
+                    drop(variant_types);
+
+                    // Get payload (field 1)
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: case_type_idx,
+                        field_index: 1,
+                    });
+
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
+            }
+
+            // Tuple pattern
+            (ResolvedType::Tuple(elem_types), TirPattern::Tuple(patterns)) => {
+                let tuple_type_idx = self
+                    .get_tuple_type_idx(&elem_types)
+                    .expect("Tuple type not registered");
+                for (i, (pat, &elem_type)) in patterns.iter().zip(elem_types.iter()).enumerate() {
+                    if matches!(pat, TirPattern::Wildcard) {
+                        continue;
+                    }
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: tuple_type_idx,
+                        field_index: i as u32,
+                    });
+                    self.generate_let_pattern_binding(
+                        func, pat, elem_type, type_table, ctx, builder,
+                    );
+                }
+            }
+
+            _ => {
+                // Unsupported pattern - do nothing
             }
         }
     }
@@ -11595,8 +12037,65 @@ impl Codegen {
             TirExprKind::Closure { body, .. } => {
                 self.preallocate_if_pattern_locals_from_expr(body, type_table, ctx);
             }
+            TirExprKind::Match { expr, arms } => {
+                self.preallocate_if_pattern_locals_from_expr(expr, type_table, ctx);
+                // Pre-allocate scrutinee local
+                let scrutinee_valtype = self.type_id_to_valtype(type_table, expr.type_id);
+                let type_key = format!("match_{:?}", expr.type_id);
+                let counter = ctx.let_pattern_counter;
+                ctx.let_pattern_counter += 1;
+                let local_name = format!("__match_scrutinee_{type_key}_{counter}");
+                ctx.alloc_local(&local_name, scrutinee_valtype);
+                for arm in arms {
+                    // Pre-allocate locals for pattern bindings
+                    self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
+                    self.preallocate_if_pattern_locals_from_expr(&arm.body, type_table, ctx);
+                }
+            }
             _ => {
                 // Other expressions don't contain blocks
+            }
+        }
+    }
+
+    /// Pre-allocate locals for match pattern bindings using resolver's `local_index`
+    fn preallocate_match_pattern_locals(
+        &self,
+        pattern: &TirPattern,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        match pattern {
+            TirPattern::Binding {
+                name,
+                local_index,
+                type_id,
+            } => {
+                // Pre-allocate the local with the same index as resolver
+                let val_type = self.type_id_to_valtype(type_table, *type_id);
+                let pattern_local_name = format!("__match_bind_{name}");
+                // Ensure we allocate at the correct index
+                while ctx.next_local < *local_index {
+                    // Fill gap with dummy locals if needed
+                    ctx.alloc_local("__gap", ValType::I32);
+                }
+                if ctx.next_local == *local_index {
+                    ctx.alloc_local(&pattern_local_name, val_type);
+                }
+                // If next_local > local_index, the local was already allocated
+            }
+            TirPattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.preallocate_match_pattern_locals(p, type_table, ctx);
+                }
+            }
+            TirPattern::Variant { bindings, .. } => {
+                for binding in bindings {
+                    self.preallocate_match_pattern_locals(binding, type_table, ctx);
+                }
+            }
+            TirPattern::Wildcard | TirPattern::Literal(_) => {
+                // No locals needed
             }
         }
     }
@@ -11842,6 +12341,20 @@ impl Codegen {
             }
             TirExprKind::Unary { expr: inner, .. } => {
                 self.preallocate_let_pattern_locals_from_expr(inner, type_table, ctx);
+            }
+            TirExprKind::Match { expr, arms } => {
+                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
+                // Pre-allocate scrutinee local
+                let scrutinee_valtype = self.type_id_to_valtype(type_table, expr.type_id);
+                let type_key = format!("match_{:?}", expr.type_id);
+                let counter = ctx.let_pattern_counter;
+                ctx.let_pattern_counter += 1;
+                let local_name = format!("__match_scrutinee_{type_key}_{counter}");
+                ctx.alloc_local(&local_name, scrutinee_valtype);
+                for arm in arms {
+                    self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
+                    self.preallocate_let_pattern_locals_from_expr(&arm.body, type_table, ctx);
+                }
             }
             _ => {
                 // Other expressions don't contain nested blocks or let patterns

@@ -594,6 +594,40 @@ outer: {
     }
     // b is not visible here
 }
+
+// Match expression
+let opt: Option<i32> = Option::<i32>::Some(42);
+let result = match opt {
+    Some(x) => x * 2,
+    None => 0,
+};
+
+// Match with custom variants
+variant Shape {
+    Circle(f64),
+    Point,
+}
+let shape = Shape::Circle(5.0);
+let area = match shape {
+    Circle(r) => 3.14159 * r * r,
+    Point => 0.0,
+};
+
+// Match with wildcard (catch-all)
+let name = match color {
+    Red => "red",
+    Green => "green",
+    _ => "other",
+};
+
+// Match with block bodies
+let description = match value {
+    Some(n) => {
+        let doubled = n * 2;
+        return `value is {doubled}`;
+    },
+    None => "no value",
+};
 ```
 
 ## Operators
@@ -1034,7 +1068,6 @@ Wado intentionally does not support macros.
 
 ## Not Yet Implemented
 
-- `match` statements/expressions
 - `enum` pattern matching
 - `flags` (parsed but no codegen)
 - `resource` (Wasm CM resource handles)

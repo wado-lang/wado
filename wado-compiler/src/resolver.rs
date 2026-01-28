@@ -7762,11 +7762,13 @@ impl<'a> Resolver<'a> {
         match_expr: &ast::MatchExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let expr = self.resolve_expr(&match_expr.expr, ctx);
+        let scrutinee = self.resolve_expr(&match_expr.expr, ctx);
+        let scrutinee_type = scrutinee.type_id;
+
         let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
-            .map(|arm| self.resolve_match_arm(arm, ctx))
+            .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx))
             .collect();
 
         // Match expression type is the type of the first arm body
@@ -7777,7 +7779,7 @@ impl<'a> Resolver<'a> {
 
         TirExpr::new(
             TirExprKind::Match {
-                expr: Box::new(expr),
+                expr: Box::new(scrutinee),
                 arms,
             },
             type_id,
@@ -7785,74 +7787,28 @@ impl<'a> Resolver<'a> {
         )
     }
 
-    /// Resolve a match arm
-    fn resolve_match_arm(&mut self, arm: &MatchArm, ctx: &mut FunctionContext) -> TirMatchArm {
-        let pattern = self.resolve_pattern(&arm.pattern, ctx);
+    /// Resolve a match arm with scrutinee type information
+    fn resolve_match_arm(
+        &mut self,
+        arm: &MatchArm,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirMatchArm {
+        // Enter scope for pattern bindings (they're only visible in the arm body)
+        ctx.enter_scope();
+
+        // Resolve pattern with scrutinee type information (same as if let)
+        let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx);
+
+        // Resolve arm body
         let body = self.resolve_expr(&arm.body, ctx);
+
+        ctx.exit_scope();
 
         TirMatchArm {
             pattern,
             body,
             span: arm.span,
-        }
-    }
-
-    /// Resolve a pattern
-    fn resolve_pattern(&mut self, pattern: &Pattern, ctx: &mut FunctionContext) -> TirPattern {
-        match pattern {
-            Pattern::Wildcard => TirPattern::Wildcard,
-            Pattern::Ident(name) => {
-                // Create a local for the binding
-                let index = ctx.add_local(name.clone(), TypeTable::UNKNOWN, false);
-                TirPattern::Binding {
-                    name: name.clone(),
-                    local_index: index,
-                    type_id: TypeTable::UNKNOWN,
-                }
-            }
-            Pattern::Literal(lit) => {
-                let tir_lit = match lit {
-                    Literal::Int(i) => {
-                        // Parse the integer literal
-                        match Self::parse_int_literal(&i.repr) {
-                            Ok(value) => TirLiteralPattern::Int(value),
-                            Err(_) => {
-                                // Error was already reported during literal resolution
-                                TirLiteralPattern::Int(0)
-                            }
-                        }
-                    }
-                    Literal::Bool(b) => TirLiteralPattern::Bool(*b),
-                    Literal::Char(c) => TirLiteralPattern::Char(*c),
-                    Literal::String(s) => TirLiteralPattern::String(s.clone()),
-                    Literal::Null => TirLiteralPattern::Null,
-                    _ => TirLiteralPattern::Null,
-                };
-                TirPattern::Literal(tir_lit)
-            }
-            Pattern::Tuple(patterns) => {
-                let resolved: Vec<TirPattern> = patterns
-                    .iter()
-                    .map(|p| self.resolve_pattern(p, ctx))
-                    .collect();
-                TirPattern::Tuple(resolved)
-            }
-            Pattern::Variant {
-                variant_name,
-                bindings,
-                ..
-            } => {
-                let resolved_bindings: Vec<TirPattern> = bindings
-                    .iter()
-                    .map(|p| self.resolve_pattern(p, ctx))
-                    .collect();
-                TirPattern::Variant {
-                    enum_type: TypeTable::UNKNOWN, // Will be inferred during type checking
-                    variant_name: variant_name.clone(),
-                    bindings: resolved_bindings,
-                    payload_type: TypeTable::UNKNOWN, // Will be inferred during type checking
-                }
-            }
         }
     }
 
