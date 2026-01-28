@@ -72,9 +72,9 @@ match value {
     // Or patterns (multiple patterns, one arm)
     Circle(r) | Rectangle([r, _]) => ...,
 
-    // Guard expressions (uses `when` keyword, not `if`)
-    Some(x) when x > 0 => ...,
-    [a, b] when a == b => ...,
+    // Guard expressions (uses `&&` for natural left-to-right reading)
+    Some(x) && x > 0 => ...,
+    [a, b] && a == b => ...,
 }
 ```
 
@@ -172,11 +172,11 @@ let is_circle = shape matches { Circle(_) };
 // Multiple patterns with |
 let is_primary = color matches { Red | Blue };
 
-// With guard (uses `when`, not `if`)
-let is_positive = opt matches { Some(x) when x > 0 };
+// With guard (uses `&&` for natural left-to-right reading)
+let is_positive = opt matches { Some(x) && x > 0 };
 
 // In conditions
-if shape matches { Circle(r) when r > 5.0 } {
+if shape matches { Circle(r) && r > 5.0 } {
     println("large circle");
 }
 
@@ -192,21 +192,22 @@ if opt matches { Some(x) } && x > 0 {
 }
 ```
 
-Syntax: `<expr> matches { <pattern> [when <guard>] }`
+Syntax: `<expr> matches { <pattern> [&& <guard>] }`
 
 The `matches` operator:
 
 - Returns `bool`
 - Pattern bindings are scoped to the guard expression only (don't escape)
-- Uses `when` for guards to avoid confusion with `if` expressions
+- Uses `&&` for guards to reflect natural left-to-right evaluation order
 
-#### Why `when` Instead of `if`
+#### Why `&&` Instead of `if` or `when`
 
-Guards use `when` keyword instead of `if` to:
+Guards use `&&` operator instead of `if` or `when` keywords:
 
-- Avoid confusion with `if` expressions and statements
-- Follow OCaml/F# precedent where `when` is the standard guard keyword
-- Make the guard syntactically distinct from conditional expressions
+- **Natural evaluation order**: `Some(x) && x > 0` reads as "Some(x) AND x > 0" - left to right matches actual evaluation
+- **Avoids misleading syntax**: `if`/`when` suggest the condition is checked first, but pattern matching happens first
+- **Familiar operator**: `&&` is already well-understood as logical AND
+- **Consistent semantics**: Pattern match is like a boolean check, so `&&` with guard is natural
 
 #### Alternatives Considered
 
@@ -214,7 +215,7 @@ Guards use `when` keyword instead of `if` to:
 
 ```wado
 let is_some = matches opt { Some(_) };
-let is_positive = matches opt { Some(x) when x > 0 };
+let is_positive = matches opt { Some(x) && x > 0 };
 ```
 
 Pros:
@@ -241,7 +242,7 @@ Pros:
 
 Cons:
 
-- Guard syntax awkward: `opt is (Some(x) when x > 0)`
+- Guard syntax awkward: `opt is (Some(x) && x > 0)`
 - Precedence issues with `&&` and `||`
 - MoonBit allows bindings to escape into `&&`, which has unclear scoping
 
@@ -279,18 +280,20 @@ Cons:
 
 | Language    | Boolean Check Syntax            | Guard Syntax         | Bindings Escape? |
 | ----------- | ------------------------------- | -------------------- | ---------------- |
+| **Wado**    | `x matches { Pattern }`         | **`&&`**             | No               |
 | **MoonBit** | `x is Pattern`                  | `if cond` in match   | Yes, into `&&`   |
 | **Rust**    | `matches!(x, P if g)`           | `if` inside macro    | No               |
 | **Swift**   | `if case P = x` / `~=`          | comma-separated      | Yes, in scope    |
 | **Kotlin**  | `x is Type` + smart cast        | conditions in `when` | Yes, smart cast  |
 | **Scala**   | `cond(x) { case P => }`         | `if` after pattern   | No               |
-| **OCaml**   | match with bool return          | **`when`**           | No               |
-| **F#**      | match with bool return          | **`when`**           | No               |
+| **OCaml**   | match with bool return          | `when`               | No               |
+| **F#**      | match with bool return          | `when`               | No               |
 | **Haskell** | pattern guards `\| pat <- expr` | `\|` chains          | Yes, in chain    |
 
 Key insights:
 
-- **OCaml/F#** use `when` for guards (not `if`)
+- **Wado** uses `&&` for guards - reflects actual evaluation order (pattern first, then guard)
+- **OCaml/F#** use `when`, **Rust** uses `if` - both suggest wrong evaluation order
 - **MoonBit** `is` is concise but bindings escaping into `&&` has unclear scoping
 - **Rust** `matches!` requires macro; Wado provides this as language feature
 
@@ -311,9 +314,9 @@ match command {
     Pause => engine.pause(),
 }
 
-// === Pattern with guard (uses `when`) ===
+// === Pattern with guard (uses `&&`) ===
 let discount = match customer {
-    Premium(years) when years > 5 => 0.3,
+    Premium(years) && years > 5 => 0.3,
     Premium(_) => 0.2,
     Regular => 0.1,
     _ => 0.0,
@@ -341,7 +344,7 @@ match result {
 
 // === Matches Infix Operator ===
 let is_circle = shape matches { Circle(_) };
-let is_large = shape matches { Circle(r) when r > 10.0 };
+let is_large = shape matches { Circle(r) && r > 10.0 };
 
 if opt matches { Some(_) } {
     println("has value");
@@ -358,12 +361,12 @@ if shape matches { Circle(_) } && should_draw {
 ```ebnf
 match_expr ::= "match" expr "{" match_arm* "}"
 
-match_arm ::= pattern ("when" expr)? "=>" arm_body ","?
+match_arm ::= pattern ("&&" expr)? "=>" arm_body ","?
 
 arm_body ::= expr
            | block
 
-matches_expr ::= expr "matches" "{" pattern ("when" expr)? "}"
+matches_expr ::= expr "matches" "{" pattern ("&&" expr)? "}"
 
 pattern ::= "_"
           | ident
@@ -380,7 +383,7 @@ variant_pattern ::= ident ("(" pattern ")")?
 
 Note:
 
-- Guards use `when` keyword (not `if`) to distinguish from conditional expressions
+- Guards use `&&` operator for natural left-to-right evaluation order reading
 - Trailing comma after each arm is optional
 - Trailing semicolon inside block bodies follows Wado's common block rules (optional, doesn't change semantics)
 
@@ -403,7 +406,7 @@ match opt {
 // x NOT in scope here
 
 // In matches: bindings scoped to guard only, don't escape
-let is_positive = opt matches { Some(x) when x > 0 };
+let is_positive = opt matches { Some(x) && x > 0 };
 // x NOT in scope here (pattern variables are internal)
 
 // This does NOT work (unlike MoonBit):
@@ -449,7 +452,7 @@ match opt {
 - Rust-like syntax is familiar to many developers
 - Consistent with Wado's tuple `[T, U]` and variant syntax
 - Consistent with Wado's common block rules (trailing semicolons optional)
-- `when` for guards avoids confusion with `if` expressions
+- `&&` for guards reflects natural left-to-right evaluation order
 - `matches` infix operator reads naturally: `opt matches { Some(_) }`
 - Clear scoping: pattern bindings don't escape `matches` expression
 
@@ -458,14 +461,14 @@ match opt {
 - Exhaustiveness checking requires careful implementation
 - Or-patterns and guards add parser complexity
 - `matches` keyword adds to language surface
-- `when` differs from Rust's `if` (minor learning curve for Rust users)
+- `&&` for guards differs from Rust's `if` (minor learning curve for Rust users)
 
 ### Implementation Order
 
 1. Basic `match` expression with single patterns
 2. Exhaustiveness checking for variants
 3. Or-patterns (`|`)
-4. Guard expressions (`when`)
+4. Guard expressions (`&&`)
 5. `matches` infix operator
 6. Optimizations (jump tables for dense patterns)
 
@@ -482,17 +485,23 @@ let x = case opt {
 
 Rejected: `match` is more widely recognized and avoids confusion with `switch/case`.
 
-### `if` Keyword for Guards (Rust-style)
+### `if` or `when` Keywords for Guards
 
 ```wado
+// Rust-style
 match opt {
     Some(x) if x > 0 => "positive",
-    Some(_) => "non-positive",
-    None => "none",
+    ...
+}
+
+// OCaml/F#-style
+match opt {
+    Some(x) when x > 0 => "positive",
+    ...
 }
 ```
 
-Rejected: `when` avoids confusion with `if` expressions/statements. OCaml/F# precedent.
+Rejected: Both `if` and `when` suggest the condition is evaluated first, but pattern matching happens first. `&&` reflects the actual left-to-right evaluation order: pattern match AND guard condition.
 
 ### `else` Arm Instead of `_`
 
