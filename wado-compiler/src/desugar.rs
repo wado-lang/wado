@@ -73,6 +73,7 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
     Function {
         name: func.name.clone(),
         is_pub: func.is_pub,
+        is_export: func.is_export,
         type_params: func.type_params.clone(),
         attrs: func.attrs.clone(),
         params: func.params.clone(),

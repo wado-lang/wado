@@ -84,6 +84,20 @@ impl<'a> Transformer<'a> {
         let world = &self.resolve.worlds[world_id];
         let world_name = world.name.clone();
 
+        // Build canonical name like "wasi:http/proxy@0.3.0"
+        let canonical_name = if let Some(pkg_id) = world.package {
+            let pkg = &self.resolve.packages[pkg_id];
+            let namespace = &pkg.name.namespace;
+            let pkg_name = &pkg.name.name;
+            if let Some(version) = &pkg.name.version {
+                format!("{namespace}:{pkg_name}/{world_name}@{version}")
+            } else {
+                format!("{namespace}:{pkg_name}/{world_name}")
+            }
+        } else {
+            world_name.clone()
+        };
+
         let mut imports = Vec::new();
         let mut exports = Vec::new();
 
@@ -151,6 +165,7 @@ impl<'a> Transformer<'a> {
 
         Ok(WadoWorld {
             name: to_upper_camel_case(&world_name),
+            canonical_name,
             doc_comment: world.docs.contents.clone(),
             imports,
             exports,

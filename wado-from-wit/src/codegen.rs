@@ -215,15 +215,15 @@ impl WadoCodeGenerator {
             (None, false) => String::new(),
         };
 
-        let async_kw = if func.is_async { "async " } else { "" };
-        self.writeln(&format!(
-            "{}fn {}({}){};",
-            async_kw, func.name, params, return_type
-        ));
+        // Note: Wado doesn't have async keyword - async functions are handled at
+        // the Component Model level via the world export mechanism
+        self.writeln(&format!("fn {}({}){};", func.name, params, return_type));
     }
 
     fn write_world(&mut self, world: &WadoWorld) {
         self.write_doc_comment(world.doc_comment.as_ref());
+        // Write the canonical WIT world name as an attribute
+        self.writeln(&format!("#[wasi(\"{}\")]", world.canonical_name));
         self.writeln(&format!("pub world {} {{", world.name));
         self.indent += 1;
 
@@ -239,6 +239,7 @@ impl WadoCodeGenerator {
         }
 
         for export in &world.exports {
+            // World exports keep async keyword as it's part of the ABI specification
             let async_kw = if export.is_async { "async " } else { "" };
             let params = Self::format_params(&export.params);
             let return_type = export

@@ -75,6 +75,9 @@ pub const WASI_RANDOM: &str = include_str!("../lib/wasi/random.wado");
 /// Embedded source for wasi:sockets
 pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
 
+/// Embedded source for wasi:http
+pub const WASI_HTTP: &str = include_str!("../lib/wasi/http.wado");
+
 // ============================================================================
 // Module Resolution
 // ============================================================================
@@ -108,6 +111,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "wasi:clocks" => Some(WASI_CLOCKS),
         "wasi:random" => Some(WASI_RANDOM),
         "wasi:sockets" => Some(WASI_SOCKETS),
+        "wasi:http" => Some(WASI_HTTP),
 
         _ => None,
     }
