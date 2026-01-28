@@ -192,7 +192,7 @@ This project relies on the following Wasm features:
 - Wasm Stack Switching (not yet implemented in wasmtime)
 - Wasm Component Model
 - WASI 0.3.0 (P3)
-  - P3 (`0.3.0-rc-2025-09-16`) is supported by wasmtime v40 with `-W component-model-async=y`
+  - P3 is supported by wasmtime v40 with `-W component-model-async=y`
   - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
 ## General Rules
