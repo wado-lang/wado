@@ -179,18 +179,16 @@ fn get_pow10(p: i32) -> PmHiLo {
 
 // uscale computes unround(x * 2^e * 10^p) using the pow10 table
 fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
-    // Note: i64_mul_wide_u returns (low, high) but Go's bits.Mul64 returns (high, low)
-    let mul_result = builtin::i64_mul_wide_u(x, pm_hi);
-    let mut hi = mul_result.1;   // HIGH part (like Go's first return value)
-    let mid = mul_result.0;      // LOW part (like Go's second return value)
+    // Note: i64_mul_wide_u returns [low, high] but Go's bits.Mul64 returns (high, low)
+    let [mid, hi_tmp] = builtin::i64_mul_wide_u(x, pm_hi);
+    let mut hi = hi_tmp;
 
     let mut sticky = 1 as i64;
 
     let s_mod_64 = s & 63;
     let check_mask = (1 as i64 << s_mod_64) - 1 as i64;
     if (hi & check_mask) == 0 as i64 {
-        let mul_result2 = builtin::i64_mul_wide_u(x, pm_lo);
-        let mid2 = mul_result2.0;  // LOW part
+        let [mid2, _] = builtin::i64_mul_wide_u(x, pm_lo);
         sticky = bool2int((mid - mid2) > 1 as i64);
         hi = hi - bool2int(u64_lt(mid, mid2));
     }
@@ -292,8 +290,8 @@ fn skewed(e: i32) -> i32 {
 // Unsigned multiply (low 64 bits only, modular)
 fn u64_mul(a: i64, b: i64) -> i64 {
     // Use wide multiply and take the low part
-    let result = builtin::i64_mul_wide_u(a, b);
-    return result.0;  // Low 64 bits
+    let [lo, _] = builtin::i64_mul_wide_u(a, b);
+    return lo;  // Low 64 bits
 }
 
 fn trim_zeros(x: i64, p: i32) -> [i64, i32] {

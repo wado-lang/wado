@@ -1,0 +1,37 @@
+// Test for tuple elision optimization with multi-value Wasm builtins.
+// When destructuring multi-value builtin calls (i64_add128, i64_sub128,
+// i64_mul_wide_u, i64_mul_wide_s), the codegen should skip tuple struct
+// allocation and directly bind stack values to locals.
+
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    // Test i64_add128: (100, 200) + (50, 25) = (150, 225)
+    let [lo1, hi1] = builtin::i64_add128(100 as i64, 200 as i64, 50 as i64, 25 as i64);
+    println(`add128: lo={lo1}, hi={hi1}`);
+
+    // Test i64_sub128: (150, 225) - (50, 25) = (100, 200)
+    let [lo2, hi2] = builtin::i64_sub128(150 as i64, 225 as i64, 50 as i64, 25 as i64);
+    println(`sub128: lo={lo2}, hi={hi2}`);
+
+    // Test i64_mul_wide_u: 10 * 20 = 200 (all in low)
+    let [lo3, hi3] = builtin::i64_mul_wide_u(10 as i64, 20 as i64);
+    println(`mul_wide_u: lo={lo3}, hi={hi3}`);
+
+    // Test i64_mul_wide_s: (-10) * 20 = -200
+    // As 64-bit signed: -200 has all bits set in high part (sign extension)
+    let [lo4, hi4] = builtin::i64_mul_wide_s(0 as i64 - 10, 20 as i64);
+    println(`mul_wide_s: lo={lo4}, hi={hi4}`);
+
+    // Test with wildcard pattern (elide hi value)
+    let [lo5, _] = builtin::i64_mul_wide_u(100 as i64, 100 as i64);
+    println(`mul_wide_u lo only: {lo5}`);
+
+    // Test with wildcard pattern (elide lo value)
+    // 2^63 * 2 = 2^64, which is (0, 1) in [lo, hi] representation
+    let [_, hi6] = builtin::i64_mul_wide_u((1 as i64) << 63, 2 as i64);
+    println(`mul_wide_u hi only: {hi6}`);
+}
+
+__DATA__
+{"stdout": "add128: lo=150, hi=225\nsub128: lo=100, hi=200\nmul_wide_u: lo=200, hi=0\nmul_wide_s: lo=-200, hi=-1\nmul_wide_u lo only: 10000\nmul_wide_u hi only: 1\n"}
