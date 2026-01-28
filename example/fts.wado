@@ -7,7 +7,7 @@
 
 use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
-use {f64_to_string as ryu_f64_to_string} from "core:internal";
+use {f64_to_string as ryu_f64_to_string, char_to_string} from "core:internal";
 
 // ============================================================================
 // Constants
@@ -386,12 +386,12 @@ fn digits(d: i64) -> i32 {
 // String formatting helpers
 // ============================================================================
 
-fn i2a_first(n: i32) -> i32 {
-    return '0' as i32 + n / 10;
+fn i2a_first(n: i32) -> char {
+    return (('0' as i32) + n / 10) as char;
 }
 
-fn i2a_second(n: i32) -> i32 {
-    return '0' as i32 + n % 10;
+fn i2a_second(n: i32) -> char {
+    return (('0' as i32) + n % 10) as char;
 }
 
 // Format result to exponential string
@@ -413,34 +413,34 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
     }
 
     // First digit
-    append_char(&mut buf, digit_chars.get(0));
+    append_char(&mut buf, digit_chars.get(0) as char);
 
     // Decimal point and remaining digits
     if nd > 1 {
-        append_char(&mut buf, '.' as i32);
+        append_char(&mut buf, '.');
         for let mut i = 1; i < nd; i += 1 {
-            append_char(&mut buf, digit_chars.get(i));
+            append_char(&mut buf, digit_chars.get(i) as char);
         }
     }
 
     // Exponent
     let exp = p + nd - 1;
-    append_char(&mut buf, 'e' as i32);
+    append_char(&mut buf, 'e');
     if exp < 0 {
-        append_char(&mut buf, '-' as i32);
+        append_char(&mut buf, '-');
     } else {
-        append_char(&mut buf, '+' as i32);
+        append_char(&mut buf, '+');
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
-        append_char(&mut buf, '0' as i32);
-        append_char(&mut buf, '0' as i32 + abs_exp);
+        append_char(&mut buf, '0');
+        append_char(&mut buf, (('0' as i32) + abs_exp) as char);
     } else if abs_exp < 100 {
         append_char(&mut buf, i2a_first(abs_exp));
         append_char(&mut buf, i2a_second(abs_exp));
     } else {
-        append_char(&mut buf, '0' as i32 + abs_exp / 100);
+        append_char(&mut buf, (('0' as i32) + abs_exp / 100) as char);
         append_char(&mut buf, i2a_first(abs_exp % 100));
         append_char(&mut buf, i2a_second(abs_exp % 100));
     }
@@ -448,29 +448,7 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
     return buf;
 }
 
-// Convert ASCII char code to single-character string
-fn char_to_string(c: i32) -> String {
-    return match c {
-        48 => "0",   // '0'
-        49 => "1",   // '1'
-        50 => "2",   // '2'
-        51 => "3",   // '3'
-        52 => "4",   // '4'
-        53 => "5",   // '5'
-        54 => "6",   // '6'
-        55 => "7",   // '7'
-        56 => "8",   // '8'
-        57 => "9",   // '9'
-        46 => ".",   // '.'
-        101 => "e",  // 'e'
-        69 => "E",   // 'E'
-        43 => "+",   // '+'
-        45 => "-",   // '-'
-        _ => "?",
-    };
-}
-
-fn append_char(buf: &mut String, c: i32) {
+fn append_char(buf: &mut String, c: char) {
     buf.append(char_to_string(c));
 }
 
@@ -1815,7 +1793,7 @@ fn truncate_str(s: String, max_len: i32) -> String {
     }
     let mut result = String::with_capacity(max_len + 3);
     for let mut i = 0; i < max_len - 3; i += 1 {
-        result.append(char_to_string(s.get(i)));
+        result.append(char_to_string(s.get(i) as char));
     }
     result.append("...");
     return result;
@@ -1845,7 +1823,7 @@ fn i32_to_str(n: i32) -> String {
     if is_neg { result.append("-"); }
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(char_to_string('0' as i32 + digits.get(i)));
+        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
         i = i - 1;
     }
     return result;
@@ -1864,7 +1842,7 @@ fn u64_to_str(n: u64) -> String {
 
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(char_to_string('0' as i32 + digits.get(i)));
+        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
         i = i - 1;
     }
     return result;
