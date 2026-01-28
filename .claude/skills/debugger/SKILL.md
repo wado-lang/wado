@@ -1,6 +1,6 @@
 ---
 name: debugger
-description: Debug Rust programs using rust-gdb. Use when investigating compiler internals, setting breakpoints, or inspecting variables during execution.
+description: Use rust-gdb to inspect variables without modifying code. Prefer this over print debugging when investigating compiler internals or runtime behavior.
 ---
 
 # Debugger
