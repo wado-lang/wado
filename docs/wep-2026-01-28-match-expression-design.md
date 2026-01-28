@@ -22,6 +22,87 @@ Wado needs `match` expressions/statements for exhaustive pattern matching on var
 
 ## Decision
 
+### Part 0: Refutable and Irrefutable Patterns
+
+Following Rust's terminology, Wado distinguishes between two kinds of patterns:
+
+#### Irrefutable Patterns
+
+Patterns that **always match** any possible value of the given type. Used where a match failure would be a compile-time error.
+
+Examples:
+
+- `x` (variable binding) - matches anything
+- `_` (wildcard) - matches anything
+- `[a, b]` (tuple pattern where components are irrefutable)
+
+Contexts requiring irrefutable patterns:
+
+- `let` statements: `let x = expr;`
+- Function parameters: `fn foo(x: i32)`
+- `for-of` bindings: `for let item of array`
+
+```wado
+let x = 42;           // OK: x is irrefutable
+let [a, b] = tuple;   // OK: tuple pattern with irrefutable components
+let Some(x) = opt;    // ERROR: Some(x) is refutable (opt could be None)
+```
+
+#### Refutable Patterns
+
+Patterns that **may fail to match**. Used in contexts that handle match failure.
+
+Examples:
+
+- `Some(x)` (variant pattern) - may not match `None`
+- `42` (literal pattern) - may not match other integers
+- `"hello"` (string literal) - may not match other strings
+- `[a, b] && a > b` (pattern with guard)
+
+Contexts accepting refutable patterns:
+
+- `if let`: `if let Some(x) = opt { ... }`
+- `while let`: `while let Some(x) = iter.next() { ... }`
+- `for` condition: `for ; let Some(x) = iter.next(); { ... }`
+- `match` arms: `match opt { Some(x) => ..., None => ... }`
+- `matches` operator: `opt matches { Some(_) }`
+
+```wado
+if let Some(x) = opt { ... }     // OK: refutable pattern in if let
+while let Some(x) = iter.next() { ... }  // OK: refutable pattern in while let
+match opt {
+    Some(x) => x,                // OK: refutable pattern in match arm
+    None => 0,
+}
+```
+
+#### Pattern Contexts Summary
+
+| Context            | Accepts          | Match Failure Handling |
+| ------------------ | ---------------- | ---------------------- |
+| `let` statement    | Irrefutable only | Compile error          |
+| Function parameter | Irrefutable only | Compile error          |
+| `for-of` binding   | Irrefutable only | Compile error          |
+| `if let`           | Refutable        | Takes else branch      |
+| `while let`        | Refutable        | Exits loop             |
+| `for` condition    | Refutable        | Exits loop             |
+| `match` arm        | Refutable        | Tries next arm         |
+| `matches` operator | Refutable        | Returns `false`        |
+
+#### Note on Irrefutable Patterns in Refutable Contexts
+
+Irrefutable patterns are allowed in refutable contexts but may trigger warnings:
+
+```wado
+// Technically valid but likely a mistake - x always matches
+if let x = get_value() {
+    // This branch always executes
+}
+
+// Better: use regular let binding
+let x = get_value();
+```
+
 ### Part 1: Match Expression Syntax
 
 #### Basic Syntax

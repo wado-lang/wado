@@ -8,12 +8,12 @@ use crate::ast::{
     EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
     IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, IntLiteral,
-    Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MethodCallExpr, Module,
-    NamedType, NamespacedGenericType, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport,
-    WorldImport,
+    Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern, ResourceDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
+    WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -1358,6 +1358,34 @@ impl Parser {
             } else {
                 Ok(Pattern::Ident(name))
             }
+        } else if let TokenKind::IntLit(repr) = self.peek_kind().clone() {
+            // Literal pattern: 42
+            self.advance();
+            Ok(Pattern::Literal(Literal::Int(IntLiteral { repr })))
+        } else if let TokenKind::FloatLit(repr) = self.peek_kind().clone() {
+            // Literal pattern: 3.14
+            self.advance();
+            Ok(Pattern::Literal(Literal::Float(FloatLiteral { repr })))
+        } else if let TokenKind::StringLit(value) = self.peek_kind().clone() {
+            // Literal pattern: "hello"
+            self.advance();
+            Ok(Pattern::Literal(Literal::String(value)))
+        } else if let TokenKind::CharLit(value) = self.peek_kind().clone() {
+            // Literal pattern: 'a'
+            self.advance();
+            Ok(Pattern::Literal(Literal::Char(value)))
+        } else if self.check(&TokenKind::True) {
+            // Literal pattern: true
+            self.advance();
+            Ok(Pattern::Literal(Literal::Bool(true)))
+        } else if self.check(&TokenKind::False) {
+            // Literal pattern: false
+            self.advance();
+            Ok(Pattern::Literal(Literal::Bool(false)))
+        } else if self.check(&TokenKind::Null) {
+            // Literal pattern: null
+            self.advance();
+            Ok(Pattern::Literal(Literal::Null))
         } else {
             Err(ParseError {
                 message: format!("expected pattern, found {:?}", self.peek_kind()),
@@ -2168,6 +2196,7 @@ impl Parser {
                 })
             }
             TokenKind::If => self.parse_if_expr(),
+            TokenKind::Match => self.parse_match_expr(),
             TokenKind::Hash => {
                 self.advance(); // consume '#'
                 // Parse compile-time location literals: #file, #line, #function
@@ -2276,6 +2305,66 @@ impl Parser {
             else_block,
             span,
         })))
+    }
+
+    /// Parse match expression: `match expr { pattern => body, ... }`
+    fn parse_match_expr(&mut self) -> ParseResult<Expr> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::Match)?;
+
+        // Parse scrutinee expression
+        let scrutinee = self.parse_expr()?;
+
+        // Expect opening brace
+        self.expect(&TokenKind::LBrace)?;
+
+        // Parse match arms
+        let mut arms = Vec::new();
+        while !self.check(&TokenKind::RBrace) {
+            let arm = self.parse_match_arm()?;
+            arms.push(arm);
+
+            // Trailing comma is optional
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+        }
+
+        let end_span = self.expect(&TokenKind::RBrace)?.span;
+
+        Ok(Expr::Match(Box::new(MatchExpr {
+            expr: scrutinee,
+            arms,
+            span: start_span.merge(&end_span),
+        })))
+    }
+
+    /// Parse a single match arm: `pattern => body`
+    fn parse_match_arm(&mut self) -> ParseResult<MatchArm> {
+        let start_span = self.peek().span;
+
+        // Parse pattern
+        let pattern = self.parse_pattern()?;
+
+        // Expect =>
+        self.expect(&TokenKind::FatArrow)?;
+
+        // Parse arm body - either a block or an expression
+        let body = if self.check(&TokenKind::LBrace) {
+            // Block body: `{ ... }`
+            let block = self.parse_block()?;
+            Expr::Block(Box::new(block))
+        } else {
+            // Expression body: `expr`
+            self.parse_expr()?
+        };
+
+        let end_span = body.span();
+        Ok(MatchArm {
+            pattern,
+            body,
+            span: start_span.merge(&end_span),
+        })
     }
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`

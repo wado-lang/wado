@@ -1,0 +1,30 @@
+// Test basic match expression on custom variants (single payload only)
+
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+fn run() with Stdout {
+    let circle = Shape::Circle(5.0);
+    let point = Shape::Point;
+
+    // Match on Circle
+    let area1 = match circle {
+        Circle(r) => 3.14159 * r * r,
+        Point => 0.0,
+    };
+    println(`Circle area: {area1}`);
+
+    // Match on Point
+    let area2 = match point {
+        Circle(r) => 3.14159 * r * r,
+        Point => 0.0,
+    };
+    println(`Point area: {area2}`);
+}
+
+__DATA__
+{"stdout": "Circle area: 78.53975\nPoint area: 0.0\n"}

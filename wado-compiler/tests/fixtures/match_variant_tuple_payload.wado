@@ -1,0 +1,24 @@
+// Test match expression on variants with tuple payloads
+
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+fn run() with Stdout {
+    let rect = Shape::Rectangle([3.0, 4.0]);
+
+    // Match on Rectangle with tuple destructuring
+    let area = match rect {
+        Circle(r) => 3.14159 * r * r,
+        Rectangle([w, h]) => w * h,
+        Point => 0.0,
+    };
+    println(`Rectangle area: {area}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "Rectangle area: 12.0\n"}
