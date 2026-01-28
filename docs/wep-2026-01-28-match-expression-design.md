@@ -80,10 +80,10 @@ match value {
 
 #### Expression vs Statement
 
-**Proposal A: Unified Syntax (Rust-like)**
+Match uses **unified Rust-like syntax**. The trailing comma after each arm is optional (like trailing commas elsewhere in Wado). The trailing semicolon inside block bodies also doesn't change semantics, following Wado's common block rules.
 
 ```wado
-// Expression: no trailing semicolons inside, comma or nothing between arms
+// Expression: produces a value
 let x = match opt {
     Some(v) => v * 2,
     None => 0,
@@ -95,75 +95,25 @@ match opt {
     None => println("none"),
 }
 
-// Block bodies allowed
+// Block bodies - trailing semicolon optional, doesn't change semantics
 match opt {
     Some(v) => {
         let doubled = v * 2;
-        println(`{doubled}`);
+        println(`{doubled}`)   // no semicolon - OK
     },
     None => {
-        println("none");
+        println("none");       // with semicolon - also OK, same meaning
     },
 }
-```
 
-Pros:
-- Familiar to Rust users
-- One syntax to learn
-- Consistent with if expression
-
-Cons:
-- Block bodies need trailing comma which can be confusing
-- Statement match still looks like expression
-
-**Proposal B: Distinct Statement Form**
-
-```wado
-// Expression: uses =>
-let x = match opt {
-    Some(v) => v * 2,
-    None => 0,
+// Trailing commas are optional
+let y = match opt {
+    Some(v) => v * 2,          // comma
+    None => 0                   // no comma - OK
 };
-
-// Statement: uses -> and semicolons
-match opt {
-    Some(v) -> { println(`{v}`); };
-    None -> { println("none"); };
-}
 ```
 
-Pros:
-- Clear visual distinction
-- Statement form is more natural for side effects
-
-Cons:
-- Two syntaxes to learn
-- `->` conflicts with potential future arrow type syntax
-
-**Proposal C: Semicolon Determines Form (Recommended)**
-
-```wado
-// Expression: arms end with comma (or nothing)
-let x = match opt {
-    Some(v) => v * 2,
-    None => 0,
-};
-
-// Statement: arms end with semicolon
-match command {
-    Start => { engine.start(); };
-    Stop => { engine.stop(); };
-}
-```
-
-Pros:
-- Natural extension of Wado's existing semicolon rules
-- Clear when you want value vs side effect
-- Single `=>` syntax
-- Follows "trailing semicolon is optional" pattern like other blocks
-
-Cons:
-- Subtle difference (comma vs semicolon)
+This is consistent with `if` expressions and other block constructs in Wado.
 
 #### Exhaustiveness
 
@@ -336,17 +286,6 @@ Cons:
 
 ### Part 3: Comparison Summary
 
-#### Match Expression/Statement
-
-| Aspect | Proposal A (Rust-like) | Proposal B (Distinct) | Proposal C (Semicolon) |
-|--------|------------------------|----------------------|------------------------|
-| Learning curve | Low for Rust users | Medium | Low |
-| Visual clarity | Medium | High | Medium-High |
-| Consistency | High | Low | High |
-| Implementation | Simple | Complex | Simple |
-
-**Recommendation: Proposal C** - Semicolon determines form. Natural extension of Wado's design.
-
 #### Matches Functionality
 
 | Aspect | Proposal A (matches) | Proposal B (is) | Proposal C (let) | Proposal D (match) |
@@ -357,9 +296,7 @@ Cons:
 | New keyword | Yes | Yes | No | No |
 | Precedence | Clear | Complex | Clear | Clear |
 
-**Recommendation: Proposal A** (`matches` keyword) - Best balance of clarity and functionality.
-
-### Part 4: Combined Design (Recommended)
+### Part 4: Examples
 
 ```wado
 // === Match Expression ===
@@ -371,22 +308,12 @@ let result = match shape {
 
 // === Match Statement ===
 match command {
-    Start => { engine.start(); };
-    Stop => { engine.stop(); };
-    Pause => { engine.pause(); };
+    Start => engine.start(),
+    Stop => engine.stop(),
+    Pause => engine.pause(),
 }
 
-// === Matches Expression ===
-let is_circle = matches shape { Circle(_) };
-let is_large = matches shape { Circle(r) if r > 10.0 };
-
-if matches opt { Some(_) } {
-    println("has value");
-}
-
-// === Combined Examples ===
-
-// Pattern with guard
+// === Pattern with guard ===
 let discount = match customer {
     Premium(years) if years > 5 => 0.3,
     Premium(_) => 0.2,
@@ -394,19 +321,33 @@ let discount = match customer {
     _ => 0.0,
 };
 
-// Or patterns
+// === Or patterns ===
 match key {
-    "quit" | "exit" | "q" => { should_exit = true; };
-    "help" | "h" | "?" => { show_help(); };
-    _ => { println("unknown command"); };
+    "quit" | "exit" | "q" => {
+        should_exit = true;
+    },
+    "help" | "h" | "?" => {
+        show_help();
+    },
+    _ => {
+        println("unknown command");
+    },
 }
 
-// Nested patterns
+// === Nested patterns ===
 match result {
     Ok([first, _]) => println(`first: {first}`),
     Ok([]) => println("empty"),
     Err(msg) => println(`error: {msg}`),
 }
+
+// === Matches Expression (TBD - see Part 2 proposals) ===
+// Proposal A: matches keyword
+let is_circle = matches shape { Circle(_) };
+let is_large = matches shape { Circle(r) if r > 10.0 };
+
+// Proposal B: is operator
+let is_circle = shape is Circle(_);
 ```
 
 ### Part 5: Grammar
@@ -414,10 +355,10 @@ match result {
 ```ebnf
 match_expr ::= "match" expr "{" match_arm* "}"
 
-match_arm ::= pattern ("if" expr)? "=>" arm_body
+match_arm ::= pattern ("if" expr)? "=>" arm_body ","?
 
-arm_body ::= expr ","?        (* expression arm *)
-           | block ";"?       (* statement arm *)
+arm_body ::= expr
+           | block
 
 matches_expr ::= "matches" expr "{" pattern ("if" expr)? "}"
 
@@ -433,6 +374,8 @@ tuple_pattern ::= "[" pattern ("," pattern)* ","? "]"
 variant_pattern ::= ident ("(" pattern ")")?
                   | path "::" ident ("(" pattern ")")?
 ```
+
+Note: Trailing comma after each arm is optional. Trailing semicolon inside block bodies follows Wado's common block rules (optional, doesn't change semantics).
 
 ### Part 6: Semantic Rules
 
@@ -474,8 +417,8 @@ let x = match opt {
 
 // Statement form: no type unification needed
 match opt {
-    Some(v) => { println(`{v}`); };
-    None => { return; };  // Different "return types" OK
+    Some(v) => { println(`{v}`) },
+    None => { return },  // Different "return types" OK
 }
 ```
 
@@ -484,15 +427,15 @@ match opt {
 ### Positive
 
 - Exhaustive matching catches missing cases at compile time
-- `matches` provides concise boolean pattern checks
+- Rust-like syntax is familiar to many developers
 - Consistent with Wado's tuple `[T, U]` and variant syntax
-- Clear distinction between expression and statement forms
+- Consistent with Wado's common block rules (trailing semicolons optional)
 
 ### Negative
 
-- New `matches` keyword adds to language surface
 - Exhaustiveness checking requires careful implementation
 - Or-patterns and guards add parser complexity
+- `matches` keyword (if adopted) adds to language surface
 
 ### Implementation Order
 
