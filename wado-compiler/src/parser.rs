@@ -1386,6 +1386,28 @@ impl Parser {
             // Literal pattern: null
             self.advance();
             Ok(Pattern::Literal(Literal::Null))
+        } else if self.check(&TokenKind::Minus) {
+            // Negative literal pattern: -42 or -3.14
+            self.advance();
+            if let TokenKind::IntLit(repr) = self.peek_kind().clone() {
+                self.advance();
+                Ok(Pattern::Literal(Literal::Int(IntLiteral {
+                    repr: format!("-{repr}"),
+                })))
+            } else if let TokenKind::FloatLit(repr) = self.peek_kind().clone() {
+                self.advance();
+                Ok(Pattern::Literal(Literal::Float(FloatLiteral {
+                    repr: format!("-{repr}"),
+                })))
+            } else {
+                Err(ParseError {
+                    message: format!(
+                        "expected integer or float literal after '-', found {:?}",
+                        self.peek_kind()
+                    ),
+                    span: self.peek().span,
+                })
+            }
         } else {
             Err(ParseError {
                 message: format!("expected pattern, found {:?}", self.peek_kind()),

@@ -3177,6 +3177,15 @@ impl<'a> Resolver<'a> {
         // Remove underscores for parsing
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
 
+        // Handle negative numbers by parsing as i64 and reinterpreting bits
+        if clean.starts_with('-') {
+            let value: i64 = clean
+                .parse()
+                .map_err(|_| format!("invalid integer literal: {repr}"))?;
+            // Reinterpret i64 bits as u64 for storage
+            return Ok(value as u64);
+        }
+
         if clean.starts_with("0x") || clean.starts_with("0X") {
             u64::from_str_radix(&clean[2..], 16).map_err(|_| format!("invalid hex literal: {repr}"))
         } else if clean.starts_with("0b") || clean.starts_with("0B") {
