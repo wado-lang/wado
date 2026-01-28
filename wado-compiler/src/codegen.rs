@@ -9596,9 +9596,41 @@ impl Codegen {
             // Literal patterns
             (_, TirPattern::Literal(lit)) => {
                 match lit {
-                    TirLiteralPattern::Int(value) => {
-                        func.instruction(&Instruction::I64Const(*value as i64));
-                        func.instruction(&Instruction::I64Eq);
+                    TirLiteralPattern::I128(value) => {
+                        // Generate comparison based on scrutinee type
+                        match scrutinee_type {
+                            ResolvedType::Primitive(PrimitiveType::I64) => {
+                                func.instruction(&Instruction::I64Const(*value as i64));
+                                func.instruction(&Instruction::I64Eq);
+                            }
+                            ResolvedType::Primitive(PrimitiveType::I128) => {
+                                // i128 patterns should be lowered to Eq comparisons
+                                panic!("i128 literal patterns should be lowered before codegen");
+                            }
+                            // I8, I16, I32 all use i32 at runtime
+                            _ => {
+                                func.instruction(&Instruction::I32Const(*value as i32));
+                                func.instruction(&Instruction::I32Eq);
+                            }
+                        }
+                    }
+                    TirLiteralPattern::U128(value) => {
+                        // Generate comparison based on scrutinee type
+                        match scrutinee_type {
+                            ResolvedType::Primitive(PrimitiveType::U64) => {
+                                func.instruction(&Instruction::I64Const(*value as i64));
+                                func.instruction(&Instruction::I64Eq);
+                            }
+                            ResolvedType::Primitive(PrimitiveType::U128) => {
+                                // u128 patterns should be lowered to Eq comparisons
+                                panic!("u128 literal patterns should be lowered before codegen");
+                            }
+                            // U8, U16, U32 all use i32 at runtime
+                            _ => {
+                                func.instruction(&Instruction::I32Const(*value as i32));
+                                func.instruction(&Instruction::I32Eq);
+                            }
+                        }
                     }
                     TirLiteralPattern::Bool(value) => {
                         func.instruction(&Instruction::I32Const(i32::from(*value)));

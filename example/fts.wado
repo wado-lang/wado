@@ -7,7 +7,7 @@
 
 use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
-use {f64_to_string as ryu_f64_to_string} from "core:internal";
+use {f64_to_string as ryu_f64_to_string, char_to_string} from "core:internal";
 
 // ============================================================================
 // Constants
@@ -17,26 +17,28 @@ fn POW10_MIN() -> i32 { return -348; }
 
 // Powers of 10 from 10^0 to 10^19
 fn pow10(n: i32) -> i64 {
-    if n == 0 { return 1 as i64; }
-    if n == 1 { return 10 as i64; }
-    if n == 2 { return 100 as i64; }
-    if n == 3 { return 1000 as i64; }
-    if n == 4 { return 10000 as i64; }
-    if n == 5 { return 100000 as i64; }
-    if n == 6 { return 1000000 as i64; }
-    if n == 7 { return 10000000 as i64; }
-    if n == 8 { return 100000000 as i64; }
-    if n == 9 { return 1000000000 as i64; }
-    if n == 10 { return 10000000000 as i64; }
-    if n == 11 { return 100000000000 as i64; }
-    if n == 12 { return 1000000000000 as i64; }
-    if n == 13 { return 10000000000000 as i64; }
-    if n == 14 { return 100000000000000 as i64; }
-    if n == 15 { return 1000000000000000 as i64; }
-    if n == 16 { return 10000000000000000 as i64; }
-    if n == 17 { return 100000000000000000 as i64; }
-    if n == 18 { return 1000000000000000000 as i64; }
-    return 0x8AC7230489E80000 as i64; // 10^19
+    return match n {
+        0 => 1 as i64,
+        1 => 10 as i64,
+        2 => 100 as i64,
+        3 => 1000 as i64,
+        4 => 10000 as i64,
+        5 => 100000 as i64,
+        6 => 1000000 as i64,
+        7 => 10000000 as i64,
+        8 => 100000000 as i64,
+        9 => 1000000000 as i64,
+        10 => 10000000000 as i64,
+        11 => 100000000000 as i64,
+        12 => 1000000000000 as i64,
+        13 => 10000000000000 as i64,
+        14 => 100000000000000 as i64,
+        15 => 1000000000000000 as i64,
+        16 => 10000000000000000 as i64,
+        17 => 100000000000000000 as i64,
+        18 => 1000000000000000000 as i64,
+        _ => 0x8AC7230489E80000 as i64, // 10^19
+    };
 }
 
 // ============================================================================
@@ -384,12 +386,12 @@ fn digits(d: i64) -> i32 {
 // String formatting helpers
 // ============================================================================
 
-fn i2a_first(n: i32) -> i32 {
-    return '0' as i32 + n / 10;
+fn i2a_first(n: i32) -> char {
+    return (('0' as i32) + n / 10) as char;
 }
 
-fn i2a_second(n: i32) -> i32 {
-    return '0' as i32 + n % 10;
+fn i2a_second(n: i32) -> char {
+    return (('0' as i32) + n % 10) as char;
 }
 
 // Format result to exponential string
@@ -411,34 +413,34 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
     }
 
     // First digit
-    append_char(&mut buf, digit_chars.get(0));
+    append_char(&mut buf, digit_chars.get(0) as char);
 
     // Decimal point and remaining digits
     if nd > 1 {
-        append_char(&mut buf, '.' as i32);
+        append_char(&mut buf, '.');
         for let mut i = 1; i < nd; i += 1 {
-            append_char(&mut buf, digit_chars.get(i));
+            append_char(&mut buf, digit_chars.get(i) as char);
         }
     }
 
     // Exponent
     let exp = p + nd - 1;
-    append_char(&mut buf, 'e' as i32);
+    append_char(&mut buf, 'e');
     if exp < 0 {
-        append_char(&mut buf, '-' as i32);
+        append_char(&mut buf, '-');
     } else {
-        append_char(&mut buf, '+' as i32);
+        append_char(&mut buf, '+');
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
-        append_char(&mut buf, '0' as i32);
-        append_char(&mut buf, '0' as i32 + abs_exp);
+        append_char(&mut buf, '0');
+        append_char(&mut buf, (('0' as i32) + abs_exp) as char);
     } else if abs_exp < 100 {
         append_char(&mut buf, i2a_first(abs_exp));
         append_char(&mut buf, i2a_second(abs_exp));
     } else {
-        append_char(&mut buf, '0' as i32 + abs_exp / 100);
+        append_char(&mut buf, (('0' as i32) + abs_exp / 100) as char);
         append_char(&mut buf, i2a_first(abs_exp % 100));
         append_char(&mut buf, i2a_second(abs_exp % 100));
     }
@@ -446,27 +448,7 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
     return buf;
 }
 
-// Convert ASCII char code to single-character string
-fn char_to_string(c: i32) -> String {
-    if c == '0' as i32 { return "0"; }
-    if c == '1' as i32 { return "1"; }
-    if c == '2' as i32 { return "2"; }
-    if c == '3' as i32 { return "3"; }
-    if c == '4' as i32 { return "4"; }
-    if c == '5' as i32 { return "5"; }
-    if c == '6' as i32 { return "6"; }
-    if c == '7' as i32 { return "7"; }
-    if c == '8' as i32 { return "8"; }
-    if c == '9' as i32 { return "9"; }
-    if c == '.' as i32 { return "."; }
-    if c == 'e' as i32 { return "e"; }
-    if c == 'E' as i32 { return "E"; }
-    if c == '+' as i32 { return "+"; }
-    if c == '-' as i32 { return "-"; }
-    return "?";
-}
-
-fn append_char(buf: &mut String, c: i32) {
+fn append_char(buf: &mut String, c: char) {
     buf.append(char_to_string(c));
 }
 
@@ -1811,7 +1793,7 @@ fn truncate_str(s: String, max_len: i32) -> String {
     }
     let mut result = String::with_capacity(max_len + 3);
     for let mut i = 0; i < max_len - 3; i += 1 {
-        result.append(char_to_string(s.get(i)));
+        result.append(char_to_string(s.get(i) as char));
     }
     result.append("...");
     return result;
@@ -1841,7 +1823,7 @@ fn i32_to_str(n: i32) -> String {
     if is_neg { result.append("-"); }
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(char_to_string('0' as i32 + digits.get(i)));
+        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
         i = i - 1;
     }
     return result;
@@ -1860,7 +1842,7 @@ fn u64_to_str(n: u64) -> String {
 
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(char_to_string('0' as i32 + digits.get(i)));
+        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
         i = i - 1;
     }
     return result;

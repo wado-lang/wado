@@ -1175,7 +1175,10 @@ pub enum TirPattern {
 
 #[derive(Debug, Clone)]
 pub enum TirLiteralPattern {
-    Int(u64),
+    /// Signed integer literal (covers i8, i16, i32, i64, i128)
+    I128(i128),
+    /// Unsigned integer literal (covers u8, u16, u32, u64, u128)
+    U128(u128),
     Bool(bool),
     Char(char),
     String(String),
