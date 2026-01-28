@@ -72,9 +72,9 @@ match value {
     // Or patterns (multiple patterns, one arm)
     Circle(r) | Rectangle([r, _]) => ...,
 
-    // Guard expressions
-    Some(x) if x > 0 => ...,
-    [a, b] if a == b => ...,
+    // Guard expressions (uses `when` keyword, not `if`)
+    Some(x) when x > 0 => ...,
+    [a, b] when a == b => ...,
 }
 ```
 
@@ -158,143 +158,130 @@ match num {
 }
 ```
 
-### Part 2: `matches` Functionality
+### Part 2: `matches` Infix Operator
 
-Since Wado has no macros, `matches!` must be a language feature. Three proposals:
+Since Wado has no macros, `matches!` must be a language feature. After evaluating alternatives, we adopt the **`matches` infix operator**.
 
-#### Proposal A: `matches` Keyword (Recommended)
+#### Syntax
 
 ```wado
 // Basic usage - returns bool
-let is_some = matches opt { Some(_) };
-let is_circle = matches shape { Circle(_) };
+let is_some = opt matches { Some(_) };
+let is_circle = shape matches { Circle(_) };
 
 // Multiple patterns with |
-let is_primary = matches color { Red | Blue };
+let is_primary = color matches { Red | Blue };
 
-// With guard
-let is_positive = matches opt { Some(x) if x > 0 };
+// With guard (uses `when`, not `if`)
+let is_positive = opt matches { Some(x) when x > 0 };
 
 // In conditions
-if matches shape { Circle(r) if r > 5.0 } {
+if shape matches { Circle(r) when r > 5.0 } {
     println("large circle");
 }
 
 // Negation
-if !matches opt { None } {
+if !(opt matches { None }) {
     println("has value");
+}
+
+// Chained conditions
+if opt matches { Some(x) } && x > 0 {
+    // Note: x is NOT in scope here (bindings don't escape)
+    // Use match or if let for value extraction
 }
 ```
 
-Syntax: `matches <expr> { <pattern> [if <guard>] }`
+Syntax: `<expr> matches { <pattern> [when <guard>] }`
+
+The `matches` operator:
+- Returns `bool`
+- Pattern bindings are scoped to the guard expression only (don't escape)
+- Uses `when` for guards to avoid confusion with `if` expressions
+
+#### Why `when` Instead of `if`
+
+Guards use `when` keyword instead of `if` to:
+- Avoid confusion with `if` expressions and statements
+- Follow OCaml/F# precedent where `when` is the standard guard keyword
+- Make the guard syntactically distinct from conditional expressions
+
+#### Alternatives Considered
+
+##### Alternative A: Prefix `matches` Keyword
+
+```wado
+let is_some = matches opt { Some(_) };
+let is_positive = matches opt { Some(x) when x > 0 };
+```
 
 Pros:
 - Clean, dedicated syntax
-- No ambiguity with other constructs
-- Reads naturally: "matches opt with Some(_)"
+- No precedence issues
 
 Cons:
-- New keyword to add
-- Different from other languages
+- Less natural English reading order
+- Prefix style is unusual for binary operations
 
-#### Proposal B: `is` Operator
+##### Alternative B: `is` Operator (MoonBit-style)
 
 ```wado
-// Returns bool
 let is_some = opt is Some(_);
 let is_circle = shape is Circle(_);
-
-// Multiple patterns
-let is_primary = color is (Red | Blue);
-
-// With guard (requires parentheses)
-let is_positive = opt is (Some(x) if x > 0);
-
-// In conditions
-if shape is Circle(r) && r > 5.0 {
-    println("large circle");
-}
-
-// Negation
-if opt is !None {  // or: !(opt is None)
-    println("has value");
-}
 ```
-
-Syntax: `<expr> is <pattern>`
 
 Pros:
 - Very concise
-- Familiar from TypeScript/Kotlin
-- Reads naturally: "opt is Some(_)"
+- Familiar from MoonBit/TypeScript/Kotlin
 
 Cons:
-- Guard syntax awkward: `opt is (Some(x) if x > 0)`
+- Guard syntax awkward: `opt is (Some(x) when x > 0)`
 - Precedence issues with `&&` and `||`
-- Pattern bindings scope unclear
+- MoonBit allows bindings to escape into `&&`, which has unclear scoping
 
-#### Proposal C: `if let` Extension with `else` Check
+##### Alternative C: `if let` Extension
 
 ```wado
-// Current: if let Some(x) = opt { ... }
-
-// Extension: if let pattern as bool expression
 let is_some = (let Some(_) = opt);
-
-// Multiple patterns
-let is_primary = (let Red | Blue = color);
-
-// With guard
-let is_positive = (let Some(x) = opt if x > 0);
 ```
 
 Pros:
-- Reuses existing `let` pattern syntax
 - No new keywords
 
 Cons:
-- Awkward syntax with parentheses
-- Confusing that `let` returns bool in this context
-- Inconsistent with normal `let` which doesn't return value
+- Awkward parentheses
+- Confusing that `let` returns bool
 
-#### Proposal D: `match` as Expression with Single Arm
+##### Alternative D: Single-arm `match`
 
 ```wado
-// match with single arm returns bool if pattern matches
 let is_some = match opt { Some(_) };
-let is_circle = match shape { Circle(_) };
-
-// Multiple patterns
-let is_primary = match color { Red | Blue };
-
-// Full match still works
-let x = match opt {
-    Some(v) => v,
-    None => 0,
-};
 ```
 
 Pros:
-- Reuses `match` keyword
-- No new syntax to learn
-- Consistent with match expression
+- Reuses existing keyword
 
 Cons:
-- Overloading `match` semantics
-- Single-arm match returning bool vs multi-arm returning value is confusing
-- What does `match opt { Some(_) }` return for None? (false, but not obvious)
+- Overloads `match` semantics confusingly
+- Unclear what non-matching case returns
 
-### Part 3: Comparison Summary
+### Part 3: Other Languages Comparison
 
-#### Matches Functionality
+| Language | Boolean Check Syntax | Guard Syntax | Bindings Escape? |
+|----------|---------------------|--------------|------------------|
+| **MoonBit** | `x is Pattern` | `if cond` in match | Yes, into `&&` |
+| **Rust** | `matches!(x, P if g)` | `if` inside macro | No |
+| **Swift** | `if case P = x` / `~=` | comma-separated | Yes, in scope |
+| **Kotlin** | `x is Type` + smart cast | conditions in `when` | Yes, smart cast |
+| **Scala** | `cond(x) { case P => }` | `if` after pattern | No |
+| **OCaml** | match with bool return | **`when`** | No |
+| **F#** | match with bool return | **`when`** | No |
+| **Haskell** | pattern guards `\| pat <- expr` | `\|` chains | Yes, in chain |
 
-| Aspect | Proposal A (matches) | Proposal B (is) | Proposal C (let) | Proposal D (match) |
-|--------|---------------------|-----------------|------------------|-------------------|
-| Readability | High | Very High | Low | Medium |
-| Conciseness | Medium | High | Low | Medium |
-| Guard support | Good | Awkward | Awkward | N/A |
-| New keyword | Yes | Yes | No | No |
-| Precedence | Clear | Complex | Clear | Clear |
+Key insights:
+- **OCaml/F#** use `when` for guards (not `if`)
+- **MoonBit** `is` is concise but bindings escaping into `&&` has unclear scoping
+- **Rust** `matches!` requires macro; Wado provides this as language feature
 
 ### Part 4: Examples
 
@@ -313,9 +300,9 @@ match command {
     Pause => engine.pause(),
 }
 
-// === Pattern with guard ===
+// === Pattern with guard (uses `when`) ===
 let discount = match customer {
-    Premium(years) if years > 5 => 0.3,
+    Premium(years) when years > 5 => 0.3,
     Premium(_) => 0.2,
     Regular => 0.1,
     _ => 0.0,
@@ -341,13 +328,18 @@ match result {
     Err(msg) => println(`error: {msg}`),
 }
 
-// === Matches Expression (TBD - see Part 2 proposals) ===
-// Proposal A: matches keyword
-let is_circle = matches shape { Circle(_) };
-let is_large = matches shape { Circle(r) if r > 10.0 };
+// === Matches Infix Operator ===
+let is_circle = shape matches { Circle(_) };
+let is_large = shape matches { Circle(r) when r > 10.0 };
 
-// Proposal B: is operator
-let is_circle = shape is Circle(_);
+if opt matches { Some(_) } {
+    println("has value");
+}
+
+// Combined with other conditions
+if shape matches { Circle(_) } && should_draw {
+    draw_circle(shape);
+}
 ```
 
 ### Part 5: Grammar
@@ -355,12 +347,12 @@ let is_circle = shape is Circle(_);
 ```ebnf
 match_expr ::= "match" expr "{" match_arm* "}"
 
-match_arm ::= pattern ("if" expr)? "=>" arm_body ","?
+match_arm ::= pattern ("when" expr)? "=>" arm_body ","?
 
 arm_body ::= expr
            | block
 
-matches_expr ::= "matches" expr "{" pattern ("if" expr)? "}"
+matches_expr ::= expr "matches" "{" pattern ("when" expr)? "}"
 
 pattern ::= "_"
           | ident
@@ -375,7 +367,10 @@ variant_pattern ::= ident ("(" pattern ")")?
                   | path "::" ident ("(" pattern ")")?
 ```
 
-Note: Trailing comma after each arm is optional. Trailing semicolon inside block bodies follows Wado's common block rules (optional, doesn't change semantics).
+Note:
+- Guards use `when` keyword (not `if`) to distinguish from conditional expressions
+- Trailing comma after each arm is optional
+- Trailing semicolon inside block bodies follows Wado's common block rules (optional, doesn't change semantics)
 
 ### Part 6: Semantic Rules
 
@@ -395,9 +390,21 @@ match opt {
 }
 // x NOT in scope here
 
-// In matches: no bindings escape (like guard context)
-let is_positive = matches opt { Some(x) if x > 0 };
+// In matches: bindings scoped to guard only, don't escape
+let is_positive = opt matches { Some(x) when x > 0 };
 // x NOT in scope here (pattern variables are internal)
+
+// This does NOT work (unlike MoonBit):
+if opt matches { Some(x) } && x > 0 {  // ERROR: x not in scope
+    // ...
+}
+
+// Use if let or match for value extraction:
+if let Some(x) = opt {
+    if x > 0 {
+        // ...
+    }
+}
 ```
 
 #### Type Inference
@@ -430,20 +437,24 @@ match opt {
 - Rust-like syntax is familiar to many developers
 - Consistent with Wado's tuple `[T, U]` and variant syntax
 - Consistent with Wado's common block rules (trailing semicolons optional)
+- `when` for guards avoids confusion with `if` expressions
+- `matches` infix operator reads naturally: `opt matches { Some(_) }`
+- Clear scoping: pattern bindings don't escape `matches` expression
 
 ### Negative
 
 - Exhaustiveness checking requires careful implementation
 - Or-patterns and guards add parser complexity
-- `matches` keyword (if adopted) adds to language surface
+- `matches` keyword adds to language surface
+- `when` differs from Rust's `if` (minor learning curve for Rust users)
 
 ### Implementation Order
 
 1. Basic `match` expression with single patterns
 2. Exhaustiveness checking for variants
 3. Or-patterns (`|`)
-4. Guard expressions (`if`)
-5. `matches` keyword
+4. Guard expressions (`when`)
+5. `matches` infix operator
 6. Optimizations (jump tables for dense patterns)
 
 ## Alternatives Considered
@@ -459,17 +470,17 @@ let x = case opt {
 
 Rejected: `match` is more widely recognized and avoids confusion with `switch/case`.
 
-### `when` Keyword for Guards
+### `if` Keyword for Guards (Rust-style)
 
 ```wado
 match opt {
-    Some(x) when x > 0 => "positive",
+    Some(x) if x > 0 => "positive",
     Some(_) => "non-positive",
     None => "none",
 }
 ```
 
-Rejected: `if` is more familiar and Rust-compatible.
+Rejected: `when` avoids confusion with `if` expressions/statements. OCaml/F# precedent.
 
 ### `else` Arm Instead of `_`
 
@@ -481,3 +492,19 @@ match color {
 ```
 
 Rejected: `_` is more consistent with pattern syntax and more widely used.
+
+### `is` Operator for Matches
+
+```wado
+let is_some = opt is Some(_);
+```
+
+Rejected: Guard syntax becomes awkward, and MoonBit-style binding escape has unclear scoping.
+
+### Prefix `matches` Keyword
+
+```wado
+let is_some = matches opt { Some(_) };
+```
+
+Rejected: Infix `opt matches { ... }` reads more naturally in English.
