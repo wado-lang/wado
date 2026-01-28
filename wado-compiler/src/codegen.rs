@@ -144,8 +144,8 @@ struct VariantCaseInfo {
     name: String,
     /// The GC struct type index for this specific case (subtype of base)
     type_idx: u32,
-    /// Field types for this case's payload (after the tag)
-    field_types: Vec<ValType>,
+    /// Payload type for this case (None for unit variants)
+    payload_type: Option<ValType>,
 }
 
 /// Information about a custom variant type's Wasm GC representation
@@ -767,12 +767,11 @@ impl Codegen {
         for v in variants {
             let mut type_deps = Vec::new();
             for case in &v.cases {
-                for field_type_id in &case.fields {
-                    let field_deps = Self::get_type_dependencies(type_table, *field_type_id);
-                    for dep in field_deps {
-                        if all_names.contains(&dep) && dep != v.name {
-                            type_deps.push(dep);
-                        }
+                // Each variant case has exactly one payload type
+                let payload_deps = Self::get_type_dependencies(type_table, case.payload);
+                for dep in payload_deps {
+                    if all_names.contains(&dep) && dep != v.name {
+                        type_deps.push(dep);
                     }
                 }
             }
@@ -1158,6 +1157,16 @@ impl Codegen {
             }
         }
 
+        // Register tuple types BEFORE PHASE 2 so variant payloads have concrete tuple types
+        // instead of fallback (ref struct). Tuples are simple structs that don't depend on
+        // any other types.
+        self.register_tuple_types_from_table(type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source != entry_module_source {
+                self.register_tuple_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
+            }
+        }
+
         // PHASE 2: Register NON-MONOMORPHIZED main module structs AND variants
         // Skip generic templates and monomorphized types
         // Sort structs and variants together topologically to handle mutual dependencies
@@ -1237,14 +1246,6 @@ impl Codegen {
                 if let Some(info) = self.struct_types.get(&original_struct_name).cloned() {
                     self.struct_types.insert(alias_struct_name, info);
                 }
-            }
-        }
-
-        // Register tuple types from all TIR modules
-        self.register_tuple_types_from_table(type_table, &mut builder);
-        for (module_source, tir_mod) in all_tir_modules {
-            if module_source != entry_module_source {
-                self.register_tuple_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -3372,21 +3373,25 @@ impl Codegen {
         let mut case_infos = Vec::with_capacity(variant.cases.len());
 
         for case in &variant.cases {
-            // Build fields for this case: tag + payload fields
+            // Build fields for this case: tag + optional payload field
             let mut case_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
             }];
 
-            let mut payload_types = Vec::with_capacity(case.fields.len());
-            for field_type_id in &case.fields {
-                let wasm_type = self.type_id_to_valtype(type_table, *field_type_id);
-                payload_types.push(wasm_type);
+            // Each variant case has exactly one payload type.
+            // Unit variants (payload is unit type) have no payload field.
+            let payload_is_unit = matches!(type_table.get(case.payload), ResolvedType::Unit);
+            let payload_type = if payload_is_unit {
+                None
+            } else {
+                let wasm_type = self.type_id_to_valtype(type_table, case.payload);
                 case_fields.push(FieldType {
                     element_type: StorageType::Val(wasm_type),
                     mutable: true,
                 });
-            }
+                Some(wasm_type)
+            };
 
             // Define the case subtype
             let case_type_name = format!("{}::{}", variant.name, case.name);
@@ -3396,7 +3401,7 @@ impl Codegen {
             case_infos.push(VariantCaseInfo {
                 name: case.name.clone(),
                 type_idx: case_type_idx,
-                field_types: payload_types,
+                payload_type,
             });
         }
 
@@ -3485,24 +3490,28 @@ impl Codegen {
             let mut case_infos = Vec::with_capacity(base_variant.cases.len());
 
             for case in &base_variant.cases {
-                // Build fields for this case: tag + payload fields
+                // Build fields for this case: tag + optional payload field
                 let mut case_fields = vec![FieldType {
                     element_type: StorageType::Val(ValType::I32),
                     mutable: false,
                 }];
 
-                let mut payload_types = Vec::with_capacity(case.fields.len());
-                for &field_type_id in &case.fields {
-                    // Substitute type parameters
-                    let concrete_type_id =
-                        self.substitute_type_params(field_type_id, &type_subst, type_table);
+                // Each variant case has exactly one payload type.
+                // Substitute type parameters first.
+                let concrete_type_id =
+                    self.substitute_type_params(case.payload, &type_subst, type_table);
+                let payload_is_unit =
+                    matches!(type_table.get(concrete_type_id), ResolvedType::Unit);
+                let payload_type = if payload_is_unit {
+                    None
+                } else {
                     let wasm_type = self.type_id_to_valtype(type_table, concrete_type_id);
-                    payload_types.push(wasm_type);
                     case_fields.push(FieldType {
                         element_type: StorageType::Val(wasm_type),
                         mutable: true,
                     });
-                }
+                    Some(wasm_type)
+                };
 
                 // Define the case subtype
                 let case_type_name = format!("{}::{}", mangled_name, case.name);
@@ -3512,7 +3521,7 @@ impl Codegen {
                 case_infos.push(VariantCaseInfo {
                     name: case.name.clone(),
                     type_idx: case_type_idx,
-                    field_types: payload_types,
+                    payload_type,
                 });
             }
 
@@ -3597,12 +3606,12 @@ impl Codegen {
                         VariantCaseInfo {
                             name: "Ok".to_string(),
                             type_idx: ok_type_idx,
-                            field_types: vec![ok_type],
+                            payload_type: Some(ok_type),
                         },
                         VariantCaseInfo {
                             name: "Err".to_string(),
                             type_idx: err_type_idx,
-                            field_types: vec![err_type],
+                            payload_type: Some(err_type),
                         },
                     ],
                 },
@@ -3986,7 +3995,12 @@ impl Codegen {
 
             // Copy this case: cast to case type, read all fields, create new struct
             let case_type_idx = case_info.type_idx;
-            let field_count = 1 + case_info.field_types.len(); // tag + payload fields
+            // tag + optional payload field
+            let field_count = if case_info.payload_type.is_some() {
+                2
+            } else {
+                1
+            };
 
             // Read all fields and push onto stack
             // For each field: get source, cast to case type, read field
@@ -4815,9 +4829,9 @@ impl Codegen {
             TirExprKind::OptionSome { value } => {
                 Self::collect_closures_from_expr(value, closures);
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    Self::collect_closures_from_expr(field, closures);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    Self::collect_closures_from_expr(payload_expr, closures);
                 }
             }
             TirExprKind::Move { value } => {
@@ -5095,9 +5109,9 @@ impl Codegen {
             TirExprKind::OptionSome { value } => {
                 Self::find_closure_locals_in_expr(value, result, closure_counter);
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    Self::find_closure_locals_in_expr(field, result, closure_counter);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    Self::find_closure_locals_in_expr(payload_expr, result, closure_counter);
                 }
             }
             TirExprKind::Move { value } => {
@@ -6087,10 +6101,10 @@ impl Codegen {
                 variant_type,
                 case_index,
                 case_name,
-                fields,
+                payload,
             } => {
                 // Custom variant construction: Shape::Circle(5.0)
-                // Layout: struct { tag: i32, field0, field1, ... }
+                // Layout: struct { tag: i32, payload? }
 
                 // Get the variant name from the type (handle both Variant and GenericInstance)
                 let variant_name = match type_table.get(*variant_type) {
@@ -6110,19 +6124,20 @@ impl Codegen {
 
                 // Special handling for Option - it's a generic variant that uses nullable refs
                 if variant_name == "Option" {
-                    if case_name == "Some" && fields.len() == 1 {
+                    if case_name == "Some" && payload.is_some() {
+                        let payload_expr = payload.as_ref().unwrap();
                         // Option::Some(value) - for primitives, need to box the value
-                        let inner_type = type_table.get(fields[0].type_id).clone();
+                        let inner_type = type_table.get(payload_expr.type_id).clone();
                         if let ResolvedType::Primitive(prim) = &inner_type {
                             // Box the primitive value
-                            self.generate_expr(func, &fields[0], type_table, ctx, builder);
+                            self.generate_expr(func, payload_expr, type_table, ctx, builder);
                             let val_type = primitive_to_valtype(prim);
                             if let Some(box_idx) = self.get_box_type_idx(val_type) {
                                 func.instruction(&Instruction::StructNew(box_idx));
                             }
                         } else {
                             // Reference types: generate directly
-                            self.generate_expr(func, &fields[0], type_table, ctx, builder);
+                            self.generate_expr(func, payload_expr, type_table, ctx, builder);
                         }
                     } else {
                         // Option::None - generate null ref
@@ -6170,12 +6185,12 @@ impl Codegen {
                 // Push the tag (case index)
                 func.instruction(&Instruction::I32Const(*case_index as i32));
 
-                // Push the field values directly (no boxing needed with subtype-based approach)
-                for field_expr in fields {
-                    self.generate_expr(func, field_expr, type_table, ctx, builder);
+                // Push the payload value if present (unit variants have no payload field)
+                if let Some(payload_expr) = payload {
+                    self.generate_expr(func, payload_expr, type_table, ctx, builder);
                 }
 
-                // Create the case-specific struct (no padding needed)
+                // Create the case-specific struct
                 func.instruction(&Instruction::StructNew(case_type_idx));
             }
 
@@ -9041,6 +9056,12 @@ impl Codegen {
                 // Get the ValType for the tuple to allocate a temporary local
                 let tuple_val_type = self.type_id_to_valtype(type_table, tuple_type_id);
 
+                // Cast to the specific tuple type if the value on stack is a generic struct ref
+                // This is needed when extracting tuple payloads from variants
+                func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                    tuple_type_idx,
+                )));
+
                 // Store the tuple in a temporary local (using pre-allocated local)
                 let local_name = ctx.next_let_pattern_local_name();
                 let temp_local = ctx.alloc_local(&local_name, tuple_val_type);
@@ -9153,6 +9174,7 @@ impl Codegen {
                 TirPattern::Variant {
                     variant_name,
                     bindings,
+                    payload_type: pattern_payload_type,
                     ..
                 },
             ) if variant_name == "Some" => {
@@ -9179,29 +9201,37 @@ impl Codegen {
 
                 // Then block: pattern matches (value is Some)
                 // Bind the inner value to the pattern binding
-                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
+                if let Some(binding) = bindings.first() {
                     // Get the inner value (the non-null reference)
                     func.instruction(&Instruction::LocalGet(scrutinee_local));
                     func.instruction(&Instruction::RefAsNonNull);
 
-                    // For primitive types, unbox the value from the box struct
+                    // For primitive types with simple binding, unbox the value from the box struct
                     // BUT skip unboxing if the local is address-taken (it expects a box ref)
-                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
-                    if !is_address_taken
-                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
-                    {
-                        let val_type = primitive_to_valtype(prim);
-                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: box_type_idx,
-                                field_index: 0,
-                            });
+                    if let TirPattern::Binding { local_index, .. } = binding {
+                        let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                        if !is_address_taken
+                            && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                        {
+                            let val_type = primitive_to_valtype(prim);
+                            if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                                func.instruction(&Instruction::StructGet {
+                                    struct_type_index: box_type_idx,
+                                    field_index: 0,
+                                });
+                            }
                         }
                     }
 
-                    // Store in the binding local with proper offset
-                    let adjusted_index = *local_index + ctx.local_index_offset;
-                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                    // Bind the value to the pattern (handles Binding, Tuple, Wildcard, etc.)
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *pattern_payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
                 }
 
                 // Generate then block body
@@ -9247,12 +9277,13 @@ impl Codegen {
                 }
             }
 
-            // Custom variant with pattern - check tag and extract fields
+            // Custom variant with pattern - check tag and extract payload
             (
                 ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
                 TirPattern::Variant {
                     variant_name: case_name,
                     bindings,
+                    payload_type: pattern_payload_type,
                     ..
                 },
             ) => {
@@ -9272,7 +9303,7 @@ impl Codegen {
                     .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
                 let case_type_idx = case_info.type_idx;
                 let base_type_idx = variant_info.base_type_idx;
-                let is_unit_variant = case_info.field_types.is_empty();
+                let is_unit_variant = case_info.payload_type.is_none();
                 drop(variant_types);
 
                 // Stack: [variant_value]
@@ -9310,25 +9341,28 @@ impl Codegen {
                 }
 
                 // Then block: pattern matches
-                // Extract payload fields and bind them
-                // Cast inline for each field access to avoid needing extra locals
-                for (i, binding) in bindings.iter().enumerate() {
-                    if let TirPattern::Binding { local_index, .. } = binding {
-                        // Get the field (field 0 is tag, payload starts at field 1)
-                        // Cast from scrutinee_local inline for each access
-                        func.instruction(&Instruction::LocalGet(scrutinee_local));
-                        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                            case_type_idx,
-                        )));
-                        func.instruction(&Instruction::StructGet {
-                            struct_type_index: case_type_idx,
-                            field_index: (1 + i) as u32,
-                        });
+                // With single payload design, extract the single payload (field 1)
+                // and bind it using the pattern (which could be a simple binding or tuple)
+                if let Some(binding) = bindings.first() {
+                    // Get the payload (field 1)
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: case_type_idx,
+                        field_index: 1,
+                    });
 
-                        // Store in the binding local with proper offset
-                        let adjusted_index = *local_index + ctx.local_index_offset;
-                        func.instruction(&Instruction::LocalSet(adjusted_index));
-                    }
+                    // Bind the payload to the pattern (handles Binding, Tuple, Wildcard, etc.)
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *pattern_payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
                 }
 
                 // Generate then block body
@@ -9402,6 +9436,7 @@ impl Codegen {
                 TirPattern::Variant {
                     variant_name,
                     bindings,
+                    payload_type: pattern_payload_type,
                     ..
                 },
             ) if variant_name == "Some" => {
@@ -9412,27 +9447,35 @@ impl Codegen {
                 func.instruction(&Instruction::BrIf(1)); // br $exit
 
                 // Bind the inner value (the non-null reference)
-                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
+                if let Some(binding) = bindings.first() {
                     func.instruction(&Instruction::LocalGet(scrutinee_local));
                     func.instruction(&Instruction::RefAsNonNull);
 
-                    // For primitive types, unbox the value from the box struct
-                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
-                    if !is_address_taken
-                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
-                    {
-                        let val_type = primitive_to_valtype(prim);
-                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: box_type_idx,
-                                field_index: 0,
-                            });
+                    // For primitive types with simple binding, unbox the value from the box struct
+                    if let TirPattern::Binding { local_index, .. } = binding {
+                        let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                        if !is_address_taken
+                            && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                        {
+                            let val_type = primitive_to_valtype(prim);
+                            if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                                func.instruction(&Instruction::StructGet {
+                                    struct_type_index: box_type_idx,
+                                    field_index: 0,
+                                });
+                            }
                         }
                     }
 
-                    // Store in the binding local with proper offset
-                    let adjusted_index = *local_index + ctx.local_index_offset;
-                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                    // Bind the value to the pattern (handles Binding, Tuple, Wildcard, etc.)
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *pattern_payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
                 }
 
                 // Generate loop body
@@ -11104,9 +11147,9 @@ impl Codegen {
                         .any(|arm| self.expr_needs_async_scratch_locals(&arm.body))
             }
             TirExprKind::OptionSome { value } => self.expr_needs_async_scratch_locals(value),
-            TirExprKind::VariantConstruct { fields, .. } => fields
-                .iter()
-                .any(|f| self.expr_needs_async_scratch_locals(f)),
+            TirExprKind::VariantConstruct { payload, .. } => payload
+                .as_ref()
+                .is_some_and(|p| self.expr_needs_async_scratch_locals(p)),
             TirExprKind::Move { value } => self.expr_needs_async_scratch_locals(value),
             TirExprKind::LabeledBlock { block, .. } => self.needs_async_scratch_locals(block),
             TirExprKind::GlobalVarSet { value, .. } => self.expr_needs_async_scratch_locals(value),
@@ -11580,22 +11623,43 @@ impl Codegen {
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
     ) {
-        if let TirPattern::Tuple(sub_patterns) = pattern {
-            // Allocate a temp local for this tuple
-            let tuple_val_type = self.type_id_to_valtype(type_table, type_id);
-            let local_name = ctx.next_let_pattern_local_name();
-            ctx.alloc_local(&local_name, tuple_val_type);
+        match pattern {
+            TirPattern::Tuple(sub_patterns) => {
+                // Allocate a temp local for this tuple
+                let tuple_val_type = self.type_id_to_valtype(type_table, type_id);
+                let local_name = ctx.next_let_pattern_local_name();
+                ctx.alloc_local(&local_name, tuple_val_type);
 
-            // Recursively handle nested tuple patterns
-            if let ResolvedType::Tuple(elem_types) = type_table.get(type_id) {
-                for (sub_pattern, elem_type) in sub_patterns.iter().zip(elem_types.iter()) {
+                // Recursively handle nested tuple patterns
+                if let ResolvedType::Tuple(elem_types) = type_table.get(type_id) {
+                    for (sub_pattern, elem_type) in sub_patterns.iter().zip(elem_types.iter()) {
+                        self.preallocate_let_pattern_for_pattern(
+                            sub_pattern,
+                            *elem_type,
+                            type_table,
+                            ctx,
+                        );
+                    }
+                }
+            }
+            TirPattern::Variant {
+                bindings,
+                payload_type,
+                ..
+            } => {
+                // Pre-allocate for nested patterns in variant bindings
+                // With single payload design, there's at most one binding
+                if let Some(binding) = bindings.first() {
                     self.preallocate_let_pattern_for_pattern(
-                        sub_pattern,
-                        *elem_type,
+                        binding,
+                        *payload_type,
                         type_table,
                         ctx,
                     );
                 }
+            }
+            TirPattern::Binding { .. } | TirPattern::Wildcard | TirPattern::Literal(_) => {
+                // These don't need temp locals
             }
         }
     }
@@ -11668,33 +11732,56 @@ impl Codegen {
             }
             TirStmtKind::IfPattern {
                 scrutinee,
+                pattern,
                 then_block,
                 else_block,
-                ..
             } => {
                 self.preallocate_let_pattern_locals_from_expr(scrutinee, type_table, ctx);
+                // Pre-allocate for nested tuple patterns inside the variant pattern
+                self.preallocate_let_pattern_for_pattern(
+                    pattern,
+                    scrutinee.type_id,
+                    type_table,
+                    ctx,
+                );
                 self.preallocate_let_pattern_locals(then_block, type_table, ctx);
                 if let Some(else_blk) = else_block {
                     self.preallocate_let_pattern_locals(else_blk, type_table, ctx);
                 }
             }
             TirStmtKind::WhilePattern {
-                scrutinee, body, ..
+                scrutinee,
+                pattern,
+                body,
             } => {
                 self.preallocate_let_pattern_locals_from_expr(scrutinee, type_table, ctx);
+                // Pre-allocate for nested tuple patterns inside the variant pattern
+                self.preallocate_let_pattern_for_pattern(
+                    pattern,
+                    scrutinee.type_id,
+                    type_table,
+                    ctx,
+                );
                 self.preallocate_let_pattern_locals(body, type_table, ctx);
             }
             TirStmtKind::ForPattern {
                 init,
                 scrutinee,
+                pattern,
                 body,
                 update,
-                ..
             } => {
                 for s in init {
                     self.preallocate_let_pattern_locals_from_stmt(s, type_table, ctx);
                 }
                 self.preallocate_let_pattern_locals_from_expr(scrutinee, type_table, ctx);
+                // Pre-allocate for nested tuple patterns inside the variant pattern
+                self.preallocate_let_pattern_for_pattern(
+                    pattern,
+                    scrutinee.type_id,
+                    type_table,
+                    ctx,
+                );
                 self.preallocate_let_pattern_locals(body, type_table, ctx);
                 if let Some(u) = update {
                     self.preallocate_let_pattern_locals_from_expr(u, type_table, ctx);
@@ -12378,9 +12465,9 @@ impl Codegen {
                     self.preallocate_locals_from_expr(&field.value, type_table, ctx);
                 }
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.preallocate_locals_from_expr(field, type_table, ctx);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.preallocate_locals_from_expr(payload_expr, type_table, ctx);
                 }
             }
             TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements, .. } => {

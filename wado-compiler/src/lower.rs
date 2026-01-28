@@ -458,9 +458,9 @@ impl ClosureLowerer {
             TirExprKind::OptionSome { value } | TirExprKind::Move { value } => {
                 self.collect_closures_in_expr(value);
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.collect_closures_in_expr(field);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.collect_closures_in_expr(payload_expr);
                 }
             }
             TirExprKind::LabeledBlock { block, .. } => {
@@ -696,9 +696,9 @@ impl ClosureLowerer {
             TirExprKind::OptionSome { value } | TirExprKind::Move { value } => {
                 self.analyze_closure_safety_expr(value, false);
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.analyze_closure_safety_expr(field, false);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.analyze_closure_safety_expr(payload_expr, false);
                 }
             }
             TirExprKind::LabeledBlock { block, .. } => {
@@ -1624,9 +1624,9 @@ impl ClosureLowerer {
                         .iter()
                         .any(|arm| self.fn_param_in_struct_field_expr(&arm.body, fn_param_indices))
             }
-            TirExprKind::VariantConstruct { fields, .. } => fields
-                .iter()
-                .any(|f| self.fn_param_in_struct_field_expr(f, fn_param_indices)),
+            TirExprKind::VariantConstruct { payload, .. } => payload
+                .as_ref()
+                .is_some_and(|p| self.fn_param_in_struct_field_expr(p, fn_param_indices)),
             TirExprKind::LabeledBlock { block, .. } => {
                 self.fn_param_stored_in_struct_field(block, fn_param_indices)
             }
@@ -1912,9 +1912,14 @@ impl ClosureLowerer {
                     self.collect_fn_param_specs_expr(&arm.body, func_by_name, type_table, requests);
                 }
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.collect_fn_param_specs_expr(field, func_by_name, type_table, requests);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.collect_fn_param_specs_expr(
+                        payload_expr,
+                        func_by_name,
+                        type_table,
+                        requests,
+                    );
                 }
             }
             TirExprKind::LabeledBlock { block, .. } => {
@@ -2064,9 +2069,9 @@ impl ClosureLowerer {
                     self.count_closures_in_expr(&arm.body, counter);
                 }
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.count_closures_in_expr(field, counter);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.count_closures_in_expr(payload_expr, counter);
                 }
             }
             TirExprKind::LabeledBlock { block, .. } => {
@@ -2731,16 +2736,15 @@ impl ClosureLowerer {
                 variant_type,
                 case_index,
                 case_name,
-                fields,
+                payload,
             } => TirExpr::new(
                 TirExprKind::VariantConstruct {
                     variant_type: *variant_type,
                     case_index: *case_index,
                     case_name: case_name.clone(),
-                    fields: fields
-                        .iter()
-                        .map(|f| self.specialize_expr(f, param_to_functor, type_table))
-                        .collect(),
+                    payload: payload
+                        .as_ref()
+                        .map(|p| Box::new(self.specialize_expr(p, param_to_functor, type_table))),
                 },
                 expr.type_id,
                 expr.span,
@@ -3145,9 +3149,9 @@ impl ClosureLowerer {
             TirExprKind::OptionSome { value } | TirExprKind::Move { value } => {
                 self.transform_expr(value, type_table);
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.transform_expr(field, type_table);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.transform_expr(payload_expr, type_table);
                 }
             }
             TirExprKind::LabeledBlock { block, .. } => {
@@ -3535,9 +3539,9 @@ impl StringCollector {
             TirExprKind::OptionSome { value } => {
                 self.collect_expr(value);
             }
-            TirExprKind::VariantConstruct { fields, .. } => {
-                for field in fields {
-                    self.collect_expr(field);
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.collect_expr(payload_expr);
                 }
             }
             TirExprKind::Move { value } => {

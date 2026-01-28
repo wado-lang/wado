@@ -2854,22 +2854,30 @@ impl Parser {
         let start_span = self.peek().span;
         let name = self.consume_ident()?;
 
-        let fields = if self.check(&TokenKind::LParen) {
+        // Each variant case has exactly one payload type.
+        // - Unit: `None` (no parentheses)
+        // - Scalar: `Some(T)` (single type in parentheses)
+        // - Tuple: `Rectangle([f64, f64])` (tuple type as single payload)
+        // - Struct: `Named({ w: f64, h: f64 })` (struct type as single payload)
+        let payload = if self.check(&TokenKind::LParen) {
             self.advance();
-            let mut types = vec![self.parse_type()?];
-            while self.check(&TokenKind::Comma) {
-                self.advance();
-                types.push(self.parse_type()?);
+            let payload_type = self.parse_type()?;
+            // Reject implicit tuple expansion: `Name(T, U)` is now invalid
+            if self.check(&TokenKind::Comma) {
+                return Err(ParseError {
+                    message: "variant case payload must be a single type; use explicit tuple syntax like `Name([T, U])` for multiple values".to_string(),
+                    span: self.peek().span,
+                });
             }
             self.expect(&TokenKind::RParen)?;
-            Some(types)
+            Some(payload_type)
         } else {
             None
         };
 
         Ok(VariantCase {
             name,
-            fields,
+            payload,
             span: start_span,
         })
     }

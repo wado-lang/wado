@@ -48,11 +48,12 @@ struct StructFieldInfo {
     type_param_bounds: Vec<(String, Vec<String>)>,
 }
 
-/// Variant case info: case name and field types
+/// Variant case info: case name and payload type
 #[derive(Clone)]
 struct VariantCaseData {
     name: String,
-    field_types: Vec<TypeId>,
+    /// Payload type for this case. Unit variants have `()` (unit type) payload.
+    payload: TypeId,
 }
 
 /// Variant info: module source, type parameters, and cases
@@ -862,24 +863,22 @@ impl<'a> Resolver<'a> {
                             .collect();
                         let mut cases = Vec::new();
                         for case in &variant_decl.cases {
-                            let field_types = if let Some(fields) = &case.fields {
-                                fields
-                                    .iter()
-                                    .map(|ty| {
-                                        Self::resolve_type_static(
-                                            ty,
-                                            &mut type_table.borrow_mut(),
-                                            &type_aliases,
-                                            &struct_fields,
-                                        )
-                                    })
-                                    .collect()
+                            // Each variant case has exactly one payload type.
+                            // Unit variants have `()` (unit type) payload.
+                            let payload = if let Some(payload_ty) = &case.payload {
+                                Self::resolve_type_static(
+                                    payload_ty,
+                                    &mut type_table.borrow_mut(),
+                                    &type_aliases,
+                                    &struct_fields,
+                                )
                             } else {
-                                Vec::new()
+                                // Unit variant: payload is unit type
+                                TypeTable::UNIT
                             };
                             cases.push(VariantCaseData {
                                 name: case.name.clone(),
-                                field_types,
+                                payload,
                             });
                         }
                         variant_cases.insert(
@@ -1310,17 +1309,19 @@ impl<'a> Resolver<'a> {
                         .map(|p| p.name.clone())
                         .collect();
 
-                    // Collect variant cases with resolved field types
+                    // Collect variant cases with resolved payload types
                     let mut cases = Vec::new();
                     for case in &variant_decl.cases {
-                        let field_types: Vec<TypeId> = case
-                            .fields
-                            .as_ref()
-                            .map(|fields| fields.iter().map(|f| self.resolve_type(f)).collect())
-                            .unwrap_or_default();
+                        // Each variant case has exactly one payload type.
+                        // Unit variants have `()` (unit type) payload.
+                        let payload = if let Some(payload_ty) = &case.payload {
+                            self.resolve_type(payload_ty)
+                        } else {
+                            TypeTable::UNIT
+                        };
                         cases.push(VariantCaseData {
                             name: case.name.clone(),
-                            field_types,
+                            payload,
                         });
                     }
 
@@ -1555,18 +1556,19 @@ impl<'a> Resolver<'a> {
                 .insert(param.name.clone(), (index as u32, type_id));
         }
 
-        // Resolve each case
+        // Resolve each case - each variant case has exactly one payload type
         let mut cases = Vec::new();
         for (index, case) in variant_decl.cases.iter().enumerate() {
-            let fields = if let Some(field_types) = &case.fields {
-                field_types.iter().map(|ty| self.resolve_type(ty)).collect()
+            // Unit variants have `()` (unit type) payload
+            let payload = if let Some(payload_ty) = &case.payload {
+                self.resolve_type(payload_ty)
             } else {
-                Vec::new()
+                TypeTable::UNIT
             };
             cases.push(TirVariantCase {
                 name: case.name.clone(),
                 index: index as u32,
-                fields,
+                payload,
                 span: case.span,
             });
         }
@@ -2385,19 +2387,20 @@ impl<'a> Resolver<'a> {
             } => {
                 let resolved_type = self.type_table.borrow().get(scrutinee_type).clone();
 
-                // Determine field types for the variant case
-                let field_types: Vec<TypeId> = match &resolved_type {
-                    // Option<T>: Some has inner type T, None has no fields
+                // Each variant case has exactly one payload type.
+                // Determine the payload type for the variant case.
+                let payload_type: TypeId = match &resolved_type {
+                    // Option<T>: Some has inner type T, None has unit type
                     ResolvedType::Option(inner) => {
                         if variant_name == "Some" {
-                            vec![*inner]
+                            *inner
                         } else {
-                            vec![]
+                            TypeTable::UNIT
                         }
                     }
                     // Non-generic variant
                     ResolvedType::Variant { name, .. } => {
-                        self.get_variant_case_field_types(name, variant_name, &[], *span)
+                        self.get_variant_case_payload_type(name, variant_name, &[], *span)
                     }
                     // Generic variant instantiation
                     ResolvedType::GenericInstance {
@@ -2405,14 +2408,14 @@ impl<'a> Resolver<'a> {
                     } => {
                         // Check if this is a variant (not a struct)
                         if self.variant_cases.contains_key(name) {
-                            self.get_variant_case_field_types(name, variant_name, type_args, *span)
+                            self.get_variant_case_payload_type(name, variant_name, type_args, *span)
                         } else {
                             self.errors.push(TypeError::TypeMismatch {
                                 expected: "variant type".to_string(),
                                 found: name.clone(),
                                 span: *span,
                             });
-                            vec![]
+                            TypeTable::UNKNOWN
                         }
                     }
                     _ => {
@@ -2421,51 +2424,55 @@ impl<'a> Resolver<'a> {
                             found: format!("{resolved_type:?}"),
                             span: *span,
                         });
-                        vec![]
+                        TypeTable::UNKNOWN
                     }
                 };
 
-                // Resolve bindings with field types
-                let resolved_bindings: Vec<TirPattern> = bindings
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        let field_type = field_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                        self.resolve_if_pattern(p, field_type, ctx)
-                    })
-                    .collect();
+                // Single payload = single binding pattern.
+                // For backward compatibility, we still accept `Some(x)` as single binding.
+                let resolved_bindings: Vec<TirPattern> = if bindings.len() == 1 {
+                    vec![self.resolve_if_pattern(&bindings[0], payload_type, ctx)]
+                } else if bindings.is_empty() {
+                    // Unit case like `None` - no bindings
+                    vec![]
+                } else {
+                    // Multiple bindings are deprecated with single payload design.
+                    // Error will be caught by test fixture updates.
+                    bindings
+                        .iter()
+                        .map(|p| self.resolve_if_pattern(p, TypeTable::UNKNOWN, ctx))
+                        .collect()
+                };
 
                 TirPattern::Variant {
                     enum_type: scrutinee_type,
                     variant_name: variant_name.clone(),
                     bindings: resolved_bindings,
+                    payload_type,
                 }
             }
         }
     }
 
-    /// Get field types for a variant case, substituting type parameters if needed
-    fn get_variant_case_field_types(
+    /// Get payload type for a variant case, substituting type parameters if needed
+    fn get_variant_case_payload_type(
         &mut self,
         variant_name: &str,
         case_name: &str,
         type_args: &[TypeId],
         span: Span,
-    ) -> Vec<TypeId> {
-        // Clone field_types first to avoid borrow conflict with substitute_type_params
-        let field_types_opt = self.variant_cases.get(variant_name).and_then(|info| {
+    ) -> TypeId {
+        // Clone payload first to avoid borrow conflict with substitute_type_params
+        let payload_opt = self.variant_cases.get(variant_name).and_then(|info| {
             info.cases
                 .iter()
                 .find(|case| case.name == case_name)
-                .map(|case| case.field_types.clone())
+                .map(|case| case.payload)
         });
 
-        if let Some(field_types) = field_types_opt {
+        if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
-            return field_types
-                .iter()
-                .map(|&ty| self.substitute_type_params(ty, type_args))
-                .collect();
+            return self.substitute_type_params(payload, type_args);
         }
 
         // Check if variant exists but case not found
@@ -2482,7 +2489,7 @@ impl<'a> Resolver<'a> {
                 span,
             });
         }
-        vec![]
+        TypeTable::UNKNOWN
     }
 
     /// Resolve a while statement
@@ -2842,6 +2849,7 @@ impl<'a> Resolver<'a> {
                 local_index: binding_local,
                 type_id: item_type,
             }],
+            payload_type: item_type,
         };
 
         let break_stmt = TirStmt::new(
@@ -3375,10 +3383,14 @@ impl<'a> Resolver<'a> {
                     .enumerate()
                     .find(|(_, c)| c.name == suffix)
                 {
-                    // Unit variant - must have no fields
-                    if !case_data.field_types.is_empty() {
+                    // Unit variant - payload must be unit type
+                    let payload_is_unit = matches!(
+                        self.type_table.borrow().get(case_data.payload),
+                        ResolvedType::Unit
+                    );
+                    if !payload_is_unit {
                         self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: case_data.field_types.len(),
+                            expected: 1,
                             found: 0,
                             span: ident.span,
                         });
@@ -3396,7 +3408,7 @@ impl<'a> Resolver<'a> {
                             variant_type,
                             case_index: case_index as u32,
                             case_name: case_data.name.clone(),
-                            fields: vec![],
+                            payload: None, // Unit variant has no explicit payload
                         },
                         variant_type,
                         ident.span,
@@ -4259,10 +4271,17 @@ impl<'a> Resolver<'a> {
                             .enumerate()
                             .find(|(_, c)| c.name == suffix)
                         {
-                            // Validate argument count
-                            if args.len() != case_data.field_types.len() {
+                            // Each variant case has exactly one payload.
+                            // Unit variants expect 0 args, non-unit variants expect 1 arg.
+                            let payload_is_unit = matches!(
+                                self.type_table.borrow().get(case_data.payload),
+                                ResolvedType::Unit
+                            );
+                            let expected_args = usize::from(!payload_is_unit);
+
+                            if args.len() != expected_args {
                                 self.errors.push(TypeError::ArgumentCountMismatch {
-                                    expected: case_data.field_types.len(),
+                                    expected: expected_args,
                                     found: args.len(),
                                     span: call.span,
                                 });
@@ -4279,12 +4298,15 @@ impl<'a> Resolver<'a> {
                                 variant_info.module_source.clone(),
                             );
 
+                            // Payload is the single argument, or None for unit variants
+                            let payload = args.into_iter().next().map(Box::new);
+
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
                                     variant_type,
                                     case_index: case_index as u32,
                                     case_name: case_data.name.clone(),
-                                    fields: args,
+                                    payload,
                                 },
                                 variant_type,
                                 call.span,
@@ -5258,15 +5280,24 @@ impl<'a> Resolver<'a> {
                     .enumerate()
                     .find(|(_, c)| c.name == static_call.method)
                 {
-                    // Validate argument count
-                    if args.len() != case_data.field_types.len() {
+                    // Each variant case has exactly one payload.
+                    let payload_is_unit = matches!(
+                        self.type_table.borrow().get(case_data.payload),
+                        ResolvedType::Unit
+                    );
+                    let expected_args = usize::from(!payload_is_unit);
+
+                    if args.len() != expected_args {
                         self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: case_data.field_types.len(),
+                            expected: expected_args,
                             found: args.len(),
                             span: static_call.span,
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                     }
+
+                    // Payload is the single argument, or None for unit variants
+                    let payload = args.into_iter().next().map(Box::new);
 
                     // Create VariantConstruct expression
                     return TirExpr::new(
@@ -5274,7 +5305,7 @@ impl<'a> Resolver<'a> {
                             variant_type: target_type_id,
                             case_index: case_index as u32,
                             case_name: case_data.name.clone(),
-                            fields: args,
+                            payload,
                         },
                         target_type_id,
                         static_call.span,
@@ -5314,15 +5345,24 @@ impl<'a> Resolver<'a> {
                     .enumerate()
                     .find(|(_, c)| c.name == static_call.method)
                 {
-                    // Validate argument count
-                    if args.len() != case_data.field_types.len() {
+                    // Each variant case has exactly one payload.
+                    let payload_is_unit = matches!(
+                        self.type_table.borrow().get(case_data.payload),
+                        ResolvedType::Unit
+                    );
+                    let expected_args = usize::from(!payload_is_unit);
+
+                    if args.len() != expected_args {
                         self.errors.push(TypeError::ArgumentCountMismatch {
-                            expected: case_data.field_types.len(),
+                            expected: expected_args,
                             found: args.len(),
                             span: static_call.span,
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                     }
+
+                    // Payload is the single argument, or None for unit variants
+                    let payload = args.into_iter().next().map(Box::new);
 
                     // Create VariantConstruct expression
                     return TirExpr::new(
@@ -5330,7 +5370,7 @@ impl<'a> Resolver<'a> {
                             variant_type: target_type_id,
                             case_index: case_index as u32,
                             case_name: case_data.name.clone(),
-                            fields: args,
+                            payload,
                         },
                         target_type_id,
                         static_call.span,
@@ -7810,6 +7850,7 @@ impl<'a> Resolver<'a> {
                     enum_type: TypeTable::UNKNOWN, // Will be inferred during type checking
                     variant_name: variant_name.clone(),
                     bindings: resolved_bindings,
+                    payload_type: TypeTable::UNKNOWN, // Will be inferred during type checking
                 }
             }
         }

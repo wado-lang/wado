@@ -397,9 +397,9 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
                     .any(|arm| expr_has_complex_generic_types(&arm.body, type_table))
         }
         TirExprKind::Closure { body, .. } => expr_has_complex_generic_types(body, type_table),
-        TirExprKind::VariantConstruct { fields, .. } => fields
-            .iter()
-            .any(|f| expr_has_complex_generic_types(f, type_table)),
+        TirExprKind::VariantConstruct { payload, .. } => payload
+            .as_ref()
+            .is_some_and(|p| expr_has_complex_generic_types(p, type_table)),
         TirExprKind::GlobalVarSet { value, .. } => {
             expr_has_complex_generic_types(value, type_table)
         }
@@ -644,9 +644,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         TirExprKind::OptionSome { value } => {
             collect_callees_from_expr(value, callees);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_callees_from_expr(field, callees);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_callees_from_expr(payload_expr, callees);
             }
         }
         TirExprKind::Move { value } => {
@@ -2086,6 +2086,7 @@ fn remap_pattern(
             enum_type,
             variant_name,
             bindings,
+            payload_type,
         } => TirPattern::Variant {
             enum_type: *enum_type,
             variant_name: variant_name.clone(),
@@ -2093,6 +2094,7 @@ fn remap_pattern(
                 .iter()
                 .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
                 .collect(),
+            payload_type: *payload_type,
         },
     }
 }
@@ -2454,15 +2456,20 @@ fn remap_expr(
             variant_type,
             case_index,
             case_name,
-            fields,
+            payload,
         } => TirExprKind::VariantConstruct {
             variant_type: *variant_type,
             case_index: *case_index,
             case_name: case_name.clone(),
-            fields: fields
-                .iter()
-                .map(|f| remap_expr(f, param_to_local, local_offset, param_count, source_module))
-                .collect(),
+            payload: payload.as_ref().map(|p| {
+                Box::new(remap_expr(
+                    p,
+                    param_to_local,
+                    local_offset,
+                    param_count,
+                    source_module,
+                ))
+            }),
         },
         TirExprKind::Move { value } => TirExprKind::Move {
             value: Box::new(remap_expr(
@@ -3121,10 +3128,10 @@ fn inline_calls_in_expr(
                 inline_counter,
             );
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
                 inline_calls_in_expr(
-                    field,
+                    payload_expr,
                     candidates,
                     current_module,
                     local_count,

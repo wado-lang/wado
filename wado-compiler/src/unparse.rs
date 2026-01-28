@@ -398,14 +398,9 @@ impl<'a> Unparser<'a> {
     fn unparse_variant_case(&mut self, case: &VariantCase) {
         self.write_indent();
         self.output.push_str(&case.name);
-        if let Some(fields) = &case.fields {
+        if let Some(payload) = &case.payload {
             self.output.push('(');
-            for (i, ty) in fields.iter().enumerate() {
-                if i > 0 {
-                    self.output.push_str(", ");
-                }
-                self.unparse_type(ty);
-            }
+            self.unparse_type(payload);
             self.output.push(')');
         }
         self.output.push_str(",\n");
@@ -2606,21 +2601,16 @@ impl<'a> TirUnparser<'a> {
                 self.output.push(')');
             }
             TirExprKind::VariantConstruct {
-                case_name, fields, ..
+                case_name, payload, ..
             } => {
                 // Get the variant type name from the type_id
                 let type_name = self.type_table.type_name(expr.type_id);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
-                if !fields.is_empty() {
+                if let Some(payload_expr) = payload {
                     self.output.push('(');
-                    for (i, field) in fields.iter().enumerate() {
-                        if i > 0 {
-                            self.output.push_str(", ");
-                        }
-                        self.unparse_expr(field);
-                    }
+                    self.unparse_expr(payload_expr);
                     self.output.push(')');
                 }
             }

@@ -308,9 +308,9 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
         TirExprKind::OptionSome { value } => {
             collect_assigned_in_expr(value, assigned);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_assigned_in_expr(field, assigned);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_assigned_in_expr(payload_expr, assigned);
             }
         }
         TirExprKind::Closure { body, .. } => {
@@ -544,9 +544,9 @@ fn collect_usage_in_expr(
         TirExprKind::OptionSome { value } => {
             collect_usage_in_expr(value, usage, in_loop, in_condition);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_usage_in_expr(field, usage, in_loop, in_condition);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_usage_in_expr(payload_expr, usage, in_loop, in_condition);
             }
         }
         TirExprKind::Move { value } => {
@@ -884,9 +884,9 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
         TirExprKind::OptionSome { value } => {
             substitute_in_expr(value, from_local, source);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                substitute_in_expr(field, from_local, source);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                substitute_in_expr(payload_expr, from_local, source);
             }
         }
         TirExprKind::Move { value } => {
@@ -1115,9 +1115,9 @@ fn collect_copy_bindings_in_expr(
         TirExprKind::OptionSome { value } => {
             collect_copy_bindings_in_expr(value, bindings, block_local_assigned);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_copy_bindings_in_expr(field, bindings, block_local_assigned);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_copy_bindings_in_expr(payload_expr, bindings, block_local_assigned);
             }
         }
         TirExprKind::Move { value } => {
@@ -1334,9 +1334,9 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
         TirExprKind::OptionSome { value } => {
             remove_copy_bindings_in_expr(value, dead_locals);
         }
-        TirExprKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                remove_copy_bindings_in_expr(field, dead_locals);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                remove_copy_bindings_in_expr(payload_expr, dead_locals);
             }
         }
         TirExprKind::Move { value } => {

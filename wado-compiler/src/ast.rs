@@ -1068,11 +1068,18 @@ pub struct VariantDecl {
 }
 
 /// A case in a variant declaration: `Some(T)` or `None`
+///
+/// Each variant case has exactly one payload type:
+/// - Unit variants: `None` → payload is `None` (parser level), becomes `()` in TIR
+/// - Scalar payloads: `Some(T)` → payload is `Some(T)`
+/// - Tuple payloads: `Rectangle([f64, f64])` → payload is `Some([f64, f64])`
+/// - Struct payloads: `Named({ w: f64 })` → payload is `Some({ w: f64 })`
 #[derive(Debug, Clone)]
 pub struct VariantCase {
     pub name: String,
-    /// Fields for this case. None for unit variants like `None`.
-    pub fields: Option<Vec<Type>>,
+    /// Payload type for this case. None for unit variants like `None`.
+    /// At TIR level, unit variants are normalized to have `()` payload.
+    pub payload: Option<Type>,
     pub span: Span,
 }
 
