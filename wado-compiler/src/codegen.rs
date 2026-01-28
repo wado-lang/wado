@@ -9597,8 +9597,18 @@ impl Codegen {
             (_, TirPattern::Literal(lit)) => {
                 match lit {
                     TirLiteralPattern::Int(value) => {
-                        func.instruction(&Instruction::I64Const(*value as i64));
-                        func.instruction(&Instruction::I64Eq);
+                        // Generate comparison based on scrutinee type
+                        match scrutinee_type {
+                            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+                                func.instruction(&Instruction::I64Const(*value as i64));
+                                func.instruction(&Instruction::I64Eq);
+                            }
+                            // I8, I16, I32, U8, U16, U32 all use i32 at runtime
+                            _ => {
+                                func.instruction(&Instruction::I32Const(*value as i32));
+                                func.instruction(&Instruction::I32Eq);
+                            }
+                        }
                     }
                     TirLiteralPattern::Bool(value) => {
                         func.instruction(&Instruction::I32Const(i32::from(*value)));
