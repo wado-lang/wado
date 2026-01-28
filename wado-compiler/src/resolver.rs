@@ -25,10 +25,10 @@ use crate::ast::{
 use crate::project::Project;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock,
-    TirCapture, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLiteralPattern, TirMatchArm,
-    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTest,
-    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp,
+    TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLiteralPattern,
+    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirTest, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -2347,10 +2347,30 @@ impl<'a> Resolver<'a> {
             }
             Pattern::Literal(lit) => {
                 let tir_lit = match lit {
-                    Literal::Int(i) => match Self::parse_int_literal(&i.repr) {
-                        Ok(value) => TirLiteralPattern::Int(value),
-                        Err(_) => TirLiteralPattern::Int(0),
-                    },
+                    Literal::Int(i) => {
+                        // Check if scrutinee type is unsigned
+                        let is_unsigned = matches!(
+                            self.type_table.borrow().get(scrutinee_type),
+                            ResolvedType::Primitive(
+                                PrimitiveType::U8
+                                    | PrimitiveType::U16
+                                    | PrimitiveType::U32
+                                    | PrimitiveType::U64
+                                    | PrimitiveType::U128
+                            )
+                        );
+                        if is_unsigned {
+                            match Self::parse_u128_literal(&i.repr) {
+                                Ok(value) => TirLiteralPattern::U128(value),
+                                Err(_) => TirLiteralPattern::U128(0),
+                            }
+                        } else {
+                            match Self::parse_i128_literal(&i.repr) {
+                                Ok(value) => TirLiteralPattern::I128(value),
+                                Err(_) => TirLiteralPattern::I128(0),
+                            }
+                        }
+                    }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     Literal::Char(c) => TirLiteralPattern::Char(*c),
                     Literal::String(s) => TirLiteralPattern::String(s.clone()),
@@ -3210,50 +3230,61 @@ impl<'a> Resolver<'a> {
             .map_err(|_| format!("invalid float literal: {repr}"))
     }
 
-    /// Parse an unsigned integer literal into a u128 value (low, high)
+    /// Parse an unsigned integer literal into a u128 value
     /// Supports decimal, hex, binary, and octal formats
-    fn parse_u128_literal(repr: &str) -> Result<(u64, u64), String> {
+    fn parse_u128_literal(repr: &str) -> Result<u128, String> {
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
 
-        let value: u128 = if clean.starts_with("0x") || clean.starts_with("0X") {
+        if clean.starts_with("0x") || clean.starts_with("0X") {
             u128::from_str_radix(&clean[2..], 16)
-                .map_err(|_| format!("invalid hex literal: {repr}"))?
+                .map_err(|_| format!("invalid hex literal: {repr}"))
         } else if clean.starts_with("0b") || clean.starts_with("0B") {
             u128::from_str_radix(&clean[2..], 2)
-                .map_err(|_| format!("invalid binary literal: {repr}"))?
+                .map_err(|_| format!("invalid binary literal: {repr}"))
         } else if clean.starts_with("0o") || clean.starts_with("0O") {
             u128::from_str_radix(&clean[2..], 8)
-                .map_err(|_| format!("invalid octal literal: {repr}"))?
+                .map_err(|_| format!("invalid octal literal: {repr}"))
         } else {
             clean
                 .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))?
-        };
-
-        Ok((value as u64, (value >> 64) as u64))
+                .map_err(|_| format!("invalid integer literal: {repr}"))
+        }
     }
 
-    /// Parse a signed integer literal into an i128 value (low as u64, high as i64)
-    /// Supports decimal, hex, binary, and octal formats
-    fn parse_i128_literal(repr: &str) -> Result<(u64, i64), String> {
+    /// Parse a signed integer literal into an i128 value
+    /// Supports decimal, hex, binary, and octal formats (negative decimals supported)
+    fn parse_i128_literal(repr: &str) -> Result<i128, String> {
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
 
-        let value: i128 = if clean.starts_with("0x") || clean.starts_with("0X") {
-            i128::from_str_radix(&clean[2..], 16)
-                .map_err(|_| format!("invalid hex literal: {repr}"))?
+        if clean.starts_with("0x") || clean.starts_with("0X") {
+            // Hex literals are always positive, parse as u128 then convert
+            let unsigned = u128::from_str_radix(&clean[2..], 16)
+                .map_err(|_| format!("invalid hex literal: {repr}"))?;
+            Ok(unsigned as i128)
         } else if clean.starts_with("0b") || clean.starts_with("0B") {
-            i128::from_str_radix(&clean[2..], 2)
-                .map_err(|_| format!("invalid binary literal: {repr}"))?
+            let unsigned = u128::from_str_radix(&clean[2..], 2)
+                .map_err(|_| format!("invalid binary literal: {repr}"))?;
+            Ok(unsigned as i128)
         } else if clean.starts_with("0o") || clean.starts_with("0O") {
-            i128::from_str_radix(&clean[2..], 8)
-                .map_err(|_| format!("invalid octal literal: {repr}"))?
+            let unsigned = u128::from_str_radix(&clean[2..], 8)
+                .map_err(|_| format!("invalid octal literal: {repr}"))?;
+            Ok(unsigned as i128)
         } else {
+            // Decimal - may be negative
             clean
                 .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))?
-        };
+                .map_err(|_| format!("invalid integer literal: {repr}"))
+        }
+    }
 
-        Ok((value as u64, (value >> 64) as i64))
+    /// Unpack u128 into (low, high) pair for codegen
+    fn unpack_u128(value: u128) -> (u64, u64) {
+        (value as u64, (value >> 64) as u64)
+    }
+
+    /// Unpack i128 into (low, high) pair for codegen
+    fn unpack_i128(value: i128) -> (u64, i64) {
+        (value as u64, (value >> 64) as i64)
     }
 
     /// Get the clean representation of a literal (without underscores)
@@ -4896,7 +4927,8 @@ impl<'a> Resolver<'a> {
                     // Value doesn't fit in u64 (or i64 for i128), use from_pair
                     // Parse at compile time and generate from_pair(low, high)
                     if name == "u128" {
-                        if let Ok((low, high)) = Self::parse_u128_literal(&int_lit.repr) {
+                        if let Ok(value) = Self::parse_u128_literal(&int_lit.repr) {
+                            let (low, high) = Self::unpack_u128(value);
                             return self.build_from_pair_call(
                                 &name,
                                 low,
@@ -4911,7 +4943,8 @@ impl<'a> Resolver<'a> {
                         });
                     } else {
                         // i128: parse as i128 (handles positive values > i64::MAX)
-                        if let Ok((low, high)) = Self::parse_i128_literal(&int_lit.repr) {
+                        if let Ok(value) = Self::parse_i128_literal(&int_lit.repr) {
+                            let (low, high) = Self::unpack_i128(value);
                             return self.build_from_pair_call(
                                 &name,
                                 low,
@@ -4945,7 +4978,8 @@ impl<'a> Resolver<'a> {
                 {
                     // Parse the negated value directly using Rust's i128
                     let negated_repr = format!("-{}", Self::clean_literal_repr(&int_lit.repr));
-                    if let Ok((low, high)) = Self::parse_i128_literal(&negated_repr) {
+                    if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
+                        let (low, high) = Self::unpack_i128(value);
                         return self.build_from_pair_call(
                             &name,
                             low,
@@ -8089,7 +8123,8 @@ impl<'a> Resolver<'a> {
 
                 // Value doesn't fit in u64 (or i64 for i128), use from_pair
                 if name == "u128" {
-                    if let Ok((low, high)) = Self::parse_u128_literal(&int_lit.repr) {
+                    if let Ok(value) = Self::parse_u128_literal(&int_lit.repr) {
+                        let (low, high) = Self::unpack_u128(value);
                         return self.build_from_pair_call(
                             name,
                             low,
@@ -8104,7 +8139,8 @@ impl<'a> Resolver<'a> {
                     });
                 } else {
                     // i128
-                    if let Ok((low, high)) = Self::parse_i128_literal(&int_lit.repr) {
+                    if let Ok(value) = Self::parse_i128_literal(&int_lit.repr) {
+                        let (low, high) = Self::unpack_i128(value);
                         return self.build_from_pair_call(name, low, high, target_type, cast.span);
                     }
                     self.errors.push(TypeError::InvalidLiteral {
@@ -8123,7 +8159,8 @@ impl<'a> Resolver<'a> {
             {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{}", Self::clean_literal_repr(&int_lit.repr));
-                if let Ok((low, high)) = Self::parse_i128_literal(&negated_repr) {
+                if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
+                    let (low, high) = Self::unpack_i128(value);
                     return self.build_from_pair_call(name, low, high, target_type, unary.span);
                 }
                 self.errors.push(TypeError::InvalidLiteral {

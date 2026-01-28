@@ -2533,8 +2533,11 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(name);
             }
             TirPattern::Literal(lit) => match lit {
-                TirLiteralPattern::Int(i) => {
+                TirLiteralPattern::I128(i) => {
                     self.output.push_str(&i.to_string());
+                }
+                TirLiteralPattern::U128(u) => {
+                    self.output.push_str(&u.to_string());
                 }
                 TirLiteralPattern::Bool(b) => {
                     self.output.push_str(if *b { "true" } else { "false" });
@@ -2962,7 +2965,8 @@ impl<'a> TirUnparser<'a> {
             TirPattern::Literal(lit) => {
                 use crate::tir::TirLiteralPattern;
                 match lit {
-                    TirLiteralPattern::Int(v) => self.output.push_str(&v.to_string()),
+                    TirLiteralPattern::I128(v) => self.output.push_str(&v.to_string()),
+                    TirLiteralPattern::U128(v) => self.output.push_str(&v.to_string()),
                     TirLiteralPattern::Bool(b) => {
                         self.output.push_str(if *b { "true" } else { "false" });
                     }
