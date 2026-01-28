@@ -17,12 +17,13 @@ use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
 };
 use crate::optimize::CanonBuiltin;
+use crate::optimize_move::is_fresh_value;
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
-    TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr,
+    TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
@@ -8571,10 +8572,8 @@ impl Codegen {
                 }
 
                 // Apply value copy for struct/array/tuple types (value semantics)
-                // Skip for Move expressions (optimizer marks fresh values with Move)
-                if self.needs_value_copy(value.type_id, type_table)
-                    && !matches!(value.kind, TirExprKind::Move { .. })
-                {
+                // Skip for fresh values (literals, calls, etc.) - they don't need copying
+                if self.needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
                     self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
                 }
 
@@ -8593,25 +8592,33 @@ impl Codegen {
                 is_mut: _,
                 value,
             } => {
-                // Generate the value expression (should be a tuple)
-                self.generate_expr(func, value, type_table, ctx, builder);
+                // Optimization: For multi-value builtin calls (e.g., i64_add128),
+                // directly bind stack values to locals without creating a tuple struct.
+                // This avoids heap allocation and struct.get for each element.
+                if self.try_generate_multivalue_builtin_destructure(
+                    func, pattern, value, type_table, ctx, builder,
+                ) {
+                    // Optimization succeeded, skip normal path
+                } else {
+                    // Generate the value expression (should be a tuple)
+                    self.generate_expr(func, value, type_table, ctx, builder);
 
-                // Apply value copy for tuple types (value semantics)
-                if self.needs_value_copy(value.type_id, type_table)
-                    && !matches!(value.kind, TirExprKind::Move { .. })
-                {
-                    self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
+                    // Apply value copy for tuple types (value semantics)
+                    // Skip for fresh values (literals, calls, etc.) - they don't need copying
+                    if self.needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
+                        self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
+                    }
+
+                    // Destructure the tuple according to the pattern
+                    self.generate_let_pattern_binding(
+                        func,
+                        pattern,
+                        value.type_id,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
                 }
-
-                // Destructure the tuple according to the pattern
-                self.generate_let_pattern_binding(
-                    func,
-                    pattern,
-                    value.type_id,
-                    type_table,
-                    ctx,
-                    builder,
-                );
             }
 
             TirStmtKind::Expr(expr) => {
@@ -9154,6 +9161,114 @@ impl Codegen {
                 func.instruction(&Instruction::Drop);
             }
         }
+    }
+
+    /// Try to generate optimized code for multi-value builtin calls with destructuring.
+    ///
+    /// Multi-value Wasm instructions (like i64.add128, `i64.mul_wide_u`) return multiple values
+    /// on the stack. Normally these are wrapped in a tuple struct and then destructured.
+    /// This optimization bypasses the tuple struct entirely when the pattern is a flat tuple
+    /// of bindings/wildcards, directly binding stack values to locals.
+    ///
+    /// Returns `true` if the optimization was applied, `false` otherwise.
+    fn try_generate_multivalue_builtin_destructure(
+        &self,
+        func: &mut Function,
+        pattern: &TirPattern,
+        value: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) -> bool {
+        // Check if pattern is a flat tuple with only Binding or Wildcard patterns
+        let patterns = match pattern {
+            TirPattern::Tuple(patterns) => patterns,
+            _ => return false,
+        };
+
+        // Verify all sub-patterns are simple bindings or wildcards
+        for p in patterns {
+            match p {
+                TirPattern::Binding { .. } | TirPattern::Wildcard => {}
+                _ => return false, // Nested tuples or other patterns - can't optimize
+            }
+        }
+
+        // Unwrap Move wrapper if present
+        let inner_value = match &value.kind {
+            TirExprKind::Move { value } => value.as_ref(),
+            _ => value,
+        };
+
+        // Check if value is a multi-value builtin call
+        let (builtin_name, args) = match &inner_value.kind {
+            TirExprKind::Call {
+                func: func_ref,
+                args,
+                ..
+            } => {
+                if let FunctionRef::External {
+                    module_source,
+                    name,
+                    ..
+                } = func_ref
+                {
+                    if let ModuleSource::Core { name: mod_name } = module_source {
+                        if mod_name == "builtin" {
+                            (name.as_str(), args)
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            _ => return false,
+        };
+
+        // Check for supported multi-value builtins (those that return [i64, i64])
+        let wasm_instruction = match builtin_name {
+            "i64_add128" => Instruction::I64Add128,
+            "i64_sub128" => Instruction::I64Sub128,
+            "i64_mul_wide_u" => Instruction::I64MulWideU,
+            "i64_mul_wide_s" => Instruction::I64MulWideS,
+            _ => return false,
+        };
+
+        // Verify pattern has exactly 2 elements (matching the [i64, i64] return)
+        if patterns.len() != 2 {
+            return false;
+        }
+
+        // Generate the builtin call arguments
+        for arg in args {
+            self.generate_expr(func, arg, type_table, ctx, builder);
+        }
+
+        // Emit the Wasm instruction (leaves [lo, hi] on stack, hi on top)
+        func.instruction(&wasm_instruction);
+
+        // Bind stack values to locals in reverse order (LIFO: hi first, then lo)
+        // Pattern: [lo_pattern, hi_pattern]
+        // Stack after instruction: [..., lo, hi]
+        // We need: local.set for hi, then local.set for lo
+        for sub_pattern in patterns.iter().rev() {
+            match sub_pattern {
+                TirPattern::Binding { local_index, .. } => {
+                    let adjusted_index = *local_index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
+                TirPattern::Wildcard => {
+                    func.instruction(&Instruction::Drop);
+                }
+                _ => unreachable!("verified above"),
+            }
+        }
+
+        true
     }
 
     /// Generate code for if-pattern statement: `if let Some(x) = expr { ... }`
@@ -12387,6 +12502,44 @@ impl Codegen {
                     self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
                     self.preallocate_let_pattern_locals_from_expr(&arm.body, type_table, ctx);
                 }
+            }
+            // Wrapper expressions that may contain nested blocks
+            TirExprKind::Move { value }
+            | TirExprKind::Cast { expr: value, .. }
+            | TirExprKind::OptionSome { value } => {
+                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::Index { expr, index, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
+                self.preallocate_let_pattern_locals_from_expr(index, type_table, ctx);
+            }
+            TirExprKind::FieldAccess { expr, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
+            }
+            TirExprKind::Assign { target, value } => {
+                self.preallocate_let_pattern_locals_from_expr(target, type_table, ctx);
+                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.preallocate_let_pattern_locals_from_expr(&field.value, type_table, ctx);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.preallocate_let_pattern_locals_from_expr(elem, type_table, ctx);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    self.preallocate_let_pattern_locals_from_expr(p, type_table, ctx);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(body, type_table, ctx);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
             }
             _ => {
                 // Other expressions don't contain nested blocks or let patterns
