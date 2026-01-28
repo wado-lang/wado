@@ -1,0 +1,25 @@
+// Test: Result<Resource, E> pattern matching (TODO)
+//
+// This test verifies that Result<TcpSocket, ErrorCode> can be pattern matched
+// to extract the resource handle inside the Ok variant.
+//
+// Currently blocked on:
+// 1. Generic variant (Result<T, E>) payload type resolution requires resolver changes
+//    that affect struct field type param handling
+// 2. Resource instance methods need WASI import generation for [method] exports
+use {println, Stdout} from "core:cli";
+use {TcpSocket, IpAddressFamily} from "wasi:sockets";
+
+fn run() with Stdout {
+    let family = IpAddressFamily::Ipv4;
+    let result = TcpSocket::static_tcp_socket_create(family);
+    if let Ok(socket) = result {
+        // Successfully extracted TcpSocket from Result<TcpSocket, ErrorCode>
+        println("Resource extracted from Result");
+    } else {
+        println("Failed to create socket");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout_contains": ["Resource extracted"], "skip_o0": true}
