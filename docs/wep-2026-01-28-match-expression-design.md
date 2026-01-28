@@ -14,11 +14,11 @@ Wado needs `match` expressions/statements for exhaustive pattern matching on var
 
 ### Key Differences from Rust
 
-| Aspect | Rust | Wado |
-|--------|------|------|
-| Tuple type/literal | `(T, U)` | `[T, U]` |
-| Multiple payload | `Foo(T, U)` | `Foo([T, U])` |
-| Struct variant | `Foo { a: T }` | `Foo({ a: T })` |
+| Aspect             | Rust           | Wado            |
+| ------------------ | -------------- | --------------- |
+| Tuple type/literal | `(T, U)`       | `[T, U]`        |
+| Multiple payload   | `Foo(T, U)`    | `Foo([T, U])`   |
+| Struct variant     | `Foo { a: T }` | `Foo({ a: T })` |
 
 ## Decision
 
@@ -195,6 +195,7 @@ if opt matches { Some(x) } && x > 0 {
 Syntax: `<expr> matches { <pattern> [when <guard>] }`
 
 The `matches` operator:
+
 - Returns `bool`
 - Pattern bindings are scoped to the guard expression only (don't escape)
 - Uses `when` for guards to avoid confusion with `if` expressions
@@ -202,6 +203,7 @@ The `matches` operator:
 #### Why `when` Instead of `if`
 
 Guards use `when` keyword instead of `if` to:
+
 - Avoid confusion with `if` expressions and statements
 - Follow OCaml/F# precedent where `when` is the standard guard keyword
 - Make the guard syntactically distinct from conditional expressions
@@ -216,10 +218,12 @@ let is_positive = matches opt { Some(x) when x > 0 };
 ```
 
 Pros:
+
 - Clean, dedicated syntax
 - No precedence issues
 
 Cons:
+
 - Less natural English reading order
 - Prefix style is unusual for binary operations
 
@@ -231,10 +235,12 @@ let is_circle = shape is Circle(_);
 ```
 
 Pros:
+
 - Very concise
 - Familiar from MoonBit/TypeScript/Kotlin
 
 Cons:
+
 - Guard syntax awkward: `opt is (Some(x) when x > 0)`
 - Precedence issues with `&&` and `||`
 - MoonBit allows bindings to escape into `&&`, which has unclear scoping
@@ -246,9 +252,11 @@ let is_some = (let Some(_) = opt);
 ```
 
 Pros:
+
 - No new keywords
 
 Cons:
+
 - Awkward parentheses
 - Confusing that `let` returns bool
 
@@ -259,26 +267,29 @@ let is_some = match opt { Some(_) };
 ```
 
 Pros:
+
 - Reuses existing keyword
 
 Cons:
+
 - Overloads `match` semantics confusingly
 - Unclear what non-matching case returns
 
 ### Part 3: Other Languages Comparison
 
-| Language | Boolean Check Syntax | Guard Syntax | Bindings Escape? |
-|----------|---------------------|--------------|------------------|
-| **MoonBit** | `x is Pattern` | `if cond` in match | Yes, into `&&` |
-| **Rust** | `matches!(x, P if g)` | `if` inside macro | No |
-| **Swift** | `if case P = x` / `~=` | comma-separated | Yes, in scope |
-| **Kotlin** | `x is Type` + smart cast | conditions in `when` | Yes, smart cast |
-| **Scala** | `cond(x) { case P => }` | `if` after pattern | No |
-| **OCaml** | match with bool return | **`when`** | No |
-| **F#** | match with bool return | **`when`** | No |
-| **Haskell** | pattern guards `\| pat <- expr` | `\|` chains | Yes, in chain |
+| Language    | Boolean Check Syntax            | Guard Syntax         | Bindings Escape? |
+| ----------- | ------------------------------- | -------------------- | ---------------- |
+| **MoonBit** | `x is Pattern`                  | `if cond` in match   | Yes, into `&&`   |
+| **Rust**    | `matches!(x, P if g)`           | `if` inside macro    | No               |
+| **Swift**   | `if case P = x` / `~=`          | comma-separated      | Yes, in scope    |
+| **Kotlin**  | `x is Type` + smart cast        | conditions in `when` | Yes, smart cast  |
+| **Scala**   | `cond(x) { case P => }`         | `if` after pattern   | No               |
+| **OCaml**   | match with bool return          | **`when`**           | No               |
+| **F#**      | match with bool return          | **`when`**           | No               |
+| **Haskell** | pattern guards `\| pat <- expr` | `\|` chains          | Yes, in chain    |
 
 Key insights:
+
 - **OCaml/F#** use `when` for guards (not `if`)
 - **MoonBit** `is` is concise but bindings escaping into `&&` has unclear scoping
 - **Rust** `matches!` requires macro; Wado provides this as language feature
@@ -368,6 +379,7 @@ variant_pattern ::= ident ("(" pattern ")")?
 ```
 
 Note:
+
 - Guards use `when` keyword (not `if`) to distinguish from conditional expressions
 - Trailing comma after each arm is optional
 - Trailing semicolon inside block bodies follows Wado's common block rules (optional, doesn't change semantics)
