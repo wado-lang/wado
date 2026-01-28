@@ -14,7 +14,7 @@ cat > /tmp/gdb_commands.txt << 'EOF'
 file ./target/debug/wado
 set pagination off
 break wado-compiler/src/codegen.rs:5985
-run compile -o /tmp/out.wasm /tmp/test.wado
+run compile -o /tmp/out.wasm example/hello.wado
 info locals
 print *expr
 bt 5
@@ -23,23 +23,14 @@ EOF
 rust-gdb --batch -x /tmp/gdb_commands.txt
 ```
 
-## Common breakpoints
-
-| Location                               | Description            |
-| -------------------------------------- | ---------------------- |
-| `wado-compiler/src/codegen.rs:843`     | `generate_wasm` entry  |
-| `wado-compiler/src/codegen.rs:5970`    | `generate_expr` entry  |
-| `wado-compiler/src/codegen.rs:9030`    | `generate_stmt` entry  |
-| `wado-compiler/src/codegen.rs:9638`    | `generate_function`    |
-
 ## Common commands
 
-| Command        | Description                     |
-| -------------- | ------------------------------- |
-| `info locals`  | Show local variables            |
-| `print *expr`  | Dereference and print pointer   |
-| `bt 5`         | Backtrace (top 5 frames)        |
-| `continue`     | Resume execution                |
+| Command       | Description                   |
+| ------------- | ----------------------------- |
+| `info locals` | Show local variables          |
+| `print *expr` | Dereference and print pointer |
+| `bt 5`        | Backtrace (top 5 frames)      |
+| `continue`    | Resume execution              |
 
 ## Notes
 
