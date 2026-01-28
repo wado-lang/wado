@@ -20,9 +20,9 @@ use crate::optimize::CanonBuiltin;
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr,
-    TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
+    TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
@@ -258,6 +258,9 @@ struct FunctionContext {
     let_pattern_counter: u32,
     /// Context for managing value copy scratch locals
     copy_context: CopyContext,
+    /// When true, builtin calls returning tuples should NOT wrap in struct.new
+    /// Used for tuple elision optimization when destructuring multi-value returns
+    skip_tuple_wrap: bool,
 }
 
 impl FunctionContext {
@@ -284,6 +287,7 @@ impl FunctionContext {
             if_pattern_counters: HashMap::new(),
             let_pattern_counter: 0,
             copy_context: CopyContext::new(),
+            skip_tuple_wrap: false,
         }
     }
 
@@ -310,6 +314,7 @@ impl FunctionContext {
             local_index_offset: 0,
             local_closure_ids: HashMap::new(),
             copy_context: CopyContext::new(),
+            skip_tuple_wrap: false,
         }
     }
 
@@ -9173,6 +9178,11 @@ impl Codegen {
     /// This optimization bypasses the tuple struct entirely when the pattern is a flat tuple
     /// of bindings/wildcards, directly binding stack values to locals.
     ///
+    /// The optimization is triggered when:
+    /// 1. The pattern is a flat tuple with only Binding or Wildcard patterns
+    /// 2. The value expression returns a tuple type (detected via metadata)
+    /// 3. The pattern length matches the tuple element count
+    ///
     /// Returns `true` if the optimization was applied, `false` otherwise.
     fn try_generate_multivalue_builtin_destructure(
         &self,
@@ -9203,61 +9213,42 @@ impl Codegen {
             _ => value,
         };
 
-        // Check if value is a multi-value builtin call
-        let (builtin_name, args) = match &inner_value.kind {
-            TirExprKind::Call {
-                func: func_ref,
-                args,
-                ..
-            } => {
-                if let FunctionRef::External {
-                    module_source,
-                    name,
-                    ..
-                } = func_ref
-                {
-                    if let ModuleSource::Core { name: mod_name } = module_source {
-                        if mod_name == "builtin" {
-                            (name.as_str(), args)
-                        } else {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
+        // Check if value is a builtin call (only builtins can return multi-value on Wasm stack)
+        let is_builtin_call = match &inner_value.kind {
+            TirExprKind::Call { func: func_ref, .. } => {
+                if let crate::tir::FunctionRef::External { module_source, .. } = func_ref {
+                    matches!(module_source, ModuleSource::Core { name } if name == "builtin")
                 } else {
-                    return false;
+                    false
                 }
             }
-            _ => return false,
+            _ => false,
         };
 
-        // Check for supported multi-value builtins (those that return [i64, i64])
-        let wasm_instruction = match builtin_name {
-            "i64_add128" => Instruction::I64Add128,
-            "i64_sub128" => Instruction::I64Sub128,
-            "i64_mul_wide_u" => Instruction::I64MulWideU,
-            "i64_mul_wide_s" => Instruction::I64MulWideS,
-            _ => return false,
-        };
-
-        // Verify pattern has exactly 2 elements (matching the [i64, i64] return)
-        if patterns.len() != 2 {
+        if !is_builtin_call {
             return false;
         }
 
-        // Generate the builtin call arguments
-        for arg in args {
-            self.generate_expr(func, arg, type_table, ctx, builder);
+        // Check if return type is a tuple (multi-value return)
+        let elem_types = match type_table.get(inner_value.type_id) {
+            ResolvedType::Tuple(types) => types,
+            _ => return false,
+        };
+
+        // Verify pattern length matches tuple element count
+        if patterns.len() != elem_types.len() {
+            return false;
         }
 
-        // Emit the Wasm instruction (leaves [lo, hi] on stack, hi on top)
-        func.instruction(&wasm_instruction);
+        // Generate the expression with skip_tuple_wrap flag set
+        // This tells builtin codegen to skip struct.new for tuple returns
+        ctx.skip_tuple_wrap = true;
+        self.generate_expr(func, inner_value, type_table, ctx, builder);
+        ctx.skip_tuple_wrap = false;
 
-        // Bind stack values to locals in reverse order (LIFO: hi first, then lo)
-        // Pattern: [lo_pattern, hi_pattern]
-        // Stack after instruction: [..., lo, hi]
-        // We need: local.set for hi, then local.set for lo
+        // Bind stack values to locals in reverse order (LIFO)
+        // Stack after multi-value instruction: [..., elem0, elem1, ..., elemN-1]
+        // elemN-1 is on top, so we need to set locals in reverse pattern order
         for sub_pattern in patterns.iter().rev() {
             match sub_pattern {
                 TirPattern::Binding { local_index, .. } => {
@@ -11191,42 +11182,51 @@ impl Codegen {
                 func.instruction(&Instruction::I32Eqz);
             }
             // Wide Arithmetic builtins - map directly to Wasm wide-arithmetic instructions
-            // These return multi-value [i64, i64] which needs to be wrapped in a tuple struct
+            // These return multi-value [i64, i64] which is wrapped in a tuple struct
+            // unless skip_tuple_wrap is set (for tuple elision optimization)
             "builtin::i64_add128" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 func.instruction(&Instruction::I64Add128);
-                // Convert multi-value return to tuple struct
-                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
-                func.instruction(&Instruction::StructNew(tuple_type_idx));
+                if !ctx.skip_tuple_wrap {
+                    let tuple_type_idx =
+                        self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                    func.instruction(&Instruction::StructNew(tuple_type_idx));
+                }
             }
             "builtin::i64_sub128" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 func.instruction(&Instruction::I64Sub128);
-                // Convert multi-value return to tuple struct
-                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
-                func.instruction(&Instruction::StructNew(tuple_type_idx));
+                if !ctx.skip_tuple_wrap {
+                    let tuple_type_idx =
+                        self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                    func.instruction(&Instruction::StructNew(tuple_type_idx));
+                }
             }
             "builtin::i64_mul_wide_u" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 func.instruction(&Instruction::I64MulWideU);
-                // Convert multi-value return to tuple struct
-                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
-                func.instruction(&Instruction::StructNew(tuple_type_idx));
+                if !ctx.skip_tuple_wrap {
+                    let tuple_type_idx =
+                        self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                    func.instruction(&Instruction::StructNew(tuple_type_idx));
+                }
             }
             "builtin::i64_mul_wide_s" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);
                 }
                 func.instruction(&Instruction::I64MulWideS);
-                // Convert multi-value return to tuple struct
-                let tuple_type_idx = self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
-                func.instruction(&Instruction::StructNew(tuple_type_idx));
+                if !ctx.skip_tuple_wrap {
+                    let tuple_type_idx =
+                        self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                    func.instruction(&Instruction::StructNew(tuple_type_idx));
+                }
             }
             "builtin::i32_clz" => {
                 for arg in args {
