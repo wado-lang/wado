@@ -17,7 +17,6 @@ use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
 };
 use crate::optimize::CanonBuiltin;
-use crate::optimize_move::is_fresh_value;
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
@@ -8572,8 +8571,10 @@ impl Codegen {
                 }
 
                 // Apply value copy for struct/array/tuple types (value semantics)
-                // Skip for fresh values (literals, calls, etc.) - they don't need copying
-                if self.needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
+                // Skip for Move-wrapped values - the optimizer marks fresh values with Move
+                if self.needs_value_copy(value.type_id, type_table)
+                    && !matches!(value.kind, TirExprKind::Move { .. })
+                {
                     self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
                 }
 
@@ -8604,8 +8605,10 @@ impl Codegen {
                     self.generate_expr(func, value, type_table, ctx, builder);
 
                     // Apply value copy for tuple types (value semantics)
-                    // Skip for fresh values (literals, calls, etc.) - they don't need copying
-                    if self.needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
+                    // Skip for Move-wrapped values - the optimizer marks fresh values with Move
+                    if self.needs_value_copy(value.type_id, type_table)
+                        && !matches!(value.kind, TirExprKind::Move { .. })
+                    {
                         self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
                     }
 

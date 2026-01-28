@@ -22,9 +22,7 @@ use std::collections::HashSet;
 
 /// Check if an expression produces a fresh value that can be moved.
 /// Fresh values are those that don't need copying because they're newly created.
-/// This function is public because it's also used by codegen to determine
-/// whether value copy is needed.
-pub fn is_fresh_value(expr: &TirExpr) -> bool {
+fn is_fresh_value(expr: &TirExpr) -> bool {
     match &expr.kind {
         // Literals always produce fresh values
         TirExprKind::StringLiteral(_)
