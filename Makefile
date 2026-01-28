@@ -135,8 +135,12 @@ update-vendor:
 update-stdlib-wasi:
 	rm -f wado-compiler/lib/wasi/*.wado
 	cargo run -p wado-from-wit -- \
+		--wit-dir vendor/wasmtime/crates/wasi-http/src/p3/wit \
+		--output-dir wado-compiler/lib/wasi
+	cargo run -p wado-from-wit -- \
 		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
 		--output-dir wado-compiler/lib/wasi
+	rm -rf wado-compiler/lib/wasi/wasi-http.wado # a file for bindgen
 
 wado-compiler/lib/builtins/wado-bundled.wat: Cargo.toml Cargo.lock wado-bundled/Cargo.toml wado-bundled/src/lib.rs
 	make update-bundled
