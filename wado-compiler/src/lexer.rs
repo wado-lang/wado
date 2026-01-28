@@ -606,6 +606,7 @@ impl<'a> Lexer<'a> {
             "export" => TokenKind::Export,
             "assert" => TokenKind::Assert,
             "global" => TokenKind::Global,
+            "matches" => TokenKind::Matches,
             // Note: "test" is handled as a contextual keyword in the parser, not here
             "true" => TokenKind::True,
             "false" => TokenKind::False,

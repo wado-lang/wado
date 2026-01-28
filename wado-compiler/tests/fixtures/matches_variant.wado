@@ -1,0 +1,41 @@
+// Test matches expression with custom variants
+// Note: Uses variants with different payload structures (one with payload, one without)
+// to avoid a known codegen bug with multiple same-type payload variants
+use {println, Stdout} from "core:cli";
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+fn run() with Stdout {
+    let circle = Shape::Circle(5.0);
+    let point = Shape::Point;
+
+    // Test matching Circle
+    if circle matches { Circle(_) } {
+        println("circle is a Circle");
+    }
+
+    // Test matching with guard
+    let big_circle = circle matches { Circle(r) && r > 3.0 };
+    if big_circle {
+        println("circle is a big Circle");
+    }
+
+    // Test Point doesn't match Circle
+    let point_is_circle = point matches { Circle(_) };
+    if point_is_circle {
+        println("point is Circle");
+    } else {
+        println("point is not Circle");
+    }
+
+    // Test Point (unit variant)
+    if point matches { Point } {
+        println("point is Point");
+    }
+}
+
+__DATA__
+{"stdout": "circle is a Circle\ncircle is a big Circle\npoint is not Circle\npoint is Point\n"}

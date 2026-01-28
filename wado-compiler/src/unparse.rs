@@ -1166,6 +1166,7 @@ impl<'a> Unparser<'a> {
             Expr::Block(b) => self.unparse_block_expr(b),
             Expr::If(i) => self.unparse_if_expr(i),
             Expr::Match(m) => self.unparse_match(m),
+            Expr::Matches(m) => self.unparse_matches(m),
             Expr::Closure(c) => self.unparse_closure(c),
             Expr::TemplateString(t) => self.unparse_template_string(t),
             Expr::Cast(c) => self.unparse_cast(c),
@@ -1173,6 +1174,17 @@ impl<'a> Unparser<'a> {
             Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
         }
+    }
+
+    fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
+        self.unparse_expr(&m.expr);
+        self.output.push_str(" matches { ");
+        self.unparse_pattern(&m.pattern);
+        if let Some(guard) = &m.guard {
+            self.output.push_str(" && ");
+            self.unparse_expr(guard);
+        }
+        self.output.push_str(" }");
     }
 
     fn unparse_labeled_block_expr(&mut self, lb: &crate::ast::LabeledBlockExpr) {

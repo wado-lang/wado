@@ -517,6 +517,19 @@ impl Binder {
                 self.exit_scope();
             }
 
+            Expr::Matches(matches_expr) => {
+                // Bind the scrutinee expression
+                self.bind_expr(&matches_expr.expr);
+                // Pattern bindings are scoped to the guard expression only
+                // and don't escape the matches expression
+                if let Some(guard) = &matches_expr.guard {
+                    self.enter_scope();
+                    self.bind_pattern(&matches_expr.pattern, matches_expr.span);
+                    self.bind_expr(guard);
+                    self.exit_scope();
+                }
+            }
+
             // Literals don't reference variables
             Expr::Literal(_) => {}
         }

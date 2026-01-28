@@ -1,0 +1,28 @@
+// Basic matches expression tests
+use {println, Stdout} from "core:cli";
+
+fn run() with Stdout {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let none: Option<i32> = null;
+
+    // Test basic matches with Some pattern - store result in variable first
+    let is_some = opt matches { Some(_) };
+    if is_some {
+        println("opt is Some");
+    }
+
+    // Test matches with None pattern
+    let is_none = none matches { None };
+    if is_none {
+        println("none is None");
+    }
+
+    // Test negation
+    let not_none = !(opt matches { None });
+    if not_none {
+        println("opt is not None");
+    }
+}
+
+__DATA__
+{"stdout": "opt is Some\nnone is None\nopt is not None\n"}

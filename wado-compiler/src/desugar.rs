@@ -409,7 +409,52 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 }))
             }
         }
+        // Desugar matches expression: `expr matches { pattern && guard }`
+        // becomes: `if let pattern = expr { guard } else { false }`
+        // or if no guard: `if let pattern = expr { true } else { false }`
+        Expr::Matches(m) => desugar_matches_expr(m),
     }
+}
+
+/// Desugar matches expression: `expr matches { pattern && guard }`
+/// becomes: `match expr { pattern => guard, _ => false }`
+/// or if no guard: `match expr { pattern => true, _ => false }`
+fn desugar_matches_expr(m: &crate::ast::MatchesExpr) -> Expr {
+    let scrutinee = desugar_expr(&m.expr);
+
+    // The match arm body: guard expression or `true` if no guard
+    let match_body = if let Some(ref guard) = m.guard {
+        desugar_expr(guard)
+    } else {
+        Expr::Literal(LiteralExpr {
+            value: Literal::Bool(true),
+            span: m.span,
+        })
+    };
+
+    // The wildcard arm: `false`
+    let wildcard_body = Expr::Literal(LiteralExpr {
+        value: Literal::Bool(false),
+        span: m.span,
+    });
+
+    // Build a match expression
+    Expr::Match(Box::new(MatchExpr {
+        expr: scrutinee,
+        arms: vec![
+            MatchArm {
+                pattern: m.pattern.clone(),
+                body: match_body,
+                span: m.span,
+            },
+            MatchArm {
+                pattern: Pattern::Wildcard,
+                body: wildcard_body,
+                span: m.span,
+            },
+        ],
+        span: m.span,
+    }))
 }
 
 /// Desugar compound assignment: `x += y` → `x = x + y`
