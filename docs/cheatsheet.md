@@ -638,9 +638,15 @@ if shape matches { Circle(_) } {
     println("it's a circle");
 }
 
-// Combine with logical operators
-if opt matches { Some(x) } && x > 0 {
-    // Note: x is NOT in scope here - use if let for value extraction
+// Pattern bindings are scoped to the guard only
+// This is a compile error - x is not in scope outside matches:
+// if opt matches { Some(x) } && x > 0 { }  // ERROR: 'x' is not in scope
+
+// For value extraction, use if let instead:
+if let Some(x) = opt {
+    if x > 0 {
+        println("positive value");
+    }
 }
 ```
 

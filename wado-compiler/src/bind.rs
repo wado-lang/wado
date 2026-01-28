@@ -520,14 +520,16 @@ impl Binder {
             Expr::Matches(matches_expr) => {
                 // Bind the scrutinee expression
                 self.bind_expr(&matches_expr.expr);
-                // Pattern bindings are scoped to the guard expression only
-                // and don't escape the matches expression
+                // Pattern bindings are scoped to the matches expression only
+                // (specifically, they're only visible in the guard if present)
+                // Always enter a scope and bind pattern to track variable names,
+                // so we can detect "use after scope exit" errors
+                self.enter_scope();
+                self.bind_pattern(&matches_expr.pattern, matches_expr.span);
                 if let Some(guard) = &matches_expr.guard {
-                    self.enter_scope();
-                    self.bind_pattern(&matches_expr.pattern, matches_expr.span);
                     self.bind_expr(guard);
-                    self.exit_scope();
                 }
+                self.exit_scope();
             }
 
             // Literals don't reference variables
