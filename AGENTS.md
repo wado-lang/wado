@@ -192,16 +192,15 @@ This project relies on the following Wasm features:
 - Wasm Stack Switching (not yet implemented in wasmtime)
 - Wasm Component Model
 - WASI 0.3.0 (P3)
-  - P3 (`0.3.0-rc-2025-09-16`) is supported by wasmtime v40 with `-W component-model-async=y`
+  - P3 is supported by wasmtime v40 with `-W component-model-async=y`
   - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
 ## General Rules
 
 - All the documents and comments must be written in English.
-- Everything is under discussion. We can change the spec at any time.
 - When referring to WAT, use folded style syntax.
 - Do not commit changes unless the user requests so. When commit, no need to explain the implementation details.
-- When you encounter an unrelated problem, don't remove the problematic code. For E2E tests, add the `TODO` field. For other cases, move it elsewhere. Preserve the problem as is.
+- If you find a compiler bug, limitation, or awkward behavior, fix it. Such a problem must be treated as the highest priority.
 
 ## Rules for Rust
 
