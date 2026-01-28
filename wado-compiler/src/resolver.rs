@@ -866,11 +866,14 @@ impl<'a> Resolver<'a> {
                             // Each variant case has exactly one payload type.
                             // Unit variants have `()` (unit type) payload.
                             let payload = if let Some(payload_ty) = &case.payload {
-                                Self::resolve_type_static(
+                                // Use resolve_type_static_with_params for variant payloads
+                                // so that type params like T in Ok(T) become TypeParam types
+                                Self::resolve_type_static_with_params(
                                     payload_ty,
                                     &mut type_table.borrow_mut(),
                                     &type_aliases,
                                     &struct_fields,
+                                    &type_params,
                                 )
                             } else {
                                 // Unit variant: payload is unit type
@@ -1205,6 +1208,133 @@ impl<'a> Resolver<'a> {
                 {
                     let elem =
                         Self::resolve_type_static(elem_ty, type_table, type_aliases, struct_fields);
+                    return type_table.make_builtin_array(elem);
+                }
+                TypeTable::UNKNOWN
+            }
+            _ => TypeTable::UNKNOWN,
+        }
+    }
+
+    /// Static version of `resolve_type` with type parameters for variant payload resolution.
+    /// This is similar to `resolve_type_static` but also handles type parameters (like T, E)
+    /// that appear in generic variant definitions (like `Result<T, E>`).
+    fn resolve_type_static_with_params(
+        ty: &Type,
+        type_table: &mut TypeTable,
+        type_aliases: &HashMap<String, TypeId>,
+        struct_fields: &HashMap<String, StructFieldInfo>,
+        type_params: &[String],
+    ) -> TypeId {
+        match ty {
+            Type::Named(named) => {
+                // Check type aliases first
+                if let Some(&alias_type_id) = type_aliases.get(&named.name) {
+                    return alias_type_id;
+                }
+
+                // Check if it's a type parameter (e.g., T in Result<T, E>)
+                if let Some(index) = type_params.iter().position(|p| p == &named.name) {
+                    return type_table.make_type_param(named.name.clone(), index as u32);
+                }
+
+                // Built-in primitives
+                match named.name.as_str() {
+                    "bool" => TypeTable::BOOL,
+                    "char" => TypeTable::CHAR,
+                    "i8" => TypeTable::I8,
+                    "i16" => TypeTable::I16,
+                    "i32" => TypeTable::I32,
+                    "i64" => TypeTable::I64,
+                    "u8" => TypeTable::U8,
+                    "u16" => TypeTable::U16,
+                    "u32" => TypeTable::U32,
+                    "u64" => TypeTable::U64,
+                    "f32" => TypeTable::F32,
+                    "f64" => TypeTable::F64,
+                    "()" => TypeTable::UNIT,
+                    "!" => TypeTable::NEVER,
+                    _ => {
+                        // Check if it's a struct type
+                        if let Some(info) = struct_fields.get(&named.name) {
+                            type_table.make_struct(named.name.clone(), info.module_source.clone())
+                        } else {
+                            TypeTable::UNKNOWN
+                        }
+                    }
+                }
+            }
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Option" if !generic.args.is_empty() => {
+                    let inner = Self::resolve_type_static_with_params(
+                        &generic.args[0],
+                        type_table,
+                        type_aliases,
+                        struct_fields,
+                        type_params,
+                    );
+                    type_table.intern(ResolvedType::Option(inner))
+                }
+                _ => {
+                    // Check if it's a generic struct type
+                    if let Some(info) = struct_fields.get(&generic.name) {
+                        // Resolve type arguments
+                        let type_args: Vec<TypeId> = generic
+                            .args
+                            .iter()
+                            .map(|arg| {
+                                Self::resolve_type_static_with_params(
+                                    arg,
+                                    type_table,
+                                    type_aliases,
+                                    struct_fields,
+                                    type_params,
+                                )
+                            })
+                            .collect();
+                        type_table.make_generic_instance(
+                            generic.name.clone(),
+                            info.module_source.clone(),
+                            type_args,
+                        )
+                    } else {
+                        TypeTable::UNKNOWN
+                    }
+                }
+            },
+            Type::Reference(inner) => {
+                let inner_type = Self::resolve_type_static_with_params(
+                    inner,
+                    type_table,
+                    type_aliases,
+                    struct_fields,
+                    type_params,
+                );
+                type_table.make_ref(inner_type)
+            }
+            Type::MutReference(inner) => {
+                let inner_type = Self::resolve_type_static_with_params(
+                    inner,
+                    type_table,
+                    type_aliases,
+                    struct_fields,
+                    type_params,
+                );
+                type_table.make_mut_ref(inner_type)
+            }
+            Type::NamespacedGeneric(namespaced) => {
+                // Handle builtin::array<T>
+                if namespaced.namespace == "builtin"
+                    && namespaced.name == "array"
+                    && let Some(elem_ty) = namespaced.args.first()
+                {
+                    let elem = Self::resolve_type_static_with_params(
+                        elem_ty,
+                        type_table,
+                        type_aliases,
+                        struct_fields,
+                        type_params,
+                    );
                     return type_table.make_builtin_array(elem);
                 }
                 TypeTable::UNKNOWN

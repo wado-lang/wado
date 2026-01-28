@@ -9451,10 +9451,15 @@ impl Codegen {
                     ..
                 },
             ) => {
-                // Look up variant type info
+                // Look up variant type info - for GenericInstance, use the mangled name
+                let variant_lookup_name =
+                    self.mangle_type_for_struct_name(scrutinee.type_id, type_table);
                 let variant_types = self.variant_types.borrow();
-                let variant_info = variant_types.get(name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {name}");
+                let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
+                    // Fallback to base name for non-generic variants
+                    variant_types.get(name).unwrap_or_else(|| {
+                        panic!("Variant type not registered: {variant_lookup_name} (base: {name})");
+                    })
                 });
 
                 // Find the case info and case index for this pattern

@@ -236,8 +236,7 @@ pub async fn compile_with_full_opts(
     };
 
     // Compile using async API
-    let result =
-        wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
+    let result = wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
 
     match result {
         Ok(result) => result.wasm,

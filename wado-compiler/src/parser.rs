@@ -259,7 +259,9 @@ impl Parser {
 
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(is_pub).map(Item::Use),
-            TokenKind::Fn => self.parse_function(is_pub, is_export, attrs).map(Item::Function),
+            TokenKind::Fn => self
+                .parse_function(is_pub, is_export, attrs)
+                .map(Item::Function),
             TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
