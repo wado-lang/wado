@@ -1039,6 +1039,24 @@ let pi = 3.14159;
 let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
 ```
 
+**Multiline strings** are supported in both regular and template strings. Literal newlines are preserved:
+
+```wado
+// Regular multiline string
+let poem = "Roses are red,
+Violets are blue,
+Wado is great,
+And so are you!";
+
+// Multiline template string
+let name = "Alice";
+let message = `Dear {name},
+
+Welcome to Wado!
+
+Best regards`;
+```
+
 #### Tuple Literals
 
 Bracket syntax `[...]` creates tuple values by default. This aligns with TypeScript conventions and JSON interoperability.

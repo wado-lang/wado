@@ -149,6 +149,20 @@ arr[0] = 100;                            // index assignment (write, requires mu
 // String literals
 let s = "hello";                         // String literal (UTF-8)
 
+// Multiline strings (newlines preserved)
+let poem = "Line 1
+Line 2
+Line 3";
+
+// Template strings (interpolation)
+let name = "Alice";
+let greeting = `Hello, {name}!`;         // "Hello, Alice!"
+
+// Multiline template strings
+let message = `Dear {name},
+
+Welcome to Wado!`;
+
 // String constructors
 let s = String::with_capacity(100);      // empty string with pre-allocated capacity
 
