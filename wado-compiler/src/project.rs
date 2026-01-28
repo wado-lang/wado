@@ -55,6 +55,9 @@ pub struct Project {
     // ========================================
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// Target world for Component Model export (e.g., "Command", "Service")
+    /// Defaults to "Command" (wasi:cli/command)
+    pub target_world: String,
 }
 
 impl Project {
@@ -80,6 +83,7 @@ impl Project {
             used_box_primitives: HashSet::new(),
             // Codegen options
             strip_names: false,
+            target_world: "Command".to_string(),
         }
     }
 

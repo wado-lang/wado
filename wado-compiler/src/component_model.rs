@@ -161,6 +161,12 @@ impl WasiRegistry {
         let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
         registry.register_module(&wasi_sockets, &mut world_registry);
 
+        // Parse and register wasi:http
+        // Note: wasi:http has complex resource types (Fields, Request, Response, etc.)
+        // that require full Component Model resource support (own<>, borrow<>, etc.)
+        // which isn't implemented yet. Skip registration for now.
+        // TODO: Add wasi:http registration when resource type support is complete
+
         // Note: wasi:filesystem uses `flags` syntax which isn't supported yet
         // TODO: Add wasi:filesystem registration when `flags` parsing is implemented
 
@@ -764,13 +770,16 @@ pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
 fn is_param_type_supported_with_types(
     ty: &Type,
     enums: &HashSet<&str>,
-    resources: &HashSet<&str>,
+    _resources: &HashSet<&str>,
 ) -> bool {
     match ty {
         Type::Named(named) => {
             let name = named.name.as_str();
             // Check primitives and unit type
             // Unit type () is parsed as Named("()"), not Tuple([])
+            // Note: Resource types are NOT supported as params yet - they need
+            // special CM handling (borrow<resource> / own<resource>) that isn't
+            // implemented in wado_type_to_cm_val_type
             matches!(
                 name,
                 "i32"
@@ -786,7 +795,6 @@ fn is_param_type_supported_with_types(
                     | "String"
                     | "()"
             ) || enums.contains(name)
-                || resources.contains(name)
         }
         Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
         _ => false,

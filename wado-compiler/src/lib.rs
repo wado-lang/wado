@@ -170,6 +170,16 @@ pub struct DumpResult {
     pub comments: comment::CommentMap,
 }
 
+/// Compilation options for the compiler
+#[derive(Debug, Clone, Default)]
+pub struct CompilerOptions {
+    /// Optimization level
+    pub opt_level: OptLevel,
+    /// Target world name (e.g., "Command", "Service")
+    /// Defaults to "Command" if not specified
+    pub target_world: Option<String>,
+}
+
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
 ///
 /// This is the main compilation entry point. It runs the full compilation pipeline:
@@ -191,6 +201,29 @@ pub async fn compile_with_host<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     opt_level: OptLevel,
+) -> Result<CompileResult, CompileError> {
+    let options = CompilerOptions {
+        opt_level,
+        target_world: None,
+    };
+    compile_with_options(source, host, filename, options).await
+}
+
+/// Compile Wado source code with full options.
+///
+/// This is the main compilation entry point with all options. It runs the full compilation pipeline:
+/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> codegen
+///
+/// # Arguments
+/// * `source` - The entry module source code
+/// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
+/// * `filename` - Optional filename for error messages
+/// * `options` - Compilation options including optimization level and target world
+pub async fn compile_with_options<H: CompilerHost>(
+    source: &str,
+    host: &H,
+    filename: Option<&str>,
+    options: CompilerOptions,
 ) -> Result<CompileResult, CompileError> {
     let filename = filename.map(String::from);
 
@@ -316,13 +349,18 @@ pub async fn compile_with_host<H: CompilerHost>(
     }
 
     // === Phase 8: Monomorphize (Project -> Project) ===
-    let project = monomorphize_project(project);
+    let mut project = monomorphize_project(project);
+
+    // Apply target world from options
+    if let Some(world) = options.target_world {
+        project.target_world = world;
+    }
 
     // === Phase 9: Lower (Project -> Project) ===
     let project = lower_project(project);
 
     // === Phase 10: Optimize (Project -> Project) ===
-    let project = optimize(project, opt_level);
+    let project = optimize(project, options.opt_level);
 
     // === Phase 11: Codegen ===
     let mut codegen = Codegen::new();

@@ -190,6 +190,7 @@ mod tests {
         let func = Function {
             name: "stream_new".to_string(),
             is_pub: false,
+            is_export: false,
             type_params: vec![],
             attrs: vec![],
             params: vec![],
@@ -220,6 +221,7 @@ mod tests {
         let func = Function {
             name: "unreachable".to_string(),
             is_pub: false,
+            is_export: false,
             type_params: vec![],
             attrs: vec![],
             params: vec![],
@@ -245,6 +247,7 @@ mod tests {
         let func = Function {
             name: "stream_write".to_string(),
             is_pub: false,
+            is_export: false,
             type_params: vec![],
             attrs: vec![],
             params: vec![

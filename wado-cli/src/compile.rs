@@ -201,6 +201,16 @@ pub async fn compile_with_opts(
     opt_level: OptLevel,
     log_level: LogLevel,
 ) -> Vec<u8> {
+    compile_with_full_opts(filename, opt_level, log_level, None).await
+}
+
+/// Compile a Wado source file with full options including target world
+pub async fn compile_with_full_opts(
+    filename: &str,
+    opt_level: OptLevel,
+    log_level: LogLevel,
+    target_world: Option<String>,
+) -> Vec<u8> {
     let path = Path::new(filename);
 
     // Read source file
@@ -219,10 +229,15 @@ pub async fn compile_with_opts(
         .unwrap_or_default();
     let host = FilesystemCompilerHost::with_log_level(base_path, log_level);
 
+    // Build compiler options
+    let options = wado_compiler::CompilerOptions {
+        opt_level: to_compiler_opt_level(opt_level),
+        target_world,
+    };
+
     // Compile using async API
-    let compiler_opt_level = to_compiler_opt_level(opt_level);
     let result =
-        wado_compiler::compile_with_host(&source, &host, Some(filename), compiler_opt_level).await;
+        wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
 
     match result {
         Ok(result) => result.wasm,
@@ -248,7 +263,8 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 }
 
 pub async fn run(opts: CompileOptions) {
-    let wasm = compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
+    let wasm =
+        compile_with_full_opts(&opts.input, opts.opt_level, opts.log_level, opts.world).await;
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {
