@@ -215,9 +215,9 @@ impl WadoCodeGenerator {
             (None, false) => String::new(),
         };
 
-        // Note: Wado doesn't have async keyword - async functions are handled at
-        // the Component Model level via the world export mechanism
-        self.writeln(&format!("fn {}({}){};", func.name, params, return_type));
+        // async keyword is needed for CM boundary ABI marker
+        let async_kw = if func.is_async { "async " } else { "" };
+        self.writeln(&format!("{}fn {}({}){};", async_kw, func.name, params, return_type));
     }
 
     fn write_world(&mut self, world: &WadoWorld) {

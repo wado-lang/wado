@@ -5984,6 +5984,11 @@ impl<'a> Resolver<'a> {
                 module_source,
                 ..
             } => (name.clone(), module_source.to_path(), None),
+            // Resource types use reference semantics - handle like struct for method lookup
+            ResolvedType::Resource {
+                name,
+                module_source,
+            } => (name.clone(), module_source.to_path(), None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
                 name,
@@ -6173,6 +6178,75 @@ impl<'a> Resolver<'a> {
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search resource declarations in loaded modules for instance methods
+        // Resource methods have &self or &mut self parameter (first param is reference to resource type)
+        if !module_path.is_empty()
+            && let Some(module) = self.loaded_modules.get(&module_path)
+        {
+            for item in &module.items {
+                if let Item::Resource(resource) = item
+                    && resource.name == struct_name
+                {
+                    for method in &resource.methods {
+                        if method.name == method_name {
+                            // Check if this is an instance method (has self parameter)
+                            let has_self = method.params.iter().any(|p| {
+                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
+                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
+                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
+                            });
+                            if has_self {
+                                let return_type = method
+                                    .return_type
+                                    .as_ref()
+                                    .map(|t| self.resolve_type(t))
+                                    .unwrap_or(TypeTable::UNIT);
+                                // Resource instance methods use &self (Ref) by default
+                                return Some(MethodInfo {
+                                    return_type,
+                                    self_kind: ast::SelfKind::Ref,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also search all modules for resources if module_path is empty
+        if module_path.is_empty() {
+            for module in self.loaded_modules.values() {
+                for item in &module.items {
+                    if let Item::Resource(resource) = item
+                        && resource.name == struct_name
+                    {
+                        for method in &resource.methods {
+                            if method.name == method_name {
+                                // Check if this is an instance method (has self parameter)
+                                let has_self = method.params.iter().any(|p| {
+                                    matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
+                                        if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
+                                        || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
+                                });
+                                if has_self {
+                                    let return_type = method
+                                        .return_type
+                                        .as_ref()
+                                        .map(|t| self.resolve_type(t))
+                                        .unwrap_or(TypeTable::UNIT);
+                                    // Resource instance methods use &self (Ref) by default
+                                    return Some(MethodInfo {
+                                        return_type,
+                                        self_kind: ast::SelfKind::Ref,
                                     });
                                 }
                             }

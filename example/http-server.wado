@@ -11,7 +11,7 @@
 // Test with curl:
 //   curl http://localhost:8080/
 
-use {eprintln, Stderr} from "core:cli";
+use {println, eprintln, Stdout, Stderr} from "core:cli";
 use {
     Request,
     Response,
@@ -23,8 +23,9 @@ use {
     FieldName,
 } from "wasi:http";
 
-// Export the HTTP handler for the wasi:http/service world
-export fn handle(request: Request) -> Result<Response, ErrorCode> with Stderr {
+// HTTP handler for the wasi:http/service world
+// Note: export keyword is commented out until Component Model async export is fully implemented
+fn handle(request: Request) -> Result<Response, ErrorCode> with Stderr {
     // Get the request path for logging
     let path = request.method_request_get_path_with_query();
 
@@ -65,4 +66,11 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> with Stderr {
     return Result::<Response, ErrorCode>::Err(
         ErrorCode::InternalError(Option::<String>::Some("Response creation not yet implemented"))
     );
+}
+
+// Entry point for wasi:cli/command world (used for testing)
+fn run() with Stdout {
+    println("HTTP server example - resource type test");
+    // Note: The handle() function would be called by the wasi:http runtime
+    // when compiled with --world wasi:http/service
 }
