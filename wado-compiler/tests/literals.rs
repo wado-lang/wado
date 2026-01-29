@@ -222,7 +222,7 @@ fn test_string_empty() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "", "expected empty string, got {:?}", s);
+            assert_eq!(s.value, "", "expected empty string, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -235,7 +235,7 @@ fn test_string_simple() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "hello", "expected 'hello', got {:?}", s);
+            assert_eq!(s.value, "hello", "expected 'hello', got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -248,7 +248,7 @@ fn test_string_with_spaces() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "hello world", "expected 'hello world', got {:?}", s);
+            assert_eq!(s.value, "hello world", "expected 'hello world', got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -261,7 +261,7 @@ fn test_string_escape_newline() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "line1\nline2", "expected newline escape, got {:?}", s);
+            assert_eq!(s.value, "line1\nline2", "expected newline escape, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -274,7 +274,7 @@ fn test_string_escape_tab() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "col1\tcol2", "expected tab escape, got {:?}", s);
+            assert_eq!(s.value, "col1\tcol2", "expected tab escape, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -287,7 +287,7 @@ fn test_string_escape_carriage_return() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "line\r", "expected carriage return escape, got {:?}", s);
+            assert_eq!(s.value, "line\r", "expected carriage return escape, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -317,7 +317,7 @@ fn test_string_escape_quote() {
 
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "say \"hello\"", "expected quote escape, got {:?}", s);
+            assert_eq!(s.value, "say \"hello\"", "expected quote escape, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -346,7 +346,7 @@ fn test_string_escape_forward_slash() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "path/to", "expected forward slash escape, got {:?}", s);
+            assert_eq!(s.value, "path/to", "expected forward slash escape, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -358,7 +358,7 @@ fn test_string_escape_backspace() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "hello\x08", "expected backspace escape, got {:?}", s);
+            assert_eq!(s.value, "hello\x08", "expected backspace escape, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -370,7 +370,7 @@ fn test_string_escape_form_feed() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "page\x0C", "expected form feed escape, got {:?}", s);
+            assert_eq!(s.value, "page\x0C", "expected form feed escape, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -382,7 +382,7 @@ fn test_string_escape_unicode_bmp() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "A", "expected Unicode A, got {:?}", s);
+            assert_eq!(s.value, "A", "expected Unicode A, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -394,7 +394,7 @@ fn test_string_escape_unicode_full() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "😀", "expected emoji, got {:?}", s);
+            assert_eq!(s.value, "😀", "expected emoji, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }
@@ -406,7 +406,7 @@ fn test_string_surrogate_pair() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(s) => {
-            assert_eq!(s, "😀", "expected emoji from surrogate pair, got {:?}", s);
+            assert_eq!(s.value, "😀", "expected emoji from surrogate pair, got {:?}", s);
         }
         other => panic!("expected String, got {:?}", other),
     }

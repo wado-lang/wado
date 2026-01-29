@@ -10,10 +10,10 @@ use crate::ast::{
     IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, IntLiteral,
     Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
     MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern,
-    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport,
-    WhileStmt, WorldDecl, WorldExport, WorldImport,
+    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr,
+    Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
+    WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -287,9 +287,9 @@ impl Parser {
         self.advance();
 
         // Optional test name (string literal)
-        let name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+        let name = if let TokenKind::StringLit { value, .. } = self.peek_kind().clone() {
             self.advance();
-            Some(s)
+            Some(value)
         } else {
             None
         };
@@ -400,9 +400,9 @@ impl Parser {
             self.advance();
             // Parse comma-separated string literal arguments
             let mut args = Vec::new();
-            while let TokenKind::StringLit(s) = self.peek_kind().clone() {
+            while let TokenKind::StringLit { value, .. } = self.peek_kind().clone() {
                 self.advance();
-                args.push(s);
+                args.push(value);
                 // Check for comma to continue parsing more arguments
                 if self.check(&TokenKind::Comma) {
                     self.advance();
@@ -623,10 +623,10 @@ impl Parser {
     /// Consume a string literal and return its value
     fn consume_string(&mut self) -> ParseResult<String> {
         match &self.peek().kind {
-            TokenKind::StringLit(s) => {
-                let s = s.clone();
+            TokenKind::StringLit { value, .. } => {
+                let value = value.clone();
                 self.advance();
-                Ok(s)
+                Ok(value)
             }
             _ => Err(ParseError {
                 message: "expected string literal".to_string(),
@@ -1386,10 +1386,13 @@ impl Parser {
             // Literal pattern: 3.14
             self.advance();
             Ok(Pattern::Literal(Literal::Float(FloatLiteral { repr })))
-        } else if let TokenKind::StringLit(value) = self.peek_kind().clone() {
+        } else if let TokenKind::StringLit { value, raw } = self.peek_kind().clone() {
             // Literal pattern: "hello"
             self.advance();
-            Ok(Pattern::Literal(Literal::String(value)))
+            Ok(Pattern::Literal(Literal::String(StringLiteral {
+                value,
+                raw,
+            })))
         } else if let TokenKind::CharLit(value) = self.peek_kind().clone() {
             // Literal pattern: 'a'
             self.advance();
@@ -2149,10 +2152,10 @@ impl Parser {
                     span: start_span,
                 }))
             }
-            TokenKind::StringLit(value) => {
+            TokenKind::StringLit { value, raw } => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::String(value),
+                    value: Literal::String(StringLiteral { value, raw }),
                     span: start_span,
                 }))
             }
@@ -4045,7 +4048,7 @@ mod tests {
                 // Check that message is present and is a string literal
                 assert!(assert_stmt.message.is_some());
                 if let Some(Expr::Literal(lit)) = &assert_stmt.message {
-                    assert!(matches!(&lit.value, Literal::String(s) if s == "x must be positive"));
+                    assert!(matches!(&lit.value, Literal::String(s) if s.value == "x must be positive"));
                 } else {
                     panic!("expected string literal message");
                 }

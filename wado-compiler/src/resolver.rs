@@ -2503,7 +2503,7 @@ impl<'a> Resolver<'a> {
                     }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     Literal::Char(c) => TirLiteralPattern::Char(*c),
-                    Literal::String(s) => TirLiteralPattern::String(s.clone()),
+                    Literal::String(s) => TirLiteralPattern::String(s.value.clone()),
                     Literal::Null => TirLiteralPattern::Null,
                     _ => TirLiteralPattern::Null,
                 };
@@ -3481,7 +3481,7 @@ impl<'a> Resolver<'a> {
             Literal::Char(c) => (TirExprKind::CharLiteral(*c), TypeTable::CHAR),
             Literal::String(s) => {
                 let string_type = self.get_string_struct_type();
-                (TirExprKind::StringLiteral(s.clone()), string_type)
+                (TirExprKind::StringLiteral(s.value.clone()), string_type)
             }
             Literal::Null => {
                 // Null is Option<T> where T is unknown

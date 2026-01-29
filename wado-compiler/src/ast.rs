@@ -705,7 +705,7 @@ pub struct LiteralExpr {
 pub enum Literal {
     Int(IntLiteral),
     Float(FloatLiteral),
-    String(String),
+    String(StringLiteral),
     Char(char),
     Bool(bool),
     Null,
@@ -716,6 +716,27 @@ pub enum Literal {
     LocationLine,
     /// Compile-time location literal: `#function`
     LocationFunction,
+}
+
+/// String literal with original representation to preserve multiline strings
+#[derive(Debug, Clone)]
+pub struct StringLiteral {
+    /// The actual string value (with escape sequences interpreted)
+    pub value: String,
+    /// The original source representation (between quotes, unescaped)
+    pub raw: String,
+}
+
+impl PartialEq<str> for StringLiteral {
+    fn eq(&self, other: &str) -> bool {
+        self.value == other
+    }
+}
+
+impl PartialEq<&str> for StringLiteral {
+    fn eq(&self, other: &&str) -> bool {
+        self.value == *other
+    }
 }
 
 /// Integer literal with original representation (e.g., "0b1100", "0xFF", "42")
