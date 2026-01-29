@@ -12440,6 +12440,116 @@ impl Codegen {
                 }
                 func.instruction(&Instruction::F32ReinterpretI32);
             }
+            // Float math operations (single-argument)
+            "builtin::f32_abs" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Abs);
+            }
+            "builtin::f64_abs" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Abs);
+            }
+            "builtin::f32_ceil" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Ceil);
+            }
+            "builtin::f64_ceil" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Ceil);
+            }
+            "builtin::f32_floor" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Floor);
+            }
+            "builtin::f64_floor" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Floor);
+            }
+            "builtin::f32_trunc" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Trunc);
+            }
+            "builtin::f64_trunc" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Trunc);
+            }
+            "builtin::f32_nearest" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Nearest);
+            }
+            "builtin::f64_nearest" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Nearest);
+            }
+            "builtin::f32_sqrt" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Sqrt);
+            }
+            "builtin::f64_sqrt" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Sqrt);
+            }
+            // Float math operations (two-argument)
+            "builtin::f32_min" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Min);
+            }
+            "builtin::f64_min" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Min);
+            }
+            "builtin::f32_max" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Max);
+            }
+            "builtin::f64_max" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Max);
+            }
+            "builtin::f32_copysign" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F32Copysign);
+            }
+            "builtin::f64_copysign" => {
+                for arg in args {
+                    self.generate_expr(func, arg, type_table, ctx, builder);
+                }
+                func.instruction(&Instruction::F64Copysign);
+            }
             "builtin::call_indirect_stdout_write_via_stream" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);

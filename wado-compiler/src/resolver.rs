@@ -4856,6 +4856,18 @@ impl<'a> Resolver<'a> {
             "i32_reinterpret_f32" => TypeTable::I32,
             "f32_reinterpret_i32" => TypeTable::F32,
 
+            // Float math operations (single-argument)
+            "f32_abs" | "f32_ceil" | "f32_floor" | "f32_trunc" | "f32_nearest" | "f32_sqrt" => {
+                TypeTable::F32
+            }
+            "f64_abs" | "f64_ceil" | "f64_floor" | "f64_trunc" | "f64_nearest" | "f64_sqrt" => {
+                TypeTable::F64
+            }
+
+            // Float math operations (two-argument)
+            "f32_min" | "f32_max" | "f32_copysign" => TypeTable::F32,
+            "f64_min" | "f64_max" | "f64_copysign" => TypeTable::F64,
+
             // Unknown builtin - default to UNIT
             _ => TypeTable::UNIT,
         }
