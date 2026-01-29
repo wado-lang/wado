@@ -39,7 +39,7 @@ impl Parser {
         if self.pos >= self.input.len() {
             return -1; // EOF
         }
-        return self.input.get(self.pos);
+        return self.input.get_byte(self.pos);
     }
 
     fn advance(&mut self) {
@@ -102,7 +102,7 @@ impl Parser {
     fn match_literal(&mut self, lit: String) -> bool {
         let start = self.pos;
         for let mut i = 0; i < lit.len(); i += 1 {
-            if self.peek() != lit.get(i) {
+            if self.peek() != lit.get_byte(i) {
                 self.pos = start;
                 return false;
             }

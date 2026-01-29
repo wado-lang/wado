@@ -334,7 +334,7 @@ impl<'a> Lexer<'a> {
 
         Ok(Token::new(
             kind,
-            Span::new(start, self.pos, start_line, start_column),
+            Span::with_end_line(start, self.pos, start_line, start_column, self.line),
         ))
     }
 
@@ -802,6 +802,7 @@ impl<'a> Lexer<'a> {
         let start_column = self.column;
 
         self.advance(); // consume opening "
+        let content_start = self.pos; // position after opening quote
 
         let mut value = String::new();
         let mut pending_high_surrogate: Option<u16> = None;
@@ -815,8 +816,18 @@ impl<'a> Lexer<'a> {
                     });
                 }
                 Some((_, '"')) => {
+                    let content_end = self.pos; // position before closing quote
                     self.advance();
-                    break;
+                    // Extract raw content between quotes
+                    let raw = self.input[content_start..content_end].to_string();
+                    if pending_high_surrogate.is_some() {
+                        return Err(LexError {
+                            message: "invalid surrogate pair: high surrogate at end of string"
+                                .to_string(),
+                            span: Span::new(start, self.pos, start_line, start_column),
+                        });
+                    }
+                    return Ok(TokenKind::StringLit { value, raw });
                 }
                 Some((_, '\\')) => {
                     self.advance();
@@ -871,15 +882,6 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
-
-        if pending_high_surrogate.is_some() {
-            return Err(LexError {
-                message: "invalid surrogate pair: high surrogate at end of string".to_string(),
-                span: Span::new(start, self.pos, start_line, start_column),
-            });
-        }
-
-        Ok(TokenKind::StringLit(value))
     }
 
     fn parse_escape_sequence(
@@ -1213,7 +1215,9 @@ mod tests {
         assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println"));
         assert!(matches!(tokens[3].kind, TokenKind::RBrace));
         assert!(matches!(tokens[4].kind, TokenKind::From));
-        assert!(matches!(&tokens[5].kind, TokenKind::StringLit(s) if s == "core:cli"));
+        assert!(
+            matches!(&tokens[5].kind, TokenKind::StringLit { value, .. } if value == "core:cli")
+        );
         assert!(matches!(tokens[6].kind, TokenKind::Semicolon));
     }
 
@@ -1222,7 +1226,9 @@ mod tests {
         let mut lexer = Lexer::new(r#""Hello, world!""#);
         let tokens = lexer.tokenize().unwrap();
 
-        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(s) if s == "Hello, world!"));
+        assert!(
+            matches!(&tokens[0].kind, TokenKind::StringLit { value, .. } if value == "Hello, world!")
+        );
     }
 
     #[test]

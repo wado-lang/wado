@@ -1,0 +1,38 @@
+// Test String character count via .chars().count()
+// len() returns byte count, chars().count() returns character count
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // ASCII string: bytes == chars
+    let ascii = "Hello";
+    assert ascii.len() == 5;
+    assert ascii.chars().count() == 5;
+
+    // Japanese: 2 chars, 6 bytes (3 bytes each)
+    let japanese = "日本";
+    assert japanese.len() == 6;
+    assert japanese.chars().count() == 2;
+
+    // Emoji: 1 char, 4 bytes
+    let emoji = "😀";
+    assert emoji.len() == 4;
+    assert emoji.chars().count() == 1;
+
+    // Mixed: 5 chars (A=1, é=2, ï=2, 日=3, 😀=4 = 12 bytes)
+    let mixed = "Aéï日😀";
+    assert mixed.len() == 12;
+    assert mixed.chars().count() == 5;
+
+    // Empty string
+    let empty = "";
+    assert empty.len() == 0;
+    assert empty.chars().count() == 0;
+
+    // bytes().count() should equal len()
+    assert mixed.bytes().count() == mixed.len();
+
+    println("char count tests passed");
+}
+
+__DATA__
+{"stdout": "char count tests passed\n"}

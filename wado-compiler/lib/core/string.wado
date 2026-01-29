@@ -6,7 +6,6 @@
 
 use {Eq, Ord, Iterator} from "core:prelude/traits";
 use {Option} from "core:prelude/types";
-use {log_stderr} from "core:internal";
 
 // ============================================================================
 // String Type
@@ -38,13 +37,13 @@ impl String {
         return self.used == 0;
     }
 
-    /// Get a byte at the given index (internal use only - prefer bytes() iterator)
-    pub fn get(&self, index: i32) -> i32 {
+    /// Get a byte at the given index (low-level - prefer bytes() iterator)
+    pub fn get_byte(&self, index: i32) -> i32 {
         return builtin::array_get_u8(self.repr, index);
     }
 
-    /// Set a byte at the given index (internal use only)
-    pub fn set(&mut self, index: i32, value: i32) {
+    /// Set a byte at the given index (low-level)
+    pub fn set_byte(&mut self, index: i32, value: i32) {
         builtin::array_set_u8(self.repr, index, value);
     }
 
@@ -70,6 +69,33 @@ impl String {
         return String { repr: bytes, used: len };
     }
 
+    /// Ensure the string has capacity for at least `min_capacity` bytes.
+    /// If the current capacity is less than `min_capacity`, grows the buffer.
+    /// Uses amortized doubling strategy for efficiency.
+    pub fn grow(&mut self, min_capacity: i32) {
+        let capacity = builtin::array_len(self.repr);
+        if min_capacity <= capacity {
+            return;
+        }
+
+        // Calculate new capacity: double or at least min_capacity
+        let mut new_capacity = capacity * 2;
+        if new_capacity < min_capacity {
+            new_capacity = min_capacity;
+        }
+        if new_capacity < 8 {
+            new_capacity = 8;
+        }
+
+        // Create new array and copy existing bytes
+        let new_repr = builtin::array_new::<u8>(new_capacity);
+        for let mut i = 0; i < self.used; i += 1 {
+            let byte = builtin::array_get_u8(self.repr, i);
+            builtin::array_set_u8(new_repr, i, byte);
+        }
+        self.repr = new_repr;
+    }
+
     /// Append another string to this string
     /// Grows the string if necessary (O(1) amortized)
     pub fn append(&mut self, other: String) {
@@ -79,31 +105,14 @@ impl String {
         }
 
         let new_used = self.used + other_len;
-        let capacity = builtin::array_len(self.repr);
-
-        // Grow if needed
-        if builtin::unlikely(new_used > capacity) {
-            // Calculate new capacity: double or at least new_used
-            let mut new_capacity = capacity * 2;
-            if new_capacity < new_used {
-                new_capacity = new_used;
-            }
-            if new_capacity < 8 {
-                new_capacity = 8;
-            }
-
-            // Create new array and copy existing bytes
-            let new_repr = builtin::array_new::<u8>(new_capacity);
-            for let mut i = 0; i < self.used; i += 1 {
-                let byte = builtin::array_get_u8(self.repr, i);
-                builtin::array_set_u8(new_repr, i, byte);
-            }
-            self.repr = new_repr;
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+            self.grow(new_used);
         }
 
         // Copy bytes from other
+        let other_repr = other.internal_raw_bytes();
         for let mut i = 0; i < other_len; i += 1 {
-            let byte = other.get(i);
+            let byte = builtin::array_get_u8(other_repr, i);
             builtin::array_set_u8(self.repr, self.used + i, byte);
         }
         self.used = new_used;
@@ -120,14 +129,16 @@ impl String {
         let repr = builtin::array_new::<u8>(total);
 
         // Copy bytes from a
+        let a_repr = a.internal_raw_bytes();
         for let mut i = 0; i < len_a; i += 1 {
-            let byte = a.get(i);
+            let byte = builtin::array_get_u8(a_repr, i);
             builtin::array_set_u8(repr, i, byte);
         }
 
         // Copy bytes from b
+        let b_repr = b.internal_raw_bytes();
         for let mut i = 0; i < len_b; i += 1 {
-            let byte = b.get(i);
+            let byte = builtin::array_get_u8(b_repr, i);
             builtin::array_set_u8(repr, len_a + i, byte);
         }
 
@@ -145,8 +156,10 @@ impl Eq for String {
             return false;
         }
 
+        let a_repr = self.internal_raw_bytes();
+        let b_repr = other.internal_raw_bytes();
         for let mut i = 0; i < len_a; i += 1 {
-            if self.get(i) != other.get(i) {
+            if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
                 return false;
             }
         }
@@ -162,9 +175,11 @@ impl Ord for String {
         let len_b = other.len();
         let min_len = if len_b < len_a { len_b } else { len_a };
 
+        let a_repr = self.internal_raw_bytes();
+        let b_repr = other.internal_raw_bytes();
         for let mut i = 0; i < min_len; i += 1 {
-            let a_byte = self.get(i);
-            let b_byte = other.get(i);
+            let a_byte = builtin::array_get_u8(a_repr, i);
+            let b_byte = builtin::array_get_u8(b_repr, i);
             if a_byte < b_byte {
                 return true;
             }
@@ -200,6 +215,26 @@ impl Iterator for StrUtf8ByteIter {
         let byte = builtin::array_get_u8(self.repr, self.index);
         self.index += 1;
         return Option::<u8>::Some(byte as u8);
+    }
+}
+
+impl StrUtf8ByteIter {
+    /// Collects iterator elements into an Array.
+    pub fn collect(&mut self) -> Array<u8> {
+        let mut result: Array<u8> = [];
+        while let Some(item) = self.next() {
+            result.append(item);
+        }
+        return result;
+    }
+
+    /// Counts the number of remaining elements in the iterator.
+    pub fn count(&mut self) -> i32 {
+        let mut n = 0;
+        while let Some(_) = self.next() {
+            n += 1;
+        }
+        return n;
     }
 }
 
@@ -254,6 +289,26 @@ impl Iterator for StrCharIter {
     }
 }
 
+impl StrCharIter {
+    /// Collects iterator elements into an Array.
+    pub fn collect(&mut self) -> Array<char> {
+        let mut result: Array<char> = [];
+        while let Some(item) = self.next() {
+            result.append(item);
+        }
+        return result;
+    }
+
+    /// Counts the number of remaining elements (Unicode scalar values) in the iterator.
+    pub fn count(&mut self) -> i32 {
+        let mut n = 0;
+        while let Some(_) = self.next() {
+            n += 1;
+        }
+        return n;
+    }
+}
+
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {
@@ -278,15 +333,9 @@ impl String {
     pub fn append_char(&mut self, c: char) {
         let code = c as i32;
 
-        // Validate Unicode scalar value (reject surrogates)
-        if code >= 0xD800 && code <= 0xDFFF {
-            log_stderr("invalid Unicode scalar value: surrogate code point");
-            builtin::unreachable();
-        }
-        if code < 0 || code > 0x10FFFF {
-            log_stderr("invalid Unicode scalar value: out of range");
-            builtin::unreachable();
-        }
+        // Validate Unicode scalar value (reject surrogates and out-of-range)
+        assert code < 0xD800 || code > 0xDFFF, "invalid Unicode scalar value: surrogate code point";
+        assert code >= 0 && code <= 0x10FFFF, "invalid Unicode scalar value: out of range";
 
         // Calculate UTF-8 byte length
         let byte_len = if code < 0x80 {
@@ -300,24 +349,8 @@ impl String {
         };
 
         let new_used = self.used + byte_len;
-        let capacity = builtin::array_len(self.repr);
-
-        // Grow if needed
-        if builtin::unlikely(new_used > capacity) {
-            let mut new_capacity = capacity * 2;
-            if new_capacity < new_used {
-                new_capacity = new_used;
-            }
-            if new_capacity < 8 {
-                new_capacity = 8;
-            }
-
-            let new_repr = builtin::array_new::<u8>(new_capacity);
-            for let mut i = 0; i < self.used; i += 1 {
-                let byte = builtin::array_get_u8(self.repr, i);
-                builtin::array_set_u8(new_repr, i, byte);
-            }
-            self.repr = new_repr;
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+            self.grow(new_used);
         }
 
         // Encode UTF-8

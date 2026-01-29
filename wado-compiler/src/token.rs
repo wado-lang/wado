@@ -46,7 +46,11 @@ pub enum TokenKind {
 
     // Literals
     Ident(String),
-    StringLit(String),
+    /// String literal with value and raw form (to preserve multiline strings)
+    StringLit {
+        value: String,
+        raw: String,
+    },
     TemplateStringLit(String), // Raw template string content (without backticks)
     CharLit(char),
     IntLit(String),   // String representation only, parsed in resolver

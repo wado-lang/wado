@@ -386,11 +386,21 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        // Track line context for blank lines inside variant
+        let saved_line = self.last_source_line;
+        self.last_source_line = v.span.line;
+
         for case in &v.cases {
+            self.emit_leading_comments(&case.span);
+            self.emit_blank_lines_to(case.span.line);
             self.unparse_variant_case(case);
+            self.emit_trailing_comments_inline(&case.span);
+            self.output.push('\n');
+            self.last_source_line = case.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(v.span.end_line());
         self.write_indent();
         self.output.push_str("}\n");
     }
@@ -403,7 +413,7 @@ impl<'a> Unparser<'a> {
             self.unparse_type(payload);
             self.output.push(')');
         }
-        self.output.push_str(",\n");
+        self.output.push(',');
     }
 
     fn unparse_flags(&mut self, f: &crate::ast::FlagsDecl) {
@@ -1215,8 +1225,9 @@ impl<'a> Unparser<'a> {
             Literal::Int(int_lit) => self.output.push_str(&int_lit.repr),
             Literal::Float(float_lit) => self.output.push_str(&float_lit.repr),
             Literal::String(s) => {
+                // Use raw form to preserve multiline strings as-is
                 self.output.push('"');
-                self.output.push_str(&escape_string(s));
+                self.output.push_str(&s.raw);
                 self.output.push('"');
             }
             Literal::Char(c) => {
@@ -1493,14 +1504,14 @@ impl<'a> Unparser<'a> {
             Pattern::Literal(lit) => self.unparse_literal(lit),
             Pattern::Wildcard => self.output.push('_'),
             Pattern::Tuple(patterns) => {
-                self.output.push('(');
+                self.output.push('[');
                 for (i, p) in patterns.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
                     self.unparse_pattern(p);
                 }
-                self.output.push(')');
+                self.output.push(']');
             }
             Pattern::Variant {
                 variant_name,
@@ -1987,8 +1998,9 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
         Literal::Int(int_lit) => output.push_str(&int_lit.repr),
         Literal::Float(float_lit) => output.push_str(&float_lit.repr),
         Literal::String(s) => {
+            // Use raw form to preserve multiline strings as-is
             output.push('"');
-            output.push_str(&escape_string(s));
+            output.push_str(&s.raw);
             output.push('"');
         }
         Literal::Char(c) => {

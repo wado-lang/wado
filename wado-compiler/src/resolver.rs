@@ -2503,7 +2503,7 @@ impl<'a> Resolver<'a> {
                     }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     Literal::Char(c) => TirLiteralPattern::Char(*c),
-                    Literal::String(s) => TirLiteralPattern::String(s.clone()),
+                    Literal::String(s) => TirLiteralPattern::String(s.value.clone()),
                     Literal::Null => TirLiteralPattern::Null,
                     _ => TirLiteralPattern::Null,
                 };
@@ -3481,7 +3481,7 @@ impl<'a> Resolver<'a> {
             Literal::Char(c) => (TirExprKind::CharLiteral(*c), TypeTable::CHAR),
             Literal::String(s) => {
                 let string_type = self.get_string_struct_type();
-                (TirExprKind::StringLiteral(s.clone()), string_type)
+                (TirExprKind::StringLiteral(s.value.clone()), string_type)
             }
             Literal::Null => {
                 // Null is Option<T> where T is unknown
@@ -4808,7 +4808,6 @@ impl<'a> Resolver<'a> {
             "array_len" => TypeTable::I32,
             "array_get_u8" => TypeTable::I32, // Returns u8 as i32
             "array_set_u8" => TypeTable::UNIT,
-            "string_new" => self.get_string_struct_type(),
 
             // Memory operations
             "realloc" => TypeTable::I32, // Returns pointer (i32)
@@ -5235,14 +5234,28 @@ impl<'a> Resolver<'a> {
             trait_impl_module_source = Some(impl_source);
         }
 
-        // Get method info (with default fallback)
+        // Get method info (error if method not found)
         let MethodInfo {
             mut return_type,
             self_kind,
-        } = method_info.unwrap_or(MethodInfo {
-            return_type: TypeTable::UNKNOWN,
-            self_kind: ast::SelfKind::Ref, // Default to &self
-        });
+        } = if let Some(info) = method_info {
+            info
+        } else {
+            let type_name = self.type_table.borrow().type_name(base_type_id);
+            self.errors.push(TypeError::TypeMismatch {
+                expected: format!(
+                    "type '{}' to have method '{}'",
+                    type_name, method_call.method
+                ),
+                found: format!("no method '{}' found", method_call.method),
+                span: method_call.span,
+            });
+            // Default to Unknown type for error recovery
+            MethodInfo {
+                return_type: TypeTable::UNKNOWN,
+                self_kind: ast::SelfKind::Ref,
+            }
+        };
 
         // Adjust receiver based on what the method expects (self_kind)
         receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, method_call.span);

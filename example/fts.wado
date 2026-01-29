@@ -1437,7 +1437,7 @@ test "f64_to_string negative values" {
     // Negative pi
     let snpi = f64_to_string(-3.141592653589793);
     // Should start with "-"
-    assert snpi.get(0) == '-' as i32;
+    assert snpi.get_byte(0) == '-' as i32;
 }
 
 test "f64_to_string powers of 10" {
@@ -1466,10 +1466,10 @@ test "f64_to_string precision" {
     // Should have many digits
     assert s.len() > 10;
     // Should start with "3.14"
-    assert s.get(0) == '3' as i32;
-    assert s.get(1) == '.' as i32;
-    assert s.get(2) == '1' as i32;
-    assert s.get(3) == '4' as i32;
+    assert s.get_byte(0) == '3' as i32;
+    assert s.get_byte(1) == '.' as i32;
+    assert s.get_byte(2) == '1' as i32;
+    assert s.get_byte(3) == '4' as i32;
 }
 
 // ============================================================================
@@ -1603,9 +1603,9 @@ test "f64_to_string extended" {
     let large = f64_to_string(1.0e100);
     assert large.len() > 0;
     // Should contain e+100
-    assert large.get(large.len() - 3) == '1' as i32;
-    assert large.get(large.len() - 2) == '0' as i32;
-    assert large.get(large.len() - 1) == '0' as i32;
+    assert large.get_byte(large.len() - 3) == '1' as i32;
+    assert large.get_byte(large.len() - 2) == '0' as i32;
+    assert large.get_byte(large.len() - 1) == '0' as i32;
 
     // Very small value
     let small = f64_to_string(1.0e-100);
@@ -1778,7 +1778,7 @@ test "format consistency" {
     while first_digit >= 10 as i64 {
         first_digit = first_digit / 10 as i64;
     }
-    assert str_result.get(0) == ('0' as i32) + (first_digit as i32);
+    assert str_result.get_byte(0) == ('0' as i32) + (first_digit as i32);
 }
 
 // ============================================================================
@@ -1791,7 +1791,7 @@ fn truncate_str(s: String, max_len: i32) -> String {
     }
     let mut result = String::with_capacity(max_len + 3);
     for let mut i = 0; i < max_len - 3; i += 1 {
-        result.append(char_to_string(s.get(i) as char));
+        result.append(char_to_string(s.get_byte(i) as char));
     }
     result.append("...");
     return result;
