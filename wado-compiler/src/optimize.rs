@@ -32,6 +32,11 @@ pub enum CanonBuiltin {
     StreamWrite,
     StreamDropWritable,
     StreamDropReadable,
+    // Future intrinsics (wasi namespace)
+    FutureNew,
+    FutureWrite,
+    FutureDropWritable,
+    FutureDropReadable,
     // Async/task intrinsics (wasi namespace)
     TaskReturn,
     WaitableSetNew,
@@ -52,6 +57,10 @@ impl CanonBuiltin {
             "stream-write" => Some(Self::StreamWrite),
             "stream-drop-writable" => Some(Self::StreamDropWritable),
             "stream-drop-readable" => Some(Self::StreamDropReadable),
+            "future-new" => Some(Self::FutureNew),
+            "future-write" => Some(Self::FutureWrite),
+            "future-drop-writable" => Some(Self::FutureDropWritable),
+            "future-drop-readable" => Some(Self::FutureDropReadable),
             "task-return" => Some(Self::TaskReturn),
             "waitable-set-new" => Some(Self::WaitableSetNew),
             "waitable-join" => Some(Self::WaitableJoin),
@@ -71,6 +80,10 @@ impl CanonBuiltin {
             Self::StreamWrite => "stream-write",
             Self::StreamDropWritable => "stream-drop-writable",
             Self::StreamDropReadable => "stream-drop-readable",
+            Self::FutureNew => "future-new",
+            Self::FutureWrite => "future-write",
+            Self::FutureDropWritable => "future-drop-writable",
+            Self::FutureDropReadable => "future-drop-readable",
             Self::TaskReturn => "task-return",
             Self::WaitableSetNew => "waitable-set-new",
             Self::WaitableJoin => "waitable-join",
@@ -87,7 +100,8 @@ impl CanonBuiltin {
         matches!(self, Self::F64ToBuffer | Self::F32ToBuffer)
     }
 
-    /// All importable builtins
+    /// All importable builtins (for Command world / standard CLI programs)
+    /// Note: Future intrinsics are NOT included here as they're Service-world-specific
     pub const ALL: &'static [CanonBuiltin] = &[
         CanonBuiltin::StreamNew,
         CanonBuiltin::StreamWrite,
@@ -101,6 +115,14 @@ impl CanonBuiltin {
         CanonBuiltin::Realloc,
         CanonBuiltin::F64ToBuffer,
         CanonBuiltin::F32ToBuffer,
+    ];
+
+    /// Future intrinsics (only available in Service world for HTTP trailers)
+    pub const FUTURE: &'static [CanonBuiltin] = &[
+        CanonBuiltin::FutureNew,
+        CanonBuiltin::FutureWrite,
+        CanonBuiltin::FutureDropWritable,
+        CanonBuiltin::FutureDropReadable,
     ];
 
     /// Async/task-related builtins

@@ -7,147 +7,15 @@
 //! expected results. Helper modules that are imported by tests go in subdirectories
 //! (e.g., fixtures/sub/) and are not run as tests themselves.
 
+mod common;
+
 use serde::Deserialize;
-use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{Config, Engine, Store};
-use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
-
-use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use wado_compiler::CompilerHost;
-use wado_compiler::{CompileError, OptLevel};
+use std::path::Path;
+use wado_compiler::OptLevel;
 
 // ============================================================================
-// Test Compiler Host (Filesystem-based)
+// Test Spec
 // ============================================================================
-
-/// A simple filesystem-based CompilerHost for tests
-struct TestCompilerHost {
-    base_path: PathBuf,
-    diagnostics: Mutex<Vec<wado_compiler::Diagnostic>>,
-}
-
-impl TestCompilerHost {
-    fn new(base_path: PathBuf) -> Self {
-        Self {
-            base_path,
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-}
-
-impl CompilerHost for TestCompilerHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<String, wado_compiler::SourceError>> + Send {
-        let full_path = self.base_path.join(path);
-        async move {
-            std::fs::read_to_string(&full_path).map_err(|e| wado_compiler::SourceError::IoError {
-                path: full_path.to_string_lossy().to_string(),
-                message: e.to_string(),
-            })
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: wado_compiler::Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-}
-
-/// Compile a file using the test host
-fn compile_file_with_opts(
-    path: &Path,
-    opt_level: OptLevel,
-) -> Result<wado_compiler::CompileResult, CompileError> {
-    // Read source file
-    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
-        path: path.to_string_lossy().to_string(),
-        message: e.to_string(),
-    })?;
-
-    // Get base path for relative imports
-    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-    let host = TestCompilerHost::new(base_path);
-
-    // Compile using async API (use tokio runtime)
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(wado_compiler::compile_with_host(
-            &source,
-            &host,
-            Some(&path.to_string_lossy()),
-            opt_level,
-        ))
-}
-
-/// Shared wasmtime Engine for all tests (initialized once)
-static ENGINE: OnceLock<Engine> = OnceLock::new();
-
-/// Shared tokio runtime for all tests (initialized once)
-static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-
-/// Get or initialize the shared wasmtime Engine
-fn get_engine() -> &'static Engine {
-    ENGINE.get_or_init(|| {
-        let mut config = Config::new();
-        config.async_support(true);
-        config.wasm_component_model(true);
-        config.wasm_component_model_gc(true);
-        config.wasm_component_model_async(true);
-        config.wasm_component_model_async_builtins(true);
-        config.wasm_component_model_async_stackful(true);
-        config.wasm_simd(true);
-        config.wasm_wide_arithmetic(true);
-        config.wasm_threads(true);
-        config.wasm_gc(true);
-        config.wasm_function_references(true);
-
-        // Use minimal optimization for faster compilation in tests
-        // This reduces Wasm compilation time while maintaining compatibility with all features
-        config.cranelift_opt_level(wasmtime::OptLevel::None);
-
-        Engine::new(&config).expect("Failed to create wasmtime Engine")
-    })
-}
-
-/// Get or initialize the shared tokio runtime
-fn get_runtime() -> &'static tokio::runtime::Runtime {
-    TOKIO_RT.get_or_init(|| {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create tokio runtime")
-    })
-}
-
-struct TestWasiState {
-    ctx: WasiCtx,
-    table: ResourceTable,
-}
-
-impl WasiView for TestWasiState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.ctx,
-            table: &mut self.table,
-        }
-    }
-}
-
-/// Result of running a Wasm component with captured output
-#[derive(Debug)]
-struct WasmRunResult {
-    /// Captured stdout
-    stdout: String,
-    /// Captured stderr
-    stderr: String,
-    /// Whether the component trapped (e.g., from unreachable)
-    trapped: bool,
-}
 
 /// Expected test results from __DATA__ section (JSON format)
 #[derive(Debug, Deserialize, Default)]
@@ -191,81 +59,12 @@ struct TestSpec {
     skip_o0: bool,
 }
 
-fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
-    // Use shared runtime and engine
-    let rt = get_runtime();
-    let engine = get_engine();
-
-    rt.block_on(async {
-        // Create component from wasm bytes
-        let component = Component::new(engine, &wasm)?;
-
-        // Set up linker with WASI P3 (includes sockets)
-        let mut linker: Linker<TestWasiState> = Linker::new(engine);
-        wasmtime_wasi::p3::add_to_linker(&mut linker)?;
-
-        // Create stdout and stderr capture pipes
-        let stdout_pipe = MemoryOutputPipe::new(4096);
-        let stdout_clone = stdout_pipe.clone();
-        let stderr_pipe = MemoryOutputPipe::new(4096);
-        let stderr_clone = stderr_pipe.clone();
-
-        // Create WASI state with captured stdout and stderr
-        let ctx = WasiCtxBuilder::new()
-            .stdout(stdout_pipe)
-            .stderr(stderr_pipe)
-            .build();
-        let table = ResourceTable::new();
-
-        let state = TestWasiState { ctx, table };
-        let mut store = Store::new(engine, state);
-
-        // Instantiate the component
-        let instance = linker.instantiate_async(&mut store, &component).await?;
-
-        // Get and call the "run" function
-        let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
-
-        let trapped = match run_func.call_async(&mut store, ()).await {
-            Ok((result,)) => result.is_err(),
-            Err(_) => true, // Runtime error (trap)
-        };
-
-        // Get captured output
-        let stdout_bytes = stdout_clone.contents();
-        let stdout = String::from_utf8(stdout_bytes.to_vec())?;
-        let stderr_bytes = stderr_clone.contents();
-        let stderr = String::from_utf8(stderr_bytes.to_vec())?;
-
-        Ok(WasmRunResult {
-            stdout,
-            stderr,
-            trapped,
-        })
-    })
-}
-
-/// Extract __DATA__ section from source file content
-fn extract_data_section(source: &str) -> Option<&str> {
-    let marker = "\n__DATA__\n";
-    if let Some(pos) = source.find(marker) {
-        Some(&source[pos + marker.len()..])
-    } else if source.starts_with("__DATA__\n") {
-        Some(&source["__DATA__\n".len()..])
-    } else {
-        None
-    }
-}
-
-/// Parse test spec from __DATA__ section JSON
-fn parse_test_spec(data_section: &str, fixture_name: &str) -> TestSpec {
-    serde_json::from_str(data_section).unwrap_or_else(|e| {
-        panic!("[{fixture_name}] Failed to parse __DATA__ section as JSON: {e}\nContent:\n{data_section}");
-    })
-}
+// ============================================================================
+// Test Verification
+// ============================================================================
 
 /// Verify the actual result matches the expected spec
-fn verify_result(result: &WasmRunResult, spec: &TestSpec, fixture_name: &str) {
+fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: &str) {
     // Check trapped status
     assert_eq!(
         result.trapped, spec.trapped,
@@ -308,16 +107,9 @@ fn verify_result(result: &WasmRunResult, spec: &TestSpec, fixture_name: &str) {
     }
 }
 
-/// Get human-readable name for optimization level
-fn opt_level_name(opt: OptLevel) -> &'static str {
-    match opt {
-        OptLevel::O0 => "O0",
-        OptLevel::O1 => "O1",
-        OptLevel::O2 => "O2",
-        OptLevel::O3 => "O3",
-        OptLevel::Os => "Os",
-    }
-}
+// ============================================================================
+// Test Runner
+// ============================================================================
 
 /// Run a single fixture test at a specific optimization level
 fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
@@ -326,7 +118,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
         .unwrap()
         .to_string_lossy()
         .to_string();
-    let opt_name = opt_level_name(opt_level);
+    let opt_name = common::opt_level_name(opt_level);
     let test_id = format!("{fixture_name} ({opt_name})");
 
     // Read the source file to extract __DATA__ section before compilation
@@ -335,12 +127,12 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
     });
 
     // Get the __DATA__ section - required for all fixtures
-    let data_section = extract_data_section(&source).unwrap_or_else(|| {
+    let data_section = common::extract_data_section(&source).unwrap_or_else(|| {
         panic!("[{test_id}] missing __DATA__ section - all fixtures must have test expectations");
     });
 
     // Parse the test spec from JSON
-    let spec = parse_test_spec(data_section, &test_id);
+    let spec: TestSpec = common::parse_data_section(data_section, &test_id);
 
     // Skip O0 tests if skip_o0 is set (for tests requiring DCE-based features)
     if spec.skip_o0 && opt_level == OptLevel::O0 {
@@ -367,7 +159,6 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
             }
             Err(err) => {
                 // Test failed as expected for a TODO test
-                // Extract panic message - Box<dyn Any> needs downcast to get the actual message
                 let msg = err
                     .downcast_ref::<String>()
                     .map(|s| s.as_str())
@@ -388,7 +179,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
 /// Run a normal (non-TODO) test
 fn run_normal_test(fixture_path: &Path, opt_level: OptLevel, spec: &TestSpec, test_id: &str) {
     // Try to compile the fixture
-    let compile_result = compile_file_with_opts(fixture_path, opt_level);
+    let compile_result = common::compile_file_with_opts(fixture_path, opt_level);
 
     // Handle expected compile errors
     if let Some(expected_error) = &spec.compile_error {
@@ -415,13 +206,17 @@ fn run_normal_test(fixture_path: &Path, opt_level: OptLevel, spec: &TestSpec, te
     });
 
     // Run and capture output
-    let result = run_wasm(compile_result.wasm).unwrap_or_else(|e| {
+    let result = common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
         panic!("[{test_id}] runtime error: {e}");
     });
 
     // Verify the result matches expectations
     verify_result(&result, spec, test_id);
 }
+
+// ============================================================================
+// Test Entry Points
+// ============================================================================
 
 /// Test function for O0 (no optimization)
 fn fixture_test_o0(path: &Path) -> Result<(), Box<dyn std::error::Error>> {

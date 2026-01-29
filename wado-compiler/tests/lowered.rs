@@ -8,47 +8,10 @@
 //! Review the diff and if the change is intentional, run `make update-golden-fixtures`
 //! to regenerate the golden files.
 
+mod common;
+
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use wado_compiler::{CompilerHost, OptLevel};
-
-// ============================================================================
-// Test Compiler Host (Filesystem-based)
-// ============================================================================
-
-/// A simple filesystem-based CompilerHost for tests
-struct TestCompilerHost {
-    base_path: PathBuf,
-    diagnostics: Mutex<Vec<wado_compiler::Diagnostic>>,
-}
-
-impl TestCompilerHost {
-    fn new(base_path: PathBuf) -> Self {
-        Self {
-            base_path,
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-}
-
-impl CompilerHost for TestCompilerHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<String, wado_compiler::SourceError>> + Send {
-        let full_path = self.base_path.join(path);
-        async move {
-            std::fs::read_to_string(&full_path).map_err(|e| wado_compiler::SourceError::IoError {
-                path: full_path.to_string_lossy().to_string(),
-                message: e.to_string(),
-            })
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: wado_compiler::Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-}
+use wado_compiler::OptLevel;
 
 // ============================================================================
 // Golden File Test Logic
@@ -67,12 +30,7 @@ fn extract_entry_module(project: &wado_compiler::Project) -> String {
 
 /// Run a golden file test
 fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    // Create tokio runtime for async operations
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-
-    rt.block_on(async {
+    common::runtime().block_on(async {
         // Read the golden file
         let golden_content = std::fs::read_to_string(golden_path)
             .unwrap_or_else(|e| panic!("Failed to read golden file {:?}: {}", golden_path, e));
@@ -100,7 +58,7 @@ fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>>
 
         // Create compiler host
         let base_path = source_path.parent().unwrap().to_path_buf();
-        let host = TestCompilerHost::new(base_path);
+        let host = common::FilesystemHost::new(base_path);
 
         // Run dump_with_host with O2 optimization
         // Use the original path from header to match expected #file output

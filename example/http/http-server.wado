@@ -1,0 +1,53 @@
+// HTTP server example using wasi:http (WASI P3)
+//
+// This demonstrates the wasi:http/service world in Wado.
+//
+// Compile:
+//   cargo run --bin wado -- compile --world wasi:http/service -o /tmp/http-server.wasm example/http/http-server.wado
+//
+// Run with wasmtime (requires vendored wasmtime with P3 support):
+//   vendor/wasmtime/target/release/wasmtime serve \
+//     -W component-model-async=y -W component-model-async-stackful=y -W gc=y \
+//     -S p3=y -S http=y /tmp/http-server.wasm
+//
+// Build vendored wasmtime (first time only):
+//   cd vendor/wasmtime && cargo build --release -p wasmtime-cli
+//
+// Test with curl:
+//   curl -i http://localhost:8080/
+//
+// Expected output:
+//   HTTP/1.1 200 OK
+//   transfer-encoding: chunked
+//   date: ...
+//
+// Current Status:
+// - Returns HTTP 200 OK with empty body
+// - Response body content (e.g., "Hello, Wado!") not yet supported
+// - See docs/wasi-http.md for implementation details
+
+use {
+    Request,
+    Response,
+    ErrorCode,
+} from "wasi:http";
+
+// HTTP handler for the wasi:http/service world.
+// This handler is invoked for each incoming HTTP request.
+//
+// Note: The compiler currently generates HTTP 200 response with empty body.
+// The return value below is a placeholder - actual response construction
+// will be supported in a future update.
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // TODO: When response body is supported, this will become:
+    //   let headers = Fields::new();
+    //   let body = Stream::<u8>::from_string("Hello, Wado!\n");
+    //   return Result::<Response, ErrorCode>::Ok(
+    //       Response::new(headers, Some(body), trailers)
+    //   );
+
+    // Placeholder return - compiler generates HTTP 200 with empty body
+    return Result::<Response, ErrorCode>::Err(
+        ErrorCode::InternalError(null)
+    );
+}
