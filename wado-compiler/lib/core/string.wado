@@ -231,6 +231,19 @@ impl StrUtf8ByteIter {
         }
         return result;
     }
+
+    /// Counts the number of remaining elements in the iterator.
+    pub fn count(&mut self) -> i32 {
+        let mut n = 0;
+        loop {
+            if let Some(_) = self.next() {
+                n += 1;
+            } else {
+                break;
+            }
+        }
+        return n;
+    }
 }
 
 /// Iterator over Unicode scalar values (chars) of a String.
@@ -296,6 +309,19 @@ impl StrCharIter {
             }
         }
         return result;
+    }
+
+    /// Counts the number of remaining elements (Unicode scalar values) in the iterator.
+    pub fn count(&mut self) -> i32 {
+        let mut n = 0;
+        loop {
+            if let Some(_) = self.next() {
+                n += 1;
+            } else {
+                break;
+            }
+        }
+        return n;
     }
 }
 
