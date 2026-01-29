@@ -1,0 +1,20 @@
+// Test: Result<Resource, E> pattern matching
+//
+// This test verifies that Result<TcpSocket, ErrorCode> can be pattern matched
+// to extract the resource handle inside the Ok variant.
+use {println, Stdout} from "core:cli";
+use {TcpSocket, IpAddressFamily} from "wasi:sockets";
+
+fn run() with Stdout {
+    let family = IpAddressFamily::Ipv4;
+    let result = TcpSocket::static_tcp_socket_create(family);
+    if let Ok(socket) = result {
+        // Successfully extracted TcpSocket from Result<TcpSocket, ErrorCode>
+        println("Resource extracted from Result");
+    } else {
+        println("Failed to create socket");
+    }
+}
+
+__DATA__
+{"stdout_contains": ["Resource extracted"], "skip_o0": true}

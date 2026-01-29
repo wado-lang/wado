@@ -234,7 +234,16 @@ impl Parser {
         // Parse any leading attributes
         let attrs = self.parse_attributes()?;
 
+        // Parse visibility: pub
         let is_pub = if self.check(&TokenKind::Pub) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
+        // Parse export keyword (for CM boundary export)
+        let is_export = if self.check(&TokenKind::Export) {
             self.advance();
             true
         } else {
@@ -250,7 +259,9 @@ impl Parser {
 
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(is_pub).map(Item::Use),
-            TokenKind::Fn => self.parse_function(is_pub, attrs).map(Item::Function),
+            TokenKind::Fn => self
+                .parse_function(is_pub, is_export, attrs)
+                .map(Item::Function),
             TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
@@ -623,7 +634,12 @@ impl Parser {
         }
     }
 
-    fn parse_function(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Function> {
+    fn parse_function(
+        &mut self,
+        is_pub: bool,
+        is_export: bool,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<Function> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
 
@@ -666,6 +682,7 @@ impl Parser {
         Ok(Function {
             name,
             is_pub,
+            is_export,
             type_params,
             attrs,
             params,
@@ -3090,7 +3107,8 @@ impl Parser {
                 } else {
                     false
                 };
-                methods.push(self.parse_function(is_pub, Vec::new())?);
+                // Methods cannot be exported at the CM boundary
+                methods.push(self.parse_function(is_pub, false, Vec::new())?);
             }
         }
 
@@ -3140,8 +3158,9 @@ impl Parser {
                 });
             } else {
                 // Trait methods are not pub (visibility comes from trait itself)
+                // Trait methods cannot be exported at the CM boundary
                 let _ = attrs; // attrs currently unused for trait methods
-                methods.push(self.parse_function(false, Vec::new())?);
+                methods.push(self.parse_function(false, false, Vec::new())?);
             }
         }
 

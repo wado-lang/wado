@@ -1600,11 +1600,43 @@ impl Codegen {
             builder.define_func_type(mangled_name, &param_types, &return_types);
         }
 
-        // World export types - derived from Command world in wasi/cli.wado
-        if let Some(run_export) = self.world_registry.get_export("Command", "run") {
-            let params = self.world_export_to_core_params(run_export);
-            let results = self.world_export_to_core_results(run_export);
-            builder.define_func_type(&run_export.name, &params, &results);
+        // World export types - derived from target world (default: Command)
+        // If a matching TIR function exists, use its params; otherwise use world definition
+        if let Some(world_info) = self.world_registry.get(&project.target_world) {
+            for export in &world_info.exports {
+                // Check if there's a matching TIR function in the entry module
+                let tir_func_match = entry_tir
+                    .functions
+                    .iter()
+                    .find(|f| f.borrow().name == export.name);
+
+                let (params, results) = if let Some(tir_func_rc) = tir_func_match {
+                    // Use TIR function's actual signature
+                    let tir_func = tir_func_rc.borrow();
+                    let param_types: Vec<ValType> = tir_func
+                        .params
+                        .iter()
+                        .map(|p| self.type_id_to_valtype(type_table, p.type_id))
+                        .collect();
+                    // Async exports have no return in core (use task_return)
+                    // Never and Unit types also have no Wasm return value
+                    let return_types = if export.is_async
+                        || tir_func.return_type == TypeTable::NEVER
+                        || tir_func.return_type == TypeTable::UNIT
+                    {
+                        vec![]
+                    } else {
+                        vec![self.type_id_to_valtype(type_table, tir_func.return_type)]
+                    };
+                    (param_types, return_types)
+                } else {
+                    // No matching TIR function - use world definition
+                    let params = self.world_export_to_core_params(export);
+                    let results = self.world_export_to_core_results(export);
+                    (params, results)
+                };
+                builder.define_func_type(&export.name, &params, &results);
+            }
         }
 
         // Collect and register closure types (types only, not functions yet)
@@ -1647,10 +1679,17 @@ impl Codegen {
         // ========================================
         // Function section
         // ========================================
-        // Declare all TIR functions except 'run' (which is handled as entry point)
+        // Collect world export names to skip (they are handled as entry points)
+        let world_export_names: HashSet<String> = self
+            .world_registry
+            .get(&project.target_world)
+            .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
+            .unwrap_or_else(|| std::iter::once("run".to_string()).collect());
+
+        // Declare all TIR functions except world exports (which are handled as entry points)
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
-            if tir_func.name == "run" {
+            if world_export_names.contains(&tir_func.name) {
                 continue;
             }
             // Skip functions that contain type parameters (from generic structs like Box<T>)
@@ -1713,8 +1752,10 @@ impl Codegen {
                 builder.define_func_alias(&method.name, func_idx);
             }
         }
-        // Declare 'run' as the entry point
-        builder.define_func("run", "run");
+        // Declare world export functions (entry points)
+        for export_name in &world_export_names {
+            builder.define_func(export_name, export_name);
+        }
         module.section(builder.functions());
 
         // ========================================
@@ -1737,7 +1778,15 @@ impl Codegen {
         // ========================================
         // Export section
         // ========================================
-        builder.export_func("run", "run");
+        // Export world functions based on target world
+        if let Some(world_info) = self.world_registry.get(&project.target_world) {
+            for export in &world_info.exports {
+                builder.export_func(&export.name, &export.name);
+            }
+        } else {
+            // Fallback to "run" for unknown worlds
+            builder.export_func("run", "run");
+        }
         // Export test functions for test runner
         for test in &entry_tir.tests {
             builder.export_func(&test.function_name, &test.function_name);
@@ -1783,11 +1832,11 @@ impl Codegen {
             func_idx += 1;
         }
 
-        // Generate user-defined functions from entry TIR (excluding 'run' which is handled specially)
+        // Generate user-defined functions from entry TIR (excluding world exports which are handled specially)
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
-            if tir_func.name == "run" {
-                continue; // Skip run - it's handled separately as entry point
+            if world_export_names.contains(&tir_func.name) {
+                continue; // Skip world exports - they are handled separately as entry points
             }
             // Skip functions that contain type parameters (from generic structs like Box<T>)
             let has_type_params = type_table.contains_type_param(tir_func.return_type)
@@ -1857,27 +1906,29 @@ impl Codegen {
             func_idx += 1;
         }
 
-        // Generate run function (entry point with task.return wrapper)
-        let run_tir_rc = entry_tir
-            .functions
-            .iter()
-            .find(|f| f.borrow().name == "run");
+        // Generate world export functions (entry points with task.return wrapper)
+        for export_name in &world_export_names {
+            let export_tir_rc = entry_tir
+                .functions
+                .iter()
+                .find(|f| f.borrow().name == *export_name);
 
-        let run_wasm_func = if let Some(run_tir_rc) = run_tir_rc {
-            // Generate run body using the TIR function body generation
-            let run_tir = run_tir_rc.borrow();
-            self.generate_run_function(&run_tir, type_table, &builder)
-        } else {
-            // No run function - create empty entry point
-            let mut func = Function::new(vec![]);
-            let task_return_idx = builder.func_idx("task-return");
-            func.instruction(&Instruction::I32Const(0));
-            func.instruction(&Instruction::Call(task_return_idx));
-            func.instruction(&Instruction::End);
-            func
-        };
+            let export_wasm_func = if let Some(tir_rc) = export_tir_rc {
+                // Generate function body using the TIR function body generation
+                let tir_func = tir_rc.borrow();
+                self.generate_run_function(&tir_func, type_table, &builder)
+            } else {
+                // No matching function - create empty entry point
+                let mut func = Function::new(vec![]);
+                let task_return_idx = builder.func_idx("task-return");
+                func.instruction(&Instruction::I32Const(0));
+                func.instruction(&Instruction::Call(task_return_idx));
+                func.instruction(&Instruction::End);
+                func
+            };
 
-        code.function(&run_wasm_func);
+            code.function(&export_wasm_func);
+        }
 
         // Branch hints section (emit before code section for proper placement)
         if !all_branch_hints.is_empty() {
@@ -2220,46 +2271,84 @@ impl Codegen {
             ],
         );
 
-        // Alias run function from main instance
-        ctx.register_core_func("run-core");
-        builder.core_alias_export(
-            Some("run-core"),
-            ctx.core_instance_idx("main"),
-            "run",
-            ExportKind::Func,
-        );
+        // Export world functions based on target world
+        let world_exports: Vec<_> = self
+            .world_registry
+            .get(&project.target_world)
+            .map(|w| w.exports.clone())
+            .unwrap_or_else(|| {
+                // Fallback to a default run export for unknown worlds
+                vec![crate::world_registry::WorldExportInfo {
+                    name: "run".to_string(),
+                    is_async: true,
+                    params: vec![],
+                    return_type: None,
+                }]
+            });
 
-        // Type: async run function type () -> result
-        let run_func_type = ctx.register_type("run-func-type");
-        {
-            let (_, enc) = builder.ty(Some("run-func-type"));
-            enc.function()
-                .async_(true)
-                .params::<[(&str, ComponentValType); 0], ComponentValType>([])
-                .result(Some(ComponentValType::Type(result_unit_type)));
+        for export in &world_exports {
+            let core_name = format!("{}-core", export.name);
+            let func_type_name = format!("{}-func-type", export.name);
+
+            // Alias function from main instance
+            ctx.register_core_func(&core_name);
+            builder.core_alias_export(
+                Some(&core_name),
+                ctx.core_instance_idx("main"),
+                &export.name,
+                ExportKind::Func,
+            );
+
+            // Type: async function type with appropriate params and result
+            // For Service world handle function, use Request param type
+            let func_type = ctx.register_type(&func_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&func_type_name));
+
+                // Check if this is the Service world's handle function with Request param
+                let is_service_handle = project.target_world == "Service"
+                    && export.name == "handle"
+                    && !export.params.is_empty();
+
+                if is_service_handle {
+                    // Use the imported http-request type for Service world handle function
+                    // The param is own<request> which is lowered to i32 by canon lift
+                    let request_type_idx = ctx.type_idx("http-request");
+                    enc.function()
+                        .async_(export.is_async)
+                        .params([("request", ComponentValType::Type(request_type_idx))])
+                        .result(Some(ComponentValType::Type(result_unit_type)));
+                } else {
+                    // Default: no params, result<_, _>
+                    enc.function()
+                        .async_(export.is_async)
+                        .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                        .result(Some(ComponentValType::Type(result_unit_type)));
+                }
+            }
+
+            // Lift function with Async option
+            ctx.register_comp_func(&export.name);
+            builder.lift_func(
+                Some(&export.name),
+                ctx.core_func_idx(&core_name),
+                func_type,
+                [
+                    CanonicalOption::Async,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                ],
+            );
+
+            // Export function
+            builder.export(
+                &export.name,
+                ComponentExportKind::Func,
+                ctx.comp_func_idx(&export.name),
+                None,
+            );
+            // Export consumes a component function index
+            ctx.skip_comp_func_idx();
         }
-
-        // Lift run function with Async option
-        ctx.register_comp_func("run");
-        builder.lift_func(
-            Some("run"),
-            ctx.core_func_idx("run-core"),
-            run_func_type,
-            [
-                CanonicalOption::Async,
-                CanonicalOption::Memory(ctx.memory_idx()),
-            ],
-        );
-
-        // Export run function
-        builder.export(
-            "run",
-            ComponentExportKind::Func,
-            ctx.comp_func_idx("run"),
-            None,
-        );
-        // Export consumes a component function index
-        ctx.skip_comp_func_idx();
 
         // Export test functions
         for test in &entry_tir.tests {
@@ -2315,7 +2404,64 @@ impl Codegen {
             builder.append_names();
         }
 
-        builder.finish()
+        let mut component_bytes = builder.finish();
+
+        // For Service world, add the handler interface export
+        // This creates a component instance containing the handle function
+        // and exports it as wasi:http/handler interface
+        if project.target_world == "Service" {
+            Self::append_http_handler_export(&mut component_bytes, &ctx);
+        }
+
+        component_bytes
+    }
+
+    /// Append HTTP handler interface export to component bytes.
+    ///
+    /// This adds a component instance containing the handle function
+    /// and exports it as `wasi:http/handler@0.3.0-rc-2026-01-06`.
+    ///
+    /// We do this as post-processing because `ComponentBuilder` doesn't expose
+    /// a public method to create component instances from exports.
+    fn append_http_handler_export(component_bytes: &mut Vec<u8>, ctx: &ComponentModelContext) {
+        use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
+
+        // Get the indices of the handle function and types
+        let handle_func_idx = ctx.comp_func_idx("handle");
+
+        // Get the type indices (aliased from http-types import)
+        let request_type_idx = ctx.type_idx("http-request-resource");
+        let response_type_idx = ctx.type_idx("http-response-resource");
+        let error_code_type_idx = ctx.type_idx("http-error-code");
+
+        // Create a component instance with the handler interface exports
+        // The interface uses: `use types.{request, response, error-code}`
+        // and exports: `handle: async func(request: request) -> result<response, error-code>`
+        let mut instances = ComponentInstanceSection::new();
+        instances.export_items([
+            ("request", ComponentExportKind::Type, request_type_idx),
+            ("response", ComponentExportKind::Type, response_type_idx),
+            ("error-code", ComponentExportKind::Type, error_code_type_idx),
+            ("handle", ComponentExportKind::Func, handle_func_idx),
+        ]);
+
+        // The instance index will be the next available (current count)
+        let instance_idx = ctx.instance_count();
+
+        // Create an export for the handler interface
+        let mut exports = ComponentExportSection::new();
+        let http_version = "0.3.0-rc-2026-01-06";
+        let handler_path = format!("wasi:http/handler@{http_version}");
+        exports.export(
+            &handler_path,
+            ComponentExportKind::Instance,
+            instance_idx,
+            None,
+        );
+
+        // Append the instance and export sections to the component
+        instances.append_to_component(component_bytes);
+        exports.append_to_component(component_bytes);
     }
 
     /// Generate WASI imports dynamically from the registry
@@ -2374,6 +2520,12 @@ impl Codegen {
             // doesn't fully implement yet. When Command world support is added,
             // this should be handled as an export, not an import.
             if interface_info.interface == "run" {
+                continue;
+            }
+
+            // Skip interfaces that have resource types - these are handled separately
+            // by import_interfaces_with_resources
+            if interface_info.resource_type.is_some() {
                 continue;
             }
 
@@ -2808,6 +2960,131 @@ impl Codegen {
         // Import interfaces with resource types (terminal-stdin, terminal-stdout, terminal-stderr)
         // using registry data instead of hardcoded effect names
         self.import_interfaces_with_resources(builder, ctx, project);
+
+        // For Service world, import wasi:http/types to get Request resource type
+        // This is needed for the handle function's parameter type
+        if project.target_world == "Service" {
+            self.import_http_types_for_service(builder, ctx);
+        }
+    }
+
+    /// Import wasi:http/types for Service world
+    ///
+    /// This imports the HTTP types interface which defines the Request resource type
+    /// needed for the handler export function.
+    fn import_http_types_for_service(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+    ) {
+        // HTTP types interface exports request, response (resources), and error-code (variant)
+        // The handler interface uses: `use types.{request, response, error-code}`
+        let http_types_instance_type = ctx.register_type("http-types-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("http-types-instance-type"));
+            let mut instance_type = InstanceType::new();
+
+            // Export request and response as sub-resource types
+            instance_type.export(
+                "request",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+            instance_type.export(
+                "response",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+
+            // error-code is a variant type with many cases
+            // Format: (name, type, refines) - we use None for type (no payload) and None for refines
+            instance_type.ty().defined_type().variant([
+                ("DNS-timeout", None, None),
+                ("DNS-error", None, None),
+                ("destination-not-found", None, None),
+                ("destination-unavailable", None, None),
+                ("destination-IP-prohibited", None, None),
+                ("destination-IP-unroutable", None, None),
+                ("connection-refused", None, None),
+                ("connection-terminated", None, None),
+                ("connection-timeout", None, None),
+                ("connection-read-timeout", None, None),
+                ("connection-write-timeout", None, None),
+                ("connection-limit-reached", None, None),
+                ("TLS-protocol-error", None, None),
+                ("TLS-certificate-error", None, None),
+                ("TLS-alert-received", None, None),
+                ("HTTP-request-denied", None, None),
+                ("HTTP-request-length-required", None, None),
+                ("HTTP-request-body-size", None, None),
+                ("HTTP-request-method-invalid", None, None),
+                ("HTTP-request-URI-invalid", None, None),
+                ("HTTP-request-URI-too-long", None, None),
+                ("HTTP-request-header-section-size", None, None),
+                ("HTTP-request-header-size", None, None),
+                ("HTTP-request-trailer-section-size", None, None),
+                ("HTTP-request-trailer-size", None, None),
+                ("HTTP-response-incomplete", None, None),
+                ("HTTP-response-header-section-size", None, None),
+                ("HTTP-response-header-size", None, None),
+                ("HTTP-response-body-size", None, None),
+                ("HTTP-response-trailer-section-size", None, None),
+                ("HTTP-response-trailer-size", None, None),
+                ("HTTP-response-transfer-coding", None, None),
+                ("HTTP-response-content-coding", None, None),
+                ("HTTP-response-timeout", None, None),
+                ("HTTP-upgrade-failed", None, None),
+                ("HTTP-protocol-error", None, None),
+                ("loop-detected", None, None),
+                ("configuration-error", None, None),
+                ("internal-error", None, None),
+            ]);
+            instance_type.export(
+                "error-code",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+            );
+
+            enc.instance(&instance_type);
+        }
+
+        // Import the wasi:http/types instance
+        ctx.register_instance("http-types");
+        let http_version = "0.3.0-rc-2026-01-06";
+        let http_types_import_path = format!("wasi:http/types@{http_version}");
+        builder.import(
+            &http_types_import_path,
+            wasm_encoder::ComponentTypeRef::Instance(http_types_instance_type),
+        );
+
+        // Alias the request resource type
+        ctx.register_type("http-request-resource");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "request",
+            ComponentExportKind::Type,
+        );
+
+        // Alias the response resource type
+        ctx.register_type("http-response-resource");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "response",
+            ComponentExportKind::Type,
+        );
+
+        // Alias the error-code type
+        ctx.register_type("http-error-code");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "error-code",
+            ComponentExportKind::Type,
+        );
+
+        // Define own<request> type for use in function params
+        let request_resource_idx = ctx.type_idx("http-request-resource");
+        ctx.register_type("http-request");
+        {
+            let (_, enc) = builder.ty(Some("http-request"));
+            enc.defined_type().own(request_resource_idx);
+        }
     }
 
     /// Import an interface that has a resource type, using registry data.
@@ -9403,10 +9680,15 @@ impl Codegen {
                     ..
                 },
             ) => {
-                // Look up variant type info
+                // Look up variant type info - for GenericInstance, use the mangled name
+                let variant_lookup_name =
+                    self.mangle_type_for_struct_name(scrutinee.type_id, type_table);
                 let variant_types = self.variant_types.borrow();
-                let variant_info = variant_types.get(name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {name}");
+                let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
+                    // Fallback to base name for non-generic variants
+                    variant_types.get(name).unwrap_or_else(|| {
+                        panic!("Variant type not registered: {variant_lookup_name} (base: {name})");
+                    })
                 });
 
                 // Find the case info and case index for this pattern
@@ -13259,19 +13541,15 @@ impl Codegen {
 
     /// Convert a world export function type to Core Wasm params
     ///
-    /// For async exports, the core function has no params (async uses `task_return`).
-    /// For sync exports, params are mapped directly.
-    fn world_export_to_core_params(&self, export: &WorldExportInfo) -> Vec<ValType> {
-        if export.is_async {
-            // Async exports have no params in core (lifted signature differs)
-            vec![]
-        } else {
-            export
-                .params
-                .iter()
-                .map(|(_, ty)| wasi_type_to_valtype(ty))
-                .collect()
-        }
+    /// NOTE: This function is used to declare the CORE function type for world exports.
+    /// For async exports, the actual params depend on the user's TIR function.
+    /// We return empty here because the function type is later overridden by the
+    /// user's TIR function if one exists.
+    fn world_export_to_core_params(&self, _export: &WorldExportInfo) -> Vec<ValType> {
+        // World export core params are handled dynamically based on the TIR function.
+        // For worlds where user provides the function (like CLI Command's run or HTTP Service's handle),
+        // the actual params come from the user's TIR function.
+        vec![]
     }
 
     /// Convert a world export function type to Core Wasm results

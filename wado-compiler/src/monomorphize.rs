@@ -2433,19 +2433,21 @@ impl Monomorphizer {
                     }
                 }
 
+                // Multiple TypeParams can have the same index (e.g., T from Result and K from TreeMap)
+                // Try all of them to handle cross-module generic types
                 for (&param_index, &concrete_type_id) in substitution {
+                    let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
                     for tid in type_table.iter_type_ids() {
                         if let ResolvedType::TypeParam { name, index } = type_table.get(tid)
                             && *index == param_index
                         {
-                            let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
                             // Replace type param in angle bracket syntax: <T> -> <i32>
+                            // Don't break - try all TypeParams with this index
                             new_func_name = new_func_name
                                 .replace(&format!("<{name}>"), &format!("<{concrete_name}>"))
                                 .replace(&format!("<{name},"), &format!("<{concrete_name},"))
                                 .replace(&format!(",{name}>"), &format!(",{concrete_name}>"))
                                 .replace(&format!(",{name},"), &format!(",{concrete_name},"));
-                            break;
                         }
                     }
                 }
@@ -2516,19 +2518,21 @@ impl Monomorphizer {
                         format!("{}<{}>{}", struct_part, type_names.join(","), method_part);
                 }
 
+                // Multiple TypeParams can have the same index (e.g., T from Result and K from TreeMap)
+                // Try all of them to handle cross-module generic types
                 for (&param_index, &concrete_type_id) in substitution {
+                    let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
                     for tid in type_table.iter_type_ids() {
                         if let ResolvedType::TypeParam { name, index } = type_table.get(tid)
                             && *index == param_index
                         {
-                            let concrete_name = self.type_id_to_name(concrete_type_id, type_table);
                             // Replace type param in angle bracket syntax: <T> -> <i32>
+                            // Don't break - try all TypeParams with this index
                             new_func_name = new_func_name
                                 .replace(&format!("<{name}>"), &format!("<{concrete_name}>"))
                                 .replace(&format!("<{name},"), &format!("<{concrete_name},"))
                                 .replace(&format!(",{name}>"), &format!(",{concrete_name}>"))
                                 .replace(&format!(",{name},"), &format!(",{concrete_name},"));
-                            break;
                         }
                     }
                 }

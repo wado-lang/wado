@@ -140,6 +140,8 @@ pub struct WadoParam {
 #[derive(Debug, Clone)]
 pub struct WadoWorld {
     pub name: String,
+    /// The canonical WIT world name (e.g., "wasi:http/proxy@0.3.0")
+    pub canonical_name: String,
     pub doc_comment: Option<String>,
     pub imports: Vec<WadoWorldImport>,
     pub exports: Vec<WadoWorldExport>,

@@ -215,6 +215,7 @@ impl WadoCodeGenerator {
             (None, false) => String::new(),
         };
 
+        // async keyword is needed for CM boundary ABI marker
         let async_kw = if func.is_async { "async " } else { "" };
         self.writeln(&format!(
             "{}fn {}({}){};",
@@ -224,6 +225,8 @@ impl WadoCodeGenerator {
 
     fn write_world(&mut self, world: &WadoWorld) {
         self.write_doc_comment(world.doc_comment.as_ref());
+        // Write the canonical WIT world name as an attribute
+        self.writeln(&format!("#[wasi(\"{}\")]", world.canonical_name));
         self.writeln(&format!("pub world {} {{", world.name));
         self.indent += 1;
 
@@ -239,6 +242,7 @@ impl WadoCodeGenerator {
         }
 
         for export in &world.exports {
+            // World exports keep async keyword as it's part of the ABI specification
             let async_kw = if export.is_async { "async " } else { "" };
             let params = Self::format_params(&export.params);
             let return_type = export

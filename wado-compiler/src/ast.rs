@@ -287,6 +287,8 @@ pub struct UseDecl {
 pub struct Function {
     pub name: String,
     pub is_pub: bool,
+    /// Whether this function is exported at the Component Model boundary (world export)
+    pub is_export: bool,
     /// Generic type parameters: `fn swap<T>(a: T, b: T) -> T`
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,

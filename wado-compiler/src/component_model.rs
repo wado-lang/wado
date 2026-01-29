@@ -161,6 +161,14 @@ impl WasiRegistry {
         let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
         registry.register_module(&wasi_sockets, &mut world_registry);
 
+        // Parse and register wasi:http (for world definitions only)
+        // Note: HTTP functions with resource types (Request, Response) are not yet
+        // fully supported for Component Model lowering. We register the module
+        // to get the world definitions, but skip function registration.
+        let wasi_http = parse_module(stdlib::WASI_HTTP);
+        // Only register world definitions, not effects/functions with unsupported types
+        registry.register_world_definitions(&wasi_http, &mut world_registry);
+
         // Note: wasi:filesystem uses `flags` syntax which isn't supported yet
         // TODO: Add wasi:filesystem registration when `flags` parsing is implemented
 
@@ -303,6 +311,35 @@ impl WasiRegistry {
         }
 
         // Register world definitions
+        for item in &module.items {
+            if let Item::World(world) = item {
+                world_registry.register(world);
+            }
+        }
+    }
+
+    /// Register only world definitions from a WASI module (no effects)
+    ///
+    /// Use this for modules with resource types that aren't fully supported
+    /// for Component Model lowering yet. This registers the world definitions
+    /// so they can be used for targeting (e.g., --world Service), but skips
+    /// effect/function registration.
+    fn register_world_definitions(
+        &mut self,
+        module: &crate::ast::Module,
+        world_registry: &mut crate::world_registry::WorldRegistry,
+    ) {
+        use crate::ast::Item;
+
+        // Collect resource types (needed for type checking)
+        for item in &module.items {
+            if let Item::Resource(resource) = item {
+                let cm_name = to_kebab_case(&resource.name);
+                self.resources.insert(resource.name.clone(), cm_name);
+            }
+        }
+
+        // Register world definitions only
         for item in &module.items {
             if let Item::World(world) = item {
                 world_registry.register(world);
@@ -771,6 +808,7 @@ fn is_param_type_supported_with_types(
             let name = named.name.as_str();
             // Check primitives and unit type
             // Unit type () is parsed as Named("()"), not Tuple([])
+            // Resource types are passed as borrow<resource> in CM (i32 handle in core wasm)
             matches!(
                 name,
                 "i32"

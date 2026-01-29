@@ -4,6 +4,15 @@
 //   - vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/http.wit
 //   - vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/sockets.wit
 
+// Import Duration from wasi:clocks
+use {Duration} from "wasi:clocks";
+
+/// Field values are byte sequences (HTTP header/trailer values).
+pub type FieldValue = Array<u8>;
+
+/// Field names are strings (HTTP header/trailer names).
+pub type FieldName = String;
+
 
 /// This type corresponds to HTTP standard Methods.
 #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#method")]
@@ -448,6 +457,7 @@ pub effect Client {
 /// The `wasi:http/service` world captures a broad category of HTTP services
 /// including web applications, API servers, and proxies. It may be `include`d
 /// in more specific worlds such as `wasi:http/middleware`.
+#[wasi("wasi:http/service@0.3.0-rc-2026-01-06")]
 pub world Service {
     import Stdout {
         write_via_stream,
@@ -540,10 +550,11 @@ pub world Service {
 
 /// The `wasi:http/middleware` world captures HTTP services that forward HTTP
 /// Requests to another handler.
-/// 
+///
 /// Components may implement this world to allow them to participate in handler
 /// "chains" where a `request` flows through handlers on its way to some terminal
 /// `service` and corresponding `response` flows in the opposite direction.
+#[wasi("wasi:http/middleware@0.3.0-rc-2026-01-06")]
 pub world Middleware {
     import Types {
         constructor_fields,
