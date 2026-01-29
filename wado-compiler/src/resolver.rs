@@ -5234,14 +5234,28 @@ impl<'a> Resolver<'a> {
             trait_impl_module_source = Some(impl_source);
         }
 
-        // Get method info (with default fallback)
+        // Get method info (error if method not found)
         let MethodInfo {
             mut return_type,
             self_kind,
-        } = method_info.unwrap_or(MethodInfo {
-            return_type: TypeTable::UNKNOWN,
-            self_kind: ast::SelfKind::Ref, // Default to &self
-        });
+        } = if let Some(info) = method_info {
+            info
+        } else {
+            let type_name = self.type_table.borrow().type_name(base_type_id);
+            self.errors.push(TypeError::TypeMismatch {
+                expected: format!(
+                    "type '{}' to have method '{}'",
+                    type_name, method_call.method
+                ),
+                found: format!("no method '{}' found", method_call.method),
+                span: method_call.span,
+            });
+            // Default to Unknown type for error recovery
+            MethodInfo {
+                return_type: TypeTable::UNKNOWN,
+                self_kind: ast::SelfKind::Ref,
+            }
+        };
 
         // Adjust receiver based on what the method expects (self_kind)
         receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, method_call.span);
