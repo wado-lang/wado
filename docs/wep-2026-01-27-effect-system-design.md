@@ -126,10 +126,10 @@ fn reset_and_print() with counter, Stdout {
 }
 ```
 
-| Declaration | Read | Write | Effect |
-|-------------|------|-------|--------|
-| `global X: T = ...` | OK | N/A (immutable) | None |
-| `global mut X: T = ...` | `with X` | `with X` | Yes |
+| Declaration             | Read     | Write           | Effect |
+| ----------------------- | -------- | --------------- | ------ |
+| `global X: T = ...`     | OK       | N/A (immutable) | None   |
+| `global mut X: T = ...` | `with X` | `with X`        | Yes    |
 
 This design follows Koka's approach where state effects are tracked, but uses simpler syntax. The `with counter` declaration is sufficient; no separate get/set functions are generated internally.
 

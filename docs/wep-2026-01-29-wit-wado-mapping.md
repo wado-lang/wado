@@ -21,10 +21,10 @@ Define a clear bidirectional mapping between WIT constructs and Wado language fe
 
 Wado distinguishes between module-level visibility (`pub`) and Component Model boundary visibility (`export`):
 
-| Keyword | Scope | Purpose |
-|---------|-------|---------|
-| `pub` | Wado modules | Share across Wado modules internally |
-| `export` | CM world boundary | Expose to external components |
+| Keyword  | Scope             | Purpose                              |
+| -------- | ----------------- | ------------------------------------ |
+| `pub`    | Wado modules      | Share across Wado modules internally |
+| `export` | CM world boundary | Expose to external components        |
 
 This separation solves the common problem of "utility modules accidentally becoming public":
 
@@ -58,10 +58,10 @@ Wado introduces explicit `interface` blocks for grouping exports, complementing 
 
 ### Interface vs Effect
 
-| Wado | WIT | Direction | Has Side Effects |
-|------|-----|-----------|------------------|
-| `interface` | `interface` | export (primary) | No (pure) |
-| `effect` | `interface` | import (primary) | Yes |
+| Wado        | WIT         | Direction        | Has Side Effects |
+| ----------- | ----------- | ---------------- | ---------------- |
+| `interface` | `interface` | export (primary) | No (pure)        |
+| `effect`    | `interface` | import (primary) | Yes              |
 
 Both `interface` and `effect` map to WIT `interface`. The distinction exists in Wado's type system:
 
@@ -184,42 +184,42 @@ world my-app {
 
 ### Primitive Types
 
-| WIT | Wado | Notes |
-|-----|------|-------|
-| `bool` | `bool` | Direct mapping |
-| `s8`, `s16`, `s32`, `s64` | `i8`, `i16`, `i32`, `i64` | Signed integers |
-| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers |
-| `f32`, `f64` | `f32`, `f64` | Floats |
-| `char` | `char` | Unicode scalar value |
-| `string` | `String` | UTF-8 string |
+| WIT                       | Wado                      | Notes                |
+| ------------------------- | ------------------------- | -------------------- |
+| `bool`                    | `bool`                    | Direct mapping       |
+| `s8`, `s16`, `s32`, `s64` | `i8`, `i16`, `i32`, `i64` | Signed integers      |
+| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers    |
+| `f32`, `f64`              | `f32`, `f64`              | Floats               |
+| `char`                    | `char`                    | Unicode scalar value |
+| `string`                  | `String`                  | UTF-8 string         |
 
 ### Compound Types
 
-| WIT | Wado | Notes |
-|-----|------|-------|
-| `list<T>` | `Array<T>` | Dynamic array |
-| `option<T>` | `Option<T>` | Optional value |
-| `result<T, E>` | `Result<T, E>` | Result type |
-| `tuple<T, U, ...>` | `[T, U, ...]` | Tuple type |
+| WIT                | Wado           | Notes          |
+| ------------------ | -------------- | -------------- |
+| `list<T>`          | `Array<T>`     | Dynamic array  |
+| `option<T>`        | `Option<T>`    | Optional value |
+| `result<T, E>`     | `Result<T, E>` | Result type    |
+| `tuple<T, U, ...>` | `[T, U, ...]`  | Tuple type     |
 
 ### User-Defined Types
 
-| WIT | Wado | Notes |
-|-----|------|-------|
-| `record` | `struct` | Named fields |
-| `variant` | `variant` | Tagged union with payloads |
-| `enum` | `enum` | Discriminated values without payloads |
-| `flags` | `flags` | Bitfield (parsed but not yet implemented) |
-| `resource` | `resource` | Handle type (not yet implemented) |
-| `type alias` | `type` | Type synonym |
+| WIT          | Wado       | Notes                                     |
+| ------------ | ---------- | ----------------------------------------- |
+| `record`     | `struct`   | Named fields                              |
+| `variant`    | `variant`  | Tagged union with payloads                |
+| `enum`       | `enum`     | Discriminated values without payloads     |
+| `flags`      | `flags`    | Bitfield (parsed but not yet implemented) |
+| `resource`   | `resource` | Handle type (not yet implemented)         |
+| `type alias` | `type`     | Type synonym                              |
 
 ### Functions
 
-| WIT | Wado | Notes |
-|-----|------|-------|
-| `func(a: t1) -> t2` | `fn f(a: t1) -> t2` | Function signature |
-| `func() -> result<T, E>` | `fn f() -> Result<T, E>` | Fallible function |
-| async function | `async fn` | Async in WASI P3 |
+| WIT                      | Wado                     | Notes              |
+| ------------------------ | ------------------------ | ------------------ |
+| `func(a: t1) -> t2`      | `fn f(a: t1) -> t2`      | Function signature |
+| `func() -> result<T, E>` | `fn f() -> Result<T, E>` | Fallible function  |
+| async function           | `async fn`               | Async in WASI P3   |
 
 ## WIT Structure Mapping
 
@@ -230,6 +230,7 @@ package wado:my-app@1.0.0;
 ```
 
 Derived from:
+
 - Namespace: `wado` (fixed, or configurable)
 - Name: entry module name or explicit declaration
 - Version: optional, from project config
@@ -300,6 +301,7 @@ When no explicit world is declared, generate one from:
 ## Package Naming
 
 Options:
+
 - `wado:{module-name}` - fixed namespace (default)
 - `{user}:{module-name}` - user-configurable namespace
 - From project manifest (future `wado.toml`)
