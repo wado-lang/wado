@@ -98,6 +98,43 @@ fn safe_div(a: i32, b: i32) -> i32 {
 }
 ```
 
+### Global State Effects
+
+Mutable global variables (`global mut`) implicitly generate an effect. Accessing them requires declaring the effect with `with`.
+
+```wado
+global PI: f64 = 3.14159;        // immutable, no effect
+global mut counter: i32 = 0;     // mutable, generates effect
+
+// Pure function - no effect needed
+fn circle_area(r: f64) -> f64 {
+    return PI * r * r;  // OK: immutable global is a constant
+}
+
+// Requires effect declaration
+fn increment() with counter {
+    counter += 1;
+}
+
+fn get_count() with counter -> i32 {
+    return counter;  // reading mutable global also requires effect
+}
+
+fn reset_and_print() with counter, Stdout {
+    counter = 0;
+    println(`Counter reset`);
+}
+```
+
+| Declaration             | Read     | Write           | Effect |
+| ----------------------- | -------- | --------------- | ------ |
+| `global X: T = ...`     | OK       | N/A (immutable) | None   |
+| `global mut X: T = ...` | `with X` | `with X`        | Yes    |
+
+This design follows Koka's approach where state effects are tracked, but uses simpler syntax. The `with counter` declaration is sufficient; no separate get/set functions are generated internally.
+
+See also: [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) for how effects relate to WIT interfaces.
+
 ### Handlers
 
 Handlers satisfy effects. Inside a `with ... do` block, the handled effect is provided by the handler, not required from the caller.

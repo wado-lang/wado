@@ -268,6 +268,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Variant Payload Design](./docs/wep-2026-01-25-variant-payload-design.md)
 - [Effect System Design](./docs/wep-2026-01-27-effect-system-design.md)
 - [Global Variables](./docs/wep-2026-01-27-global-variables.md)
+- [WIT and Wado Mapping](./docs/wep-2026-01-29-wit-wado-mapping.md)
 
 ### Structure
 
