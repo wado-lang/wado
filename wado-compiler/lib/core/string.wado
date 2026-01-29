@@ -222,12 +222,8 @@ impl StrUtf8ByteIter {
     /// Collects iterator elements into an Array.
     pub fn collect(&mut self) -> Array<u8> {
         let mut result: Array<u8> = [];
-        loop {
-            if let Some(item) = self.next() {
-                result.append(item);
-            } else {
-                break;
-            }
+        while let Some(item) = self.next() {
+            result.append(item);
         }
         return result;
     }
@@ -235,12 +231,8 @@ impl StrUtf8ByteIter {
     /// Counts the number of remaining elements in the iterator.
     pub fn count(&mut self) -> i32 {
         let mut n = 0;
-        loop {
-            if let Some(_) = self.next() {
-                n += 1;
-            } else {
-                break;
-            }
+        while let Some(_) = self.next() {
+            n += 1;
         }
         return n;
     }
@@ -301,12 +293,8 @@ impl StrCharIter {
     /// Collects iterator elements into an Array.
     pub fn collect(&mut self) -> Array<char> {
         let mut result: Array<char> = [];
-        loop {
-            if let Some(item) = self.next() {
-                result.append(item);
-            } else {
-                break;
-            }
+        while let Some(item) = self.next() {
+            result.append(item);
         }
         return result;
     }
@@ -314,12 +302,8 @@ impl StrCharIter {
     /// Counts the number of remaining elements (Unicode scalar values) in the iterator.
     pub fn count(&mut self) -> i32 {
         let mut n = 0;
-        loop {
-            if let Some(_) = self.next() {
-                n += 1;
-            } else {
-                break;
-            }
+        while let Some(_) = self.next() {
+            n += 1;
         }
         return n;
     }
