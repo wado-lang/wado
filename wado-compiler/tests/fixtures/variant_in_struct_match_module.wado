@@ -1,0 +1,33 @@
+// Module with variant, struct, and function using match
+use {println, Stdout} from "core:cli";
+
+pub variant Align {
+    Left,
+    Right,
+}
+
+pub struct Opts {
+    align: Align,
+}
+
+impl Opts {
+    pub fn default() -> Opts {
+        return Opts { align: Align::Right };
+    }
+}
+
+pub fn get_align_name(opts: Opts) -> String {
+    return match opts.align {
+        Left => "left",
+        Right => "right",
+    };
+}
+
+fn run() with Stdout {
+    let opts = Opts::default();
+    let name = get_align_name(opts);
+    println(name);
+}
+
+__DATA__
+{"stdout": "right\n"}

@@ -326,6 +326,12 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         TirExprKind::GlobalVarSet { value, .. } => {
             insert_moves_in_expr(value, type_table);
         }
+        TirExprKind::Match { expr, arms } => {
+            insert_moves_in_expr(expr, type_table);
+            for arm in arms {
+                insert_moves_in_expr(&mut arm.body, type_table);
+            }
+        }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -338,7 +344,6 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         | TirExprKind::Global { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
 }
@@ -597,6 +602,12 @@ fn collect_value_copy_types_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_value_copy_types_in_expr(value, type_table, copy_types);
         }
+        TirExprKind::Match { expr, arms } => {
+            collect_value_copy_types_in_expr(expr, type_table, copy_types);
+            for arm in arms {
+                collect_value_copy_types_in_expr(&arm.body, type_table, copy_types);
+            }
+        }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -609,7 +620,6 @@ fn collect_value_copy_types_in_expr(
         | TirExprKind::Global { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
     }
 }

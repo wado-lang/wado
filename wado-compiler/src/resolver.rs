@@ -7967,6 +7967,34 @@ impl<'a> Resolver<'a> {
             .last()
             .and_then(|s| match &s.kind {
                 TirStmtKind::Expr(e) => Some(e.type_id),
+                // If statement can produce a value if both branches exist and have the same type
+                TirStmtKind::If {
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } => {
+                    let then_type = Self::block_result_type(then_block);
+                    let else_type = Self::block_result_type(else_block);
+                    if then_type == else_type {
+                        Some(then_type)
+                    } else {
+                        None
+                    }
+                }
+                // IfPattern can also produce a value if both branches exist and have the same type
+                TirStmtKind::IfPattern {
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } => {
+                    let then_type = Self::block_result_type(then_block);
+                    let else_type = Self::block_result_type(else_block);
+                    if then_type == else_type {
+                        Some(then_type)
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             })
             .unwrap_or(TypeTable::UNIT)

@@ -1176,46 +1176,68 @@ impl Codegen {
         // Option<primitive> fields need to map to nullable box references
         self.register_box_types(&mut builder, project);
 
-        // PHASE 1: Register NON-MONOMORPHIZED structs from library modules
+        // PHASE 1: Register NON-MONOMORPHIZED structs AND variants from library modules
         // These are "base" structs like String that don't depend on array types
         // - If no collision: register with simple name (entry point)
         // - If collision with main module: register with qualified name (full module source)
         // Note: all_tir_modules is in topological order (dependency modules first)
+        // Note: Structs and variants must be registered together with topological sorting
+        //       because structs may have variant fields and variants may have struct payloads.
         for (module_source, tir_mod) in all_tir_modules {
-            // Skip entry module (handled separately)
+            // Skip entry module (handled separately in PHASE 2)
             if module_source == entry_module_source {
                 continue;
             }
-            for tir_struct in &tir_mod.structs {
-                if !tir_struct.is_pub {
-                    continue;
+            // Collect non-generic, non-monomorphized public structs
+            let lib_structs: Vec<_> = tir_mod
+                .structs
+                .iter()
+                .filter(|s| {
+                    s.is_pub
+                        && s.type_params.is_empty()
+                        && s.monomorph_info.is_none()
+                        && !self.struct_contains_type_params(s, &tir_mod.type_table.borrow())
+                })
+                .cloned()
+                .collect();
+            // Collect non-generic public variants
+            let lib_variants: Vec<_> = tir_mod
+                .variants
+                .iter()
+                .filter(|v| v.is_pub && v.type_params.is_empty())
+                .cloned()
+                .collect();
+            // Sort structs and variants together topologically
+            let sorted_types = Self::sort_types_topologically(
+                &lib_structs,
+                &lib_variants,
+                &tir_mod.type_table.borrow(),
+            );
+            for type_decl in sorted_types {
+                match type_decl {
+                    TypeDecl::Struct(tir_struct) => {
+                        let struct_name = if main_module_struct_names.contains(&tir_struct.name) {
+                            // Collision - use qualified name with full module source
+                            StructName::new(module_source.clone(), tir_struct.name.clone())
+                        } else {
+                            // No collision - use simple name (entry point)
+                            StructName::new(ModuleSource::entry_point(), tir_struct.name.clone())
+                        };
+                        self.register_struct_type(
+                            struct_name,
+                            tir_struct,
+                            &tir_mod.type_table.borrow(),
+                            &mut builder,
+                        );
+                    }
+                    TypeDecl::Variant(tir_variant) => {
+                        self.register_variant_type(
+                            tir_variant,
+                            &tir_mod.type_table.borrow(),
+                            &mut builder,
+                        );
+                    }
                 }
-                // Skip generic struct templates - they will be registered when monomorphized
-                if !tir_struct.type_params.is_empty() {
-                    continue;
-                }
-                // Also skip structs that contain type parameters in field types
-                // (these are generic templates that weren't properly monomorphized)
-                if self.struct_contains_type_params(tir_struct, &tir_mod.type_table.borrow()) {
-                    continue;
-                }
-                // Skip monomorphized structs for now - they need array types registered first
-                if tir_struct.monomorph_info.is_some() {
-                    continue;
-                }
-                let struct_name = if main_module_struct_names.contains(&tir_struct.name) {
-                    // Collision - use qualified name with full module source
-                    StructName::new(module_source.clone(), tir_struct.name.clone())
-                } else {
-                    // No collision - use simple name (entry point)
-                    StructName::new(ModuleSource::entry_point(), tir_struct.name.clone())
-                };
-                self.register_struct_type(
-                    struct_name,
-                    tir_struct,
-                    &tir_mod.type_table.borrow(),
-                    &mut builder,
-                );
             }
         }
 
@@ -1450,22 +1472,8 @@ impl Codegen {
         }
 
         // PHASE 4.5: Register variant types (tagged unions) from imported modules
-        // Note: Main module non-generic variants are already registered in PHASE 2
-        for (module_source, tir_mod) in all_tir_modules {
-            if module_source == entry_module_source {
-                continue;
-            }
-            for variant in &tir_mod.variants {
-                if !variant.is_pub {
-                    continue;
-                }
-                // Skip generic variants - they will be registered when monomorphized
-                if !variant.type_params.is_empty() {
-                    continue;
-                }
-                self.register_variant_type(variant, &tir_mod.type_table.borrow(), &mut builder);
-            }
-        }
+        // NOTE: Non-generic library variants are now registered in PHASE 1 together with structs
+        //       using topological sorting to handle struct<->variant dependencies.
 
         // PHASE 4.5b: Register monomorphized generic variants from type tables
         // Scan for GenericInstance types that refer to variants and register them
@@ -8269,7 +8277,19 @@ impl Codegen {
 
             // === Block Expression ===
             TirExprKind::Block(block) => {
-                self.generate_block(func, block, type_table, ctx, builder);
+                // If block produces a value (not unit), use generate_block_as_expr
+                if expr.type_id == TypeTable::UNIT {
+                    self.generate_block(func, block, type_table, ctx, builder);
+                } else {
+                    self.generate_block_as_expr(
+                        func,
+                        block,
+                        expr.type_id,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
             }
 
             // === If Expression ===
@@ -9385,13 +9405,65 @@ impl Codegen {
             let is_last = i == len - 1;
             if is_last && result_type != TypeTable::UNIT {
                 // For the last statement in an expression block, keep the value on stack
-                if let TirStmtKind::Expr(expr) = &stmt.kind {
-                    self.generate_expr(func, expr, type_table, ctx, builder);
-                } else {
-                    // Not an expression statement - generate normally
-                    self.generate_stmt(func, stmt, type_table, ctx, builder);
-                    // Block expects a value but last stmt isn't an expression,
-                    // this is a type error that should've been caught by the resolver
+                match &stmt.kind {
+                    TirStmtKind::Expr(expr) => {
+                        self.generate_expr(func, expr, type_table, ctx, builder);
+                    }
+                    TirStmtKind::If {
+                        condition,
+                        then_block,
+                        else_block: Some(else_block),
+                    } => {
+                        // Generate if statement as expression (with result type)
+                        self.generate_expr(func, condition, type_table, ctx, builder);
+                        let result_valtype = self.type_id_to_valtype(type_table, result_type);
+                        func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                            result_valtype,
+                        )));
+                        self.generate_block_as_expr(
+                            func,
+                            then_block,
+                            result_type,
+                            type_table,
+                            ctx,
+                            builder,
+                        );
+                        func.instruction(&Instruction::Else);
+                        self.generate_block_as_expr(
+                            func,
+                            else_block,
+                            result_type,
+                            type_table,
+                            ctx,
+                            builder,
+                        );
+                        func.instruction(&Instruction::End);
+                    }
+                    TirStmtKind::IfPattern {
+                        scrutinee,
+                        pattern,
+                        then_block,
+                        else_block: Some(else_block),
+                    } => {
+                        // Generate if-pattern statement as expression using a helper
+                        self.generate_if_pattern_as_expr(
+                            func,
+                            scrutinee,
+                            pattern,
+                            then_block,
+                            else_block,
+                            result_type,
+                            type_table,
+                            ctx,
+                            builder,
+                        );
+                    }
+                    _ => {
+                        // Not a statement that can produce a value - generate normally
+                        self.generate_stmt(func, stmt, type_table, ctx, builder);
+                        // Block expects a value but last stmt isn't an expression,
+                        // this is a type error that should've been caught by the resolver
+                    }
                 }
             } else {
                 self.generate_stmt(func, stmt, type_table, ctx, builder);
@@ -10484,6 +10556,264 @@ impl Codegen {
             // Unsupported pattern
             _ => {
                 panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
+            }
+        }
+    }
+
+    /// Generate code for if-pattern as an expression (produces a value).
+    /// Similar to `generate_if_pattern` but the if block has a result type.
+    #[allow(clippy::too_many_arguments)]
+    fn generate_if_pattern_as_expr(
+        &self,
+        func: &mut Function,
+        scrutinee: &TirExpr,
+        pattern: &TirPattern,
+        then_block: &TirBlock,
+        else_block: &TirBlock,
+        result_type: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        // Generate the scrutinee expression
+        self.generate_expr(func, scrutinee, type_table, ctx, builder);
+
+        // Get the scrutinee type to determine how to match
+        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
+        let result_valtype = self.type_id_to_valtype(type_table, result_type);
+
+        match (&scrutinee_type, pattern) {
+            // Option<T> with Some(x) pattern - check for non-null and bind
+            (
+                ResolvedType::Option(inner_type),
+                TirPattern::Variant {
+                    variant_name,
+                    bindings,
+                    payload_type: pattern_payload_type,
+                    ..
+                },
+            ) if variant_name == "Some" => {
+                let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                let type_key = format!("{:?}", scrutinee.type_id);
+                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
+                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
+                func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::RefIsNull);
+                func.instruction(&Instruction::I32Eqz);
+
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                    result_valtype,
+                )));
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                // Then block: pattern matches (value is Some)
+                if let Some(binding) = bindings.first() {
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefAsNonNull);
+
+                    if let TirPattern::Binding { local_index, .. } = binding {
+                        let is_address_taken = ctx.address_taken_locals.contains(local_index);
+                        if !is_address_taken
+                            && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
+                        {
+                            let val_type = primitive_to_valtype(prim);
+                            if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                                func.instruction(&Instruction::StructGet {
+                                    struct_type_index: box_type_idx,
+                                    field_index: 0,
+                                });
+                            }
+                        }
+                    }
+
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *pattern_payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
+
+                self.generate_block_as_expr(
+                    func,
+                    then_block,
+                    result_type,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::Else);
+                self.generate_block_as_expr(
+                    func,
+                    else_block,
+                    result_type,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::End);
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            }
+
+            // Option<T> with None pattern - check for null
+            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
+                if variant_name == "None" =>
+            {
+                func.instruction(&Instruction::RefIsNull);
+
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                    result_valtype,
+                )));
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                self.generate_block_as_expr(
+                    func,
+                    then_block,
+                    result_type,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::Else);
+                self.generate_block_as_expr(
+                    func,
+                    else_block,
+                    result_type,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::End);
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            }
+
+            // Custom variant with pattern
+            (
+                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    bindings,
+                    payload_type: pattern_payload_type,
+                    ..
+                },
+            ) => {
+                let variant_lookup_name =
+                    self.mangle_type_for_struct_name(scrutinee.type_id, type_table);
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
+                    variant_types.get(name).unwrap_or_else(|| {
+                        panic!("Variant type not registered: {variant_lookup_name} (base: {name})");
+                    })
+                });
+
+                let (case_index, case_info) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, info)| info.name == *case_name)
+                    .map(|(i, info)| (i, info.clone()))
+                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
+                let case_type_idx = case_info.type_idx;
+                let base_type_idx = variant_info.base_type_idx;
+                let is_unit_variant = case_info.payload_type.is_none();
+                drop(variant_types);
+
+                let variant_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
+                let type_key = format!("{:?}", scrutinee.type_id);
+                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
+                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
+                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
+                let scrutinee_local = ctx.alloc_local(&local_name, variant_valtype);
+                func.instruction(&Instruction::LocalSet(scrutinee_local));
+
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                if is_unit_variant {
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    func.instruction(&Instruction::I32Const(case_index as i32));
+                    func.instruction(&Instruction::I32Eq);
+                } else {
+                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                }
+
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                    result_valtype,
+                )));
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                if let Some(binding) = bindings.first() {
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: case_type_idx,
+                        field_index: 1,
+                    });
+
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *pattern_payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
+
+                self.generate_block_as_expr(
+                    func,
+                    then_block,
+                    result_type,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::Else);
+                self.generate_block_as_expr(
+                    func,
+                    else_block,
+                    result_type,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::End);
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            }
+
+            _ => {
+                panic!(
+                    "Unsupported if-pattern as expression: {pattern:?} on type {scrutinee_type:?}"
+                );
             }
         }
     }

@@ -1,0 +1,39 @@
+// Simplified module - string operations with variant match
+use {println, Stdout} from "core:cli";
+
+pub variant Align {
+    Left,
+    Right,
+    Center,
+}
+
+pub struct Opts {
+    align: Align,
+    width: i32,
+}
+
+impl Opts {
+    pub fn default() -> Opts {
+        return Opts { align: Align::Right, width: 0 };
+    }
+}
+
+pub fn format_str(s: String, opts: Opts) -> String {
+    if opts.width <= 0 {
+        return s;
+    }
+    return match opts.align {
+        Left => s,
+        Right => s,
+        Center => s,
+    };
+}
+
+fn run() with Stdout {
+    let opts = Opts::default();
+    let s = format_str("hello", opts);
+    println(s);
+}
+
+__DATA__
+{"stdout": "hello\n"}
