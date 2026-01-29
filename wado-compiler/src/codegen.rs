@@ -1108,14 +1108,56 @@ impl Codegen {
                 continue; // Unknown builtin, skip
             }
             // For Service world, task-return needs different signature
-            // result<own<response>, error-code> flattens to (i32, i32)
+            // result<own<response>, error-code> flattens based on the error-code variant payloads.
+            // The full error-code with record payloads flattens to:
+            // (i32, i32, i32, i64, i32, i32, i32, i32)
+            // - i32: Ok/Err discriminant
+            // - i32: Response handle (Ok) or error-code discriminant (Err)
+            // - Remaining: Space for largest error-code payload (records with option<string>, etc.)
             if canonical_name == "task-return" && project.target_world == "Service" {
-                builder.define_func_type(canonical_name, &[ValType::I32, ValType::I32], &[]);
+                builder.define_func_type(
+                    canonical_name,
+                    &[
+                        ValType::I32, // Ok/Err discriminant
+                        ValType::I32, // Response handle or error discriminant
+                        ValType::I32, // Payload field
+                        ValType::I64, // u64 payload (option<u64>)
+                        ValType::I32, // Payload field
+                        ValType::I32, // Payload field
+                        ValType::I32, // Payload field
+                        ValType::I32, // Payload field
+                    ],
+                    &[],
+                );
                 continue;
             }
             let params = self.builtin_func_to_core_params(func);
             let results = self.builtin_func_to_core_results(func);
             builder.define_func_type(canonical_name, &params, &results);
+        }
+
+        // Define HTTP function types for Service world
+        if project.target_world == "Service" {
+            // [constructor]fields: () -> i32 (resource handle)
+            builder.define_func_type("http-fields-constructor", &[], &[ValType::I32]);
+
+            // [static]response.new:
+            // (headers: i32, contents_discrim: i32, contents_stream: i32,
+            //  trailers_future: i32, out_ptr: i32) -> ()
+            // The function writes the result (response handle, transmission future) to out_ptr
+            // Actually, for lowered functions with multi-value results, the returns go to linear memory
+            // Need to check the actual signature from wasmtime
+            builder.define_func_type(
+                "http-response-new",
+                &[
+                    ValType::I32, // headers (fields handle)
+                    ValType::I32, // contents discriminant (0=None, 1=Some)
+                    ValType::I32, // contents stream handle (if Some)
+                    ValType::I32, // trailers future handle
+                    ValType::I32, // out pointer for multi-value result
+                ],
+                &[],
+            );
         }
 
         // Register PRIMITIVE array types first (elements are primitives)
@@ -1680,6 +1722,12 @@ impl Codegen {
             builder.import_func("wasi", local_name);
         }
 
+        // Import HTTP functions for Service world
+        if project.target_world == "Service" {
+            builder.import_func("wasi", "http-fields-constructor");
+            builder.import_func("wasi", "http-response-new");
+        }
+
         builder.import_memory("env", "memory", 1);
         module.section(builder.imports());
 
@@ -1936,9 +1984,16 @@ impl Codegen {
                 let mut func = Function::new(vec![]);
                 let task_return_idx = builder.func_idx("task-return");
                 if project.target_world == "Service" {
-                    // Service world: result<own<response>, error-code> needs (i32, i32)
+                    // Service world: result<own<response>, error-code> with complex payloads
+                    // Flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
                     func.instruction(&Instruction::I32Const(1)); // Err discriminant
                     func.instruction(&Instruction::I32Const(38)); // internal-error
+                    func.instruction(&Instruction::I32Const(1)); // option<string> has Some
+                    func.instruction(&Instruction::I64Const(0)); // u64 padding
+                    func.instruction(&Instruction::I32Const(0)); // string ptr
+                    func.instruction(&Instruction::I32Const(37)); // string len
+                    func.instruction(&Instruction::I32Const(0)); // padding
+                    func.instruction(&Instruction::I32Const(0)); // padding
                 } else {
                     // Command world: result<_, _> needs just (i32)
                     func.instruction(&Instruction::I32Const(0)); // Ok discriminant
@@ -2261,11 +2316,26 @@ impl Codegen {
         // ========================================
         // Lower HTTP types functions for Service world
         // ========================================
-        // NOTE: Currently disabled - returning proper HTTP 200 responses requires:
-        // 1. Importing [constructor]fields and [static]response.new from wasi:http/types
-        // 2. Handling the complex error-code variant type with all payload records
-        // 3. Updating task-return signature to match the complex result type
-        // For now, the handler returns an error which uses the simpler error-code variant.
+        if project.target_world == "Service" && ctx.has_comp_func("http-fields-constructor") {
+            // Lower [constructor]fields: () -> own<fields>
+            // Constructor returns a resource handle (i32)
+            ctx.register_core_func("http-fields-constructor");
+            builder.lower_func(
+                Some("http-fields-constructor"),
+                ctx.comp_func_idx("http-fields-constructor"),
+                [],
+            );
+
+            // Lower [static]response.new:
+            // (own<fields>, option<stream<u8>>, future<...>) -> tuple<response, future>
+            // Needs memory for complex types
+            ctx.register_core_func("http-response-new");
+            builder.lower_func(
+                Some("http-response-new"),
+                ctx.comp_func_idx("http-response-new"),
+                [CanonicalOption::Memory(ctx.memory_idx())],
+            );
+        }
 
         // Async intrinsics - DCE: only generate if used
         if project.used_builtins.contains(&CanonBuiltin::TaskReturn) {
@@ -2377,8 +2447,19 @@ impl Codegen {
             ));
         }
 
-        // NOTE: Lowered HTTP types functions ([constructor]fields, [static]response.new)
-        // are not currently exported to the wasi instance. The handler returns an error.
+        // Add lowered HTTP types functions for Service world
+        if project.target_world == "Service" && ctx.has_core_func("http-fields-constructor") {
+            wasi_exports.push((
+                "http-fields-constructor".to_string(),
+                ExportKind::Func,
+                ctx.core_func_idx("http-fields-constructor"),
+            ));
+            wasi_exports.push((
+                "http-response-new".to_string(),
+                ExportKind::Func,
+                ctx.core_func_idx("http-response-new"),
+            ));
+        }
 
         let wasi_exports_refs: Vec<_> = wasi_exports
             .iter()
@@ -3162,18 +3243,88 @@ impl Codegen {
                 wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
             );
 
-            // For simplicity, we define error-code without payload types.
-            // The handler return type needs to match the simple error-code structure
-            // for proper task-return lowering.
-            //
-            // NOTE: This may cause a subtype mismatch with wasmtime at runtime,
-            // as wasmtime's error-code has payloads. A full implementation would
-            // need to handle the complex error-code type with all payload records.
+            // === Payload types for error-code variant ===
+            // Records and variants must be "named" (exported) to be used in function signatures.
+            // The full error-code type matches wasmtime's wasi:http/types interface.
 
-            // Type 3: error-code variant (simplified - no payloads)
+            // Type 3: option<string> (used in multiple record payloads)
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Primitive(PrimitiveValType::String));
+
+            // Type 4: option<u16> (for DNS-error-payload.info-code)
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Primitive(PrimitiveValType::U16));
+
+            // Type 5: DNS-error-payload record { rcode: option<string>, info-code: option<u16> }
+            instance_type.ty().defined_type().record([
+                ("rcode", ComponentValType::Type(3)),     // option<string>
+                ("info-code", ComponentValType::Type(4)), // option<u16>
+            ]);
+            // Type 6: Export DNS-error-payload to make it "named"
+            instance_type.export(
+                "DNS-error-payload",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(5)),
+            );
+
+            // Type 7: option<u8> (for TLS-alert-received-payload.alert-id)
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Primitive(PrimitiveValType::U8));
+
+            // Type 8: TLS-alert-received-payload record
+            instance_type.ty().defined_type().record([
+                ("alert-id", ComponentValType::Type(7)),      // option<u8>
+                ("alert-message", ComponentValType::Type(3)), // option<string>
+            ]);
+            // Type 9: Export TLS-alert-received-payload to make it "named"
+            instance_type.export(
+                "TLS-alert-received-payload",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(8)),
+            );
+
+            // Type 10: option<u32> (for field-size-payload.field-size and some variant payloads)
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Primitive(PrimitiveValType::U32));
+
+            // Type 11: field-size-payload record
+            instance_type.ty().defined_type().record([
+                ("field-name", ComponentValType::Type(3)),  // option<string>
+                ("field-size", ComponentValType::Type(10)), // option<u32>
+            ]);
+            // Type 12: Export field-size-payload to make it "named"
+            instance_type.export(
+                "field-size-payload",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(11)),
+            );
+
+            // Type 13: option<u64> (for HTTP-request-body-size, HTTP-response-body-size)
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Primitive(PrimitiveValType::U64));
+
+            // Type 14: option<field-size-payload>
+            // Must use the exported alias (type 12) for the named field-size-payload
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Type(12));
+
+            // Type 15: error-code variant with proper payloads
+            // Use named (exported) types for record payloads:
+            // - type 6 for DNS-error-payload
+            // - type 9 for TLS-alert-received-payload
+            // - type 12 for field-size-payload
             instance_type.ty().defined_type().variant([
                 ("DNS-timeout", None, None),
-                ("DNS-error", None, None),
+                ("DNS-error", Some(ComponentValType::Type(6)), None), // DNS-error-payload
                 ("destination-not-found", None, None),
                 ("destination-unavailable", None, None),
                 ("destination-IP-prohibited", None, None),
@@ -3186,76 +3337,149 @@ impl Codegen {
                 ("connection-limit-reached", None, None),
                 ("TLS-protocol-error", None, None),
                 ("TLS-certificate-error", None, None),
-                ("TLS-alert-received", None, None),
+                ("TLS-alert-received", Some(ComponentValType::Type(9)), None), // TLS-alert-received-payload
                 ("HTTP-request-denied", None, None),
                 ("HTTP-request-length-required", None, None),
-                ("HTTP-request-body-size", None, None),
+                ("HTTP-request-body-size", Some(ComponentValType::Type(13)), None), // option<u64>
                 ("HTTP-request-method-invalid", None, None),
                 ("HTTP-request-URI-invalid", None, None),
                 ("HTTP-request-URI-too-long", None, None),
-                ("HTTP-request-header-section-size", None, None),
-                ("HTTP-request-header-size", None, None),
-                ("HTTP-request-trailer-section-size", None, None),
-                ("HTTP-request-trailer-size", None, None),
+                ("HTTP-request-header-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
+                ("HTTP-request-header-size", Some(ComponentValType::Type(14)), None), // option<field-size-payload>
+                ("HTTP-request-trailer-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
+                ("HTTP-request-trailer-size", Some(ComponentValType::Type(12)), None), // field-size-payload
                 ("HTTP-response-incomplete", None, None),
-                ("HTTP-response-header-section-size", None, None),
-                ("HTTP-response-header-size", None, None),
-                ("HTTP-response-body-size", None, None),
-                ("HTTP-response-trailer-section-size", None, None),
-                ("HTTP-response-trailer-size", None, None),
-                ("HTTP-response-transfer-coding", None, None),
-                ("HTTP-response-content-coding", None, None),
+                ("HTTP-response-header-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
+                ("HTTP-response-header-size", Some(ComponentValType::Type(12)), None), // field-size-payload
+                ("HTTP-response-body-size", Some(ComponentValType::Type(13)), None), // option<u64>
+                ("HTTP-response-trailer-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
+                ("HTTP-response-trailer-size", Some(ComponentValType::Type(12)), None), // field-size-payload
+                ("HTTP-response-transfer-coding", Some(ComponentValType::Type(3)), None), // option<string>
+                ("HTTP-response-content-coding", Some(ComponentValType::Type(3)), None), // option<string>
                 ("HTTP-response-timeout", None, None),
                 ("HTTP-upgrade-failed", None, None),
                 ("HTTP-protocol-error", None, None),
                 ("loop-detected", None, None),
                 ("configuration-error", None, None),
-                ("internal-error", None, None),
+                ("internal-error", Some(ComponentValType::Type(3)), None), // option<string>
             ]);
-            // Type 4: Export error-code to make it "named"
+            // Type 16: Export error-code to make it "named"
             instance_type.export(
                 "error-code",
-                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(3)),
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(15)),
             );
 
-            // Type indices (simplified):
+            // Type indices (full error-code):
             // 0: request (sub-resource export - named)
             // 1: response (sub-resource export - named)
             // 2: fields (sub-resource export - named)
-            // 3: error-code variant (internal)
-            // 4: error-code (Eq export - named)
-            // 5: stream<u8>
-            // 6: option<stream<u8>>
-            // 7: result<_, error-code>
-            // 8: future<result<_, error-code>>
-            //
-            // For now, we don't export [constructor]fields and [static]response.new
-            // to keep the import signature simple. The handler returns an error.
+            // 3: option<string>
+            // 4: option<u16>
+            // 5: DNS-error-payload record (internal)
+            // 6: DNS-error-payload (Eq export - named)
+            // 7: option<u8>
+            // 8: TLS-alert-received-payload record (internal)
+            // 9: TLS-alert-received-payload (Eq export - named)
+            // 10: option<u32>
+            // 11: field-size-payload record (internal)
+            // 12: field-size-payload (Eq export - named)
+            // 13: option<u64>
+            // 14: option<field-size-payload>
+            // 15: error-code variant (internal)
+            // 16: error-code (Eq export - named)
+            // 17: stream<u8>
+            // 18: option<stream<u8>>
+            // 19: result<_, error-code>
+            // 20: future<result<_, error-code>>
 
-            // Type 5: stream<u8>
+            // Type 17: stream<u8>
             instance_type
                 .ty()
                 .defined_type()
                 .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
 
-            // Type 6: option<stream<u8>>
+            // Type 18: option<stream<u8>>
             instance_type
                 .ty()
                 .defined_type()
-                .option(ComponentValType::Type(5));
+                .option(ComponentValType::Type(17));
 
-            // Type 7: result<_, error-code> (for transmission future)
-            // Use type 4 (named/exported error-code alias)
+            // Type 19: result<_, error-code> (for transmission future)
+            // Use type 16 (named/exported error-code alias)
             instance_type
                 .ty()
                 .defined_type()
-                .result(None, Some(ComponentValType::Type(4)));
+                .result(None, Some(ComponentValType::Type(16)));
 
-            // Type 8: future<result<_, error-code>>
+            // Type 20: future<result<_, error-code>>
             instance_type
                 .ty()
                 .defined_type()
-                .future(Some(ComponentValType::Type(7)));
+                .future(Some(ComponentValType::Type(19)));
+
+            // Types for [constructor]fields and [static]response.new
+            // Type 21: own<fields> (for constructor return and parameters)
+            instance_type.ty().defined_type().own(2); // fields is at export index 2
+
+            // Type 22: own<response> (for response.new return)
+            instance_type.ty().defined_type().own(1); // response is at export index 1
+
+            // Type 23: option<own<fields>> (for trailers in result)
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Type(21));
+
+            // Type 24: result<option<own<fields>>, error-code> (for trailers future payload)
+            instance_type.ty().defined_type().result(
+                Some(ComponentValType::Type(23)),
+                Some(ComponentValType::Type(16)), // error-code export
+            );
+
+            // Type 25: future<result<option<own<fields>>, error-code>> (trailers parameter)
+            instance_type
+                .ty()
+                .defined_type()
+                .future(Some(ComponentValType::Type(24)));
+
+            // Type 26: tuple<own<response>, future<result<_, error-code>>> (response.new return)
+            instance_type.ty().defined_type().tuple([
+                ComponentValType::Type(22), // own<response>
+                ComponentValType::Type(20), // future<result<_, error-code>>
+            ]);
+
+            // Type 27: [constructor]fields function type
+            // Signature: () -> own<fields>
+            // Note: constructors are NOT async
+            let params: [(&str, ComponentValType); 0] = [];
+            instance_type
+                .ty()
+                .function()
+                .params(params)
+                .result(Some(ComponentValType::Type(21)));
+
+            // Type 28: [static]response.new function type
+            // Signature: (headers: own<fields>, contents: option<stream<u8>>,
+            //             trailers: future<result<option<own<fields>>, error-code>>)
+            //         -> tuple<own<response>, future<result<_, error-code>>>
+            // Note: NOT async - static functions with futures are still sync in CM
+            instance_type.ty().function().params([
+                ("headers", ComponentValType::Type(21)),  // own<fields>
+                ("contents", ComponentValType::Type(18)), // option<stream<u8>>
+                ("trailers", ComponentValType::Type(25)), // future<...>
+            ]).result(Some(ComponentValType::Type(26))); // tuple<response, future>
+
+            // Export [constructor]fields function (type 27)
+            instance_type.export(
+                "[constructor]fields",
+                wasm_encoder::ComponentTypeRef::Func(27),
+            );
+
+            // Export [static]response.new function (type 28)
+            instance_type.export(
+                "[static]response.new",
+                wasm_encoder::ComponentTypeRef::Func(28),
+            );
 
             enc.instance(&instance_type);
         }
@@ -3301,9 +3525,24 @@ impl Codegen {
             ComponentExportKind::Type,
         );
 
-        // NOTE: We don't alias [constructor]fields and [static]response.new for now.
-        // The current HTTP handler just returns an error.
-        // To return a proper response, these functions need to be aliased and called.
+        // Alias [constructor]fields function for creating empty headers
+        ctx.register_comp_func("http-fields-constructor");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "[constructor]fields",
+            ComponentExportKind::Func,
+        );
+
+        // Alias [static]response.new function for creating responses
+        ctx.register_comp_func("http-response-new");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "[static]response.new",
+            ComponentExportKind::Func,
+        );
+
+        // NOTE: The lowering of these functions is done in lower_http_response_functions()
+        // which is called after generate_http_response_types().
 
         // Define own<request> type for use in function params
         let request_resource_idx = ctx.type_idx("http-request-resource");
@@ -9204,16 +9443,27 @@ impl Codegen {
                     }
                     // Call task-return with appropriate arguments based on world
                     if ctx.target_world == "Service" {
-                        // Service world: result<own<response>, error-code> needs (i32, i32)
+                        // Service world: Return 500 error for now
+                        // HTTP 200 response creation is blocked - http-response-new hangs
+                        // This might be a wasmtime issue or incorrect lowering
+
+                        // Return Err(InternalError) which works
                         func.instruction(&Instruction::I32Const(1)); // Err discriminant
                         func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
+                        func.instruction(&Instruction::I32Const(1)); // option<string> = Some
+                        func.instruction(&Instruction::I64Const(0)); // string ptr (data segment at 0)
+                        func.instruction(&Instruction::I32Const(37)); // string len
+                        func.instruction(&Instruction::I32Const(0)); // padding
+                        func.instruction(&Instruction::I32Const(0)); // padding
+                        func.instruction(&Instruction::I32Const(0)); // padding
                     } else {
                         // Command world: result<_, _> needs just (i32)
                         func.instruction(&Instruction::I32Const(0)); // Ok discriminant
                     }
                     let task_return_idx = builder.func_idx("task-return");
                     func.instruction(&Instruction::Call(task_return_idx));
-                    // No wasm return instruction - async exports have no return type
+                    // Add return to prevent fall-through to the end-of-function task-return
+                    func.instruction(&Instruction::Return);
                 } else {
                     // Normal function return
                     if let Some(expr) = value {
@@ -11363,8 +11613,15 @@ impl Codegen {
             self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
         }
 
-        // Note: For async exports, we don't need scratch locals anymore.
-        // The simplified approach passes the discriminant directly to task-return.
+        // Pre-allocate scratch locals for Service world HTTP response creation
+        if func_ctx.is_async_export && func_ctx.target_world == "Service" {
+            func_ctx.alloc_local("_http_future", ValType::I64);
+            func_ctx.alloc_local("_trailers_rx", ValType::I32);
+            func_ctx.alloc_local("_trailers_tx", ValType::I32);
+            func_ctx.alloc_local("_headers_handle", ValType::I32);
+            func_ctx.alloc_local("_result_disc", ValType::I32);
+            func_ctx.alloc_local("_response_handle", ValType::I32);
+        }
 
         // Reset for-of counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_for_of_counter();
@@ -11383,11 +11640,18 @@ impl Codegen {
         // For async exports, ensure task-return is called even for fall-through paths
         // (functions without explicit return statements)
         if func_ctx.is_async_export {
-            // For Service world: result<own<response>, error-code> needs (i32, i32)
+            // For Service world: result<own<response>, error-code> with complex payloads
+            // The full error-code variant flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
             // For Command world: result<_, _> needs just (i32)
             if func_ctx.target_world == "Service" {
                 wasm_func.instruction(&Instruction::I32Const(1)); // Err discriminant
                 wasm_func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
+                wasm_func.instruction(&Instruction::I32Const(1)); // option<string> = Some
+                wasm_func.instruction(&Instruction::I64Const(0)); // string ptr
+                wasm_func.instruction(&Instruction::I32Const(37)); // string len
+                wasm_func.instruction(&Instruction::I32Const(0)); // padding
+                wasm_func.instruction(&Instruction::I32Const(0)); // padding
+                wasm_func.instruction(&Instruction::I32Const(0)); // padding
             } else {
                 wasm_func.instruction(&Instruction::I32Const(0)); // Ok discriminant for result<_, _>
             }

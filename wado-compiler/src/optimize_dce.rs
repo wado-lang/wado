@@ -301,6 +301,13 @@ pub fn analyze_project(project: &mut Project) {
                 used_builtins.insert(*builtin);
             }
         }
+
+        // Service world needs future intrinsics for response creation
+        // (trailers parameter to response.new is a future)
+        if is_async_world {
+            used_builtins.insert(CanonBuiltin::FutureNew);
+            used_builtins.insert(CanonBuiltin::FutureWrite);
+        }
     }
 
     // Apply results to project
