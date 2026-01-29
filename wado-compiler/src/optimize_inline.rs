@@ -2536,6 +2536,12 @@ fn remap_function_ref(func: &FunctionRef, source_module: &[String]) -> FunctionR
         return func.clone();
     }
 
+    // Never remap builtin functions - they must keep their special path
+    // Check both non-monomorphized and monomorphized builtins
+    if func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some() {
+        return func.clone();
+    }
+
     // Only remap if the func has an empty module path (local call)
     if func.module_path().is_empty() {
         // Convert to External with the source module path

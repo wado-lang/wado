@@ -26,10 +26,11 @@ pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 // add_newline: if true, appends '\n' after the message
 pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     let len = message.len();
+    let msg_bytes = message.internal_raw_bytes();
     let alloc_size = if add_newline { len + 1 } else { len };
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
     for (let mut i = 0; i < len; i = i + 1) {
-        let byte = message.get(i);
+        let byte = builtin::array_get_u8(msg_bytes, i);
         builtin::memory_store8(ptr + i, byte);
     }
     if add_newline {

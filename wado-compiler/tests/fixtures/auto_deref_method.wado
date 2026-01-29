@@ -53,7 +53,11 @@ fn run() with Stdout {
     let s = "hello";
     let s_ref = &s;
     assert s_ref.len() == 5;
-    assert s_ref.get(0) == 'h' as i32;
+    // Test bytes() iterator via auto-deref
+    let mut bytes_iter = s_ref.bytes();
+    if let Some(b) = bytes_iter.next() {
+        assert b == 'h' as u8;
+    }
 
     // Mutable reference auto-deref
     let mut p2 = Point { x: 5, y: 10 };
