@@ -6,7 +6,8 @@
 // See https://github.com/rsc/fpfmt/blob/main/LICENSE
 
 use {
-    f64_to_string, f64_to_string_exp, f64_to_string_compact,
+    f64_to_string, f64_to_string_exp, f64_to_string_auto,
+    f32_to_string, f32_to_string_exp, f32_to_string_auto,
     short, fixed_width, digits, format_exp, format_decimal,
     log10_pow2, log2_pow10, i64_bit_len, pow10,
     unpack64, FormatResult, UnpackResult,
@@ -558,26 +559,26 @@ test "fixed_width powers of 10" {
 // ============================================================================
 
 test "f64_to_string_exp zero" {
-    let s0 = f64_to_string_exp(0.0);
+    let s0 = f64_to_string_exp(0.0, false);
     assert s0 == "0e+00";
 
-    let sn0 = f64_to_string_exp(-0.0);
+    let sn0 = f64_to_string_exp(-0.0, false);
     assert sn0 == "-0e+00";
 }
 
 test "f64_to_string_exp infinity" {
     let inf = 1.0 / 0.0;
-    let s_inf = f64_to_string_exp(inf);
+    let s_inf = f64_to_string_exp(inf, false);
     assert s_inf == "Inf";
 
     let neg_inf = -1.0 / 0.0;
-    let s_neg_inf = f64_to_string_exp(neg_inf);
+    let s_neg_inf = f64_to_string_exp(neg_inf, false);
     assert s_neg_inf == "-Inf";
 }
 
 test "f64_to_string_exp NaN" {
     let nan = 0.0 / 0.0;
-    let s_nan = f64_to_string_exp(nan);
+    let s_nan = f64_to_string_exp(nan, false);
     assert s_nan == "NaN";
 }
 
@@ -586,54 +587,54 @@ test "f64_to_string_exp NaN" {
 // ============================================================================
 
 test "f64_to_string_exp single digit integers" {
-    assert f64_to_string_exp(1.0) == "1e+00";
-    assert f64_to_string_exp(2.0) == "2e+00";
-    assert f64_to_string_exp(3.0) == "3e+00";
-    assert f64_to_string_exp(5.0) == "5e+00";
-    assert f64_to_string_exp(9.0) == "9e+00";
+    assert f64_to_string_exp(1.0, false) == "1e+00";
+    assert f64_to_string_exp(2.0, false) == "2e+00";
+    assert f64_to_string_exp(3.0, false) == "3e+00";
+    assert f64_to_string_exp(5.0, false) == "5e+00";
+    assert f64_to_string_exp(9.0, false) == "9e+00";
 }
 
 test "f64_to_string_exp powers of 10" {
-    assert f64_to_string_exp(10.0) == "1e+01";
-    assert f64_to_string_exp(100.0) == "1e+02";
-    assert f64_to_string_exp(1000.0) == "1e+03";
+    assert f64_to_string_exp(10.0, false) == "1e+01";
+    assert f64_to_string_exp(100.0, false) == "1e+02";
+    assert f64_to_string_exp(1000.0, false) == "1e+03";
 
-    assert f64_to_string_exp(0.1) == "1e-01";
-    assert f64_to_string_exp(0.01) == "1e-02";
-    assert f64_to_string_exp(0.001) == "1e-03";
+    assert f64_to_string_exp(0.1, false) == "1e-01";
+    assert f64_to_string_exp(0.01, false) == "1e-02";
+    assert f64_to_string_exp(0.001, false) == "1e-03";
 }
 
 test "f64_to_string_exp powers of 2" {
-    assert f64_to_string_exp(2.0) == "2e+00";
-    assert f64_to_string_exp(4.0) == "4e+00";
-    assert f64_to_string_exp(8.0) == "8e+00";
+    assert f64_to_string_exp(2.0, false) == "2e+00";
+    assert f64_to_string_exp(4.0, false) == "4e+00";
+    assert f64_to_string_exp(8.0, false) == "8e+00";
 
-    assert f64_to_string_exp(0.5) == "5e-01";
-    assert f64_to_string_exp(0.25) == "2.5e-01";
-    assert f64_to_string_exp(0.125) == "1.25e-01";
+    assert f64_to_string_exp(0.5, false) == "5e-01";
+    assert f64_to_string_exp(0.25, false) == "2.5e-01";
+    assert f64_to_string_exp(0.125, false) == "1.25e-01";
 }
 
 test "f64_to_string_exp negative values" {
-    assert f64_to_string_exp(-1.0) == "-1e+00";
-    assert f64_to_string_exp(-10.0) == "-1e+01";
-    assert f64_to_string_exp(-0.1) == "-1e-01";
+    assert f64_to_string_exp(-1.0, false) == "-1e+00";
+    assert f64_to_string_exp(-10.0, false) == "-1e+01";
+    assert f64_to_string_exp(-0.1, false) == "-1e-01";
 
-    let neg_pi = f64_to_string_exp(-3.141592653589793);
+    let neg_pi = f64_to_string_exp(-3.141592653589793, false);
     assert neg_pi.get_byte(0) == '-' as i32;
 }
 
 test "f64_to_string_exp two digit exponent" {
-    let s = f64_to_string_exp(1.0e10);
+    let s = f64_to_string_exp(1.0e10, false);
     // Should end with e+10
     assert s.len() >= 5;
 
-    let s2 = f64_to_string_exp(1.0e-10);
+    let s2 = f64_to_string_exp(1.0e-10, false);
     // Should end with e-10
     assert s2.len() >= 5;
 }
 
 test "f64_to_string_exp three digit exponent" {
-    let large = f64_to_string_exp(1.0e100);
+    let large = f64_to_string_exp(1.0e100, false);
     assert large.len() > 0;
     // Check last 3 chars are "100"
     let n = large.len();
@@ -641,7 +642,7 @@ test "f64_to_string_exp three digit exponent" {
     assert large.get_byte(n - 2) == '0' as i32;
     assert large.get_byte(n - 1) == '0' as i32;
 
-    let small = f64_to_string_exp(1.0e-100);
+    let small = f64_to_string_exp(1.0e-100, false);
     assert small.len() > 0;
 }
 
@@ -651,7 +652,7 @@ test "f64_to_string_exp three digit exponent" {
 
 test "f64_to_string_exp pi precision" {
     let pi = 3.141592653589793;
-    let s = f64_to_string_exp(pi);
+    let s = f64_to_string_exp(pi, false);
 
     // Should have many digits
     assert s.len() > 10;
@@ -667,7 +668,7 @@ test "f64_to_string_exp round trip consistency" {
     // Verify short and f64_to_string are consistent
     let pi = 3.141592653589793;
     let short_result = short(pi);
-    let str_result = f64_to_string_exp(pi);
+    let str_result = f64_to_string_exp(pi, false);
 
     // First digit should match
     let mut first_digit = short_result.digits;
@@ -810,43 +811,43 @@ test "hard boundary near powers of 10" {
 
 test "format_exp basic" {
     // 1 digit
-    let s1 = format_exp(1 as i64, 0, 1);
+    let s1 = format_exp(1 as i64, 0, 1, false);
     assert s1 == "1e+00";
 
     // 2 digits, exp 0
-    let s2 = format_exp(12 as i64, -1, 2);
+    let s2 = format_exp(12 as i64, -1, 2, false);
     assert s2 == "1.2e+00";
 
     // 3 digits, exp 0
-    let s3 = format_exp(314 as i64, -2, 3);
+    let s3 = format_exp(314 as i64, -2, 3, false);
     assert s3 == "3.14e+00";
 }
 
 test "format_exp negative exponent" {
     // 1 digit, exp -1
-    let s1 = format_exp(1 as i64, -1, 1);
+    let s1 = format_exp(1 as i64, -1, 1, false);
     assert s1 == "1e-01";
 
     // exp -10
-    let s2 = format_exp(1 as i64, -10, 1);
+    let s2 = format_exp(1 as i64, -10, 1, false);
     assert s2 == "1e-10";
 
     // exp -100
-    let s3 = format_exp(1 as i64, -100, 1);
+    let s3 = format_exp(1 as i64, -100, 1, false);
     assert s3 == "1e-100";
 }
 
 test "format_exp positive exponent" {
     // exp +1
-    let s1 = format_exp(1 as i64, 1, 1);
+    let s1 = format_exp(1 as i64, 1, 1, false);
     assert s1 == "1e+01";
 
     // exp +10
-    let s2 = format_exp(1 as i64, 10, 1);
+    let s2 = format_exp(1 as i64, 10, 1, false);
     assert s2 == "1e+10";
 
     // exp +100
-    let s3 = format_exp(1 as i64, 100, 1);
+    let s3 = format_exp(1 as i64, 100, 1, false);
     assert s3 == "1e+100";
 }
 
@@ -857,24 +858,24 @@ test "format_exp positive exponent" {
 test "extreme large values" {
     // 10^200
     let large = 1.0e200;
-    let s_large = f64_to_string_exp(large);
+    let s_large = f64_to_string_exp(large, false);
     assert s_large.len() > 0;
 
     // 10^300
     let larger = 1.0e300;
-    let s_larger = f64_to_string_exp(larger);
+    let s_larger = f64_to_string_exp(larger, false);
     assert s_larger.len() > 0;
 }
 
 test "extreme small values" {
     // 10^-200
     let small = 1.0e-200;
-    let s_small = f64_to_string_exp(small);
+    let s_small = f64_to_string_exp(small, false);
     assert s_small.len() > 0;
 
     // 10^-300
     let smaller = 1.0e-300;
-    let s_smaller = f64_to_string_exp(smaller);
+    let s_smaller = f64_to_string_exp(smaller, false);
     assert s_smaller.len() > 0;
 }
 
@@ -884,15 +885,15 @@ test "extreme small values" {
 
 test "f64_to_string_exp extended precision" {
     // Very large value
-    let large = f64_to_string_exp(1.0e100);
+    let large = f64_to_string_exp(1.0e100, false);
     assert large.len() > 0;
 
     // Very small value
-    let small = f64_to_string_exp(1.0e-100);
+    let small = f64_to_string_exp(1.0e-100, false);
     assert small.len() > 0;
 
     // Value near 1
-    let near1 = f64_to_string_exp(1.0000001);
+    let near1 = f64_to_string_exp(1.0000001, false);
     assert near1.len() > 0;
 }
 
@@ -1022,112 +1023,112 @@ fn f64_from_bits(bits: i64) -> f64 {
 
 test "exact output basic integers" {
     // 1.0
-    assert f64_to_string_exp(f64_from_bits(0x3FF0000000000000 as i64)) == "1e+00";
+    assert f64_to_string_exp(f64_from_bits(0x3FF0000000000000 as i64), false) == "1e+00";
     // 2.0
-    assert f64_to_string_exp(f64_from_bits(0x4000000000000000 as i64)) == "2e+00";
+    assert f64_to_string_exp(f64_from_bits(0x4000000000000000 as i64), false) == "2e+00";
     // 10.0
-    assert f64_to_string_exp(f64_from_bits(0x4024000000000000 as i64)) == "1e+01";
+    assert f64_to_string_exp(f64_from_bits(0x4024000000000000 as i64), false) == "1e+01";
     // 100.0
-    assert f64_to_string_exp(f64_from_bits(0x4059000000000000 as i64)) == "1e+02";
+    assert f64_to_string_exp(f64_from_bits(0x4059000000000000 as i64), false) == "1e+02";
     // 1000.0
-    assert f64_to_string_exp(f64_from_bits(0x408F400000000000 as i64)) == "1e+03";
+    assert f64_to_string_exp(f64_from_bits(0x408F400000000000 as i64), false) == "1e+03";
 }
 
 test "exact output pi" {
     // 3.141592653589793
-    assert f64_to_string_exp(f64_from_bits(0x400921FB54442D18 as i64)) == "3.141592653589793e+00";
+    assert f64_to_string_exp(f64_from_bits(0x400921FB54442D18 as i64), false) == "3.141592653589793e+00";
 }
 
 test "exact output powers of 10 small" {
     // 0.1
-    assert f64_to_string_exp(f64_from_bits(0x3FB999999999999A as i64)) == "1e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FB999999999999A as i64), false) == "1e-01";
     // 0.01
-    assert f64_to_string_exp(f64_from_bits(0x3F847AE147AE147B as i64)) == "1e-02";
+    assert f64_to_string_exp(f64_from_bits(0x3F847AE147AE147B as i64), false) == "1e-02";
     // 0.001
-    assert f64_to_string_exp(f64_from_bits(0x3F50624DD2F1A9FC as i64)) == "1e-03";
+    assert f64_to_string_exp(f64_from_bits(0x3F50624DD2F1A9FC as i64), false) == "1e-03";
 }
 
 test "exact output dyadic fractions" {
     // 0.5
-    assert f64_to_string_exp(f64_from_bits(0x3FE0000000000000 as i64)) == "5e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FE0000000000000 as i64), false) == "5e-01";
     // 0.25
-    assert f64_to_string_exp(f64_from_bits(0x3FD0000000000000 as i64)) == "2.5e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FD0000000000000 as i64), false) == "2.5e-01";
     // 0.125
-    assert f64_to_string_exp(f64_from_bits(0x3FC0000000000000 as i64)) == "1.25e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FC0000000000000 as i64), false) == "1.25e-01";
     // 0.0625
-    assert f64_to_string_exp(f64_from_bits(0x3FB0000000000000 as i64)) == "6.25e-02";
+    assert f64_to_string_exp(f64_from_bits(0x3FB0000000000000 as i64), false) == "6.25e-02";
 }
 
 test "exact output two-digit integers" {
     // 16
-    assert f64_to_string_exp(f64_from_bits(0x4030000000000000 as i64)) == "1.6e+01";
+    assert f64_to_string_exp(f64_from_bits(0x4030000000000000 as i64), false) == "1.6e+01";
     // 32
-    assert f64_to_string_exp(f64_from_bits(0x4040000000000000 as i64)) == "3.2e+01";
+    assert f64_to_string_exp(f64_from_bits(0x4040000000000000 as i64), false) == "3.2e+01";
 }
 
 test "exact output near boundaries" {
     // 9.999999999999998
-    assert f64_to_string_exp(f64_from_bits(0x4023FFFFFFFFFFFF as i64)) == "9.999999999999998e+00";
+    assert f64_to_string_exp(f64_from_bits(0x4023FFFFFFFFFFFF as i64), false) == "9.999999999999998e+00";
     // 10.000000000000002
-    assert f64_to_string_exp(f64_from_bits(0x4024000000000001 as i64)) == "1.0000000000000002e+01";
+    assert f64_to_string_exp(f64_from_bits(0x4024000000000001 as i64), false) == "1.0000000000000002e+01";
     // 99.99999999999999
-    assert f64_to_string_exp(f64_from_bits(0x4058FFFFFFFFFFFF as i64)) == "9.999999999999999e+01";
+    assert f64_to_string_exp(f64_from_bits(0x4058FFFFFFFFFFFF as i64), false) == "9.999999999999999e+01";
     // 100.00000000000001
-    assert f64_to_string_exp(f64_from_bits(0x4059000000000001 as i64)) == "1.0000000000000001e+02";
+    assert f64_to_string_exp(f64_from_bits(0x4059000000000001 as i64), false) == "1.0000000000000001e+02";
 }
 
 test "exact output extreme scales" {
     // 1e-100
-    assert f64_to_string_exp(f64_from_bits(0x2B2BFF2EE48E0530 as i64)) == "1e-100";
+    assert f64_to_string_exp(f64_from_bits(0x2B2BFF2EE48E0530 as i64), false) == "1e-100";
     // 1e-200
-    assert f64_to_string_exp(f64_from_bits(0x16687E92154EF7AC as i64)) == "1e-200";
+    assert f64_to_string_exp(f64_from_bits(0x16687E92154EF7AC as i64), false) == "1e-200";
     // 1e-300
-    assert f64_to_string_exp(f64_from_bits(0x01A56E1FC2F8F359 as i64)) == "1e-300";
+    assert f64_to_string_exp(f64_from_bits(0x01A56E1FC2F8F359 as i64), false) == "1e-300";
     // 1e+100
-    assert f64_to_string_exp(f64_from_bits(0x54B249AD2594C37D as i64)) == "1e+100";
+    assert f64_to_string_exp(f64_from_bits(0x54B249AD2594C37D as i64), false) == "1e+100";
     // 1e+200
-    assert f64_to_string_exp(f64_from_bits(0x6974E718D7D7625A as i64)) == "1e+200";
+    assert f64_to_string_exp(f64_from_bits(0x6974E718D7D7625A as i64), false) == "1e+200";
     // 1e+300
-    assert f64_to_string_exp(f64_from_bits(0x7E37E43C8800759C as i64)) == "1e+300";
+    assert f64_to_string_exp(f64_from_bits(0x7E37E43C8800759C as i64), false) == "1e+300";
 }
 
 test "exact output precise decimals" {
     // 1.2345678901234567
-    assert f64_to_string_exp(f64_from_bits(0x3FF3C0CA428C59FB as i64)) == "1.2345678901234567e+00";
+    assert f64_to_string_exp(f64_from_bits(0x3FF3C0CA428C59FB as i64), false) == "1.2345678901234567e+00";
     // 9.876543210987654
-    assert f64_to_string_exp(f64_from_bits(0x4023C0CA45917213 as i64)) == "9.876543210987654e+00";
+    assert f64_to_string_exp(f64_from_bits(0x4023C0CA45917213 as i64), false) == "9.876543210987654e+00";
 }
 
 test "exact output nextafter 1" {
     // 1.0000000000000002 (nextafter 1.0 towards 2)
-    assert f64_to_string_exp(f64_from_bits(0x3FF0000000000001 as i64)) == "1.0000000000000002e+00";
+    assert f64_to_string_exp(f64_from_bits(0x3FF0000000000001 as i64), false) == "1.0000000000000002e+00";
     // 0.9999999999999999 (nextafter 1.0 towards 0)
-    assert f64_to_string_exp(f64_from_bits(0x3FEFFFFFFFFFFFFF as i64)) == "9.999999999999999e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FEFFFFFFFFFFFFF as i64), false) == "9.999999999999999e-01";
 }
 
 test "exact output subnormals" {
     // 5e-324 (smallest subnormal)
-    assert f64_to_string_exp(f64_from_bits(0x0000000000000001 as i64)) == "5e-324";
+    assert f64_to_string_exp(f64_from_bits(0x0000000000000001 as i64), false) == "5e-324";
     // 1e-323
-    assert f64_to_string_exp(f64_from_bits(0x0000000000000002 as i64)) == "1e-323";
+    assert f64_to_string_exp(f64_from_bits(0x0000000000000002 as i64), false) == "1e-323";
     // 4.94e-321
-    assert f64_to_string_exp(f64_from_bits(0x00000000000003E8 as i64)) == "4.94e-321";
+    assert f64_to_string_exp(f64_from_bits(0x00000000000003E8 as i64), false) == "4.94e-321";
 }
 
 test "exact output boundary normals" {
     // 1e-308 (near minimum normal)
-    assert f64_to_string_exp(f64_from_bits(0x000730D67819E8D2 as i64)) == "1e-308";
+    assert f64_to_string_exp(f64_from_bits(0x000730D67819E8D2 as i64), false) == "1e-308";
     // 2.2250738585072014e-308 (min normal)
-    assert f64_to_string_exp(f64_from_bits(0x0010000000000000 as i64)) == "2.2250738585072014e-308";
+    assert f64_to_string_exp(f64_from_bits(0x0010000000000000 as i64), false) == "2.2250738585072014e-308";
     // 4.4501477170144023e-308 (max subnormal)
-    assert f64_to_string_exp(f64_from_bits(0x001FFFFFFFFFFFFF as i64)) == "4.4501477170144023e-308";
+    assert f64_to_string_exp(f64_from_bits(0x001FFFFFFFFFFFFF as i64), false) == "4.4501477170144023e-308";
 }
 
 test "exact output max finite" {
     // 1.7976931348623157e+308 (max finite)
-    assert f64_to_string_exp(f64_from_bits(0x7FEFFFFFFFFFFFFF as i64)) == "1.7976931348623157e+308";
+    assert f64_to_string_exp(f64_from_bits(0x7FEFFFFFFFFFFFFF as i64), false) == "1.7976931348623157e+308";
     // 8.988465674311579e+307 (near max / 2)
-    assert f64_to_string_exp(f64_from_bits(0x7FDFFFFFFFFFFFFF as i64)) == "8.988465674311579e+307";
+    assert f64_to_string_exp(f64_from_bits(0x7FDFFFFFFFFFFFFF as i64), false) == "8.988465674311579e+307";
 }
 
 test "exact output hard table values" {
@@ -1135,53 +1136,53 @@ test "exact output hard table values" {
     // in the uscale function
 
     // 3.341806004452504e-86
-    assert f64_to_string_exp(f64_from_bits(0x2E309E9CA62CBB67 as i64)) == "3.341806004452504e-86";
+    assert f64_to_string_exp(f64_from_bits(0x2E309E9CA62CBB67 as i64), false) == "3.341806004452504e-86";
     // 6.424072801322751e-86
-    assert f64_to_string_exp(f64_from_bits(0x2E3FF2CAC926600D as i64)) == "6.424072801322751e-86";
+    assert f64_to_string_exp(f64_from_bits(0x2E3FF2CAC926600D as i64), false) == "6.424072801322751e-86";
 }
 
 test "exact output repeating decimals" {
     // 0.3333333333333333 (1/3 approximation)
-    assert f64_to_string_exp(f64_from_bits(0x3FD5555555555555 as i64)) == "3.333333333333333e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FD5555555555555 as i64), false) == "3.333333333333333e-01";
     // 0.6666666666666666 (2/3 approximation)
-    assert f64_to_string_exp(f64_from_bits(0x3FE5555555555555 as i64)) == "6.666666666666666e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FE5555555555555 as i64), false) == "6.666666666666666e-01";
     // 0.14285714285714285 (1/7 approximation)
-    assert f64_to_string_exp(f64_from_bits(0x3FC2492492492492 as i64)) == "1.4285714285714285e-01";
+    assert f64_to_string_exp(f64_from_bits(0x3FC2492492492492 as i64), false) == "1.4285714285714285e-01";
     // 0.09090909090909091 (1/11 approximation)
-    assert f64_to_string_exp(f64_from_bits(0x3FB745D1745D1746 as i64)) == "9.090909090909091e-02";
+    assert f64_to_string_exp(f64_from_bits(0x3FB745D1745D1746 as i64), false) == "9.090909090909091e-02";
 }
 
 test "exact output large exact integers" {
     // 9.007199254740992e+15 (2^53)
-    assert f64_to_string_exp(f64_from_bits(0x4340000000000000 as i64)) == "9.007199254740992e+15";
+    assert f64_to_string_exp(f64_from_bits(0x4340000000000000 as i64), false) == "9.007199254740992e+15";
     // 9.007199254740991e+15 (2^53 - 1)
-    assert f64_to_string_exp(f64_from_bits(0x433FFFFFFFFFFFFF as i64)) == "9.007199254740991e+15";
+    assert f64_to_string_exp(f64_from_bits(0x433FFFFFFFFFFFFF as i64), false) == "9.007199254740991e+15";
 }
 
 test "exact output powers of 10 large" {
     // 1e+23
-    assert f64_to_string_exp(f64_from_bits(0x44B52D02C7E14AF6 as i64)) == "1e+23";
+    assert f64_to_string_exp(f64_from_bits(0x44B52D02C7E14AF6 as i64), false) == "1e+23";
     // 1e-23
-    assert f64_to_string_exp(f64_from_bits(0x3B282DB34012B251 as i64)) == "1e-23";
+    assert f64_to_string_exp(f64_from_bits(0x3B282DB34012B251 as i64), false) == "1e-23";
 }
 
 test "exact output more hard values" {
     // 1.401298464324817e-45 (float32 min subnormal as f64)
-    assert f64_to_string_exp(f64_from_bits(0x36A0000000000000 as i64)) == "1.401298464324817e-45";
+    assert f64_to_string_exp(f64_from_bits(0x36A0000000000000 as i64), false) == "1.401298464324817e-45";
     // 1.0020841800044864e-292
-    assert f64_to_string_exp(f64_from_bits(0x0350000000000000 as i64)) == "1.0020841800044864e-292";
+    assert f64_to_string_exp(f64_from_bits(0x0350000000000000 as i64), false) == "1.0020841800044864e-292";
 }
 
 test "exact output hard table scaled values" {
     // Values derived from hard table with specific exponents
     // 3.7301512778008376e-82
-    assert f64_to_string_exp(f64_from_bits(0x2F06A528B980A505 as i64)) == "3.7301512778008376e-82";
+    assert f64_to_string_exp(f64_from_bits(0x2F06A528B980A505 as i64), false) == "3.7301512778008376e-82";
     // 3.5175663416277467e-82
-    assert f64_to_string_exp(f64_from_bits(0x2F055AC5FB5A1968 as i64)) == "3.5175663416277467e-82";
+    assert f64_to_string_exp(f64_from_bits(0x2F055AC5FB5A1968 as i64), false) == "3.5175663416277467e-82";
     // 5.96824204448134e-82
-    assert f64_to_string_exp(f64_from_bits(0x2F121DBA2E008404 as i64)) == "5.96824204448134e-82";
+    assert f64_to_string_exp(f64_from_bits(0x2F121DBA2E008404 as i64), false) == "5.96824204448134e-82";
     // 9.594083833149982e-82
-    assert f64_to_string_exp(f64_from_bits(0x2F1D1F405433CFCD as i64)) == "9.594083833149982e-82";
+    assert f64_to_string_exp(f64_from_bits(0x2F1D1F405433CFCD as i64), false) == "9.594083833149982e-82";
 }
 
 // ============================================================================
@@ -1238,54 +1239,54 @@ test "f64_to_string decimal large integers" {
 }
 
 // ============================================================================
-// f64_to_string_compact tests
+// f64_to_string_auto tests
 // ============================================================================
 
-test "f64_to_string_compact uses decimal for normal range" {
+test "f64_to_string_auto uses decimal for normal range" {
     // Values in normal range should use decimal notation
-    assert f64_to_string_compact(0.0) == "0";
-    assert f64_to_string_compact(1.0) == "1";
-    assert f64_to_string_compact(10.0) == "10";
-    assert f64_to_string_compact(0.1) == "0.1";
-    assert f64_to_string_compact(0.01) == "0.01";
-    assert f64_to_string_compact(0.001) == "0.001";
-    assert f64_to_string_compact(0.0001) == "0.0001";
-    assert f64_to_string_compact(3.14) == "3.14";
+    assert f64_to_string_auto(0.0) == "0";
+    assert f64_to_string_auto(1.0) == "1";
+    assert f64_to_string_auto(10.0) == "10";
+    assert f64_to_string_auto(0.1) == "0.1";
+    assert f64_to_string_auto(0.01) == "0.01";
+    assert f64_to_string_auto(0.001) == "0.001";
+    assert f64_to_string_auto(0.0001) == "0.0001";
+    assert f64_to_string_auto(3.14) == "3.14";
 }
 
-test "f64_to_string_compact uses exp for very small" {
+test "f64_to_string_auto uses exp for very small" {
     // Values with exp < -4 should use exponential notation
-    let s = f64_to_string_compact(0.00001);
+    let s = f64_to_string_auto(0.00001);
     assert s == "1e-05";
 
-    let s2 = f64_to_string_compact(1.0e-10);
+    let s2 = f64_to_string_auto(1.0e-10);
     assert s2 == "1e-10";
 }
 
-test "f64_to_string_compact uses exp for very large" {
+test "f64_to_string_auto uses exp for very large" {
     // Values with exp >= 16 should use exponential notation
-    let s = f64_to_string_compact(1.0e16);
+    let s = f64_to_string_auto(1.0e16);
     assert s == "1e+16";
 
-    let s2 = f64_to_string_compact(1.0e100);
+    let s2 = f64_to_string_auto(1.0e100);
     assert s2 == "1e+100";
 }
 
-test "f64_to_string_compact negative values" {
-    assert f64_to_string_compact(-1.0) == "-1";
-    assert f64_to_string_compact(-0.001) == "-0.001";
-    assert f64_to_string_compact(-0.00001) == "-1e-05";
-    assert f64_to_string_compact(-1.0e20) == "-1e+20";
+test "f64_to_string_auto negative values" {
+    assert f64_to_string_auto(-1.0) == "-1";
+    assert f64_to_string_auto(-0.001) == "-0.001";
+    assert f64_to_string_auto(-0.00001) == "-1e-05";
+    assert f64_to_string_auto(-1.0e20) == "-1e+20";
 }
 
-test "f64_to_string_compact special values" {
+test "f64_to_string_auto special values" {
     let inf = 1.0 / 0.0;
     let neg_inf = -1.0 / 0.0;
     let nan = 0.0 / 0.0;
 
-    assert f64_to_string_compact(inf) == "Inf";
-    assert f64_to_string_compact(neg_inf) == "-Inf";
-    assert f64_to_string_compact(nan) == "NaN";
+    assert f64_to_string_auto(inf) == "Inf";
+    assert f64_to_string_auto(neg_inf) == "-Inf";
+    assert f64_to_string_auto(nan) == "NaN";
 }
 
 // ============================================================================
@@ -1334,6 +1335,48 @@ test "format_decimal decimal in middle" {
 
     // digits=12345, exponent=-4, nd=5 → "1.2345"
     assert format_decimal(12345 as i64, -4, 5) == "1.2345";
+}
+
+// ============================================================================
+// f64_to_string_exp upper case tests
+// ============================================================================
+
+test "f64_to_string_exp upper case" {
+    assert f64_to_string_exp(1.0, true) == "1E+00";
+    assert f64_to_string_exp(3.14, true) == "3.14E+00";
+    assert f64_to_string_exp(1.0e10, true) == "1E+10";
+    assert f64_to_string_exp(1.0e-10, true) == "1E-10";
+    assert f64_to_string_exp(-1.0, true) == "-1E+00";
+}
+
+test "f64_to_string_exp upper case zero" {
+    assert f64_to_string_exp(0.0, true) == "0E+00";
+    assert f64_to_string_exp(-0.0, true) == "-0E+00";
+}
+
+// ============================================================================
+// f32 wrapper tests
+// ============================================================================
+
+test "f32_to_string basic" {
+    // f32 values that are exactly representable
+    assert f32_to_string(0.0 as f32) == "0";
+    assert f32_to_string(1.0 as f32) == "1";
+    assert f32_to_string(0.5 as f32) == "0.5";
+    assert f32_to_string(-1.0 as f32) == "-1";
+}
+
+test "f32_to_string_exp basic" {
+    assert f32_to_string_exp(1.0 as f32, false) == "1e+00";
+    assert f32_to_string_exp(0.5 as f32, false) == "5e-01";
+    assert f32_to_string_exp(1.0 as f32, true) == "1E+00";
+}
+
+test "f32_to_string_auto basic" {
+    assert f32_to_string_auto(1.0 as f32) == "1";
+    assert f32_to_string_auto(0.5 as f32) == "0.5";
+    // f32 1e30 gets represented with more precision when cast to f64
+    assert f32_to_string_auto(1.0e30 as f32) == "1.0000000150474662e+30";
 }
 
 // ============================================================================
@@ -1443,7 +1486,7 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
     // Benchmark fpfmt (this implementation)
     let start_fpfmt = now();
     for let mut i = 0; i < iterations; i += 1 {
-        let _ = f64_to_string_exp(val);
+        let _ = f64_to_string_exp(val, false);
     }
     let end_fpfmt = now();
     let fpfmt_time = (end_fpfmt - start_fpfmt) / (iterations as u64);
@@ -1464,7 +1507,7 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
     };
 
     // Format value for display (use our fpfmt implementation)
-    let val_str = f64_to_string_exp(val);
+    let val_str = f64_to_string_exp(val, false);
     let display_val = truncate_str(val_str, 24);
     let padded_val = pad_right(display_val, 25);
 

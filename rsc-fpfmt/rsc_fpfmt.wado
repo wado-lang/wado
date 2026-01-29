@@ -407,8 +407,8 @@ pub fn format_decimal(d: i64, p: i32, nd: i32) -> String {
     return buf;
 }
 
-// Format result to exponential string
-pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
+// Format result to exponential string (upper: true for 'E', false for 'e')
+pub fn format_exp(d: i64, p: i32, nd: i32, upper: bool) -> String {
     let mut buf = String::with_capacity(30);
 
     // Format digits
@@ -438,7 +438,7 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
 
     // Exponent
     let exp = p + nd - 1;
-    buf.append_char('e');
+    buf.append_char(if upper { 'E' } else { 'e' });
     if exp < 0 {
         buf.append_char('-');
     } else {
@@ -522,16 +522,17 @@ pub fn f64_to_string(f: f64) -> String {
     return formatted;
 }
 
-// Convert f64 to exponential string (e.g., "3.14e+00", "1e-05")
-pub fn f64_to_string_exp(f: f64) -> String {
+// Convert f64 to exponential string (e.g., "3.14e+00" or "3.14E+00")
+// upper: true for 'E', false for 'e'
+pub fn f64_to_string_exp(f: f64, upper: bool) -> String {
     let special = check_special(f);
     if special.0 {
-        // For exponential format, zero is "0e+00"
+        // For exponential format, zero is "0e+00" or "0E+00"
         if special.2 == "0" {
             if special.1 {
-                return "-0e+00";
+                return if upper { "-0E+00" } else { "-0e+00" };
             }
-            return "0e+00";
+            return if upper { "0E+00" } else { "0e+00" };
         }
         return special.2;
     }
@@ -544,7 +545,7 @@ pub fn f64_to_string_exp(f: f64) -> String {
     let p = result.exponent;
     let nd = digits(d);
 
-    let formatted = format_exp(d, p, nd);
+    let formatted = format_exp(d, p, nd, upper);
 
     if is_neg {
         return String::concat("-", formatted);
@@ -553,8 +554,8 @@ pub fn f64_to_string_exp(f: f64) -> String {
 }
 
 // Convert f64 to string, choosing decimal or exponential based on magnitude
-// Similar to C's %g: uses exponential if exponent < -4 or >= precision
-pub fn f64_to_string_compact(f: f64) -> String {
+// Similar to Rust's Debug: uses exponential if exponent < -4 or >= 16
+pub fn f64_to_string_auto(f: f64) -> String {
     let special = check_special(f);
     if special.0 {
         if special.1 {
@@ -575,9 +576,9 @@ pub fn f64_to_string_compact(f: f64) -> String {
     // e.g., digits=314, p=-2, nd=3 → exp = -2 + 3 - 1 = 0 (3.14e+00)
     let exp = p + nd - 1;
 
-    // Use exponential if exp < -4 or exp >= 16 (like %g with default precision)
+    // Use exponential if exp < -4 or exp >= 16 (like Rust Debug)
     let formatted = if exp < -4 || exp >= 16 {
-        format_exp(d, p, nd)
+        format_exp(d, p, nd, false)
     } else {
         format_decimal(d, p, nd)
     };
@@ -586,6 +587,25 @@ pub fn f64_to_string_compact(f: f64) -> String {
         return String::concat("-", formatted);
     }
     return formatted;
+}
+
+// ============================================================================
+// f32 wrappers (cast to f64)
+// ============================================================================
+
+// Convert f32 to decimal string
+pub fn f32_to_string(f: f32) -> String {
+    return f64_to_string(f as f64);
+}
+
+// Convert f32 to exponential string
+pub fn f32_to_string_exp(f: f32, upper: bool) -> String {
+    return f64_to_string_exp(f as f64, upper);
+}
+
+// Convert f32 to string with auto mode
+pub fn f32_to_string_auto(f: f32) -> String {
+    return f64_to_string_auto(f as f64);
 }
 
 pub fn pow10_tab_0(idx: i32) -> PmHiLo {
