@@ -4,16 +4,7 @@ use { println, Stdout } from "core:cli";
 
 fn run() with Stdout {
     // Test 1-byte ASCII characters (U+0000 to U+007F)
-    let ascii = "ABC";
-    let mut ascii_iter = ascii.chars();
-    let mut ascii_chars: Array<char> = [];
-    loop {
-        if let Some(c) = ascii_iter.next() {
-            ascii_chars.append(c);
-        } else {
-            break;
-        }
-    }
+    let ascii_chars: Array<char> = "ABC".chars().collect();
     assert ascii_chars.len() == 3;
     assert ascii_chars[0] == 'A';
     assert ascii_chars[1] == 'B';
@@ -21,70 +12,30 @@ fn run() with Stdout {
 
     // Test 2-byte UTF-8 characters (U+0080 to U+07FF)
     // "ñé" - ñ is U+00F1, é is U+00E9
-    let two_byte = "ñé";
-    let mut two_iter = two_byte.chars();
-    let mut two_chars: Array<char> = [];
-    loop {
-        if let Some(c) = two_iter.next() {
-            two_chars.append(c);
-        } else {
-            break;
-        }
-    }
+    let two_chars: Array<char> = "ñé".chars().collect();
     assert two_chars.len() == 2;
     assert two_chars[0] as i32 == 0x00F1;  // ñ
     assert two_chars[1] as i32 == 0x00E9;  // é
 
     // Test 3-byte UTF-8 characters (U+0800 to U+FFFF)
     // "日本" - 日 is U+65E5, 本 is U+672C
-    let three_byte = "日本";
-    let mut three_iter = three_byte.chars();
-    let mut three_chars: Array<char> = [];
-    loop {
-        if let Some(c) = three_iter.next() {
-            three_chars.append(c);
-        } else {
-            break;
-        }
-    }
+    let three_chars: Array<char> = "日本".chars().collect();
     assert three_chars.len() == 2;
     assert three_chars[0] as i32 == 0x65E5;  // 日
     assert three_chars[1] as i32 == 0x672C;  // 本
 
     // Test 4-byte UTF-8 characters (U+10000 to U+10FFFF)
     // Emoji: 😀 is U+1F600
-    let four_byte = "😀";
-    let mut four_iter = four_byte.chars();
-    let mut four_chars: Array<char> = [];
-    loop {
-        if let Some(c) = four_iter.next() {
-            four_chars.append(c);
-        } else {
-            break;
-        }
-    }
+    let four_chars: Array<char> = "😀".chars().collect();
     assert four_chars.len() == 1;
     assert four_chars[0] as i32 == 0x1F600;  // 😀
 
     // Test empty string
-    let empty = "";
-    let mut empty_iter = empty.chars();
-    if let Some(_) = empty_iter.next() {
-        assert false, "empty string should yield no chars";
-    }
+    assert "".chars().count() == 0;
 
     // Test mixed encoding - all branches in one string
     // "Aéï日😀" - A(1), é(2), ï(2), 日(3), 😀(4)
-    let mixed = "Aéï日😀";
-    let mut mixed_iter = mixed.chars();
-    let mut mixed_chars: Array<char> = [];
-    loop {
-        if let Some(c) = mixed_iter.next() {
-            mixed_chars.append(c);
-        } else {
-            break;
-        }
-    }
+    let mixed_chars: Array<char> = "Aéï日😀".chars().collect();
     assert mixed_chars.len() == 5;
     assert mixed_chars[0] == 'A';              // 1-byte
     assert mixed_chars[1] as i32 == 0x00E9;    // 2-byte: é
