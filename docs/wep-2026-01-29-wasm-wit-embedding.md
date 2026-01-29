@@ -13,6 +13,169 @@ Wado compiles to WebAssembly Component Model. Currently, the compiler generates 
 
 Embed auto-generated WIT metadata into compiled Wasm components using the `wit-component` crate's `embed_component_metadata()` API.
 
+## Export Principle
+
+Wado distinguishes between module-level visibility (`pub`) and Component Model boundary visibility (`export`):
+
+| Keyword | Scope | Purpose |
+|---------|-------|---------|
+| `pub` | Wado modules | Share across Wado modules internally |
+| `export` | CM world boundary | Expose to external components |
+
+This separation solves the common problem of "utility modules accidentally becoming public":
+
+```wado
+// utils.wado - internal utilities
+pub fn helper() { ... }        // visible to other Wado modules
+pub struct Internal { ... }    // visible to other Wado modules
+// → NOT exposed at CM boundary
+
+// api.wado - public API
+export fn run() { ... }        // exposed at CM boundary
+export struct Point { ... }    // exposed at CM boundary
+```
+
+Only items explicitly marked with `export` appear in the generated WIT and Component Model interface.
+
+### Exportable Items
+
+```wado
+export fn process() -> Result<T, E>   // function
+export struct Point { x: i32, y: i32 } // record
+export variant Shape { ... }           // variant
+export enum Color { ... }              // enum
+export type ID = String;               // type alias
+export interface MyApi { ... }         // interface (see below)
+```
+
+## Interface and Effect
+
+Wado introduces explicit `interface` blocks for grouping exports, complementing the existing `effect` for imports.
+
+### Interface vs Effect
+
+| Wado | WIT | Direction | Has Side Effects |
+|------|-----|-----------|------------------|
+| `interface` | `interface` | export (primary) | No (pure) |
+| `effect` | `interface` | import (primary) | Yes |
+
+Both `interface` and `effect` map to WIT `interface`. The distinction exists in Wado's type system:
+
+- **`effect`**: Represents interfaces that modify global state or perform I/O. Functions from effects require `with` annotations for effect tracking.
+- **`interface`**: Represents pure interfaces without side effects. Functions can be called without effect annotations.
+
+### WIT Lacks Purity Annotations
+
+WIT currently has no way to express whether an interface is pure or effectful. This is a known limitation:
+
+- [Component Model Issue #321: Add `pure` annotation to WIT](https://github.com/WebAssembly/component-model/issues/321)
+
+Wado's `effect` vs `interface` distinction is a Wado-side concept. When generating WIT, both become `interface`:
+
+```wado
+// Wado source
+effect Stdout {
+    fn print(s: String);
+}
+
+interface Calculator {
+    fn add(a: i32, b: i32) -> i32;
+}
+```
+
+```wit
+// Generated WIT (no distinction)
+interface stdout {
+    print: func(s: string);
+}
+
+interface calculator {
+    add: func(a: s32, b: s32) -> s32;
+}
+```
+
+### Effect Tracking
+
+```wado
+use {print} from Stdout;       // from effect → requires `with`
+use {add} from Calculator;     // from interface → no `with` needed
+
+fn pure_function() -> i32 {
+    return add(1, 2);          // OK: Calculator is pure
+}
+
+fn effectful_function() with Stdout {
+    print("hello");            // OK: Stdout effect declared
+}
+
+fn error_function() {
+    print("hello");            // ERROR: missing `with Stdout`
+}
+```
+
+## Interface Syntax
+
+### Explicit Interface (for grouping)
+
+```wado
+export interface MyApi {
+    struct Point { x: i32, y: i32 }
+    fn add(a: i32, b: i32) -> i32;
+    fn distance(p1: Point, p2: Point) -> f64;
+}
+```
+
+```wit
+// Generated WIT
+interface my-api {
+    record point { x: s32, y: s32 }
+    add: func(a: s32, b: s32) -> s32;
+    distance: func(p1: point, p2: point) -> f64;
+}
+
+world my-app {
+    export my-api;
+}
+```
+
+### Implicit Interface (top-level exports)
+
+For simple cases, top-level `export` declarations are collected into an implicit interface:
+
+```wado
+export struct Point { x: i32, y: i32 }
+export fn origin() -> Point { ... }
+```
+
+```wit
+// Generated WIT
+interface exports {
+    record point { x: s32, y: s32 }
+    origin: func() -> point;
+}
+
+world my-app {
+    export exports;
+}
+```
+
+### Functions Without Types (direct world export)
+
+When only functions are exported (no types), they can be exported directly in the world:
+
+```wado
+export fn run() { ... }
+export fn add(a: i32, b: i32) -> i32 { ... }
+```
+
+```wit
+// Generated WIT (no interface needed)
+world my-app {
+    export run: func();
+    export add: func(a: s32, b: s32) -> s32;
+}
+```
+
 ## WIT to Wado Type Mapping
 
 ### Primitive Types
@@ -67,29 +230,13 @@ Derived from:
 - Name: entry module name or explicit declaration
 - Version: optional, from project config
 
-### Interface
-
-```wit
-interface my-exports {
-    record point { x: s32, y: s32 }
-    add: func(a: s32, b: s32) -> s32;
-}
-```
-
-Wado equivalent:
-
-```wado
-// Exported types and functions form an implicit interface
-pub struct Point { x: i32, y: i32 }
-export fn add(a: i32, b: i32) -> i32 { ... }
-```
-
 ### World
 
 ```wit
 world my-app {
     import wasi:cli/stdout@0.3.0;
     import wasi:cli/stderr@0.3.0;
+    export my-api;
     export run: func();
 }
 ```
@@ -97,10 +244,13 @@ world my-app {
 Wado equivalent:
 
 ```wado
-// Imports derived from `use wasi:*` and effect usage
+// Imports derived from effect usage
 use {Stdout} from "wasi:cli";
 
-// Exports derived from `export fn`
+// Explicit interface export
+export interface MyApi { ... }
+
+// Direct function export
 export fn run() with Stdout {
     println("Hello!");
 }
@@ -112,13 +262,13 @@ export fn run() with Stdout {
 
 When no explicit world is declared, generate one from:
 
-1. **Imports**: Collect from `WasiRegistry` (used WASI interfaces)
-2. **Exports**: Collect from functions marked with `export`
+1. **Imports**: Collect from `WasiRegistry` (used WASI interfaces via effects)
+2. **Exports**: Collect from items marked with `export`
 
 ```
 ┌─────────────────────┐    ┌─────────────────────┐
-│    WasiRegistry     │    │  export fn list     │
-│  (used interfaces)  │    │  (from TIR/codegen) │
+│    WasiRegistry     │    │   export items      │
+│  (used effects)     │    │  (fn, struct, etc.) │
 └─────────┬───────────┘    └──────────┬──────────┘
           │                           │
           └───────────┬───────────────┘
@@ -137,54 +287,18 @@ When no explicit world is declared, generate one from:
               └───────────────┘
 ```
 
-### Type Export Rules
+### Export Collection Rules
 
-Only export types that are:
-1. Marked with `pub` visibility
-2. Used in `export fn` signatures (parameters or return types)
-3. Transitively referenced by exported types
+1. **Explicit `export` required**: Only items with `export` keyword are included
+2. **Transitive types**: Types referenced in exported signatures are automatically included
+3. **Interface grouping**: Explicit `export interface` creates named interfaces; top-level exports form implicit interface
 
-## Open Questions
-
-### Interface Grouping
-
-Should Wado support explicit interface declarations?
-
-Option A: Implicit single interface (all exports in one interface)
-```wit
-world my-app {
-    export my-exports;  // single interface with all exports
-}
-```
-
-Option B: Explicit interface syntax
-```wado
-interface MyApi {
-    fn add(a: i32, b: i32) -> i32;
-    fn sub(a: i32, b: i32) -> i32;
-}
-export interface MyApi;
-```
-
-**Current decision**: Option A (implicit) for simplicity.
-
-### Package Naming
+## Package Naming
 
 Options:
-- `wado:{module-name}` - fixed namespace
+- `wado:{module-name}` - fixed namespace (default)
 - `{user}:{module-name}` - user-configurable namespace
 - From project manifest (future `wado.toml`)
-
-**Current decision**: `wado:{module-name}` as default.
-
-### Version Embedding
-
-Options:
-- No version (omit from package declaration)
-- From CLI flag (`--version 1.0.0`)
-- From project manifest (future)
-
-**Current decision**: No version initially.
 
 ## Implementation Plan
 
@@ -197,11 +311,17 @@ Options:
 
 ### Phase 2: Type Export
 
-- [ ] Collect exported struct/variant/enum types
+- [ ] Support `export struct/variant/enum/type`
+- [ ] Collect transitive type dependencies
 - [ ] Generate WIT record/variant/enum definitions
-- [ ] Handle type references in function signatures
 
-### Phase 3: CLI Integration
+### Phase 3: Interface Syntax
+
+- [ ] Parse `export interface Name { ... }` blocks
+- [ ] Generate named interfaces in WIT
+- [ ] Support multiple interfaces per module
+
+### Phase 4: CLI Integration
 
 - [ ] Add `--emit-wit` flag to output WIT text
 - [ ] Add `--no-wit-embed` flag to disable embedding
@@ -215,6 +335,7 @@ Options:
 - Better tooling integration
 - Enables component composition
 - Registry-ready artifacts
+- Clear separation between internal (`pub`) and external (`export`) visibility
 
 ### Negative
 
@@ -226,4 +347,5 @@ Options:
 
 - [Component Model WIT specification](https://component-model.bytecodealliance.org/design/wit.html)
 - [wit-component crate](https://crates.io/crates/wit-component)
+- [Component Model Issue #321: Pure annotation](https://github.com/WebAssembly/component-model/issues/321)
 - [WEP: World Conformance](./wep-2026-01-16-world-conformance-and-export.md)
