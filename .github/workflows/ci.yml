@@ -83,8 +83,8 @@ jobs:
             gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
           fi
 
-  test:
-    name: Test
+  test-core:
+    name: Test (Core)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -105,5 +105,94 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
-      - run: cargo test --locked --all
+      - run: cargo test --locked --all -- --skip fixture_test_
       - run: cargo run --locked -p wado-cli -- test example/*.wado
+
+  test-e2e-o0:
+    name: Test (E2E O0)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - uses: rui314/setup-mold@v1
+
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o0
+
+  test-e2e-o3:
+    name: Test (E2E O3)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - uses: rui314/setup-mold@v1
+
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o3
+
+  test-e2e-os:
+    name: Test (E2E Os)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - uses: rui314/setup-mold@v1
+
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_os
+
+  test:
+    name: Test
+    if: always()
+    needs: [test-core, test-e2e-o0, test-e2e-o3, test-e2e-os]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs passed
+        run: |
+          results="${{ needs.test-core.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }}"
+          for result in $results; do
+            if [ "$result" != "success" ]; then
+              echo "One or more jobs failed"
+              exit 1
+            fi
+          done
+          echo "All CI checks passed"

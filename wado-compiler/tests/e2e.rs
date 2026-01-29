@@ -435,6 +435,12 @@ fn fixture_test_o2(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Test function for O3 (aggressive optimization)
+fn fixture_test_o3(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    run_fixture_test_with_opt(path, OptLevel::O3);
+    Ok(())
+}
+
 /// Test function for Os (size optimization)
 fn fixture_test_os(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, OptLevel::Os);
@@ -446,5 +452,6 @@ datatest_mini::harness! {
     // (subdirectories contain helper modules that are imported, not run as tests)
     { test = fixture_test_o0, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_o2, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
 }
