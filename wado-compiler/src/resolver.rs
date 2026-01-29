@@ -5353,8 +5353,8 @@ impl<'a> Resolver<'a> {
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
 
         // Use trait impl module source if this is a trait method, otherwise current module
-        let method_module_source = trait_impl_module_source
-            .unwrap_or_else(|| self.current_module_source.clone());
+        let method_module_source =
+            trait_impl_module_source.unwrap_or_else(|| self.current_module_source.clone());
 
         TirExpr::new(
             TirExprKind::MethodCall {
@@ -7604,8 +7604,8 @@ impl<'a> Resolver<'a> {
         };
 
         // Use trait impl module source if this is a trait method, otherwise current module
-        let method_call_module_source = method_trait_impl_source
-            .unwrap_or_else(|| self.current_module_source.clone());
+        let method_call_module_source =
+            method_trait_impl_source.unwrap_or_else(|| self.current_module_source.clone());
 
         Some(TirExpr::new(
             TirExprKind::MethodCall {
