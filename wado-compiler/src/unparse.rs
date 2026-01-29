@@ -1493,14 +1493,14 @@ impl<'a> Unparser<'a> {
             Pattern::Literal(lit) => self.unparse_literal(lit),
             Pattern::Wildcard => self.output.push('_'),
             Pattern::Tuple(patterns) => {
-                self.output.push('(');
+                self.output.push('[');
                 for (i, p) in patterns.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
                     self.unparse_pattern(p);
                 }
-                self.output.push(')');
+                self.output.push(']');
             }
             Pattern::Variant {
                 variant_name,
