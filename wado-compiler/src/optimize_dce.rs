@@ -1306,6 +1306,31 @@ pub fn remove_unreachable_functions(project: &mut Project) {
     }
 }
 
+/// Remove unreachable structs from the project's TIR modules.
+///
+/// This physically removes structs that are not in `used_struct_names`
+/// from the TIR, so codegen doesn't need to filter them.
+pub fn remove_unreachable_structs(project: &mut Project) {
+    // Skip if all types are reachable (no DCE)
+    if project.all_reachable {
+        return;
+    }
+
+    for module in project.tir_modules.values_mut() {
+        // Retain only used structs
+        module.structs.retain(|tir_struct| {
+            // Generic templates (with type params) are always kept
+            // They're needed for monomorphization even if no instance is used yet
+            if !tir_struct.type_params.is_empty() {
+                return true;
+            }
+
+            // Check if this struct is used
+            project.used_struct_names.contains(&tir_struct.name)
+        });
+    }
+}
+
 /// Check if a generic function has any monomorphized version that is reachable.
 /// For example, "`Array::with_capacity`" should be kept if "Array<i32>`::with_capacity`" is reachable.
 fn is_generic_func_reachable(

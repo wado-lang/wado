@@ -1203,11 +1203,8 @@ impl Codegen {
                 if tir_struct.monomorph_info.is_some() {
                     continue;
                 }
-                // Struct-level DCE: skip unused structs from non-WASI library modules
-                // WASI structs are always included because they may be needed by WASI functions
-                if !module_source.is_wasi() && !project.is_struct_used(&tir_struct.name) {
-                    continue;
-                }
+                // Note: DCE has already removed unused structs from module.structs,
+                // so we don't need to filter here anymore
                 let struct_name = if main_module_struct_names.contains(&tir_struct.name) {
                     // Collision - use qualified name with full module source
                     StructName::new(module_source.clone(), tir_struct.name.clone())
@@ -1227,14 +1224,10 @@ impl Codegen {
         // Register tuple types BEFORE PHASE 2 so variant payloads have concrete tuple types
         // instead of fallback (ref struct). Tuples are simple structs that don't depend on
         // any other types.
-        self.register_tuple_types_from_table(type_table, project, &mut builder);
+        self.register_tuple_types_from_table(type_table, &mut builder);
         for (module_source, tir_mod) in all_tir_modules {
             if module_source != entry_module_source {
-                self.register_tuple_types_from_table(
-                    &tir_mod.type_table.borrow(),
-                    project,
-                    &mut builder,
-                );
+                self.register_tuple_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -1324,12 +1317,11 @@ impl Codegen {
         // This must happen BEFORE monomorphized struct registration because
         // monomorphized structs (e.g., BTreeNode<String, i32>) may have fields
         // that are arrays of non-monomorphized structs (e.g., Array<String>).
-        self.register_non_monomorphized_struct_arrays(type_table, project, &mut builder);
+        self.register_non_monomorphized_struct_arrays(type_table, &mut builder);
         for (module_source, tir_mod) in all_tir_modules {
             if module_source != entry_module_source {
                 self.register_non_monomorphized_struct_arrays(
                     &tir_mod.type_table.borrow(),
-                    project,
                     &mut builder,
                 );
             }
@@ -1362,11 +1354,11 @@ impl Codegen {
             if module_source == entry_module_source {
                 continue;
             }
-            // Collect monomorphized structs that are actually used (struct-level DCE)
+            // Collect monomorphized structs (DCE has already removed unused ones)
             let mono_lib_structs: Vec<_> = tir_mod
                 .structs
                 .iter()
-                .filter(|s| s.monomorph_info.is_some() && project.is_struct_used(&s.name))
+                .filter(|s| s.monomorph_info.is_some())
                 .cloned()
                 .collect();
 
@@ -1503,14 +1495,10 @@ impl Codegen {
         // This must happen after ALL struct registration (including monomorphized ones)
         // because array types with struct elements need type_id_to_valtype to work.
         // Also must be after canonical closure types for Array<fn(...)> to work.
-        self.register_array_types_from_table(type_table, project, &mut builder);
+        self.register_array_types_from_table(type_table, &mut builder);
         for (module_source, tir_mod) in all_tir_modules {
             if module_source != entry_module_source {
-                self.register_array_types_from_table(
-                    &tir_mod.type_table.borrow(),
-                    project,
-                    &mut builder,
-                );
+                self.register_array_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -5117,7 +5105,6 @@ impl Codegen {
     fn register_tuple_types_from_table(
         &mut self,
         type_table: &TypeTable,
-        project: &Project,
         builder: &mut CoreModuleBuilder,
     ) {
         for type_id in type_table.iter_type_ids() {
@@ -5126,8 +5113,8 @@ impl Codegen {
                 && !self.tuple_types.borrow().contains_key(elements)
                 // Skip tuples that contain type parameters (these are from generic templates)
                 && !elements.iter().any(|&elem| type_table.contains_type_param(elem))
-                // Skip tuples that reference structs not in used_struct_names (struct-level DCE)
-                && self.all_tuple_elements_used(elements, type_table, project)
+                // Skip tuples that reference unregistered structs (DCE removed them)
+                && self.all_tuple_elements_registerable(elements, type_table)
             {
                 // Create the tuple type
                 let mut fields = Vec::new();
@@ -5156,53 +5143,57 @@ impl Codegen {
         }
     }
 
-    /// Check if all elements of a tuple are used (for struct-level DCE filtering).
-    /// Returns true if all element types are either primitives or structs that are in `used_struct_names`.
-    fn all_tuple_elements_used(
-        &self,
-        elements: &[TypeId],
-        type_table: &TypeTable,
-        project: &Project,
-    ) -> bool {
+    /// Check if all elements of a tuple can be registered (structs are already registered).
+    /// Returns true if all element types are either primitives or structs that have been registered.
+    fn all_tuple_elements_registerable(&self, elements: &[TypeId], type_table: &TypeTable) -> bool {
         for &elem_type_id in elements {
-            if !self.is_type_used(elem_type_id, type_table, project) {
+            if !self.is_type_registerable(elem_type_id, type_table) {
                 return false;
             }
         }
         true
     }
 
-    /// Check if a type is used (for struct-level DCE).
-    /// Primitives are always used. Structs are checked against `project.used_struct_names`.
-    fn is_type_used(&self, type_id: TypeId, type_table: &TypeTable, project: &Project) -> bool {
+    /// Check if a type can be registered (its required structs are already registered).
+    /// Primitives are always registerable. Structs must be in `struct_types`.
+    fn is_type_registerable(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
             ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never => true,
-            ResolvedType::Struct { name, .. } => project.is_struct_used(name),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => {
+                // Check if struct is registered in struct_types
+                let lookup_source = if name == "String" {
+                    string_module_source()
+                } else {
+                    module_source.clone()
+                };
+                self.lookup_struct_type(name, &lookup_source).is_some()
+            }
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
-                // Build monomorphized name like "Array<i32>"
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|&t| self.canonical_element_type_name(t, type_table))
-                    .collect();
-                let mono_name = format!("{name}<{}>", args.join(","));
-                project.is_struct_used(&mono_name)
+                // For generic instances, check if the monomorphized struct is registered
+                // or if all type args are registerable
+                let struct_name = StructName::new(ModuleSource::entry_point(), name.clone());
+                self.struct_types.contains_key(&struct_name)
                     || type_args
                         .iter()
-                        .all(|&t| self.is_type_used(t, type_table, project))
+                        .all(|&t| self.is_type_registerable(t, type_table))
             }
             ResolvedType::Tuple(elems) => elems
                 .iter()
-                .all(|&t| self.is_type_used(t, type_table, project)),
+                .all(|&t| self.is_type_registerable(t, type_table)),
             ResolvedType::Option(inner)
             | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner) => self.is_type_used(*inner, type_table, project),
+            | ResolvedType::MutRef(inner) => self.is_type_registerable(*inner, type_table),
             ResolvedType::Result { ok, err } => {
-                self.is_type_used(*ok, type_table, project)
-                    && self.is_type_used(*err, type_table, project)
+                self.is_type_registerable(*ok, type_table)
+                    && self.is_type_registerable(*err, type_table)
             }
-            // For other types (Variant, Enum, etc.), assume they are used
+            // For other types (Variant, Enum, etc.), assume they are registerable
             _ => true,
         }
     }
@@ -6158,7 +6149,6 @@ impl Codegen {
     fn register_non_monomorphized_struct_arrays(
         &mut self,
         type_table: &TypeTable,
-        project: &Project,
         builder: &mut CoreModuleBuilder,
     ) {
         for type_id in type_table.iter_type_ids() {
@@ -6171,19 +6161,28 @@ impl Codegen {
                     continue;
                 };
 
-            // Only process non-monomorphized struct element types that are used
+            // Only process non-monomorphized struct element types that are registered
             let struct_name = match type_table.get(element_type_id) {
                 ResolvedType::Struct {
                     is_monomorphized,
                     name,
+                    module_source,
                     ..
-                } if !is_monomorphized => name.clone(),
+                } if !is_monomorphized => {
+                    // Check if this struct is registered (DCE may have removed it)
+                    let lookup_source = if name == "String" {
+                        string_module_source()
+                    } else {
+                        module_source.clone()
+                    };
+                    if self.lookup_struct_type(name, &lookup_source).is_none() {
+                        continue;
+                    }
+                    name.clone()
+                }
                 _ => continue,
             };
-            // Struct-level DCE: skip arrays of unused structs
-            if !project.is_struct_used(&struct_name) {
-                continue;
-            }
+            let _ = struct_name; // suppress unused warning
 
             // Skip array types with type parameters (unmonomorphized generics)
             if type_table.contains_type_param(element_type_id) {
@@ -6371,7 +6370,6 @@ impl Codegen {
     fn register_array_types_from_table(
         &mut self,
         type_table: &TypeTable,
-        project: &Project,
         builder: &mut CoreModuleBuilder,
     ) {
         // Collect all array types from the type table, including nested ones
@@ -6395,8 +6393,8 @@ impl Codegen {
             if element_type_id == TypeTable::UNKNOWN || element_type_id == TypeTable::ERROR {
                 continue;
             }
-            // Struct-level DCE: skip arrays of unused element types
-            if !self.is_type_used(element_type_id, type_table, project) {
+            // Skip arrays of unregisterable element types (DCE removed required structs)
+            if !self.is_type_registerable(element_type_id, type_table) {
                 continue;
             }
             // Note: We no longer skip GenericInstance element types here.
