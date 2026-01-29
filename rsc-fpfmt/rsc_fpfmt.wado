@@ -354,6 +354,59 @@ fn i2a_second(n: i32) -> char {
     return (('0' as i32) + n % 10) as char;
 }
 
+// Format result to decimal string (no exponent)
+pub fn format_decimal(d: i64, p: i32, nd: i32) -> String {
+    let mut buf = String::with_capacity(30);
+
+    // Convert digits to character array
+    let mut val = d;
+    let mut digit_chars: Array<i32> = [];
+    for let mut i = 0; i < nd; i += 1 {
+        digit_chars.append(0);
+    }
+
+    let mut idx = nd - 1;
+    while idx >= 0 {
+        digit_chars.set(idx, ('0' as i32) + ((val % 10 as i64) as i32));
+        val = val / 10 as i64;
+        idx = idx - 1;
+    }
+
+    // decimal_pos is where the decimal point goes (0-indexed from left)
+    // e.g., digits=314, p=-2, nd=3 → decimal_pos = 3 + (-2) = 1 → "3.14"
+    let decimal_pos = nd + p;
+
+    if decimal_pos <= 0 {
+        // Need leading zeros: 0.00...digits
+        buf.append("0.");
+        for let mut i = 0; i < -decimal_pos; i += 1 {
+            buf.append_char('0');
+        }
+        for let mut i = 0; i < nd; i += 1 {
+            buf.append_char(digit_chars.get(i) as char);
+        }
+    } else if decimal_pos >= nd {
+        // Integer with trailing zeros: digits000...
+        for let mut i = 0; i < nd; i += 1 {
+            buf.append_char(digit_chars.get(i) as char);
+        }
+        for let mut i = 0; i < decimal_pos - nd; i += 1 {
+            buf.append_char('0');
+        }
+    } else {
+        // Decimal point in the middle: dig.its
+        for let mut i = 0; i < decimal_pos; i += 1 {
+            buf.append_char(digit_chars.get(i) as char);
+        }
+        buf.append_char('.');
+        for let mut i = decimal_pos; i < nd; i += 1 {
+            buf.append_char(digit_chars.get(i) as char);
+        }
+    }
+
+    return buf;
+}
+
 // Format result to exponential string
 pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
     let mut buf = String::with_capacity(30);
@@ -412,33 +465,79 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
 // Public API
 // ============================================================================
 
-// Convert f64 to string using shortest representation
-pub fn f64_to_string(f: f64) -> String {
+// Helper: check for special values (zero, infinity, NaN)
+// Returns: [is_special, is_neg, special_string_or_empty]
+pub fn check_special(f: f64) -> [bool, bool, String] {
     let bits = builtin::i64_reinterpret_f64(f);
 
     // Check for zero
     if bits == 0 as i64 {
-        return "0e+00";
+        return [true, false, "0"];
     }
     if bits == 0x8000000000000000 as i64 {
-        return "-0e+00";
+        return [true, true, "0"];
     }
 
     let is_neg = bits < 0 as i64;
-    let abs_f = if is_neg { -f } else { f };
 
     // Check for infinity/NaN
     let exp_mask = 0x7FF0000000000000 as i64;
     let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
     if (bits & exp_mask) == exp_mask {
         if (bits & mantissa_mask) != 0 as i64 {
-            return "NaN";
+            return [true, false, "NaN"];
         }
         if is_neg {
-            return "-Inf";
+            return [true, false, "-Inf"];
         }
-        return "Inf";
+        return [true, false, "Inf"];
     }
+
+    return [false, is_neg, ""];
+}
+
+// Convert f64 to decimal string (no exponent, e.g., "3.14", "0.001", "12345")
+pub fn f64_to_string(f: f64) -> String {
+    let special = check_special(f);
+    if special.0 {
+        if special.1 {
+            return String::concat("-", special.2);
+        }
+        return special.2;
+    }
+
+    let is_neg = special.1;
+    let abs_f = if is_neg { -f } else { f };
+
+    let result = short(abs_f);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+
+    let formatted = format_decimal(d, p, nd);
+
+    if is_neg {
+        return String::concat("-", formatted);
+    }
+    return formatted;
+}
+
+// Convert f64 to exponential string (e.g., "3.14e+00", "1e-05")
+pub fn f64_to_string_exp(f: f64) -> String {
+    let special = check_special(f);
+    if special.0 {
+        // For exponential format, zero is "0e+00"
+        if special.2 == "0" {
+            if special.1 {
+                return "-0e+00";
+            }
+            return "0e+00";
+        }
+        return special.2;
+    }
+
+    let is_neg = special.1;
+    let abs_f = if is_neg { -f } else { f };
 
     let result = short(abs_f);
     let d = result.digits;
@@ -446,6 +545,42 @@ pub fn f64_to_string(f: f64) -> String {
     let nd = digits(d);
 
     let formatted = format_exp(d, p, nd);
+
+    if is_neg {
+        return String::concat("-", formatted);
+    }
+    return formatted;
+}
+
+// Convert f64 to string, choosing decimal or exponential based on magnitude
+// Similar to C's %g: uses exponential if exponent < -4 or >= precision
+pub fn f64_to_string_compact(f: f64) -> String {
+    let special = check_special(f);
+    if special.0 {
+        if special.1 {
+            return String::concat("-", special.2);
+        }
+        return special.2;
+    }
+
+    let is_neg = special.1;
+    let abs_f = if is_neg { -f } else { f };
+
+    let result = short(abs_f);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+
+    // Actual exponent in scientific notation: p + nd - 1
+    // e.g., digits=314, p=-2, nd=3 → exp = -2 + 3 - 1 = 0 (3.14e+00)
+    let exp = p + nd - 1;
+
+    // Use exponential if exp < -4 or exp >= 16 (like %g with default precision)
+    let formatted = if exp < -4 || exp >= 16 {
+        format_exp(d, p, nd)
+    } else {
+        format_decimal(d, p, nd)
+    };
 
     if is_neg {
         return String::concat("-", formatted);
