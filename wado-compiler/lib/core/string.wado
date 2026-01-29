@@ -38,14 +38,36 @@ impl String {
         return self.used == 0;
     }
 
-    /// Get a byte at the given index (internal use only)
-    fn get(&self, index: i32) -> i32 {
+    /// Get a byte at the given index (internal use only - prefer bytes() iterator)
+    pub fn get(&self, index: i32) -> i32 {
         return builtin::array_get_u8(self.repr, index);
     }
 
     /// Set a byte at the given index (internal use only)
-    fn set(&mut self, index: i32, value: i32) {
+    pub fn set(&mut self, index: i32, value: i32) {
         builtin::array_set_u8(self.repr, index, value);
+    }
+
+    // =========================================================================
+    // Internal methods for stdlib use only
+    // =========================================================================
+
+    /// Internal: Get raw bytes array (stdlib use only)
+    /// Returns the underlying byte array. Caller must respect `len()` boundary.
+    pub fn internal_raw_bytes(&self) -> builtin::array<u8> {
+        return self.repr;
+    }
+
+    /// Internal: Get used length (stdlib use only)
+    /// Returns the number of valid bytes in the raw bytes array.
+    pub fn internal_len(&self) -> i32 {
+        return self.used;
+    }
+
+    /// Internal: Create String from raw UTF-8 bytes (stdlib use only)
+    /// The bytes must be valid UTF-8. No validation is performed.
+    pub fn internal_from_utf8_raw(bytes: builtin::array<u8>, len: i32) -> String {
+        return String { repr: bytes, used: len };
     }
 
     /// Append another string to this string
@@ -163,7 +185,8 @@ impl Ord for String {
 /// Iterator over UTF-8 bytes of a String.
 /// Yields each byte as u8.
 pub struct StrUtf8ByteIter {
-    string: &String,
+    repr: builtin::array<u8>,
+    used: i32,
     index: i32,
 }
 
@@ -171,10 +194,10 @@ impl Iterator for StrUtf8ByteIter {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.string.used {
+        if self.index >= self.used {
             return null;
         }
-        let byte = builtin::array_get_u8(self.string.repr, self.index);
+        let byte = builtin::array_get_u8(self.repr, self.index);
         self.index += 1;
         return Option::<u8>::Some(byte as u8);
     }
@@ -183,7 +206,8 @@ impl Iterator for StrUtf8ByteIter {
 /// Iterator over Unicode scalar values (chars) of a String.
 /// Decodes UTF-8 and yields each character.
 pub struct StrCharIter {
-    string: &String,
+    repr: builtin::array<u8>,
+    used: i32,
     byte_index: i32,
 }
 
@@ -191,11 +215,11 @@ impl Iterator for StrCharIter {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.byte_index >= self.string.used {
+        if self.byte_index >= self.used {
             return null;
         }
 
-        let b0 = builtin::array_get_u8(self.string.repr, self.byte_index);
+        let b0 = builtin::array_get_u8(self.repr, self.byte_index);
         self.byte_index += 1;
 
         // Single byte (ASCII): 0xxxxxxx
@@ -205,7 +229,7 @@ impl Iterator for StrCharIter {
 
         // Two bytes: 110xxxxx 10xxxxxx
         if b0 < 0xE0 {
-            let b1 = builtin::array_get_u8(self.string.repr, self.byte_index);
+            let b1 = builtin::array_get_u8(self.repr, self.byte_index);
             self.byte_index += 1;
             let code = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
             return Option::<char>::Some(code as char);
@@ -213,17 +237,17 @@ impl Iterator for StrCharIter {
 
         // Three bytes: 1110xxxx 10xxxxxx 10xxxxxx
         if b0 < 0xF0 {
-            let b1 = builtin::array_get_u8(self.string.repr, self.byte_index);
-            let b2 = builtin::array_get_u8(self.string.repr, self.byte_index + 1);
+            let b1 = builtin::array_get_u8(self.repr, self.byte_index);
+            let b2 = builtin::array_get_u8(self.repr, self.byte_index + 1);
             self.byte_index += 2;
             let code = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
             return Option::<char>::Some(code as char);
         }
 
         // Four bytes: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-        let b1 = builtin::array_get_u8(self.string.repr, self.byte_index);
-        let b2 = builtin::array_get_u8(self.string.repr, self.byte_index + 1);
-        let b3 = builtin::array_get_u8(self.string.repr, self.byte_index + 2);
+        let b1 = builtin::array_get_u8(self.repr, self.byte_index);
+        let b2 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        let b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
         self.byte_index += 3;
         let code = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
         return Option::<char>::Some(code as char);
@@ -234,7 +258,8 @@ impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {
         return StrUtf8ByteIter {
-            string: self,
+            repr: self.repr,
+            used: self.used,
             index: 0,
         };
     }
@@ -242,7 +267,8 @@ impl String {
     /// Returns an iterator over the Unicode scalar values (chars) of the string.
     pub fn chars(&self) -> StrCharIter {
         return StrCharIter {
-            string: self,
+            repr: self.repr,
+            used: self.used,
             byte_index: 0,
         };
     }
