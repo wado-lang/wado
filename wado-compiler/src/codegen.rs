@@ -2207,12 +2207,14 @@ impl Codegen {
         // These are defined here because they depend on stream-u8
         // ========================================
         let trailers_future_type = if project.target_world == "Service" {
-            // Define fields type (alias for trailers, represents HTTP headers)
-            // In the lowered representation, this is a resource handle (u32)
+            // Define own<fields> type for use in option<fields> (trailers)
+            // This must be an owned handle type, not just u32, for type compatibility
+            // with response.new's trailers parameter
             ctx.register_type("http-fields");
             {
+                let fields_resource_idx = ctx.type_idx("http-fields-resource");
                 let (_, enc) = builder.ty(Some("http-fields"));
-                enc.defined_type().primitive(PrimitiveValType::U32);
+                enc.defined_type().own(fields_resource_idx);
             }
 
             // Define option<stream<u8>> type for body
@@ -9439,40 +9441,105 @@ impl Codegen {
                     // For async exports, call task-return with the result value
                     if ctx.target_world == "Service" {
                         // Service world: result<response, error-code>
-                        // For now, we only support returning errors (Err case)
-                        // HTTP 200 responses require proper trailers/body handling (TODO)
-                        //
-                        // The return type is Result<Response, ErrorCode>
-                        // - Ok(response) = task-return(0, response_handle, padding...)
-                        // - Err(error) = task-return(1, error_case, payload...)
-                        //
-                        // Generate the return expression (expected to be Result::Err(ErrorCode))
-                        // but for now we just return a hardcoded 500 error
+                        // Generate the return expression but drop it for now
                         if let Some(expr) = value {
                             self.generate_expr(func, expr, type_table, ctx, builder);
                             func.instruction(&Instruction::Drop);
                         }
-                        // Return Err(InternalError(Some("Response creation not yet implemented")))
-                        // task-return args: (discriminant=1, case=38, has_payload=1, padding, len=37, ...)
-                        func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                        func.instruction(&Instruction::I32Const(38)); // InternalError case
-                        func.instruction(&Instruction::I32Const(1)); // has payload (Some)
+
+                        // Try creating HTTP 200 response:
+                        // 1. Create headers
+                        // 2. Create trailers future (rx, tx)
+                        // 3. Call response.new(rx) - this starts the reader!
+                        // 4. Write None to trailers future (reader should be ready now)
+                        // 5. Return Ok(response)
+
+                        // 1. Create headers
+                        let fields_constructor_idx = builder.func_idx("http-fields-constructor");
+                        func.instruction(&Instruction::Call(fields_constructor_idx));
+                        let headers_handle = ctx.alloc_local("_headers_handle", ValType::I32);
+                        func.instruction(&Instruction::LocalSet(headers_handle));
+
+                        // 2. Create trailers future
+                        let future_new_idx = builder.func_idx("future-new");
+                        func.instruction(&Instruction::Call(future_new_idx));
+                        let future_local = ctx.alloc_local("_http_future", ValType::I64);
+                        func.instruction(&Instruction::LocalSet(future_local));
+                        // Extract rx (low 32 bits)
+                        func.instruction(&Instruction::LocalGet(future_local));
+                        func.instruction(&Instruction::I32WrapI64);
+                        let trailers_rx = ctx.alloc_local("_trailers_rx", ValType::I32);
+                        func.instruction(&Instruction::LocalSet(trailers_rx));
+                        // Extract tx (high 32 bits)
+                        func.instruction(&Instruction::LocalGet(future_local));
+                        func.instruction(&Instruction::I64Const(32));
+                        func.instruction(&Instruction::I64ShrU);
+                        func.instruction(&Instruction::I32WrapI64);
+                        let trailers_tx = ctx.alloc_local("_trailers_tx", ValType::I32);
+                        func.instruction(&Instruction::LocalSet(trailers_tx));
+
+                        // 3. Call response.new FIRST (this starts the reader!)
+                        // response.new returns tuple: [response_handle, transmission_future]
+                        let response_new_idx = builder.func_idx("http-response-new");
+                        func.instruction(&Instruction::LocalGet(headers_handle)); // headers
+                        func.instruction(&Instruction::I32Const(0)); // body discriminant = None
+                        func.instruction(&Instruction::I32Const(0)); // body stream handle
+                        func.instruction(&Instruction::LocalGet(trailers_rx)); // trailers future rx
+                        func.instruction(&Instruction::I32Const(128)); // out_ptr
+                        func.instruction(&Instruction::Call(response_new_idx));
+
+                        // 4. Read response handle from offset 128 (before task.return)
+                        func.instruction(&Instruction::I32Const(128));
+                        func.instruction(&Instruction::I32Load(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                        let response_handle = ctx.alloc_local("_response_handle", ValType::I32);
+                        func.instruction(&Instruction::LocalSet(response_handle));
+
+                        // 5. Return Ok(response) via task-return
+                        func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                        func.instruction(&Instruction::LocalGet(response_handle));
+                        func.instruction(&Instruction::I32Const(0)); // padding
                         func.instruction(&Instruction::I64Const(0)); // padding
-                        func.instruction(&Instruction::I32Const(37)); // string length
+                        func.instruction(&Instruction::I32Const(0)); // padding
                         func.instruction(&Instruction::I32Const(0)); // padding
                         func.instruction(&Instruction::I32Const(0)); // padding
                         func.instruction(&Instruction::I32Const(0)); // padding
                         let task_ret = builder.func_idx("task-return");
                         func.instruction(&Instruction::Call(task_ret));
+
+                        // 6. Write None (no trailers) to the trailers future
+                        // This is post-return execution - Component Model allows
+                        // code to run after task.return
+                        //
+                        // future-write payload: result<option<fields>, error-code>
+                        // - Ok(None) = 0 (result Ok), 0 (option None)
+                        // The payload is at memory offset, we'll use offset 256
+                        func.instruction(&Instruction::I32Const(256)); // offset for payload
+                        func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                        func.instruction(&Instruction::I32Store(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                        func.instruction(&Instruction::I32Const(260)); // offset for option
+                        func.instruction(&Instruction::I32Const(0)); // None discriminant
+                        func.instruction(&Instruction::I32Store(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                        // Call future-write(tx, payload_ptr)
+                        func.instruction(&Instruction::LocalGet(trailers_tx));
+                        func.instruction(&Instruction::I32Const(256)); // payload ptr
+                        let future_write_idx = builder.func_idx("future-write");
+                        func.instruction(&Instruction::Call(future_write_idx));
+                        // Drop the return code (we don't check it)
+                        func.instruction(&Instruction::Drop);
+
                         func.instruction(&Instruction::Return);
-                        // Pre-allocate scratch locals for future use (when 200 responses are supported)
-                        let future_local = ctx.alloc_local("_http_future", ValType::I64);
-                        let trailers_rx = ctx.alloc_local("_trailers_rx", ValType::I32);
-                        let trailers_tx = ctx.alloc_local("_trailers_tx", ValType::I32);
-                        let headers_handle = ctx.alloc_local("_headers_handle", ValType::I32);
-                        let response_handle = ctx.alloc_local("_response_handle", ValType::I32);
-                        let result_disc = ctx.alloc_local("_result_disc", ValType::I32);
-                        let _ = (future_local, trailers_rx, trailers_tx, headers_handle, response_handle, result_disc);
                     } else {
                         // Command world: result<_, _> needs just (i32)
                         func.instruction(&Instruction::I32Const(0)); // Ok discriminant

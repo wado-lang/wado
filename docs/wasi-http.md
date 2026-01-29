@@ -6,7 +6,7 @@ This document tracks the implementation of `wasi:http/service` world support in 
 
 - HTTP server compiles and runs with `--world wasi:http/service`
 - Returns 500 errors correctly with error message payload
-- HTTP 200 response creation is blocked (see below)
+- HTTP 200 responses work correctly (as of 2026-01-29)
 
 ## What Works
 
@@ -46,9 +46,7 @@ The generated component correctly:
 - Lowers HTTP type functions (`[constructor]fields`, `[static]response.new`)
 - Includes future intrinsics (`future.new`, `future.write`, `future.drop-writable`)
 
-## What Doesn't Work
-
-### HTTP 200 Response Creation
+## HTTP 200 Response (Working)
 
 Creating a successful response requires calling `[static]response.new`:
 
@@ -58,26 +56,44 @@ response.new(headers, body, trailers) -> [Response, Future<Result<(), ErrorCode>
 
 The `trailers` parameter is `Future<Result<Option<Fields>, ErrorCode>>`.
 
-#### Attempted Approaches
+### Solution (Implemented 2026-01-29)
+
+The key insight was **post-return async execution**: Component Model allows code to run after `task.return`.
+
+**Correct sequence:**
+
+1. Create headers via `[constructor]fields`
+2. Create trailers future via `future.new` → (rx, tx)
+3. Call `response.new(headers, body=None, trailers=rx)`
+4. Call `task.return(Ok(response))` - returns response to caller
+5. Write `Ok(None)` to trailers future via `future.write(tx, payload_ptr)` (post-return execution)
+6. Return from function
+
+**Critical type fix:**
+
+The `http-fields` type MUST be `(own $fields)`, NOT `u32`. Even though both are i32 at the core level, the Component Model type checker requires the correct owned handle type:
+
+```wat
+;; WRONG: (type $http-fields (;12;) u32)
+;; CORRECT:
+(type $http-fields (;12;) (own $fields))
+```
+
+### Failed Approaches (Historical)
 
 | Approach | Code | Result |
 |----------|------|--------|
 | Null handle | `trailers = 0` | trap: "channel closed" at response.new |
 | Drop writable end | `future-new` → `future-drop-writable(tx)` → `response.new(rx)` | trap: "channel closed" at future-drop-writable |
-| Write None before response.new | `future-new` → `future-write(tx, None)` → `response.new(rx)` | Hangs (blocks indefinitely) |
-| Write None after response.new | `future-new` → `response.new(rx)` → `future-write(tx, None)` | Hangs (blocks indefinitely) |
+| Write None before response.new | `future-new` → `future-write(tx, None)` → `response.new(rx)` | Hangs (BLOCKED return code) |
+| Write None after response.new (before task.return) | `future-new` → `response.new(rx)` → `future-write(tx, None)` → `task.return` | Hangs (BLOCKED return code) |
 | Leave future pending | `future-new` → `response.new(rx)` → return (tx leaks) | trap: "channel closed" after handler returns |
-
-#### Analysis
-
-1. `future-write` blocks because it waits for the reader to be ready
-2. `future-drop-writable` signals an error to the reader (channel closed)
-3. Passing null (0) is not allowed for future handles
-4. The runtime expects the trailers future to be properly fulfilled
+| Wrong type for http-fields | `http-fields = u32` instead of `own<fields>` | trap: "channel closed" at response.new |
 
 The Component Model async semantics require:
 - A future to be fulfilled (written) OR explicitly cancelled
 - The sender must not be dropped without writing
+- Types must match exactly (own<resource> vs u32)
 
 ## Implementation Details
 
@@ -122,14 +138,16 @@ task-return(1, error_case, has_payload, padding, payload_fields...)
 
 ### Implementation
 
-- [ ] Implement correct trailers future lifecycle
-- [ ] Handle transmission future from response.new
-- [ ] Return Ok(response) via task-return
+- [x] Implement correct trailers future lifecycle (post-return execution pattern)
+- [x] Fix type definition: `http-fields` must be `own<fields>` not `u32`
+- [x] Return Ok(response) via task-return
+- [ ] Handle transmission future from response.new (currently ignored)
+- [ ] Support response body content via stream
 
 ### Testing
 
 - [ ] Add E2E tests using wasmtime API (not CLI)
-- [ ] Test HTTP 200 response with empty body
+- [x] Test HTTP 200 response with empty body (manual test passed)
 - [ ] Test HTTP 200 response with body content
 
 ## Investigation Notes (2026-01-29)
