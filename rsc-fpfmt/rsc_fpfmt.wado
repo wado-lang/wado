@@ -5,11 +5,6 @@
 // Use of this source code is governed by a BSD-style license.
 // See https://github.com/rsc/fpfmt/blob/main/LICENSE
 
-use {char_to_string} from "core:internal";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 fn POW10_MIN() -> i32 { return -348; }
 
@@ -39,10 +34,6 @@ pub fn pow10(n: i32) -> i64 {
     };
 }
 
-// ============================================================================
-// Bit utilities
-// ============================================================================
-
 // Returns the bit length of x (position of highest set bit + 1)
 pub fn i64_bit_len(x: i64) -> i32 {
     if x == 0 as i64 {
@@ -61,10 +52,6 @@ pub fn bool2int32(b: bool) -> i32 {
     return 0;
 }
 
-// ============================================================================
-// Logarithm approximations
-// ============================================================================
-
 // log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
 pub fn log10_pow2(x: i32) -> i32 {
     return (x * 78913) >> 18;
@@ -74,10 +61,6 @@ pub fn log10_pow2(x: i32) -> i32 {
 pub fn log2_pow10(x: i32) -> i32 {
     return (x * 108853) >> 15;
 }
-
-// ============================================================================
-// Float unpacking
-// ============================================================================
 
 // Result of unpacking a float64
 pub struct UnpackResult {
@@ -112,10 +95,6 @@ pub fn unpack64(f: f64) -> UnpackResult {
     return UnpackResult { mantissa: m, exponent: e };
 }
 
-// ============================================================================
-// Unrounded arithmetic
-// ============================================================================
-
 pub fn unrounded_floor(u: i64) -> i64 {
     return (u + 0 as i64) >> 2;
 }
@@ -138,10 +117,6 @@ pub fn unrounded_div(u: i64, d: i64) -> i64 {
     return q | (u & 1 as i64) | bool2int(r != 0 as i64);
 }
 
-// ============================================================================
-// Unsigned comparisons (treating i64 as u64)
-// ============================================================================
-
 pub fn u64_lt(a: i64, b: i64) -> bool {
     let sign_bit = 0x8000000000000000 as i64;
     return (a ^ sign_bit) < (b ^ sign_bit);
@@ -162,18 +137,10 @@ pub fn u64_gt(a: i64, b: i64) -> bool {
     return (a ^ sign_bit) > (b ^ sign_bit);
 }
 
-// ============================================================================
-// Power of 10 table entry
-// ============================================================================
-
 pub struct PmHiLo {
     hi: i64,
     lo: i64,
 }
-
-// ============================================================================
-// Scaling
-// ============================================================================
 
 pub fn get_pow10(p: i32) -> PmHiLo {
     let idx = p - POW10_MIN();
@@ -202,10 +169,6 @@ pub fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
     return logical_shr(hi, s) | sticky;
 }
 
-// ============================================================================
-// Main formatting functions
-// ============================================================================
-
 // Result of formatting
 pub struct FormatResult {
     digits: i64,
@@ -214,9 +177,7 @@ pub struct FormatResult {
 
 // FixedWidth returns the n-digit decimal form of f
 pub fn fixed_width(f: f64, n: i32) -> FormatResult {
-    if n > 18 {
-        panic("too many digits");
-    }
+    assert n <= 18, "digits must be <= 18";
 
     let unpack = unpack64(f);
     let m = unpack.mantissa;
@@ -385,10 +346,6 @@ pub fn digits(d: i64) -> i32 {
     return nd + bool2int32(u64_ge(d, pow10(nd)));
 }
 
-// ============================================================================
-// String formatting helpers
-// ============================================================================
-
 fn i2a_first(n: i32) -> char {
     return (('0' as i32) + n / 10) as char;
 }
@@ -416,43 +373,39 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
     }
 
     // First digit
-    append_char(&mut buf, digit_chars.get(0) as char);
+    buf.append_char(digit_chars.get(0) as char);
 
     // Decimal point and remaining digits
     if nd > 1 {
-        append_char(&mut buf, '.');
+        buf.append_char('.');
         for let mut i = 1; i < nd; i += 1 {
-            append_char(&mut buf, digit_chars.get(i) as char);
+            buf.append_char(digit_chars.get(i) as char);
         }
     }
 
     // Exponent
     let exp = p + nd - 1;
-    append_char(&mut buf, 'e');
+    buf.append_char('e');
     if exp < 0 {
-        append_char(&mut buf, '-');
+        buf.append_char('-');
     } else {
-        append_char(&mut buf, '+');
+        buf.append_char('+');
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
-        append_char(&mut buf, '0');
-        append_char(&mut buf, (('0' as i32) + abs_exp) as char);
+        buf.append_char('0');
+        buf.append_char((('0' as i32) + abs_exp) as char);
     } else if abs_exp < 100 {
-        append_char(&mut buf, i2a_first(abs_exp));
-        append_char(&mut buf, i2a_second(abs_exp));
+        buf.append_char(i2a_first(abs_exp));
+        buf.append_char(i2a_second(abs_exp));
     } else {
-        append_char(&mut buf, (('0' as i32) + abs_exp / 100) as char);
-        append_char(&mut buf, i2a_first(abs_exp % 100));
-        append_char(&mut buf, i2a_second(abs_exp % 100));
+        buf.append_char((('0' as i32) + abs_exp / 100) as char);
+        buf.append_char(i2a_first(abs_exp % 100));
+        buf.append_char(i2a_second(abs_exp % 100));
     }
 
     return buf;
-}
-
-pub fn append_char(buf: &mut String, c: char) {
-    buf.append(char_to_string(c));
 }
 
 // ============================================================================
@@ -499,15 +452,6 @@ pub fn f64_to_string(f: f64) -> String {
     }
     return formatted;
 }
-
-// ============================================================================
-// Power of 10 table
-// ============================================================================
-
-
-// ============================================================================
-// Power of 10 table
-// ============================================================================
 
 pub fn pow10_tab_0(idx: i32) -> PmHiLo {
     if idx == 0 { return PmHiLo { hi: 0xfa8fd5a0081c0289 as i64, lo: 0xe8cd3796329f1bac as i64 }; }

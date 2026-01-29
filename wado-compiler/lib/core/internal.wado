@@ -347,40 +347,38 @@ pub fn bool_to_string(value: bool) -> String {
 
 /// Convert char to String (single character)
 pub fn char_to_string(value: char) -> String {
-    // char is a Unicode scalar value (u32), we need to encode as UTF-8
-    let code = value as i32;
+    // char is a Unicode scalar value, we need to encode as UTF-8
+    let code = value as u32;
 
     if code < 0x80 {
-        // ASCII: single byte
+        // ASCII: always valid, single byte
         let arr = builtin::array_new::<u8>(1);
         builtin::array_set_u8(arr, 0, code);
         return String::internal_from_utf8_raw(arr, 1);
-    }
-
-    if code < 0x800 {
-        // 2-byte UTF-8: 110xxxxx 10xxxxxx
+    } else if code < 0x800 {
+        // 2-byte UTF-8: always valid (surrogates start at 0xD800)
         let arr = builtin::array_new::<u8>(2);
         builtin::array_set_u8(arr, 0, 0xC0 | (code >> 6));
         builtin::array_set_u8(arr, 1, 0x80 | (code & 0x3F));
         return String::internal_from_utf8_raw(arr, 2);
-    }
-
-    if code < 0x10000 {
-        // 3-byte UTF-8: 1110xxxx 10xxxxxx 10xxxxxx
+    } else if code < 0x10000 {
+        // 3-byte UTF-8: check for surrogates (0xD800-0xDFFF)
+        assert code < 0xD800 || code > 0xDFFF, "invalid Unicode scalar value: surrogate code point";
         let arr = builtin::array_new::<u8>(3);
         builtin::array_set_u8(arr, 0, 0xE0 | (code >> 12));
         builtin::array_set_u8(arr, 1, 0x80 | ((code >> 6) & 0x3F));
         builtin::array_set_u8(arr, 2, 0x80 | (code & 0x3F));
         return String::internal_from_utf8_raw(arr, 3);
+    } else {
+        // 4-byte UTF-8: check for valid range (max 0x10FFFF)
+        assert code <= 0x10FFFF, "invalid Unicode scalar value: out of range";
+        let arr = builtin::array_new::<u8>(4);
+        builtin::array_set_u8(arr, 0, 0xF0 | (code >> 18));
+        builtin::array_set_u8(arr, 1, 0x80 | ((code >> 12) & 0x3F));
+        builtin::array_set_u8(arr, 2, 0x80 | ((code >> 6) & 0x3F));
+        builtin::array_set_u8(arr, 3, 0x80 | (code & 0x3F));
+        return String::internal_from_utf8_raw(arr, 4);
     }
-
-    // 4-byte UTF-8: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-    let arr = builtin::array_new::<u8>(4);
-    builtin::array_set_u8(arr, 0, 0xF0 | (code >> 18));
-    builtin::array_set_u8(arr, 1, 0x80 | ((code >> 12) & 0x3F));
-    builtin::array_set_u8(arr, 2, 0x80 | ((code >> 6) & 0x3F));
-    builtin::array_set_u8(arr, 3, 0x80 | (code & 0x3F));
-    return String::internal_from_utf8_raw(arr, 4);
 }
 
 /// Write a string to a stream handle with an optional newline
