@@ -3,99 +3,10 @@
 //! This module tests that compilation errors are properly reported with
 //! correct error types, messages, and source locations.
 
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use wado_compiler::{CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
+mod common;
 
-// ============================================================================
-// Test Compiler Hosts
-// ============================================================================
-
-/// In-memory compiler host for source-only tests
-struct InMemoryTestHost;
-
-impl CompilerHost for InMemoryTestHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<String, SourceError>> + Send {
-        let path = path.to_string();
-        async move { Err(SourceError::NotFound { path }) }
-    }
-
-    fn emit_diagnostic(&self, _diagnostic: Diagnostic) {}
-}
-
-/// Filesystem compiler host for file-based tests
-struct FilesystemTestHost {
-    base_path: PathBuf,
-    diagnostics: Mutex<Vec<Diagnostic>>,
-}
-
-impl FilesystemTestHost {
-    fn new(base_path: PathBuf) -> Self {
-        Self {
-            base_path,
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-}
-
-impl CompilerHost for FilesystemTestHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<String, SourceError>> + Send {
-        let full_path = self.base_path.join(path);
-        async move {
-            std::fs::read_to_string(&full_path).map_err(|e| SourceError::IoError {
-                path: full_path.to_string_lossy().to_string(),
-                message: e.to_string(),
-            })
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-}
-
-/// Create a tokio runtime for blocking on async code
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-}
-
-/// Compile source string using in-memory host
-fn compile(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
-    let host = InMemoryTestHost;
-    runtime().block_on(wado_compiler::compile_with_host(
-        source,
-        &host,
-        None,
-        OptLevel::default(),
-    ))
-}
-
-/// Compile a file using filesystem host
-fn compile_file(path: &Path) -> Result<wado_compiler::CompileResult, CompileError> {
-    let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
-        path: path.to_string_lossy().to_string(),
-        message: e.to_string(),
-    })?;
-
-    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-    let host = FilesystemTestHost::new(base_path);
-
-    runtime().block_on(wado_compiler::compile_with_host(
-        &source,
-        &host,
-        Some(&path.to_string_lossy()),
-        OptLevel::default(),
-    ))
-}
+use std::path::Path;
+use wado_compiler::CompileError;
 
 // ============================================================================
 // I/O Errors
@@ -103,7 +14,7 @@ fn compile_file(path: &Path) -> Result<wado_compiler::CompileResult, CompileErro
 
 #[test]
 fn test_io_error_file_not_found() {
-    let result = compile_file(Path::new("nonexistent_file.wado"));
+    let result = common::compile_file(Path::new("nonexistent_file.wado"));
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -118,7 +29,7 @@ fn test_io_error_file_not_found() {
 
 #[test]
 fn test_io_error_directory_instead_of_file() {
-    let result = compile_file(Path::new("."));
+    let result = common::compile_file(Path::new("."));
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -146,7 +57,7 @@ fn main() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -173,7 +84,7 @@ fn main() {
 fn test_lexer_error_invalid_character() {
     let source = "fn main() { let x = @invalid; }";
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -206,7 +117,7 @@ fn test_parser_error_missing_function_body() {
 fn main()
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -237,7 +148,7 @@ fn main() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -269,7 +180,7 @@ fn main() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -298,7 +209,7 @@ fn test_parser_error_invalid_use_statement() {
 use;
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -335,7 +246,7 @@ fn main() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -361,7 +272,7 @@ fn main() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -395,7 +306,7 @@ fn run() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -426,7 +337,7 @@ fn run() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -457,7 +368,7 @@ fn run() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -488,7 +399,7 @@ fn run() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -519,7 +430,7 @@ fn run() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -550,7 +461,7 @@ fn run() {
 }
 "#;
 
-    let result = compile(source);
+    let result = common::compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -579,8 +490,6 @@ fn run() {
 
 #[test]
 fn test_error_display_with_filename() {
-    // Use compile_file with a file that has syntax errors
-    // For this test, we'll check the Display impl manually
     let err = CompileError::Parser {
         message: "unexpected token".to_string(),
         line: 10,
