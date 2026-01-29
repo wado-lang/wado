@@ -493,14 +493,15 @@ impl Parser {
             None
         };
 
-        self.expect(&TokenKind::Semicolon)?;
+        let semicolon = self.expect(&TokenKind::Semicolon)?;
+        let end_span = semicolon.span;
 
         Ok(UseDecl {
             is_pub,
             source,
             items,
             attributes,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 
