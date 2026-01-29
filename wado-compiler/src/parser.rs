@@ -930,6 +930,7 @@ impl Parser {
 
         self.expect(&TokenKind::Eq)?;
         let value = self.parse_expr()?;
+        let end_span = value.span();
 
         Ok(Stmt::Let(LetStmt {
             pattern,
@@ -937,7 +938,7 @@ impl Parser {
             is_reactive,
             ty,
             value,
-            span: start_span,
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -1076,6 +1077,7 @@ impl Parser {
 
         self.expect(&TokenKind::Eq)?;
         let value = self.parse_expr()?;
+        let end_span = value.span();
 
         Ok(LetStmt {
             pattern,
@@ -1083,7 +1085,7 @@ impl Parser {
             is_reactive: false,
             ty,
             value,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 

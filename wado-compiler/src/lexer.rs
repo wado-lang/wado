@@ -334,7 +334,7 @@ impl<'a> Lexer<'a> {
 
         Ok(Token::new(
             kind,
-            Span::new(start, self.pos, start_line, start_column),
+            Span::with_end_line(start, self.pos, start_line, start_column, self.line),
         ))
     }
 

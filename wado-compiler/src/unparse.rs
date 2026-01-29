@@ -386,11 +386,21 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        // Track line context for blank lines inside variant
+        let saved_line = self.last_source_line;
+        self.last_source_line = v.span.line;
+
         for case in &v.cases {
+            self.emit_leading_comments(&case.span);
+            self.emit_blank_lines_to(case.span.line);
             self.unparse_variant_case(case);
+            self.emit_trailing_comments_inline(&case.span);
+            self.output.push('\n');
+            self.last_source_line = case.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(v.span.end_line());
         self.write_indent();
         self.output.push_str("}\n");
     }
@@ -403,7 +413,7 @@ impl<'a> Unparser<'a> {
             self.unparse_type(payload);
             self.output.push(')');
         }
-        self.output.push_str(",\n");
+        self.output.push(',');
     }
 
     fn unparse_flags(&mut self, f: &crate::ast::FlagsDecl) {
