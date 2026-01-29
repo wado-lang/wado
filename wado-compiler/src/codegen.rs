@@ -2299,17 +2299,32 @@ impl Codegen {
                 ExportKind::Func,
             );
 
-            // Type: async function type () -> result
-            // Note: For complex worlds like HTTP service, this would need to handle
-            // parameter types (Request) and return types (Result<Response, ErrorCode>)
-            // For now, we use the simple () -> result<_, _> signature
+            // Type: async function type with appropriate params and result
+            // For Service world handle function, use Request param type
             let func_type = ctx.register_type(&func_type_name);
             {
                 let (_, enc) = builder.ty(Some(&func_type_name));
-                enc.function()
-                    .async_(export.is_async)
-                    .params::<[(&str, ComponentValType); 0], ComponentValType>([])
-                    .result(Some(ComponentValType::Type(result_unit_type)));
+
+                // Check if this is the Service world's handle function with Request param
+                let is_service_handle = project.target_world == "Service"
+                    && export.name == "handle"
+                    && !export.params.is_empty();
+
+                if is_service_handle {
+                    // Use the imported http-request type for Service world handle function
+                    // The param is own<request> which is lowered to i32 by canon lift
+                    let request_type_idx = ctx.type_idx("http-request");
+                    enc.function()
+                        .async_(export.is_async)
+                        .params([("request", ComponentValType::Type(request_type_idx))])
+                        .result(Some(ComponentValType::Type(result_unit_type)));
+                } else {
+                    // Default: no params, result<_, _>
+                    enc.function()
+                        .async_(export.is_async)
+                        .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                        .result(Some(ComponentValType::Type(result_unit_type)));
+                }
             }
 
             // Lift function with Async option
@@ -2389,7 +2404,59 @@ impl Codegen {
             builder.append_names();
         }
 
-        builder.finish()
+        let mut component_bytes = builder.finish();
+
+        // For Service world, add the handler interface export
+        // This creates a component instance containing the handle function
+        // and exports it as wasi:http/handler interface
+        if project.target_world == "Service" {
+            Self::append_http_handler_export(&mut component_bytes, &ctx);
+        }
+
+        component_bytes
+    }
+
+    /// Append HTTP handler interface export to component bytes.
+    ///
+    /// This adds a component instance containing the handle function
+    /// and exports it as `wasi:http/handler@0.3.0-rc-2026-01-06`.
+    ///
+    /// We do this as post-processing because ComponentBuilder doesn't expose
+    /// a public method to create component instances from exports.
+    fn append_http_handler_export(component_bytes: &mut Vec<u8>, ctx: &ComponentModelContext) {
+        use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
+
+        // Get the indices of the handle function and types
+        let handle_func_idx = ctx.comp_func_idx("handle");
+
+        // Get the type indices (aliased from http-types import)
+        let request_type_idx = ctx.type_idx("http-request-resource");
+        let response_type_idx = ctx.type_idx("http-response-resource");
+        let error_code_type_idx = ctx.type_idx("http-error-code");
+
+        // Create a component instance with the handler interface exports
+        // The interface uses: `use types.{request, response, error-code}`
+        // and exports: `handle: async func(request: request) -> result<response, error-code>`
+        let mut instances = ComponentInstanceSection::new();
+        instances.export_items([
+            ("request", ComponentExportKind::Type, request_type_idx),
+            ("response", ComponentExportKind::Type, response_type_idx),
+            ("error-code", ComponentExportKind::Type, error_code_type_idx),
+            ("handle", ComponentExportKind::Func, handle_func_idx),
+        ]);
+
+        // The instance index will be the next available (current count)
+        let instance_idx = ctx.instance_count();
+
+        // Create an export for the handler interface
+        let mut exports = ComponentExportSection::new();
+        let http_version = "0.3.0-rc-2026-01-06";
+        let handler_path = format!("wasi:http/handler@{http_version}");
+        exports.export(&handler_path, ComponentExportKind::Instance, instance_idx, None);
+
+        // Append the instance and export sections to the component
+        instances.append_to_component(component_bytes);
+        exports.append_to_component(component_bytes);
     }
 
     /// Generate WASI imports dynamically from the registry
@@ -2888,6 +2955,131 @@ impl Codegen {
         // Import interfaces with resource types (terminal-stdin, terminal-stdout, terminal-stderr)
         // using registry data instead of hardcoded effect names
         self.import_interfaces_with_resources(builder, ctx, project);
+
+        // For Service world, import wasi:http/types to get Request resource type
+        // This is needed for the handle function's parameter type
+        if project.target_world == "Service" {
+            self.import_http_types_for_service(builder, ctx);
+        }
+    }
+
+    /// Import wasi:http/types for Service world
+    ///
+    /// This imports the HTTP types interface which defines the Request resource type
+    /// needed for the handler export function.
+    fn import_http_types_for_service(
+        &self,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+    ) {
+        // HTTP types interface exports request, response (resources), and error-code (variant)
+        // The handler interface uses: `use types.{request, response, error-code}`
+        let http_types_instance_type = ctx.register_type("http-types-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("http-types-instance-type"));
+            let mut instance_type = InstanceType::new();
+
+            // Export request and response as sub-resource types
+            instance_type.export(
+                "request",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+            instance_type.export(
+                "response",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+
+            // error-code is a variant type with many cases
+            // Format: (name, type, refines) - we use None for type (no payload) and None for refines
+            instance_type.ty().defined_type().variant([
+                ("DNS-timeout", None, None),
+                ("DNS-error", None, None),
+                ("destination-not-found", None, None),
+                ("destination-unavailable", None, None),
+                ("destination-IP-prohibited", None, None),
+                ("destination-IP-unroutable", None, None),
+                ("connection-refused", None, None),
+                ("connection-terminated", None, None),
+                ("connection-timeout", None, None),
+                ("connection-read-timeout", None, None),
+                ("connection-write-timeout", None, None),
+                ("connection-limit-reached", None, None),
+                ("TLS-protocol-error", None, None),
+                ("TLS-certificate-error", None, None),
+                ("TLS-alert-received", None, None),
+                ("HTTP-request-denied", None, None),
+                ("HTTP-request-length-required", None, None),
+                ("HTTP-request-body-size", None, None),
+                ("HTTP-request-method-invalid", None, None),
+                ("HTTP-request-URI-invalid", None, None),
+                ("HTTP-request-URI-too-long", None, None),
+                ("HTTP-request-header-section-size", None, None),
+                ("HTTP-request-header-size", None, None),
+                ("HTTP-request-trailer-section-size", None, None),
+                ("HTTP-request-trailer-size", None, None),
+                ("HTTP-response-incomplete", None, None),
+                ("HTTP-response-header-section-size", None, None),
+                ("HTTP-response-header-size", None, None),
+                ("HTTP-response-body-size", None, None),
+                ("HTTP-response-trailer-section-size", None, None),
+                ("HTTP-response-trailer-size", None, None),
+                ("HTTP-response-transfer-coding", None, None),
+                ("HTTP-response-content-coding", None, None),
+                ("HTTP-response-timeout", None, None),
+                ("HTTP-upgrade-failed", None, None),
+                ("HTTP-protocol-error", None, None),
+                ("loop-detected", None, None),
+                ("configuration-error", None, None),
+                ("internal-error", None, None),
+            ]);
+            instance_type.export(
+                "error-code",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+            );
+
+            enc.instance(&instance_type);
+        }
+
+        // Import the wasi:http/types instance
+        ctx.register_instance("http-types");
+        let http_version = "0.3.0-rc-2026-01-06";
+        let http_types_import_path = format!("wasi:http/types@{http_version}");
+        builder.import(
+            &http_types_import_path,
+            wasm_encoder::ComponentTypeRef::Instance(http_types_instance_type),
+        );
+
+        // Alias the request resource type
+        ctx.register_type("http-request-resource");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "request",
+            ComponentExportKind::Type,
+        );
+
+        // Alias the response resource type
+        ctx.register_type("http-response-resource");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "response",
+            ComponentExportKind::Type,
+        );
+
+        // Alias the error-code type
+        ctx.register_type("http-error-code");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "error-code",
+            ComponentExportKind::Type,
+        );
+
+        // Define own<request> type for use in function params
+        let request_resource_idx = ctx.type_idx("http-request-resource");
+        ctx.register_type("http-request");
+        {
+            let (_, enc) = builder.ty(Some("http-request"));
+            enc.defined_type().own(request_resource_idx);
+        }
     }
 
     /// Import an interface that has a resource type, using registry data.

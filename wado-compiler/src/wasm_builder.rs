@@ -521,6 +521,11 @@ impl ComponentModelContext {
             .unwrap_or_else(|| panic!("unknown component instance: {name}"))
     }
 
+    /// Get the current component instance count
+    pub fn instance_count(&self) -> u32 {
+        self.next_instance_idx
+    }
+
     /// Register a core function (at component level) and return its index
     pub fn register_core_func(&mut self, name: &str) -> u32 {
         let idx = self.next_core_func_idx;
