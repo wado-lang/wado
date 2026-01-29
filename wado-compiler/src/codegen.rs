@@ -2258,6 +2258,15 @@ impl Codegen {
         // ========================================
         self.lower_wasi_functions(&mut builder, &mut ctx);
 
+        // ========================================
+        // Lower HTTP types functions for Service world
+        // ========================================
+        // NOTE: Currently disabled - returning proper HTTP 200 responses requires:
+        // 1. Importing [constructor]fields and [static]response.new from wasi:http/types
+        // 2. Handling the complex error-code variant type with all payload records
+        // 3. Updating task-return signature to match the complex result type
+        // For now, the handler returns an error which uses the simpler error-code variant.
+
         // Async intrinsics - DCE: only generate if used
         if project.used_builtins.contains(&CanonBuiltin::TaskReturn) {
             ctx.register_core_func("task-return");
@@ -2367,6 +2376,10 @@ impl Codegen {
                 ctx.core_func_idx(local_name),
             ));
         }
+
+        // NOTE: Lowered HTTP types functions ([constructor]fields, [static]response.new)
+        // are not currently exported to the wasi instance. The handler returns an error.
+
         let wasi_exports_refs: Vec<_> = wasi_exports
             .iter()
             .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
@@ -3115,25 +3128,49 @@ impl Codegen {
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
     ) {
-        // HTTP types interface exports request, response (resources), and error-code (variant)
-        // The handler interface uses: `use types.{request, response, error-code}`
+        // HTTP types interface exports request, response, fields (resources), error-code (variant)
+        // We also need [constructor]fields and [static]response.new for response creation
+        //
+        // Type indices within instance type (created by ty() calls, NOT by SubResource exports):
+        // SubResource exports don't create type indices - they're placeholders
+        // 0: error-code (variant)
+        // 1: stream<u8>
+        // 2: option<stream<u8>>
+        // 3: result<_, error-code> (for transmission future)
+        // 4: future<result<_, error-code>>
+        // 5: [constructor]fields function type
+        // 6: [static]response.new function type (simplified - just takes i32s and returns i32s)
         let http_types_instance_type = ctx.register_type("http-types-instance-type");
         {
             let (_, enc) = builder.ty(Some("http-types-instance-type"));
             let mut instance_type = InstanceType::new();
 
-            // Export request and response as sub-resource types
+            // Type 0: request (sub-resource export)
             instance_type.export(
                 "request",
                 wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
             );
+            // Type 1: response (sub-resource export)
             instance_type.export(
                 "response",
                 wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
             );
 
-            // error-code is a variant type with many cases
-            // Format: (name, type, refines) - we use None for type (no payload) and None for refines
+            // Type 2: fields (sub-resource export)
+            instance_type.export(
+                "fields",
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+
+            // For simplicity, we define error-code without payload types.
+            // The handler return type needs to match the simple error-code structure
+            // for proper task-return lowering.
+            //
+            // NOTE: This may cause a subtype mismatch with wasmtime at runtime,
+            // as wasmtime's error-code has payloads. A full implementation would
+            // need to handle the complex error-code type with all payload records.
+
+            // Type 3: error-code variant (simplified - no payloads)
             instance_type.ty().defined_type().variant([
                 ("DNS-timeout", None, None),
                 ("DNS-error", None, None),
@@ -3175,11 +3212,50 @@ impl Codegen {
                 ("configuration-error", None, None),
                 ("internal-error", None, None),
             ]);
-            // The variant type was just defined, it's at index 2 (after request=0, response=1)
+            // Type 4: Export error-code to make it "named"
             instance_type.export(
                 "error-code",
-                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(2)),
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(3)),
             );
+
+            // Type indices (simplified):
+            // 0: request (sub-resource export - named)
+            // 1: response (sub-resource export - named)
+            // 2: fields (sub-resource export - named)
+            // 3: error-code variant (internal)
+            // 4: error-code (Eq export - named)
+            // 5: stream<u8>
+            // 6: option<stream<u8>>
+            // 7: result<_, error-code>
+            // 8: future<result<_, error-code>>
+            //
+            // For now, we don't export [constructor]fields and [static]response.new
+            // to keep the import signature simple. The handler returns an error.
+
+            // Type 5: stream<u8>
+            instance_type
+                .ty()
+                .defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+
+            // Type 6: option<stream<u8>>
+            instance_type
+                .ty()
+                .defined_type()
+                .option(ComponentValType::Type(5));
+
+            // Type 7: result<_, error-code> (for transmission future)
+            // Use type 4 (named/exported error-code alias)
+            instance_type
+                .ty()
+                .defined_type()
+                .result(None, Some(ComponentValType::Type(4)));
+
+            // Type 8: future<result<_, error-code>>
+            instance_type
+                .ty()
+                .defined_type()
+                .future(Some(ComponentValType::Type(7)));
 
             enc.instance(&instance_type);
         }
@@ -3209,6 +3285,14 @@ impl Codegen {
             ComponentExportKind::Type,
         );
 
+        // Alias the fields resource type
+        ctx.register_type("http-fields-resource");
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            "fields",
+            ComponentExportKind::Type,
+        );
+
         // Alias the error-code type
         ctx.register_type("http-error-code");
         builder.alias_export(
@@ -3216,6 +3300,10 @@ impl Codegen {
             "error-code",
             ComponentExportKind::Type,
         );
+
+        // NOTE: We don't alias [constructor]fields and [static]response.new for now.
+        // The current HTTP handler just returns an error.
+        // To return a proper response, these functions need to be aliased and called.
 
         // Define own<request> type for use in function params
         let request_resource_idx = ctx.type_idx("http-request-resource");
