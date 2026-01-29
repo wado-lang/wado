@@ -1215,7 +1215,9 @@ mod tests {
         assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println"));
         assert!(matches!(tokens[3].kind, TokenKind::RBrace));
         assert!(matches!(tokens[4].kind, TokenKind::From));
-        assert!(matches!(&tokens[5].kind, TokenKind::StringLit { value, .. } if value == "core:cli"));
+        assert!(
+            matches!(&tokens[5].kind, TokenKind::StringLit { value, .. } if value == "core:cli")
+        );
         assert!(matches!(tokens[6].kind, TokenKind::Semicolon));
     }
 
@@ -1224,7 +1226,9 @@ mod tests {
         let mut lexer = Lexer::new(r#""Hello, world!""#);
         let tokens = lexer.tokenize().unwrap();
 
-        assert!(matches!(&tokens[0].kind, TokenKind::StringLit { value, .. } if value == "Hello, world!"));
+        assert!(
+            matches!(&tokens[0].kind, TokenKind::StringLit { value, .. } if value == "Hello, world!")
+        );
     }
 
     #[test]

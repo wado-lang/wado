@@ -4048,7 +4048,9 @@ mod tests {
                 // Check that message is present and is a string literal
                 assert!(assert_stmt.message.is_some());
                 if let Some(Expr::Literal(lit)) = &assert_stmt.message {
-                    assert!(matches!(&lit.value, Literal::String(s) if s.value == "x must be positive"));
+                    assert!(
+                        matches!(&lit.value, Literal::String(s) if s.value == "x must be positive")
+                    );
                 } else {
                     panic!("expected string literal message");
                 }
