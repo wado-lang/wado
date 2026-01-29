@@ -24,6 +24,9 @@ type EffectUsageMap = HashMap<FunctionId, HashSet<(String, String)>>;
 /// Per-function box primitives usage
 type BoxPrimitivesMap = HashMap<FunctionId, HashSet<PrimitiveType>>;
 
+/// Per-function struct usage
+type StructUsageMap = HashMap<FunctionId, HashSet<String>>;
+
 /// Analysis results for a single function
 #[derive(Debug, Clone, Default)]
 struct FunctionAnalysis {
@@ -33,6 +36,8 @@ struct FunctionAnalysis {
     effect_calls: HashSet<(String, String)>,
     /// Primitive types that need box types (for references like &i32, &mut f64)
     used_box_primitives: HashSet<PrimitiveType>,
+    /// Struct names used in this function (from types)
+    used_structs: HashSet<String>,
 }
 
 /// Analyze the project and populate its usage fields with DCE analysis results.
@@ -41,8 +46,9 @@ struct FunctionAnalysis {
 /// and populates the project's `reachable_functions`, `used_wasi_functions`,
 /// `used_builtins`, etc. fields.
 pub fn analyze_project(project: &mut Project) {
-    // Build call graph, effect usage, and box primitives from all modules
-    let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
+    // Build call graph, effect usage, box primitives, and struct usage from all modules
+    let (call_graph, effect_usage, box_primitives_map, struct_usage_map) =
+        build_analysis_graph(&project.tir_modules);
 
     // Determine entry functions based on target world
     // Each world has specific export functions that are entry points
@@ -75,9 +81,10 @@ pub fn analyze_project(project: &mut Project) {
         }
     }
 
-    // Collect used WASI functions and box primitives from reachable functions
+    // Collect used WASI functions, box primitives, and structs from reachable functions
     let mut used_wasi_functions: HashSet<String> = HashSet::new();
     let mut used_box_primitives: HashSet<PrimitiveType> = HashSet::new();
+    let mut used_struct_names: HashSet<String> = HashSet::new();
     for func_id in &reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
@@ -87,7 +94,31 @@ pub fn analyze_project(project: &mut Project) {
         if let Some(prims) = box_primitives_map.get(func_id) {
             used_box_primitives.extend(prims.iter().copied());
         }
+        if let Some(structs) = struct_usage_map.get(func_id) {
+            used_struct_names.extend(structs.iter().cloned());
+        }
     }
+
+    // Add WASI struct names to the used set when any WASI module is loaded
+    // WASI structs may reference core types like String, so we need to include them
+    // We check if any WASI module exists in tir_modules, not just if WASI functions are called
+    let has_wasi_modules = project
+        .tir_modules
+        .keys()
+        .any(super::name::ModuleSource::is_wasi);
+    if has_wasi_modules {
+        for (module_source, tir_mod) in &project.tir_modules {
+            if module_source.is_wasi() {
+                for tir_struct in &tir_mod.structs {
+                    used_struct_names.insert(tir_struct.name.clone());
+                }
+            }
+        }
+    }
+
+    // Compute transitive closure for struct dependencies
+    // If struct A uses struct B as a field type, we need B when we need A
+    let used_struct_names = compute_struct_closure(used_struct_names, &project.tir_modules);
 
     // Helper to check if a core/internal function is reachable
     let core_internal = |name: &str| -> FunctionId {
@@ -317,6 +348,7 @@ pub fn analyze_project(project: &mut Project) {
     project.used_wasi_functions = used_wasi_functions;
     project.used_builtins = used_builtins;
     project.used_box_primitives = used_box_primitives;
+    project.used_struct_names = used_struct_names;
 
     // Filter string literals in each module to only include strings from reachable functions
     for module in project.tir_modules.values_mut() {
@@ -394,13 +426,14 @@ pub fn populate_all_features(project: &mut Project) {
 }
 
 /// Build call graph and effect usage from all TIR modules
-/// Returns (`call_graph`, `effect_usage`, `box_primitives_map`)
+/// Returns (`call_graph`, `effect_usage`, `box_primitives_map`, `struct_usage_map`)
 fn build_analysis_graph(
     modules: &IndexMap<ModuleSource, TirModule>,
-) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap) {
+) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap, StructUsageMap) {
     let mut call_graph: CallGraph = HashMap::new();
     let mut effect_usage: EffectUsageMap = HashMap::new();
     let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
+    let mut struct_usage_map: StructUsageMap = HashMap::new();
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
@@ -446,7 +479,10 @@ fn build_analysis_graph(
                 effect_usage.insert(func_id.clone(), analysis.effect_calls);
             }
             if !analysis.used_box_primitives.is_empty() {
-                box_primitives_map.insert(func_id, analysis.used_box_primitives);
+                box_primitives_map.insert(func_id.clone(), analysis.used_box_primitives);
+            }
+            if !analysis.used_structs.is_empty() {
+                struct_usage_map.insert(func_id, analysis.used_structs);
             }
         }
 
@@ -471,13 +507,21 @@ fn build_analysis_graph(
                     effect_usage.insert(method_id.clone(), analysis.effect_calls);
                 }
                 if !analysis.used_box_primitives.is_empty() {
-                    box_primitives_map.insert(method_id, analysis.used_box_primitives);
+                    box_primitives_map.insert(method_id.clone(), analysis.used_box_primitives);
+                }
+                if !analysis.used_structs.is_empty() {
+                    struct_usage_map.insert(method_id, analysis.used_structs);
                 }
             }
         }
     }
 
-    (call_graph, effect_usage, box_primitives_map)
+    (
+        call_graph,
+        effect_usage,
+        box_primitives_map,
+        struct_usage_map,
+    )
 }
 
 /// Analyze a TIR function for callees and effect usage
@@ -488,8 +532,10 @@ fn analyze_function(
 ) -> FunctionAnalysis {
     let mut analysis = FunctionAnalysis::default();
 
-    // Check parameters for references to primitives (e.g., &i32, &mut f64)
+    // Collect struct names from parameter types
     for param in &func.params {
+        collect_struct_names_from_type(param.type_id, type_table, &mut analysis.used_structs);
+        // Check for references to primitives (e.g., &i32, &mut f64)
         if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
             type_table.get(param.type_id)
             && let ResolvedType::Primitive(prim) = type_table.get(*inner)
@@ -497,6 +543,9 @@ fn analyze_function(
             analysis.used_box_primitives.insert(*prim);
         }
     }
+
+    // Collect struct names from return type (unless it's Unit type)
+    collect_struct_names_from_type(func.return_type, type_table, &mut analysis.used_structs);
 
     if let Some(body) = &func.body {
         analyze_block(body, current_module, type_table, &mut analysis);
@@ -629,6 +678,9 @@ fn analyze_expr(
     type_table: &TypeTable,
     analysis: &mut FunctionAnalysis,
 ) {
+    // Collect struct names from the expression's type
+    collect_struct_names_from_type(expr.type_id, type_table, &mut analysis.used_structs);
+
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
             let module_path = func.module_path();
@@ -1314,6 +1366,103 @@ fn is_generic_func_reachable(
         }
     }
     false
+}
+
+/// Compute transitive closure for struct dependencies.
+/// If struct A has a field of type struct B, we need B when we need A.
+fn compute_struct_closure(
+    initial: HashSet<String>,
+    modules: &IndexMap<ModuleSource, TirModule>,
+) -> HashSet<String> {
+    // Build a map of struct name -> field type names
+    let mut struct_deps: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for module in modules.values() {
+        let type_table = &*module.type_table.borrow();
+        for tir_struct in &module.structs {
+            let mut deps = HashSet::new();
+            for field in &tir_struct.fields {
+                collect_struct_names_from_type(field.type_id, type_table, &mut deps);
+            }
+            // Merge with existing deps (struct may appear in multiple modules)
+            struct_deps
+                .entry(tir_struct.name.clone())
+                .or_default()
+                .extend(deps);
+        }
+    }
+
+    // Compute transitive closure using BFS
+    let mut result = initial;
+    let mut worklist: Vec<String> = result.iter().cloned().collect();
+
+    while let Some(struct_name) = worklist.pop() {
+        if let Some(deps) = struct_deps.get(&struct_name) {
+            for dep in deps {
+                if !result.contains(dep) {
+                    result.insert(dep.clone());
+                    worklist.push(dep.clone());
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Collect struct names from a resolved type (used for struct-level DCE)
+fn collect_struct_names_from_type(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    names: &mut HashSet<String>,
+) {
+    match type_table.get(type_id) {
+        ResolvedType::Struct { name, .. } => {
+            names.insert(name.clone());
+        }
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } => {
+            // Include the monomorphized name (e.g., "Array<i32>")
+            let args: Vec<String> = type_args
+                .iter()
+                .map(|t| mangle_type_for_name(*t, type_table))
+                .collect();
+            let mono_name = format!("{}<{}>", name, args.join(","));
+            names.insert(mono_name);
+            // Also collect struct names from type arguments
+            for arg_type_id in type_args {
+                collect_struct_names_from_type(*arg_type_id, type_table, names);
+            }
+        }
+        ResolvedType::Tuple(elems) => {
+            // Tuple is compiled to a struct, so we need it
+            let elem_names: Vec<String> = elems
+                .iter()
+                .map(|t| mangle_type_for_name(*t, type_table))
+                .collect();
+            names.insert(format!("Tuple<{}>", elem_names.join(",")));
+            // Collect element types too
+            for elem in elems {
+                collect_struct_names_from_type(*elem, type_table, names);
+            }
+        }
+        ResolvedType::Option(inner) => {
+            collect_struct_names_from_type(*inner, type_table, names);
+        }
+        ResolvedType::Result { ok, err } => {
+            collect_struct_names_from_type(*ok, type_table, names);
+            collect_struct_names_from_type(*err, type_table, names);
+        }
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            collect_struct_names_from_type(*inner, type_table, names);
+        }
+        ResolvedType::Variant { name, .. } => {
+            names.insert(name.clone());
+        }
+        // Primitives and other types don't contribute to struct names
+        _ => {}
+    }
 }
 
 #[cfg(test)]

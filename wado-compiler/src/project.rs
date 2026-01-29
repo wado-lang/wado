@@ -49,6 +49,9 @@ pub struct Project {
     pub used_builtins: HashSet<CanonBuiltin>,
     /// Primitive types that need box types (for references like &i32, &mut f64)
     pub used_box_primitives: HashSet<PrimitiveType>,
+    /// Struct names used by reachable functions (from DCE analysis)
+    /// Used for struct-level DCE to avoid emitting unused struct type definitions.
+    pub used_struct_names: HashSet<String>,
 
     // ========================================
     // Codegen options
@@ -81,6 +84,7 @@ impl Project {
             used_wasi_functions: HashSet::new(),
             used_builtins: HashSet::new(),
             used_box_primitives: HashSet::new(),
+            used_struct_names: HashSet::new(),
             // Codegen options
             strip_names: false,
             target_world: "Command".to_string(),
@@ -112,5 +116,11 @@ impl Project {
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))
+    }
+
+    /// Check if a struct is used (should be included in the binary).
+    /// When `all_reachable` is true (DCE disabled), all structs are included.
+    pub fn is_struct_used(&self, struct_name: &str) -> bool {
+        self.all_reachable || self.used_struct_names.contains(struct_name)
     }
 }
