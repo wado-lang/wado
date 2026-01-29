@@ -228,7 +228,7 @@ fn normalize_world_name(world: &str) -> String {
     }
 }
 
-/// Convert a string to PascalCase.
+/// Convert a string to `PascalCase`.
 fn to_pascal_case(s: &str) -> String {
     s.split('-')
         .map(|part| {

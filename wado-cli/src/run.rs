@@ -5,7 +5,9 @@ use lexopt::Arg::{Long, Value};
 use tempfile::NamedTempFile;
 use wasmtime::component::Component;
 
-use crate::args::{next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg};
+use crate::args::{
+    next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
+};
 use crate::compile::{self, OptLevel};
 use crate::runtime;
 use wado_compiler::LogLevel;

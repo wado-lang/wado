@@ -1,26 +1,21 @@
 // HTTP server example using wasi:http (WASI P3)
 //
 // This demonstrates the wasi:http/service world in Wado.
-// The HTTP server compiles and runs, returning a 500 error for now.
-//
-// Run with wado:
-//   cargo run --bin wado -- run --world wasi:http/service example/http-server.wado
+// The HTTP server compiles and runs, returning HTTP 200 OK.
 //
 // Compile:
-//   cargo run --bin wado -- compile --world wasi:http/service -o example/http-server.wasm example/http-server.wado
+//   cargo run --bin wado -- compile --world wasi:http/service -o /tmp/http-server.wasm example/http/http-server.wado
 //
 // Run with wasmtime (with WASI P3 support):
-//   wasmtime serve -W all-proposals=y -W stack-switching=n -S p3=y -S http=y example/http-server.wasm
+//   wasmtime serve -W component-model-async=y -W component-model-async-stackful=y -W gc=y -S p3=y -S http=y /tmp/http-server.wasm
 //
 // Test with curl:
 //   curl http://localhost:8080/
 //
 // Current Status:
 // - The HTTP handler compiles and runs correctly
-// - Currently returns a 500 Internal Server Error
-// - Infrastructure for HTTP response creation (future intrinsics, HTTP types) is in place
-// - TODO: Implement proper response creation using Fields::from_list, Response::new,
-//   and stream/future intrinsics to return 200 OK with a body
+// - Returns HTTP 200 OK with empty body
+// - See docs/wasi-http.md for implementation details
 
 use {
     Request,

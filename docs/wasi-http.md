@@ -81,16 +81,17 @@ The `http-fields` type MUST be `(own $fields)`, NOT `u32`. Even though both are 
 
 ### Failed Approaches (Historical)
 
-| Approach | Code | Result |
-|----------|------|--------|
-| Null handle | `trailers = 0` | trap: "channel closed" at response.new |
-| Drop writable end | `future-new` → `future-drop-writable(tx)` → `response.new(rx)` | trap: "channel closed" at future-drop-writable |
-| Write None before response.new | `future-new` → `future-write(tx, None)` → `response.new(rx)` | Hangs (BLOCKED return code) |
-| Write None after response.new (before task.return) | `future-new` → `response.new(rx)` → `future-write(tx, None)` → `task.return` | Hangs (BLOCKED return code) |
-| Leave future pending | `future-new` → `response.new(rx)` → return (tx leaks) | trap: "channel closed" after handler returns |
-| Wrong type for http-fields | `http-fields = u32` instead of `own<fields>` | trap: "channel closed" at response.new |
+| Approach                                           | Code                                                                         | Result                                         |
+| -------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------- |
+| Null handle                                        | `trailers = 0`                                                               | trap: "channel closed" at response.new         |
+| Drop writable end                                  | `future-new` → `future-drop-writable(tx)` → `response.new(rx)`               | trap: "channel closed" at future-drop-writable |
+| Write None before response.new                     | `future-new` → `future-write(tx, None)` → `response.new(rx)`                 | Hangs (BLOCKED return code)                    |
+| Write None after response.new (before task.return) | `future-new` → `response.new(rx)` → `future-write(tx, None)` → `task.return` | Hangs (BLOCKED return code)                    |
+| Leave future pending                               | `future-new` → `response.new(rx)` → return (tx leaks)                        | trap: "channel closed" after handler returns   |
+| Wrong type for http-fields                         | `http-fields = u32` instead of `own<fields>`                                 | trap: "channel closed" at response.new         |
 
 The Component Model async semantics require:
+
 - A future to be fulfilled (written) OR explicitly cancelled
 - The sender must not be dropped without writing
 - Types must match exactly (own<resource> vs u32)
@@ -156,12 +157,12 @@ task-return(1, error_case, has_payload, padding, payload_fields...)
 
 #### Key Files
 
-| File | Purpose |
-|------|---------|
-| `crates/wasi-http/src/p3/host/types.rs:597-637` | `Response::new` host implementation |
-| `crates/wasi-http/src/p3/body.rs:404-439` | `GuestTrailerConsumer` - consumes guest trailers |
-| `crates/wasi-http/src/p3/body.rs:355-372` | Trailers polling in `GuestBody::poll_frame` |
-| `crates/test-programs/src/bin/p3_http_outbound_request_response_build.rs` | Guest-side response building example |
+| File                                                                      | Purpose                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------ |
+| `crates/wasi-http/src/p3/host/types.rs:597-637`                           | `Response::new` host implementation              |
+| `crates/wasi-http/src/p3/body.rs:404-439`                                 | `GuestTrailerConsumer` - consumes guest trailers |
+| `crates/wasi-http/src/p3/body.rs:355-372`                                 | Trailers polling in `GuestBody::poll_frame`      |
+| `crates/test-programs/src/bin/p3_http_outbound_request_response_build.rs` | Guest-side response building example             |
 
 #### Guest-Side Response Building Pattern
 
@@ -217,12 +218,12 @@ The host stores `trailers_rx` in the `Body::Guest` struct and polls it when the 
 
 From `futures_and_streams.rs:54-99`:
 
-| Return Code | Value | Meaning |
-|-------------|-------|---------|
-| `Blocked` | `0xffffffff` | No reader ready, operation cannot complete |
-| `Completed(n)` | `(n << 4) \| 0x0` | Data transferred successfully |
-| `Dropped(n)` | `(n << 4) \| 0x1` | Other end dropped |
-| `Cancelled(n)` | `(n << 4) \| 0x2` | Operation cancelled |
+| Return Code    | Value             | Meaning                                    |
+| -------------- | ----------------- | ------------------------------------------ |
+| `Blocked`      | `0xffffffff`      | No reader ready, operation cannot complete |
+| `Completed(n)` | `(n << 4) \| 0x0` | Data transferred successfully              |
+| `Dropped(n)`   | `(n << 4) \| 0x1` | Other end dropped                          |
+| `Cancelled(n)` | `(n << 4) \| 0x2` | Operation cancelled                        |
 
 #### `future.write` Blocking Behavior
 
@@ -242,6 +243,7 @@ if result == ReturnCode::Blocked && !self.options(store.0, options).async_ {
 ```
 
 **Key findings:**
+
 1. For **async-lifted** exports: returns `BLOCKED` immediately, guest should suspend
 2. For **sync-lifted** exports: blocks synchronously in `wait_for_write()`
 3. Blocks when `ReadState::Open` (no reader has called `future.read` yet)
@@ -290,6 +292,7 @@ The problem is the **async/sync mismatch**:
 #### Option 1: Use `wit_future::new` Pattern
 
 The guest code uses `wit_future::new(|| Ok(None))` which likely:
+
 - Creates a future with a callback
 - The callback is invoked when the reader is ready
 - Doesn't require explicit `future.write`
@@ -299,6 +302,7 @@ Need to investigate how this maps to canonical intrinsics.
 #### Option 2: Handle BLOCKED Return Code
 
 When `future.write` returns `BLOCKED`:
+
 1. Save the write handle
 2. Return from handler (but how?)
 3. Resume when notified
@@ -308,6 +312,7 @@ This requires understanding the async task suspension model.
 #### Option 3: Write After task.return
 
 Since `task.return` doesn't cancel pending futures:
+
 1. Call `response.new(rx)`
 2. Call `task.return` with response
 3. Call `future.write(tx, None)` after task.return
@@ -340,6 +345,7 @@ Ok(Response::new(headers, Body::new(pipe_rx, Some(trailers_rx))))
 ```
 
 **Key pattern:**
+
 1. Create future (tx, rx)
 2. **Spawn** async task that will write to tx later
 3. Return response with rx immediately
@@ -357,6 +363,7 @@ let _ = Response::new(headers, Some(contents_rx), trailers_rx);
 ```
 
 `wit_future::new(|| Ok(None))` creates a future where:
+
 - The callback `|| Ok(None)` is invoked when the reader is ready
 - Returns `Ok(None)` immediately (no trailers)
 - No explicit `future.write` needed

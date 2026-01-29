@@ -1911,7 +1911,12 @@ impl Codegen {
             }
             // Test functions need task.return wrapper like run
             if tir_func.name.starts_with("__test_") {
-                let wasm_func = self.generate_run_function(&tir_func, type_table, &builder, &project.target_world);
+                let wasm_func = self.generate_run_function(
+                    &tir_func,
+                    type_table,
+                    &builder,
+                    &project.target_world,
+                );
                 code.function(&wasm_func);
             } else {
                 let (wasm_func, hints) =
@@ -2221,7 +2226,8 @@ impl Codegen {
             ctx.register_type("http-option-stream-u8");
             {
                 let (_, enc) = builder.ty(Some("http-option-stream-u8"));
-                enc.defined_type().option(ComponentValType::Type(stream_u8_type));
+                enc.defined_type()
+                    .option(ComponentValType::Type(stream_u8_type));
             }
 
             // Define option<fields> for trailers
@@ -2229,7 +2235,8 @@ impl Codegen {
             {
                 let fields_idx = ctx.type_idx("http-fields");
                 let (_, enc) = builder.ty(Some("http-option-fields"));
-                enc.defined_type().option(ComponentValType::Type(fields_idx));
+                enc.defined_type()
+                    .option(ComponentValType::Type(fields_idx));
             }
 
             // Define result<option<fields>, error-code> for trailers future payload
@@ -2281,7 +2288,6 @@ impl Codegen {
         // Only generated for Service world
         // ========================================
         if project.target_world == "Service" {
-
             if project.used_builtins.contains(&CanonBuiltin::FutureNew) {
                 ctx.register_core_func("future-new");
                 builder.future_new(trailers_future_type);
@@ -2298,12 +2304,18 @@ impl Codegen {
                 );
             }
 
-            if project.used_builtins.contains(&CanonBuiltin::FutureDropWritable) {
+            if project
+                .used_builtins
+                .contains(&CanonBuiltin::FutureDropWritable)
+            {
                 ctx.register_core_func("future-drop-writable");
                 builder.future_drop_writable(trailers_future_type);
             }
 
-            if project.used_builtins.contains(&CanonBuiltin::FutureDropReadable) {
+            if project
+                .used_builtins
+                .contains(&CanonBuiltin::FutureDropReadable)
+            {
                 ctx.register_core_func("future-drop-readable");
                 builder.future_drop_readable(trailers_future_type);
             }
@@ -3300,7 +3312,7 @@ impl Codegen {
 
             // Type 11: field-size-payload record
             instance_type.ty().defined_type().record([
-                ("field-name", ComponentValType::Type(3)),  // option<string>
+                ("field-name", ComponentValType::Type(3)), // option<string>
                 ("field-size", ComponentValType::Type(10)), // option<u32>
             ]);
             // Type 12: Export field-size-payload to make it "named"
@@ -3345,22 +3357,70 @@ impl Codegen {
                 ("TLS-alert-received", Some(ComponentValType::Type(9)), None), // TLS-alert-received-payload
                 ("HTTP-request-denied", None, None),
                 ("HTTP-request-length-required", None, None),
-                ("HTTP-request-body-size", Some(ComponentValType::Type(13)), None), // option<u64>
+                (
+                    "HTTP-request-body-size",
+                    Some(ComponentValType::Type(13)),
+                    None,
+                ), // option<u64>
                 ("HTTP-request-method-invalid", None, None),
                 ("HTTP-request-URI-invalid", None, None),
                 ("HTTP-request-URI-too-long", None, None),
-                ("HTTP-request-header-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
-                ("HTTP-request-header-size", Some(ComponentValType::Type(14)), None), // option<field-size-payload>
-                ("HTTP-request-trailer-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
-                ("HTTP-request-trailer-size", Some(ComponentValType::Type(12)), None), // field-size-payload
+                (
+                    "HTTP-request-header-section-size",
+                    Some(ComponentValType::Type(10)),
+                    None,
+                ), // option<u32>
+                (
+                    "HTTP-request-header-size",
+                    Some(ComponentValType::Type(14)),
+                    None,
+                ), // option<field-size-payload>
+                (
+                    "HTTP-request-trailer-section-size",
+                    Some(ComponentValType::Type(10)),
+                    None,
+                ), // option<u32>
+                (
+                    "HTTP-request-trailer-size",
+                    Some(ComponentValType::Type(12)),
+                    None,
+                ), // field-size-payload
                 ("HTTP-response-incomplete", None, None),
-                ("HTTP-response-header-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
-                ("HTTP-response-header-size", Some(ComponentValType::Type(12)), None), // field-size-payload
-                ("HTTP-response-body-size", Some(ComponentValType::Type(13)), None), // option<u64>
-                ("HTTP-response-trailer-section-size", Some(ComponentValType::Type(10)), None), // option<u32>
-                ("HTTP-response-trailer-size", Some(ComponentValType::Type(12)), None), // field-size-payload
-                ("HTTP-response-transfer-coding", Some(ComponentValType::Type(3)), None), // option<string>
-                ("HTTP-response-content-coding", Some(ComponentValType::Type(3)), None), // option<string>
+                (
+                    "HTTP-response-header-section-size",
+                    Some(ComponentValType::Type(10)),
+                    None,
+                ), // option<u32>
+                (
+                    "HTTP-response-header-size",
+                    Some(ComponentValType::Type(12)),
+                    None,
+                ), // field-size-payload
+                (
+                    "HTTP-response-body-size",
+                    Some(ComponentValType::Type(13)),
+                    None,
+                ), // option<u64>
+                (
+                    "HTTP-response-trailer-section-size",
+                    Some(ComponentValType::Type(10)),
+                    None,
+                ), // option<u32>
+                (
+                    "HTTP-response-trailer-size",
+                    Some(ComponentValType::Type(12)),
+                    None,
+                ), // field-size-payload
+                (
+                    "HTTP-response-transfer-coding",
+                    Some(ComponentValType::Type(3)),
+                    None,
+                ), // option<string>
+                (
+                    "HTTP-response-content-coding",
+                    Some(ComponentValType::Type(3)),
+                    None,
+                ), // option<string>
                 ("HTTP-response-timeout", None, None),
                 ("HTTP-upgrade-failed", None, None),
                 ("HTTP-protocol-error", None, None),
@@ -3468,11 +3528,15 @@ impl Codegen {
             //             trailers: future<result<option<own<fields>>, error-code>>)
             //         -> tuple<own<response>, future<result<_, error-code>>>
             // Note: NOT async - static functions with futures are still sync in CM
-            instance_type.ty().function().params([
-                ("headers", ComponentValType::Type(21)),  // own<fields>
-                ("contents", ComponentValType::Type(18)), // option<stream<u8>>
-                ("trailers", ComponentValType::Type(25)), // future<...>
-            ]).result(Some(ComponentValType::Type(26))); // tuple<response, future>
+            instance_type
+                .ty()
+                .function()
+                .params([
+                    ("headers", ComponentValType::Type(21)),  // own<fields>
+                    ("contents", ComponentValType::Type(18)), // option<stream<u8>>
+                    ("trailers", ComponentValType::Type(25)), // future<...>
+                ])
+                .result(Some(ComponentValType::Type(26))); // tuple<response, future>
 
             // Export [constructor]fields function (type 27)
             instance_type.export(
@@ -7790,10 +7854,11 @@ impl Codegen {
 
                             // Handle Result return if needed
                             let conv = &func_info.call_convention;
-                            if conv.result_return.is_some() {
-                                // Result return handling - for now just panic
-                                panic!("Resource method with Result return not yet implemented: {func_name}");
-                            }
+                            // Result return handling - for now just panic
+                            assert!(
+                                conv.result_return.is_none(),
+                                "Resource method with Result return not yet implemented: {func_name}"
+                            );
                         } else {
                             panic!("Unknown resource method: {func_name}");
                         }
@@ -10718,7 +10783,7 @@ impl Codegen {
                 });
 
                 // Result has cases: Ok (0), Err (1)
-                let case_index = if case_name == "Ok" { 0 } else { 1 };
+                let case_index = usize::from(case_name != "Ok");
                 let case_info = &variant_info.cases[case_index];
                 let case_type_idx = case_info.type_idx;
                 drop(variant_types);
@@ -10800,7 +10865,9 @@ impl Codegen {
                     .enumerate()
                     .find(|(_, info)| info.name == *case_name)
                     .map(|(i, info)| (i, info.clone()))
-                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {mangled_name}"));
+                    .unwrap_or_else(|| {
+                        panic!("Unknown case {case_name} for variant {mangled_name}")
+                    });
                 let case_type_idx = case_info.type_idx;
                 let base_type_idx = variant_info.base_type_idx;
                 let is_unit_variant = case_info.payload_type.is_none();
@@ -10921,7 +10988,7 @@ impl Codegen {
 
                     let variant_types = self.variant_types.borrow();
                     let variant_info = variant_types.get(&mangled_name).unwrap();
-                    let case_index = if case_name == "Ok" { 0 } else { 1 };
+                    let case_index = usize::from(case_name != "Ok");
                     let case_info = variant_info.cases[case_index].clone();
                     let case_type_idx = case_info.type_idx;
                     drop(variant_types);
