@@ -275,7 +275,9 @@ pub fn analyze_project(project: &mut Project) {
 
     // Effect usage requires TaskReturn for async entry point
     // But waitable-set builtins are only needed when effect_wait is actually called
-    if !used_wasi_functions.is_empty() || uses_stream_builtins {
+    // Service world always needs TaskReturn since the handler is an async export
+    let is_async_world = project.target_world == "Service";
+    if !used_wasi_functions.is_empty() || uses_stream_builtins || is_async_world {
         // TaskReturn is always needed for async exports
         used_builtins.insert(CanonBuiltin::TaskReturn);
 

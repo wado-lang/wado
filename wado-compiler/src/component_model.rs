@@ -166,7 +166,6 @@ impl WasiRegistry {
         // fully supported for Component Model lowering. We register the module
         // to get the world definitions, but skip function registration.
         let wasi_http = parse_module(stdlib::WASI_HTTP);
-        // Only register world definitions, not effects/functions with unsupported types
         registry.register_world_definitions(&wasi_http, &mut world_registry);
 
         // Note: wasi:filesystem uses `flags` syntax which isn't supported yet

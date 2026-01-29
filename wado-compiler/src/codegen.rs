@@ -6398,7 +6398,7 @@ impl Codegen {
                         // Build mangled name for generic variant: Result<i32,String>
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| self.canonical_element_type_name(*t, type_table))
+                            .map(|t| self.mangle_type_for_struct_name(*t, type_table))
                             .collect();
                         format!("{}<{}>", name, type_arg_names.join(","))
                     }
@@ -7271,6 +7271,37 @@ impl Codegen {
                             panic!(
                                 "unknown method {method_name} on generic struct {name}: tried [{full_method_name}], [{mangled_method_name}], [{generic_full_method_name}], [{generic_method_name}]"
                             );
+                        }
+                    }
+
+                    // WASI Resource method calls (e.g., Fields::method_fields_set)
+                    ResolvedType::Resource { name, .. } => {
+                        // Build the method name for wasi_registry lookup: ResourceName::method_name
+                        let func_name = format!("{name}::{method_name}");
+
+                        if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
+                            let local_name = func_info.local_alias_name();
+
+                            // Generate receiver (resource handle is i32)
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+
+                            // Generate arguments
+                            for arg in args {
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                            }
+
+                            // Call the WASI function
+                            let func_idx = builder.func_idx(&local_name);
+                            func.instruction(&Instruction::Call(func_idx));
+
+                            // Handle Result return if needed
+                            let conv = &func_info.call_convention;
+                            if conv.result_return.is_some() {
+                                // Result return handling - for now just panic
+                                panic!("Resource method with Result return not yet implemented: {func_name}");
+                            }
+                        } else {
+                            panic!("Unknown resource method: {func_name}");
                         }
                     }
 
@@ -10061,9 +10092,40 @@ impl Codegen {
                 true
             }
 
-            // Custom variant patterns
+            // Result<T, E> with Ok pattern - check if discriminant is 0
             (
-                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
+                ResolvedType::Result { ok, err },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    ..
+                },
+            ) => {
+                // Build mangled name for Result<ok, err>
+                let ok_name = self.mangle_type_for_struct_name(*ok, _type_table);
+                let err_name = self.mangle_type_for_struct_name(*err, _type_table);
+                let mangled_name = format!("Result<{ok_name},{err_name}>");
+
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
+                    panic!("Result type not registered: {mangled_name}");
+                });
+
+                // Result has cases: Ok (0), Err (1)
+                let case_index = if case_name == "Ok" { 0 } else { 1 };
+                let case_info = &variant_info.cases[case_index];
+                let case_type_idx = case_info.type_idx;
+                drop(variant_types);
+
+                // Use ref.test to check if the value is of the expected case type
+                func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                    case_type_idx,
+                )));
+                true
+            }
+
+            // Non-generic variant patterns
+            (
+                ResolvedType::Variant { name, .. },
                 TirPattern::Variant {
                     variant_name: case_name,
                     ..
@@ -10081,6 +10143,57 @@ impl Codegen {
                     .find(|(_, info)| info.name == *case_name)
                     .map(|(i, info)| (i, info.clone()))
                     .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
+                let case_type_idx = case_info.type_idx;
+                let base_type_idx = variant_info.base_type_idx;
+                let is_unit_variant = case_info.payload_type.is_none();
+                drop(variant_types);
+
+                if is_unit_variant {
+                    // Read discriminator and compare with case index
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    func.instruction(&Instruction::I32Const(case_index as i32));
+                    func.instruction(&Instruction::I32Eq);
+                } else {
+                    // Use ref.test to check if the value is of the expected case type
+                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                }
+                true
+            }
+
+            // Generic instance variant patterns (Result<T,E>, Maybe<T>, etc.)
+            (
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    ..
+                },
+            ) => {
+                // Build mangled name including type arguments
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_for_struct_name(*t, _type_table))
+                    .collect();
+                let mangled_name = format!("{}<{}>", name, type_arg_names.join(","));
+
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
+                    panic!("Variant type not registered: {mangled_name}");
+                });
+
+                let (case_index, case_info) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, info)| info.name == *case_name)
+                    .map(|(i, info)| (i, info.clone()))
+                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {mangled_name}"));
                 let case_type_idx = case_info.type_idx;
                 let base_type_idx = variant_info.base_type_idx;
                 let is_unit_variant = case_info.payload_type.is_none();
@@ -10183,9 +10296,53 @@ impl Codegen {
             (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
                 if variant_name == "None" => {}
 
-            // Custom variant patterns
+            // Result<T, E> with Ok(x) or Err(e) pattern - extract inner value
             (
-                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
+                ResolvedType::Result { ok, err },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    bindings,
+                    payload_type,
+                    ..
+                },
+            ) => {
+                if let Some(binding) = bindings.first() {
+                    // Build mangled name for Result<ok, err>
+                    let ok_name = self.mangle_type_for_struct_name(ok, type_table);
+                    let err_name = self.mangle_type_for_struct_name(err, type_table);
+                    let mangled_name = format!("Result<{ok_name},{err_name}>");
+
+                    let variant_types = self.variant_types.borrow();
+                    let variant_info = variant_types.get(&mangled_name).unwrap();
+                    let case_index = if case_name == "Ok" { 0 } else { 1 };
+                    let case_info = variant_info.cases[case_index].clone();
+                    let case_type_idx = case_info.type_idx;
+                    drop(variant_types);
+
+                    // Get payload (field 1)
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: case_type_idx,
+                        field_index: 1,
+                    });
+
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
+            }
+
+            // Non-generic variant patterns
+            (
+                ResolvedType::Variant { name, .. },
                 TirPattern::Variant {
                     variant_name: case_name,
                     bindings,
@@ -10196,6 +10353,58 @@ impl Codegen {
                 if let Some(binding) = bindings.first() {
                     let variant_types = self.variant_types.borrow();
                     let variant_info = variant_types.get(&name).unwrap();
+                    let case_info = variant_info
+                        .cases
+                        .iter()
+                        .find(|info| info.name == *case_name)
+                        .unwrap()
+                        .clone();
+                    let case_type_idx = case_info.type_idx;
+                    drop(variant_types);
+
+                    // Get payload (field 1)
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: case_type_idx,
+                        field_index: 1,
+                    });
+
+                    self.generate_let_pattern_binding(
+                        func,
+                        binding,
+                        *payload_type,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
+            }
+
+            // Generic instance variant patterns (Result<T,E>, Maybe<T>, etc.)
+            (
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                },
+                TirPattern::Variant {
+                    variant_name: case_name,
+                    bindings,
+                    payload_type,
+                    ..
+                },
+            ) => {
+                if let Some(binding) = bindings.first() {
+                    // Build mangled name including type arguments
+                    let type_arg_names: Vec<String> = type_args
+                        .iter()
+                        .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                        .collect();
+                    let mangled_name = format!("{}<{}>", name, type_arg_names.join(","));
+
+                    let variant_types = self.variant_types.borrow();
+                    let variant_info = variant_types.get(&mangled_name).unwrap();
                     let case_info = variant_info
                         .cases
                         .iter()

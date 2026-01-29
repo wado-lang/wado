@@ -209,6 +209,38 @@ pub async fn compile_with_host<H: CompilerHost>(
     compile_with_options(source, host, filename, options).await
 }
 
+/// Normalize a world specifier to internal world name.
+///
+/// Converts WIT-style world specifiers to internal names:
+/// - `wasi:http/service` → `Service`
+/// - `wasi:cli/command` → `Command`
+/// - `Service` → `Service` (already normalized)
+fn normalize_world_name(world: &str) -> String {
+    // If it contains a slash, it's a WIT-style specifier
+    if let Some(pos) = world.rfind('/') {
+        // Extract the part after the last slash (e.g., "service" from "wasi:http/service")
+        let name = &world[pos + 1..];
+        // Convert to PascalCase
+        to_pascal_case(name)
+    } else {
+        // Already a world name (e.g., "Service")
+        world.to_string()
+    }
+}
+
+/// Convert a string to PascalCase.
+fn to_pascal_case(s: &str) -> String {
+    s.split('-')
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
 /// Compile Wado source code with full options.
 ///
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
@@ -352,8 +384,9 @@ pub async fn compile_with_options<H: CompilerHost>(
     let mut project = monomorphize_project(project);
 
     // Apply target world from options
+    // Convert WIT-style world specifier (e.g., "wasi:http/service") to internal name (e.g., "Service")
     if let Some(world) = options.target_world {
-        project.target_world = world;
+        project.target_world = normalize_world_name(&world);
     }
 
     // === Phase 9: Lower (Project -> Project) ===

@@ -17,39 +17,15 @@
 use {
     Request,
     Response,
-    Headers,
-    Fields,
     ErrorCode,
-    Method,
-    FieldValue,
-    FieldName,
-    Trailers,
 } from "wasi:http";
 
 // HTTP handler for the wasi:http/service world
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    // Create response headers (empty for now)
-    let headers_entries: Array<[FieldName, FieldValue]> = [];
-    let headers_result = Fields::static_fields_from_list(headers_entries);
-
-    let headers: Fields = match headers_result {
-        Ok(h) => h,
-        Err(_) => {
-            return Result::<Response, ErrorCode>::Err(ErrorCode::InternalError(null));
-        },
-    };
-
-    // Set Content-Type header: "text/plain"
-    let content_type_value: FieldValue = [
-        116 as u8, 101 as u8, 120 as u8, 116 as u8, 47 as u8,  // "text/"
-        112 as u8, 108 as u8, 97 as u8, 105 as u8, 110 as u8,  // "plain"
-    ];
-    let content_type_values: Array<FieldValue> = [content_type_value];
-    let _ = headers.method_fields_set("content-type", content_type_values);
-
-    // Create the response body content (placeholder - needs Stream support)
-    // For now, return error indicating incomplete implementation
+// Simplified version - just returns an error for now
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Return error indicating incomplete implementation
+    // TODO: Implement proper response with Headers, Body (Stream), Trailers (Future)
     return Result::<Response, ErrorCode>::Err(
-        ErrorCode::InternalError(Option::<String>::Some("Stream/Future not yet implemented"))
+        ErrorCode::InternalError(Option::<String>::Some("HTTP server not yet implemented"))
     );
 }
