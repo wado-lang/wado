@@ -137,13 +137,17 @@ impl CommentMap {
 
     /// Count blank lines between two line numbers.
     /// Returns the number of consecutive empty lines between end of `prev_line` and start of `next_line`.
-    /// Rule: 0 → 0, 1+ → 1 (caps at 1 blank line maximum)
+    /// Rule: 0 → 0, 1 → 1, 2+ → 2
     pub fn blank_lines_between(&self, prev_line: usize, next_line: usize) -> usize {
         if next_line <= prev_line + 1 {
             return 0;
         }
-        // Cap at 1 blank line maximum
-        1
+        let blank_count = next_line - prev_line - 1;
+        match blank_count {
+            0 => 0,
+            1 => 1,
+            _ => 2,
+        }
     }
 }
 
