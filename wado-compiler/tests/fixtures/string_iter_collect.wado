@@ -1,0 +1,42 @@
+// Test String iterators with collect - verifies Iterator trait integration
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // Test bytes().collect() - collects UTF-8 bytes into Array<u8>
+    let s = "Hi!";
+    let bytes: Array<u8> = s.bytes().collect();
+    assert bytes.len() == 3;
+    assert bytes[0] == 'H' as u8;
+    assert bytes[1] == 'i' as u8;
+    assert bytes[2] == '!' as u8;
+
+    // Test chars().collect() - collects chars into Array<char>
+    let chars: Array<char> = s.chars().collect();
+    assert chars.len() == 3;
+    assert chars[0] == 'H';
+    assert chars[1] == 'i';
+    assert chars[2] == '!';
+
+    // Test with UTF-8 multi-byte characters
+    let utf8 = "日😀";
+    let utf8_chars: Array<char> = utf8.chars().collect();
+    assert utf8_chars.len() == 2;
+    assert utf8_chars[0] as i32 == 0x65E5;  // 日
+    assert utf8_chars[1] as i32 == 0x1F600; // 😀
+
+    // Test bytes for multi-byte string
+    let utf8_bytes: Array<u8> = utf8.bytes().collect();
+    // 日 = 3 bytes, 😀 = 4 bytes = 7 total
+    assert utf8_bytes.len() == 7;
+
+    // Test empty string collect
+    let empty_bytes: Array<u8> = "".bytes().collect();
+    assert empty_bytes.len() == 0;
+    let empty_chars: Array<char> = "".chars().collect();
+    assert empty_chars.len() == 0;
+
+    println("collect tests passed");
+}
+
+__DATA__
+{"stdout": "collect tests passed\n"}

@@ -11274,28 +11274,6 @@ impl Codegen {
                     .expect("u8 array type should be registered");
                 func.instruction(&Instruction::ArraySet(u8_array_idx));
             }
-            "builtin::string_new" => {
-                // String struct has two fields: repr (array) and used (i32)
-                // Creates a String with the given length as both capacity and used size
-                if let Some(len_arg) = args.first() {
-                    // Generate length for ArrayNewDefault
-                    self.generate_expr(func, len_arg, type_table, ctx, builder);
-                    let u8_array_idx = *self
-                        .array_types
-                        .get(&TypeTable::U8)
-                        .expect("u8 array type should be registered");
-                    func.instruction(&Instruction::ArrayNewDefault(u8_array_idx));
-
-                    // Generate length again for the `used` field
-                    // (len_arg is typically a simple variable or literal, so this is safe)
-                    self.generate_expr(func, len_arg, type_table, ctx, builder);
-
-                    let string_struct_info = self
-                        .lookup_struct_type("String", &string_module_source())
-                        .expect("String struct not found");
-                    func.instruction(&Instruction::StructNew(string_struct_info.type_idx));
-                }
-            }
             "builtin::memory_store8" => {
                 for arg in args {
                     self.generate_expr(func, arg, type_table, ctx, builder);

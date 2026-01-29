@@ -4808,7 +4808,6 @@ impl<'a> Resolver<'a> {
             "array_len" => TypeTable::I32,
             "array_get_u8" => TypeTable::I32, // Returns u8 as i32
             "array_set_u8" => TypeTable::UNIT,
-            "string_new" => self.get_string_struct_type(),
 
             // Memory operations
             "realloc" => TypeTable::I32, // Returns pointer (i32)

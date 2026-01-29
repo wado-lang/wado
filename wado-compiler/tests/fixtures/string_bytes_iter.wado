@@ -1,0 +1,53 @@
+// Test StrUtf8ByteIter - iterates over UTF-8 bytes of a String
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // Test ASCII string
+    let s = "Hello";
+    let mut iter = s.bytes();
+
+    // Collect bytes manually
+    let mut count = 0;
+    loop {
+        if let Some(b) = iter.next() {
+            if count == 0 { assert b == 'H' as u8; }
+            if count == 1 { assert b == 'e' as u8; }
+            if count == 2 { assert b == 'l' as u8; }
+            if count == 3 { assert b == 'l' as u8; }
+            if count == 4 { assert b == 'o' as u8; }
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    assert count == 5;
+
+    // Test empty string
+    let empty = "";
+    let mut empty_iter = empty.bytes();
+    if let Some(_) = empty_iter.next() {
+        assert false, "empty string should yield no bytes";
+    }
+
+    // Test UTF-8 multi-byte sequence
+    // "日" is 3 bytes: E6 97 A5
+    let japanese = "日";
+    let mut jp_iter = japanese.bytes();
+    let mut jp_bytes: Array<u8> = [];
+    loop {
+        if let Some(b) = jp_iter.next() {
+            jp_bytes.append(b);
+        } else {
+            break;
+        }
+    }
+    assert jp_bytes.len() == 3;
+    assert jp_bytes[0] == 0xE6 as u8;
+    assert jp_bytes[1] == 0x97 as u8;
+    assert jp_bytes[2] == 0xA5 as u8;
+
+    println("bytes iter tests passed");
+}
+
+__DATA__
+{"stdout": "bytes iter tests passed\n"}

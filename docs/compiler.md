@@ -378,7 +378,6 @@ fn i32_and(a: i32, b: i32) -> i32;
 | `array_len`      | `array.len`              | Array    |
 | `array_get_u8`   | `array.get_u $type`      | Array    |
 | `array_set_u8`   | `array.set $type`        | Array    |
-| `string_new`     | `array.new_default`      | String   |
 | `memory_store8`  | `i32.store8`             | Memory   |
 | `memory_load8_u` | `i32.load8_u`            | Memory   |
 | `effect_wait`    | (effect synchronization) | Effects  |
