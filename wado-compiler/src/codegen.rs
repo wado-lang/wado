@@ -2421,7 +2421,7 @@ impl Codegen {
     /// This adds a component instance containing the handle function
     /// and exports it as `wasi:http/handler@0.3.0-rc-2026-01-06`.
     ///
-    /// We do this as post-processing because ComponentBuilder doesn't expose
+    /// We do this as post-processing because `ComponentBuilder` doesn't expose
     /// a public method to create component instances from exports.
     fn append_http_handler_export(component_bytes: &mut Vec<u8>, ctx: &ComponentModelContext) {
         use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
@@ -2452,7 +2452,12 @@ impl Codegen {
         let mut exports = ComponentExportSection::new();
         let http_version = "0.3.0-rc-2026-01-06";
         let handler_path = format!("wasi:http/handler@{http_version}");
-        exports.export(&handler_path, ComponentExportKind::Instance, instance_idx, None);
+        exports.export(
+            &handler_path,
+            ComponentExportKind::Instance,
+            instance_idx,
+            None,
+        );
 
         // Append the instance and export sections to the component
         instances.append_to_component(component_bytes);

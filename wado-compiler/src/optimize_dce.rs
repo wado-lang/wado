@@ -47,7 +47,7 @@ pub fn analyze_project(project: &mut Project) {
     // Determine entry functions based on target world
     // Each world has specific export functions that are entry points
     let entry_func_names: Vec<&str> = match project.target_world.as_str() {
-        "Service" => vec!["handle"], // wasi:http/service
+        "Service" => vec!["handle"],  // wasi:http/service
         "Command" | _ => vec!["run"], // wasi:cli/command (default)
     };
 
