@@ -3,7 +3,7 @@
 // i64_mul_wide_u, i64_mul_wide_s), the codegen should skip tuple struct
 // allocation and directly bind stack values to locals.
 
-use {println, Stdout} from "core:cli";
+use { println, Stdout } from "core:cli";
 
 fn run() with Stdout {
     // Test i64_add128: (100, 200) + (50, 25) = (150, 225)
@@ -29,7 +29,7 @@ fn run() with Stdout {
 
     // Test with wildcard pattern (elide lo value)
     // 2^63 * 2 = 2^64, which is (0, 1) in [lo, hi] representation
-    let [_, hi6] = builtin::i64_mul_wide_u((1 as i64) << 63, 2 as i64);
+    let [_, hi6] = builtin::i64_mul_wide_u(1 as i64 << 63, 2 as i64);
     println(`mul_wide_u hi only: {hi6}`);
 }
 
