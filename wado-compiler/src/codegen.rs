@@ -261,6 +261,10 @@ struct FunctionContext {
     /// When true, builtin calls returning tuples should NOT wrap in struct.new
     /// Used for tuple elision optimization when destructuring multi-value returns
     skip_tuple_wrap: bool,
+    /// When true, this function is an async export and returns should use task-return
+    is_async_export: bool,
+    /// Target world for async export handling
+    target_world: String,
 }
 
 impl FunctionContext {
@@ -288,6 +292,8 @@ impl FunctionContext {
             let_pattern_counter: 0,
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
+            is_async_export: false,
+            target_world: String::new(),
         }
     }
 
@@ -315,6 +321,8 @@ impl FunctionContext {
             local_closure_ids: HashMap::new(),
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
+            is_async_export: false,
+            target_world: String::new(),
         }
     }
 
@@ -1099,6 +1107,12 @@ impl Codegen {
             } else {
                 continue; // Unknown builtin, skip
             }
+            // For Service world, task-return needs different signature
+            // result<own<response>, error-code> flattens to (i32, i32)
+            if canonical_name == "task-return" && project.target_world == "Service" {
+                builder.define_func_type(canonical_name, &[ValType::I32, ValType::I32], &[]);
+                continue;
+            }
             let params = self.builtin_func_to_core_params(func);
             let results = self.builtin_func_to_core_results(func);
             builder.define_func_type(canonical_name, &params, &results);
@@ -1849,7 +1863,7 @@ impl Codegen {
             }
             // Test functions need task.return wrapper like run
             if tir_func.name.starts_with("__test_") {
-                let wasm_func = self.generate_run_function(&tir_func, type_table, &builder);
+                let wasm_func = self.generate_run_function(&tir_func, type_table, &builder, &project.target_world);
                 code.function(&wasm_func);
             } else {
                 let (wasm_func, hints) =
@@ -1916,12 +1930,19 @@ impl Codegen {
             let export_wasm_func = if let Some(tir_rc) = export_tir_rc {
                 // Generate function body using the TIR function body generation
                 let tir_func = tir_rc.borrow();
-                self.generate_run_function(&tir_func, type_table, &builder)
+                self.generate_run_function(&tir_func, type_table, &builder, &project.target_world)
             } else {
                 // No matching function - create empty entry point
                 let mut func = Function::new(vec![]);
                 let task_return_idx = builder.func_idx("task-return");
-                func.instruction(&Instruction::I32Const(0));
+                if project.target_world == "Service" {
+                    // Service world: result<own<response>, error-code> needs (i32, i32)
+                    func.instruction(&Instruction::I32Const(1)); // Err discriminant
+                    func.instruction(&Instruction::I32Const(38)); // internal-error
+                } else {
+                    // Command world: result<_, _> needs just (i32)
+                    func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                }
                 func.instruction(&Instruction::Call(task_return_idx));
                 func.instruction(&Instruction::End);
                 func
@@ -2135,7 +2156,17 @@ impl Codegen {
         // Async intrinsics - DCE: only generate if used
         if project.used_builtins.contains(&CanonBuiltin::TaskReturn) {
             ctx.register_core_func("task-return");
-            builder.task_return(Some(ComponentValType::Type(result_unit_type)), []);
+            // For Service world, task-return should use result<response, error-code>
+            let task_return_type = if project.target_world == "Service" {
+                ctx.type_idx("http-handler-result")
+            } else {
+                result_unit_type
+            };
+            // task.return only accepts memory option, not realloc
+            builder.task_return(
+                Some(ComponentValType::Type(task_return_type)),
+                [CanonicalOption::Memory(ctx.memory_idx())],
+            );
         }
 
         if project
@@ -2314,10 +2345,12 @@ impl Codegen {
                     // Use the imported http-request type for Service world handle function
                     // The param is own<request> which is lowered to i32 by canon lift
                     let request_type_idx = ctx.type_idx("http-request");
+                    // Use result<response, error-code> for the return type
+                    let handler_result_type_idx = ctx.type_idx("http-handler-result");
                     enc.function()
                         .async_(export.is_async)
                         .params([("request", ComponentValType::Type(request_type_idx))])
-                        .result(Some(ComponentValType::Type(result_unit_type)));
+                        .result(Some(ComponentValType::Type(handler_result_type_idx)));
                 } else {
                     // Default: no params, result<_, _>
                     enc.function()
@@ -3037,9 +3070,10 @@ impl Codegen {
                 ("configuration-error", None, None),
                 ("internal-error", None, None),
             ]);
+            // The variant type was just defined, it's at index 2 (after request=0, response=1)
             instance_type.export(
                 "error-code",
-                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(2)),
             );
 
             enc.instance(&instance_type);
@@ -3084,6 +3118,26 @@ impl Codegen {
         {
             let (_, enc) = builder.ty(Some("http-request"));
             enc.defined_type().own(request_resource_idx);
+        }
+
+        // Define own<response> type for use in result
+        let response_resource_idx = ctx.type_idx("http-response-resource");
+        ctx.register_type("http-response");
+        {
+            let (_, enc) = builder.ty(Some("http-response"));
+            enc.defined_type().own(response_resource_idx);
+        }
+
+        // Define result<own<response>, error-code> type for the handler return type
+        let response_type_idx = ctx.type_idx("http-response");
+        let error_code_type_idx = ctx.type_idx("http-error-code");
+        ctx.register_type("http-handler-result");
+        {
+            let (_, enc) = builder.ty(Some("http-handler-result"));
+            enc.defined_type().result(
+                Some(ComponentValType::Type(response_type_idx)),
+                Some(ComponentValType::Type(error_code_type_idx)),
+            );
         }
     }
 
@@ -8943,10 +8997,34 @@ impl Codegen {
             }
 
             TirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    self.generate_expr(func, expr, type_table, ctx, builder);
+                if ctx.is_async_export {
+                    // For async exports, call task-return with the result value
+                    // For now, we drop the return value and pass a simple error discriminant
+                    // TODO: Implement proper lowering from GC struct to canonical ABI
+                    if let Some(expr) = value {
+                        // Generate the expression but drop it for now
+                        self.generate_expr(func, expr, type_table, ctx, builder);
+                        func.instruction(&Instruction::Drop);
+                    }
+                    // Call task-return with appropriate arguments based on world
+                    if ctx.target_world == "Service" {
+                        // Service world: result<own<response>, error-code> needs (i32, i32)
+                        func.instruction(&Instruction::I32Const(1)); // Err discriminant
+                        func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
+                    } else {
+                        // Command world: result<_, _> needs just (i32)
+                        func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                    }
+                    let task_return_idx = builder.func_idx("task-return");
+                    func.instruction(&Instruction::Call(task_return_idx));
+                    // No wasm return instruction - async exports have no return type
+                } else {
+                    // Normal function return
+                    if let Some(expr) = value {
+                        self.generate_expr(func, expr, type_table, ctx, builder);
+                    }
+                    func.instruction(&Instruction::Return);
                 }
-                func.instruction(&Instruction::Return);
             }
 
             TirStmtKind::If {
@@ -10957,9 +11035,14 @@ impl Codegen {
         tir_func: &TirFunction,
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
+        target_world: &str,
     ) -> Function {
         // Create function context
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
+
+        // Mark this as an async export - returns should use task-return
+        func_ctx.is_async_export = true;
+        func_ctx.target_world = target_world.to_string();
 
         // Copy address-taken locals from TIR
         func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
@@ -11084,6 +11167,9 @@ impl Codegen {
             self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
         }
 
+        // Note: For async exports, we don't need scratch locals anymore.
+        // The simplified approach passes the discriminant directly to task-return.
+
         // Reset for-of counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_for_of_counter();
         // Reset if-pattern counters so code generation uses the same indices as pre-allocation
@@ -11098,10 +11184,20 @@ impl Codegen {
             self.generate_block(&mut wasm_func, body, type_table, &mut func_ctx, builder);
         }
 
-        // Call task.return to complete the async task (0 = ok)
-        let task_return_idx = builder.func_idx("task-return");
-        wasm_func.instruction(&Instruction::I32Const(0));
-        wasm_func.instruction(&Instruction::Call(task_return_idx));
+        // For async exports, ensure task-return is called even for fall-through paths
+        // (functions without explicit return statements)
+        if func_ctx.is_async_export {
+            // For Service world: result<own<response>, error-code> needs (i32, i32)
+            // For Command world: result<_, _> needs just (i32)
+            if func_ctx.target_world == "Service" {
+                wasm_func.instruction(&Instruction::I32Const(1)); // Err discriminant
+                wasm_func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
+            } else {
+                wasm_func.instruction(&Instruction::I32Const(0)); // Ok discriminant for result<_, _>
+            }
+            let task_return_idx = builder.func_idx("task-return");
+            wasm_func.instruction(&Instruction::Call(task_return_idx));
+        }
         wasm_func.instruction(&Instruction::End);
 
         wasm_func

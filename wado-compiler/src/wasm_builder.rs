@@ -308,6 +308,11 @@ impl CoreModuleBuilder {
             .unwrap_or_else(|| panic!("unknown type: {name}"))
     }
 
+    /// Try to get type index by name, returns None if not found
+    pub fn try_type_idx(&self, name: &str) -> Option<u32> {
+        self.type_names.get(name).copied()
+    }
+
     /// Get function index by name
     pub fn func_idx(&self, name: &str) -> u32 {
         *self

@@ -133,13 +133,17 @@ fn run_http_service(wasm: &[u8]) -> Result<()> {
     eprintln!("Starting HTTP server with wasmtime serve...");
     eprintln!("Test with: curl http://localhost:8080/");
 
-    // Run wasmtime serve
+    // Run wasmtime serve with P3 support
     let status = Command::new("wasmtime")
         .arg("serve")
         .arg("-W")
         .arg("all-proposals=y")
         .arg("-W")
         .arg("stack-switching=n")
+        .arg("-S")
+        .arg("p3=y")
+        .arg("-S")
+        .arg("http=y")
         .arg(temp_path)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
