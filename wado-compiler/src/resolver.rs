@@ -14,6 +14,7 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
+use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::name::{LocalMethodName, ModuleSource, strip_type_params};
 
@@ -478,6 +479,8 @@ pub struct Resolver<'a> {
     current_self_type: Option<TypeId>,
     /// WASI registry for looking up effect return types
     wasi_registry: WasiRegistry,
+    /// Builtin registry for looking up builtin function return types
+    builtin_registry: BuiltinRegistry,
     /// Global variables in the current module (name -> (type, `is_mutable`))
     current_module_globals: HashMap<String, (TypeId, bool)>,
 }
@@ -544,6 +547,7 @@ impl<'a> Resolver<'a> {
     /// Create a new resolver
     pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
+        let builtin_registry = BuiltinRegistry::build_from_stdlib();
         Self {
             type_table: Rc::new(RefCell::new(TypeTable::new())),
             symbols,
@@ -565,6 +569,7 @@ impl<'a> Resolver<'a> {
             current_associated_type_bindings: HashMap::new(),
             current_self_type: None,
             wasi_registry,
+            builtin_registry,
             current_module_globals: HashMap::new(),
         }
     }
@@ -972,6 +977,7 @@ impl<'a> Resolver<'a> {
             }
 
             let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
+            let builtin_registry = BuiltinRegistry::build_from_stdlib();
             let mut resolver = Resolver {
                 type_table: Rc::clone(&type_table), // Share the same TypeTable via Rc::clone
                 symbols,
@@ -993,6 +999,7 @@ impl<'a> Resolver<'a> {
                 current_associated_type_bindings: HashMap::new(),
                 current_self_type: None,
                 wasi_registry,
+                builtin_registry,
                 current_module_globals: HashMap::new(),
             };
 
@@ -4776,10 +4783,13 @@ impl<'a> Resolver<'a> {
     }
 
     /// Get the return type of a builtin function
+    ///
+    /// Most builtin functions are looked up from the `BuiltinRegistry` which parses
+    /// `lib/core/builtin.wado`. Generic builtins like `array_new<T>` and `array_get<T>`
+    /// have special handling because their return types involve type parameters.
     fn get_builtin_return_type(&mut self, name: &str) -> TypeId {
+        // Special cases for generic builtins that need type parameter handling
         match name {
-            // Generic array operations - return types with TypeParam for substitution
-            // These are called with type arguments: array_new::<T>() -> builtin::array<T>
             "array_new" => {
                 // Returns builtin::array<T> where T is the first type param
                 let type_param = self
@@ -4789,75 +4799,90 @@ impl<'a> Resolver<'a> {
                         index: 0,
                         name: "T".to_string(),
                     });
-                self.type_table
+                return self
+                    .type_table
                     .borrow_mut()
-                    .intern(ResolvedType::BuiltinArray(type_param))
+                    .intern(ResolvedType::BuiltinArray(type_param));
             }
             "array_get" => {
                 // Returns T where T is the first type param
-                self.type_table
+                return self
+                    .type_table
                     .borrow_mut()
                     .intern(ResolvedType::TypeParam {
                         index: 0,
                         name: "T".to_string(),
-                    })
+                    });
             }
-            "array_set" | "array_copy" => TypeTable::UNIT,
-
-            // Non-generic array operations
-            "array_len" => TypeTable::I32,
-            "array_get_u8" => TypeTable::I32, // Returns u8 as i32
-            "array_set_u8" => TypeTable::UNIT,
-
-            // Memory operations
-            "realloc" => TypeTable::I32, // Returns pointer (i32)
-            "memory_load8_u" => TypeTable::I32,
-            "memory_load32" => TypeTable::I32,
-            "memory_store8" => TypeTable::UNIT,
-
-            // Float-to-string (returns length)
-            "f64_to_buffer" | "f32_to_buffer" => TypeTable::I32,
-
-            // Bitwise operations
-            "i32_and" | "i32_or" | "i32_xor" | "i32_shl" | "i32_shr_u" | "i32_shr_s" => {
-                TypeTable::I32
+            "array_fill" => {
+                // Returns builtin::array<T> where T is the first type param
+                let type_param = self
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::TypeParam {
+                        index: 0,
+                        name: "T".to_string(),
+                    });
+                return self
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::BuiltinArray(type_param));
             }
-            "i32_eqz" => TypeTable::BOOL,
+            _ => {}
+        }
 
-            // Control flow / hints
-            "likely" | "unlikely" => TypeTable::BOOL,
-            "unreachable" | "effect_wait" => TypeTable::NEVER,
+        // Look up in the builtin registry (populated from builtin.wado)
+        // Clone the return type to avoid borrow checker issues
+        let builtin_info = self
+            .builtin_registry
+            .get(name)
+            .map(|info| (info.diverges, info.return_type.clone()));
 
-            // Stream builtins for IO
-            "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {
-                TypeTable::UNIT
+        if let Some((diverges, return_type)) = builtin_info {
+            if diverges {
+                return TypeTable::NEVER;
             }
+            if let Some(ref ty) = return_type {
+                return self.resolve_builtin_type(ty);
+            }
+            return TypeTable::UNIT;
+        }
 
-            // WASI stream operations
-            "stream_new" => TypeTable::I64, // Returns i64 (two i32s packed)
-            "stream_write" => TypeTable::I32, // Returns result code
-            "stream_drop_writable" | "stream_drop_readable" => TypeTable::UNIT,
+        // Unknown builtin - default to UNIT
+        TypeTable::UNIT
+    }
 
-            // Wide arithmetic operations - return [i64, i64] tuple
-            "i64_add128" | "i64_sub128" | "i64_mul_wide_u" | "i64_mul_wide_s" => {
-                // Returns a tuple of two i64 values: [i64, i64]
+    /// Resolve a type from builtin.wado to a `TypeId`
+    ///
+    /// This is a simplified version of `resolve_type` that handles the subset
+    /// of types used in builtin function signatures.
+    fn resolve_builtin_type(&mut self, ty: &Type) -> TypeId {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "i8" => TypeTable::I8,
+                "i16" => TypeTable::I16,
+                "i32" => TypeTable::I32,
+                "i64" => TypeTable::I64,
+                "u8" => TypeTable::U8,
+                "u16" => TypeTable::U16,
+                "u32" => TypeTable::U32,
+                "u64" => TypeTable::U64,
+                "f32" => TypeTable::F32,
+                "f64" => TypeTable::F64,
+                "bool" => TypeTable::BOOL,
+                "!" => TypeTable::NEVER,
+                _ => TypeTable::UNIT, // Unknown type
+            },
+            Type::Tuple(elements) => {
+                let element_types: Vec<TypeId> = elements
+                    .iter()
+                    .map(|t| self.resolve_builtin_type(t))
+                    .collect();
                 self.type_table
                     .borrow_mut()
-                    .intern(ResolvedType::Tuple(vec![TypeTable::I64, TypeTable::I64]))
+                    .intern(ResolvedType::Tuple(element_types))
             }
-
-            // Bit counting operations
-            "i32_clz" => TypeTable::I32,
-            "i64_clz" => TypeTable::I64,
-
-            // Float/integer reinterpret operations
-            "i64_reinterpret_f64" => TypeTable::I64,
-            "f64_reinterpret_i64" => TypeTable::F64,
-            "i32_reinterpret_f32" => TypeTable::I32,
-            "f32_reinterpret_i32" => TypeTable::F32,
-
-            // Unknown builtin - default to UNIT
-            _ => TypeTable::UNIT,
+            _ => TypeTable::UNIT, // Other types default to UNIT
         }
     }
 

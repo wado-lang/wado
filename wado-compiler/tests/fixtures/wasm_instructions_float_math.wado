@@ -1,0 +1,91 @@
+// Test Wasm float math instructions exposed via builtin module
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    // Test f64_abs
+    let abs_neg = builtin::f64_abs(-3.5);
+    let abs_pos = builtin::f64_abs(3.5);
+    println(`f64_abs(-3.5) = {abs_neg}`);
+    println(`f64_abs(3.5) = {abs_pos}`);
+
+    // Test f32_abs
+    let abs_neg32 = builtin::f32_abs(-2.5 as f32);
+    println(`f32_abs(-2.5) = {abs_neg32}`);
+
+    // Test f64_ceil
+    let ceil1 = builtin::f64_ceil(2.3);
+    let ceil2 = builtin::f64_ceil(-2.3);
+    let ceil3 = builtin::f64_ceil(2.0);
+    println(`f64_ceil(2.3) = {ceil1}`);
+    println(`f64_ceil(-2.3) = {ceil2}`);
+    println(`f64_ceil(2.0) = {ceil3}`);
+
+    // Test f64_floor
+    let floor1 = builtin::f64_floor(2.7);
+    let floor2 = builtin::f64_floor(-2.7);
+    let floor3 = builtin::f64_floor(2.0);
+    println(`f64_floor(2.7) = {floor1}`);
+    println(`f64_floor(-2.7) = {floor2}`);
+    println(`f64_floor(2.0) = {floor3}`);
+
+    // Test f64_trunc (truncate toward zero)
+    let trunc1 = builtin::f64_trunc(2.9);
+    let trunc2 = builtin::f64_trunc(-2.9);
+    println(`f64_trunc(2.9) = {trunc1}`);
+    println(`f64_trunc(-2.9) = {trunc2}`);
+
+    // Test f64_nearest (round to nearest even)
+    let near1 = builtin::f64_nearest(2.5);
+    let near2 = builtin::f64_nearest(3.5);
+    let near3 = builtin::f64_nearest(2.3);
+    let near4 = builtin::f64_nearest(2.7);
+    println(`f64_nearest(2.5) = {near1}`);
+    println(`f64_nearest(3.5) = {near2}`);
+    println(`f64_nearest(2.3) = {near3}`);
+    println(`f64_nearest(2.7) = {near4}`);
+
+    // Test f64_sqrt
+    let sqrt1 = builtin::f64_sqrt(4.0);
+    let sqrt2 = builtin::f64_sqrt(9.0);
+    let sqrt3 = builtin::f64_sqrt(2.0);
+    println(`f64_sqrt(4.0) = {sqrt1}`);
+    println(`f64_sqrt(9.0) = {sqrt2}`);
+    // sqrt(2) is approximately 1.4142135623730951
+    if sqrt3 > 1.414 && sqrt3 < 1.415 {
+        println("f64_sqrt(2.0) is correct");
+    }
+
+    // Test f64_min and f64_max
+    let min1 = builtin::f64_min(3.0, 5.0);
+    let min2 = builtin::f64_min(-1.0, 1.0);
+    let max1 = builtin::f64_max(3.0, 5.0);
+    let max2 = builtin::f64_max(-1.0, 1.0);
+    println(`f64_min(3.0, 5.0) = {min1}`);
+    println(`f64_min(-1.0, 1.0) = {min2}`);
+    println(`f64_max(3.0, 5.0) = {max1}`);
+    println(`f64_max(-1.0, 1.0) = {max2}`);
+
+    // Test f64_copysign
+    let copy1 = builtin::f64_copysign(3.0, -1.0);
+    let copy2 = builtin::f64_copysign(-3.0, 1.0);
+    let copy3 = builtin::f64_copysign(5.0, 5.0);
+    println(`f64_copysign(3.0, -1.0) = {copy1}`);
+    println(`f64_copysign(-3.0, 1.0) = {copy2}`);
+    println(`f64_copysign(5.0, 5.0) = {copy3}`);
+
+    // Test f32 versions
+    let f32_ceil = builtin::f32_ceil(2.3 as f32);
+    let f32_floor = builtin::f32_floor(2.7 as f32);
+    let f32_sqrt = builtin::f32_sqrt(4.0 as f32);
+    let f32_min = builtin::f32_min(3.0 as f32, 5.0 as f32);
+    let f32_max = builtin::f32_max(3.0 as f32, 5.0 as f32);
+    println(`f32_ceil(2.3) = {f32_ceil}`);
+    println(`f32_floor(2.7) = {f32_floor}`);
+    println(`f32_sqrt(4.0) = {f32_sqrt}`);
+    println(`f32_min(3.0, 5.0) = {f32_min}`);
+    println(`f32_max(3.0, 5.0) = {f32_max}`);
+}
+
+__DATA__
+{"stdout": "f64_abs(-3.5) = 3.5\nf64_abs(3.5) = 3.5\nf32_abs(-2.5) = 2.5\nf64_ceil(2.3) = 3.0\nf64_ceil(-2.3) = -2.0\nf64_ceil(2.0) = 2.0\nf64_floor(2.7) = 2.0\nf64_floor(-2.7) = -3.0\nf64_floor(2.0) = 2.0\nf64_trunc(2.9) = 2.0\nf64_trunc(-2.9) = -2.0\nf64_nearest(2.5) = 2.0\nf64_nearest(3.5) = 4.0\nf64_nearest(2.3) = 2.0\nf64_nearest(2.7) = 3.0\nf64_sqrt(4.0) = 2.0\nf64_sqrt(9.0) = 3.0\nf64_sqrt(2.0) is correct\nf64_min(3.0, 5.0) = 3.0\nf64_min(-1.0, 1.0) = -1.0\nf64_max(3.0, 5.0) = 5.0\nf64_max(-1.0, 1.0) = 1.0\nf64_copysign(3.0, -1.0) = -3.0\nf64_copysign(-3.0, 1.0) = 3.0\nf64_copysign(5.0, 5.0) = 5.0\nf32_ceil(2.3) = 3.0\nf32_floor(2.7) = 2.0\nf32_sqrt(4.0) = 2.0\nf32_min(3.0, 5.0) = 3.0\nf32_max(3.0, 5.0) = 5.0\n"}
