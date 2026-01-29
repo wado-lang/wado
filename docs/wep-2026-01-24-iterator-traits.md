@@ -883,13 +883,13 @@ fn run() with Stdout {
 ### TODO
 
 - [ ] **Default trait method implementations**: Once supported, move `collect()` and
-  `count()` from each iterator type to the `Iterator` trait as default methods.
-  Currently each iterator must implement these methods separately.
+      `count()` from each iterator type to the `Iterator` trait as default methods.
+      Currently each iterator must implement these methods separately.
 
 - [ ] **`for-of` with `&mut` references**: Support `for-of` on `&mut Iterator` to allow
-  cleaner iterator method implementations. Currently iterator methods like `collect()`
-  use manual loops because `for-of` copies the iterator (value semantics), preventing
-  the original from being exhausted.
+      cleaner iterator method implementations. Currently iterator methods like `collect()`
+      use manual loops because `for-of` copies the iterator (value semantics), preventing
+      the original from being exhausted.
 
 ## Related WEPs
 
