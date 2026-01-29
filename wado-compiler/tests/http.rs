@@ -180,6 +180,89 @@ struct HttpTestSpec {
     /// Expected body content (optional)
     #[serde(default)]
     body: Option<String>,
+
+    /// Whether this is a TODO test (not yet implemented feature).
+    /// TODO tests MUST fail. If a TODO test passes, the test fails.
+    #[serde(default)]
+    #[serde(rename = "TODO")]
+    todo: bool,
+}
+
+// ============================================================================
+// Test Runner Helper
+// ============================================================================
+
+/// Run an HTTP fixture test, handling TODO tests properly
+async fn run_http_fixture_test(fixture_path: &Path, fixture_name: &str) {
+    // Read source and spec
+    let source = std::fs::read_to_string(fixture_path)
+        .unwrap_or_else(|e| panic!("[{fixture_name}] failed to read: {e}"));
+    let data_section = common::extract_data_section(&source)
+        .unwrap_or_else(|| panic!("[{fixture_name}] missing __DATA__ section"));
+    let spec: HttpTestSpec = common::parse_data_section(data_section, fixture_name);
+
+    // Handle TODO tests - they must fail
+    if spec.todo {
+        eprintln!("[{fixture_name}] TODO test - expecting failure");
+
+        let test_result = run_http_test_inner(fixture_path, fixture_name, &spec).await;
+
+        match test_result {
+            Ok(()) => {
+                panic!(
+                    "[{fixture_name}] TODO test PASSED! This means the feature is now implemented.\n\
+                     Please remove 'TODO: true' from the __DATA__ section."
+                );
+            }
+            Err(msg) => {
+                eprintln!("[{fixture_name}] TODO test failed as expected (feature not yet implemented)");
+                eprintln!("[{fixture_name}] Error: {msg}");
+            }
+        }
+    } else {
+        // Normal test - run and expect success
+        run_http_test_inner(fixture_path, fixture_name, &spec)
+            .await
+            .unwrap_or_else(|e| panic!("{e}"));
+    }
+}
+
+/// Inner test logic that returns Result for TODO handling
+async fn run_http_test_inner(
+    fixture_path: &Path,
+    fixture_name: &str,
+    spec: &HttpTestSpec,
+) -> Result<(), String> {
+    // Compile
+    let wasm = compile_http_service(fixture_path)
+        .await
+        .map_err(|e| format!("[{fixture_name}] compilation failed: {e}"))?;
+
+    // Run HTTP request
+    let result = run_http_request_async(wasm)
+        .await
+        .map_err(|e| format!("[{fixture_name}] HTTP request failed: {e:?}"))?;
+
+    // Verify status
+    if result.status != spec.http_status {
+        return Err(format!(
+            "[{fixture_name}] HTTP status mismatch: expected {}, got {}",
+            spec.http_status, result.status
+        ));
+    }
+
+    // Verify body if specified
+    if let Some(expected_body) = &spec.body {
+        let actual_body = String::from_utf8_lossy(&result.body);
+        if actual_body != expected_body.as_str() {
+            return Err(format!(
+                "[{fixture_name}] body mismatch: expected '{}', got '{}'",
+                expected_body, actual_body
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 // ============================================================================
@@ -188,39 +271,27 @@ struct HttpTestSpec {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_http_200_response() {
-    let fixture_path = Path::new("tests/fixtures.http/http-200.wado");
-    let fixture_name = "http-200.wado";
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-200.wado"),
+        "http-200.wado",
+    )
+    .await;
+}
 
-    // Read source and spec
-    let source = std::fs::read_to_string(fixture_path)
-        .unwrap_or_else(|e| panic!("[{fixture_name}] failed to read: {e}"));
-    let data_section = common::extract_data_section(&source)
-        .unwrap_or_else(|| panic!("[{fixture_name}] missing __DATA__ section"));
-    let spec: HttpTestSpec = common::parse_data_section(data_section, fixture_name);
+#[tokio::test(flavor = "multi_thread")]
+async fn test_http_400_response() {
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-400.wado"),
+        "http-400.wado",
+    )
+    .await;
+}
 
-    // Compile
-    let wasm = compile_http_service(fixture_path)
-        .await
-        .unwrap_or_else(|e| panic!("[{fixture_name}] compilation failed: {e}"));
-
-    // Run HTTP request with timeout
-    let result = run_http_request_async(wasm)
-        .await
-        .unwrap_or_else(|e| panic!("[{fixture_name}] HTTP request failed: {e:?}"));
-
-    // Verify status
-    assert_eq!(
-        result.status, spec.http_status,
-        "[{fixture_name}] HTTP status mismatch: expected {}, got {}",
-        spec.http_status, result.status
-    );
-
-    // Verify body if specified
-    if let Some(expected_body) = &spec.body {
-        let actual_body = String::from_utf8_lossy(&result.body);
-        assert_eq!(
-            actual_body, expected_body.as_str(),
-            "[{fixture_name}] body mismatch"
-        );
-    }
+#[tokio::test(flavor = "multi_thread")]
+async fn test_http_500_response() {
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-500.wado"),
+        "http-500.wado",
+    )
+    .await;
 }
