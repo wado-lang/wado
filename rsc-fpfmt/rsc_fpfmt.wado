@@ -5,18 +5,11 @@
 // Use of this source code is governed by a BSD-style license.
 // See https://github.com/rsc/fpfmt/blob/main/LICENSE
 
-use {println, Stdout} from "core:cli";
-use {now, MonotonicClock} from "core:clocks";
-use {f64_to_string as ryu_f64_to_string, char_to_string} from "core:internal";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 fn POW10_MIN() -> i32 { return -348; }
 
 // Powers of 10 from 10^0 to 10^19
-fn pow10(n: i32) -> i64 {
+pub fn pow10(n: i32) -> i64 {
     return match n {
         0 => 1 as i64,
         1 => 10 as i64,
@@ -41,54 +34,42 @@ fn pow10(n: i32) -> i64 {
     };
 }
 
-// ============================================================================
-// Bit utilities
-// ============================================================================
-
 // Returns the bit length of x (position of highest set bit + 1)
-fn i64_bit_len(x: i64) -> i32 {
+pub fn i64_bit_len(x: i64) -> i32 {
     if x == 0 as i64 {
         return 0;
     }
     return 64 - (builtin::i64_clz(x) as i32);
 }
 
-fn bool2int(b: bool) -> i64 {
+pub fn bool2int(b: bool) -> i64 {
     if b { return 1 as i64; }
     return 0 as i64;
 }
 
-fn bool2int32(b: bool) -> i32 {
+pub fn bool2int32(b: bool) -> i32 {
     if b { return 1; }
     return 0;
 }
 
-// ============================================================================
-// Logarithm approximations
-// ============================================================================
-
 // log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
-fn log10_pow2(x: i32) -> i32 {
+pub fn log10_pow2(x: i32) -> i32 {
     return (x * 78913) >> 18;
 }
 
 // log2_pow10(x) returns floor(log2(10^x)) = floor(x * log2(10))
-fn log2_pow10(x: i32) -> i32 {
+pub fn log2_pow10(x: i32) -> i32 {
     return (x * 108853) >> 15;
 }
 
-// ============================================================================
-// Float unpacking
-// ============================================================================
-
 // Result of unpacking a float64
-struct UnpackResult {
+pub struct UnpackResult {
     mantissa: i64,
     exponent: i32,
 }
 
 // unpack64 returns (mantissa, exponent) such that f = mantissa * 2^exponent
-fn unpack64(f: f64) -> UnpackResult {
+pub fn unpack64(f: f64) -> UnpackResult {
     let bits = builtin::i64_reinterpret_f64(f);
 
     let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
@@ -114,71 +95,60 @@ fn unpack64(f: f64) -> UnpackResult {
     return UnpackResult { mantissa: m, exponent: e };
 }
 
-// ============================================================================
-// Unrounded arithmetic
-// ============================================================================
-
-fn unrounded_floor(u: i64) -> i64 {
+pub fn unrounded_floor(u: i64) -> i64 {
     return (u + 0 as i64) >> 2;
 }
 
-fn unrounded_round(u: i64) -> i64 {
+pub fn unrounded_round(u: i64) -> i64 {
     return (u + 1 as i64 + ((u >> 2) & 1 as i64)) >> 2;
 }
 
-fn unrounded_ceil(u: i64) -> i64 {
+pub fn unrounded_ceil(u: i64) -> i64 {
     return (u + 3 as i64) >> 2;
 }
 
-fn unrounded_nudge(u: i64, delta: i32) -> i64 {
+pub fn unrounded_nudge(u: i64, delta: i32) -> i64 {
     return u + (delta as i64);
 }
 
-fn unrounded_div(u: i64, d: i64) -> i64 {
+pub fn unrounded_div(u: i64, d: i64) -> i64 {
     let q = u / d;
     let r = u % d;
     return q | (u & 1 as i64) | bool2int(r != 0 as i64);
 }
 
-// ============================================================================
-// Unsigned comparisons (treating i64 as u64)
-// ============================================================================
-
-fn u64_lt(a: i64, b: i64) -> bool {
+pub fn u64_lt(a: i64, b: i64) -> bool {
     let sign_bit = 0x8000000000000000 as i64;
     return (a ^ sign_bit) < (b ^ sign_bit);
 }
 
-fn u64_ge(a: i64, b: i64) -> bool {
+pub fn u64_ge(a: i64, b: i64) -> bool {
     let sign_bit = 0x8000000000000000 as i64;
     return (a ^ sign_bit) >= (b ^ sign_bit);
 }
 
-fn u64_le(a: i64, b: i64) -> bool {
+pub fn u64_le(a: i64, b: i64) -> bool {
     let sign_bit = 0x8000000000000000 as i64;
     return (a ^ sign_bit) <= (b ^ sign_bit);
 }
 
-// ============================================================================
-// Power of 10 table entry
-// ============================================================================
+pub fn u64_gt(a: i64, b: i64) -> bool {
+    let sign_bit = 0x8000000000000000 as i64;
+    return (a ^ sign_bit) > (b ^ sign_bit);
+}
 
-struct PmHiLo {
+pub struct PmHiLo {
     hi: i64,
     lo: i64,
 }
 
-// ============================================================================
-// Scaling
-// ============================================================================
-
-fn get_pow10(p: i32) -> PmHiLo {
+pub fn get_pow10(p: i32) -> PmHiLo {
     let idx = p - POW10_MIN();
     return pow10_tab(idx);
 }
 
 // uscale computes unround(x * 2^e * 10^p) using the pow10 table
-fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
+pub fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
     // Note: i64_mul_wide_u returns [low, high] but Go's bits.Mul64 returns (high, low)
     let [mid, hi_tmp] = builtin::i64_mul_wide_u(x, pm_hi);
     let mut hi = hi_tmp;
@@ -188,8 +158,10 @@ fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
     let s_mod_64 = s & 63;
     let check_mask = (1 as i64 << s_mod_64) - 1 as i64;
     if (hi & check_mask) == 0 as i64 {
-        let [mid2, _] = builtin::i64_mul_wide_u(x, pm_lo);
-        sticky = bool2int((mid - mid2) > 1 as i64);
+        // Go: mid2, _ := bits.Mul64(x, pm_lo) → mid2=high part, _=low part
+        // Wado: [_, mid2] = i64_mul_wide_u(x, pm_lo) → _=low part, mid2=high part
+        let [_, mid2] = builtin::i64_mul_wide_u(x, pm_lo);
+        sticky = bool2int(u64_gt(mid - mid2, 1 as i64));
         hi = hi - bool2int(u64_lt(mid, mid2));
     }
 
@@ -197,21 +169,15 @@ fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
     return logical_shr(hi, s) | sticky;
 }
 
-// ============================================================================
-// Main formatting functions
-// ============================================================================
-
 // Result of formatting
-struct FormatResult {
+pub struct FormatResult {
     digits: i64,
     exponent: i32,
 }
 
 // FixedWidth returns the n-digit decimal form of f
-fn fixed_width(f: f64, n: i32) -> FormatResult {
-    if n > 18 {
-        panic("too many digits");
-    }
+pub fn fixed_width(f: f64, n: i32) -> FormatResult {
+    assert n <= 18, "digits must be <= 18";
 
     let unpack = unpack64(f);
     let m = unpack.mantissa;
@@ -234,7 +200,7 @@ fn fixed_width(f: f64, n: i32) -> FormatResult {
 }
 
 // Short computes the shortest formatting of f that round-trips
-fn short(f: f64) -> FormatResult {
+pub fn short(f: f64) -> FormatResult {
     let min_exp = -1085;
 
     let unpack = unpack64(f);
@@ -283,18 +249,18 @@ fn short(f: f64) -> FormatResult {
     return FormatResult { digits: d, exponent: -p };
 }
 
-fn skewed(e: i32) -> i32 {
+pub fn skewed(e: i32) -> i32 {
     return (e * 631305 - 261663) >> 21;
 }
 
 // Unsigned multiply (low 64 bits only, modular)
-fn u64_mul(a: i64, b: i64) -> i64 {
+pub fn u64_mul(a: i64, b: i64) -> i64 {
     // Use wide multiply and take the low part
     let [lo, _] = builtin::i64_mul_wide_u(a, b);
     return lo;  // Low 64 bits
 }
 
-fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
+pub fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
     let max_u64 = 0xFFFFFFFFFFFFFFFF as i64;
     let inv5 = 0xcccccccccccccccd as i64;
     let inv5p2 = 0x8f5c28f5c28f5c29 as i64;
@@ -346,7 +312,7 @@ fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
 }
 
 // Logical right shift for unsigned semantics on i64
-fn logical_shr(x: i64, n: i32) -> i64 {
+pub fn logical_shr(x: i64, n: i32) -> i64 {
     if n <= 0 { return x; }
     if n >= 64 { return 0 as i64; }
     // Use arithmetic shift, then mask off sign-extended bits
@@ -356,7 +322,7 @@ fn logical_shr(x: i64, n: i32) -> i64 {
 }
 
 // Get mask for logical shift: (1 << (64-n)) - 1
-fn shr_mask(n: i32) -> i64 {
+pub fn shr_mask(n: i32) -> i64 {
     if n <= 0 { return 0xFFFFFFFFFFFFFFFF as i64; }
     if n >= 64 { return 0 as i64; }
     // Build the mask: all 1s in the low (64-n) bits
@@ -370,19 +336,15 @@ fn shr_mask(n: i32) -> i64 {
     return (1 as i64 << remaining) - 1 as i64;
 }
 
-fn rotate_right(x: i64, n: i32) -> i64 {
+pub fn rotate_right(x: i64, n: i32) -> i64 {
     return logical_shr(x, n) | (x << (64 - n));
 }
 
 // digits returns the number of decimal digits in d
-fn digits(d: i64) -> i32 {
+pub fn digits(d: i64) -> i32 {
     let nd = log10_pow2(i64_bit_len(d));
     return nd + bool2int32(u64_ge(d, pow10(nd)));
 }
-
-// ============================================================================
-// String formatting helpers
-// ============================================================================
 
 fn i2a_first(n: i32) -> char {
     return (('0' as i32) + n / 10) as char;
@@ -411,43 +373,39 @@ pub fn format_exp(d: i64, p: i32, nd: i32) -> String {
     }
 
     // First digit
-    append_char(&mut buf, digit_chars.get(0) as char);
+    buf.append_char(digit_chars.get(0) as char);
 
     // Decimal point and remaining digits
     if nd > 1 {
-        append_char(&mut buf, '.');
+        buf.append_char('.');
         for let mut i = 1; i < nd; i += 1 {
-            append_char(&mut buf, digit_chars.get(i) as char);
+            buf.append_char(digit_chars.get(i) as char);
         }
     }
 
     // Exponent
     let exp = p + nd - 1;
-    append_char(&mut buf, 'e');
+    buf.append_char('e');
     if exp < 0 {
-        append_char(&mut buf, '-');
+        buf.append_char('-');
     } else {
-        append_char(&mut buf, '+');
+        buf.append_char('+');
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
-        append_char(&mut buf, '0');
-        append_char(&mut buf, (('0' as i32) + abs_exp) as char);
+        buf.append_char('0');
+        buf.append_char((('0' as i32) + abs_exp) as char);
     } else if abs_exp < 100 {
-        append_char(&mut buf, i2a_first(abs_exp));
-        append_char(&mut buf, i2a_second(abs_exp));
+        buf.append_char(i2a_first(abs_exp));
+        buf.append_char(i2a_second(abs_exp));
     } else {
-        append_char(&mut buf, (('0' as i32) + abs_exp / 100) as char);
-        append_char(&mut buf, i2a_first(abs_exp % 100));
-        append_char(&mut buf, i2a_second(abs_exp % 100));
+        buf.append_char((('0' as i32) + abs_exp / 100) as char);
+        buf.append_char(i2a_first(abs_exp % 100));
+        buf.append_char(i2a_second(abs_exp % 100));
     }
 
     return buf;
-}
-
-fn append_char(buf: &mut String, c: char) {
-    buf.append(char_to_string(c));
 }
 
 // ============================================================================
@@ -495,16 +453,7 @@ pub fn f64_to_string(f: f64) -> String {
     return formatted;
 }
 
-// ============================================================================
-// Power of 10 table
-// ============================================================================
-
-
-// ============================================================================
-// Power of 10 table
-// ============================================================================
-
-fn pow10_tab_0(idx: i32) -> PmHiLo {
+pub fn pow10_tab_0(idx: i32) -> PmHiLo {
     if idx == 0 { return PmHiLo { hi: 0xfa8fd5a0081c0289 as i64, lo: 0xe8cd3796329f1bac as i64 }; }
     if idx == 1 { return PmHiLo { hi: 0x9c99e58405118196 as i64, lo: 0xf18042bddfa3714b as i64 }; }
     if idx == 2 { return PmHiLo { hi: 0xc3c05ee50655e1fb as i64, lo: 0xade0536d578c4d9e as i64 }; }
@@ -608,7 +557,7 @@ fn pow10_tab_0(idx: i32) -> PmHiLo {
     return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
 }
 
-fn pow10_tab_1(idx: i32) -> PmHiLo {
+pub fn pow10_tab_1(idx: i32) -> PmHiLo {
     if idx == 100 { return PmHiLo { hi: 0x8f31cc0937ae58d3 as i64, lo: 0x2e4d13474f6f77ef as i64 }; }
     if idx == 101 { return PmHiLo { hi: 0xb2fe3f0b8599ef08 as i64, lo: 0x79e05819234b55ea as i64 }; }
     if idx == 102 { return PmHiLo { hi: 0xdfbdcece67006aca as i64, lo: 0x98586e1f6c1e2b65 as i64 }; }
@@ -712,7 +661,7 @@ fn pow10_tab_1(idx: i32) -> PmHiLo {
     return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
 }
 
-fn pow10_tab_2(idx: i32) -> PmHiLo {
+pub fn pow10_tab_2(idx: i32) -> PmHiLo {
     if idx == 200 { return PmHiLo { hi: 0xa3ab66580d5fdaf6 as i64, lo: 0x3ec19f2f2d1f1445 as i64 }; }
     if idx == 201 { return PmHiLo { hi: 0xcc963fee10b7d1b4 as i64, lo: 0xce7206faf866d957 as i64 }; }
     if idx == 202 { return PmHiLo { hi: 0xffbbcfe994e5c620 as i64, lo: 0x020e88b9b6808fad as i64 }; }
@@ -816,7 +765,7 @@ fn pow10_tab_2(idx: i32) -> PmHiLo {
     return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
 }
 
-fn pow10_tab_3(idx: i32) -> PmHiLo {
+pub fn pow10_tab_3(idx: i32) -> PmHiLo {
     if idx == 300 { return PmHiLo { hi: 0xbb127c53b17ec15a as i64, lo: 0xaa9f3fe7a7f2a2ad as i64 }; }
     if idx == 301 { return PmHiLo { hi: 0xe9d71b689dde71b0 as i64, lo: 0x55470fe191ef4b59 as i64 }; }
     if idx == 302 { return PmHiLo { hi: 0x9226712162ab070e as i64, lo: 0x354c69ecfb358f17 as i64 }; }
@@ -920,7 +869,7 @@ fn pow10_tab_3(idx: i32) -> PmHiLo {
     return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
 }
 
-fn pow10_tab_4(idx: i32) -> PmHiLo {
+pub fn pow10_tab_4(idx: i32) -> PmHiLo {
     if idx == 400 { return PmHiLo { hi: 0xd5d238a4abe98069 as i64, lo: 0x8d5b6fba67292780 as i64 }; }
     if idx == 401 { return PmHiLo { hi: 0x85a36366eb71f042 as i64, lo: 0xb85925d48079b8b0 as i64 }; }
     if idx == 402 { return PmHiLo { hi: 0xa70c3c40a64e6c52 as i64, lo: 0x666f6f49a09826dc as i64 }; }
@@ -1024,7 +973,7 @@ fn pow10_tab_4(idx: i32) -> PmHiLo {
     return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
 }
 
-fn pow10_tab_5(idx: i32) -> PmHiLo {
+pub fn pow10_tab_5(idx: i32) -> PmHiLo {
     if idx == 500 { return PmHiLo { hi: 0xf46518c2ef5b8cd2 as i64, lo: 0x814da799a03da296 as i64 }; }
     if idx == 501 { return PmHiLo { hi: 0x98bf2f79d5993803 as i64, lo: 0x10d088c00426859e as i64 }; }
     if idx == 502 { return PmHiLo { hi: 0xbeeefb584aff8604 as i64, lo: 0x5504aaf005302705 as i64 }; }
@@ -1128,7 +1077,7 @@ fn pow10_tab_5(idx: i32) -> PmHiLo {
     return PmHiLo { hi: 0 as i64, lo: 0 as i64 };
 }
 
-fn pow10_tab_6(idx: i32) -> PmHiLo {
+pub fn pow10_tab_6(idx: i32) -> PmHiLo {
     if idx == 600 { return PmHiLo { hi: 0x8bab8eefb6409c1b as i64, lo: 0xe52f76493d08ab71 as i64 }; }
     if idx == 601 { return PmHiLo { hi: 0xae9672aba3d0c321 as i64, lo: 0x5e7b53db8c4ad64e as i64 }; }
     if idx == 602 { return PmHiLo { hi: 0xda3c0f568cc4f3e9 as i64, lo: 0x361a28d26f5d8be1 as i64 }; }
@@ -1230,7 +1179,7 @@ fn pow10_tab_6(idx: i32) -> PmHiLo {
 
 // Power of 10 table: 10^-348 to 10^347 (696 entries)
 // Generated from rsc.io/fpfmt pow10tab.go
-fn pow10_tab(idx: i32) -> PmHiLo {
+pub fn pow10_tab(idx: i32) -> PmHiLo {
     if idx < 100 { return pow10_tab_0(idx); }
     if idx < 200 { return pow10_tab_1(idx); }
     if idx < 300 { return pow10_tab_2(idx); }
@@ -1240,723 +1189,7 @@ fn pow10_tab(idx: i32) -> PmHiLo {
     return pow10_tab_6(idx);
 }
 
-
-// ============================================================================
-// Tests
-// ============================================================================
-
-test "log approximations" {
-    assert log10_pow2(10) == 3;
-    assert log10_pow2(100) == 30;
-    assert log2_pow10(3) == 9;
-    assert log2_pow10(10) == 33;
+export fn run() {
+    let f = 3.14;
+    f64_to_string(f);
 }
-
-test "bit length" {
-    assert i64_bit_len(0 as i64) == 0;
-    assert i64_bit_len(1 as i64) == 1;
-    assert i64_bit_len(2 as i64) == 2;
-    assert i64_bit_len(3 as i64) == 2;
-    assert i64_bit_len(255 as i64) == 8;
-    assert i64_bit_len(256 as i64) == 9;
-}
-
-test "unpack64 basic" {
-    let r1 = unpack64(1.0);
-    assert r1.mantissa != 0 as i64;
-
-    let r2 = unpack64(2.0);
-    assert r2.mantissa != 0 as i64;
-}
-
-test "pow10 function" {
-    assert pow10(0) == 1 as i64;
-    assert pow10(1) == 10 as i64;
-    assert pow10(2) == 100 as i64;
-    assert pow10(9) == 1000000000 as i64;
-}
-
-test "digits count" {
-    assert digits(1 as i64) == 1;
-    assert digits(9 as i64) == 1;
-    assert digits(10 as i64) == 2;
-    assert digits(99 as i64) == 2;
-    assert digits(100 as i64) == 3;
-    assert digits(999 as i64) == 3;
-}
-
-test "unsigned comparisons" {
-    // Test that u64_lt handles sign bit correctly
-    let a = 0x7FFFFFFFFFFFFFFF as i64;  // Max positive i64
-    let b = 0x8000000000000000 as i64;  // Min negative i64, but largest u64/2
-    // As unsigned: a < b
-    assert u64_lt(a, b);
-    assert !u64_lt(b, a);
-}
-
-test "short formatting basic values" {
-    // 1.0 should format to 1 * 10^0
-    let r1 = short(1.0);
-    assert r1.digits == 1 as i64;
-    assert r1.exponent == 0;
-
-    // 10.0 should format to 1 * 10^1
-    let r10 = short(10.0);
-    assert r10.digits == 1 as i64;
-    assert r10.exponent == 1;
-
-    // 100.0 should format to 1 * 10^2
-    let r100 = short(100.0);
-    assert r100.digits == 1 as i64;
-    assert r100.exponent == 2;
-
-    // 2.0 should format to 2 * 10^0
-    let r2 = short(2.0);
-    assert r2.digits == 2 as i64;
-    assert r2.exponent == 0;
-}
-
-test "short formatting pi" {
-    let pi = 3.141592653589793;
-    let r = short(pi);
-    // Pi should produce many digits
-    assert r.digits > 0 as i64;
-    // The digit count should be reasonable
-    assert digits(r.digits) <= 17;
-}
-
-test "short formatting small values" {
-    // 0.1 cannot be exactly represented in binary
-    let r01 = short(0.1);
-    assert r01.digits > 0 as i64;
-    assert r01.exponent < 0;
-
-    // 0.5 = 1/2 can be exactly represented
-    let r05 = short(0.5);
-    assert r05.digits == 5 as i64;
-    assert r05.exponent == -1;
-}
-
-test "short formatting large values" {
-    // Large power of 2
-    let r = short(1048576.0);  // 2^20
-    assert r.digits > 0 as i64;
-}
-
-test "fixed_width formatting" {
-    // fixed_width(1.0, 1) should give 1 digit
-    let r1 = fixed_width(1.0, 1);
-    assert r1.digits == 1 as i64;
-
-    // fixed_width(pi, 4) should give 4 digits
-    let pi = 3.141592653589793;
-    let r4 = fixed_width(pi, 4);
-    // Should be 3142 (rounded)
-    assert digits(r4.digits) == 4;
-}
-
-test "f64_to_string special values" {
-    // Zero
-    let s0 = f64_to_string(0.0);
-    assert s0 == "0e+00";
-
-    // Negative zero
-    let sn0 = f64_to_string(-0.0);
-    assert sn0 == "-0e+00";
-}
-
-test "f64_to_string basic" {
-    // 1.0 should format to "1e+00"
-    let s1 = f64_to_string(1.0);
-    assert s1 == "1e+00";
-
-    // 10.0 should format to "1e+01"
-    let s10 = f64_to_string(10.0);
-    assert s10 == "1e+01";
-
-    // 100.0 should format to "1e+02"
-    let s100 = f64_to_string(100.0);
-    assert s100 == "1e+02";
-}
-
-test "f64_to_string small values" {
-    // 0.5 should format to "5e-01"
-    let s05 = f64_to_string(0.5);
-    assert s05 == "5e-01";
-
-    // 0.01 should format to "1e-02"
-    let s001 = f64_to_string(0.01);
-    assert s001 == "1e-02";
-}
-
-test "trim_zeros" {
-    // 1000 should trim to 1 with exponent +3
-    let t1 = trim_zeros(1000 as i64, 0);
-    assert t1.0 == 1 as i64;
-    assert t1.1 == 3;
-
-    // 1200 should trim to 12 with exponent +2
-    let t2 = trim_zeros(1200 as i64, 0);
-    assert t2.0 == 12 as i64;
-    assert t2.1 == 2;
-
-    // 123 has no trailing zeros
-    let t3 = trim_zeros(123 as i64, 0);
-    assert t3.0 == 123 as i64;
-    assert t3.1 == 0;
-}
-
-test "rotate_right" {
-    // Rotate 0x80 right by 4 should give 0x08 (for 8-bit value conceptually)
-    // For 64-bit: rotating 1 right by 1 puts 1 in MSB
-    let r1 = rotate_right(1 as i64, 1);
-    assert r1 == 0x8000000000000000 as i64;
-
-    // Rotate 0x8000000000000000 right by 1 should give 0x4000000000000000
-    let r2 = rotate_right(0x8000000000000000 as i64, 1);
-    assert r2 == 0x4000000000000000 as i64;
-}
-
-test "logical_shr" {
-    // Logical shift of negative number should not sign-extend
-    let neg = 0x8000000000000000 as i64;  // -9223372036854775808
-    let shifted = logical_shr(neg, 1);
-    // Should be 0x4000000000000000, not 0xC000000000000000
-    assert shifted == 0x4000000000000000 as i64;
-
-    // Shift by 63 should leave just the sign bit
-    let shifted63 = logical_shr(neg, 63);
-    assert shifted63 == 1 as i64;
-}
-
-test "f64_to_string negative values" {
-    // Negative 1.0
-    let sn1 = f64_to_string(-1.0);
-    assert sn1 == "-1e+00";
-
-    // Negative pi
-    let snpi = f64_to_string(-3.141592653589793);
-    // Should start with "-"
-    assert snpi.get_byte(0) == '-' as i32;
-}
-
-test "f64_to_string powers of 10" {
-    // Large powers
-    let s10 = f64_to_string(10.0);
-    assert s10 == "1e+01";
-
-    let s100 = f64_to_string(100.0);
-    assert s100 == "1e+02";
-
-    let s1000 = f64_to_string(1000.0);
-    assert s1000 == "1e+03";
-
-    // Small powers
-    let s01 = f64_to_string(0.01);
-    assert s01 == "1e-02";
-
-    let s001 = f64_to_string(0.001);
-    assert s001 == "1e-03";
-}
-
-test "f64_to_string precision" {
-    // Verify that non-round values have correct precision
-    let pi = 3.141592653589793;
-    let s = f64_to_string(pi);
-    // Should have many digits
-    assert s.len() > 10;
-    // Should start with "3.14"
-    assert s.get_byte(0) == '3' as i32;
-    assert s.get_byte(1) == '.' as i32;
-    assert s.get_byte(2) == '1' as i32;
-    assert s.get_byte(3) == '4' as i32;
-}
-
-// ============================================================================
-// Extended test cases ported from Go fpfmt_test.go
-// ============================================================================
-
-test "powers of 2" {
-    // Test powers of 2 which have exact binary representations
-    // 2^0 = 1
-    let r0 = short(1.0);
-    assert r0.digits == 1 as i64;
-    assert r0.exponent == 0;
-
-    // 2^1 = 2
-    let r1 = short(2.0);
-    assert r1.digits == 2 as i64;
-    assert r1.exponent == 0;
-
-    // 2^10 = 1024
-    let r10 = short(1024.0);
-    assert r10.digits > 0 as i64;
-
-    // 2^-1 = 0.5
-    let rm1 = short(0.5);
-    assert rm1.digits == 5 as i64;
-    assert rm1.exponent == -1;
-
-    // 2^-2 = 0.25
-    let rm2 = short(0.25);
-    assert rm2.digits == 25 as i64;
-    assert rm2.exponent == -2;
-
-    // 2^-10 = 0.0009765625
-    let rm10 = short(0.0009765625);
-    assert rm10.digits > 0 as i64;
-}
-
-test "extended powers of 10" {
-    // 10^0 = 1
-    let r0 = short(1.0);
-    assert r0.digits == 1 as i64;
-    assert r0.exponent == 0;
-
-    // 10^1 = 10
-    let r1 = short(10.0);
-    assert r1.digits == 1 as i64;
-    assert r1.exponent == 1;
-
-    // 10^2 = 100
-    let r2 = short(100.0);
-    assert r2.digits == 1 as i64;
-    assert r2.exponent == 2;
-
-    // 10^6 = 1000000
-    let r6 = short(1000000.0);
-    assert r6.digits == 1 as i64;
-    assert r6.exponent == 6;
-
-    // 10^9 = 1000000000
-    let r9 = short(1000000000.0);
-    assert r9.digits == 1 as i64;
-    assert r9.exponent == 9;
-
-    // 10^-1 = 0.1
-    let rm1 = short(0.1);
-    assert rm1.exponent < 0;
-
-    // 10^-6 = 0.000001
-    let rm6 = short(0.000001);
-    assert rm6.exponent < 0;
-}
-
-test "short specific values" {
-    // Test specific values that have known shortest representations
-    // 1.5
-    let r15 = short(1.5);
-    assert r15.digits == 15 as i64;
-    assert r15.exponent == -1;
-
-    // 1.25
-    let r125 = short(1.25);
-    assert r125.digits == 125 as i64;
-    assert r125.exponent == -2;
-
-    // 1.125
-    let r1125 = short(1.125);
-    assert r1125.digits == 1125 as i64;
-    assert r1125.exponent == -3;
-
-    // 0.125 = 1/8
-    let r0125 = short(0.125);
-    assert r0125.digits == 125 as i64;
-    assert r0125.exponent == -3;
-}
-
-test "fixed_width various digits" {
-    // Test fixed_width with different digit counts
-    let pi = 3.141592653589793;
-
-    // 1 digit
-    let f1 = fixed_width(pi, 1);
-    assert digits(f1.digits) == 1;
-
-    // 3 digits
-    let f3 = fixed_width(pi, 3);
-    assert digits(f3.digits) == 3;
-
-    // 6 digits
-    let f6 = fixed_width(pi, 6);
-    assert digits(f6.digits) == 6;
-
-    // 10 digits
-    let f10 = fixed_width(pi, 10);
-    assert digits(f10.digits) == 10;
-
-    // 17 digits (max precision for f64)
-    let f17 = fixed_width(pi, 17);
-    assert digits(f17.digits) == 17;
-}
-
-test "negative values symmetry" {
-    // Test that negative values produce same digits with negative sign
-    let pos = short(123.456);
-    let neg = short(-123.456);
-    assert pos.digits == neg.digits;
-    assert pos.exponent == neg.exponent;
-}
-
-test "f64_to_string extended" {
-    // Very large value
-    let large = f64_to_string(1.0e100);
-    assert large.len() > 0;
-    // Should contain e+100
-    assert large.get_byte(large.len() - 3) == '1' as i32;
-    assert large.get_byte(large.len() - 2) == '0' as i32;
-    assert large.get_byte(large.len() - 1) == '0' as i32;
-
-    // Very small value
-    let small = f64_to_string(1.0e-100);
-    assert small.len() > 0;
-    // Should contain e-100
-
-    // Value near 1
-    let near1 = f64_to_string(1.0000001);
-    assert near1.len() > 0;
-}
-
-test "round trip consistency" {
-    // Test that short produces consistent results for values
-    // that should have short representations
-
-    // Integers up to certain size should be exact
-    let i1 = short(1.0);
-    let i2 = short(2.0);
-    let i3 = short(3.0);
-    let i9 = short(9.0);
-
-    assert i1.digits == 1 as i64;
-    assert i2.digits == 2 as i64;
-    assert i3.digits == 3 as i64;
-    assert i9.digits == 9 as i64;
-
-    assert i1.exponent == 0;
-    assert i2.exponent == 0;
-    assert i3.exponent == 0;
-    assert i9.exponent == 0;
-}
-
-test "boundary digits" {
-    // Test values at digit boundaries
-    // 9, 99, 999, etc. - values just before power of 10
-    let r9 = short(9.0);
-    assert r9.digits == 9 as i64;
-    assert r9.exponent == 0;
-
-    let r99 = short(99.0);
-    assert r99.digits == 99 as i64;
-    assert r99.exponent == 0;
-
-    let r999 = short(999.0);
-    assert r999.digits == 999 as i64;
-    assert r999.exponent == 0;
-
-    // 11, 101, 1001, etc. - values just after power of 10
-    let r11 = short(11.0);
-    assert r11.digits == 11 as i64;
-    assert r11.exponent == 0;
-
-    let r101 = short(101.0);
-    assert r101.digits == 101 as i64;
-    assert r101.exponent == 0;
-}
-
-test "hard boundary cases from bits" {
-    // Test specific IEEE 754 bit patterns that are known hard cases
-    // These are values near rounding boundaries
-
-    // Smallest positive normal number: 2^-1022
-    // Bit pattern: 0x0010000000000000
-    let min_normal_bits = 0x0010000000000000 as i64;
-    let min_normal = builtin::f64_reinterpret_i64(min_normal_bits);
-    let r_min = short(min_normal);
-    assert r_min.digits > 0 as i64;
-
-    // Largest positive finite number: (2-2^-52) * 2^1023
-    // Bit pattern: 0x7FEFFFFFFFFFFFFF
-    let max_finite_bits = 0x7FEFFFFFFFFFFFFF as i64;
-    let max_finite = builtin::f64_reinterpret_i64(max_finite_bits);
-    let r_max = short(max_finite);
-    assert r_max.digits > 0 as i64;
-
-    // 1.0 exactly: bit pattern 0x3FF0000000000000
-    let one_bits = 0x3FF0000000000000 as i64;
-    let one = builtin::f64_reinterpret_i64(one_bits);
-    let r_one = short(one);
-    assert r_one.digits == 1 as i64;
-    assert r_one.exponent == 0;
-
-    // 2.0 exactly: bit pattern 0x4000000000000000
-    let two_bits = 0x4000000000000000 as i64;
-    let two = builtin::f64_reinterpret_i64(two_bits);
-    let r_two = short(two);
-    assert r_two.digits == 2 as i64;
-    assert r_two.exponent == 0;
-}
-
-test "nextafter boundary cases" {
-    // Test values just above and below powers of 10
-    // These are typically hard cases for float-to-string conversion
-
-    // Just above 1.0: nextafter(1.0, 2.0)
-    // Bit pattern: 0x3FF0000000000001
-    let above_one_bits = 0x3FF0000000000001 as i64;
-    let above_one = builtin::f64_reinterpret_i64(above_one_bits);
-    let r_above = short(above_one);
-    // Should produce more digits than just "1"
-    assert r_above.digits > 1 as i64;
-
-    // Just below 1.0: nextafter(1.0, 0.0)
-    // Bit pattern: 0x3FEFFFFFFFFFFFFF
-    let below_one_bits = 0x3FEFFFFFFFFFFFFF as i64;
-    let below_one = builtin::f64_reinterpret_i64(below_one_bits);
-    let r_below = short(below_one);
-    // Should produce digits with negative exponent
-    assert r_below.digits > 0 as i64;
-}
-
-test "subnormal numbers" {
-    // Test subnormal (denormalized) numbers
-    // Smallest positive subnormal: 2^-1074
-    // Bit pattern: 0x0000000000000001
-    let min_subnormal_bits = 0x0000000000000001 as i64;
-    let min_subnormal = builtin::f64_reinterpret_i64(min_subnormal_bits);
-    let r_min_sub = short(min_subnormal);
-    assert r_min_sub.digits > 0 as i64;
-    // Exponent should be very negative (around -324)
-    assert r_min_sub.exponent < -300;
-
-    // Largest subnormal: just below 2^-1022
-    // Bit pattern: 0x000FFFFFFFFFFFFF
-    let max_subnormal_bits = 0x000FFFFFFFFFFFFF as i64;
-    let max_subnormal = builtin::f64_reinterpret_i64(max_subnormal_bits);
-    let r_max_sub = short(max_subnormal);
-    assert r_max_sub.digits > 0 as i64;
-}
-
-test "scientific notation extremes" {
-    // Test extreme values that require large exponents
-    // 1e200 (large but within range)
-    let large = 1.0e200;
-    let s_large = f64_to_string(large);
-    assert s_large.len() > 0;
-
-    // 1e-200 (small but within range)
-    let small = 1.0e-200;
-    let s_small = f64_to_string(small);
-    assert s_small.len() > 0;
-}
-
-test "specific hard values from Go tests" {
-    // Values extracted from Go fpfmt_test.go
-    // These are at decimal rounding boundaries
-
-    // Test value in middle range
-    let val2 = 1.23456789012345678;
-    let r2 = short(val2);
-    // Should have approximately 17 digits of precision
-    assert digits(r2.digits) <= 17;
-
-    // Test exact power of 2
-    let val3 = 1.0 / 1024.0;  // 2^-10 = 0.0009765625
-    let r3 = short(val3);
-    assert r3.digits > 0 as i64;
-}
-
-test "format consistency" {
-    // Test that f64_to_string and short produce consistent results
-    let pi = 3.141592653589793;
-    let short_result = short(pi);
-    let str_result = f64_to_string(pi);
-
-    // The string should start with the digits from short
-    assert str_result.len() > 0;
-    // First digit should match
-    let mut first_digit = short_result.digits;
-    while first_digit >= 10 as i64 {
-        first_digit = first_digit / 10 as i64;
-    }
-    assert str_result.get_byte(0) == ('0' as i32) + (first_digit as i32);
-}
-
-// ============================================================================
-// Benchmark helper functions
-// ============================================================================
-
-fn truncate_str(s: String, max_len: i32) -> String {
-    if s.len() <= max_len {
-        return s;
-    }
-    let mut result = String::with_capacity(max_len + 3);
-    for let mut i = 0; i < max_len - 3; i += 1 {
-        result.append(char_to_string(s.get_byte(i) as char));
-    }
-    result.append("...");
-    return result;
-}
-
-fn pad_right(s: String, width: i32) -> String {
-    let mut result = s;
-    while result.len() < width {
-        result.append(" ");
-    }
-    return result;
-}
-
-fn i32_to_str(n: i32) -> String {
-    if n == 0 { return "0"; }
-    let mut result = String::with_capacity(12);
-    let mut val = n;
-    let is_neg = val < 0;
-    if is_neg { val = -val; }
-
-    let mut digits: Array<i32> = [];
-    while val > 0 {
-        digits.append(val % 10);
-        val = val / 10;
-    }
-
-    if is_neg { result.append("-"); }
-    let mut i = digits.len() - 1;
-    while i >= 0 {
-        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
-        i = i - 1;
-    }
-    return result;
-}
-
-fn u64_to_str(n: u64) -> String {
-    if n == 0 as u64 { return "0"; }
-    let mut result = String::with_capacity(20);
-    let mut val = n;
-
-    let mut digits: Array<i32> = [];
-    while val > 0 as u64 {
-        digits.append((val % 10 as u64) as i32);
-        val = val / 10 as u64;
-    }
-
-    let mut i = digits.len() - 1;
-    while i >= 0 {
-        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
-        i = i - 1;
-    }
-    return result;
-}
-
-// Entry point for running
-fn run() with Stdout, MonotonicClock {
-    println("======================================================================");
-    println("Float-to-String Benchmark: fpfmt vs ryu (internal::f64_to_string)");
-    println("======================================================================");
-    println("");
-    println("fpfmt: Russ Cox's unrounded scaling algorithm (this file)");
-    println("ryu:   Bundled ryu-based f64_to_buffer (wado-bundled)");
-    println("");
-
-    // Number of iterations per test
-    let iterations = 10000;
-
-    // Test categories
-    benchmark_category("Integers", iterations, [1.0, 10.0, 100.0, 1000.0, 10000.0]);
-    benchmark_category("Decimals", iterations, [0.1, 0.01, 0.001, 0.0001, 0.00001]);
-    benchmark_category("Pi variants", iterations, [3.141592653589793, 31.41592653589793, 0.3141592653589793]);
-    benchmark_category("Large values", iterations, [1.0e50, 1.0e100, 1.0e200]);
-    benchmark_category("Small values", iterations, [1.0e-50, 1.0e-100, 1.0e-200]);
-    benchmark_category("Powers of 2", iterations, [0.5, 0.25, 0.125, 1024.0, 65536.0]);
-    benchmark_category("Mixed precision", iterations, [1.23456789, 9.87654321, 1.111111111111111]);
-
-    println("");
-    println("======================================================================");
-    println("Benchmark complete.");
-    println("======================================================================");
-}
-
-fn benchmark_category(name: String, iterations: i32, values: Array<f64>) with Stdout, MonotonicClock {
-    println(`\n--- {name} ---`);
-    println("Value                      fpfmt(ns)    ryu(ns)       ratio");
-    println("-----------------------------------------------------------------");
-
-    for let val of values {
-        benchmark_value(val, iterations);
-    }
-}
-
-fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
-    // Benchmark fpfmt (this implementation)
-    let start_fpfmt = now();
-    for let mut i = 0; i < iterations; i += 1 {
-        let _ = f64_to_string(val);
-    }
-    let end_fpfmt = now();
-    let fpfmt_time = (end_fpfmt - start_fpfmt) / (iterations as u64);
-
-    // Benchmark ryu (internal::f64_to_string)
-    let start_ryu = now();
-    for let mut i = 0; i < iterations; i += 1 {
-        let _ = ryu_f64_to_string(val);
-    }
-    let end_ryu = now();
-    let ryu_time = (end_ryu - start_ryu) / (iterations as u64);
-
-    // Calculate ratio (fpfmt / ryu)
-    let ratio = if ryu_time > 0 as u64 {
-        (fpfmt_time as f64) / (ryu_time as f64)
-    } else {
-        0.0
-    };
-
-    // Format value for display (use our fpfmt implementation)
-    let val_str = f64_to_string(val);
-    let display_val = truncate_str(val_str, 24);
-    let padded_val = pad_right(display_val, 25);
-
-    // Build output line
-    let fpfmt_str = format_ns(fpfmt_time);
-    let ryu_str = format_ns(ryu_time);
-    let ratio_str = format_ratio(ratio);
-
-    let mut line = String::with_capacity(80);
-    line.append(padded_val);
-    line.append(" ");
-    line.append(fpfmt_str);
-    line.append("    ");
-    line.append(ryu_str);
-    line.append("     ");
-    line.append(ratio_str);
-    println(line);
-}
-
-fn format_ns(ns: u64) -> String {
-    // Format nanoseconds with padding to 8 chars
-    let s = u64_to_str(ns);
-    let mut result = String::with_capacity(12);
-    // Pad left with spaces
-    let padding = 8 - s.len();
-    for let mut i = 0; i < padding; i += 1 {
-        result.append(" ");
-    }
-    result.append(s);
-    return result;
-}
-
-fn format_ratio(ratio: f64) -> String {
-    // Format ratio with 2 decimal places
-    if ratio < 0.01 {
-        return "~0.00x";
-    }
-    let whole = ratio as i32;
-    let frac = ((ratio - (whole as f64)) * 100.0) as i32;
-    let mut result = String::with_capacity(10);
-    result.append(i32_to_str(whole));
-    result.append(".");
-    if frac < 10 {
-        result.append("0");
-    }
-    result.append(i32_to_str(frac));
-    result.append("x");
-    return result;
-}
-
