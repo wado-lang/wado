@@ -1601,10 +1601,40 @@ impl Codegen {
         }
 
         // World export types - derived from target world (default: Command)
+        // If a matching TIR function exists, use its params; otherwise use world definition
         if let Some(world_info) = self.world_registry.get(&project.target_world) {
             for export in &world_info.exports {
-                let params = self.world_export_to_core_params(export);
-                let results = self.world_export_to_core_results(export);
+                // Check if there's a matching TIR function in the entry module
+                let tir_func_match = entry_tir
+                    .functions
+                    .iter()
+                    .find(|f| f.borrow().name == export.name);
+
+                let (params, results) = if let Some(tir_func_rc) = tir_func_match {
+                    // Use TIR function's actual signature
+                    let tir_func = tir_func_rc.borrow();
+                    let param_types: Vec<ValType> = tir_func
+                        .params
+                        .iter()
+                        .map(|p| self.type_id_to_valtype(type_table, p.type_id))
+                        .collect();
+                    // Async exports have no return in core (use task_return)
+                    // Never and Unit types also have no Wasm return value
+                    let return_types = if export.is_async
+                        || tir_func.return_type == TypeTable::NEVER
+                        || tir_func.return_type == TypeTable::UNIT
+                    {
+                        vec![]
+                    } else {
+                        vec![self.type_id_to_valtype(type_table, tir_func.return_type)]
+                    };
+                    (param_types, return_types)
+                } else {
+                    // No matching TIR function - use world definition
+                    let params = self.world_export_to_core_params(export);
+                    let results = self.world_export_to_core_results(export);
+                    (params, results)
+                };
                 builder.define_func_type(&export.name, &params, &results);
             }
         }
@@ -1722,8 +1752,10 @@ impl Codegen {
                 builder.define_func_alias(&method.name, func_idx);
             }
         }
-        // Declare 'run' as the entry point
-        builder.define_func("run", "run");
+        // Declare world export functions (entry points)
+        for export_name in &world_export_names {
+            builder.define_func(export_name, export_name);
+        }
         module.section(builder.functions());
 
         // ========================================
@@ -13312,19 +13344,15 @@ impl Codegen {
 
     /// Convert a world export function type to Core Wasm params
     ///
-    /// For async exports, the core function has no params (async uses `task_return`).
-    /// For sync exports, params are mapped directly.
-    fn world_export_to_core_params(&self, export: &WorldExportInfo) -> Vec<ValType> {
-        if export.is_async {
-            // Async exports have no params in core (lifted signature differs)
-            vec![]
-        } else {
-            export
-                .params
-                .iter()
-                .map(|(_, ty)| wasi_type_to_valtype(ty))
-                .collect()
-        }
+    /// NOTE: This function is used to declare the CORE function type for world exports.
+    /// For async exports, the actual params depend on the user's TIR function.
+    /// We return empty here because the function type is later overridden by the
+    /// user's TIR function if one exists.
+    fn world_export_to_core_params(&self, _export: &WorldExportInfo) -> Vec<ValType> {
+        // World export core params are handled dynamically based on the TIR function.
+        // For worlds where user provides the function (like CLI Command's run or HTTP Service's handle),
+        // the actual params come from the user's TIR function.
+        vec![]
     }
 
     /// Convert a world export function type to Core Wasm results

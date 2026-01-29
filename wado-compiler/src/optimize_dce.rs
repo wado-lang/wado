@@ -44,14 +44,23 @@ pub fn analyze_project(project: &mut Project) {
     // Build call graph, effect usage, and box primitives from all modules
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
-    // Find entry function (run in entry module)
-    let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
-        &project.entry_module_source,
-        "run",
-    ));
+    // Determine entry functions based on target world
+    // Each world has specific export functions that are entry points
+    let entry_func_names: Vec<&str> = match project.target_world.as_str() {
+        "Service" => vec!["handle"], // wasi:http/service
+        "Command" | _ => vec!["run"], // wasi:cli/command (default)
+    };
 
-    // Compute reachable functions from entry point
-    let mut reachable = compute_reachable(&call_graph, &entry_func);
+    // Compute reachable functions from all entry points
+    let mut reachable = HashSet::new();
+    for entry_name in entry_func_names {
+        let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
+            &project.entry_module_source,
+            entry_name,
+        ));
+        let entry_reachable = compute_reachable(&call_graph, &entry_func);
+        reachable.extend(entry_reachable);
+    }
 
     // Add test functions as additional entry points
     // Test functions are also roots for reachability analysis

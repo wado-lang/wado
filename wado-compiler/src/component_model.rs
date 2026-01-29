@@ -161,11 +161,13 @@ impl WasiRegistry {
         let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
         registry.register_module(&wasi_sockets, &mut world_registry);
 
-        // Parse and register wasi:http
-        // Note: wasi:http has complex resource types (Fields, Request, Response, etc.)
-        // that require full Component Model resource support (own<>, borrow<>, etc.)
-        // which isn't implemented yet. Skip registration for now.
-        // TODO: Add wasi:http registration when resource type support is complete
+        // Parse and register wasi:http (for world definitions only)
+        // Note: HTTP functions with resource types (Request, Response) are not yet
+        // fully supported for Component Model lowering. We register the module
+        // to get the world definitions, but skip function registration.
+        let wasi_http = parse_module(stdlib::WASI_HTTP);
+        // Only register world definitions, not effects/functions with unsupported types
+        registry.register_world_definitions(&wasi_http, &mut world_registry);
 
         // Note: wasi:filesystem uses `flags` syntax which isn't supported yet
         // TODO: Add wasi:filesystem registration when `flags` parsing is implemented
@@ -309,6 +311,35 @@ impl WasiRegistry {
         }
 
         // Register world definitions
+        for item in &module.items {
+            if let Item::World(world) = item {
+                world_registry.register(world);
+            }
+        }
+    }
+
+    /// Register only world definitions from a WASI module (no effects)
+    ///
+    /// Use this for modules with resource types that aren't fully supported
+    /// for Component Model lowering yet. This registers the world definitions
+    /// so they can be used for targeting (e.g., --world Service), but skips
+    /// effect/function registration.
+    fn register_world_definitions(
+        &mut self,
+        module: &crate::ast::Module,
+        world_registry: &mut crate::world_registry::WorldRegistry,
+    ) {
+        use crate::ast::Item;
+
+        // Collect resource types (needed for type checking)
+        for item in &module.items {
+            if let Item::Resource(resource) = item {
+                let cm_name = to_kebab_case(&resource.name);
+                self.resources.insert(resource.name.clone(), cm_name);
+            }
+        }
+
+        // Register world definitions only
         for item in &module.items {
             if let Item::World(world) = item {
                 world_registry.register(world);
@@ -770,16 +801,14 @@ pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
 fn is_param_type_supported_with_types(
     ty: &Type,
     enums: &HashSet<&str>,
-    _resources: &HashSet<&str>,
+    resources: &HashSet<&str>,
 ) -> bool {
     match ty {
         Type::Named(named) => {
             let name = named.name.as_str();
             // Check primitives and unit type
             // Unit type () is parsed as Named("()"), not Tuple([])
-            // Note: Resource types are NOT supported as params yet - they need
-            // special CM handling (borrow<resource> / own<resource>) that isn't
-            // implemented in wado_type_to_cm_val_type
+            // Resource types are passed as borrow<resource> in CM (i32 handle in core wasm)
             matches!(
                 name,
                 "i32"
@@ -795,6 +824,7 @@ fn is_param_type_supported_with_types(
                     | "String"
                     | "()"
             ) || enums.contains(name)
+                || resources.contains(name)
         }
         Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
         _ => false,
