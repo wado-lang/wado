@@ -2,11 +2,14 @@
 //
 // This is a simple HTTP server that responds with "Hello from Wado!" to all requests.
 //
+// Run with wado:
+//   cargo run --bin wado -- run --world wasi:http/service example/http-server.wado
+//
 // Compile:
 //   cargo run --bin wado -- compile --world wasi:http/service -o example/http-server.wasm example/http-server.wado
 //
 // Run with wasmtime:
-//   wasmtime serve -W component-model-async=y example/http-server.wasm
+//   wasmtime serve -W all-proposals=y -W stack-switching=n example/http-server.wasm
 //
 // Test with curl:
 //   curl http://localhost:8080/
