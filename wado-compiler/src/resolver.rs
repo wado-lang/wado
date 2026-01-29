@@ -2881,7 +2881,8 @@ impl<'a> Resolver<'a> {
         let iter_local = ctx.add_local("__iter".to_string(), iter_type, true);
 
         // Get base type info for method name mangling
-        let (struct_name, _module_path, type_args) = self.get_type_info_for_method(iterable_type);
+        let (struct_name, module_path, type_args) = self.get_type_info_for_method(iterable_type);
+        let module_source = ModuleSource::from_path(&module_path);
 
         // Build into_iter() method call
         // Receiver needs to be a reference: &iterable
@@ -2900,7 +2901,7 @@ impl<'a> Resolver<'a> {
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 func: FunctionRef::External {
-                    module_source: ModuleSource::core("prelude"),
+                    module_source,
                     name: into_iter_method_name,
                     monomorph_info: None,
                     method_info: Some(crate::name::LocalMethodName::new(
@@ -2941,8 +2942,9 @@ impl<'a> Resolver<'a> {
         ctx.exit_scope();
 
         // Get iterator type info for next() method name
-        let (iter_struct_name, _iter_module_path, iter_type_args) =
+        let (iter_struct_name, iter_module_path, iter_type_args) =
             self.get_type_info_for_method(iter_type);
+        let iter_module_source = ModuleSource::from_path(&iter_module_path);
 
         // Build __iter.next() call
         // Receiver needs to be a mutable reference: &mut __iter
@@ -2974,7 +2976,7 @@ impl<'a> Resolver<'a> {
             TirExprKind::MethodCall {
                 receiver: Box::new(next_receiver),
                 func: FunctionRef::External {
-                    module_source: ModuleSource::core("prelude"),
+                    module_source: iter_module_source,
                     name: next_method_name,
                     monomorph_info: None,
                     method_info: Some(crate::name::LocalMethodName::new(
@@ -5218,8 +5220,10 @@ impl<'a> Resolver<'a> {
             };
 
         // If inherent method not found, try trait methods
+        // Track the module source where the trait impl was found
+        let mut trait_impl_module_source: Option<ModuleSource> = None;
         if method_info.is_none()
-            && let Some((found_trait, info)) = self.find_trait_method_for_type(
+            && let Some((found_trait, info, impl_source)) = self.find_trait_method_for_type(
                 &struct_name,
                 &method_call.method,
                 &module_path,
@@ -5228,6 +5232,7 @@ impl<'a> Resolver<'a> {
         {
             trait_name = Some(found_trait);
             method_info = Some(info);
+            trait_impl_module_source = Some(impl_source);
         }
 
         // Get method info (with default fallback)
@@ -5347,11 +5352,15 @@ impl<'a> Resolver<'a> {
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
 
+        // Use trait impl module source if this is a trait method, otherwise current module
+        let method_module_source = trait_impl_module_source
+            .unwrap_or_else(|| self.current_module_source.clone());
+
         TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 func: FunctionRef::External {
-                    module_source: self.current_module_source.clone(),
+                    module_source: method_module_source,
                     name: mangled_method_name,
                     monomorph_info,
                     method_info: Some(method_info),
@@ -6662,7 +6671,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Find a trait method for a given type and method name.
-    /// Returns (`trait_name`, `MethodInfo`) if found, None otherwise.
+    /// Returns (`trait_name`, `MethodInfo`, `ModuleSource`) if found, None otherwise.
     /// This is used when an inherent method is not found.
     ///
     /// `receiver_type_args` should contain the concrete type arguments for generic receivers
@@ -6674,22 +6683,25 @@ impl<'a> Resolver<'a> {
         method_name: &str,
         module_path: &[String],
         receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<(String, MethodInfo)> {
-        let mut found_traits: Vec<(String, MethodInfo)> = Vec::new();
+    ) -> Option<(String, MethodInfo, ModuleSource)> {
+        let mut found_traits: Vec<(String, MethodInfo, ModuleSource)> = Vec::new();
 
         // Collect impl blocks to check (avoiding borrow issues)
         // Include associated type bindings for resolving Self::* types
+        // Also track which module source each impl comes from
         let mut impl_blocks_to_check: Vec<(
             Type,
             Type,
             Vec<Function>,
             Vec<crate::ast::AssociatedTypeBinding>,
+            ModuleSource,
         )> = Vec::new();
 
         // Check specific module if provided
         if !module_path.is_empty()
             && let Some(module) = self.loaded_modules.get(module_path)
         {
+            let impl_module_source = ModuleSource::from_path(module_path);
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && let Some(trait_type) = &impl_block.trait_type
@@ -6699,13 +6711,15 @@ impl<'a> Resolver<'a> {
                         trait_type.clone(),
                         impl_block.methods.clone(),
                         impl_block.associated_types.clone(),
+                        impl_module_source.clone(),
                     ));
                 }
             }
         }
 
         // Also check all loaded modules
-        for module in self.loaded_modules.values() {
+        for (path, module) in self.loaded_modules {
+            let impl_module_source = ModuleSource::from_path(path);
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && let Some(trait_type) = &impl_block.trait_type
@@ -6715,6 +6729,7 @@ impl<'a> Resolver<'a> {
                         trait_type.clone(),
                         impl_block.methods.clone(),
                         impl_block.associated_types.clone(),
+                        impl_module_source.clone(),
                     ));
                 }
             }
@@ -6730,12 +6745,15 @@ impl<'a> Resolver<'a> {
                     trait_type.clone(),
                     impl_block.methods.clone(),
                     impl_block.associated_types.clone(),
+                    self.current_module_source.clone(),
                 ));
             }
         }
 
         // Now process the collected impl blocks with mutable access
-        for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
+        for (impl_ty, trait_type, methods, associated_types, impl_module_source) in
+            impl_blocks_to_check
+        {
             let impl_struct_name = self.get_type_name(&impl_ty);
             if impl_struct_name == struct_name {
                 // Set up type parameters for resolving generic associated types
@@ -6784,6 +6802,7 @@ impl<'a> Resolver<'a> {
                                 return_type,
                                 self_kind,
                             },
+                            impl_module_source.clone(),
                         ));
                     }
                 }
@@ -7497,9 +7516,10 @@ impl<'a> Resolver<'a> {
         // Look up method info to check if it needs &mut self
         let mut method_info = self.lookup_method_info(output_type, &method_call.method);
         let mut method_trait_name: Option<String> = None;
+        let mut method_trait_impl_source: Option<ModuleSource> = None;
 
         if method_info.is_none()
-            && let Some((found_trait, info)) = self.find_trait_method_for_type(
+            && let Some((found_trait, info, impl_source)) = self.find_trait_method_for_type(
                 &output_struct_name,
                 &method_call.method,
                 &output_module_path,
@@ -7508,6 +7528,7 @@ impl<'a> Resolver<'a> {
         {
             method_trait_name = Some(found_trait);
             method_info = Some(info);
+            method_trait_impl_source = Some(impl_source);
         }
 
         let MethodInfo {
@@ -7582,11 +7603,15 @@ impl<'a> Resolver<'a> {
             None => format!("{}::{}", output_struct_name, method_call.method),
         };
 
+        // Use trait impl module source if this is a trait method, otherwise current module
+        let method_call_module_source = method_trait_impl_source
+            .unwrap_or_else(|| self.current_module_source.clone());
+
         Some(TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver_for_method),
                 func: FunctionRef::External {
-                    module_source: self.current_module_source.clone(),
+                    module_source: method_call_module_source,
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(

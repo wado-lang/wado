@@ -193,7 +193,7 @@ pub struct StrUtf8ByteIter {
 impl Iterator for StrUtf8ByteIter {
     type Item = u8;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.used {
             return null;
         }
@@ -214,7 +214,7 @@ pub struct StrCharIter {
 impl Iterator for StrCharIter {
     type Item = char;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next(&mut self) -> Option<Self::Item> {
         if self.byte_index >= self.used {
             return null;
         }
