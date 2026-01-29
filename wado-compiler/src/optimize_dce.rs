@@ -1316,6 +1316,484 @@ fn is_generic_func_reachable(
     false
 }
 
+// =============================================================================
+// Type DCE - Remove unreachable types from TypeTable
+// =============================================================================
+
+/// Compute the set of reachable types from reachable functions.
+/// A type is reachable if it's used in any reachable function's signature,
+/// locals, or expressions.
+fn compute_reachable_types(project: &Project) -> HashSet<TypeId> {
+    let mut reachable_types: HashSet<TypeId> = HashSet::new();
+
+    // Always include primitive types (TypeId 0-17)
+    for i in 0..18 {
+        reachable_types.insert(TypeId(i));
+    }
+
+    // Collect types from reachable functions
+    for (module_source, module) in &project.tir_modules {
+        let type_table = module.type_table.borrow();
+        let module_path = module_source.to_path();
+
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+
+            // Check if this function is reachable
+            let is_reachable = if project.all_reachable {
+                true
+            } else {
+                is_function_reachable(&func, &module_path, project)
+            };
+
+            if is_reachable {
+                collect_types_from_function(&func, &type_table, &mut reachable_types);
+            }
+        }
+
+        // Also collect types from reachable struct definitions
+        for tir_struct in &module.structs {
+            let struct_type_id = type_table.find_struct_type(&tir_struct.name, module_source);
+            if let Some(type_id) = struct_type_id {
+                if reachable_types.contains(&type_id) {
+                    // Struct is reachable, collect field types
+                    for field in &tir_struct.fields {
+                        collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
+                    }
+                }
+            }
+        }
+
+        // Collect types from variants
+        for variant in &module.variants {
+            let variant_type_id = type_table
+                .iter_type_ids()
+                .find(|&id| matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &variant.name));
+            if let Some(type_id) = variant_type_id {
+                if reachable_types.contains(&type_id) {
+                    for case in &variant.cases {
+                        collect_type_transitive(case.payload, &type_table, &mut reachable_types);
+                    }
+                }
+            }
+        }
+    }
+
+    // Compute transitive closure - keep iterating until no new types are added
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let current_types: Vec<TypeId> = reachable_types.iter().copied().collect();
+
+        for (_module_source, module) in &project.tir_modules {
+            let type_table = module.type_table.borrow();
+
+            for type_id in &current_types {
+                let before_len = reachable_types.len();
+                collect_type_dependencies(*type_id, &type_table, &mut reachable_types);
+                if reachable_types.len() > before_len {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    reachable_types
+}
+
+/// Check if a function is reachable based on project's reachable_functions set
+fn is_function_reachable(func: &TirFunction, module_path: &[String], project: &Project) -> bool {
+    if func.name.starts_with("__test_") {
+        return true;
+    }
+
+    if let Some(ref info) = func.method_info {
+        let method_id = FunctionId::Method(MethodName::new(
+            module_path.join("/"),
+            info.struct_name.clone(),
+            info.trait_name.clone(),
+            info.method_name.clone(),
+        ));
+        if project.reachable_functions.contains(&method_id) {
+            return true;
+        }
+
+        let free_id =
+            FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, &func.name));
+        if project.reachable_functions.contains(&free_id) {
+            return true;
+        }
+
+        if func.monomorph_info.is_some() {
+            let entry_module_free_id =
+                FunctionId::Free(FreeFunctionName::from_path_and_name(&[], &func.name));
+            if project.reachable_functions.contains(&entry_module_free_id) {
+                return true;
+            }
+        }
+
+        is_generic_func_reachable(&project.reachable_functions, module_path, &func.name)
+    } else {
+        let func_id =
+            FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, &func.name));
+        project.reachable_functions.contains(&func_id)
+    }
+}
+
+/// Collect all types used in a function
+fn collect_types_from_function(
+    func: &TirFunction,
+    type_table: &TypeTable,
+    reachable: &mut HashSet<TypeId>,
+) {
+    // Collect parameter types
+    for param in &func.params {
+        collect_type_transitive(param.type_id, type_table, reachable);
+    }
+
+    // Collect return type
+    collect_type_transitive(func.return_type, type_table, reachable);
+
+    // Collect types from body
+    if let Some(body) = &func.body {
+        collect_types_from_block(body, type_table, reachable);
+    }
+}
+
+/// Collect types from a block
+fn collect_types_from_block(
+    block: &TirBlock,
+    type_table: &TypeTable,
+    reachable: &mut HashSet<TypeId>,
+) {
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            TirStmtKind::Let { value, type_id, .. } => {
+                collect_type_transitive(*type_id, type_table, reachable);
+                collect_types_from_expr(value, type_table, reachable);
+            }
+            TirStmtKind::Expr(expr) => {
+                collect_types_from_expr(expr, type_table, reachable);
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(expr) = value {
+                    collect_types_from_expr(expr, type_table, reachable);
+                }
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                collect_types_from_expr(condition, type_table, reachable);
+                collect_types_from_block(then_block, type_table, reachable);
+                if let Some(else_blk) = else_block {
+                    collect_types_from_block(else_blk, type_table, reachable);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                collect_types_from_expr(condition, type_table, reachable);
+                collect_types_from_block(body, type_table, reachable);
+            }
+            TirStmtKind::For {
+                init,
+                condition,
+                body,
+                update,
+            } => {
+                for init_stmt in init {
+                    if let TirStmtKind::Let { value, type_id, .. } = &init_stmt.kind {
+                        collect_type_transitive(*type_id, type_table, reachable);
+                        collect_types_from_expr(value, type_table, reachable);
+                    }
+                }
+                if let Some(cond) = condition {
+                    collect_types_from_expr(cond, type_table, reachable);
+                }
+                collect_types_from_block(body, type_table, reachable);
+                if let Some(upd) = update {
+                    collect_types_from_expr(upd, type_table, reachable);
+                }
+            }
+            TirStmtKind::Loop { body } => {
+                collect_types_from_block(body, type_table, reachable);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                collect_types_from_expr(iterable, type_table, reachable);
+                collect_types_from_block(body, type_table, reachable);
+            }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                collect_types_from_block(block, type_table, reachable);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_types_from_expr(scrutinee, type_table, reachable);
+                collect_types_from_block(then_block, type_table, reachable);
+                if let Some(else_blk) = else_block {
+                    collect_types_from_block(else_blk, type_table, reachable);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                collect_types_from_expr(scrutinee, type_table, reachable);
+                collect_types_from_block(body, type_table, reachable);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for init_stmt in init {
+                    if let TirStmtKind::Let { value, type_id, .. } = &init_stmt.kind {
+                        collect_type_transitive(*type_id, type_table, reachable);
+                        collect_types_from_expr(value, type_table, reachable);
+                    }
+                }
+                collect_types_from_expr(scrutinee, type_table, reachable);
+                collect_types_from_block(body, type_table, reachable);
+                if let Some(upd) = update {
+                    collect_types_from_expr(upd, type_table, reachable);
+                }
+            }
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    collect_types_from_expr(v, type_table, reachable);
+                }
+            }
+            TirStmtKind::Continue => {}
+            TirStmtKind::LetPattern { value, .. } => {
+                collect_types_from_expr(value, type_table, reachable);
+            }
+        }
+    }
+}
+
+/// Collect types from an expression
+fn collect_types_from_expr(
+    expr: &TirExpr,
+    type_table: &TypeTable,
+    reachable: &mut HashSet<TypeId>,
+) {
+    // Always collect the expression's type
+    collect_type_transitive(expr.type_id, type_table, reachable);
+
+    match &expr.kind {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_types_from_expr(arg, type_table, reachable);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            collect_types_from_expr(receiver, type_table, reachable);
+            for arg in args {
+                collect_types_from_expr(arg, type_table, reachable);
+            }
+        }
+        TirExprKind::StaticCall { args, .. } => {
+            for arg in args {
+                collect_types_from_expr(arg, type_table, reachable);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            collect_types_from_expr(left, type_table, reachable);
+            collect_types_from_expr(right, type_table, reachable);
+        }
+        TirExprKind::Unary { expr, .. } => {
+            collect_types_from_expr(expr, type_table, reachable);
+        }
+        TirExprKind::Assign { target, value } => {
+            collect_types_from_expr(target, type_table, reachable);
+            collect_types_from_expr(value, type_table, reachable);
+        }
+        TirExprKind::Cast { expr, target_type } => {
+            collect_types_from_expr(expr, type_table, reachable);
+            collect_type_transitive(*target_type, type_table, reachable);
+        }
+        TirExprKind::EffectCall { args, .. } => {
+            for arg in args {
+                collect_types_from_expr(arg, type_table, reachable);
+            }
+        }
+        TirExprKind::FieldAccess { expr, .. } => {
+            collect_types_from_expr(expr, type_table, reachable);
+        }
+        TirExprKind::Index { expr, index } => {
+            collect_types_from_expr(expr, type_table, reachable);
+            collect_types_from_expr(index, type_table, reachable);
+        }
+        TirExprKind::Block(block) => {
+            collect_types_from_block(block, type_table, reachable);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_types_from_expr(condition, type_table, reachable);
+            collect_types_from_block(then_branch, type_table, reachable);
+            if let Some(else_blk) = else_branch {
+                collect_types_from_block(else_blk, type_table, reachable);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            collect_types_from_expr(expr, type_table, reachable);
+            for arm in arms {
+                collect_types_from_expr(&arm.body, type_table, reachable);
+            }
+        }
+        TirExprKind::StructLiteral {
+            struct_type, fields, ..
+        } => {
+            collect_type_transitive(*struct_type, type_table, reachable);
+            for field in fields {
+                collect_types_from_expr(&field.value, type_table, reachable);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_types_from_expr(elem, type_table, reachable);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            collect_types_from_expr(body, type_table, reachable);
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            collect_types_from_expr(callee, type_table, reachable);
+            for arg in args {
+                collect_types_from_expr(arg, type_table, reachable);
+            }
+        }
+        TirExprKind::OptionSome { value } => {
+            collect_types_from_expr(value, type_table, reachable);
+        }
+        TirExprKind::VariantConstruct {
+            variant_type,
+            payload,
+            ..
+        } => {
+            collect_type_transitive(*variant_type, type_table, reachable);
+            if let Some(payload_expr) = payload {
+                collect_types_from_expr(payload_expr, type_table, reachable);
+            }
+        }
+        TirExprKind::Move { value } => {
+            collect_types_from_expr(value, type_table, reachable);
+        }
+        TirExprKind::LabeledBlock { block, .. } => {
+            collect_types_from_block(block, type_table, reachable);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_types_from_expr(value, type_table, reachable);
+        }
+        // Leaf nodes
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Add a type and its dependencies to the reachable set
+fn collect_type_transitive(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    reachable: &mut HashSet<TypeId>,
+) {
+    if reachable.contains(&type_id) {
+        return;
+    }
+    reachable.insert(type_id);
+    collect_type_dependencies(type_id, type_table, reachable);
+}
+
+/// Collect direct type dependencies (struct fields, array elements, etc.)
+fn collect_type_dependencies(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    reachable: &mut HashSet<TypeId>,
+) {
+    match type_table.get(type_id) {
+        ResolvedType::BuiltinArray(inner)
+        | ResolvedType::Option(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::Stream(inner)
+        | ResolvedType::Future(inner)
+        | ResolvedType::Reactive(inner) => {
+            collect_type_transitive(*inner, type_table, reachable);
+        }
+        ResolvedType::Result { ok, err } => {
+            collect_type_transitive(*ok, type_table, reachable);
+            collect_type_transitive(*err, type_table, reachable);
+        }
+        ResolvedType::Tuple(elements) => {
+            for elem in elements {
+                collect_type_transitive(*elem, type_table, reachable);
+            }
+        }
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            for param in params {
+                collect_type_transitive(*param, type_table, reachable);
+            }
+            collect_type_transitive(*return_type, type_table, reachable);
+        }
+        ResolvedType::GenericInstance { type_args, .. } => {
+            for arg in type_args {
+                collect_type_transitive(*arg, type_table, reachable);
+            }
+        }
+        // Leaf types - no dependencies
+        ResolvedType::Primitive(_)
+        | ResolvedType::Unit
+        | ResolvedType::Never
+        | ResolvedType::Unknown
+        | ResolvedType::Error
+        | ResolvedType::Struct { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::TypeParam { .. } => {}
+    }
+}
+
+/// Remove unreachable types from the project's TypeTable.
+/// This should be called after function DCE.
+pub fn remove_unreachable_types(project: &mut Project) {
+    // Skip if all functions are reachable (no DCE)
+    if project.all_reachable {
+        return;
+    }
+
+    let reachable_types = compute_reachable_types(project);
+
+    // Remove unreachable types from the shared TypeTable
+    // Since all modules share the same TypeTable via Rc<RefCell<>>,
+    // we only need to modify it once through any module
+    if let Some(module) = project.tir_modules.values().next() {
+        let mut type_table = module.type_table.borrow_mut();
+        type_table.retain(|type_id, _| reachable_types.contains(&type_id));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

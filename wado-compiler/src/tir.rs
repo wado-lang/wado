@@ -13,6 +13,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use indexmap::IndexMap;
+
 use crate::component_model::CmCallConvention;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::token::Span;
@@ -304,8 +306,9 @@ impl ResolvedType {
 
 #[derive(Debug, Clone)]
 pub struct TypeTable {
-    types: Vec<ResolvedType>,
+    types: IndexMap<TypeId, ResolvedType>,
     intern_map: HashMap<ResolvedType, TypeId>,
+    next_id: u32,
 }
 
 impl Default for TypeTable {
@@ -337,8 +340,9 @@ impl TypeTable {
 
     pub fn new() -> Self {
         let mut table = Self {
-            types: Vec::new(),
+            types: IndexMap::new(),
             intern_map: HashMap::new(),
+            next_id: 0,
         };
 
         // Pre-populate primitive types matching the constants above
@@ -369,14 +373,17 @@ impl TypeTable {
         if let Some(&id) = self.intern_map.get(&ty) {
             return id;
         }
-        let id = TypeId(self.types.len() as u32);
-        self.types.push(ty.clone());
+        let id = TypeId(self.next_id);
+        self.next_id += 1;
+        self.types.insert(id, ty.clone());
         self.intern_map.insert(ty, id);
         id
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
-        &self.types[id.0 as usize]
+        self.types
+            .get(&id)
+            .unwrap_or_else(|| panic!("TypeId {:?} not found in TypeTable", id))
     }
 
     pub fn is_integer(&self, id: TypeId) -> bool {
@@ -417,8 +424,30 @@ impl TypeTable {
     }
 
     /// Iterate over all type IDs in the table
-    pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> {
-        (0..self.types.len() as u32).map(TypeId)
+    pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.types.keys().copied()
+    }
+
+    /// Retain only types that satisfy the predicate.
+    /// Used by DCE to remove unreachable types.
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(TypeId, &ResolvedType) -> bool,
+    {
+        // Collect types to remove
+        let to_remove: Vec<TypeId> = self
+            .types
+            .iter()
+            .filter(|(id, ty)| !f(**id, ty))
+            .map(|(id, _)| *id)
+            .collect();
+
+        // Remove from both maps
+        for id in to_remove {
+            if let Some(ty) = self.types.remove(&id) {
+                self.intern_map.remove(&ty);
+            }
+        }
     }
 
     /// Create a raw GC array type (`builtin::array<T>`)
