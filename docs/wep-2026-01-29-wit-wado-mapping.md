@@ -353,3 +353,4 @@ Options:
 - [wit-component crate](https://crates.io/crates/wit-component)
 - [Component Model Issue #321: Pure annotation](https://github.com/WebAssembly/component-model/issues/321)
 - [WEP: World Conformance](./wep-2026-01-16-world-conformance-and-export.md)
+- [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md)
