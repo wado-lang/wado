@@ -269,6 +269,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Effect System Design](./docs/wep-2026-01-27-effect-system-design.md)
 - [Global Variables](./docs/wep-2026-01-27-global-variables.md)
 - [WIT and Wado Mapping](./docs/wep-2026-01-29-wit-wado-mapping.md)
+- [Newtype Semantics](./docs/wep-2026-01-29-newtype-semantics.md)
 
 ### Structure
 
