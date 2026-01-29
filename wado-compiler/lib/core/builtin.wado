@@ -33,6 +33,29 @@ fn stream_drop_writable(tx: i32);
 fn stream_drop_readable(rx: i32);
 
 // ============================================================================
+// Future Intrinsics (Component Model async futures)
+// ============================================================================
+
+/// Create a new future, returns (rx, tx) packed in i64
+/// Low 32 bits = rx (readable end), High 32 bits = tx (writable end)
+#[canonical("wasi", "future-new")]
+fn future_new() -> i64;
+
+/// Write data from linear memory to a future (fulfill it)
+/// ptr points to the payload value in linear memory
+/// Returns 0 on success, non-zero on error
+#[canonical("wasi", "future-write")]
+fn future_write(tx: i32, ptr: i32) -> i32;
+
+/// Drop the writable end of a future (close for writing without fulfilling)
+#[canonical("wasi", "future-drop-writable")]
+fn future_drop_writable(tx: i32);
+
+/// Drop the readable end of a future
+#[canonical("wasi", "future-drop-readable")]
+fn future_drop_readable(rx: i32);
+
+// ============================================================================
 // Async Task Intrinsics (Component Model async)
 // ============================================================================
 

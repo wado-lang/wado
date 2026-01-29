@@ -242,6 +242,18 @@ pub fn analyze_project(project: &mut Project) {
                 "stream_drop_readable" => {
                     used_builtins.insert(CanonBuiltin::StreamDropReadable);
                 }
+                "future_new" => {
+                    used_builtins.insert(CanonBuiltin::FutureNew);
+                }
+                "future_write" => {
+                    used_builtins.insert(CanonBuiltin::FutureWrite);
+                }
+                "future_drop_writable" => {
+                    used_builtins.insert(CanonBuiltin::FutureDropWritable);
+                }
+                "future_drop_readable" => {
+                    used_builtins.insert(CanonBuiltin::FutureDropReadable);
+                }
                 // Ambient logging builtins also need stream intrinsics
                 n if n.starts_with("call_indirect_stdout")
                     || n.starts_with("call_indirect_stderr") =>
@@ -363,6 +375,12 @@ pub fn populate_all_features(project: &mut Project) {
         .collect();
     // All importable builtins when DCE is disabled
     project.used_builtins = CanonBuiltin::ALL.iter().copied().collect();
+    // Future intrinsics are only available in Service world (for HTTP trailers)
+    if project.target_world == "Service" {
+        for builtin in CanonBuiltin::FUTURE {
+            project.used_builtins.insert(*builtin);
+        }
+    }
     // All primitives that map to box types when DCE is disabled
     project.used_box_primitives = HashSet::from([I32, I64, F32, F64]);
 }

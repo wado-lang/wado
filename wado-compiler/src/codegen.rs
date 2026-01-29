@@ -2148,6 +2148,111 @@ impl Codegen {
         }
 
         // ========================================
+        // HTTP response types for Service world
+        // These are defined here because they depend on stream-u8
+        // ========================================
+        let trailers_future_type = if project.target_world == "Service" {
+            // Define fields type (alias for trailers, represents HTTP headers)
+            // In the lowered representation, this is a resource handle (u32)
+            ctx.register_type("http-fields");
+            {
+                let (_, enc) = builder.ty(Some("http-fields"));
+                enc.defined_type().primitive(PrimitiveValType::U32);
+            }
+
+            // Define option<stream<u8>> type for body
+            ctx.register_type("http-option-stream-u8");
+            {
+                let (_, enc) = builder.ty(Some("http-option-stream-u8"));
+                enc.defined_type().option(ComponentValType::Type(stream_u8_type));
+            }
+
+            // Define option<fields> for trailers
+            ctx.register_type("http-option-fields");
+            {
+                let fields_idx = ctx.type_idx("http-fields");
+                let (_, enc) = builder.ty(Some("http-option-fields"));
+                enc.defined_type().option(ComponentValType::Type(fields_idx));
+            }
+
+            // Define result<option<fields>, error-code> for trailers future payload
+            ctx.register_type("http-trailers-result");
+            {
+                let option_fields_idx = ctx.type_idx("http-option-fields");
+                let error_code_idx = ctx.type_idx("http-error-code");
+                let (_, enc) = builder.ty(Some("http-trailers-result"));
+                enc.defined_type().result(
+                    Some(ComponentValType::Type(option_fields_idx)),
+                    Some(ComponentValType::Type(error_code_idx)),
+                );
+            }
+
+            // Define future<result<option<fields>, error-code>> for trailers
+            let trailers_future_type = ctx.register_type("http-trailers-future");
+            {
+                let trailers_result_idx = ctx.type_idx("http-trailers-result");
+                let (_, enc) = builder.ty(Some("http-trailers-future"));
+                enc.defined_type()
+                    .future(Some(ComponentValType::Type(trailers_result_idx)));
+            }
+
+            // Define result<_, error-code> for transmission future payload
+            ctx.register_type("http-transmission-result");
+            {
+                let error_code_idx = ctx.type_idx("http-error-code");
+                let (_, enc) = builder.ty(Some("http-transmission-result"));
+                enc.defined_type()
+                    .result(None, Some(ComponentValType::Type(error_code_idx)));
+            }
+
+            // Define future<result<_, error-code>> for transmission future
+            ctx.register_type("http-transmission-future");
+            {
+                let transmission_result_idx = ctx.type_idx("http-transmission-result");
+                let (_, enc) = builder.ty(Some("http-transmission-future"));
+                enc.defined_type()
+                    .future(Some(ComponentValType::Type(transmission_result_idx)));
+            }
+
+            trailers_future_type
+        } else {
+            0 // Placeholder - not used for non-Service worlds
+        };
+
+        // ========================================
+        // Future canonical intrinsics for HTTP trailers
+        // Only generated for Service world
+        // ========================================
+        if project.target_world == "Service" {
+
+            if project.used_builtins.contains(&CanonBuiltin::FutureNew) {
+                ctx.register_core_func("future-new");
+                builder.future_new(trailers_future_type);
+            }
+
+            if project.used_builtins.contains(&CanonBuiltin::FutureWrite) {
+                ctx.register_core_func("future-write");
+                builder.future_write(
+                    trailers_future_type,
+                    [
+                        CanonicalOption::Memory(ctx.memory_idx()),
+                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                    ],
+                );
+            }
+
+            if project.used_builtins.contains(&CanonBuiltin::FutureDropWritable) {
+                ctx.register_core_func("future-drop-writable");
+                builder.future_drop_writable(trailers_future_type);
+            }
+
+            if project.used_builtins.contains(&CanonBuiltin::FutureDropReadable) {
+                ctx.register_core_func("future-drop-readable");
+                builder.future_drop_readable(trailers_future_type);
+            }
+        }
+
+        // ========================================
         // Lower all WASI functions using registry data
         // Canonical options are derived from CmCallConvention
         // ========================================
@@ -3139,6 +3244,9 @@ impl Codegen {
                 Some(ComponentValType::Type(error_code_type_idx)),
             );
         }
+
+        // Note: Additional types for HTTP response creation (fields, trailers future, etc.)
+        // will be defined later in generate_http_response_types() when stream-u8 is available.
     }
 
     /// Import an interface that has a resource type, using registry data.
@@ -11886,6 +11994,10 @@ impl Codegen {
             | "builtin::stream_write"
             | "builtin::stream_drop_writable"
             | "builtin::stream_drop_readable"
+            | "builtin::future_new"
+            | "builtin::future_write"
+            | "builtin::future_drop_writable"
+            | "builtin::future_drop_readable"
             | "builtin::task_return"
             | "builtin::waitable_set_new"
             | "builtin::waitable_join"

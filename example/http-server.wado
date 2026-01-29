@@ -1,6 +1,7 @@
 // HTTP server example using wasi:http (WASI P3)
 //
-// This is a simple HTTP server that responds with "Hello from Wado!" to all requests.
+// This demonstrates the wasi:http/service world in Wado.
+// The HTTP server compiles and runs, returning a 500 error for now.
 //
 // Run with wado:
 //   cargo run --bin wado -- run --world wasi:http/service example/http-server.wado
@@ -8,11 +9,18 @@
 // Compile:
 //   cargo run --bin wado -- compile --world wasi:http/service -o example/http-server.wasm example/http-server.wado
 //
-// Run with wasmtime:
-//   wasmtime serve -W all-proposals=y -W stack-switching=n example/http-server.wasm
+// Run with wasmtime (with WASI P3 support):
+//   wasmtime serve -W all-proposals=y -W stack-switching=n -S p3=y -S http=y example/http-server.wasm
 //
 // Test with curl:
 //   curl http://localhost:8080/
+//
+// Current Status:
+// - The HTTP handler compiles and runs correctly
+// - Currently returns a 500 Internal Server Error
+// - Infrastructure for HTTP response creation (future intrinsics, HTTP types) is in place
+// - TODO: Implement proper response creation using Fields::from_list, Response::new,
+//   and stream/future intrinsics to return 200 OK with a body
 
 use {
     Request,
@@ -21,11 +29,16 @@ use {
 } from "wasi:http";
 
 // HTTP handler for the wasi:http/service world
-// Simplified version - just returns an error for now
+// This handler is invoked for each incoming HTTP request.
 export fn handle(request: Request) -> Result<Response, ErrorCode> {
-    // Return error indicating incomplete implementation
-    // TODO: Implement proper response with Headers, Body (Stream), Trailers (Future)
+    // Currently returns an error because Response construction requires:
+    // 1. Headers (Fields resource) via [static]fields.from-list
+    // 2. Body stream via stream.new + stream.write
+    // 3. Trailers future via future.new + future.write(Ok(None))
+    // 4. Response via [static]response.new
+    //
+    // These WASI imports need Component Model lowering which is WIP.
     return Result::<Response, ErrorCode>::Err(
-        ErrorCode::InternalError(Option::<String>::Some("HTTP server not yet implemented"))
+        ErrorCode::InternalError(Option::<String>::Some("Response creation not yet implemented"))
     );
 }
