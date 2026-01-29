@@ -7,6 +7,7 @@ This document tracks the implementation of `wasi:http/service` world support in 
 - HTTP server compiles and runs with `--world wasi:http/service`
 - Returns 500 errors correctly with error message payload
 - HTTP 200 responses work correctly (as of 2026-01-29)
+- Custom status codes (400, 500, etc.) not yet supported - codegen always returns 200
 
 ## What Works
 
@@ -144,13 +145,15 @@ task-return(1, error_case, has_payload, padding, payload_fields...)
 - [x] Return Ok(response) via task-return
 - [ ] Handle transmission future from response.new (currently ignored)
 - [ ] Support response body content via stream
+- [ ] Support custom status codes via `Response::set_status_code`
 
 ### Testing
 
 - [x] Add E2E tests using wasmtime API (not CLI)
 - [x] Test HTTP 200 response with empty body
 - [ ] Test HTTP 200 response with body content
-- [ ] Test HTTP 500 error response
+- [x] Test HTTP 400 error response (TODO test - awaiting `Response::set_status_code` codegen)
+- [x] Test HTTP 500 error response (TODO test - awaiting `Response::set_status_code` codegen)
 
 ## Investigation Notes (2026-01-29)
 
@@ -396,135 +399,36 @@ This is a **higher-level abstraction** over the canonical intrinsics.
 
 ## E2E Testing with Wasmtime API
 
-### Working Test Pattern
+### Test Fixtures
 
-The HTTP E2E tests are implemented in `wado-compiler/tests/http.rs`. Key pattern:
+HTTP test fixtures are in `wado-compiler/tests/fixtures.http/*.wado`. Each fixture has a `__DATA__` section with JSON test expectations:
 
-```rust
-async fn run_http_request_async(wasm: Vec<u8>) -> Result<HttpTestResult> {
-    let engine = create_engine();
-    let component = Component::new(&engine, &wasm)?;
+```wado
+use {Request, Response, ErrorCode} from "wasi:http";
 
-    let mut linker: Linker<HttpTestState> = Linker::new(&engine);
-    // CRITICAL: Add all three linkers
-    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
-    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
-    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
-
-    let state = HttpTestState { ... };
-    let mut store = Store::new(&engine, state);
-    let service = Service::instantiate_async(&mut store, &component, &linker).await?;
-
-    let http_req = http::Request::builder()
-        .uri("http://localhost/")
-        .method(http::Method::GET)
-        .body(Empty::<Bytes>::new())?;
-
-    let (req, io) = Request::from_http(http_req);
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    // Run handler and response receiver in parallel
-    // Note: We don't await `io` because our handler doesn't consume request body
-    let (handle_result, res) = try_join!(
-        async {
-            store
-                .run_concurrent(async |store| {
-                    let (res, task) = match service.handle(store, req).await? {
-                        Ok(pair) => pair,
-                        Err(err) => return Ok(Err(Some(err))),
-                    };
-                    _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                    task.block(store).await;
-                    Ok(Ok(()))
-                })
-                .await?
-        },
-        async {
-            let res = rx.await?;
-            let (parts, body) = res.into_parts();
-            let body = body.collect().await?;
-            Ok(http::Response::from_parts(parts, body))
-        }
-    )?;
-    drop(io);  // Drop io - we don't consume request body
-
-    match handle_result {
-        Ok(()) => Ok(HttpTestResult { status: res.status().as_u16(), body: ... }),
-        Err(Some(error_code)) => Ok(HttpTestResult { status: 500, body: ... }),
-        Err(None) => Err(anyhow!("Handler returned error without error code")),
-    }
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // handler implementation
 }
+
+__DATA__
+{"http_status": 200}
 ```
 
-### Engine Configuration
+#### HTTP Test Spec Schema
 
-The engine must enable the features used by Wado-generated components:
+| Field         | Type     | Description                                                |
+| ------------- | -------- | ---------------------------------------------------------- |
+| `http_status` | `u16`    | Expected HTTP status code                                  |
+| `body`        | `string` | Expected response body (optional)                          |
+| `TODO`        | `bool`   | Mark as TODO test - must fail until feature is implemented |
 
-```rust
-fn create_engine() -> Engine {
-    let mut config = Config::new();
-    config.async_support(true);
-    config.wasm_component_model(true);
-    config.wasm_component_model_async(true);
-    config.wasm_component_model_async_stackful(true);  // Required for canon lift async
-    config.wasm_component_model_gc(true);
-    config.wasm_gc(true);
-    config.wasm_function_references(true);
-    config.wasm_wide_arithmetic(true);
-    config.wasm_threads(true);
-    Engine::new(&config).expect("Failed to create wasmtime Engine")
-}
-```
+#### Current Fixtures
 
-### Key Findings
-
-1. **Three linkers required**: P2 async, P3 sync, and HTTP P3.
-2. **`store.run_concurrent`**: Required for async component model execution.
-3. **`try_join!` pattern**: Handler call and response channel receiver must run in parallel.
-4. **`store.with()` for conversion**: `res.into_http()` must be called inside `store.with()`.
-5. **`task.block(store)`**: Wait for post-return execution after converting response.
-6. **Request body I/O**: The `io` future from `Request::from_http` waits for the request body to be consumed by the guest. If the handler doesn't read the request body, this future never completes. For simple tests that don't consume request bodies, drop `io` instead of awaiting it.
-
-### Required Cargo Dependencies
-
-```toml
-[dev-dependencies]
-wasmtime = { version = "41", features = ["async", "component-model", "component-model-async"] }
-wasmtime-wasi = { version = "41", features = ["p3"] }
-wasmtime-wasi-http = { version = "41", features = ["p3"] }
-bytes = "1"
-futures = "0.3"
-http = "1"
-http-body-util = "0.1"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
-```
-
-### WasiHttpView Trait
-
-The context must implement both `WasiView` and `WasiHttpView`:
-
-```rust
-struct TestHttpCtx;
-impl WasiHttpCtx for TestHttpCtx {}
-
-struct HttpTestState {
-    table: ResourceTable,
-    wasi: WasiCtx,
-    http: TestHttpCtx,
-}
-
-impl WasiView for HttpTestState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView { ctx: &mut self.wasi, table: &mut self.table }
-    }
-}
-
-impl WasiHttpView for HttpTestState {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView { ctx: &mut self.http, table: &mut self.table }
-    }
-}
-```
+| Fixture         | Status | Description                                            |
+| --------------- | ------ | ------------------------------------------------------ |
+| `http-200.wado` | Pass   | HTTP 200 response with empty body                      |
+| `http-400.wado` | TODO   | HTTP 400 Bad Request (awaiting status code codegen)    |
+| `http-500.wado` | TODO   | HTTP 500 Internal Error (awaiting status code codegen) |
 
 ## References
 

@@ -11,8 +11,8 @@ use http_body_util::{BodyExt, Empty};
 use serde::Deserialize;
 use std::path::Path;
 use std::time::Duration;
-use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::Store;
+use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime_wasi::{WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::p3::bindings::Service;
 use wasmtime_wasi_http::p3::{Request, WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
@@ -132,7 +132,8 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
                             Ok(pair) => pair,
                             Err(err) => return Ok(Err(Some(err))),
                         };
-                        let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                        let _ =
+                            tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
                         task.block(store).await;
                         Ok(Ok(()))
                     })
@@ -215,7 +216,9 @@ async fn run_http_fixture_test(fixture_path: &Path, fixture_name: &str) {
                 );
             }
             Err(msg) => {
-                eprintln!("[{fixture_name}] TODO test failed as expected (feature not yet implemented)");
+                eprintln!(
+                    "[{fixture_name}] TODO test failed as expected (feature not yet implemented)"
+                );
                 eprintln!("[{fixture_name}] Error: {msg}");
             }
         }

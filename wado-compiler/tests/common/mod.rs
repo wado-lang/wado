@@ -212,9 +212,7 @@ pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, Comp
 }
 
 /// Compile a file using filesystem host
-pub fn compile_file(
-    path: &std::path::Path,
-) -> Result<wado_compiler::CompileResult, CompileError> {
+pub fn compile_file(path: &std::path::Path) -> Result<wado_compiler::CompileResult, CompileError> {
     compile_file_with_opts(path, OptLevel::default())
 }
 
@@ -272,12 +270,11 @@ pub fn extract_data_section(source: &str) -> Option<&str> {
 }
 
 /// Parse JSON from __DATA__ section with helpful error message
-pub fn parse_data_section<T: serde::de::DeserializeOwned>(
-    data_section: &str,
-    context: &str,
-) -> T {
+pub fn parse_data_section<T: serde::de::DeserializeOwned>(data_section: &str, context: &str) -> T {
     serde_json::from_str(data_section).unwrap_or_else(|e| {
-        panic!("[{context}] Failed to parse __DATA__ section as JSON: {e}\nContent:\n{data_section}");
+        panic!(
+            "[{context}] Failed to parse __DATA__ section as JSON: {e}\nContent:\n{data_section}"
+        );
     })
 }
 
