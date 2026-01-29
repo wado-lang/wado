@@ -307,6 +307,7 @@ pub fn analyze_project(project: &mut Project) {
         if is_async_world {
             used_builtins.insert(CanonBuiltin::FutureNew);
             used_builtins.insert(CanonBuiltin::FutureWrite);
+            used_builtins.insert(CanonBuiltin::FutureDropWritable);
         }
     }
 

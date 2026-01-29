@@ -2327,13 +2327,16 @@ impl Codegen {
             );
 
             // Lower [static]response.new:
-            // (own<fields>, option<stream<u8>>, future<...>) -> tuple<response, future>
-            // Needs memory for complex types
+            // (own<fields>, option<stream<u8>>, future<...>) -> result<response, transmission-result>
+            // Needs memory and realloc for complex types
             ctx.register_core_func("http-response-new");
             builder.lower_func(
                 Some("http-response-new"),
                 ctx.comp_func_idx("http-response-new"),
-                [CanonicalOption::Memory(ctx.memory_idx())],
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
             );
         }
 
@@ -9434,36 +9437,49 @@ impl Codegen {
             TirStmtKind::Return { value } => {
                 if ctx.is_async_export {
                     // For async exports, call task-return with the result value
-                    // For now, we drop the return value and pass a simple error discriminant
-                    // TODO: Implement proper lowering from GC struct to canonical ABI
-                    if let Some(expr) = value {
-                        // Generate the expression but drop it for now
-                        self.generate_expr(func, expr, type_table, ctx, builder);
-                        func.instruction(&Instruction::Drop);
-                    }
-                    // Call task-return with appropriate arguments based on world
                     if ctx.target_world == "Service" {
-                        // Service world: Return 500 error for now
-                        // HTTP 200 response creation is blocked - http-response-new hangs
-                        // This might be a wasmtime issue or incorrect lowering
-
-                        // Return Err(InternalError) which works
+                        // Service world: result<response, error-code>
+                        // For now, we only support returning errors (Err case)
+                        // HTTP 200 responses require proper trailers/body handling (TODO)
+                        //
+                        // The return type is Result<Response, ErrorCode>
+                        // - Ok(response) = task-return(0, response_handle, padding...)
+                        // - Err(error) = task-return(1, error_case, payload...)
+                        //
+                        // Generate the return expression (expected to be Result::Err(ErrorCode))
+                        // but for now we just return a hardcoded 500 error
+                        if let Some(expr) = value {
+                            self.generate_expr(func, expr, type_table, ctx, builder);
+                            func.instruction(&Instruction::Drop);
+                        }
+                        // Return Err(InternalError(Some("Response creation not yet implemented")))
+                        // task-return args: (discriminant=1, case=38, has_payload=1, padding, len=37, ...)
                         func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                        func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
-                        func.instruction(&Instruction::I32Const(1)); // option<string> = Some
-                        func.instruction(&Instruction::I64Const(0)); // string ptr (data segment at 0)
-                        func.instruction(&Instruction::I32Const(37)); // string len
+                        func.instruction(&Instruction::I32Const(38)); // InternalError case
+                        func.instruction(&Instruction::I32Const(1)); // has payload (Some)
+                        func.instruction(&Instruction::I64Const(0)); // padding
+                        func.instruction(&Instruction::I32Const(37)); // string length
                         func.instruction(&Instruction::I32Const(0)); // padding
                         func.instruction(&Instruction::I32Const(0)); // padding
                         func.instruction(&Instruction::I32Const(0)); // padding
+                        let task_ret = builder.func_idx("task-return");
+                        func.instruction(&Instruction::Call(task_ret));
+                        func.instruction(&Instruction::Return);
+                        // Pre-allocate scratch locals for future use (when 200 responses are supported)
+                        let future_local = ctx.alloc_local("_http_future", ValType::I64);
+                        let trailers_rx = ctx.alloc_local("_trailers_rx", ValType::I32);
+                        let trailers_tx = ctx.alloc_local("_trailers_tx", ValType::I32);
+                        let headers_handle = ctx.alloc_local("_headers_handle", ValType::I32);
+                        let response_handle = ctx.alloc_local("_response_handle", ValType::I32);
+                        let result_disc = ctx.alloc_local("_result_disc", ValType::I32);
+                        let _ = (future_local, trailers_rx, trailers_tx, headers_handle, response_handle, result_disc);
                     } else {
                         // Command world: result<_, _> needs just (i32)
                         func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                        let task_return_idx = builder.func_idx("task-return");
+                        func.instruction(&Instruction::Call(task_return_idx));
+                        func.instruction(&Instruction::Return);
                     }
-                    let task_return_idx = builder.func_idx("task-return");
-                    func.instruction(&Instruction::Call(task_return_idx));
-                    // Add return to prevent fall-through to the end-of-function task-return
-                    func.instruction(&Instruction::Return);
                 } else {
                     // Normal function return
                     if let Some(expr) = value {
@@ -11619,6 +11635,7 @@ impl Codegen {
             func_ctx.alloc_local("_trailers_rx", ValType::I32);
             func_ctx.alloc_local("_trailers_tx", ValType::I32);
             func_ctx.alloc_local("_headers_handle", ValType::I32);
+            func_ctx.alloc_local("_write_result", ValType::I32);
             func_ctx.alloc_local("_result_disc", ValType::I32);
             func_ctx.alloc_local("_response_handle", ValType::I32);
         }
