@@ -3,8 +3,15 @@
 #
 # Compares .wasm binary sizes across different languages
 #
-# Prerequisites:
-# - See `mise run install-deps` for installation instructions
+# Some tools require manual installation:
+# - C: brew install llvm lld wasi-libc wasi-runtimes (macOS)
+# - Rust wasm target: rustup target add wasm32-wasip1
+# - Moonbit: curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+
+[tools]
+node = "latest"
+zig = "latest"
+tinygo = "latest"
 
 [env]
 OUT_DIR = "out"
@@ -41,10 +48,8 @@ set -e
 mkdir -p "$OUT_DIR"
 
 echo "Building Rust..."
-cd rust/hello_world && cargo build --release --target wasm32-wasip1
-cd ../..
-cd rust/pi_approx && cargo build --release --target wasm32-wasip1
-cd ../..
+(cd rust/hello_world && cargo build --release --target wasm32-wasip1)
+(cd rust/pi_approx && cargo build --release --target wasm32-wasip1)
 cp rust/hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
 cp rust/pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
 """
@@ -56,13 +61,9 @@ run = """
 set -e
 mkdir -p "$OUT_DIR"
 
-if command -v zig >/dev/null 2>&1; then
-    echo "Building Zig..."
-    zig build-exe -O ReleaseSmall -target wasm32-wasi zig/hello_world.zig -femit-bin="$OUT_DIR/hello_world_zig.wasm"
-    zig build-exe -O ReleaseSmall -target wasm32-wasi zig/pi_approx.zig -femit-bin="$OUT_DIR/pi_approx_zig.wasm"
-else
-    echo "SKIP: Zig (brew install zig)"
-fi
+echo "Building Zig..."
+zig build-exe -O ReleaseSmall -target wasm32-wasi zig/hello_world.zig -femit-bin="$OUT_DIR/hello_world_zig.wasm"
+zig build-exe -O ReleaseSmall -target wasm32-wasi zig/pi_approx.zig -femit-bin="$OUT_DIR/pi_approx_zig.wasm"
 """
 
 [tasks.build-tinygo]
@@ -85,9 +86,9 @@ set -e
 mkdir -p "$OUT_DIR"
 
 echo "Building AssemblyScript..."
-cd assemblyscript && npm install
-cd assemblyscript && npx asc hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/hello_world_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2
-cd assemblyscript && npx asc pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/pi_approx_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2
+(cd assemblyscript && npm install)
+(cd assemblyscript && npx asc hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/hello_world_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
+(cd assemblyscript && npx asc pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/pi_approx_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
 """
 
 [tasks.build-moonbit]
@@ -98,10 +99,8 @@ set -e
 mkdir -p "$OUT_DIR"
 
 echo "Building Moonbit..."
-cd moonbit/hello_world && moon build --target wasm --strip
-cd ../..
-cd moonbit/pi_approx && moon build --target wasm --strip
-cd ../..
+(cd moonbit/hello_world && moon build --target wasm --strip)
+(cd moonbit/pi_approx && moon build --target wasm --strip)
 cp moonbit/hello_world/target/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
 cp moonbit/pi_approx/target/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
 """
@@ -187,11 +186,11 @@ rm -rf assemblyscript/node_modules
 description = "Show dependency installation instructions"
 run = """
 #!/usr/bin/env bash
-echo "Install dependencies (macOS with Homebrew):"
-echo "  brew install llvm lld wasi-libc wasi-runtimes  # C"
-echo "  rustup target add wasm32-wasip1                # Rust"
-echo "  brew install zig                               # Zig"
-echo "  brew install tinygo                            # TinyGo"
-echo "  brew install node                              # AssemblyScript"
+echo "Managed by mise (run 'mise install' in this directory):"
+echo "  node, zig, tinygo"
+echo ""
+echo "Manual installation required:"
+echo "  rustup target add wasm32-wasip1                                # Rust wasm target"
 echo "  curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit"
+echo "  brew install llvm lld wasi-libc wasi-runtimes                  # C (macOS)"
 """
