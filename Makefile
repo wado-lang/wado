@@ -87,7 +87,7 @@ clean:
 	cargo clean
 	rm -f example/*.wat example/*.wasm
 	mise run -C benchmark clean
-	$(MAKE) -C wasm-size clean
+	mise run -C wasm-size clean
 
 # VS Code extension targets
 .PHONY: install-wado-vscode-dev
@@ -173,4 +173,4 @@ benchmark-sieve:
 
 .PHONY: report-wasm-size
 report-wasm-size:
-	$(MAKE) -C wasm-size report-wasm-size
+	mise run -C wasm-size report-wasm-size
