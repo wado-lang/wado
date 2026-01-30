@@ -1,0 +1,35 @@
+// Test: match expression with variant and block bodies
+use {println, Stdout} from "core:cli";
+
+variant Align {
+    Left,
+    Center,
+    Right,
+}
+
+fn apply_align(align: Align) -> String {
+    let mut result = "";
+    return match align {
+        Left => {
+            result = "left";
+            result
+        },
+        Center => {
+            result = "center";
+            result
+        },
+        Right => {
+            result = "right";
+            result
+        },
+    };
+}
+
+fn run() with Stdout {
+    println(apply_align(Align::Left));
+    println(apply_align(Align::Center));
+    println(apply_align(Align::Right));
+}
+
+__DATA__
+{"stdout": "left\ncenter\nright\n"}

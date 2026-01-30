@@ -13809,13 +13809,8 @@ impl Codegen {
             }
             TirExprKind::Match { expr, arms } => {
                 self.preallocate_if_pattern_locals_from_expr(expr, type_table, ctx);
-                // Pre-allocate scrutinee local
-                let scrutinee_valtype = self.type_id_to_valtype(type_table, expr.type_id);
-                let type_key = format!("match_{:?}", expr.type_id);
-                let counter = ctx.let_pattern_counter;
-                ctx.let_pattern_counter += 1;
-                let local_name = format!("__match_scrutinee_{type_key}_{counter}");
-                ctx.alloc_local(&local_name, scrutinee_valtype);
+                // Don't allocate scrutinee local here - it's done in preallocate_locals_from_expr
+                // to avoid double-counting with let_pattern_counter
                 for arm in arms {
                     // Pre-allocate locals for pattern bindings
                     self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
@@ -14114,13 +14109,8 @@ impl Codegen {
             }
             TirExprKind::Match { expr, arms } => {
                 self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
-                // Pre-allocate scrutinee local
-                let scrutinee_valtype = self.type_id_to_valtype(type_table, expr.type_id);
-                let type_key = format!("match_{:?}", expr.type_id);
-                let counter = ctx.let_pattern_counter;
-                ctx.let_pattern_counter += 1;
-                let local_name = format!("__match_scrutinee_{type_key}_{counter}");
-                ctx.alloc_local(&local_name, scrutinee_valtype);
+                // Don't allocate scrutinee local here - it's done in preallocate_locals_from_expr
+                // to avoid double-counting with let_pattern_counter
                 for arm in arms {
                     self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
                     self.preallocate_let_pattern_locals_from_expr(&arm.body, type_table, ctx);
@@ -14804,6 +14794,21 @@ impl Codegen {
             }
             TirExprKind::Closure { body, .. } => {
                 self.preallocate_locals_from_expr(body, type_table, ctx);
+            }
+            TirExprKind::Match { expr, arms } => {
+                self.preallocate_locals_from_expr(expr, type_table, ctx);
+                // Pre-allocate scrutinee local
+                let scrutinee_valtype = self.type_id_to_valtype(type_table, expr.type_id);
+                let type_key = format!("match_{:?}", expr.type_id);
+                let counter = ctx.let_pattern_counter;
+                ctx.let_pattern_counter += 1;
+                let local_name = format!("__match_scrutinee_{type_key}_{counter}");
+                ctx.alloc_local(&local_name, scrutinee_valtype);
+                for arm in arms {
+                    // Pre-allocate locals for pattern bindings
+                    self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
+                    self.preallocate_locals_from_expr(&arm.body, type_table, ctx);
+                }
             }
             // Leaf nodes - no nested expressions containing blocks
             _ => {}

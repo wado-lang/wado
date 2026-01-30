@@ -1,0 +1,68 @@
+// Test: match expression with variant, loops and mutable variables
+use {println, Stdout} from "core:cli";
+
+variant Align {
+    Left,
+    Center,
+    Right,
+}
+
+struct FormatSpec {
+    align: Align,
+    width: i32,
+    fill: char,
+}
+
+fn apply_padding(s: String, spec: FormatSpec) -> String {
+    let width = spec.width;
+    if width <= 0 || s.len() >= width {
+        return s;
+    }
+
+    let fill = spec.fill;
+    let pad_len = width - s.len();
+
+    let mut result = String::with_capacity(width);
+
+    return match spec.align {
+        Left => {
+            result.append(s);
+            for let mut i = 0; i < pad_len; i += 1 {
+                result.append_char(fill);
+            }
+            result
+        },
+        Center => {
+            let left_pad = pad_len / 2;
+            let right_pad = pad_len - left_pad;
+            for let mut i = 0; i < left_pad; i += 1 {
+                result.append_char(fill);
+            }
+            result.append(s);
+            for let mut i = 0; i < right_pad; i += 1 {
+                result.append_char(fill);
+            }
+            result
+        },
+        Right => {
+            for let mut i = 0; i < pad_len; i += 1 {
+                result.append_char(fill);
+            }
+            result.append(s);
+            result
+        },
+    };
+}
+
+fn run() with Stdout {
+    let left = FormatSpec { align: Align::Left, width: 10, fill: '*' };
+    let center = FormatSpec { align: Align::Center, width: 10, fill: '*' };
+    let right = FormatSpec { align: Align::Right, width: 10, fill: '*' };
+
+    println(apply_padding("test", left));
+    println(apply_padding("test", center));
+    println(apply_padding("test", right));
+}
+
+__DATA__
+{"stdout": "test******\n***test***\n******test\n"}
