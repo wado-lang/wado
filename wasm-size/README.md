@@ -46,14 +46,17 @@ Compares WebAssembly binary sizes across different languages.
 ## Usage
 
 ```sh
-# Install dependencies (see below)
-make install-deps
+# Install mise-managed tools
+mise install
+
+# Show other dependency requirements
+mise run install-deps
 
 # Build all and report sizes
-make report-wasm-size
+mise run report-wasm-size
 
 # Clean build artifacts
-make clean
+mise run clean
 ```
 
 ## Size Optimization Flags
@@ -70,13 +73,20 @@ All languages are compiled with size optimization and symbol stripping enabled:
 | Moonbit        | Preview 1    | `--strip`                                                                     | Via peter-jerry-ye/wasi                      |
 | Wado           | Preview 3    | `-Os`                                                                         | Component model                              |
 
-## Requirements (macOS with Homebrew)
+## Requirements
+
+### Managed by mise
+
+Run `mise install` to install:
+
+- **Node.js** - for AssemblyScript
+- **Zig** - wasm32-wasi target
+- **TinyGo** - wasip1 target
+
+### Manual installation
 
 ```sh
-brew install llvm lld wasi-libc wasi-runtimes  # C
-rustup target add wasm32-wasip1                # Rust
-brew install zig                               # Zig
-brew install tinygo                            # TinyGo
-brew install node                              # AssemblyScript
+rustup target add wasm32-wasip1                                # Rust wasm target
 curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit
+brew install llvm lld wasi-libc wasi-runtimes                  # C (macOS)
 ```
