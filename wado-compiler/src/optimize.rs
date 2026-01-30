@@ -9,7 +9,9 @@
 //! - Move insertion via `optimize_move` module
 
 use crate::optimize_copy_prop::propagate_copies;
-use crate::optimize_dce::{analyze_project, populate_all_features, remove_unreachable_functions};
+use crate::optimize_dce::{
+    analyze_project, populate_all_features, remove_unreachable_functions, remove_unreachable_types,
+};
 use crate::optimize_inline::inline_functions;
 
 /// Configuration for optimization passes
@@ -216,9 +218,10 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
                 inline_threshold: 10,
             };
             run_optimization_passes(&mut project, &config);
-            // DCE: analyze and remove unreachable functions
+            // DCE: analyze and remove unreachable functions and types
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
+            remove_unreachable_types(&mut project);
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
             }
@@ -230,9 +233,10 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
                 inline_threshold: 20,
             };
             run_optimization_passes(&mut project, &config);
-            // DCE: analyze and remove unreachable functions
+            // DCE: analyze and remove unreachable functions and types
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
+            remove_unreachable_types(&mut project);
         }
     }
 
