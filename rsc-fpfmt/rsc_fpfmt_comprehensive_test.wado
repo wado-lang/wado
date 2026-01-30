@@ -8,7 +8,7 @@
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-use {f64_to_string} from "./rsc_fpfmt.wado";
+use {f64_to_string_exp} from "./rsc_fpfmt.wado";
 use {println, Stdout} from "core:cli";
 
 // Helper to construct f64 from bits
@@ -26,7 +26,7 @@ fn run_test_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: Strin
 
     for let mut i = 0; i < n; i += 1 {
         let f = f64_from_bits(bits[i]);
-        let actual = f64_to_string(f);
+        let actual = f64_to_string_exp(f, false);
         let exp = expected[i];
 
         if actual != exp {

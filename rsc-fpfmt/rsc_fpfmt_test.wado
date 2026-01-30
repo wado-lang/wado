@@ -13,7 +13,15 @@ use {
     unpack64, FormatResult, UnpackResult,
     u64_lt, u64_ge, u64_le, u64_gt,
     trim_zeros, rotate_right, logical_shr,
-    bool2int, bool2int32
+    bool2int, bool2int32,
+    // New format specifier types and functions
+    FormatSpec, Align, Sign, FormatType,
+    format_f64,
+    f64_to_string_prec, f64_to_string_exp_prec,
+    f64_to_string_width_prec, f64_to_string_signed,
+    f64_to_string_signed_prec, f64_to_string_zero_pad,
+    f64_to_string_zero_pad_prec, f64_to_string_left,
+    f64_to_string_center, f64_to_string_fill
 } from "./rsc_fpfmt.wado";
 
 use {char_to_string, f64_to_string as ryu_f64_to_string} from "core:internal";
@@ -1243,7 +1251,7 @@ test "f64_to_string decimal large integers" {
 // ============================================================================
 
 test "f64_to_string_auto uses decimal for normal range" {
-    // Values in normal range should use decimal notation
+    // Values in normal range (-4 <= exp < 16) use decimal notation
     assert f64_to_string_auto(0.0) == "0";
     assert f64_to_string_auto(1.0) == "1";
     assert f64_to_string_auto(10.0) == "10";
@@ -1255,12 +1263,21 @@ test "f64_to_string_auto uses decimal for normal range" {
 }
 
 test "f64_to_string_auto uses exp for very small" {
-    // Values with exp < -4 should use exponential notation
+    // Values with exp < -4 use exponential notation
     let s = f64_to_string_auto(0.00001);
     assert s == "1e-05";
 
-    let s2 = f64_to_string_auto(1.0e-10);
-    assert s2 == "1e-10";
+    let s2 = f64_to_string_auto(0.000001);
+    assert s2 == "1e-06";
+
+    let s3 = f64_to_string_auto(1.0e-10);
+    assert s3 == "1e-10";
+
+    let s2 = f64_to_string_auto(0.00001);
+    assert s2 == "1e-05";
+
+    let s3 = f64_to_string_auto(1.0e-10);
+    assert s3 == "1e-10";
 }
 
 test "f64_to_string_auto uses exp for very large" {
@@ -1268,13 +1285,17 @@ test "f64_to_string_auto uses exp for very large" {
     let s = f64_to_string_auto(1.0e16);
     assert s == "1e+16";
 
-    let s2 = f64_to_string_auto(1.0e100);
-    assert s2 == "1e+100";
+    let s2 = f64_to_string_auto(1.0e17);
+    assert s2 == "1e+17";
+
+    let s3 = f64_to_string_auto(1.0e100);
+    assert s3 == "1e+100";
 }
 
 test "f64_to_string_auto negative values" {
     assert f64_to_string_auto(-1.0) == "-1";
-    assert f64_to_string_auto(-0.001) == "-0.001";
+    assert f64_to_string_auto(-10.0) == "-10";
+    assert f64_to_string_auto(-0.1) == "-0.1";
     assert f64_to_string_auto(-0.00001) == "-1e-05";
     assert f64_to_string_auto(-1.0e20) == "-1e+20";
 }
@@ -1377,6 +1398,148 @@ test "f32_to_string_auto basic" {
     assert f32_to_string_auto(0.5 as f32) == "0.5";
     // f32 1e30 gets represented with more precision when cast to f64
     assert f32_to_string_auto(1.0e30 as f32) == "1.0000000150474662e+30";
+}
+
+// ============================================================================
+// Format Specifier Tests (Rust-compatible)
+// ============================================================================
+
+test "FormatSpec default" {
+    let spec = FormatSpec::default();
+    assert format_f64(3.14, spec) == "3.14";
+    assert format_f64(42.0, spec) == "42";
+    assert format_f64(-3.14, spec) == "-3.14";
+}
+
+test "precision decimal" {
+    // Basic precision tests
+    assert f64_to_string_prec(3.14159, 2) == "3.14";
+    assert f64_to_string_prec(3.14159, 4) == "3.1416";
+    assert f64_to_string_prec(3.14159, 0) == "3";
+    assert f64_to_string_prec(100.0, 2) == "100.00";
+    assert f64_to_string_prec(0.5, 3) == "0.500";
+    assert f64_to_string_prec(0.001, 5) == "0.00100";
+}
+
+test "precision exponential" {
+    // Exponential precision tests
+    assert f64_to_string_exp_prec(3.14159, 2, false) == "3.14e+00";
+    assert f64_to_string_exp_prec(3.14159, 4, false) == "3.1416e+00";
+    assert f64_to_string_exp_prec(1.0e10, 2, false) == "1.00e+10";
+    assert f64_to_string_exp_prec(1.0e10, 2, true) == "1.00E+10";
+    assert f64_to_string_exp_prec(0.00123, 3, false) == "1.230e-03";
+}
+
+test "width right align" {
+    // Width with right alignment (default for numbers)
+    assert f64_to_string_width_prec(3.14, 8, 2) == "    3.14";
+    assert f64_to_string_width_prec(3.14, 5, 2) == " 3.14";
+    // Width smaller than output - no padding
+    assert f64_to_string_width_prec(3.14, 2, 2) == "3.14";
+}
+
+test "width left align" {
+    // Left alignment
+    assert f64_to_string_left(3.14, 8) == "3.14    ";
+    assert f64_to_string_left(42.0, 6) == "42    ";
+}
+
+test "width center align" {
+    // Center alignment
+    assert f64_to_string_center(3.14, 8) == "  3.14  ";
+    assert f64_to_string_center(42.0, 6) == "  42  ";
+}
+
+test "zero padding" {
+    // Zero padding
+    assert f64_to_string_zero_pad(3.14, 8) == "00003.14";
+    assert f64_to_string_zero_pad(42.0, 6) == "000042";
+    assert f64_to_string_zero_pad(-3.14, 8) == "-0003.14";
+}
+
+test "zero padding with precision" {
+    // Zero padding with precision
+    assert f64_to_string_zero_pad_prec(3.14, 10, 2) == "0000003.14";
+    assert f64_to_string_zero_pad_prec(-3.14, 10, 2) == "-000003.14";
+}
+
+test "sign always" {
+    // Always show sign
+    assert f64_to_string_signed(3.14) == "+3.14";
+    assert f64_to_string_signed(-3.14) == "-3.14";
+    assert f64_to_string_signed(0.0) == "0";  // Zero doesn't get + sign by default
+    assert f64_to_string_signed(42.0) == "+42";
+}
+
+test "sign with precision" {
+    // Sign with precision
+    assert f64_to_string_signed_prec(3.14159, 2) == "+3.14";
+    assert f64_to_string_signed_prec(-3.14159, 2) == "-3.14";
+}
+
+test "custom fill character" {
+    // Custom fill character
+    assert f64_to_string_fill(42.0, 8, '_', Align::Right) == "______42";
+    assert f64_to_string_fill(42.0, 8, '_', Align::Left) == "42______";
+    assert f64_to_string_fill(42.0, 8, '_', Align::Center) == "___42___";
+    assert f64_to_string_fill(3.14, 10, '*', Align::Right) == "******3.14";
+}
+
+test "format_f64 with full spec" {
+    // Full format spec
+    let mut spec = FormatSpec::default();
+    spec.width = 10;
+    spec.precision = 2;
+    spec.sign = Sign::Plus;
+    spec.zero_pad = true;
+    assert format_f64(3.14159, spec) == "+000003.14";
+
+    let mut spec2 = FormatSpec::exp(false);
+    spec2.precision = 2;
+    assert format_f64(1234.5, spec2) == "1.23e+03";
+}
+
+test "format special values with spec" {
+    let spec = FormatSpec::with_width(10);
+    assert format_f64(1.0 / 0.0, spec) == "       Inf";
+    assert format_f64(-1.0 / 0.0, spec) == "      -Inf";
+    assert format_f64(0.0 / 0.0, spec) == "       NaN";
+
+    let spec2 = FormatSpec::with_width_precision(8, 2);
+    assert format_f64(0.0, spec2) == "    0.00";  // width 8, precision 2
+}
+
+test "precision with small numbers" {
+    // Small numbers with precision
+    assert f64_to_string_prec(0.00123, 2) == "0.00";
+    assert f64_to_string_prec(0.00123, 4) == "0.0012";
+    assert f64_to_string_prec(0.00123, 6) == "0.001230";
+}
+
+test "precision with large numbers" {
+    // Large numbers with precision
+    assert f64_to_string_prec(12345.678, 2) == "12345.68";
+    assert f64_to_string_prec(12345.678, 0) == "12346";
+}
+
+test "exponential format with full spec" {
+    let mut spec = FormatSpec::default();
+    spec.format_type = FormatType::LowerExp;
+    spec.precision = 3;
+    spec.width = 12;
+    assert format_f64(12345.678, spec) == "   1.235e+04";
+
+    spec.format_type = FormatType::UpperExp;
+    assert format_f64(12345.678, spec) == "   1.235E+04";
+}
+
+test "negative zero formatting" {
+    let neg_zero = -0.0;
+    assert f64_to_string_prec(neg_zero, 2) == "-0.00";
+
+    let mut spec = FormatSpec::exp(false);
+    spec.precision = 2;
+    assert format_f64(neg_zero, spec) == "-0.00e+00";  // precision 2 adds decimal places
 }
 
 // ============================================================================
