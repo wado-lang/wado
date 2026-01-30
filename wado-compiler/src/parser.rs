@@ -2119,9 +2119,7 @@ impl Parser {
                     name: qualified_name,
                     span: start_span,
                 }));
-            } else if self.check(&TokenKind::Colon)
-                && self.peek_nth(1).kind == TokenKind::LBrace
-            {
+            } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
                 self.advance(); // consume ':'
                 let block = self.parse_block()?;
