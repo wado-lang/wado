@@ -107,7 +107,9 @@ impl Project {
 
     /// Check if any libm math function is used
     pub fn needs_libm(&self) -> bool {
-        self.used_builtins.iter().any(|b| b.is_libm())
+        self.used_builtins
+            .iter()
+            .any(super::optimize::CanonBuiltin::is_libm)
     }
 
     /// Check if the wado-bundled module is needed (float-to-string or libm)
