@@ -6778,22 +6778,21 @@ impl Codegen {
                             _ => array_expr.type_id,
                         };
                         let base_type = type_table.get(base_type_id);
-                        let (raw_array_type_idx, struct_type_idx) = if let Some(element_type) =
-                            type_table.as_array(base_type_id)
-                        {
-                            let raw_type_idx = self
-                                .array_types
-                                .get(&element_type)
-                                .copied()
-                                .or_else(|| self.array_types.get(&TypeTable::U8).copied())
-                                .expect("array type should be registered");
-                            let struct_type_idx = self
-                                .lookup_array_struct_type(element_type, type_table)
-                                .expect("Array struct type should be registered");
-                            (raw_type_idx, struct_type_idx)
-                        } else {
-                            panic!("index assignment on non-array type: {base_type:?}");
-                        };
+                        let (raw_array_type_idx, struct_type_idx) =
+                            if let Some(element_type) = type_table.as_array(base_type_id) {
+                                let raw_type_idx = self
+                                    .array_types
+                                    .get(&element_type)
+                                    .copied()
+                                    .or_else(|| self.array_types.get(&TypeTable::U8).copied())
+                                    .expect("array type should be registered");
+                                let struct_type_idx = self
+                                    .lookup_array_struct_type(element_type, type_table)
+                                    .expect("Array struct type should be registered");
+                                (raw_type_idx, struct_type_idx)
+                            } else {
+                                panic!("index assignment on non-array type: {base_type:?}");
+                            };
 
                         // Generate array reference first
                         self.generate_expr(func, array_expr, type_table, ctx, builder);
@@ -7505,53 +7504,50 @@ impl Codegen {
                     _ => array.type_id,
                 };
                 // Track element type info for post-array-get processing
-                let (raw_array_type_idx, element_is_ref, closure_cast_type_idx) = if let Some(
-                    element_type,
-                ) =
-                    type_table.as_array(base_type_id)
-                {
-                    let element_resolved = type_table.get(element_type);
-                    let is_ref = matches!(
-                        element_resolved,
-                        ResolvedType::GenericInstance { .. }
-                            | ResolvedType::Struct { .. }
-                            | ResolvedType::Function { .. }
-                    );
-                    // For function types, we need to cast structref to canonical closure type
-                    let closure_type_idx = if let ResolvedType::Function {
-                        params,
-                        return_type,
-                        ..
-                    } = element_resolved
-                    {
-                        let canonical = self.canonical_closure_types.borrow();
-                        canonical
-                            .get(&(params.clone(), *return_type))
-                            .map(|(_, _, struct_idx)| *struct_idx)
+                let (raw_array_type_idx, element_is_ref, closure_cast_type_idx) =
+                    if let Some(element_type) = type_table.as_array(base_type_id) {
+                        let element_resolved = type_table.get(element_type);
+                        let is_ref = matches!(
+                            element_resolved,
+                            ResolvedType::GenericInstance { .. }
+                                | ResolvedType::Struct { .. }
+                                | ResolvedType::Function { .. }
+                        );
+                        // For function types, we need to cast structref to canonical closure type
+                        let closure_type_idx = if let ResolvedType::Function {
+                            params,
+                            return_type,
+                            ..
+                        } = element_resolved
+                        {
+                            let canonical = self.canonical_closure_types.borrow();
+                            canonical
+                                .get(&(params.clone(), *return_type))
+                                .map(|(_, _, struct_idx)| *struct_idx)
+                        } else {
+                            None
+                        };
+                        let array_struct_type_idx = self
+                            .lookup_array_struct_type(element_type, type_table)
+                            .expect("Array struct type should be registered");
+                        // Access the repr field (field 0) to get the raw array
+                        func.instruction(&Instruction::StructGet {
+                            struct_type_index: array_struct_type_idx,
+                            field_index: 0, // repr is field 0
+                        });
+                        let u8_array_idx = self.get_array_type_index(TypeTable::U8);
+                        (
+                            self.array_types
+                                .get(&element_type)
+                                .copied()
+                                .unwrap_or(u8_array_idx),
+                            is_ref,
+                            closure_type_idx,
+                        )
                     } else {
-                        None
+                        let u8_array_idx = self.get_array_type_index(TypeTable::U8);
+                        (u8_array_idx, false, None)
                     };
-                    let array_struct_type_idx = self
-                        .lookup_array_struct_type(element_type, type_table)
-                        .expect("Array struct type should be registered");
-                    // Access the repr field (field 0) to get the raw array
-                    func.instruction(&Instruction::StructGet {
-                        struct_type_index: array_struct_type_idx,
-                        field_index: 0, // repr is field 0
-                    });
-                    let u8_array_idx = self.get_array_type_index(TypeTable::U8);
-                    (
-                        self.array_types
-                            .get(&element_type)
-                            .copied()
-                            .unwrap_or(u8_array_idx),
-                        is_ref,
-                        closure_type_idx,
-                    )
-                } else {
-                    let u8_array_idx = self.get_array_type_index(TypeTable::U8);
-                    (u8_array_idx, false, None)
-                };
 
                 // Now generate index and do array access
                 self.generate_expr(func, index, type_table, ctx, builder);
