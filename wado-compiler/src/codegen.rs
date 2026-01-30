@@ -472,6 +472,15 @@ struct BrTableAnalysis {
     is_i64: bool,
 }
 
+/// Result of resolving a newtype chain to its ultimate base
+enum UltimateBaseType {
+    Primitive(PrimitiveType),
+    Struct {
+        name: String,
+        module_source: ModuleSource,
+    },
+}
+
 impl Codegen {
     /// Create a new code generator with registries built from stdlib
     pub fn new() -> Self {
@@ -4622,6 +4631,10 @@ impl Codegen {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_or_tuple_type_idx(*inner, type_table)
             }
+            // For newtypes, look through to the base type
+            ResolvedType::Newtype { base_type, .. } => {
+                self.get_struct_or_tuple_type_idx(*base_type, type_table)
+            }
             other => {
                 panic!("expected struct or tuple type, got: {other:?}");
             }
@@ -7284,31 +7297,62 @@ impl Codegen {
                                         builder,
                                     );
                                 }
-                                // Handle chained newtypes (e.g., type C = B, type B = A, type A = i32)
+                                // Handle chained newtypes (e.g., type C = B, type B = A, type A = Point)
                                 ResolvedType::Newtype {
                                     base_type: inner_base,
                                     ..
                                 } => {
-                                    // Follow the chain to find the ultimate primitive
-                                    let ultimate_prim = Self::resolve_to_primitive(
+                                    // Follow the chain to find the ultimate base type
+                                    let ultimate_base = Self::resolve_to_ultimate_base(
                                         type_table.get(inner_base).clone(),
                                         type_table,
                                     );
-                                    if let Some(prim) = ultimate_prim {
-                                        self.generate_expr(
-                                            func, receiver, type_table, ctx, builder,
-                                        );
-                                        Self::generate_primitive_method(
-                                            func,
-                                            &method_name,
-                                            &name,
-                                            prim,
-                                            builder,
-                                        );
-                                    } else {
-                                        panic!(
-                                            "method '{method_name}' not found on chained newtype '{name}'"
-                                        );
+                                    match ultimate_base {
+                                        Some(UltimateBaseType::Primitive(prim)) => {
+                                            self.generate_expr(
+                                                func, receiver, type_table, ctx, builder,
+                                            );
+                                            Self::generate_primitive_method(
+                                                func,
+                                                &method_name,
+                                                &name,
+                                                prim,
+                                                builder,
+                                            );
+                                        }
+                                        Some(UltimateBaseType::Struct {
+                                            name: base_name,
+                                            module_source: base_module,
+                                        }) => {
+                                            // Look up method on ultimate base struct
+                                            let base_module_path = base_module.to_path();
+                                            let base_mangled = MethodName::new(
+                                                base_module_path.join("/"),
+                                                base_name.clone(),
+                                                trait_name.clone(),
+                                                method_name.clone(),
+                                            )
+                                            .to_string();
+
+                                            if let Some(idx) = builder.try_func_idx(&base_mangled) {
+                                                self.generate_expr(
+                                                    func, receiver, type_table, ctx, builder,
+                                                );
+                                                self.generate_args(
+                                                    func, args, type_table, ctx, builder,
+                                                );
+                                                func.instruction(&Instruction::Call(idx));
+                                            } else {
+                                                panic!(
+                                                    "method '{method_name}' not found on chained newtype '{name}' or ultimate base '{base_name}'"
+                                                );
+                                            }
+                                        }
+                                        None => {
+                                            panic!(
+                                                "method '{method_name}' not found on chained newtype '{name}'"
+                                            );
+                                        }
                                     }
                                 }
                                 _ => {
@@ -8101,12 +8145,23 @@ impl Codegen {
         }
     }
 
-    /// Follow newtype chain to find the ultimate primitive type
-    fn resolve_to_primitive(ty: ResolvedType, type_table: &TypeTable) -> Option<PrimitiveType> {
+    /// Follow newtype chain to find the ultimate base type (struct or primitive)
+    fn resolve_to_ultimate_base(
+        ty: ResolvedType,
+        type_table: &TypeTable,
+    ) -> Option<UltimateBaseType> {
         match ty {
-            ResolvedType::Primitive(prim) => Some(prim),
+            ResolvedType::Primitive(prim) => Some(UltimateBaseType::Primitive(prim)),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => Some(UltimateBaseType::Struct {
+                name,
+                module_source,
+            }),
             ResolvedType::Newtype { base_type, .. } => {
-                Self::resolve_to_primitive(type_table.get(base_type).clone(), type_table)
+                Self::resolve_to_ultimate_base(type_table.get(base_type).clone(), type_table)
             }
             _ => None,
         }

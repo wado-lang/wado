@@ -1,25 +1,8 @@
 # WEP: Newtype Semantics
 
-## Context
-
-Currently, `type T = U` creates a type alias where `T` and `U` are completely interchangeable. This provides no type safety benefit - you can accidentally pass a `Duration` where an `Instant` is expected if both are aliased to `u64`.
-
-```wado
-// Current behavior (alias)
-type Instant = u64;
-type Duration = u64;
-
-fn sleep(duration: Duration) { ... }
-
-let timestamp: Instant = now();
-sleep(timestamp);  // Silently accepted - bug!
-```
-
-Type aliases are nearly useless for type safety. The only benefit is documentation, but that's better served by comments.
-
 ## Decision
 
-Change `type T = U` from alias semantics to **newtype semantics**:
+`type T = U` uses **newtype semantics**:
 
 1. `T` is a distinct type from `U`
 2. `T` inherits all methods, operators, and traits from `U`
@@ -210,59 +193,6 @@ impl UserId {
 }
 ```
 
-## Implementation
-
-### Type System
-
-1. `type T = U` creates a new type entry in the type table
-2. The newtype stores a reference to its base type
-3. During type checking, newtypes are distinct from base types
-4. Cast expressions check that source and target share a common base type
-
-### Method Resolution
-
-When resolving a method call on a newtype:
-
-1. Look for methods in `impl Newtype { ... }` first
-2. Look for methods in `impl BaseType { ... }`
-3. For base type methods, create a substituted signature:
-   - Replace all occurrences of `BaseType` with `Newtype` in parameters and return type
-4. The actual Wasm function called is the same (representations are identical)
-
-### Code Generation
-
-At the Wasm level, newtypes are erased:
-
-```wado
-type Duration = u64;
-let d: Duration = 1000;
-let d2 = d + d;
-```
-
-Generates the same Wasm as:
-
-```wado
-let d: u64 = 1000;
-let d2 = d + d;
-```
-
-The type safety is enforced entirely at compile time.
-
-### ResolvedType Registration
-
-For method signature substitution, the resolver registers "virtual" function entries:
-
-```
-// Original in u64
-u64::saturating_add : (&u64, u64) -> u64
-
-// Virtual entry for Duration
-Duration::saturating_add : (&Duration, Duration) -> Duration
-  -> calls: u64::saturating_add
-```
-
-This allows type checking to use the substituted signature while code generation uses the original function.
-
 ## Consequences
 
 ### Positive
@@ -287,6 +217,12 @@ This allows type checking to use the substituted signature while code generation
 | Go         | Distinct type (like this proposal)        |
 | TypeScript | Alias (use branded types for distinction) |
 | **Wado**   | **Newtype (this proposal)**               |
+
+## TODO
+
+- [ ] Generic newtypes (`type MyArray<T> = Array<T>`)
+- [ ] Trait bounds with newtypes (`fn compare<T: Ord>(a: T, b: T)` with newtype)
+- [ ] Methods on primitive newtypes (`impl UserId { ... }` where `type UserId = i32`)
 
 ## See Also
 

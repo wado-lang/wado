@@ -1,0 +1,38 @@
+// Return type substitution for inherited methods
+// When calling a method on a newtype, the return type should be substituted
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn clone_point(&self) -> Point {
+        return Point { x: self.x, y: self.y };
+    }
+
+    fn offset(&self, dx: i32, dy: i32) -> Point {
+        return Point { x: self.x + dx, y: self.y + dy };
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    let loc: Location = Point { x: 10, y: 20 } as Location;
+
+    // clone_point returns Location (not Point) when called on Location
+    let loc2 = loc.clone_point();
+    let loc3: Location = loc2;  // This should compile (loc2 is Location)
+    println(`clone: ({loc3.x}, {loc3.y})`);
+
+    // offset returns Location when called on Location
+    let loc4 = loc.offset(5, 5);
+    let loc5: Location = loc4;  // This should compile (loc4 is Location)
+    println(`offset: ({loc5.x}, {loc5.y})`);
+}
+
+__DATA__
+{"stdout": "clone: (10, 20)\noffset: (15, 25)\n"}

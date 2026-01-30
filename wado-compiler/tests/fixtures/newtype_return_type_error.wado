@@ -1,0 +1,26 @@
+// Error: Return type is substituted, cannot assign to base type
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn clone_point(&self) -> Point {
+        return Point { x: self.x, y: self.y };
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    let loc: Location = Point { x: 10, y: 20 } as Location;
+    let loc2 = loc.clone_point();  // Returns Location, not Point
+    // ERROR: cannot assign Location to Point
+    let pt: Point = loc2;
+}
+
+__DATA__
+{"compile_error": "expected 'Point', found 'Location'"}

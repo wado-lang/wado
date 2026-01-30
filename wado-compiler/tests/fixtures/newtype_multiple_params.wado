@@ -1,0 +1,24 @@
+// Multiple parameters of newtype
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+
+impl Point {
+    fn combine(&self, a: &Point, b: &Point) -> Point {
+        return Point { x: self.x + a.x + b.x, y: self.y + a.y + b.y };
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    let loc1: Location = Point { x: 1, y: 1 } as Location;
+    let loc2: Location = Point { x: 2, y: 2 } as Location;
+    let loc3: Location = Point { x: 3, y: 3 } as Location;
+    // All parameters should be substituted to expect Location
+    let result = loc1.combine(&loc2, &loc3);
+    println(`{result.x}`);
+}
+
+__DATA__
+{"stdout": "6\n"}

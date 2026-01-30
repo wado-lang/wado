@@ -1,0 +1,21 @@
+// Static method on newtype
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+
+impl Point {
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    // Static method via newtype returns the base type, which should be usable as Location
+    let loc: Location = Location::origin() as Location;
+    println(`{loc.x}`);
+}
+
+__DATA__
+{"stdout": "0\n"}

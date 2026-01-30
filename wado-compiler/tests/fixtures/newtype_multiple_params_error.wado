@@ -1,0 +1,23 @@
+// Multiple parameters - passing base type to second param should fail
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+
+impl Point {
+    fn combine(&self, a: &Point, b: &Point) -> Point {
+        return Point { x: self.x + a.x + b.x, y: self.y + a.y + b.y };
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    let loc1: Location = Point { x: 1, y: 1 } as Location;
+    let loc2: Location = Point { x: 2, y: 2 } as Location;
+    let pt = Point { x: 3, y: 3 };
+    // Third param is Point but expected Location - should fail
+    let result = loc1.combine(&loc2, &pt);
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'argument 2 to be &Location', found '&Point'"}
