@@ -10,7 +10,7 @@ use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
 use crate::bundled::wado_bundled_wasm;
 use crate::component_model::{
     CmPrimitiveType, WasiFunctionInfo, WasiInterfaceInfo, WasiRegistry, build_local_alias_name,
-    return_type_requires_outptr, wasi_type_to_valtype,
+    return_type_requires_outptr, type_id_to_valtype, wasi_type_to_valtype,
 };
 use crate::copy_context::{ArrayCopyLocals, CopyContext};
 use crate::name::{
@@ -363,7 +363,10 @@ impl FunctionContext {
 
     /// Get the next match scrutinee local name and increment counter
     fn next_match_scrutinee_local_name(&mut self, type_key: &str) -> String {
-        let name = format!("__match_scrutinee_{}_{}", type_key, self.match_scrutinee_counter);
+        let name = format!(
+            "__match_scrutinee_{}_{}",
+            type_key, self.match_scrutinee_counter
+        );
         self.match_scrutinee_counter += 1;
         name
     }
@@ -508,16 +511,16 @@ enum TypeDecl<'a> {
 // - DENSITY_THRESHOLD: 75%
 // - MAX_RANGE: 1024
 
-/// Minimum number of cases to consider br_table optimization
+/// Minimum number of cases to consider `br_table` optimization
 const BR_TABLE_MIN_CASES: usize = 8;
 
-/// Minimum density (cases / range) to use br_table (75% = 0.75)
+/// Minimum density (cases / range) to use `br_table` (75% = 0.75)
 const BR_TABLE_DENSITY_THRESHOLD: f64 = 0.75;
 
-/// Maximum range size for br_table (avoid huge tables)
+/// Maximum range size for `br_table` (avoid huge tables)
 const BR_TABLE_MAX_RANGE: i64 = 1024;
 
-/// Analysis result for br_table optimization
+/// Analysis result for `br_table` optimization
 struct BrTableAnalysis {
     /// Minimum value in the match
     min_value: i64,
@@ -534,8 +537,13 @@ struct BrTableAnalysis {
 impl Codegen {
     /// Create a new code generator with registries built from stdlib
     pub fn new() -> Self {
+        use std::cell::RefCell;
         let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
-        let builtin_registry = BuiltinRegistry::build_from_stdlib();
+        // Create a temporary TypeTable for building the registry.
+        // The codegen only uses canonical_name/namespace/name/diverges fields,
+        // not the resolved TypeIds.
+        let temp_type_table = RefCell::new(TypeTable::new());
+        let builtin_registry = BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
         Self {
             string_literals: Vec::new(),
@@ -10902,7 +10910,7 @@ impl Codegen {
     // br_table optimization for integer match expressions
     // =========================================================================
 
-    /// Build br_table targets array for a dense integer match.
+    /// Build `br_table` targets array for a dense integer match.
     ///
     /// Given:
     /// - `value_to_arm_map`: for each index in range [0, range), which arm index to jump to
@@ -10910,7 +10918,7 @@ impl Codegen {
     /// - `default_arm`: optional index of the wildcard/default arm
     ///
     /// Returns:
-    /// - `targets`: Vec of branch depths for br_table
+    /// - `targets`: Vec of branch depths for `br_table`
     /// - `default_target`: branch depth for out-of-range values
     ///
     /// Block structure (from innermost to outermost):
@@ -10918,8 +10926,8 @@ impl Codegen {
     /// - arm[num_arms-1] block (depth 1)
     /// - arm[num_arms-2] block (depth 2)
     /// - ...
-    /// - arm[0] block (depth num_arms)
-    /// - done block (depth num_arms + 1)
+    /// - arm[0] block (depth `num_arms`)
+    /// - done block (depth `num_arms` + 1)
     fn build_br_table_targets(
         value_to_arm_map: &[usize],
         num_arms: usize,
@@ -10948,7 +10956,7 @@ impl Codegen {
         (targets, default_target)
     }
 
-    /// Analyze match arms to determine if br_table optimization is applicable
+    /// Analyze match arms to determine if `br_table` optimization is applicable
     fn analyze_for_br_table(
         arms: &[TirMatchArm],
         scrutinee_type: &ResolvedType,
@@ -11023,7 +11031,7 @@ impl Codegen {
         })
     }
 
-    /// Generate match expression using br_table for O(1) dispatch
+    /// Generate match expression using `br_table` for O(1) dispatch
     ///
     /// Structure:
     /// ```text
@@ -11135,19 +11143,12 @@ impl Codegen {
             // Bind pattern variables (for bindings in the pattern)
             // For integer literals, there's nothing to bind
             // For wildcard/binding, bind the scrutinee value
-            match &arm.pattern {
-                TirPattern::Binding {
-                    name,
-                    type_id,
-                    ..
-                } => {
-                    let valtype = self.type_id_to_valtype(type_table, *type_id);
-                    let local = ctx.alloc_local(name, valtype);
-                    ctx.locals.insert(name.clone(), local);
-                    func.instruction(&Instruction::LocalGet(scrutinee_local));
-                    func.instruction(&Instruction::LocalSet(local));
-                }
-                _ => {}
+            if let TirPattern::Binding { name, type_id, .. } = &arm.pattern {
+                let valtype = self.type_id_to_valtype(type_table, *type_id);
+                let local = ctx.alloc_local(name, valtype);
+                ctx.locals.insert(name.clone(), local);
+                func.instruction(&Instruction::LocalGet(scrutinee_local));
+                func.instruction(&Instruction::LocalSet(local));
             }
 
             // Generate body expression
@@ -11167,14 +11168,14 @@ impl Codegen {
 
     /// Generate code for match expression: `match expr { pattern => body, ... }`
     ///
-    /// Uses br_table optimization for dense integer matches (O(1) dispatch).
+    /// Uses `br_table` optimization for dense integer matches (O(1) dispatch).
     /// Falls back to nested if-else chain for other patterns.
     ///
-    /// br_table is used when:
+    /// `br_table` is used when:
     /// - All patterns are integer literals (plus optional wildcard/default)
-    /// - At least 4 cases (BR_TABLE_MIN_CASES)
-    /// - Density >= 40% (BR_TABLE_DENSITY_THRESHOLD)
-    /// - Range <= 1024 (BR_TABLE_MAX_RANGE)
+    /// - At least 4 cases (`BR_TABLE_MIN_CASES`)
+    /// - Density >= 40% (`BR_TABLE_DENSITY_THRESHOLD`)
+    /// - Range <= 1024 (`BR_TABLE_MAX_RANGE`)
     ///
     /// Structure (as nested if-else, fallback):
     /// ```text
@@ -15239,19 +15240,17 @@ impl Codegen {
     fn builtin_func_to_core_params(&self, func: &BuiltinFunctionInfo) -> Vec<ValType> {
         func.params
             .iter()
-            .map(|(_, ty)| wasi_type_to_valtype(ty))
+            .map(|(_, ty)| type_id_to_valtype(*ty))
             .collect()
     }
 
     /// Convert a builtin function type to Core Wasm results
     fn builtin_func_to_core_results(&self, func: &BuiltinFunctionInfo) -> Vec<ValType> {
-        if func.diverges {
-            // Diverging functions have no return type
+        if func.diverges || func.return_type == TypeTable::UNIT {
+            // Diverging or void functions have no return type
             vec![]
-        } else if let Some(ret_ty) = &func.return_type {
-            vec![wasi_type_to_valtype(ret_ty)]
         } else {
-            vec![]
+            vec![type_id_to_valtype(func.return_type)]
         }
     }
 

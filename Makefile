@@ -180,7 +180,7 @@ benchmark-count-prime:
 	@ruby benchmark/count_prime.rb
 	@echo ""
 	@echo "=== Wado (wasmtime) ==="
-	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/count_prime.wasm
+	@cargo run --bin wado --quiet -- run -O2 benchmark/count_prime.wado
 
 .PHONY: benchmark-mandelbrot
 benchmark-mandelbrot:
@@ -203,7 +203,7 @@ benchmark-mandelbrot:
 	@ruby benchmark/mandelbrot.rb
 	@echo ""
 	@echo "=== Wado (wasmtime) ==="
-	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/mandelbrot.wasm
+	@cargo run --bin wado --quiet -- run -O2 benchmark/mandelbrot.wado
 
 .PHONY: report-wasm-size
 report-wasm-size:
@@ -230,4 +230,4 @@ benchmark-sieve:
 	@ruby benchmark/sieve.rb
 	@echo ""
 	@echo "=== Wado (wasmtime) ==="
-	@wasmtime run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' benchmark/sieve.wasm
+	@cargo run --bin wado --quiet -- run -O2 benchmark/sieve.wado
