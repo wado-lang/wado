@@ -461,6 +461,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 wado_compiler::symbol::SymbolKind::Enum(e) => {
                     format!("enum{{ {} }}", e.cases.join(", "))
                 }
+                wado_compiler::symbol::SymbolKind::Flags(f) => {
+                    format!("flags{{ {} }}", f.members.join(", "))
+                }
                 wado_compiler::symbol::SymbolKind::Variant(v) => {
                     format!("variant{{ {} }}", v.cases.join(", "))
                 }

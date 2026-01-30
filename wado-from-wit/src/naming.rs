@@ -2,16 +2,34 @@
 
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
+/// Wado reserved keywords that cannot be used as identifiers
+const RESERVED_KEYWORDS: &[&str] = &[
+    "as", "async", "break", "const", "continue", "effect", "else", "enum", "export", "false",
+    "flags", "fn", "for", "global", "if", "impl", "import", "in", "let", "loop", "match", "mod",
+    "mut", "null", "of", "pub", "reactive", "resource", "return", "self", "struct", "test",
+    "trait", "true", "type", "use", "variant", "while", "with", "world",
+];
+
 /// Convert WIT kebab-case to Wado `snake_case` for function/field names
 #[must_use]
 pub fn to_snake_case(name: &str) -> String {
-    name.to_snake_case()
+    let result = name.to_snake_case();
+    escape_reserved_keyword(&result)
 }
 
 /// Convert WIT kebab-case to Wado `UpperCamelCase` for type names
 #[must_use]
 pub fn to_upper_camel_case(name: &str) -> String {
     name.to_upper_camel_case()
+}
+
+/// Escape reserved keywords by appending an underscore
+fn escape_reserved_keyword(name: &str) -> String {
+    if RESERVED_KEYWORDS.contains(&name) {
+        format!("{name}_")
+    } else {
+        name.to_string()
+    }
 }
 
 #[cfg(test)]

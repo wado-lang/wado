@@ -14,11 +14,10 @@
 //! ```wado
 //! // High-level helpers
 //! use {println, eprintln} from "core:cli";
-//! use {read_file, exists} from "core:filesystem";
 //!
 //! // Raw WASI interfaces
 //! use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
-//! use {FileSystem, Preopens} from "wasi:filesystem";
+//! use {Preopens, Descriptor} from "wasi:filesystem";
 //! ```
 
 /// Embedded source for core:prelude
@@ -29,9 +28,6 @@ pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
 
 /// Embedded source for core:stream
 pub const CORE_STREAM: &str = include_str!("../lib/core/stream.wado");
-
-/// Embedded source for core:filesystem
-pub const CORE_FILESYSTEM: &str = include_str!("../lib/core/filesystem.wado");
 
 /// Embedded source for core:internal
 pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
@@ -99,7 +95,6 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),
-        "core:filesystem" => Some(CORE_FILESYSTEM),
         "core:internal" => Some(CORE_INTERNAL),
         "core:string" => Some(CORE_STRING),
         "core:builtin" => Some(CORE_BUILTIN),
@@ -137,13 +132,6 @@ mod tests {
         let source = get_stdlib_module("core:prelude");
         assert!(source.is_some());
         assert!(source.unwrap().contains("panic"));
-    }
-
-    #[test]
-    fn test_get_core_filesystem() {
-        let source = get_stdlib_module("core:filesystem");
-        assert!(source.is_some());
-        assert!(source.unwrap().contains("read_file"));
     }
 
     #[test]
