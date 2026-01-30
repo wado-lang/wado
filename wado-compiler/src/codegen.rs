@@ -256,6 +256,8 @@ struct FunctionContext {
     if_pattern_counters: HashMap<String, u32>,
     /// Counter for generating unique `LetPattern` temp locals
     let_pattern_counter: u32,
+    /// Counter for generating unique match scrutinee locals
+    match_scrutinee_counter: u32,
     /// Context for managing value copy scratch locals
     copy_context: CopyContext,
     /// When true, builtin calls returning tuples should NOT wrap in struct.new
@@ -290,6 +292,7 @@ impl FunctionContext {
             indirect_call_counters: HashMap::new(),
             if_pattern_counters: HashMap::new(),
             let_pattern_counter: 0,
+            match_scrutinee_counter: 0,
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
             is_async_export: false,
@@ -317,6 +320,7 @@ impl FunctionContext {
             indirect_call_counters: HashMap::new(),
             if_pattern_counters: HashMap::new(),
             let_pattern_counter: 0,
+            match_scrutinee_counter: 0,
             local_index_offset: 0,
             local_closure_ids: HashMap::new(),
             copy_context: CopyContext::new(),
@@ -350,6 +354,18 @@ impl FunctionContext {
     /// Reset let-pattern counter (called between pre-allocation and code generation phases)
     fn reset_let_pattern_counter(&mut self) {
         self.let_pattern_counter = 0;
+    }
+
+    /// Reset match-scrutinee counter (called between pre-allocation and code generation phases)
+    fn reset_match_scrutinee_counter(&mut self) {
+        self.match_scrutinee_counter = 0;
+    }
+
+    /// Get the next match scrutinee local name and increment counter
+    fn next_match_scrutinee_local_name(&mut self, type_key: &str) -> String {
+        let name = format!("__match_scrutinee_{}_{}", type_key, self.match_scrutinee_counter);
+        self.match_scrutinee_counter += 1;
+        name
     }
 
     /// Get the next let-pattern temp local name and increment counter
@@ -477,6 +493,42 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
 enum TypeDecl<'a> {
     Struct(&'a crate::tir::TirStruct),
     Variant(&'a crate::tir::TirVariantDecl),
+}
+
+// =========================================================================
+// br_table optimization constants and types
+// =========================================================================
+//
+// Thresholds based on GCC/LLVM:
+// - GCC: 5 cases minimum (--param case-values-threshold)
+// - LLVM: 40% density threshold
+//
+// We use more conservative values for Wasm:
+// - MIN_CASES: 8
+// - DENSITY_THRESHOLD: 75%
+// - MAX_RANGE: 1024
+
+/// Minimum number of cases to consider br_table optimization
+const BR_TABLE_MIN_CASES: usize = 8;
+
+/// Minimum density (cases / range) to use br_table (75% = 0.75)
+const BR_TABLE_DENSITY_THRESHOLD: f64 = 0.75;
+
+/// Maximum range size for br_table (avoid huge tables)
+const BR_TABLE_MAX_RANGE: i64 = 1024;
+
+/// Analysis result for br_table optimization
+struct BrTableAnalysis {
+    /// Minimum value in the match
+    min_value: i64,
+    /// Maximum value in the match
+    max_value: i64,
+    /// Mapping from value to arm index
+    value_to_arm: Vec<(i64, usize)>,
+    /// Index of the default/wildcard arm (if any)
+    default_arm: Option<usize>,
+    /// Whether the scrutinee is i64 (vs i32)
+    is_i64: bool,
 }
 
 impl Codegen {
@@ -10818,9 +10870,285 @@ impl Codegen {
         }
     }
 
+    // =========================================================================
+    // br_table optimization for integer match expressions
+    // =========================================================================
+
+    /// Build br_table targets array for a dense integer match.
+    ///
+    /// Given:
+    /// - `value_to_arm_map`: for each index in range [0, range), which arm index to jump to
+    /// - `num_arms`: total number of match arms
+    /// - `default_arm`: optional index of the wildcard/default arm
+    ///
+    /// Returns:
+    /// - `targets`: Vec of branch depths for br_table
+    /// - `default_target`: branch depth for out-of-range values
+    ///
+    /// Block structure (from innermost to outermost):
+    /// - dispatch block (depth 0)
+    /// - arm[num_arms-1] block (depth 1)
+    /// - arm[num_arms-2] block (depth 2)
+    /// - ...
+    /// - arm[0] block (depth num_arms)
+    /// - done block (depth num_arms + 1)
+    fn build_br_table_targets(
+        value_to_arm_map: &[usize],
+        num_arms: usize,
+        default_arm: Option<usize>,
+    ) -> (Vec<u32>, u32) {
+        let mut targets: Vec<u32> = Vec::with_capacity(value_to_arm_map.len());
+
+        for &arm_idx in value_to_arm_map {
+            if arm_idx < num_arms {
+                // Jump to arm block: depth = num_arms - arm_idx
+                targets.push((num_arms - arm_idx) as u32);
+            } else {
+                // No matching arm - jump to dispatch block (depth 0)
+                // Will fall through to unreachable
+                targets.push(0);
+            }
+        }
+
+        // Default target for out-of-range values
+        let default_target = if let Some(def_idx) = default_arm {
+            (num_arms - def_idx) as u32
+        } else {
+            0 // Will hit unreachable after dispatch block
+        };
+
+        (targets, default_target)
+    }
+
+    /// Analyze match arms to determine if br_table optimization is applicable
+    fn analyze_for_br_table(
+        arms: &[TirMatchArm],
+        scrutinee_type: &ResolvedType,
+    ) -> Option<BrTableAnalysis> {
+        // Only applicable to integer types
+        let is_i64 = match scrutinee_type {
+            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => true,
+            ResolvedType::Primitive(
+                PrimitiveType::I32
+                | PrimitiveType::U32
+                | PrimitiveType::I16
+                | PrimitiveType::U16
+                | PrimitiveType::I8
+                | PrimitiveType::U8,
+            ) => false,
+            _ => return None,
+        };
+
+        let mut value_to_arm: Vec<(i64, usize)> = Vec::new();
+        let mut default_arm: Option<usize> = None;
+
+        for (arm_idx, arm) in arms.iter().enumerate() {
+            match &arm.pattern {
+                TirPattern::Literal(TirLiteralPattern::I128(v)) => {
+                    value_to_arm.push((*v as i64, arm_idx));
+                }
+                TirPattern::Literal(TirLiteralPattern::U128(v)) => {
+                    value_to_arm.push((*v as i64, arm_idx));
+                }
+                TirPattern::Wildcard | TirPattern::Binding { .. } => {
+                    // Wildcard/binding is the default case
+                    if default_arm.is_some() {
+                        // Multiple defaults - shouldn't happen, but bail out
+                        return None;
+                    }
+                    default_arm = Some(arm_idx);
+                }
+                _ => {
+                    // Non-integer pattern, can't use br_table
+                    return None;
+                }
+            }
+        }
+
+        // Need at least MIN_CASES integer literals
+        if value_to_arm.len() < BR_TABLE_MIN_CASES {
+            return None;
+        }
+
+        // Calculate range
+        let min_value = value_to_arm.iter().map(|(v, _)| *v).min().unwrap();
+        let max_value = value_to_arm.iter().map(|(v, _)| *v).max().unwrap();
+        let range = max_value - min_value + 1;
+
+        // Check range isn't too large
+        if range > BR_TABLE_MAX_RANGE {
+            return None;
+        }
+
+        // Check density threshold
+        let density = value_to_arm.len() as f64 / range as f64;
+        if density < BR_TABLE_DENSITY_THRESHOLD {
+            return None;
+        }
+
+        Some(BrTableAnalysis {
+            min_value,
+            max_value,
+            value_to_arm,
+            default_arm,
+            is_i64,
+        })
+    }
+
+    /// Generate match expression using br_table for O(1) dispatch
+    ///
+    /// Structure:
+    /// ```text
+    /// block $done (result T)
+    ///   block $arm_0
+    ///     block $arm_1
+    ///       ...
+    ///       block $default
+    ///         local.get $scrutinee
+    ///         i32.const <min_value>
+    ///         i32.sub
+    ///         br_table $arm_0 $arm_1 ... $default
+    ///       end ;; $default
+    ///       <default body>
+    ///       br $done
+    ///     end ;; $arm_1
+    ///     <arm_1 body>
+    ///     br $done
+    ///   end ;; $arm_0
+    ///   <arm_0 body>
+    ///   ;; falls through to $done
+    /// end ;; $done
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    fn generate_match_br_table(
+        &self,
+        func: &mut Function,
+        scrutinee_local: u32,
+        arms: &[TirMatchArm],
+        analysis: BrTableAnalysis,
+        result_valtype: ValType,
+        _result_type_id: TypeId,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        let range = (analysis.max_value - analysis.min_value + 1) as usize;
+        let num_arms = arms.len();
+
+        // Create a lookup table: for each value in range, which arm to jump to
+        // Default arm index is used for gaps
+        let default_arm_idx = analysis.default_arm.unwrap_or(num_arms); // num_arms means unreachable
+
+        let mut value_to_arm_map: Vec<usize> = vec![default_arm_idx; range];
+        for (value, arm_idx) in &analysis.value_to_arm {
+            let offset = (*value - analysis.min_value) as usize;
+            value_to_arm_map[offset] = *arm_idx;
+        }
+
+        // Block structure:
+        // - Block 0 ($done): outermost, result type T
+        // - Block 1..num_arms ($arm_N): one per arm, for arm num_arms-1 down to 0
+        // - Block num_arms+1 ($dispatch): innermost, contains br_table
+        //
+        // br_table targets are relative to the dispatch block:
+        // - To reach $arm_i from dispatch block, we need depth = num_arms - i
+
+        // Open $done block with result type
+        func.instruction(&Instruction::Block(BlockType::Result(result_valtype)));
+
+        // Open blocks for each arm (in reverse order, so arm 0's block is outermost)
+        for _ in 0..num_arms {
+            func.instruction(&Instruction::Block(BlockType::Empty));
+        }
+
+        // Open dispatch block
+        func.instruction(&Instruction::Block(BlockType::Empty));
+
+        // Load scrutinee and subtract min to get table index
+        func.instruction(&Instruction::LocalGet(scrutinee_local));
+
+        if analysis.min_value != 0 {
+            if analysis.is_i64 {
+                func.instruction(&Instruction::I64Const(analysis.min_value));
+                func.instruction(&Instruction::I64Sub);
+                // Convert to i32 for br_table index
+                func.instruction(&Instruction::I32WrapI64);
+            } else {
+                func.instruction(&Instruction::I32Const(analysis.min_value as i32));
+                func.instruction(&Instruction::I32Sub);
+            }
+        } else if analysis.is_i64 {
+            // Just convert to i32
+            func.instruction(&Instruction::I32WrapI64);
+        }
+
+        // Build br_table targets using the helper function
+        let (targets, default_target) =
+            Self::build_br_table_targets(&value_to_arm_map, num_arms, analysis.default_arm);
+
+        func.instruction(&Instruction::BrTable(targets.into(), default_target));
+
+        // End dispatch block
+        func.instruction(&Instruction::End);
+
+        // If no default arm, emit unreachable here (for out-of-range values)
+        if analysis.default_arm.is_none() {
+            func.instruction(&Instruction::Unreachable);
+        }
+
+        // Generate arm bodies in reverse order (arm[num_arms-1] first, arm[0] last)
+        for arm_idx in (0..num_arms).rev() {
+            // End the arm's block first
+            func.instruction(&Instruction::End);
+
+            // Generate this arm's body
+            let arm = &arms[arm_idx];
+
+            // Bind pattern variables (for bindings in the pattern)
+            // For integer literals, there's nothing to bind
+            // For wildcard/binding, bind the scrutinee value
+            match &arm.pattern {
+                TirPattern::Binding {
+                    name,
+                    type_id,
+                    ..
+                } => {
+                    let valtype = self.type_id_to_valtype(type_table, *type_id);
+                    let local = ctx.alloc_local(name, valtype);
+                    ctx.locals.insert(name.clone(), local);
+                    func.instruction(&Instruction::LocalGet(scrutinee_local));
+                    func.instruction(&Instruction::LocalSet(local));
+                }
+                _ => {}
+            }
+
+            // Generate body expression
+            self.generate_expr(func, &arm.body, type_table, ctx, builder);
+
+            // Branch to $done (skip remaining arms)
+            // From here, depth to $done is arm_idx + 1 (arm_idx blocks above us, plus $done)
+            if arm_idx > 0 {
+                func.instruction(&Instruction::Br((arm_idx) as u32));
+            }
+            // arm_idx == 0: falls through to $done naturally
+        }
+
+        // End $done block
+        func.instruction(&Instruction::End);
+    }
+
     /// Generate code for match expression: `match expr { pattern => body, ... }`
     ///
-    /// Structure (as nested if-else):
+    /// Uses br_table optimization for dense integer matches (O(1) dispatch).
+    /// Falls back to nested if-else chain for other patterns.
+    ///
+    /// br_table is used when:
+    /// - All patterns are integer literals (plus optional wildcard/default)
+    /// - At least 4 cases (BR_TABLE_MIN_CASES)
+    /// - Density >= 40% (BR_TABLE_DENSITY_THRESHOLD)
+    /// - Range <= 1024 (BR_TABLE_MAX_RANGE)
+    ///
+    /// Structure (as nested if-else, fallback):
     /// ```text
     /// block $match (result T)
     ///   ;; evaluate scrutinee once and store in local
@@ -10861,15 +11189,30 @@ impl Codegen {
 
         let scrutinee_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
         let type_key = format!("match_{:?}", scrutinee.type_id);
-        let counter = ctx.let_pattern_counter;
-        ctx.let_pattern_counter += 1;
-        let local_name = format!("__match_scrutinee_{type_key}_{counter}");
+        let local_name = ctx.next_match_scrutinee_local_name(&type_key);
         let scrutinee_local = ctx.alloc_local(&local_name, scrutinee_valtype);
         func.instruction(&Instruction::LocalSet(scrutinee_local));
 
         let result_valtype = self.type_id_to_valtype(type_table, result_type_id);
 
-        // Generate nested if-else chain for arms
+        // Try br_table optimization for integer matches
+        let scrutinee_type = type_table.get(scrutinee.type_id);
+        if let Some(analysis) = Self::analyze_for_br_table(arms, scrutinee_type) {
+            self.generate_match_br_table(
+                func,
+                scrutinee_local,
+                arms,
+                analysis,
+                result_valtype,
+                result_type_id,
+                type_table,
+                ctx,
+                builder,
+            );
+            return;
+        }
+
+        // Fall back to nested if-else chain for other patterns
         self.generate_match_arms(
             func,
             scrutinee_local,
@@ -11858,6 +12201,8 @@ impl Codegen {
         func_ctx.reset_if_pattern_counters();
         // Reset let-pattern counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_let_pattern_counter();
+        // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
+        func_ctx.reset_match_scrutinee_counter();
 
         // Generate the function code
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
@@ -12110,6 +12455,8 @@ impl Codegen {
         func_ctx.reset_if_pattern_counters();
         // Reset let-pattern counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_let_pattern_counter();
+        // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
+        func_ctx.reset_match_scrutinee_counter();
 
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
 
@@ -14800,9 +15147,7 @@ impl Codegen {
                 // Pre-allocate scrutinee local
                 let scrutinee_valtype = self.type_id_to_valtype(type_table, expr.type_id);
                 let type_key = format!("match_{:?}", expr.type_id);
-                let counter = ctx.let_pattern_counter;
-                ctx.let_pattern_counter += 1;
-                let local_name = format!("__match_scrutinee_{type_key}_{counter}");
+                let local_name = ctx.next_match_scrutinee_local_name(&type_key);
                 ctx.alloc_local(&local_name, scrutinee_valtype);
                 for arm in arms {
                     // Pre-allocate locals for pattern bindings

@@ -1,0 +1,66 @@
+use {println, Stdout} from "core:cli";
+
+struct S { a: i64, b: i64 }
+
+fn MIN() -> i32 { return -50; }
+
+// Returns a tuple
+fn tuple_fn(x: i64) -> [i64, i32] {
+    return [x * 2 as i64, 42];
+}
+
+// Big match function - will be inlined
+fn big_match(idx: i32) -> S {
+    return match idx {
+        0 => S { a: 0 as i64, b: 0 as i64 },
+        1 => S { a: 1 as i64, b: 1 as i64 },
+        2 => S { a: 2 as i64, b: 2 as i64 },
+        3 => S { a: 3 as i64, b: 3 as i64 },
+        4 => S { a: 4 as i64, b: 4 as i64 },
+        5 => S { a: 5 as i64, b: 5 as i64 },
+        6 => S { a: 6 as i64, b: 6 as i64 },
+        7 => S { a: 7 as i64, b: 7 as i64 },
+        8 => S { a: 8 as i64, b: 8 as i64 },
+        9 => S { a: 9 as i64, b: 9 as i64 },
+        _ => S { a: 99 as i64, b: 99 as i64 },
+    };
+}
+
+// Intermediate function that will be inlined
+fn get_val(p: i32) -> S {
+    let idx = p - MIN();  // MIN() will be inlined
+    return big_match(idx);  // big_match will be inlined
+}
+
+// This function has both inlined match and tuple destructuring
+fn outer(e: i32) -> i64 {
+    let min_exp = -100;
+    let mut z = 11;
+    let mut p: i32 = 0;
+    if e > min_exp {
+        p = -e;
+    } else {
+        if e < min_exp {
+            z = 11 + (min_exp - e);
+        }
+        p = -z;
+    }
+
+    // This call will inline and bring a match expression
+    let pm = get_val(p);
+
+    // This tuple destructuring uses let_pattern_counter
+    // The bug: match scrutinee and tuple pattern both used let_pattern_counter
+    // but pre-allocation and code generation process them in different orders
+    let [val, _] = tuple_fn(pm.a);
+
+    return val;
+}
+
+export fn run() with Stdout {
+    let s = outer(-50);
+    println(`{s}`);
+}
+
+__DATA__
+{"stdout": "198\n"}
