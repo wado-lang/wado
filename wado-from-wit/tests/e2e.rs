@@ -114,7 +114,7 @@ interface storage {
     let output = parse_wit_and_generate(wit);
 
     assert!(output.contains("pub resource File {"));
-    // `self` is a reserved keyword, so it's escaped as `self_`
-    assert!(output.contains("fn method_file_read(self_: &File, len: u32) -> Array<u8>;"));
-    assert!(output.contains("fn method_file_write(self_: &File, data: Array<u8>);"));
+    // `self` is valid Wado syntax for method receivers
+    assert!(output.contains("fn method_file_read(self: &File, len: u32) -> Array<u8>;"));
+    assert!(output.contains("fn method_file_write(self: &File, data: Array<u8>);"));
 }

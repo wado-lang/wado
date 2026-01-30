@@ -109,6 +109,20 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
+    /// Returns the identifier name for tokens that can act as identifiers.
+    /// This includes regular identifiers and contextual keywords (`flags`, `type`)
+    /// which are only keywords at declaration start but can be used as identifiers elsewhere.
+    #[must_use]
+    pub fn as_ident_name(&self) -> Option<&str> {
+        match self {
+            Self::Ident(name) => Some(name),
+            // Contextual keywords: only keywords at declaration start
+            Self::Flags => Some("flags"),
+            Self::Type => Some("type"),
+            _ => None,
+        }
+    }
+
     /// Returns the keyword as a string if this token is a keyword.
     /// Used for allowing keywords as field names.
     #[must_use]

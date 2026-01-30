@@ -195,15 +195,16 @@ impl Parser {
     }
 
     fn consume_ident(&mut self) -> ParseResult<String> {
-        match self.peek_kind().clone() {
-            TokenKind::Ident(name) => {
-                self.advance();
-                Ok(name)
-            }
-            _ => Err(ParseError {
+        // Accept regular identifiers and contextual keywords (flags, type)
+        if let Some(name) = self.peek_kind().as_ident_name() {
+            let name = name.to_string();
+            self.advance();
+            Ok(name)
+        } else {
+            Err(ParseError {
                 message: format!("expected identifier, found {:?}", self.peek_kind()),
                 span: self.peek().span,
-            }),
+            })
         }
     }
 
@@ -1151,8 +1152,9 @@ impl Parser {
             }
 
             // Check if identifier followed by 'of'
-            if let TokenKind::Ident(binding) = &self.peek().kind {
-                let binding = binding.clone();
+            // Accept identifiers and contextual keywords (flags, type)
+            if let Some(binding) = self.peek_kind().as_ident_name() {
+                let binding = binding.to_string();
                 self.advance(); // consume identifier
 
                 // Check if next token is 'of'
@@ -1339,7 +1341,9 @@ impl Parser {
             }
             self.expect(&TokenKind::RBracket)?;
             Ok(Pattern::Tuple(patterns))
-        } else if let TokenKind::Ident(name) = self.peek_kind().clone() {
+        } else if let Some(name) = self.peek_kind().as_ident_name() {
+            // Accept identifiers and contextual keywords (flags, type) as pattern names
+            let name = name.to_string();
             let start_span = self.peek().span;
             self.advance();
             if name == "_" {
@@ -1458,7 +1462,9 @@ impl Parser {
             }
             self.expect(&TokenKind::RBracket)?;
             Ok(Pattern::Tuple(patterns))
-        } else if let TokenKind::Ident(name) = self.peek_kind().clone() {
+        } else if let Some(name) = self.peek_kind().as_ident_name() {
+            // Accept identifiers and contextual keywords (flags, type) as pattern names
+            let name = name.to_string();
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
@@ -2045,99 +2051,99 @@ impl Parser {
     fn parse_primary_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
 
-        match self.peek_kind().clone() {
-            TokenKind::Ident(name) => {
-                self.advance();
-                // A name is considered a type name if:
-                // 1. It starts with uppercase (UpperCamelCase convention), OR
-                // 2. It looks like a primitive type (i32, u64, i128, u128, f32, etc.)
-                let is_type_name = name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                    || Self::looks_like_primitive_type(&name);
+        // Handle identifiers and contextual keywords (flags, type)
+        if let Some(name) = self.peek_kind().as_ident_name() {
+            let name = name.to_string();
+            self.advance();
+            // A name is considered a type name if:
+            // 1. It starts with uppercase (UpperCamelCase convention), OR
+            // 2. It looks like a primitive type (i32, u64, i128, u128, f32, etc.)
+            let is_type_name = name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                || Self::looks_like_primitive_type(&name);
 
-                // Check for qualified name (Effect::function) or static method call
-                if self.check(&TokenKind::ColonColon) {
-                    // Peek ahead to check if this is turbofish (::< for type args)
-                    let checkpoint = self.pos;
-                    self.advance(); // consume ::
+            // Check for qualified name (Effect::function) or static method call
+            if self.check(&TokenKind::ColonColon) {
+                // Peek ahead to check if this is turbofish (::< for type args)
+                let checkpoint = self.pos;
+                self.advance(); // consume ::
 
-                    if self.check(&TokenKind::Lt) && is_type_name {
-                        // This could be Type::<Args>::method() - static method on generic type
-                        // Parse type arguments
-                        self.advance(); // consume <
-                        let mut type_args = vec![self.parse_type()?];
-                        while self.check(&TokenKind::Comma) {
-                            self.advance();
-                            type_args.push(self.parse_type()?);
-                        }
-                        self.expect_gt()?;
-
-                        // Now expect ::method(args)
-                        if self.check(&TokenKind::ColonColon) {
-                            self.advance(); // consume ::
-                            let method = self.consume_ident()?;
-                            self.expect(&TokenKind::LParen)?;
-                            let (args, has_trailing_comma) = self.parse_arg_list()?;
-                            let end_span = self.expect(&TokenKind::RParen)?.span;
-
-                            Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
-                                target_type: Type::Generic(GenericType {
-                                    name,
-                                    args: type_args,
-                                    span: start_span,
-                                }),
-                                method,
-                                args,
-                                has_trailing_comma,
-                                span: start_span.merge(&end_span),
-                            })))
-                        } else {
-                            // Not followed by ::method, backtrack for turbofish
-                            self.pos = checkpoint;
-                            Ok(Expr::Ident(IdentExpr {
-                                name,
-                                span: start_span,
-                            }))
-                        }
-                    } else if self.check(&TokenKind::Lt) {
-                        // Lowercase name with ::<, this is turbofish, backtrack
-                        self.pos = checkpoint;
-                        Ok(Expr::Ident(IdentExpr {
-                            name,
-                            span: start_span,
-                        }))
-                    } else {
-                        // This is a qualified name like Effect::function
-                        let method = self.consume_ident()?;
-                        let qualified_name = format!("{name}::{method}");
-                        Ok(Expr::Ident(IdentExpr {
-                            name: qualified_name,
-                            span: start_span,
-                        }))
+                if self.check(&TokenKind::Lt) && is_type_name {
+                    // This could be Type::<Args>::method() - static method on generic type
+                    // Parse type arguments
+                    self.advance(); // consume <
+                    let mut type_args = vec![self.parse_type()?];
+                    while self.check(&TokenKind::Comma) {
+                        self.advance();
+                        type_args.push(self.parse_type()?);
                     }
-                } else if self.check(&TokenKind::Colon)
-                    && self.peek_nth(1).kind == TokenKind::LBrace
-                {
-                    // Labeled block expression: `label: { ... }`
-                    self.advance(); // consume ':'
-                    let block = self.parse_block()?;
-                    let end_span = block.span;
-                    Ok(Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
-                        label: name,
-                        block,
-                        span: start_span.merge(&end_span),
-                    })))
-                } else if self.check(&TokenKind::LBrace) && is_type_name {
-                    // Struct literal: `Point { x: 10, y: 20 }`
-                    // Only parse as struct literal if name starts with uppercase
-                    // (struct naming convention: UpperCamelCase)
-                    self.parse_struct_literal(Some(name), start_span)
-                } else {
-                    Ok(Expr::Ident(IdentExpr {
+                    self.expect_gt()?;
+
+                    // Now expect ::method(args)
+                    if self.check(&TokenKind::ColonColon) {
+                        self.advance(); // consume ::
+                        let method = self.consume_ident()?;
+                        self.expect(&TokenKind::LParen)?;
+                        let (args, has_trailing_comma) = self.parse_arg_list()?;
+                        let end_span = self.expect(&TokenKind::RParen)?.span;
+
+                        return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+                            target_type: Type::Generic(GenericType {
+                                name,
+                                args: type_args,
+                                span: start_span,
+                            }),
+                            method,
+                            args,
+                            has_trailing_comma,
+                            span: start_span.merge(&end_span),
+                        })));
+                    }
+                    // Not followed by ::method, backtrack for turbofish
+                    self.pos = checkpoint;
+                    return Ok(Expr::Ident(IdentExpr {
                         name,
                         span: start_span,
-                    }))
+                    }));
+                } else if self.check(&TokenKind::Lt) {
+                    // Lowercase name with ::<, this is turbofish, backtrack
+                    self.pos = checkpoint;
+                    return Ok(Expr::Ident(IdentExpr {
+                        name,
+                        span: start_span,
+                    }));
                 }
+                // This is a qualified name like Effect::function
+                let method = self.consume_ident()?;
+                let qualified_name = format!("{name}::{method}");
+                return Ok(Expr::Ident(IdentExpr {
+                    name: qualified_name,
+                    span: start_span,
+                }));
+            } else if self.check(&TokenKind::Colon)
+                && self.peek_nth(1).kind == TokenKind::LBrace
+            {
+                // Labeled block expression: `label: { ... }`
+                self.advance(); // consume ':'
+                let block = self.parse_block()?;
+                let end_span = block.span;
+                return Ok(Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                    label: name,
+                    block,
+                    span: start_span.merge(&end_span),
+                })));
+            } else if self.check(&TokenKind::LBrace) && is_type_name {
+                // Struct literal: `Point { x: 10, y: 20 }`
+                // Only parse as struct literal if name starts with uppercase
+                // (struct naming convention: UpperCamelCase)
+                return self.parse_struct_literal(Some(name), start_span);
             }
+            return Ok(Expr::Ident(IdentExpr {
+                name,
+                span: start_span,
+            }));
+        }
+
+        match self.peek_kind().clone() {
             TokenKind::IntLit(repr) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {

@@ -3,11 +3,13 @@
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
 /// Wado reserved keywords that cannot be used as identifiers
+/// Note: `self` is valid as a method receiver, and `flags`/`type` are contextual keywords
+/// (only keywords at declaration start, allowed as identifiers elsewhere)
 const RESERVED_KEYWORDS: &[&str] = &[
-    "as", "async", "break", "const", "continue", "effect", "else", "enum", "export", "false",
-    "flags", "fn", "for", "global", "if", "impl", "import", "in", "let", "loop", "match", "mod",
-    "mut", "null", "of", "pub", "reactive", "resource", "return", "self", "struct", "test",
-    "trait", "true", "type", "use", "variant", "while", "with", "world",
+    "as", "async", "break", "const", "continue", "effect", "else", "enum", "export", "false", "fn",
+    "for", "global", "if", "impl", "import", "in", "let", "loop", "match", "mod", "mut", "null",
+    "of", "pub", "reactive", "resource", "return", "struct", "test", "trait", "true", "use",
+    "variant", "while", "with", "world",
 ];
 
 /// Convert WIT kebab-case to Wado `snake_case` for function/field names

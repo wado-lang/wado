@@ -1,0 +1,31 @@
+// Test contextual keywords (flags, type) used as identifiers
+// These are only keywords at declaration start, allowed as identifiers elsewhere
+
+use { println, Stdout } from "core:cli";
+
+fn test_param(flags: i32, type: i32) -> i32 {
+    return flags + type;
+}
+
+fn run() with Stdout {
+    // Test as local variable names
+    let flags = 10;
+    let type = 20;
+
+    // Test in expressions
+    let sum = flags + type;
+    println(`flags + type = {sum}`);
+
+    // Test as function parameters
+    let result = test_param(flags, type);
+    println(`test_param result = {result}`);
+
+    // Test in for-of binding
+    let arr: Array<i32> = [1, 2, 3];
+    for let flags of arr {
+        println(`for-of flags = {flags}`);
+    }
+}
+
+__DATA__
+{"stdout": "flags + type = 30\ntest_param result = 30\nfor-of flags = 1\nfor-of flags = 2\nfor-of flags = 3\n"}
