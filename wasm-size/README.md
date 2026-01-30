@@ -23,13 +23,10 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |        1,100 |
-| c              |        2,122 |
+| wado           |        1,140 |
 | zig            |        4,449 |
 | assemblyscript |        6,913 |
-| moonbit        |       22,884 |
 | rust           |       42,587 |
-| tinygo         |      161,350 |
 
 ### pi_approx
 
@@ -37,11 +34,8 @@ Compares WebAssembly binary sizes across different languages.
 | -------------- | -----------: |
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
-| wado           |       11,838 |
-| c              |       14,151 |
-| moonbit        |       32,940 |
+| wado           |       53,707 |
 | rust           |       62,952 |
-| tinygo         |      186,022 |
 
 ## Usage
 
@@ -81,12 +75,12 @@ Run `mise install` to install:
 
 - **Node.js** - for AssemblyScript
 - **Zig** - wasm32-wasi target
-- **TinyGo** - wasip1 target
 
 ### Manual installation
 
 ```sh
 rustup target add wasm32-wasip1                                # Rust wasm target
+brew install tinygo                                            # TinyGo (macOS)
 curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit
 brew install llvm lld wasi-libc wasi-runtimes                  # C (macOS)
 ```

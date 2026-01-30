@@ -4,14 +4,14 @@
 # Compares .wasm binary sizes across different languages
 #
 # Some tools require manual installation:
-# - C: brew install llvm lld wasi-libc wasi-runtimes (macOS)
 # - Rust wasm target: rustup target add wasm32-wasip1
+# - TinyGo: brew install tinygo (macOS)
 # - Moonbit: curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+# - C: brew install llvm lld wasi-libc wasi-runtimes (macOS)
 
 [tools]
 node = "latest"
 zig = "latest"
-tinygo = "latest"
 
 [env]
 OUT_DIR = "out"
@@ -47,11 +47,15 @@ run = """
 set -e
 mkdir -p "$OUT_DIR"
 
-echo "Building Rust..."
-(cd rust/hello_world && cargo build --release --target wasm32-wasip1)
-(cd rust/pi_approx && cargo build --release --target wasm32-wasip1)
-cp rust/hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
-cp rust/pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
+if rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
+    echo "Building Rust..."
+    (cd rust/hello_world && cargo build --release --target wasm32-wasip1)
+    (cd rust/pi_approx && cargo build --release --target wasm32-wasip1)
+    cp rust/hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
+    cp rust/pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
+else
+    echo "SKIP: Rust (rustup target add wasm32-wasip1)"
+fi
 """
 
 [tasks.build-zig]
@@ -73,9 +77,13 @@ run = """
 set -e
 mkdir -p "$OUT_DIR"
 
-echo "Building TinyGo..."
-tinygo build -o "$OUT_DIR/hello_world_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/hello_world.go
-tinygo build -o "$OUT_DIR/pi_approx_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/pi_approx.go
+if command -v tinygo >/dev/null 2>&1; then
+    echo "Building TinyGo..."
+    tinygo build -o "$OUT_DIR/hello_world_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/hello_world.go
+    tinygo build -o "$OUT_DIR/pi_approx_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/pi_approx.go
+else
+    echo "SKIP: TinyGo (not installed)"
+fi
 """
 
 [tasks.build-assemblyscript]
@@ -98,11 +106,15 @@ run = """
 set -e
 mkdir -p "$OUT_DIR"
 
-echo "Building Moonbit..."
-(cd moonbit/hello_world && moon build --target wasm --strip)
-(cd moonbit/pi_approx && moon build --target wasm --strip)
-cp moonbit/hello_world/target/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
-cp moonbit/pi_approx/target/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
+if command -v moon >/dev/null 2>&1; then
+    echo "Building Moonbit..."
+    (cd moonbit/hello_world && moon build --target wasm --strip)
+    (cd moonbit/pi_approx && moon build --target wasm --strip)
+    cp moonbit/hello_world/target/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
+    cp moonbit/pi_approx/target/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
+else
+    echo "SKIP: Moonbit (not installed)"
+fi
 """
 
 [tasks.build-wado]
@@ -187,10 +199,11 @@ description = "Show dependency installation instructions"
 run = """
 #!/usr/bin/env bash
 echo "Managed by mise (run 'mise install' in this directory):"
-echo "  node, zig, tinygo"
+echo "  node, zig"
 echo ""
 echo "Manual installation required:"
 echo "  rustup target add wasm32-wasip1                                # Rust wasm target"
+echo "  brew install tinygo                                            # TinyGo (macOS)"
 echo "  curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit"
 echo "  brew install llvm lld wasi-libc wasi-runtimes                  # C (macOS)"
 """
