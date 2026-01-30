@@ -6292,10 +6292,7 @@ impl Codegen {
                 // String is a struct with two fields: repr (builtin::array<u8>) and used (i32)
                 // 1. Create the raw byte array
                 let len = s.len();
-                let u8_array_idx = *self
-                    .array_types
-                    .get(&TypeTable::U8)
-                    .expect("u8 array type should be registered");
+                let u8_array_idx = self.get_array_type_index(TypeTable::U8);
 
                 if len == 0 {
                     // Empty string - create empty array without data section reference
@@ -6812,10 +6809,7 @@ impl Codegen {
                             (raw_type_idx, ArrayKind::Array { struct_type_idx })
                         } else if matches!(base_type, ResolvedType::Struct { name, .. } if name == "String")
                         {
-                            let u8_array_idx = *self
-                                .array_types
-                                .get(&TypeTable::U8)
-                                .expect("u8 array type should be registered");
+                            let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                             (u8_array_idx, ArrayKind::String)
                         } else {
                             panic!("index assignment on non-array type: {base_type:?}");
@@ -6980,9 +6974,7 @@ impl Codegen {
                     // CM effect call handled via convention
                 } else {
                     // Generate arguments first
-                    for arg in args {
-                        self.generate_expr(func, arg, type_table, ctx, builder);
-                    }
+                    self.generate_args(func, args, type_table, ctx, builder);
 
                     // Resolve function index using multiple strategies
                     let func_idx = self.resolve_call_target(
@@ -7017,9 +7009,7 @@ impl Codegen {
                     // CM effect call handled via convention
                 } else {
                     // Fallback for unknown effect calls
-                    for arg in args {
-                        self.generate_expr(func, arg, type_table, ctx, builder);
-                    }
+                    self.generate_args(func, args, type_table, ctx, builder);
                     let full_name = format!("{effect_name}::{op_name}");
                     if let Some(func_idx) = builder.try_func_idx(&full_name) {
                         func.instruction(&Instruction::Call(func_idx));
@@ -7159,9 +7149,7 @@ impl Codegen {
                             self.generate_expr(func, receiver, type_table, ctx, builder);
 
                             // Generate code for other arguments
-                            for arg in args {
-                                self.generate_expr(func, arg, type_table, ctx, builder);
-                            }
+                            self.generate_args(func, args, type_table, ctx, builder);
 
                             // Call the method
                             func.instruction(&Instruction::Call(idx));
@@ -7260,9 +7248,7 @@ impl Codegen {
                             // Generate receiver
                             self.generate_expr(func, receiver, type_table, ctx, builder);
                             // Generate arguments
-                            for arg in args {
-                                self.generate_expr(func, arg, type_table, ctx, builder);
-                            }
+                            self.generate_args(func, args, type_table, ctx, builder);
                             // Call the method
                             func.instruction(&Instruction::Call(idx));
                         } else {
@@ -7284,9 +7270,7 @@ impl Codegen {
                             self.generate_expr(func, receiver, type_table, ctx, builder);
 
                             // Generate arguments
-                            for arg in args {
-                                self.generate_expr(func, arg, type_table, ctx, builder);
-                            }
+                            self.generate_args(func, args, type_table, ctx, builder);
 
                             // Call the WASI function
                             let func_idx = builder.func_idx(&local_name);
@@ -7322,9 +7306,7 @@ impl Codegen {
                 let module_path = static_func.module_path();
 
                 // Generate arguments first
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
 
                 // Check if this is a monomorphized function using metadata
                 let base_struct_name = static_func.base_struct_name();
@@ -7654,10 +7636,7 @@ impl Codegen {
                         struct_type_index: array_struct_type_idx,
                         field_index: 0, // repr is field 0
                     });
-                    let u8_array_idx = *self
-                        .array_types
-                        .get(&TypeTable::U8)
-                        .expect("u8 array type should be registered");
+                    let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                     (
                         self.array_types
                             .get(&element_type)
@@ -7678,16 +7657,10 @@ impl Codegen {
                             field_index: 0, // repr is field 0
                         });
                     }
-                    let u8_array_idx = *self
-                        .array_types
-                        .get(&TypeTable::U8)
-                        .expect("u8 array type should be registered");
+                    let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                     (u8_array_idx, false, None)
                 } else {
-                    let u8_array_idx = *self
-                        .array_types
-                        .get(&TypeTable::U8)
-                        .expect("u8 array type should be registered");
+                    let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                     (u8_array_idx, false, None)
                 };
 
@@ -7842,10 +7815,7 @@ impl Codegen {
 
                 // Get the array type from the expression's type
                 if let Some(element_type_id) = type_table.as_array(expr.type_id) {
-                    let u8_array_idx = *self
-                        .array_types
-                        .get(&TypeTable::U8)
-                        .expect("u8 array type should be registered");
+                    let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                     let raw_array_type_idx = self
                         .array_types
                         .get(&element_type_id)
@@ -7973,9 +7943,7 @@ impl Codegen {
                 });
 
                 // Generate arguments
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
 
                 // Get the closure again and extract funcref (field 1)
                 func.instruction(&Instruction::LocalGet(closure_local));
@@ -8069,6 +8037,28 @@ impl Codegen {
         }
     }
 
+    /// Generate code for multiple arguments (convenience wrapper)
+    fn generate_args(
+        &self,
+        func: &mut Function,
+        args: &[TirExpr],
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        for arg in args {
+            self.generate_expr(func, arg, type_table, ctx, builder);
+        }
+    }
+
+    /// Get the Wasm array type index for a given element type
+    fn get_array_type_index(&self, element_type: TypeId) -> u32 {
+        *self
+            .array_types
+            .get(&element_type)
+            .expect("array type should be registered")
+    }
+
     /// Generate code for an expression used as a statement (value is discarded).
     /// This optimizes assignment expressions to avoid the drop-tee pattern.
     fn generate_expr_as_stmt(
@@ -8152,10 +8142,7 @@ impl Codegen {
                     Array { struct_type_idx: u32 },
                     String,
                 }
-                let u8_array_idx = *self
-                    .array_types
-                    .get(&TypeTable::U8)
-                    .expect("u8 array type should be registered");
+                let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                 let (raw_array_type_idx, array_kind) = if let Some(element_type) =
                     type_table.as_array(base_type_id)
                 {
@@ -9318,10 +9305,7 @@ impl Codegen {
                 // - break: br 2 (to $exit)
 
                 // Get the raw array type index and Array struct type index for array.get
-                let u8_array_idx = *self
-                    .array_types
-                    .get(&TypeTable::U8)
-                    .expect("u8 array type should be registered");
+                let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                 let (raw_array_type_idx, array_struct_type_idx, element_type_id) =
                     if let Some(element_type) = type_table.as_array(*iterable_type) {
                         // Try TypeId lookup first, then fall back to canonical name lookup
@@ -11515,10 +11499,7 @@ impl Codegen {
 
         // Pre-allocate locals for assert statements
         if let Some(body) = &tir_func.body {
-            let string_array_type = *self
-                .array_types
-                .get(&TypeTable::U8)
-                .expect("u8 array type should be registered");
+            let string_array_type = self.get_array_type_index(TypeTable::U8);
             self.preallocate_assert_locals(body, type_table, &mut func_ctx, string_array_type);
         }
 
@@ -11667,10 +11648,7 @@ impl Codegen {
 
         // Pre-allocate locals for assert statements
         if let Some(body) = &tir_func.body {
-            let string_array_type = *self
-                .array_types
-                .get(&TypeTable::U8)
-                .expect("u8 array type should be registered");
+            let string_array_type = self.get_array_type_index(TypeTable::U8);
             self.preallocate_assert_locals(body, type_table, &mut func_ctx, string_array_type);
         }
 
@@ -11898,9 +11876,7 @@ impl Codegen {
         let local_name = func_info.local_alias_name();
 
         // Generate arguments first
-        for arg in args {
-            self.generate_expr(func, arg, type_table, ctx, builder);
-        }
+        self.generate_args(func, args, type_table, ctx, builder);
 
         // Handle async operations (need extra outptr argument)
         // For async functions, the outptr is always 2048 - we don't use outptr_alloc
@@ -12105,16 +12081,12 @@ impl Codegen {
         match builtin_name {
             "builtin::likely" => {
                 // Pass through the argument and set branch hint for the next branch
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 ctx.set_branch_hint(true);
             }
             "builtin::unlikely" => {
                 // Pass through the argument and set branch hint for the next branch
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 ctx.set_branch_hint(false);
             }
             "builtin::unreachable" => {
@@ -12132,29 +12104,17 @@ impl Codegen {
                 func.instruction(&Instruction::ArrayLen);
             }
             "builtin::array_get_u8" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                let u8_array_idx = *self
-                    .array_types
-                    .get(&TypeTable::U8)
-                    .expect("u8 array type should be registered");
+                self.generate_args(func, args, type_table, ctx, builder);
+                let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                 func.instruction(&Instruction::ArrayGetU(u8_array_idx));
             }
             "builtin::array_set_u8" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-                let u8_array_idx = *self
-                    .array_types
-                    .get(&TypeTable::U8)
-                    .expect("u8 array type should be registered");
+                self.generate_args(func, args, type_table, ctx, builder);
+                let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                 func.instruction(&Instruction::ArraySet(u8_array_idx));
             }
             "builtin::memory_store8" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Store8(MemArg {
                     offset: 0,
                     align: 0,
@@ -12162,9 +12122,7 @@ impl Codegen {
                 }));
             }
             "builtin::memory_load8_u" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Load8U(MemArg {
                     offset: 0,
                     align: 0,
@@ -12172,9 +12130,7 @@ impl Codegen {
                 }));
             }
             "builtin::memory_load32" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Load(MemArg {
                     offset: 0,
                     align: 2,
@@ -12183,13 +12139,8 @@ impl Codegen {
             }
             "builtin::array_new" => {
                 if let ResolvedType::BuiltinArray(element_type) = type_table.get(expr.type_id) {
-                    let array_type_idx = *self
-                        .array_types
-                        .get(element_type)
-                        .expect("Array type should be registered for array_new");
-                    for arg in args {
-                        self.generate_expr(func, arg, type_table, ctx, builder);
-                    }
+                    let array_type_idx = self.get_array_type_index(*element_type);
+                    self.generate_args(func, args, type_table, ctx, builder);
                     func.instruction(&Instruction::ArrayNewDefault(array_type_idx));
                 } else {
                     panic!("array_new return type must be builtin::array<T>");
@@ -12200,18 +12151,13 @@ impl Codegen {
                     if let ResolvedType::BuiltinArray(element_type) =
                         type_table.get(arr_arg.type_id)
                     {
-                        let array_type_idx = *self
-                            .array_types
-                            .get(element_type)
-                            .expect("Array type should be registered for array_get");
+                        let array_type_idx = self.get_array_type_index(*element_type);
                         // Generate array argument and ensure it's non-null
                         // (struct field access returns nullable refs)
                         self.generate_expr(func, arr_arg, type_table, ctx, builder);
                         func.instruction(&Instruction::RefAsNonNull);
                         // Generate remaining arguments (index)
-                        for arg in args.iter().skip(1) {
-                            self.generate_expr(func, arg, type_table, ctx, builder);
-                        }
+                        self.generate_args(func, &args[1..], type_table, ctx, builder);
                         // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
                         if *element_type == TypeTable::U8 || *element_type == TypeTable::U16 {
                             func.instruction(&Instruction::ArrayGetU(array_type_idx));
@@ -12236,18 +12182,13 @@ impl Codegen {
                     if let ResolvedType::BuiltinArray(element_type) =
                         type_table.get(arr_arg.type_id)
                     {
-                        let array_type_idx = *self
-                            .array_types
-                            .get(element_type)
-                            .expect("Array type should be registered for array_set");
+                        let array_type_idx = self.get_array_type_index(*element_type);
                         // Generate array argument and ensure it's non-null
                         // (struct field access returns nullable refs)
                         self.generate_expr(func, arr_arg, type_table, ctx, builder);
                         func.instruction(&Instruction::RefAsNonNull);
                         // Generate remaining arguments (index, value)
-                        for arg in args.iter().skip(1) {
-                            self.generate_expr(func, arg, type_table, ctx, builder);
-                        }
+                        self.generate_args(func, &args[1..], type_table, ctx, builder);
                         func.instruction(&Instruction::ArraySet(array_type_idx));
                     } else {
                         panic!("array_set first argument must be builtin::array<T>");
@@ -12261,10 +12202,7 @@ impl Codegen {
                     if let ResolvedType::BuiltinArray(element_type) =
                         type_table.get(dst_arg.type_id)
                     {
-                        let array_type_idx = *self
-                            .array_types
-                            .get(element_type)
-                            .expect("Array type should be registered for array_copy");
+                        let array_type_idx = self.get_array_type_index(*element_type);
                         // Generate dst array and ensure non-null
                         self.generate_expr(func, &args[0], type_table, ctx, builder);
                         func.instruction(&Instruction::RefAsNonNull);
@@ -12293,13 +12231,8 @@ impl Codegen {
                     if let ResolvedType::BuiltinArray(element_type) =
                         type_table.get(arr_arg.type_id)
                     {
-                        let array_type_idx = *self
-                            .array_types
-                            .get(element_type)
-                            .expect("Array type should be registered for array_fill");
-                        for arg in args {
-                            self.generate_expr(func, arg, type_table, ctx, builder);
-                        }
+                        let array_type_idx = self.get_array_type_index(*element_type);
+                        self.generate_args(func, args, type_table, ctx, builder);
                         func.instruction(&Instruction::ArrayFill(array_type_idx));
                     } else {
                         panic!("array_fill first argument must be builtin::array<T>");
@@ -12307,24 +12240,18 @@ impl Codegen {
                 }
             }
             "builtin::i32_and" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32And);
             }
             "builtin::i32_eqz" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Eqz);
             }
             // Wide Arithmetic builtins - map directly to Wasm wide-arithmetic instructions
             // These return multi-value [i64, i64] which is wrapped in a tuple struct
             // unless skip_tuple_wrap is set (for tuple elision optimization)
             "builtin::i64_add128" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I64Add128);
                 if !ctx.skip_tuple_wrap {
                     let tuple_type_idx =
@@ -12333,9 +12260,7 @@ impl Codegen {
                 }
             }
             "builtin::i64_sub128" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I64Sub128);
                 if !ctx.skip_tuple_wrap {
                     let tuple_type_idx =
@@ -12344,9 +12269,7 @@ impl Codegen {
                 }
             }
             "builtin::i64_mul_wide_u" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I64MulWideU);
                 if !ctx.skip_tuple_wrap {
                     let tuple_type_idx =
@@ -12355,9 +12278,7 @@ impl Codegen {
                 }
             }
             "builtin::i64_mul_wide_s" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I64MulWideS);
                 if !ctx.skip_tuple_wrap {
                     let tuple_type_idx =
@@ -12366,155 +12287,105 @@ impl Codegen {
                 }
             }
             "builtin::i32_clz" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Clz);
             }
             "builtin::i64_clz" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I64Clz);
             }
             "builtin::i64_reinterpret_f64" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I64ReinterpretF64);
             }
             "builtin::f64_reinterpret_i64" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64ReinterpretI64);
             }
             "builtin::i32_reinterpret_f32" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32ReinterpretF32);
             }
             "builtin::f32_reinterpret_i32" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32ReinterpretI32);
             }
             // Float math operations (single-argument)
             "builtin::f32_abs" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Abs);
             }
             "builtin::f64_abs" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Abs);
             }
             "builtin::f32_ceil" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Ceil);
             }
             "builtin::f64_ceil" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Ceil);
             }
             "builtin::f32_floor" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Floor);
             }
             "builtin::f64_floor" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Floor);
             }
             "builtin::f32_trunc" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Trunc);
             }
             "builtin::f64_trunc" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Trunc);
             }
             "builtin::f32_nearest" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Nearest);
             }
             "builtin::f64_nearest" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Nearest);
             }
             "builtin::f32_sqrt" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Sqrt);
             }
             "builtin::f64_sqrt" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Sqrt);
             }
             // Float math operations (two-argument)
             "builtin::f32_min" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Min);
             }
             "builtin::f64_min" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Min);
             }
             "builtin::f32_max" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Max);
             }
             "builtin::f64_max" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Max);
             }
             "builtin::f32_copysign" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F32Copysign);
             }
             "builtin::f64_copysign" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::F64Copysign);
             }
             "builtin::call_indirect_stdout_write_via_stream" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Const(2048));
                 let stdout_func = build_local_alias_name("cli", "Stdout", "write_via_stream");
                 let func_idx = builder.func_idx(&stdout_func);
@@ -12525,9 +12396,7 @@ impl Codegen {
                 func.instruction(&Instruction::LocalSet(subtask_local));
             }
             "builtin::call_indirect_stderr_write_via_stream" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Const(2048));
                 let stderr_func = build_local_alias_name("cli", "Stderr", "write_via_stream");
                 let func_idx = builder.func_idx(&stderr_func);
@@ -12555,9 +12424,7 @@ impl Codegen {
             | "builtin::waitable_join"
             | "builtin::waitable_set_wait"
             | "builtin::subtask_drop" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 // Look up the canonical name from the builtin registry
                 let func_name = builtin_name.strip_prefix("builtin::").unwrap();
                 let builtin_info = self
@@ -12595,9 +12462,7 @@ impl Codegen {
                 if is_unit_payload {
                     func.instruction(&Instruction::I32Const(0));
                 } else {
-                    for arg in args {
-                        self.generate_expr(func, arg, type_table, ctx, builder);
-                    }
+                    self.generate_args(func, args, type_table, ctx, builder);
                 }
                 true
             }
@@ -12607,16 +12472,12 @@ impl Codegen {
                 if is_unit_payload {
                     func.instruction(&Instruction::I32Const(1));
                 } else {
-                    for arg in args {
-                        self.generate_expr(func, arg, type_table, ctx, builder);
-                    }
+                    self.generate_args(func, args, type_table, ctx, builder);
                 }
                 true
             }
             "Some" => {
-                for arg in args {
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
+                self.generate_args(func, args, type_table, ctx, builder);
                 true
             }
             "None" => {
