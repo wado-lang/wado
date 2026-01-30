@@ -1623,8 +1623,11 @@ pub struct ClosureFunctor {
     pub id: u32,
     /// Name of the generated functor struct (e.g., `__Closure_0`)
     pub struct_name: String,
-    /// Type ID of the generated functor struct
+    /// Type ID of the generated functor struct (bare struct type for definitions)
     pub struct_type_id: TypeId,
+    /// Type ID of reference to functor struct (for expression/local types)
+    /// Functors are reference types, so variables holding them have this type.
+    pub ref_type_id: TypeId,
     /// The `__call` method for this closure (with body transformed:
     /// Capture nodes become `FieldAccess` on self)
     pub call_method: Rc<RefCell<TirFunction>>,

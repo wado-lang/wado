@@ -1922,7 +1922,11 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.collect_func_instantiation_sites_in_expr(functor, generic_functions, type_table);
+                self.collect_func_instantiation_sites_in_expr(
+                    functor,
+                    generic_functions,
+                    type_table,
+                );
             }
             TirExprKind::OptionSome { value } => {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);

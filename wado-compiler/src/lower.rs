@@ -127,8 +127,9 @@ struct ClosureLowerer {
     functor_infos: Vec<ClosureFunctor>,
     /// Map from local variable index to closure ID (for tracking closures stored in locals)
     local_to_closure: HashMap<u32, u32>,
-    /// Closure IDs that are safe to transform (stored in locals, never passed as arguments)
-    safe_to_transform: std::collections::HashSet<u32>,
+    /// Closure IDs that can be specialized (stored in locals, called directly).
+    /// Non-specializable closures use `ClosureToCanonical` for type-erased representation.
+    specializable: std::collections::HashSet<u32>,
     /// Generated structs to add to module
     generated_structs: Vec<TirStruct>,
     /// Generated functions to add to module
@@ -145,7 +146,7 @@ impl ClosureLowerer {
             collected_closures: Vec::new(),
             functor_infos: Vec::new(),
             local_to_closure: HashMap::new(),
-            safe_to_transform: std::collections::HashSet::new(),
+            specializable: std::collections::HashSet::new(),
             generated_structs: Vec::new(),
             generated_functions: Vec::new(),
             fn_param_specializations: HashMap::new(),
@@ -268,11 +269,12 @@ impl ClosureLowerer {
         // For each local that stored a closure and was transformed to a struct,
         // update its type from function type to struct type
         for (local_idx, closure_id) in &self.local_to_closure {
-            if self.safe_to_transform.contains(closure_id)
+            if self.specializable.contains(closure_id)
                 && let Some(functor) = self.functor_infos.get(*closure_id as usize)
                 && let Some(type_id) = func.local_types.get_mut(*local_idx as usize)
             {
-                *type_id = functor.struct_type_id;
+                // Functors are reference types
+                *type_id = functor.ref_type_id;
             }
         }
     }
@@ -525,7 +527,7 @@ impl ClosureLowerer {
                     let closure_id = self.closure_counter;
                     self.local_to_closure.insert(*local_index, closure_id);
                     // Initially mark as safe; will be removed if passed as argument
-                    self.safe_to_transform.insert(closure_id);
+                    self.specializable.insert(closure_id);
                 }
                 // Analyze the value expression
                 self.analyze_closure_safety_expr(value, false);
@@ -626,7 +628,7 @@ impl ClosureLowerer {
 
                 // If a closure appears directly as an argument, it's not safe to transform
                 if in_arg_position {
-                    self.safe_to_transform.remove(&closure_id);
+                    self.specializable.remove(&closure_id);
                 }
 
                 // Recursively analyze the body
@@ -635,7 +637,7 @@ impl ClosureLowerer {
             TirExprKind::Local { index, .. } => {
                 // If a local that holds a closure is passed as an argument, mark it unsafe
                 if in_arg_position && let Some(closure_id) = self.local_to_closure.get(index) {
-                    self.safe_to_transform.remove(closure_id);
+                    self.specializable.remove(closure_id);
                 }
             }
             TirExprKind::Call { args, .. }
@@ -886,6 +888,7 @@ impl ClosureLowerer {
                 id: collected.id,
                 struct_name,
                 struct_type_id,
+                ref_type_id: self_ref_type,
                 call_method: call_method_rc,
                 captures: collected.captures.clone(),
             });
@@ -2212,10 +2215,7 @@ impl ClosureLowerer {
 
         // Determine if this is an instance method (has self parameter)
         // Note: static methods have method_info but no self parameter
-        let has_self_param = callee
-            .params
-            .first()
-            .is_some_and(|p| p.name == "self");
+        let has_self_param = callee.params.first().is_some_and(|p| p.name == "self");
         let param_offset = u32::from(has_self_param);
 
         // Clone and modify params
@@ -2934,14 +2934,31 @@ impl ClosureLowerer {
     fn transform_stmt(&mut self, stmt: &mut TirStmt, type_table: &mut TypeTable) {
         match &mut stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                type_id,
+                ..
             } => {
                 // Track if this local stores a closure
-                if matches!(value.kind, TirExprKind::Closure { .. }) {
-                    let closure_id = self.closure_counter;
-                    self.local_to_closure.insert(*local_index, closure_id);
-                }
+                let was_closure = matches!(value.kind, TirExprKind::Closure { .. });
+                let closure_id = if was_closure {
+                    let id = self.closure_counter;
+                    self.local_to_closure.insert(*local_index, id);
+                    Some(id)
+                } else {
+                    None
+                };
+
                 self.transform_expr(value, type_table);
+
+                // Update the Let statement's type_id for specializable closures
+                // (non-specializable closures keep their fn(...) type for ClosureToCanonical)
+                if let Some(id) = closure_id
+                    && self.specializable.contains(&id)
+                    && let Some(functor) = self.functor_infos.get(id as usize)
+                {
+                    *type_id = functor.ref_type_id;
+                }
             }
             TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
                 self.transform_expr(expr, type_table);
@@ -3043,16 +3060,15 @@ impl ClosureLowerer {
                 // Transform nested closures in the body
                 self.transform_expr(body, type_table);
 
-                // Safe closures: transform to StructLiteral (stored in local, called directly)
-                // Unsafe closures: set functor_id and leave as Closure for fn-param specialization
+                // Specializable closures: transform to StructLiteral (stored in local, called directly)
+                // Non-specializable closures: set functor_id and leave as Closure for fn-param specialization
                 // The try_transform_fn_param_call will handle specialization. Any remaining
                 // Closure nodes after that are transformed to ClosureToCanonical in a final pass.
-                if self.safe_to_transform.contains(&closure_id)
+                if self.specializable.contains(&closure_id)
                     && let Some(functor) = self.functor_infos.get(closure_id as usize)
                 {
                     // Transform Closure to StructLiteral
                     let struct_name = functor.struct_name.clone();
-                    let struct_type_id = functor.struct_type_id;
 
                     // Build field expressions from captures
                     let fields: Vec<crate::tir::TirStructField> = captures
@@ -3073,14 +3089,16 @@ impl ClosureLowerer {
                         .collect();
 
                     // Replace with StructLiteral
+                    // struct_type uses bare struct type for codegen
+                    // type_id uses ref type because functors are reference types
                     expr.kind = TirExprKind::StructLiteral {
-                        struct_type: struct_type_id,
+                        struct_type: functor.struct_type_id,
                         struct_name,
                         fields,
                     };
-                    expr.type_id = struct_type_id;
+                    expr.type_id = functor.ref_type_id;
                 } else {
-                    // For unsafe closures (passed as arguments), set the functor_id
+                    // For non-specializable closures (passed as arguments), set the functor_id
                     // so that try_transform_fn_param_call can look up the corresponding ClosureFunctor
                     *functor_id = Some(closure_id);
                 }
@@ -3095,18 +3113,16 @@ impl ClosureLowerer {
                 // Check if callee is a local that stores a safe-to-transform closure
                 if let TirExprKind::Local { index, .. } = &callee.kind
                     && let Some(closure_id) = self.local_to_closure.get(index)
-                    && self.safe_to_transform.contains(closure_id)
+                    && self.specializable.contains(closure_id)
                     && let Some(functor) = self.functor_infos.get(*closure_id as usize)
                 {
                     // Transform IndirectCall to MethodCall
-                    let struct_type_id = functor.struct_type_id;
-
-                    // Update callee's type to the struct type
+                    // Update callee's type to the functor ref type (functors are reference types)
                     let mut callee_owned = std::mem::replace(
                         callee.as_mut(),
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
                     );
-                    callee_owned.type_id = struct_type_id;
+                    callee_owned.type_id = functor.ref_type_id;
 
                     // Get return type from the __call method
                     let return_type = functor.call_method.borrow().return_type;
@@ -3296,23 +3312,13 @@ impl ClosureLowerer {
                     })
                     .collect();
 
-                // Transform to struct literal and wrap in reference
-                let struct_literal = TirExpr::new(
-                    TirExprKind::StructLiteral {
-                        struct_type: functor.struct_type_id,
-                        struct_name: functor.struct_name.clone(),
-                        fields,
-                    },
-                    functor.struct_type_id,
-                    arg.span,
-                );
-
-                // The specialized function takes &__Closure_N, so wrap in reference
-                let ref_type = type_table.make_ref(functor.struct_type_id);
-                arg.kind = TirExprKind::Move {
-                    value: Box::new(struct_literal),
+                // Transform to struct literal (functors are reference types, no Move needed)
+                arg.kind = TirExprKind::StructLiteral {
+                    struct_type: functor.struct_type_id,
+                    struct_name: functor.struct_name.clone(),
+                    fields,
                 };
-                arg.type_id = ref_type;
+                arg.type_id = functor.ref_type_id;
             }
         }
 
@@ -3347,7 +3353,7 @@ impl ClosureLowerer {
         };
     }
 
-    /// Transform remaining Closure nodes to ClosureToCanonical.
+    /// Transform remaining Closure nodes to `ClosureToCanonical`.
     /// This is called after fn-param specialization has had a chance to transform closures.
     /// Any Closure nodes still remaining are those where specialization was skipped
     /// (e.g., fn-param stored in struct field).
@@ -3368,7 +3374,9 @@ impl ClosureLowerer {
             TirStmtKind::Return { value: Some(expr) } => {
                 self.transform_remaining_closures_expr(expr);
             }
-            TirStmtKind::Return { value: None } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
+            TirStmtKind::Return { value: None }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => {}
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -3462,7 +3470,6 @@ impl ClosureLowerer {
                 // This closure wasn't specialized, transform to ClosureToCanonical
                 if let Some(functor) = self.functor_infos.get(*closure_id as usize) {
                     let struct_name = functor.struct_name.clone();
-                    let struct_type_id = functor.struct_type_id;
 
                     // Build field expressions from captures
                     let fields: Vec<crate::tir::TirStructField> = captures
@@ -3482,14 +3489,14 @@ impl ClosureLowerer {
                         })
                         .collect();
 
-                    // Build the StructLiteral
+                    // Build the StructLiteral (functors are reference types)
                     let struct_literal = TirExpr::new(
                         TirExprKind::StructLiteral {
-                            struct_type: struct_type_id,
+                            struct_type: functor.struct_type_id,
                             struct_name,
                             fields,
                         },
-                        struct_type_id,
+                        functor.ref_type_id,
                         expr.span,
                     );
 
@@ -3565,7 +3572,10 @@ impl ClosureLowerer {
                     self.transform_remaining_closures_expr(arg);
                 }
             }
-            TirExprKind::Match { expr: scrutinee, arms } => {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 self.transform_remaining_closures_expr(scrutinee);
                 for arm in arms {
                     self.transform_remaining_closures_expr(&mut arm.body);
@@ -3574,7 +3584,9 @@ impl ClosureLowerer {
             TirExprKind::OptionSome { value } => {
                 self.transform_remaining_closures_expr(value);
             }
-            TirExprKind::VariantConstruct { payload: Some(p), .. } => {
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            } => {
                 self.transform_remaining_closures_expr(p);
             }
             TirExprKind::LabeledBlock { block, .. } => {
@@ -3586,7 +3598,11 @@ impl ClosureLowerer {
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.transform_remaining_closures_expr(functor);
             }
-            TirExprKind::Closure { body, functor_id: None, .. } => {
+            TirExprKind::Closure {
+                body,
+                functor_id: None,
+                ..
+            } => {
                 // Closure without functor_id - just recurse into body
                 self.transform_remaining_closures_expr(body);
             }

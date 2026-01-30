@@ -1018,7 +1018,7 @@ fn analyze_expr(
             // Mark the __call method as reachable (it's referenced via ref.func)
             let method_name = MethodName::new(
                 current_module.join("/"),
-                format!("__Closure_{}", functor_id),
+                format!("__Closure_{functor_id}"),
                 None,
                 "__call".to_string(),
             );
