@@ -6,7 +6,7 @@
 //! - Float-to-string conversion using ryu
 //! - Math functions (transcendentals) using libm
 
-#![no_std]
+#![cfg_attr(target_arch = "wasm32", no_std)]
 
 #[cfg(target_arch = "wasm32")]
 use core::panic::PanicInfo;
