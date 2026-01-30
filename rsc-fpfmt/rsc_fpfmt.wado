@@ -42,16 +42,6 @@ pub fn i64_bit_len(x: i64) -> i32 {
     return 64 - (builtin::i64_clz(x) as i32);
 }
 
-pub fn bool2int(b: bool) -> i64 {
-    if b { return 1 as i64; }
-    return 0 as i64;
-}
-
-pub fn bool2int32(b: bool) -> i32 {
-    if b { return 1; }
-    return 0;
-}
-
 // log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
 pub fn log10_pow2(x: i32) -> i32 {
     return (x * 78913) >> 18;
@@ -114,27 +104,7 @@ pub fn unrounded_nudge(u: i64, delta: i32) -> i64 {
 pub fn unrounded_div(u: i64, d: i64) -> i64 {
     let q = u / d;
     let r = u % d;
-    return q | (u & 1 as i64) | bool2int(r != 0 as i64);
-}
-
-pub fn u64_lt(a: i64, b: i64) -> bool {
-    let sign_bit = 0x8000000000000000 as i64;
-    return (a ^ sign_bit) < (b ^ sign_bit);
-}
-
-pub fn u64_ge(a: i64, b: i64) -> bool {
-    let sign_bit = 0x8000000000000000 as i64;
-    return (a ^ sign_bit) >= (b ^ sign_bit);
-}
-
-pub fn u64_le(a: i64, b: i64) -> bool {
-    let sign_bit = 0x8000000000000000 as i64;
-    return (a ^ sign_bit) <= (b ^ sign_bit);
-}
-
-pub fn u64_gt(a: i64, b: i64) -> bool {
-    let sign_bit = 0x8000000000000000 as i64;
-    return (a ^ sign_bit) > (b ^ sign_bit);
+    return q | (u & 1 as i64) | ((r != 0 as i64) as i64);
 }
 
 pub struct PmHiLo {
@@ -161,8 +131,8 @@ pub fn uscale(x: i64, pm_hi: i64, pm_lo: i64, s: i32) -> i64 {
         // Go: mid2, _ := bits.Mul64(x, pm_lo) → mid2=high part, _=low part
         // Wado: [_, mid2] = i64_mul_wide_u(x, pm_lo) → _=low part, mid2=high part
         let [_, mid2] = builtin::i64_mul_wide_u(x, pm_lo);
-        sticky = bool2int(u64_gt(mid - mid2, 1 as i64));
-        hi = hi - bool2int(u64_lt(mid, mid2));
+        sticky = ((mid - mid2) as u64 > 1 as u64) as i64;
+        hi = hi - ((mid as u64) < (mid2 as u64)) as i64;
     }
 
     // Use logical shift (not arithmetic) for unsigned semantics
@@ -191,7 +161,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
     let u = uscale(m, pm.hi, pm.lo, s);
     let mut d = unrounded_round(u);
 
-    if u64_ge(d, pow10(n)) {
+    if (d as u64) >= (pow10(n) as u64) {
         d = unrounded_round(unrounded_div(u, 10 as i64));
         return FormatResult { digits: d, exponent: -p + 1 };
     }
@@ -277,7 +247,7 @@ pub fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
     let mut pv = p;
 
     let d1 = rotate_right(u64_mul(xv, inv5), 1);
-    if u64_le(d1, thresh_10) {
+    if (d1 as u64) <= (thresh_10 as u64) {
         xv = d1;
         pv = pv + 1;
     } else {
@@ -285,25 +255,25 @@ pub fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
     }
 
     let d8 = rotate_right(u64_mul(xv, inv5p8), 8);
-    if u64_le(d8, thresh_1e8) {
+    if (d8 as u64) <= (thresh_1e8 as u64) {
         xv = d8;
         pv = pv + 8;
     }
 
     let d4 = rotate_right(u64_mul(xv, inv5p4), 4);
-    if u64_le(d4, thresh_10000) {
+    if (d4 as u64) <= (thresh_10000 as u64) {
         xv = d4;
         pv = pv + 4;
     }
 
     let d2 = rotate_right(u64_mul(xv, inv5p2), 2);
-    if u64_le(d2, thresh_100) {
+    if (d2 as u64) <= (thresh_100 as u64) {
         xv = d2;
         pv = pv + 2;
     }
 
     let d1b = rotate_right(u64_mul(xv, inv5), 1);
-    if u64_le(d1b, thresh_10) {
+    if (d1b as u64) <= (thresh_10 as u64) {
         xv = d1b;
         pv = pv + 1;
     }
@@ -312,28 +282,9 @@ pub fn trim_zeros(x: i64, p: i32) -> [i64, i32] {
 }
 
 // Logical right shift for unsigned semantics on i64
+// Uses native i64.shr_u via cast to u64
 pub fn logical_shr(x: i64, n: i32) -> i64 {
-    if n <= 0 { return x; }
-    if n >= 64 { return 0 as i64; }
-    // Use arithmetic shift, then mask off sign-extended bits
-    // The mask has (64-n) ones in the low bits
-    let mask = shr_mask(n);
-    return (x >> n) & mask;
-}
-
-// Get mask for logical shift: (1 << (64-n)) - 1
-pub fn shr_mask(n: i32) -> i64 {
-    if n <= 0 { return 0xFFFFFFFFFFFFFFFF as i64; }
-    if n >= 64 { return 0 as i64; }
-    // Build the mask: all 1s in the low (64-n) bits
-    // For n=1: 0x7FFFFFFFFFFFFFFF
-    // For n=8: 0x00FFFFFFFFFFFFFF
-    // We can compute this as: if (64-n) >= 64 then -1, else (1 << (64-n)) - 1
-    let remaining = 64 - n;
-    if remaining >= 63 {
-        return 0x7FFFFFFFFFFFFFFF as i64;
-    }
-    return (1 as i64 << remaining) - 1 as i64;
+    return ((x as u64) >> n) as i64;
 }
 
 pub fn rotate_right(x: i64, n: i32) -> i64 {
@@ -343,7 +294,7 @@ pub fn rotate_right(x: i64, n: i32) -> i64 {
 // digits returns the number of decimal digits in d
 pub fn digits(d: i64) -> i32 {
     let nd = log10_pow2(i64_bit_len(d));
-    return nd + bool2int32(u64_ge(d, pow10(nd)));
+    return nd + ((d as u64) >= (pow10(nd) as u64)) as i32;
 }
 
 fn i2a_first(n: i32) -> char {

@@ -9419,6 +9419,34 @@ impl Codegen {
             ) => {
                 // No instruction needed
             }
+            // bool -> i64 (unsigned extend, bool is 0 or 1)
+            (
+                ResolvedType::Primitive(PrimitiveType::Bool),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
+            }
+            // bool -> u64 (unsigned extend, bool is 0 or 1)
+            (
+                ResolvedType::Primitive(PrimitiveType::Bool),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => {
+                func.instruction(&Instruction::I64ExtendI32U);
+            }
+            // bool -> i32 (no-op, bool is stored as i32)
+            (
+                ResolvedType::Primitive(PrimitiveType::Bool),
+                ResolvedType::Primitive(PrimitiveType::I32),
+            ) => {
+                // No instruction needed
+            }
+            // bool -> u32 (no-op, bool is stored as i32)
+            (
+                ResolvedType::Primitive(PrimitiveType::Bool),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                // No instruction needed
+            }
             // Same type - no conversion needed
             _ if from_type == to_type => {}
             // Other conversions - placeholder

@@ -11,9 +11,7 @@ use {
     short, fixed_width, digits, format_exp, format_decimal,
     log10_pow2, log2_pow10, i64_bit_len, pow10,
     unpack64, FormatResult, UnpackResult,
-    u64_lt, u64_ge, u64_le, u64_gt,
     trim_zeros, rotate_right, logical_shr,
-    bool2int, bool2int32,
     // New format specifier types and functions
     FormatSpec, Align, Sign, FormatType,
     format_f64,
@@ -68,16 +66,6 @@ test "i64_bit_len" {
     // Note: 0x8000000000000000 is negative in i64, special case
 }
 
-test "bool2int" {
-    assert bool2int(true) == 1 as i64;
-    assert bool2int(false) == 0 as i64;
-}
-
-test "bool2int32" {
-    assert bool2int32(true) == 1;
-    assert bool2int32(false) == 0;
-}
-
 test "pow10 lookup" {
     assert pow10(0) == 1 as i64;
     assert pow10(1) == 10 as i64;
@@ -103,64 +91,6 @@ test "digits count" {
 
 // ============================================================================
 // Unsigned comparison tests (i64 treated as u64)
-// ============================================================================
-
-test "u64_lt unsigned less than" {
-    // Basic cases
-    assert u64_lt(0 as i64, 1 as i64);
-    assert !u64_lt(1 as i64, 0 as i64);
-    assert !u64_lt(1 as i64, 1 as i64);
-
-    // Sign bit boundary
-    let a = 0x7FFFFFFFFFFFFFFF as i64;  // Max positive i64
-    let b = 0x8000000000000000 as i64;  // Min negative i64, but largest u64/2 + 1
-    // As unsigned: a (2^63-1) < b (2^63)
-    assert u64_lt(a, b);
-    assert !u64_lt(b, a);
-
-    // Both "negative" (high bit set)
-    let c = 0xFFFFFFFFFFFFFFFE as i64;  // u64: 2^64 - 2
-    let d = 0xFFFFFFFFFFFFFFFF as i64;  // u64: 2^64 - 1
-    assert u64_lt(c, d);
-    assert !u64_lt(d, c);
-}
-
-test "u64_ge unsigned greater or equal" {
-    assert u64_ge(1 as i64, 0 as i64);
-    assert u64_ge(1 as i64, 1 as i64);
-    assert !u64_ge(0 as i64, 1 as i64);
-
-    let a = 0x8000000000000000 as i64;
-    let b = 0x7FFFFFFFFFFFFFFF as i64;
-    assert u64_ge(a, b);  // As unsigned: a > b
-}
-
-test "u64_le unsigned less or equal" {
-    assert u64_le(0 as i64, 1 as i64);
-    assert u64_le(1 as i64, 1 as i64);
-    assert !u64_le(1 as i64, 0 as i64);
-
-    let a = 0x7FFFFFFFFFFFFFFF as i64;
-    let b = 0x8000000000000000 as i64;
-    assert u64_le(a, b);  // As unsigned: a < b
-}
-
-test "u64_gt unsigned greater than" {
-    assert u64_gt(1 as i64, 0 as i64);
-    assert !u64_gt(0 as i64, 1 as i64);
-    assert !u64_gt(1 as i64, 1 as i64);
-
-    let a = 0x8000000000000000 as i64;
-    let b = 0x7FFFFFFFFFFFFFFF as i64;
-    assert u64_gt(a, b);  // As unsigned: a > b
-
-    // Test the specific case that was buggy in uscale
-    let c = 0xFFFFFFFFFFFFFFFE as i64;  // u64: 2^64 - 2
-    let d = 0xFFFFFFFFFFFFFFFF as i64;  // u64: 2^64 - 1
-    assert u64_gt(d, c);
-    assert !u64_gt(c, d);
-}
-
 // ============================================================================
 // Bit manipulation tests
 // ============================================================================
