@@ -40,18 +40,6 @@ use wasm_encoder::{
 };
 use wasmparser::{Validator, WasmFeatures};
 
-/// Module path for the String struct in core:string
-/// Used to avoid repeated allocations when looking up String type
-const STRING_MODULE_PATH: &[&str] = &["core", "string"];
-
-/// Helper to convert `STRING_MODULE_PATH` to Vec<String> (for APIs requiring owned strings)
-fn string_module_path() -> Vec<String> {
-    STRING_MODULE_PATH
-        .iter()
-        .map(|s| (*s).to_string())
-        .collect()
-}
-
 /// Helper to get the `ModuleSource` for String type (core:string)
 fn string_module_source() -> ModuleSource {
     ModuleSource::core("string")
@@ -6790,11 +6778,7 @@ impl Codegen {
                             _ => array_expr.type_id,
                         };
                         let base_type = type_table.get(base_type_id);
-                        enum ArrayKind {
-                            Array { struct_type_idx: u32 },
-                            String,
-                        }
-                        let (raw_array_type_idx, array_kind) = if let Some(element_type) =
+                        let (raw_array_type_idx, struct_type_idx) = if let Some(element_type) =
                             type_table.as_array(base_type_id)
                         {
                             let raw_type_idx = self
@@ -6806,11 +6790,7 @@ impl Codegen {
                             let struct_type_idx = self
                                 .lookup_array_struct_type(element_type, type_table)
                                 .expect("Array struct type should be registered");
-                            (raw_type_idx, ArrayKind::Array { struct_type_idx })
-                        } else if matches!(base_type, ResolvedType::Struct { name, .. } if name == "String")
-                        {
-                            let u8_array_idx = self.get_array_type_index(TypeTable::U8);
-                            (u8_array_idx, ArrayKind::String)
+                            (raw_type_idx, struct_type_idx)
                         } else {
                             panic!("index assignment on non-array type: {base_type:?}");
                         };
@@ -6818,24 +6798,10 @@ impl Codegen {
                         // Generate array reference first
                         self.generate_expr(func, array_expr, type_table, ctx, builder);
                         // Access the repr field to get the raw array
-                        match &array_kind {
-                            ArrayKind::Array { struct_type_idx } => {
-                                func.instruction(&Instruction::StructGet {
-                                    struct_type_index: *struct_type_idx,
-                                    field_index: 0, // repr is field 0
-                                });
-                            }
-                            ArrayKind::String => {
-                                if let Some(struct_info) =
-                                    self.lookup_struct_type("String", &string_module_source())
-                                {
-                                    func.instruction(&Instruction::StructGet {
-                                        struct_type_index: struct_info.type_idx,
-                                        field_index: 0, // repr is field 0
-                                    });
-                                }
-                            }
-                        }
+                        func.instruction(&Instruction::StructGet {
+                            struct_type_index: struct_type_idx,
+                            field_index: 0, // repr is field 0
+                        });
                         // Then generate index
                         self.generate_expr(func, index_expr, type_table, ctx, builder);
                         // Then generate value
@@ -6845,24 +6811,10 @@ impl Codegen {
                         // Push the assigned value back for expression result
                         // (Regenerate the index access to get the value)
                         self.generate_expr(func, array_expr, type_table, ctx, builder);
-                        match &array_kind {
-                            ArrayKind::Array { struct_type_idx } => {
-                                func.instruction(&Instruction::StructGet {
-                                    struct_type_index: *struct_type_idx,
-                                    field_index: 0,
-                                });
-                            }
-                            ArrayKind::String => {
-                                if let Some(struct_info) =
-                                    self.lookup_struct_type("String", &string_module_source())
-                                {
-                                    func.instruction(&Instruction::StructGet {
-                                        struct_type_index: struct_info.type_idx,
-                                        field_index: 0,
-                                    });
-                                }
-                            }
-                        }
+                        func.instruction(&Instruction::StructGet {
+                            struct_type_index: struct_type_idx,
+                            field_index: 0,
+                        });
                         self.generate_expr(func, index_expr, type_table, ctx, builder);
                         func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
                     }
@@ -7552,7 +7504,6 @@ impl Codegen {
                     ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
                     _ => array.type_id,
                 };
-                let base_type = type_table.get(base_type_id);
                 // Track element type info for post-array-get processing
                 let (raw_array_type_idx, element_is_ref, closure_cast_type_idx) = if let Some(
                     element_type,
@@ -7597,20 +7548,6 @@ impl Codegen {
                         is_ref,
                         closure_type_idx,
                     )
-                } else if matches!(base_type, ResolvedType::Struct { name, .. } if name == "String")
-                {
-                    // String is now a struct with repr field (field 0) containing the array
-                    // First access the repr field, then do array.get
-                    if let Some(struct_info) =
-                        self.lookup_struct_type("String", &string_module_source())
-                    {
-                        func.instruction(&Instruction::StructGet {
-                            struct_type_index: struct_info.type_idx,
-                            field_index: 0, // repr is field 0
-                        });
-                    }
-                    let u8_array_idx = self.get_array_type_index(TypeTable::U8);
-                    (u8_array_idx, false, None)
                 } else {
                     let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                     (u8_array_idx, false, None)
