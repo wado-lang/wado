@@ -1,0 +1,31 @@
+// Newtype-specific implementations
+
+use { println, Stdout } from "core:cli";
+
+type Radians = f64;
+type Degrees = f64;
+
+impl Radians {
+    fn to_degrees(&self) -> Degrees {
+        return (*self * 180.0 / 3.14159) as Degrees;
+    }
+}
+
+impl Degrees {
+    fn to_radians(&self) -> Radians {
+        return (*self * 3.14159 / 180.0) as Radians;
+    }
+}
+
+fn run() with Stdout {
+    let r: Radians = 3.14159;
+    let d = r.to_degrees();
+    println(`radians to degrees: {d}`);
+
+    let d2: Degrees = 90.0;
+    let r2 = d2.to_radians();
+    println(`degrees to radians: {r2}`);
+}
+
+__DATA__
+{"stdout": "radians to degrees: 180.0\ndegrees to radians: 1.570795\n"}

@@ -1,0 +1,15 @@
+// Error: cannot mix different newtypes without explicit cast
+
+type Meters = f64;
+type Kilometers = f64;
+
+fn run() {
+    let m: Meters = 1000.0;
+    let km: Kilometers = 1.0;
+
+    // ERROR: cannot add Meters and Kilometers
+    let bad = m + km;
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

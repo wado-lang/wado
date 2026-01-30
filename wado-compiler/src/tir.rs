@@ -285,6 +285,15 @@ pub enum ResolvedType {
     /// Raw GC array intrinsic (`builtin::array<T>`)
     /// This is the underlying storage type for String and Array<T> structs
     BuiltinArray(TypeId),
+    /// Newtype: a distinct type wrapping a base type with the same representation.
+    /// Created by `type T = U;` declarations.
+    /// Newtypes are distinct from their base types but can be cast between them.
+    Newtype {
+        name: String,
+        module_source: ModuleSource,
+        /// The direct base type (may be another newtype for chained newtypes)
+        base_type: TypeId,
+    },
     Unknown,
     Error,
 }
@@ -298,7 +307,8 @@ impl ResolvedType {
             Self::Struct { module_source, .. }
             | Self::Enum { module_source, .. }
             | Self::Variant { module_source, .. }
-            | Self::GenericInstance { module_source, .. } => module_source.to_path(),
+            | Self::GenericInstance { module_source, .. }
+            | Self::Newtype { module_source, .. } => module_source.to_path(),
             _ => vec![],
         }
     }
@@ -387,8 +397,10 @@ impl TypeTable {
     }
 
     pub fn is_integer(&self, id: TypeId) -> bool {
+        // Follow newtype chain to get ultimate base type
+        let base_id = self.get_ultimate_base_type(id);
         matches!(
-            self.get(id),
+            self.get(base_id),
             ResolvedType::Primitive(
                 PrimitiveType::I8
                     | PrimitiveType::I16
@@ -405,8 +417,10 @@ impl TypeTable {
     }
 
     pub fn is_float(&self, id: TypeId) -> bool {
+        // Follow newtype chain to get ultimate base type
+        let base_id = self.get_ultimate_base_type(id);
         matches!(
-            self.get(id),
+            self.get(base_id),
             ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
         )
     }
@@ -574,6 +588,48 @@ impl TypeTable {
             ModuleSource::core("prelude"),
             vec![element],
         )
+    }
+
+    /// Create a newtype wrapping a base type
+    pub fn make_newtype(
+        &mut self,
+        name: String,
+        module_source: ModuleSource,
+        base_type: TypeId,
+    ) -> TypeId {
+        self.intern(ResolvedType::Newtype {
+            name,
+            module_source,
+            base_type,
+        })
+    }
+
+    /// Get the base type if this is a newtype, or None otherwise
+    pub fn get_newtype_base(&self, id: TypeId) -> Option<TypeId> {
+        if let ResolvedType::Newtype { base_type, .. } = self.get(id) {
+            Some(*base_type)
+        } else {
+            None
+        }
+    }
+
+    /// Get the ultimate base type by following the chain of newtypes.
+    /// Returns the original type if it's not a newtype.
+    pub fn get_ultimate_base_type(&self, id: TypeId) -> TypeId {
+        let mut current = id;
+        while let ResolvedType::Newtype { base_type, .. } = self.get(current) {
+            current = *base_type;
+        }
+        current
+    }
+
+    /// Check if two types share a common base type (for cast validation).
+    /// Types share a common base if:
+    /// - They are the same type
+    /// - One is a newtype of the other
+    /// - Both are newtypes with the same ultimate base type
+    pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
+        self.get_ultimate_base_type(a) == self.get_ultimate_base_type(b)
     }
 
     /// Check if a type is Array<T> and return the element type if so.
@@ -750,6 +806,7 @@ impl TypeTable {
                 let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
                 format!("{}<{}>", name, arg_names.join(", "))
             }
+            ResolvedType::Newtype { name, .. } => name.clone(),
         }
     }
 }

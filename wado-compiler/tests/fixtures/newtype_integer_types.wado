@@ -1,0 +1,29 @@
+// Newtypes with different integer base types
+
+use { println, Stdout } from "core:cli";
+
+type UserId = i32;
+type Timestamp = i64;
+type Count = u32;
+
+fn run() with Stdout {
+    let user: UserId = 42;
+    let time: Timestamp = 1706500000;
+    let count: Count = 100;
+
+    println(`user: {user}`);
+    println(`time: {time}`);
+    println(`count: {count}`);
+
+    // Arithmetic works
+    let next_user: UserId = user + 1;
+    let later: Timestamp = time + 1000;
+    let more: Count = count + 50;
+
+    println(`next_user: {next_user}`);
+    println(`later: {later}`);
+    println(`more: {more}`);
+}
+
+__DATA__
+{"stdout": "user: 42\ntime: 1706500000\ncount: 100\nnext_user: 43\nlater: 1706501000\nmore: 150\n"}

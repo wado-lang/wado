@@ -3200,10 +3200,11 @@ impl Codegen {
                         .map(|(name, val_type)| (name.as_str(), *val_type))
                         .collect();
 
-                    // Build result
+                    // Build result - resolve type aliases first (e.g., Mark -> u64)
                     let result_type = func.return_type.as_ref().map(|ty| {
+                        let resolved_ty = self.wasi_registry.resolve_type(ty);
                         self.wado_type_to_cm_result_type(
-                            ty,
+                            &resolved_ty,
                             result_type_idx,
                             array_type_idx,
                             option_type_idx,
@@ -5857,7 +5858,9 @@ impl Codegen {
         match &init.kind {
             TirExprKind::IntLiteral { value, .. } => {
                 // Determine the right type of constant based on the expression type
-                match type_table.get(init.type_id) {
+                // Follow newtype chain to get the primitive type
+                let base_type = type_table.get_ultimate_base_type(init.type_id);
+                match type_table.get(base_type) {
                     ResolvedType::Primitive(prim) => match prim {
                         PrimitiveType::I8
                         | PrimitiveType::I16
@@ -5877,7 +5880,9 @@ impl Codegen {
                 }
             }
             TirExprKind::FloatLiteral { value, .. } => {
-                match type_table.get(init.type_id) {
+                // Follow newtype chain to get the primitive type
+                let base_type = type_table.get_ultimate_base_type(init.type_id);
+                match type_table.get(base_type) {
                     ResolvedType::Primitive(PrimitiveType::F32) => {
                         ConstExpr::f32_const(Ieee32::from(*value as f32))
                     }
@@ -6173,6 +6178,11 @@ impl Codegen {
                     )
                 }
             }
+
+            // Newtype: same representation as base type
+            ResolvedType::Newtype { base_type, .. } => {
+                self.type_id_to_valtype(type_table, *base_type)
+            }
         }
     }
 
@@ -6248,8 +6258,10 @@ impl Codegen {
             // === Literals ===
             TirExprKind::IntLiteral { value, .. } => {
                 // Check the target type to generate appropriate instruction
+                // Follow newtype chain to get the primitive type
+                let base_type = type_table.get_ultimate_base_type(expr.type_id);
                 // Reinterpret u64 bits as i64 for Wasm instruction
-                match type_table.get(expr.type_id) {
+                match type_table.get(base_type) {
                     ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
                         func.instruction(&Instruction::I64Const(*value as i64));
                     }
@@ -6259,14 +6271,18 @@ impl Codegen {
                 }
             }
 
-            TirExprKind::FloatLiteral { value, .. } => match type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::F32) => {
-                    func.instruction(&Instruction::F32Const(((*value) as f32).into()));
+            TirExprKind::FloatLiteral { value, .. } => {
+                // Follow newtype chain to get the primitive type
+                let base_type = type_table.get_ultimate_base_type(expr.type_id);
+                match type_table.get(base_type) {
+                    ResolvedType::Primitive(PrimitiveType::F32) => {
+                        func.instruction(&Instruction::F32Const(((*value) as f32).into()));
+                    }
+                    _ => {
+                        func.instruction(&Instruction::F64Const((*value).into()));
+                    }
                 }
-                _ => {
-                    func.instruction(&Instruction::F64Const((*value).into()));
-                }
-            },
+            }
 
             TirExprKind::BoolLiteral(b) => {
                 func.instruction(&Instruction::I32Const(i32::from(*b)));
@@ -6985,7 +7001,7 @@ impl Codegen {
                     // Fallback to function name if no method_info
                     (method_func.name(), None)
                 };
-                // Get the base type for method lookup (strip Ref/MutRef)
+                // Get the base type for method lookup (strip Ref/MutRef only, preserve Newtype)
                 let base_receiver_type = {
                     let mut t = type_table.get(receiver.type_id).clone();
                     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = t {
@@ -7188,6 +7204,119 @@ impl Codegen {
                             );
                         } else {
                             panic!("Unknown resource method: {func_name}");
+                        }
+                    }
+
+                    // Newtype method calls (e.g., Radians::to_degrees where type Radians = f64)
+                    // Methods can be defined directly on the newtype via `impl Radians { ... }`
+                    // or inherited from the base type
+                    ResolvedType::Newtype {
+                        name,
+                        module_source,
+                        base_type,
+                    } => {
+                        let module_path = module_source.to_path();
+
+                        // Try to find method on the newtype itself first
+                        let mangled_name = MethodName::new(
+                            module_path.join("/"),
+                            name.clone(),
+                            trait_name.clone(),
+                            method_name.clone(),
+                        )
+                        .to_string();
+
+                        // Also try simple format without module path
+                        let simple_name = MethodName::format_local(&name, None, &method_name);
+                        let simple_trait_name =
+                            MethodName::format_local(&name, trait_name.as_deref(), &method_name);
+
+                        let func_idx = builder
+                            .try_func_idx(&mangled_name)
+                            .or_else(|| builder.try_func_idx(&simple_trait_name))
+                            .or_else(|| builder.try_func_idx(&simple_name));
+
+                        if let Some(idx) = func_idx {
+                            // Method found on newtype itself - call it
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            self.generate_args(func, args, type_table, ctx, builder);
+                            func.instruction(&Instruction::Call(idx));
+                        } else {
+                            // Method not found on newtype - try base type (method inheritance)
+                            // Recursively handle the base type by building a synthetic receiver
+                            let base_resolved = type_table.get(base_type).clone();
+                            match base_resolved {
+                                ResolvedType::Struct {
+                                    name: base_name,
+                                    module_source: base_module,
+                                    ..
+                                } => {
+                                    // Look up method on base struct
+                                    let base_module_path = base_module.to_path();
+                                    let base_mangled = MethodName::new(
+                                        base_module_path.join("/"),
+                                        base_name.clone(),
+                                        trait_name.clone(),
+                                        method_name.clone(),
+                                    )
+                                    .to_string();
+
+                                    if let Some(idx) = builder.try_func_idx(&base_mangled) {
+                                        self.generate_expr(
+                                            func, receiver, type_table, ctx, builder,
+                                        );
+                                        self.generate_args(func, args, type_table, ctx, builder);
+                                        func.instruction(&Instruction::Call(idx));
+                                    } else {
+                                        panic!(
+                                            "method '{method_name}' not found on newtype '{name}' or base type '{base_name}'"
+                                        );
+                                    }
+                                }
+                                ResolvedType::Primitive(prim) => {
+                                    // For primitive base types, only builtin methods are supported
+                                    self.generate_expr(func, receiver, type_table, ctx, builder);
+                                    Self::generate_primitive_method(
+                                        func,
+                                        &method_name,
+                                        &name,
+                                        prim,
+                                        builder,
+                                    );
+                                }
+                                // Handle chained newtypes (e.g., type C = B, type B = A, type A = i32)
+                                ResolvedType::Newtype {
+                                    base_type: inner_base,
+                                    ..
+                                } => {
+                                    // Follow the chain to find the ultimate primitive
+                                    let ultimate_prim = Self::resolve_to_primitive(
+                                        type_table.get(inner_base).clone(),
+                                        type_table,
+                                    );
+                                    if let Some(prim) = ultimate_prim {
+                                        self.generate_expr(
+                                            func, receiver, type_table, ctx, builder,
+                                        );
+                                        Self::generate_primitive_method(
+                                            func,
+                                            &method_name,
+                                            &name,
+                                            prim,
+                                            builder,
+                                        );
+                                    } else {
+                                        panic!(
+                                            "method '{method_name}' not found on chained newtype '{name}'"
+                                        );
+                                    }
+                                }
+                                _ => {
+                                    panic!(
+                                        "method '{method_name}' not found on newtype '{name}' with unsupported base type"
+                                    );
+                                }
+                            }
                         }
                     }
 
@@ -7936,6 +8065,53 @@ impl Codegen {
         }
     }
 
+    /// Generate method call for primitive types (e.g., `to_string`)
+    fn generate_primitive_method(
+        func: &mut Function,
+        method_name: &str,
+        newtype_name: &str,
+        prim: PrimitiveType,
+        builder: &CoreModuleBuilder,
+    ) {
+        if method_name == "to_string" {
+            let func_name = match prim {
+                PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => {
+                    "core/internal/i32_to_string"
+                }
+                PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => {
+                    "core/internal/u32_to_string"
+                }
+                PrimitiveType::I64 => "core/internal/i64_to_string",
+                PrimitiveType::U64 => "core/internal/u64_to_string",
+                PrimitiveType::F32 => "core/internal/f32_to_string",
+                PrimitiveType::F64 => "core/internal/f64_to_string",
+                PrimitiveType::Bool => "core/internal/bool_to_string",
+                PrimitiveType::Char => "core/internal/char_to_string",
+                _ => panic!("to_string not supported for primitive type: {prim:?}"),
+            };
+            if let Some(func_idx) = builder.try_func_idx(func_name) {
+                func.instruction(&Instruction::Call(func_idx));
+            } else {
+                panic!("missing builtin function: {func_name}");
+            }
+        } else {
+            panic!(
+                "method '{method_name}' not found on newtype '{newtype_name}' (primitive base type {prim:?})"
+            );
+        }
+    }
+
+    /// Follow newtype chain to find the ultimate primitive type
+    fn resolve_to_primitive(ty: ResolvedType, type_table: &TypeTable) -> Option<PrimitiveType> {
+        match ty {
+            ResolvedType::Primitive(prim) => Some(prim),
+            ResolvedType::Newtype { base_type, .. } => {
+                Self::resolve_to_primitive(type_table.get(base_type).clone(), type_table)
+            }
+            _ => None,
+        }
+    }
+
     /// Get the Wasm array type index for a given element type
     fn get_array_type_index(&self, element_type: TypeId) -> u32 {
         *self
@@ -8186,20 +8362,22 @@ impl Codegen {
         operand_type: TypeId,
         type_table: &TypeTable,
     ) {
+        // Follow newtype chain to get the primitive type for instruction selection
+        let base_type = type_table.get_ultimate_base_type(operand_type);
         let is_i64 = matches!(
-            type_table.get(operand_type),
+            type_table.get(base_type),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
         let is_f32 = matches!(
-            type_table.get(operand_type),
+            type_table.get(base_type),
             ResolvedType::Primitive(PrimitiveType::F32)
         );
         let is_f64 = matches!(
-            type_table.get(operand_type),
+            type_table.get(base_type),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
         let is_unsigned = matches!(
-            type_table.get(operand_type),
+            type_table.get(base_type),
             ResolvedType::Primitive(
                 PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
             )
@@ -13986,7 +14164,11 @@ impl Codegen {
         let mut params: Vec<ValType> = func
             .params
             .iter()
-            .map(|(_, ty)| wasi_type_to_valtype(ty))
+            .map(|(_, ty)| {
+                // Resolve type aliases (e.g., Mark -> u64) before converting to ValType
+                let resolved_ty = self.wasi_registry.resolve_type(ty);
+                wasi_type_to_valtype(&resolved_ty)
+            })
             .collect();
 
         // Async functions have an additional outptr parameter for the result
@@ -13994,10 +14176,12 @@ impl Codegen {
             params.push(ValType::I32); // outptr
         }
         // Sync functions with complex return types also need an outptr
-        else if let Some(ret_ty) = &func.return_type
-            && return_type_requires_outptr(ret_ty)
-        {
-            params.push(ValType::I32); // outptr
+        // Resolve type aliases first to correctly detect complex types
+        else if let Some(ret_ty) = &func.return_type {
+            let resolved_ret_ty = self.wasi_registry.resolve_type(ret_ty);
+            if return_type_requires_outptr(&resolved_ret_ty) {
+                params.push(ValType::I32); // outptr
+            }
         }
 
         params
@@ -14013,11 +14197,13 @@ impl Codegen {
             // Async functions return a subtask handle (i32)
             vec![ValType::I32]
         } else if let Some(ret_ty) = &func.return_type {
+            // Resolve type aliases (e.g., Mark -> u64) before checking/converting
+            let resolved_ty = self.wasi_registry.resolve_type(ret_ty);
             // Complex types are returned via outptr, so no direct return value
-            if return_type_requires_outptr(ret_ty) {
+            if return_type_requires_outptr(&resolved_ty) {
                 vec![]
             } else {
-                vec![wasi_type_to_valtype(ret_ty)]
+                vec![wasi_type_to_valtype(&resolved_ty)]
             }
         } else {
             vec![]
@@ -14064,7 +14250,9 @@ impl Codegen {
             // Async exports have no return in core (use task_return)
             vec![]
         } else if let Some(ret_ty) = &export.return_type {
-            vec![wasi_type_to_valtype(ret_ty)]
+            // Resolve type aliases (e.g., newtypes) before converting to ValType
+            let resolved_ty = self.wasi_registry.resolve_type(ret_ty);
+            vec![wasi_type_to_valtype(&resolved_ty)]
         } else {
             vec![]
         }

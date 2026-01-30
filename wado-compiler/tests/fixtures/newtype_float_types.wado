@@ -1,0 +1,49 @@
+// Test newtypes of floating point types (f64)
+// Ensures f64 newtypes map to correct Wasm types
+
+use { println, Stdout } from "core:cli";
+
+type Radians = f64;
+type Degrees = f64;
+type MyRadians = Radians;  // Chained newtype
+
+fn run() with Stdout {
+    // f64 newtypes - literals coerce to newtype
+    let pi: Radians = 3.14159265358979;
+    let half_circle: Degrees = 180.0;
+
+    // Arithmetic on f64 newtypes (same type on both sides)
+    let two_pi = pi * 2.0;
+    if two_pi > pi {
+        println("f64 newtype arithmetic works");
+    }
+
+    // Cast between f64 newtypes
+    let deg_as_rad = half_circle as Radians;
+    if deg_as_rad > 0.0 {
+        println("f64 newtype cast works");
+    }
+
+    // Cast to base type
+    let deg_f64 = half_circle as f64;
+    if deg_f64 > 90.0 {
+        println("newtype to f64 cast works");
+    }
+
+    // Chained newtype
+    let angle: MyRadians = 1.5707963267949;
+    if angle > 0.0 {
+        println("chained f64 newtype works");
+    }
+
+    // Comparison between newtype values
+    let angle2: MyRadians = 3.14159;
+    if angle2 > angle {
+        println("newtype comparison works");
+    }
+
+    println("float newtype tests passed");
+}
+
+__DATA__
+{"stdout": "f64 newtype arithmetic works\nf64 newtype cast works\nnewtype to f64 cast works\nchained f64 newtype works\nnewtype comparison works\nfloat newtype tests passed\n"}

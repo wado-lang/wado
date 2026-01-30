@@ -852,13 +852,20 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     Item::Type(type_alias) => {
-                        let type_id = Self::resolve_type_static(
+                        // Resolve the base type
+                        let base_type_id = Self::resolve_type_static(
                             &type_alias.ty,
                             &mut type_table.borrow_mut(),
                             &type_aliases,
                             &struct_fields,
                         );
-                        type_aliases.insert(type_alias.name.clone(), type_id);
+                        // Create a newtype wrapping the base type
+                        let newtype_id = type_table.borrow_mut().make_newtype(
+                            type_alias.name.clone(),
+                            module_source.clone(),
+                            base_type_id,
+                        );
+                        type_aliases.insert(type_alias.name.clone(), newtype_id);
                     }
                     Item::Variant(variant_decl) => {
                         // Resolve variant case field types
@@ -1354,13 +1361,22 @@ impl<'a> Resolver<'a> {
     /// Collect type definitions from the module
     fn collect_types(&mut self, module: &Module) {
         // First, collect types from loaded modules (so aliases like Instant = u64 are available)
-        for loaded_module in self.loaded_modules.values() {
+        for (path, loaded_module) in self.loaded_modules {
+            let module_source = ModuleSource::from_path(path);
             for item in &loaded_module.items {
                 if let Item::Type(type_alias) = item {
                     // Only add if not already present (main module takes priority)
                     if !self.type_aliases.contains_key(&type_alias.name) {
-                        let type_id = self.resolve_type(&type_alias.ty);
-                        self.type_aliases.insert(type_alias.name.clone(), type_id);
+                        // Resolve the base type
+                        let base_type_id = self.resolve_type(&type_alias.ty);
+                        // Create a newtype wrapping the base type
+                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                            type_alias.name.clone(),
+                            module_source.clone(),
+                            base_type_id,
+                        );
+                        self.type_aliases
+                            .insert(type_alias.name.clone(), newtype_id);
                     }
                 }
             }
@@ -1425,8 +1441,16 @@ impl<'a> Resolver<'a> {
                     self.current_type_params = old_type_params;
                 }
                 Item::Type(type_alias) => {
-                    let type_id = self.resolve_type(&type_alias.ty);
-                    self.type_aliases.insert(type_alias.name.clone(), type_id);
+                    // Resolve the base type
+                    let base_type_id = self.resolve_type(&type_alias.ty);
+                    // Create a newtype wrapping the base type
+                    let newtype_id = self.type_table.borrow_mut().make_newtype(
+                        type_alias.name.clone(),
+                        self.current_module_source.clone(),
+                        base_type_id,
+                    );
+                    self.type_aliases
+                        .insert(type_alias.name.clone(), newtype_id);
                 }
                 Item::Variant(variant_decl) => {
                     // Set up type parameters in scope for resolving field types
@@ -2251,6 +2275,29 @@ impl<'a> Resolver<'a> {
             let value = self.resolve_expr(&let_stmt.value, ctx);
             (value.clone(), value.type_id)
         };
+
+        // Type check: if type annotation is present, verify value type matches
+        if let Some(_annotated_type) = &let_stmt.ty
+            && value.type_id != type_id
+            && value.type_id != TypeTable::UNKNOWN
+        {
+            // Allow null (Option<unknown>) to be assigned to Option<T>
+            let is_null_to_option = {
+                let type_table = self.type_table.borrow();
+                matches!(
+                    (type_table.get(value.type_id), type_table.get(type_id)),
+                    (ResolvedType::Option(inner), ResolvedType::Option(_))
+                        if *inner == TypeTable::UNKNOWN
+                )
+            };
+            if !is_null_to_option {
+                self.errors.push(TypeError::TypeMismatch {
+                    expected: self.type_table.borrow().type_name(type_id),
+                    found: self.type_table.borrow().type_name(value.type_id),
+                    span: let_stmt.value.span(),
+                });
+            }
+        }
 
         // Handle different pattern types
         match &let_stmt.pattern {
@@ -3947,6 +3994,26 @@ impl<'a> Resolver<'a> {
 
         let op = convert_binary_op(binary.op);
 
+        // Type check for newtypes: if either operand is a newtype, they must be the same type
+        // (This prevents mixing Meters and Seconds even though both wrap i32)
+        {
+            let type_table = self.type_table.borrow();
+            let left_is_newtype =
+                matches!(type_table.get(left.type_id), ResolvedType::Newtype { .. });
+            let right_is_newtype =
+                matches!(type_table.get(right.type_id), ResolvedType::Newtype { .. });
+
+            if (left_is_newtype || right_is_newtype) && left.type_id != right.type_id {
+                let left_name = type_table.type_name(left.type_id);
+                let right_name = type_table.type_name(right.type_id);
+                self.errors.push(TypeError::TypeMismatch {
+                    expected: left_name,
+                    found: right_name,
+                    span: binary.span,
+                });
+            }
+        }
+
         // Determine result type based on operator
         let type_id = match binary.op {
             BinaryOp::Eq
@@ -4691,12 +4758,25 @@ impl<'a> Resolver<'a> {
                 "f32" => TypeTable::F32,
                 "f64" => TypeTable::F64,
                 "bool" => TypeTable::BOOL,
-                // Type aliases from WASI (e.g., Instant, Duration)
+                // Type aliases from WASI (e.g., Mark, Instant, Duration)
                 _ => {
-                    // Clone to avoid borrow checker issues
+                    // First check if it's a registered newtype in type_aliases
+                    if let Some(&newtype_id) = self.type_aliases.get(&named.name) {
+                        return newtype_id;
+                    }
+                    // Otherwise, try to resolve via WASI registry's type aliases
                     let aliased = self.wasi_registry.get_type_alias(&named.name).cloned();
                     if let Some(aliased) = aliased {
-                        self.resolve_wasi_type(&aliased)
+                        // Create a newtype for this WASI type alias
+                        let base_type = self.resolve_wasi_type(&aliased);
+                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                            named.name.clone(),
+                            ModuleSource::wasi("clocks"),
+                            base_type,
+                        );
+                        // Cache the newtype for future lookups
+                        self.type_aliases.insert(named.name.clone(), newtype_id);
+                        newtype_id
                     } else {
                         // Resource types are represented as i32 handles
                         TypeTable::I32
@@ -6047,6 +6127,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.mangle_type_name(*elem))
             }
+            ResolvedType::Newtype { name, .. } => name.clone(),
             _ => "unknown".to_string(),
         }
     }
@@ -6063,17 +6144,17 @@ impl<'a> Resolver<'a> {
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
         // Get the struct name, module path, and type args from the base type
-        let (struct_name, module_path, receiver_type_args) = match &base_type {
+        let (struct_name, module_path, receiver_type_args, newtype_base) = match &base_type {
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.to_path(), None),
+            } => (name.clone(), module_source.to_path(), None, None),
             // Resource types use reference semantics - handle like struct for method lookup
             ResolvedType::Resource {
                 name,
                 module_source,
-            } => (name.clone(), module_source.to_path(), None),
+            } => (name.clone(), module_source.to_path(), None, None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
                 name,
@@ -6087,6 +6168,19 @@ impl<'a> Resolver<'a> {
                 } else {
                     Some(type_args.clone())
                 },
+                None,
+            ),
+            // Newtype: first try looking up methods on the newtype itself,
+            // then fall back to the base type for method inheritance
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                base_type,
+            } => (
+                name.clone(),
+                module_source.to_path(),
+                None,
+                Some(*base_type),
             ),
             // Primitive types have built-in methods like to_string()
             ResolvedType::Primitive(_) => {
@@ -6339,6 +6433,12 @@ impl<'a> Resolver<'a> {
                     }
                 }
             }
+        }
+
+        // For newtypes: if method not found on the newtype itself, try the base type
+        // This enables method inheritance: Location (newtype of Point) can use Point's methods
+        if let Some(base_type_id) = newtype_base {
+            return self.lookup_method_info(base_type_id, method_name);
         }
 
         None

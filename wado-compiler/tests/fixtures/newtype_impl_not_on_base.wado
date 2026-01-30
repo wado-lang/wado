@@ -1,0 +1,26 @@
+// Newtype methods are not available on base type
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+type Location = Point;
+
+impl Location {
+    fn distance_from_origin(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+fn run() with Stdout {
+    let pt = Point { x: 10, y: 20 };
+
+    // ERROR: Point has no method 'distance_from_origin' - it's only on Location
+    let d = pt.distance_from_origin();
+}
+
+__DATA__
+{"compile_error": "no method"}

@@ -723,10 +723,18 @@ fn analyze_expr(
                 analysis.callees.insert(callee_id);
             } else {
                 // Non-monomorphized method - determine target from receiver type
-                // First strip any reference wrappers to get the base type
+                // First strip any reference wrappers and newtypes to get the base type
                 let mut current_type = type_table.get(receiver.type_id);
-                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = current_type {
-                    current_type = type_table.get(*inner);
+                loop {
+                    match current_type {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                            current_type = type_table.get(*inner);
+                        }
+                        ResolvedType::Newtype { base_type, .. } => {
+                            current_type = type_table.get(*base_type);
+                        }
+                        _ => break,
+                    }
                 }
                 let base_receiver_type = current_type.clone();
 
@@ -1085,7 +1093,9 @@ fn analyze_expr(
 /// Add the appropriate `to_string` function call for a type
 fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut FunctionAnalysis) {
     let core_internal: &[&str] = &["core", "internal"];
-    match type_table.get(type_id) {
+    // Follow newtype chain to get the ultimate base type
+    let base_type_id = type_table.get_ultimate_base_type(type_id);
+    match type_table.get(base_type_id) {
         ResolvedType::Primitive(prim) => {
             let func_name = match prim {
                 PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => "i32_to_string",
@@ -1882,6 +1892,11 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. } => {}
+
+        // Newtype: collect dependency on base type
+        ResolvedType::Newtype { base_type, .. } => {
+            collect_type_transitive(*base_type, type_table, reachable);
+        }
     }
 }
 
