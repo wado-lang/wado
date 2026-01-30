@@ -1331,113 +1331,139 @@ fn compute_reachable_types(project: &Project) -> HashSet<TypeId> {
         reachable_types.insert(TypeId(i));
     }
 
-    // Collect types from reachable functions
-    for (module_source, module) in &project.tir_modules {
+    // Always include BuiltinArray(U8) as it's fundamental for String operations
+    // and used by codegen for internal operations (assert statements, etc.)
+    // Find the TypeId for BuiltinArray(U8) in the type table
+    if let Some(module) = project.tir_modules.values().next() {
         let type_table = module.type_table.borrow();
-        let module_path = module_source.to_path();
+        for type_id in type_table.iter_type_ids() {
+            if let ResolvedType::BuiltinArray(elem) = type_table.get(type_id)
+                && *elem == TypeTable::U8
+            {
+                reachable_types.insert(type_id);
+                break;
+            }
+        }
+    }
+
+    // Phase 1: Collect types from all remaining functions
+    // Note: We collect from ALL functions that exist after function DCE,
+    // because function DCE has already removed unreachable functions.
+    // This is more conservative but ensures we don't miss any types.
+    for (_module_source, module) in &project.tir_modules {
+        let type_table = module.type_table.borrow();
 
         for func_rc in &module.functions {
             let func = func_rc.borrow();
+            collect_types_from_function(&func, &type_table, &mut reachable_types);
+        }
 
-            // Check if this function is reachable
-            let is_reachable = if project.all_reachable {
-                true
-            } else {
-                is_function_reachable(&func, &module_path, project)
-            };
-
-            if is_reachable {
-                collect_types_from_function(&func, &type_table, &mut reachable_types);
+        // Also collect types from impl blocks
+        for impl_block in &module.impls {
+            reachable_types.insert(impl_block.target_type);
+            for method in &impl_block.methods {
+                collect_types_from_function(method, &type_table, &mut reachable_types);
             }
         }
 
-        // Also collect types from reachable struct definitions
-        for tir_struct in &module.structs {
-            let struct_type_id = type_table.find_struct_type(&tir_struct.name, module_source);
-            if let Some(type_id) = struct_type_id {
-                if reachable_types.contains(&type_id) {
-                    // Struct is reachable, collect field types
+        // Collect types from global variables
+        for global in &module.globals {
+            collect_types_from_expr(&global.initializer, &type_table, &mut reachable_types);
+        }
+    }
+
+    // Phase 2: Transitive closure - include struct fields, variant payloads, and type dependencies
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let before_len = reachable_types.len();
+
+        for (module_source, module) in &project.tir_modules {
+            let type_table = module.type_table.borrow();
+
+            // Collect struct field types for reachable structs
+            // A struct's fields should be collected if:
+            // 1. The Struct type itself is reachable, OR
+            // 2. Any GenericInstance with this struct name is reachable, OR
+            // 3. Any monomorphized version with this base name is reachable
+            for tir_struct in &module.structs {
+                let struct_reachable = if tir_struct.monomorph_info.is_none() {
+                    // Non-monomorphized struct
+                    let direct_reachable = type_table
+                        .find_struct_type(&tir_struct.name, module_source)
+                        .map(|id| reachable_types.contains(&id))
+                        .unwrap_or(false);
+
+                    let instance_reachable = reachable_types.iter().any(|&id| {
+                        matches!(
+                            type_table.get(id),
+                            ResolvedType::GenericInstance { name, .. } if name == &tir_struct.name
+                        )
+                    });
+
+                    let monomorph_reachable = reachable_types.iter().any(|&id| {
+                        matches!(
+                            type_table.get(id),
+                            ResolvedType::Struct { base_name: Some(base), is_monomorphized: true, .. } if base == &tir_struct.name
+                        )
+                    });
+
+                    direct_reachable || instance_reachable || monomorph_reachable
+                } else {
+                    // Monomorphized struct - check by exact name match
+                    reachable_types.iter().any(|&id| {
+                        matches!(
+                            type_table.get(id),
+                            ResolvedType::Struct { name, is_monomorphized: true, .. } if name == &tir_struct.name
+                        )
+                    })
+                };
+
+                if struct_reachable {
                     for field in &tir_struct.fields {
                         collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
                     }
                 }
             }
-        }
 
-        // Collect types from variants
-        for variant in &module.variants {
-            let variant_type_id = type_table
-                .iter_type_ids()
-                .find(|&id| matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &variant.name));
-            if let Some(type_id) = variant_type_id {
-                if reachable_types.contains(&type_id) {
+            // Collect variant payload types for reachable variants
+            // A variant's payloads should be collected if:
+            // 1. The base Variant type is reachable, OR
+            // 2. Any GenericInstance with this variant name is reachable
+            for variant in &module.variants {
+                let base_reachable = type_table
+                    .iter_type_ids()
+                    .find(|&id| matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &variant.name))
+                    .map(|id| reachable_types.contains(&id))
+                    .unwrap_or(false);
+
+                let instance_reachable = reachable_types.iter().any(|&id| {
+                    matches!(
+                        type_table.get(id),
+                        ResolvedType::GenericInstance { name, .. } if name == &variant.name
+                    )
+                });
+
+                if base_reachable || instance_reachable {
                     for case in &variant.cases {
                         collect_type_transitive(case.payload, &type_table, &mut reachable_types);
                     }
                 }
             }
-        }
-    }
 
-    // Compute transitive closure - keep iterating until no new types are added
-    let mut changed = true;
-    while changed {
-        changed = false;
-        let current_types: Vec<TypeId> = reachable_types.iter().copied().collect();
-
-        for (_module_source, module) in &project.tir_modules {
-            let type_table = module.type_table.borrow();
-
-            for type_id in &current_types {
-                let before_len = reachable_types.len();
-                collect_type_dependencies(*type_id, &type_table, &mut reachable_types);
-                if reachable_types.len() > before_len {
-                    changed = true;
-                }
+            // Collect type dependencies (array elements, option inner, etc.)
+            let current_types: Vec<TypeId> = reachable_types.iter().copied().collect();
+            for type_id in current_types {
+                collect_type_dependencies(type_id, &type_table, &mut reachable_types);
             }
+        }
+
+        if reachable_types.len() > before_len {
+            changed = true;
         }
     }
 
     reachable_types
-}
-
-/// Check if a function is reachable based on project's reachable_functions set
-fn is_function_reachable(func: &TirFunction, module_path: &[String], project: &Project) -> bool {
-    if func.name.starts_with("__test_") {
-        return true;
-    }
-
-    if let Some(ref info) = func.method_info {
-        let method_id = FunctionId::Method(MethodName::new(
-            module_path.join("/"),
-            info.struct_name.clone(),
-            info.trait_name.clone(),
-            info.method_name.clone(),
-        ));
-        if project.reachable_functions.contains(&method_id) {
-            return true;
-        }
-
-        let free_id =
-            FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, &func.name));
-        if project.reachable_functions.contains(&free_id) {
-            return true;
-        }
-
-        if func.monomorph_info.is_some() {
-            let entry_module_free_id =
-                FunctionId::Free(FreeFunctionName::from_path_and_name(&[], &func.name));
-            if project.reachable_functions.contains(&entry_module_free_id) {
-                return true;
-            }
-        }
-
-        is_generic_func_reachable(&project.reachable_functions, module_path, &func.name)
-    } else {
-        let func_id =
-            FunctionId::Free(FreeFunctionName::from_path_and_name(module_path, &func.name));
-        project.reachable_functions.contains(&func_id)
-    }
 }
 
 /// Collect all types used in a function
@@ -1453,6 +1479,11 @@ fn collect_types_from_function(
 
     // Collect return type
     collect_type_transitive(func.return_type, type_table, reachable);
+
+    // Collect local variable types (includes types from inlined functions)
+    for &local_type_id in &func.local_types {
+        collect_type_transitive(local_type_id, type_table, reachable);
+    }
 
     // Collect types from body
     if let Some(body) = &func.body {
@@ -1527,28 +1558,32 @@ fn collect_types_from_block(
             }
             TirStmtKind::IfPattern {
                 scrutinee,
+                pattern,
                 then_block,
                 else_block,
-                ..
             } => {
                 collect_types_from_expr(scrutinee, type_table, reachable);
+                collect_types_from_pattern(pattern, type_table, reachable);
                 collect_types_from_block(then_block, type_table, reachable);
                 if let Some(else_blk) = else_block {
                     collect_types_from_block(else_blk, type_table, reachable);
                 }
             }
             TirStmtKind::WhilePattern {
-                scrutinee, body, ..
+                scrutinee,
+                pattern,
+                body,
             } => {
                 collect_types_from_expr(scrutinee, type_table, reachable);
+                collect_types_from_pattern(pattern, type_table, reachable);
                 collect_types_from_block(body, type_table, reachable);
             }
             TirStmtKind::ForPattern {
                 init,
                 scrutinee,
+                pattern,
                 body,
                 update,
-                ..
             } => {
                 for init_stmt in init {
                     if let TirStmtKind::Let { value, type_id, .. } = &init_stmt.kind {
@@ -1557,6 +1592,7 @@ fn collect_types_from_block(
                     }
                 }
                 collect_types_from_expr(scrutinee, type_table, reachable);
+                collect_types_from_pattern(pattern, type_table, reachable);
                 collect_types_from_block(body, type_table, reachable);
                 if let Some(upd) = update {
                     collect_types_from_expr(upd, type_table, reachable);
@@ -1568,7 +1604,8 @@ fn collect_types_from_block(
                 }
             }
             TirStmtKind::Continue => {}
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetPattern { pattern, value, .. } => {
+                collect_types_from_pattern(pattern, type_table, reachable);
                 collect_types_from_expr(value, type_table, reachable);
             }
         }
@@ -1645,11 +1682,14 @@ fn collect_types_from_expr(
         TirExprKind::Match { expr, arms } => {
             collect_types_from_expr(expr, type_table, reachable);
             for arm in arms {
+                collect_types_from_pattern(&arm.pattern, type_table, reachable);
                 collect_types_from_expr(&arm.body, type_table, reachable);
             }
         }
         TirExprKind::StructLiteral {
-            struct_type, fields, ..
+            struct_type,
+            fields,
+            ..
         } => {
             collect_type_transitive(*struct_type, type_table, reachable);
             for field in fields {
@@ -1661,7 +1701,20 @@ fn collect_types_from_expr(
                 collect_types_from_expr(elem, type_table, reachable);
             }
         }
-        TirExprKind::Closure { body, .. } => {
+        TirExprKind::Closure {
+            params,
+            body,
+            captures,
+            ..
+        } => {
+            // Collect parameter types
+            for (_name, type_id) in params {
+                collect_type_transitive(*type_id, type_table, reachable);
+            }
+            // Collect capture types
+            for capture in captures {
+                collect_type_transitive(capture.type_id, type_table, reachable);
+            }
             collect_types_from_expr(body, type_table, reachable);
         }
         TirExprKind::IndirectCall { callee, args } => {
@@ -1705,6 +1758,40 @@ fn collect_types_from_expr(
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Collect types from a pattern
+fn collect_types_from_pattern(
+    pattern: &crate::tir::TirPattern,
+    type_table: &TypeTable,
+    reachable: &mut HashSet<TypeId>,
+) {
+    use crate::tir::TirPattern;
+
+    match pattern {
+        TirPattern::Wildcard => {}
+        TirPattern::Binding { type_id, .. } => {
+            collect_type_transitive(*type_id, type_table, reachable);
+        }
+        TirPattern::Literal(_) => {}
+        TirPattern::Tuple(patterns) => {
+            for p in patterns {
+                collect_types_from_pattern(p, type_table, reachable);
+            }
+        }
+        TirPattern::Variant {
+            enum_type,
+            bindings,
+            payload_type,
+            ..
+        } => {
+            collect_type_transitive(*enum_type, type_table, reachable);
+            collect_type_transitive(*payload_type, type_table, reachable);
+            for binding in bindings {
+                collect_types_from_pattern(binding, type_table, reachable);
+            }
+        }
     }
 }
 
@@ -1775,7 +1862,7 @@ fn collect_type_dependencies(
     }
 }
 
-/// Remove unreachable types from the project's TypeTable.
+/// Remove unreachable types from the project's `TypeTable` and module definitions.
 /// This should be called after function DCE.
 pub fn remove_unreachable_types(project: &mut Project) {
     // Skip if all functions are reachable (no DCE)
@@ -1784,6 +1871,112 @@ pub fn remove_unreachable_types(project: &mut Project) {
     }
 
     let reachable_types = compute_reachable_types(project);
+
+    // Remove unreachable struct/variant/enum definitions from each module
+    for module in project.tir_modules.values_mut() {
+        let type_table = module.type_table.borrow();
+        let module_source = module.module_source.clone();
+
+        // Collect names of structs to keep
+        // A struct is kept if:
+        // 1. Its Struct type is reachable, OR
+        // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
+        // 3. Any monomorphized Struct with its base name is reachable
+        let keep_structs: HashSet<String> = module
+            .structs
+            .iter()
+            .filter(|s| {
+                // For non-monomorphized structs
+                if s.monomorph_info.is_none() {
+                    // Check if the struct type itself is reachable
+                    let struct_reachable = type_table
+                        .find_struct_type(&s.name, &module_source)
+                        .map(|id| reachable_types.contains(&id))
+                        .unwrap_or(false);
+
+                    // Check if any GenericInstance with this struct name is reachable
+                    let instance_reachable = reachable_types.iter().any(|&id| {
+                        matches!(
+                            type_table.get(id),
+                            ResolvedType::GenericInstance { name, .. } if name == &s.name
+                        )
+                    });
+
+                    // Check if any monomorphized version is reachable
+                    let monomorph_reachable = reachable_types.iter().any(|&id| {
+                        matches!(
+                            type_table.get(id),
+                            ResolvedType::Struct { base_name: Some(base), is_monomorphized: true, .. } if base == &s.name
+                        )
+                    });
+
+                    struct_reachable || instance_reachable || monomorph_reachable
+                } else {
+                    // For monomorphized structs, check by exact name match
+                    reachable_types.iter().any(|&id| {
+                        matches!(
+                            type_table.get(id),
+                            ResolvedType::Struct { name, is_monomorphized: true, .. } if name == &s.name
+                        )
+                    })
+                }
+            })
+            .map(|s| s.name.clone())
+            .collect();
+
+        // Collect names of variants to keep
+        // A variant is kept if:
+        // 1. Its base Variant type is reachable, OR
+        // 2. Any GenericInstance with its name is reachable (e.g., Result<i32, String>)
+        let keep_variants: HashSet<String> = module
+            .variants
+            .iter()
+            .filter(|v| {
+                // Check if base Variant type is reachable
+                let base_reachable = type_table
+                    .iter_type_ids()
+                    .find(|&id| {
+                        matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &v.name)
+                    })
+                    .map(|id| reachable_types.contains(&id))
+                    .unwrap_or(false);
+
+                // Check if any GenericInstance with this variant name is reachable
+                let instance_reachable = reachable_types.iter().any(|&id| {
+                    matches!(
+                        type_table.get(id),
+                        ResolvedType::GenericInstance { name, .. } if name == &v.name
+                    )
+                });
+
+                base_reachable || instance_reachable
+            })
+            .map(|v| v.name.clone())
+            .collect();
+
+        // Collect names of enums to keep
+        let keep_enums: HashSet<String> = module
+            .enums
+            .iter()
+            .filter(|e| {
+                type_table
+                    .iter_type_ids()
+                    .find(|&id| {
+                        matches!(type_table.get(id), ResolvedType::Enum { name, .. } if name == &e.name)
+                    })
+                    .map(|id| reachable_types.contains(&id))
+                    .unwrap_or(false)
+            })
+            .map(|e| e.name.clone())
+            .collect();
+
+        drop(type_table);
+
+        // Remove unreachable definitions
+        module.structs.retain(|s| keep_structs.contains(&s.name));
+        module.variants.retain(|v| keep_variants.contains(&v.name));
+        module.enums.retain(|e| keep_enums.contains(&e.name));
+    }
 
     // Remove unreachable types from the shared TypeTable
     // Since all modules share the same TypeTable via Rc<RefCell<>>,

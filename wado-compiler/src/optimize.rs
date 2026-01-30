@@ -221,8 +221,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             // DCE: analyze and remove unreachable functions and types
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
-            // TODO: Enable type DCE after fixing reachability analysis
-            // remove_unreachable_types(&mut project);
+            remove_unreachable_types(&mut project);
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
             }
@@ -237,8 +236,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             // DCE: analyze and remove unreachable functions and types
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
-            // TODO: Enable type DCE after fixing reachability analysis
-            // remove_unreachable_types(&mut project);
+            remove_unreachable_types(&mut project);
         }
     }
 

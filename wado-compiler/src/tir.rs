@@ -383,7 +383,7 @@ impl TypeTable {
     pub fn get(&self, id: TypeId) -> &ResolvedType {
         self.types
             .get(&id)
-            .unwrap_or_else(|| panic!("TypeId {:?} not found in TypeTable", id))
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
     pub fn is_integer(&self, id: TypeId) -> bool {
@@ -444,7 +444,7 @@ impl TypeTable {
 
         // Remove from both maps
         for id in to_remove {
-            if let Some(ty) = self.types.remove(&id) {
+            if let Some(ty) = self.types.shift_remove(&id) {
                 self.intern_map.remove(&ty);
             }
         }
