@@ -105,6 +105,18 @@ impl Project {
             || self.used_builtins.contains(&CanonBuiltin::F32ToBuffer)
     }
 
+    /// Check if any libm math function is used
+    pub fn needs_libm(&self) -> bool {
+        self.used_builtins
+            .iter()
+            .any(super::optimize::CanonBuiltin::is_libm)
+    }
+
+    /// Check if the wado-bundled module is needed (float-to-string or libm)
+    pub fn needs_wado_bundled(&self) -> bool {
+        self.needs_float_to_string() || self.needs_libm()
+    }
+
     /// Check if any function from the given WASI effect is used.
     /// Effect names are like "Stdout", "Stderr", "Environment", etc.
     pub fn has_effect(&self, effect_name: &str) -> bool {

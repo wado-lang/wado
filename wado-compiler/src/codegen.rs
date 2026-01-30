@@ -2183,22 +2183,22 @@ impl Codegen {
         );
 
         // ========================================
-        // Float-to-string conversion module (conditionally included)
+        // Wado-bundled module (float-to-string and libm, conditionally included)
         // ========================================
-        if project.needs_float_to_string() {
-            let fts_module =
+        if project.needs_wado_bundled() {
+            let bundled_module =
                 wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
-                    .expect("Failed to process float-to-string module");
+                    .expect("Failed to process wado-bundled module");
             ctx.register_core_module("fts-mod");
-            builder.core_module_raw(Some("fts-mod"), &fts_module);
+            builder.core_module_raw(Some("fts-mod"), &bundled_module);
 
-            // Create env instance for float-to-string (just memory)
+            // Create env instance for bundled module (just memory)
             ctx.register_core_instance("fts-env");
             let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
             let fts_env_instance =
                 builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
 
-            // Instantiate float-to-string module with memory
+            // Instantiate bundled module with memory
             ctx.register_core_instance("fts");
             builder.core_instantiate(
                 Some("fts"),
@@ -2225,6 +2225,20 @@ impl Codegen {
                     "f32_to_buffer",
                     ExportKind::Func,
                 );
+            }
+
+            // Alias libm exports (only the ones needed)
+            for builtin in &project.used_builtins {
+                if builtin.is_libm() {
+                    let canonical_name = builtin.canonical_name();
+                    ctx.register_core_func(canonical_name);
+                    builder.core_alias_export(
+                        Some(canonical_name),
+                        ctx.core_instance_idx("fts"),
+                        canonical_name,
+                        ExportKind::Func,
+                    );
+                }
             }
         }
 
@@ -2560,6 +2574,17 @@ impl Codegen {
                 ExportKind::Func,
                 ctx.core_func_idx("f32-to-buffer"),
             ));
+        }
+        // Add libm exports
+        for builtin in &project.used_builtins {
+            if builtin.is_libm() {
+                let canonical_name = builtin.canonical_name();
+                env_exports.push((
+                    canonical_name,
+                    ExportKind::Func,
+                    ctx.core_func_idx(canonical_name),
+                ));
+            }
         }
         let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
         ctx.register_core_instance("env");
@@ -12298,7 +12323,57 @@ impl Codegen {
             | "builtin::waitable_set_new"
             | "builtin::waitable_join"
             | "builtin::waitable_set_wait"
-            | "builtin::subtask_drop" => {
+            | "builtin::subtask_drop"
+            // Libm builtins (f64)
+            | "builtin::f64_sin"
+            | "builtin::f64_cos"
+            | "builtin::f64_tan"
+            | "builtin::f64_asin"
+            | "builtin::f64_acos"
+            | "builtin::f64_atan"
+            | "builtin::f64_atan2"
+            | "builtin::f64_sinh"
+            | "builtin::f64_cosh"
+            | "builtin::f64_tanh"
+            | "builtin::f64_asinh"
+            | "builtin::f64_acosh"
+            | "builtin::f64_atanh"
+            | "builtin::f64_exp"
+            | "builtin::f64_exp2"
+            | "builtin::f64_expm1"
+            | "builtin::f64_ln"
+            | "builtin::f64_log2"
+            | "builtin::f64_log10"
+            | "builtin::f64_ln1p"
+            | "builtin::f64_pow"
+            | "builtin::f64_cbrt"
+            | "builtin::f64_hypot"
+            | "builtin::f64_fmod"
+            // Libm builtins (f32)
+            | "builtin::f32_sin"
+            | "builtin::f32_cos"
+            | "builtin::f32_tan"
+            | "builtin::f32_asin"
+            | "builtin::f32_acos"
+            | "builtin::f32_atan"
+            | "builtin::f32_atan2"
+            | "builtin::f32_sinh"
+            | "builtin::f32_cosh"
+            | "builtin::f32_tanh"
+            | "builtin::f32_asinh"
+            | "builtin::f32_acosh"
+            | "builtin::f32_atanh"
+            | "builtin::f32_exp"
+            | "builtin::f32_exp2"
+            | "builtin::f32_expm1"
+            | "builtin::f32_ln"
+            | "builtin::f32_log2"
+            | "builtin::f32_log10"
+            | "builtin::f32_ln1p"
+            | "builtin::f32_pow"
+            | "builtin::f32_cbrt"
+            | "builtin::f32_hypot"
+            | "builtin::f32_fmod" => {
                 self.generate_args(func, args, type_table, ctx, builder);
                 // Look up the canonical name from the builtin registry
                 let func_name = builtin_name.strip_prefix("builtin::").unwrap();

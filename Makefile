@@ -53,7 +53,7 @@ test-cov-html:
 	@echo "Coverage report generated at target/llvm-cov/html/index.html"
 
 .PHONY: on-task-done
-on-task-done: clippy-fix update-bundled update-golden-fixtures format test test-wado
+on-task-done: clippy-fix update-golden-fixtures format test test-wado
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: format
