@@ -479,6 +479,9 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
                 collect_modified_vars_in_expr(arg, modified);
             }
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_modified_vars_in_expr(functor, modified);
+        }
         TirExprKind::Closure { body, .. } => {
             collect_modified_vars_in_expr(body, modified);
         }
@@ -773,6 +776,9 @@ fn collect_licm_ref_bindings_in_expr(
             for arg in args {
                 collect_licm_ref_bindings_in_expr(arg, type_table, bindings);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_licm_ref_bindings_in_expr(functor, type_table, bindings);
         }
         TirExprKind::Assign { target, value } => {
             collect_licm_ref_bindings_in_expr(target, type_table, bindings);
@@ -1430,6 +1436,16 @@ fn find_hoist_candidates_in_expr(
                 );
             }
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            find_hoist_candidates_in_expr(
+                functor,
+                modified_vars,
+                ref_bindings,
+                candidates,
+                seen,
+                next_local,
+            );
+        }
         TirExprKind::Closure { body, .. } => {
             find_hoist_candidates_in_expr(
                 body,
@@ -1738,6 +1754,9 @@ fn replace_hoisted_in_expr(
             for arg in args {
                 replace_hoisted_in_expr(arg, candidates, ref_bindings);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            replace_hoisted_in_expr(functor, candidates, ref_bindings);
         }
         TirExprKind::Closure { body, .. } => {
             replace_hoisted_in_expr(body, candidates, ref_bindings);

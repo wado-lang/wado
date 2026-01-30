@@ -128,6 +128,10 @@ pub struct Codegen {
     /// Reset before codegen starts, incremented each time we encounter a Closure expression.
     /// Must match the order in which closures were collected by `collect_closures_from_module`.
     closure_codegen_counter: RefCell<u32>,
+    /// Canonical wrapper function indices for closure __call methods.
+    /// Key: functor_id (from ClosureToCanonical)
+    /// Value: wrapper function index (has canonical signature)
+    closure_canonical_wrappers: RefCell<HashMap<u32, u32>>,
     /// Registry of custom variant types
     /// Key: variant name (e.g., "Shape")
     /// Value: `VariantTypeInfo` with struct type index and case metadata
@@ -197,6 +201,21 @@ struct CollectedClosure {
     params: Vec<(String, TypeId)>,
     body: TirExpr,
     return_type: TypeId,
+}
+
+/// Info for generating canonical wrapper for closure __call methods
+#[derive(Clone)]
+struct ClosureCallWrapperInfo {
+    /// Functor ID (from __Closure_N)
+    functor_id: u32,
+    /// Function index of the __call method
+    call_func_idx: u32,
+    /// Functor struct type index (for casting)
+    functor_type_idx: u32,
+    /// Parameter type IDs (excluding self)
+    param_type_ids: Vec<TypeId>,
+    /// Return type ID
+    return_type_id: TypeId,
 }
 
 /// Context for tracking local variables during function code generation
@@ -561,6 +580,7 @@ impl Codegen {
             canonical_closure_types: RefCell::new(HashMap::new()),
             pending_closures: RefCell::new(Vec::new()),
             closure_codegen_counter: RefCell::new(0),
+            closure_canonical_wrappers: RefCell::new(HashMap::new()),
             variant_types: RefCell::new(HashMap::new()),
             pending_type_indices: RefCell::new(HashMap::new()),
         }
@@ -1816,6 +1836,11 @@ impl Codegen {
             .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
             .unwrap_or_else(|| std::iter::once("run".to_string()).collect());
 
+        // Collect closure __call method indices for element segment (required for ref.func)
+        let mut closure_call_func_indices: Vec<u32> = Vec::new();
+        // Collect info for generating canonical wrappers
+        let mut closure_call_wrapper_infos: Vec<ClosureCallWrapperInfo> = Vec::new();
+
         // Declare all TIR functions except world exports (which are handled as entry points)
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
@@ -1845,6 +1870,34 @@ impl Codegen {
                 // with just the simple name (e.g., Array<i32>::len)
                 if tir_func.monomorph_info.is_some() {
                     builder.define_func_alias(&tir_func.name, func_idx);
+                }
+                // For closure __call methods, collect info for canonical wrapper generation
+                if info.struct_name.starts_with("__Closure_") {
+                    builder.define_func_alias(&tir_func.name, func_idx);
+                    // Track for element segment (required for ref.func)
+                    closure_call_func_indices.push(func_idx);
+
+                    // Extract functor_id from struct_name "__Closure_N"
+                    if let Some(id_str) = info.struct_name.strip_prefix("__Closure_") {
+                        if let Ok(functor_id) = id_str.parse::<u32>() {
+                            // Get functor struct type index
+                            let functor_type_idx = builder.type_idx(&info.struct_name);
+                            // Get param types (skip first param which is self)
+                            let param_type_ids: Vec<TypeId> = tir_func
+                                .params
+                                .iter()
+                                .skip(1)
+                                .map(|p| p.type_id)
+                                .collect();
+                            closure_call_wrapper_infos.push(ClosureCallWrapperInfo {
+                                functor_id,
+                                call_func_idx: func_idx,
+                                functor_type_idx,
+                                param_type_ids,
+                                return_type_id: tir_func.return_type,
+                            });
+                        }
+                    }
                 }
             } else {
                 builder.define_func(&tir_func.name, &tir_func.name);
@@ -1886,6 +1939,24 @@ impl Codegen {
         for export_name in &world_export_names {
             builder.define_func(export_name, export_name);
         }
+
+        // Declare canonical wrapper functions for closure __call methods
+        // These have canonical signature (ref struct, params...) -> result
+        for wrapper_info in &closure_call_wrapper_infos {
+            // Get canonical closure type for this signature
+            let key = (wrapper_info.param_type_ids.clone(), wrapper_info.return_type_id);
+            if let Some((_, fn_type_name, _)) = self.canonical_closure_types.borrow().get(&key) {
+                let wrapper_name = format!("__Closure_{}_canonical", wrapper_info.functor_id);
+                let wrapper_func_idx = builder.define_func(&wrapper_name, fn_type_name);
+                // Track wrapper for use in ClosureToCanonical
+                self.closure_canonical_wrappers
+                    .borrow_mut()
+                    .insert(wrapper_info.functor_id, wrapper_func_idx);
+                // Also add to element segment for ref.func
+                closure_call_func_indices.push(wrapper_func_idx);
+            }
+        }
+
         module.section(builder.functions());
 
         // ========================================
@@ -1926,19 +1997,21 @@ impl Codegen {
         // ========================================
         // Element section (required for ref.func in closures)
         // ========================================
+        // Combine old-style closure indices (pending_closures) with new-style __call method indices
         let pending_closures = self.pending_closures.borrow();
-        if !pending_closures.is_empty() {
+        let mut all_closure_func_indices: Vec<u32> =
+            pending_closures.iter().map(|c| c.func_idx).collect();
+        all_closure_func_indices.extend(&closure_call_func_indices);
+        drop(pending_closures);
+
+        if !all_closure_func_indices.is_empty() {
             let mut elements = ElementSection::new();
-            // Collect closure function indices for declarative element segment
-            let closure_func_indices: Vec<u32> =
-                pending_closures.iter().map(|c| c.func_idx).collect();
             // Create declarative element segment for ref.func usage
             elements.declared(Elements::Functions(std::borrow::Cow::Borrowed(
-                &closure_func_indices,
+                &all_closure_func_indices,
             )));
             module.section(&elements);
         }
-        drop(pending_closures);
 
         // Data count section (required for array.new_data with GC)
         let data_count = u32::from(!string_data.is_empty());
@@ -2077,6 +2150,38 @@ impl Codegen {
             };
 
             code.function(&export_wasm_func);
+        }
+
+        // Generate canonical wrapper function bodies for closure __call methods
+        // These cast (ref struct) to the specific functor type and call the original __call
+        for wrapper_info in &closure_call_wrapper_infos {
+            // Skip if wrapper wasn't defined (canonical type not registered)
+            if !self
+                .closure_canonical_wrappers
+                .borrow()
+                .contains_key(&wrapper_info.functor_id)
+            {
+                continue;
+            }
+
+            let mut wrapper_func = Function::new(vec![]);
+
+            // Cast first param (ref struct) to specific functor type
+            wrapper_func.instruction(&Instruction::LocalGet(0)); // env param
+            wrapper_func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                wrapper_info.functor_type_idx,
+            )));
+
+            // Pass through all other params
+            for i in 0..wrapper_info.param_type_ids.len() {
+                wrapper_func.instruction(&Instruction::LocalGet((i + 1) as u32));
+            }
+
+            // Call the original __call method
+            wrapper_func.instruction(&Instruction::Call(wrapper_info.call_func_idx));
+
+            wrapper_func.instruction(&Instruction::End);
+            code.function(&wrapper_func);
         }
 
         // Branch hints section (emit before code section for proper placement)
@@ -5765,6 +5870,9 @@ impl Codegen {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                Self::collect_closures_from_expr(functor, closures);
+            }
         }
     }
 
@@ -6014,6 +6122,9 @@ impl Codegen {
                 for arg in args {
                     Self::find_closure_locals_in_expr(arg, result, closure_counter);
                 }
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                Self::find_closure_locals_in_expr(functor, result, closure_counter);
             }
             TirExprKind::OptionSome { value } => {
                 Self::find_closure_locals_in_expr(value, result, closure_counter);
@@ -8671,6 +8782,62 @@ impl Codegen {
 
                 // Call via call_ref with the function type
                 func.instruction(&Instruction::CallRef(fn_type_idx));
+            }
+
+            // === Closure to Canonical Wrapper ===
+            TirExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+            } => {
+                // Generate the functor struct (pushes __Closure_N ref onto stack)
+                self.generate_expr(func, functor, type_table, ctx, builder);
+
+                // Look up the canonical wrapper function index
+                // The wrapper has signature (ref struct, params...) -> result
+                let wrapper_func_idx = self
+                    .closure_canonical_wrappers
+                    .borrow()
+                    .get(functor_id)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "canonical wrapper not found for closure functor {}",
+                            functor_id
+                        )
+                    });
+
+                // Get canonical closure struct type for this function signature
+                let closure_struct_type_idx = if let ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } = type_table.get(*target_fn_type)
+                {
+                    // Look up canonical closure types for this function signature
+                    // These should have been registered during closure collection phase
+                    let key = (params.clone(), *return_type);
+                    if let Some((_, _, struct_idx)) =
+                        self.canonical_closure_types.borrow().get(&key).cloned()
+                    {
+                        struct_idx
+                    } else {
+                        panic!(
+                            "canonical closure type not found for ClosureToCanonical: {:?}",
+                            type_table.get(*target_fn_type)
+                        );
+                    }
+                } else {
+                    panic!(
+                        "ClosureToCanonical target_fn_type is not a function: {:?}",
+                        type_table.get(*target_fn_type)
+                    );
+                };
+
+                // Stack: functor_ref
+                // Create canonical closure: (env: functor as structref, func: wrapper funcref)
+                func.instruction(&Instruction::RefFunc(wrapper_func_idx));
+                func.instruction(&Instruction::StructNew(closure_struct_type_idx));
             }
 
             // === Labeled Block Expression ===
@@ -13741,6 +13908,9 @@ impl Codegen {
             TirExprKind::Move { value } => self.expr_needs_async_scratch_locals(value),
             TirExprKind::LabeledBlock { block, .. } => self.needs_async_scratch_locals(block),
             TirExprKind::GlobalVarSet { value, .. } => self.expr_needs_async_scratch_locals(value),
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.expr_needs_async_scratch_locals(functor)
+            }
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }

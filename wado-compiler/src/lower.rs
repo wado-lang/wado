@@ -234,6 +234,22 @@ impl ClosureLowerer {
             }
         }
 
+        // Fourth pass: transform remaining Closure nodes to ClosureToCanonical
+        // These are closures that weren't specialized (fn-param stored in struct field)
+        for func_rc in &func_refs {
+            let mut func = func_rc.borrow_mut();
+            if let Some(body) = &mut func.body {
+                self.transform_remaining_closures_block(body);
+            }
+        }
+        for impl_block in &mut module.impls {
+            for method in &mut impl_block.methods {
+                if let Some(body) = &mut method.body {
+                    self.transform_remaining_closures_block(body);
+                }
+            }
+        }
+
         // Store functor metadata in module for the optimizer to use.
         // This enables closure inlining by providing the __call method body.
         module.closure_functors = std::mem::take(&mut self.functor_infos);
@@ -455,6 +471,9 @@ impl ClosureLowerer {
                     self.collect_closures_in_expr(arg);
                 }
             }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.collect_closures_in_expr(functor);
+            }
             TirExprKind::OptionSome { value } | TirExprKind::Move { value } => {
                 self.collect_closures_in_expr(value);
             }
@@ -642,6 +661,9 @@ impl ClosureLowerer {
                 for arg in args {
                     self.analyze_closure_safety_expr(arg, true);
                 }
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.analyze_closure_safety_expr(functor, in_arg_position);
             }
             TirExprKind::Binary { left, right, .. } => {
                 self.analyze_closure_safety_expr(left, false);
@@ -1421,8 +1443,10 @@ impl ClosureLowerer {
             // Skip specialization if any fn-param is stored in a struct field
             // This would cause type mismatches since struct fields expect fn(...) not &__Closure_N
             let callee = callee_rc.borrow();
-            let is_method = callee.method_info.is_some();
-            let param_offset = u32::from(is_method);
+            // Check if this is an instance method (has self parameter)
+            // Note: static methods have method_info but no self parameter
+            let has_self_param = callee.params.first().is_some_and(|p| p.name == "self");
+            let param_offset = u32::from(has_self_param);
             let fn_param_indices: Vec<u32> = key
                 .functor_types
                 .iter()
@@ -1587,6 +1611,9 @@ impl ClosureLowerer {
                     || args
                         .iter()
                         .any(|a| self.fn_param_in_struct_field_expr(a, fn_param_indices))
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.fn_param_in_struct_field_expr(functor, fn_param_indices)
             }
             TirExprKind::Block(block) => {
                 self.fn_param_stored_in_struct_field(block, fn_param_indices)
@@ -1865,6 +1892,9 @@ impl ClosureLowerer {
                 for arg in args {
                     self.collect_fn_param_specs_expr(arg, func_by_name, type_table, requests);
                 }
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.collect_fn_param_specs_expr(functor, func_by_name, type_table, requests);
             }
             TirExprKind::Block(block) => {
                 self.collect_fn_param_specs(block, func_by_name, type_table, requests);
@@ -2180,9 +2210,13 @@ impl ClosureLowerer {
         // Note: key.functor_types contains argument indices (0 = first arg after receiver for methods)
         let arg_to_functor: HashMap<u32, TypeId> = key.functor_types.iter().copied().collect();
 
-        // Determine if this is a method (has self parameter)
-        let is_method = callee.method_info.is_some();
-        let param_offset = u32::from(is_method);
+        // Determine if this is an instance method (has self parameter)
+        // Note: static methods have method_info but no self parameter
+        let has_self_param = callee
+            .params
+            .first()
+            .is_some_and(|p| p.name == "self");
+        let param_offset = u32::from(has_self_param);
 
         // Clone and modify params
         // For methods: params[0] is self, so argument index i maps to params[i + 1]
@@ -2493,6 +2527,19 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
+            TirExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+            } => TirExpr::new(
+                TirExprKind::ClosureToCanonical {
+                    functor: Box::new(self.specialize_expr(functor, param_to_functor, type_table)),
+                    functor_id: *functor_id,
+                    target_fn_type: *target_fn_type,
+                },
+                expr.type_id,
+                expr.span,
+            ),
             // Recurse into sub-expressions
             TirExprKind::Binary { left, op, right } => TirExpr::new(
                 TirExprKind::Binary {
@@ -2996,9 +3043,10 @@ impl ClosureLowerer {
                 // Transform nested closures in the body
                 self.transform_expr(body, type_table);
 
-                // Only transform if this closure is safe to transform (stored in local, called directly)
-                // Closures passed as arguments are NOT transformed here - they need fn-param monomorphization
-                // which is handled in the monomorphize phase.
+                // Safe closures: transform to StructLiteral (stored in local, called directly)
+                // Unsafe closures: set functor_id and leave as Closure for fn-param specialization
+                // The try_transform_fn_param_call will handle specialization. Any remaining
+                // Closure nodes after that are transformed to ClosureToCanonical in a final pass.
                 if self.safe_to_transform.contains(&closure_id)
                     && let Some(functor) = self.functor_infos.get(closure_id as usize)
                 {
@@ -3033,7 +3081,7 @@ impl ClosureLowerer {
                     expr.type_id = struct_type_id;
                 } else {
                     // For unsafe closures (passed as arguments), set the functor_id
-                    // so that monomorphize phase can look up the corresponding ClosureFunctor
+                    // so that try_transform_fn_param_call can look up the corresponding ClosureFunctor
                     *functor_id = Some(closure_id);
                 }
             }
@@ -3074,6 +3122,9 @@ impl ClosureLowerer {
                     expr.type_id = return_type;
                 }
             }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.transform_expr(functor, type_table);
+            }
             // Recursive cases - transform all sub-expressions
             TirExprKind::Binary { left, right, .. } => {
                 self.transform_expr(left, type_table);
@@ -3084,9 +3135,14 @@ impl ClosureLowerer {
             | TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.transform_expr(inner, type_table);
             }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
-            | TirExprKind::StaticCall { args, .. } => {
+            TirExprKind::Call { func, args, .. } | TirExprKind::StaticCall { func, args } => {
+                for arg in &mut *args {
+                    self.transform_expr(arg, type_table);
+                }
+                // Check if this call has closure arguments that need fn-param specialization
+                self.try_transform_fn_param_call(func, args, type_table);
+            }
+            TirExprKind::EffectCall { args, .. } => {
                 for arg in args {
                     self.transform_expr(arg, type_table);
                 }
@@ -3289,6 +3345,266 @@ impl ClosureLowerer {
             monomorph_info: None,
             method_info: specialized_method_info,
         };
+    }
+
+    /// Transform remaining Closure nodes to ClosureToCanonical.
+    /// This is called after fn-param specialization has had a chance to transform closures.
+    /// Any Closure nodes still remaining are those where specialization was skipped
+    /// (e.g., fn-param stored in struct field).
+    fn transform_remaining_closures_block(&self, block: &mut TirBlock) {
+        for stmt in &mut block.stmts {
+            self.transform_remaining_closures_stmt(stmt);
+        }
+    }
+
+    fn transform_remaining_closures_stmt(&self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, .. } => {
+                self.transform_remaining_closures_expr(value);
+            }
+            TirStmtKind::Expr(expr) => {
+                self.transform_remaining_closures_expr(expr);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                self.transform_remaining_closures_expr(expr);
+            }
+            TirStmtKind::Return { value: None } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.transform_remaining_closures_expr(condition);
+                self.transform_remaining_closures_block(then_block);
+                if let Some(else_blk) = else_block {
+                    self.transform_remaining_closures_block(else_blk);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                self.transform_remaining_closures_expr(condition);
+                self.transform_remaining_closures_block(body);
+            }
+            TirStmtKind::For {
+                init,
+                condition,
+                body,
+                update,
+            } => {
+                for s in init {
+                    self.transform_remaining_closures_stmt(s);
+                }
+                if let Some(c) = condition {
+                    self.transform_remaining_closures_expr(c);
+                }
+                self.transform_remaining_closures_block(body);
+                if let Some(u) = update {
+                    self.transform_remaining_closures_expr(u);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                self.transform_remaining_closures_block(body);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                self.transform_remaining_closures_expr(iterable);
+                self.transform_remaining_closures_block(body);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.transform_remaining_closures_expr(scrutinee);
+                self.transform_remaining_closures_block(then_block);
+                if let Some(else_blk) = else_block {
+                    self.transform_remaining_closures_block(else_blk);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                self.transform_remaining_closures_expr(scrutinee);
+                self.transform_remaining_closures_block(body);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    self.transform_remaining_closures_stmt(s);
+                }
+                self.transform_remaining_closures_expr(scrutinee);
+                self.transform_remaining_closures_block(body);
+                if let Some(u) = update {
+                    self.transform_remaining_closures_expr(u);
+                }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.transform_remaining_closures_expr(value);
+            }
+        }
+    }
+
+    fn transform_remaining_closures_expr(&self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Closure {
+                captures,
+                functor_id: Some(closure_id),
+                body,
+                ..
+            } => {
+                // Transform nested closures first
+                self.transform_remaining_closures_expr(body);
+
+                // This closure wasn't specialized, transform to ClosureToCanonical
+                if let Some(functor) = self.functor_infos.get(*closure_id as usize) {
+                    let struct_name = functor.struct_name.clone();
+                    let struct_type_id = functor.struct_type_id;
+
+                    // Build field expressions from captures
+                    let fields: Vec<crate::tir::TirStructField> = captures
+                        .iter()
+                        .enumerate()
+                        .map(|(i, cap)| crate::tir::TirStructField {
+                            name: format!("__capture_{i}"),
+                            value: TirExpr::new(
+                                TirExprKind::Local {
+                                    index: cap.outer_index,
+                                    name: cap.name.clone(),
+                                },
+                                cap.type_id,
+                                expr.span,
+                            ),
+                            field_index: i as u32,
+                        })
+                        .collect();
+
+                    // Build the StructLiteral
+                    let struct_literal = TirExpr::new(
+                        TirExprKind::StructLiteral {
+                            struct_type: struct_type_id,
+                            struct_name,
+                            fields,
+                        },
+                        struct_type_id,
+                        expr.span,
+                    );
+
+                    // Wrap in ClosureToCanonical
+                    let target_fn_type = expr.type_id; // Original function type
+                    expr.kind = TirExprKind::ClosureToCanonical {
+                        functor: Box::new(struct_literal),
+                        functor_id: *closure_id,
+                        target_fn_type,
+                    };
+                    // Keep original function type for type compatibility
+                }
+            }
+            // Recurse into all expression kinds
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    self.transform_remaining_closures_expr(arg);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.transform_remaining_closures_expr(receiver);
+                for arg in args {
+                    self.transform_remaining_closures_expr(arg);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.transform_remaining_closures_expr(left);
+                self.transform_remaining_closures_expr(right);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::Move { value: inner } => {
+                self.transform_remaining_closures_expr(inner);
+            }
+            TirExprKind::Assign { target, value } => {
+                self.transform_remaining_closures_expr(target);
+                self.transform_remaining_closures_expr(value);
+            }
+            TirExprKind::Index { expr: arr, index } => {
+                self.transform_remaining_closures_expr(arr);
+                self.transform_remaining_closures_expr(index);
+            }
+            TirExprKind::Block(block) => {
+                self.transform_remaining_closures_block(block);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.transform_remaining_closures_expr(condition);
+                self.transform_remaining_closures_block(then_branch);
+                if let Some(else_blk) = else_branch {
+                    self.transform_remaining_closures_block(else_blk);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.transform_remaining_closures_expr(&mut field.value);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.transform_remaining_closures_expr(elem);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.transform_remaining_closures_expr(callee);
+                for arg in args {
+                    self.transform_remaining_closures_expr(arg);
+                }
+            }
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                self.transform_remaining_closures_expr(scrutinee);
+                for arm in arms {
+                    self.transform_remaining_closures_expr(&mut arm.body);
+                }
+            }
+            TirExprKind::OptionSome { value } => {
+                self.transform_remaining_closures_expr(value);
+            }
+            TirExprKind::VariantConstruct { payload: Some(p), .. } => {
+                self.transform_remaining_closures_expr(p);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.transform_remaining_closures_block(block);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.transform_remaining_closures_expr(value);
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.transform_remaining_closures_expr(functor);
+            }
+            TirExprKind::Closure { body, functor_id: None, .. } => {
+                // Closure without functor_id - just recurse into body
+                self.transform_remaining_closures_expr(body);
+            }
+            // Leaf nodes - nothing to recurse into
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. }
+            | TirExprKind::VariantConstruct { payload: None, .. } => {}
+        }
     }
 }
 
@@ -3535,6 +3851,9 @@ impl StringCollector {
                 for arg in args {
                     self.collect_expr(arg);
                 }
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.collect_expr(functor);
             }
             TirExprKind::OptionSome { value } => {
                 self.collect_expr(value);

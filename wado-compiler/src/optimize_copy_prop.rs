@@ -263,6 +263,9 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
                 collect_assigned_in_expr(arg, assigned);
             }
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_assigned_in_expr(functor, assigned);
+        }
         TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
             collect_assigned_in_expr(inner, assigned);
         }
@@ -496,6 +499,9 @@ fn collect_usage_in_expr(
             for arg in args {
                 collect_usage_in_expr(arg, usage, in_loop, in_condition);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_usage_in_expr(functor, usage, in_loop, in_condition);
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
             collect_usage_in_expr(inner, usage, in_loop, in_condition);
@@ -837,6 +843,9 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
                 substitute_in_expr(arg, from_local, source);
             }
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            substitute_in_expr(functor, from_local, source);
+        }
         TirExprKind::FieldAccess { expr: inner, .. } => {
             substitute_in_expr(inner, from_local, source);
         }
@@ -1093,6 +1102,9 @@ fn collect_copy_bindings_in_expr(
                 collect_copy_bindings_in_expr(arg, bindings, block_local_assigned);
             }
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_copy_bindings_in_expr(functor, bindings, block_local_assigned);
+        }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. } => {
@@ -1311,6 +1323,9 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
             for arg in args {
                 remove_copy_bindings_in_expr(arg, dead_locals);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            remove_copy_bindings_in_expr(functor, dead_locals);
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. }

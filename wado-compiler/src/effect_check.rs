@@ -261,6 +261,9 @@ impl<'a> EffectChecker<'a> {
                 }
                 // TODO: Check closure effects when we have effect types on closures
             }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.check_expr(functor);
+            }
             TirExprKind::Binary { left, right, .. } => {
                 self.check_expr(left);
                 self.check_expr(right);

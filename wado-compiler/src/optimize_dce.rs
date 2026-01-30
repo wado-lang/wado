@@ -1009,6 +1009,21 @@ fn analyze_expr(
                 analyze_expr(arg, current_module, type_table, analysis);
             }
         }
+        TirExprKind::ClosureToCanonical {
+            functor,
+            functor_id,
+            ..
+        } => {
+            analyze_expr(functor, current_module, type_table, analysis);
+            // Mark the __call method as reachable (it's referenced via ref.func)
+            let method_name = MethodName::new(
+                current_module.join("/"),
+                format!("__Closure_{}", functor_id),
+                None,
+                "__call".to_string(),
+            );
+            analysis.callees.insert(FunctionId::Method(method_name));
+        }
         TirExprKind::OptionSome { value } => {
             analyze_expr(value, current_module, type_table, analysis);
             // Option<primitive> now uses box types for Some variant
@@ -1722,6 +1737,14 @@ fn collect_types_from_expr(
             for arg in args {
                 collect_types_from_expr(arg, type_table, reachable);
             }
+        }
+        TirExprKind::ClosureToCanonical {
+            functor,
+            target_fn_type,
+            ..
+        } => {
+            collect_types_from_expr(functor, type_table, reachable);
+            collect_type_transitive(*target_fn_type, type_table, reachable);
         }
         TirExprKind::OptionSome { value } => {
             collect_types_from_expr(value, type_table, reachable);

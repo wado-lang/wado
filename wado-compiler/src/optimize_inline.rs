@@ -353,6 +353,9 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
                     .iter()
                     .any(|a| expr_has_complex_generic_types(a, type_table))
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            expr_has_complex_generic_types(functor, type_table)
+        }
         TirExprKind::Binary { left, right, .. }
         | TirExprKind::Assign {
             target: left,
@@ -629,6 +632,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
             for arg in args {
                 collect_callees_from_expr(arg, callees);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_callees_from_expr(functor, callees);
         }
         TirExprKind::EffectCall { args, .. } => {
             for arg in args {
@@ -2443,6 +2449,21 @@ fn remap_expr(
                 .map(|a| remap_expr(a, param_to_local, local_offset, param_count, source_module))
                 .collect(),
         },
+        TirExprKind::ClosureToCanonical {
+            functor,
+            functor_id,
+            target_fn_type,
+        } => TirExprKind::ClosureToCanonical {
+            functor: Box::new(remap_expr(
+                functor,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+            functor_id: *functor_id,
+            target_fn_type: *target_fn_type,
+        },
         TirExprKind::OptionSome { value } => TirExprKind::OptionSome {
             value: Box::new(remap_expr(
                 value,
@@ -3120,6 +3141,19 @@ fn inline_calls_in_expr(
                     inline_counter,
                 );
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            inline_calls_in_expr(
+                functor,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
         }
         TirExprKind::OptionSome { value } => {
             inline_calls_in_expr(
