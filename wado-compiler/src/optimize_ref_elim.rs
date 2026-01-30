@@ -147,6 +147,9 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             }
             (all_ok, total)
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            track_local_uses_in_expr(functor, local_index)
+        }
         TirExprKind::Index { expr: inner, index } => {
             let (i_ok, i_count) = track_local_uses_in_expr(inner, local_index);
             let (x_ok, x_count) = track_local_uses_in_expr(index, local_index);
@@ -398,6 +401,9 @@ fn replace_ref_field_access_in_expr(
             for arg in args {
                 replace_ref_field_access_in_expr(arg, ref_local, target_local, target_name);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            replace_ref_field_access_in_expr(functor, ref_local, target_local, target_name);
         }
         TirExprKind::Index { expr: inner, index } => {
             replace_ref_field_access_in_expr(inner, ref_local, target_local, target_name);
@@ -799,6 +805,9 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
                 collect_ref_bindings_in_expr(arg, bindings);
             }
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_ref_bindings_in_expr(functor, bindings);
+        }
         TirExprKind::Binary { left, right, .. } => {
             collect_ref_bindings_in_expr(left, bindings);
             collect_ref_bindings_in_expr(right, bindings);
@@ -1025,6 +1034,9 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
             for arg in args {
                 remove_dead_ref_bindings_in_expr(arg, dead_locals);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            remove_dead_ref_bindings_in_expr(functor, dead_locals);
         }
         TirExprKind::Binary { left, right, .. } => {
             remove_dead_ref_bindings_in_expr(left, dead_locals);

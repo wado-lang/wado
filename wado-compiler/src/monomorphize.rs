@@ -888,6 +888,9 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(arg, type_table);
                 }
             }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.rewrite_types_in_expr(functor, type_table);
+            }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
             }
@@ -1918,6 +1921,13 @@ impl Monomorphizer {
                     );
                 }
             }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.collect_func_instantiation_sites_in_expr(
+                    functor,
+                    generic_functions,
+                    type_table,
+                );
+            }
             TirExprKind::OptionSome { value } => {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
             }
@@ -2681,6 +2691,14 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(arg, substitution, type_table);
                 }
             }
+            TirExprKind::ClosureToCanonical {
+                functor,
+                target_fn_type,
+                ..
+            } => {
+                self.substitute_types_in_expr(functor, substitution, type_table);
+                *target_fn_type = self.substitute_type(*target_fn_type, substitution, type_table);
+            }
             TirExprKind::OptionSome { value } => {
                 self.substitute_types_in_expr(value, substitution, type_table);
             }
@@ -2906,6 +2924,9 @@ impl Monomorphizer {
                 for arg in args {
                     Self::update_local_expr_types_in_expr(arg, local_types);
                 }
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                Self::update_local_expr_types_in_expr(functor, local_types);
             }
             _ => {}
         }
@@ -3273,6 +3294,9 @@ impl Monomorphizer {
                 for arg in args {
                     self.rewrite_function_calls_in_expr(arg, type_table);
                 }
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.rewrite_function_calls_in_expr(functor, type_table);
             }
             TirExprKind::OptionSome { value } => {
                 self.rewrite_function_calls_in_expr(value, type_table);

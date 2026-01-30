@@ -20,9 +20,9 @@ use crate::optimize::CanonBuiltin;
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture, TirExpr, TirExprKind,
-    TirFunction, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
@@ -107,10 +107,6 @@ pub struct Codegen {
     box_types: HashMap<ValType, u32>,
     /// Counter for generating unique closure IDs
     closure_counter: RefCell<u32>,
-    /// Registry of closure environment types
-    /// Key: vector of (`type_id`, `is_mut`) for each capture
-    /// Value: (`env_type_idx`, `env_type_name`)
-    closure_env_types: RefCell<HashMap<Vec<(TypeId, bool)>, (u32, String)>>,
     /// Registry of closure struct types (env + funcref pair)
     /// Key: (`env_type_idx`, `fn_type_idx`)
     /// Value: `closure_struct_type_idx`
@@ -121,13 +117,10 @@ pub struct Codegen {
     /// Key: (`param_type_ids`, `return_type_id`)
     /// Value: (`canonical_fn_type_idx`, `canonical_fn_type_name`, `canonical_closure_struct_type_idx`)
     canonical_closure_types: RefCell<HashMap<(Vec<TypeId>, TypeId), (u32, String, u32)>>,
-    /// Pending closure implementation functions to generate
-    /// (`closure_id`, captures, params, body, `return_type`, `env_type_idx`, `closure_type_idx`)
-    pending_closures: RefCell<Vec<ClosureInfo>>,
-    /// Counter for tracking which closure we're generating during codegen.
-    /// Reset before codegen starts, incremented each time we encounter a Closure expression.
-    /// Must match the order in which closures were collected by `collect_closures_from_module`.
-    closure_codegen_counter: RefCell<u32>,
+    /// Canonical wrapper function indices for closure __call methods.
+    /// Key: `functor_id` (from `ClosureToCanonical`)
+    /// Value: wrapper function index (has canonical signature)
+    closure_canonical_wrappers: RefCell<HashMap<u32, u32>>,
     /// Registry of custom variant types
     /// Key: variant name (e.g., "Shape")
     /// Value: `VariantTypeInfo` with struct type index and case metadata
@@ -162,41 +155,19 @@ struct VariantTypeInfo {
     cases: Vec<VariantCaseInfo>,
 }
 
-/// Information about a closure to be generated
+/// Info for generating canonical wrapper for closure __call methods
 #[derive(Clone)]
-struct ClosureInfo {
-    /// Unique closure ID
-    #[allow(dead_code)]
-    id: u32,
-    /// Captured variables from outer scope
-    captures: Vec<TirCapture>,
-    /// Closure parameters (name, type)
-    params: Vec<(String, TypeId)>,
-    /// Closure body expression
-    body: TirExpr,
-    /// Return type of the closure
-    return_type: TypeId,
-    /// Wasm type index for the environment struct
-    env_type_idx: u32,
-    /// Wasm type index for the closure function type (env + params -> result)
-    #[allow(dead_code)]
-    fn_type_idx: u32,
-    /// Wasm type name for the closure function type (needed for `define_func`)
-    fn_type_name: String,
-    /// Wasm type index for the closure struct type (env + funcref)
-    closure_struct_type_idx: u32,
-    /// Wasm function index for the closure implementation function
-    func_idx: u32,
-    /// Function name for the closure implementation
-    func_name: String,
-}
-
-/// Collected closure during TIR scan (before type registration)
-struct CollectedClosure {
-    captures: Vec<TirCapture>,
-    params: Vec<(String, TypeId)>,
-    body: TirExpr,
-    return_type: TypeId,
+struct ClosureCallWrapperInfo {
+    /// Functor ID (from __`Closure_N`)
+    functor_id: u32,
+    /// Function index of the __call method
+    call_func_idx: u32,
+    /// Functor struct type index (for casting)
+    functor_type_idx: u32,
+    /// Parameter type IDs (excluding self)
+    param_type_ids: Vec<TypeId>,
+    /// Return type ID
+    return_type_id: TypeId,
 }
 
 /// Context for tracking local variables during function code generation
@@ -240,14 +211,8 @@ struct FunctionContext {
     address_taken_locals: std::collections::HashSet<u32>,
     /// Map from local index to its box type index (for address-taken primitive locals)
     local_box_types: HashMap<u32, u32>,
-    /// Closure environment type index (set when generating closure implementation function)
-    closure_env_type_idx: Option<u32>,
-    /// Closure captures (set when generating closure implementation function)
-    closure_captures: Vec<TirCapture>,
-    /// Offset to add to local indices for closure functions (typically 1 to skip env param)
+    /// Offset to add to local indices (always 0, kept for potential future use)
     local_index_offset: u32,
-    /// Map from local index to closure id (for closures stored in locals)
-    local_closure_ids: HashMap<u32, u32>,
     /// Counter for generating unique `IndirectCall` temp locals per closure struct type
     /// Key is the closure struct type index, value is the counter for that type
     indirect_call_counters: HashMap<u32, u32>,
@@ -285,10 +250,7 @@ impl FunctionContext {
             for_of_counter: 0,
             address_taken_locals: std::collections::HashSet::new(),
             local_box_types: HashMap::new(),
-            closure_env_type_idx: None,
-            closure_captures: Vec::new(),
             local_index_offset: 0,
-            local_closure_ids: HashMap::new(),
             indirect_call_counters: HashMap::new(),
             if_pattern_counters: HashMap::new(),
             let_pattern_counter: 0,
@@ -315,28 +277,16 @@ impl FunctionContext {
             for_of_counter: 0,
             address_taken_locals: std::collections::HashSet::new(),
             local_box_types: HashMap::new(),
-            closure_env_type_idx: None,
-            closure_captures: Vec::new(),
+            local_index_offset: 0,
             indirect_call_counters: HashMap::new(),
             if_pattern_counters: HashMap::new(),
             let_pattern_counter: 0,
             match_scrutinee_counter: 0,
-            local_index_offset: 0,
-            local_closure_ids: HashMap::new(),
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
             is_async_export: false,
             target_world: String::new(),
         }
-    }
-
-    /// Set closure context for generating a closure implementation function.
-    /// This enables `TirExprKind::Capture` to generate proper struct.get instructions.
-    /// Also sets `local_index_offset` to 1 to account for the env parameter at index 0.
-    fn set_closure_info(&mut self, env_type_idx: u32, captures: &[TirCapture]) {
-        self.closure_env_type_idx = Some(env_type_idx);
-        self.closure_captures = captures.to_vec();
-        self.local_index_offset = 1; // Skip env param at index 0
     }
 
     /// Reset for-of counter (called between pre-allocation and code generation phases)
@@ -556,11 +506,9 @@ impl Codegen {
             array_types_by_name: HashMap::new(),
             box_types: HashMap::new(),
             closure_counter: RefCell::new(0),
-            closure_env_types: RefCell::new(HashMap::new()),
             closure_struct_types: RefCell::new(HashMap::new()),
             canonical_closure_types: RefCell::new(HashMap::new()),
-            pending_closures: RefCell::new(Vec::new()),
-            closure_codegen_counter: RefCell::new(0),
+            closure_canonical_wrappers: RefCell::new(HashMap::new()),
             variant_types: RefCell::new(HashMap::new()),
             pending_type_indices: RefCell::new(HashMap::new()),
         }
@@ -1763,13 +1711,6 @@ impl Codegen {
             }
         }
 
-        // Collect and register closure types (types only, not functions yet)
-        // Note: canonical closure types are already registered earlier, so this
-        // will reuse them for closures with matching signatures.
-        let collected_closures = Self::collect_closures_from_module(entry_tir);
-        let mut closure_infos =
-            self.register_closure_types(&collected_closures, type_table, &mut builder);
-
         // Add types section to module
         module.section(builder.types());
 
@@ -1800,13 +1741,6 @@ impl Codegen {
         module.section(builder.imports());
 
         // ========================================
-        // Define closure functions (after imports)
-        // ========================================
-        Self::define_closure_funcs(&mut closure_infos, &mut builder);
-        // Store closure infos for code generation
-        *self.pending_closures.borrow_mut() = closure_infos;
-
-        // ========================================
         // Function section
         // ========================================
         // Collect world export names to skip (they are handled as entry points)
@@ -1815,6 +1749,11 @@ impl Codegen {
             .get(&project.target_world)
             .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
             .unwrap_or_else(|| std::iter::once("run".to_string()).collect());
+
+        // Collect closure __call method indices for element segment (required for ref.func)
+        let mut closure_call_func_indices: Vec<u32> = Vec::new();
+        // Collect info for generating canonical wrappers
+        let mut closure_call_wrapper_infos: Vec<ClosureCallWrapperInfo> = Vec::new();
 
         // Declare all TIR functions except world exports (which are handled as entry points)
         for tir_func_rc in &entry_tir.functions {
@@ -1845,6 +1784,30 @@ impl Codegen {
                 // with just the simple name (e.g., Array<i32>::len)
                 if tir_func.monomorph_info.is_some() {
                     builder.define_func_alias(&tir_func.name, func_idx);
+                }
+                // For closure __call methods, collect info for canonical wrapper generation
+                if info.struct_name.starts_with("__Closure_") {
+                    builder.define_func_alias(&tir_func.name, func_idx);
+                    // Track for element segment (required for ref.func)
+                    closure_call_func_indices.push(func_idx);
+
+                    // Extract functor_id from struct_name "__Closure_N"
+                    if let Some(id_str) = info.struct_name.strip_prefix("__Closure_")
+                        && let Ok(functor_id) = id_str.parse::<u32>()
+                    {
+                        // Get functor struct type index
+                        let functor_type_idx = builder.type_idx(&info.struct_name);
+                        // Get param types (skip first param which is self)
+                        let param_type_ids: Vec<TypeId> =
+                            tir_func.params.iter().skip(1).map(|p| p.type_id).collect();
+                        closure_call_wrapper_infos.push(ClosureCallWrapperInfo {
+                            functor_id,
+                            call_func_idx: func_idx,
+                            functor_type_idx,
+                            param_type_ids,
+                            return_type_id: tir_func.return_type,
+                        });
+                    }
                 }
             } else {
                 builder.define_func(&tir_func.name, &tir_func.name);
@@ -1886,6 +1849,27 @@ impl Codegen {
         for export_name in &world_export_names {
             builder.define_func(export_name, export_name);
         }
+
+        // Declare canonical wrapper functions for closure __call methods
+        // These have canonical signature (ref struct, params...) -> result
+        for wrapper_info in &closure_call_wrapper_infos {
+            // Get canonical closure type for this signature
+            let key = (
+                wrapper_info.param_type_ids.clone(),
+                wrapper_info.return_type_id,
+            );
+            if let Some((_, fn_type_name, _)) = self.canonical_closure_types.borrow().get(&key) {
+                let wrapper_name = format!("__Closure_{}_canonical", wrapper_info.functor_id);
+                let wrapper_func_idx = builder.define_func(&wrapper_name, fn_type_name);
+                // Track wrapper for use in ClosureToCanonical
+                self.closure_canonical_wrappers
+                    .borrow_mut()
+                    .insert(wrapper_info.functor_id, wrapper_func_idx);
+                // Also add to element segment for ref.func
+                closure_call_func_indices.push(wrapper_func_idx);
+            }
+        }
+
         module.section(builder.functions());
 
         // ========================================
@@ -1926,19 +1910,14 @@ impl Codegen {
         // ========================================
         // Element section (required for ref.func in closures)
         // ========================================
-        let pending_closures = self.pending_closures.borrow();
-        if !pending_closures.is_empty() {
+        if !closure_call_func_indices.is_empty() {
             let mut elements = ElementSection::new();
-            // Collect closure function indices for declarative element segment
-            let closure_func_indices: Vec<u32> =
-                pending_closures.iter().map(|c| c.func_idx).collect();
             // Create declarative element segment for ref.func usage
             elements.declared(Elements::Functions(std::borrow::Cow::Borrowed(
-                &closure_func_indices,
+                &closure_call_func_indices,
             )));
             module.section(&elements);
         }
-        drop(pending_closures);
 
         // Data count section (required for array.new_data with GC)
         let data_count = u32::from(!string_data.is_empty());
@@ -1947,20 +1926,10 @@ impl Codegen {
         // ========================================
         // Code section
         // ========================================
-        // Reset closure codegen counter - must match the order closures were collected
-        *self.closure_codegen_counter.borrow_mut() = 0;
         let mut code = CodeSection::new();
         let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
         let mut func_idx = builder.import_func_count;
         let empty_path: &[String] = &[];
-
-        // Generate closure implementation function bodies FIRST (they were declared first)
-        let pending_closures = self.pending_closures.borrow().clone();
-        for closure_info in &pending_closures {
-            let wasm_func = self.generate_closure_function(closure_info, type_table, &builder);
-            code.function(&wasm_func);
-            func_idx += 1;
-        }
 
         // Generate user-defined functions from entry TIR (excluding world exports which are handled specially)
         for tir_func_rc in &entry_tir.functions {
@@ -2077,6 +2046,38 @@ impl Codegen {
             };
 
             code.function(&export_wasm_func);
+        }
+
+        // Generate canonical wrapper function bodies for closure __call methods
+        // These cast (ref struct) to the specific functor type and call the original __call
+        for wrapper_info in &closure_call_wrapper_infos {
+            // Skip if wrapper wasn't defined (canonical type not registered)
+            if !self
+                .closure_canonical_wrappers
+                .borrow()
+                .contains_key(&wrapper_info.functor_id)
+            {
+                continue;
+            }
+
+            let mut wrapper_func = Function::new(vec![]);
+
+            // Cast first param (ref struct) to specific functor type
+            wrapper_func.instruction(&Instruction::LocalGet(0)); // env param
+            wrapper_func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                wrapper_info.functor_type_idx,
+            )));
+
+            // Pass through all other params
+            for i in 0..wrapper_info.param_type_ids.len() {
+                wrapper_func.instruction(&Instruction::LocalGet((i + 1) as u32));
+            }
+
+            // Call the original __call method
+            wrapper_func.instruction(&Instruction::Call(wrapper_info.call_func_idx));
+
+            wrapper_func.instruction(&Instruction::End);
+            code.function(&wrapper_func);
         }
 
         // Branch hints section (emit before code section for proper placement)
@@ -5403,46 +5404,6 @@ impl Codegen {
         id
     }
 
-    /// Get or create a closure environment type for the given captures.
-    /// Returns (`env_type_idx`, `env_type_name`).
-    fn get_or_create_closure_env_type(
-        &self,
-        captures: &[crate::tir::TirCapture],
-        type_table: &TypeTable,
-        builder: &mut CoreModuleBuilder,
-    ) -> (u32, String) {
-        // Build the key from captures
-        let key: Vec<(TypeId, bool)> = captures.iter().map(|c| (c.type_id, c.is_mut)).collect();
-
-        // Check if already registered
-        if let Some(result) = self.closure_env_types.borrow().get(&key) {
-            return result.clone();
-        }
-
-        // Create the environment struct type
-        let closure_id = self.get_next_closure_id();
-        let type_name = format!("ClosureEnv_{closure_id}");
-
-        let fields: Vec<FieldType> = captures
-            .iter()
-            .map(|cap| {
-                let val_type = self.type_id_to_valtype(type_table, cap.type_id);
-                FieldType {
-                    element_type: StorageType::Val(val_type),
-                    mutable: cap.is_mut,
-                }
-            })
-            .collect();
-
-        let type_idx = builder.define_gc_struct_type(&type_name, &fields);
-
-        self.closure_env_types
-            .borrow_mut()
-            .insert(key, (type_idx, type_name.clone()));
-
-        (type_idx, type_name)
-    }
-
     /// Get or create a canonical closure type for a function signature.
     /// This is used for function type parameters (e.g., `fn(i32) -> i32`).
     /// Returns (`canonical_fn_type_idx`, `canonical_fn_type_name`, `canonical_closure_struct_type_idx`).
@@ -5519,595 +5480,6 @@ impl Codegen {
             .insert(key, (fn_type_idx, fn_type_name.clone(), struct_type_idx));
 
         (fn_type_idx, fn_type_name, struct_type_idx)
-    }
-
-    /// Collect all closures from a TIR module.
-    /// Returns a list of collected closures that need type registration.
-    fn collect_closures_from_module(module: &TirModule) -> Vec<CollectedClosure> {
-        let mut closures = Vec::new();
-
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if let Some(body) = &func.body {
-                Self::collect_closures_from_block(body, &mut closures);
-            }
-        }
-
-        closures
-    }
-
-    /// Collect closures from a TIR block
-    fn collect_closures_from_block(block: &TirBlock, closures: &mut Vec<CollectedClosure>) {
-        for stmt in &block.stmts {
-            Self::collect_closures_from_stmt(stmt, closures);
-        }
-    }
-
-    /// Collect closures from a TIR statement
-    fn collect_closures_from_stmt(stmt: &TirStmt, closures: &mut Vec<CollectedClosure>) {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-                Self::collect_closures_from_expr(value, closures);
-            }
-            TirStmtKind::While { condition, body } => {
-                Self::collect_closures_from_expr(condition, closures);
-                Self::collect_closures_from_block(body, closures);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                update,
-                body,
-            } => {
-                for stmt in init {
-                    Self::collect_closures_from_stmt(stmt, closures);
-                }
-                if let Some(cond) = condition {
-                    Self::collect_closures_from_expr(cond, closures);
-                }
-                if let Some(upd) = update {
-                    Self::collect_closures_from_expr(upd, closures);
-                }
-                Self::collect_closures_from_block(body, closures);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                Self::collect_closures_from_expr(iterable, closures);
-                Self::collect_closures_from_block(body, closures);
-            }
-            TirStmtKind::Loop { body } => {
-                Self::collect_closures_from_block(body, closures);
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                Self::collect_closures_from_expr(expr, closures);
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::collect_closures_from_expr(condition, closures);
-                Self::collect_closures_from_block(then_block, closures);
-                if let Some(else_blk) = else_block {
-                    Self::collect_closures_from_block(else_blk, closures);
-                }
-            }
-            TirStmtKind::LabeledBlock { block, .. } => {
-                Self::collect_closures_from_block(block, closures);
-            }
-            TirStmtKind::IfPattern {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::collect_closures_from_expr(scrutinee, closures);
-                Self::collect_closures_from_block(then_block, closures);
-                if let Some(else_blk) = else_block {
-                    Self::collect_closures_from_block(else_blk, closures);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                Self::collect_closures_from_expr(scrutinee, closures);
-                Self::collect_closures_from_block(body, closures);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for stmt in init {
-                    Self::collect_closures_from_stmt(stmt, closures);
-                }
-                Self::collect_closures_from_expr(scrutinee, closures);
-                Self::collect_closures_from_block(body, closures);
-                if let Some(upd) = update {
-                    Self::collect_closures_from_expr(upd, closures);
-                }
-            }
-            TirStmtKind::LetPattern { value, .. } => {
-                Self::collect_closures_from_expr(value, closures);
-            }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
-        }
-    }
-
-    /// Collect closures from a TIR expression
-    fn collect_closures_from_expr(expr: &TirExpr, closures: &mut Vec<CollectedClosure>) {
-        match &expr.kind {
-            TirExprKind::Closure {
-                params,
-                body,
-                captures,
-                functor_id: _,
-            } => {
-                // Determine return type:
-                // - For block bodies, check for return statements
-                // - Fall back to the body expression's type
-                let return_type = if let TirExprKind::Block(ref block) = body.kind {
-                    Self::find_return_type_in_closure_block(block).unwrap_or(body.type_id)
-                } else {
-                    body.type_id
-                };
-
-                // Collect this closure
-                closures.push(CollectedClosure {
-                    captures: captures.clone(),
-                    params: params.clone(),
-                    body: (**body).clone(),
-                    return_type,
-                });
-                // Also collect any nested closures in the body
-                Self::collect_closures_from_expr(body, closures);
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                Self::collect_closures_from_expr(left, closures);
-                Self::collect_closures_from_expr(right, closures);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. } => {
-                Self::collect_closures_from_expr(inner, closures);
-            }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
-            | TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    Self::collect_closures_from_expr(arg, closures);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                Self::collect_closures_from_expr(receiver, closures);
-                for arg in args {
-                    Self::collect_closures_from_expr(arg, closures);
-                }
-            }
-            TirExprKind::Block(block) => {
-                Self::collect_closures_from_block(block, closures);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                Self::collect_closures_from_expr(condition, closures);
-                Self::collect_closures_from_block(then_branch, closures);
-                if let Some(else_blk) = else_branch {
-                    Self::collect_closures_from_block(else_blk, closures);
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                Self::collect_closures_from_expr(target, closures);
-                Self::collect_closures_from_expr(value, closures);
-            }
-            TirExprKind::Index { expr: array, index } => {
-                Self::collect_closures_from_expr(array, closures);
-                Self::collect_closures_from_expr(index, closures);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                Self::collect_closures_from_expr(scrutinee, closures);
-                for arm in arms {
-                    Self::collect_closures_from_expr(&arm.body, closures);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    Self::collect_closures_from_expr(&field.value, closures);
-                }
-            }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    Self::collect_closures_from_expr(elem, closures);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                Self::collect_closures_from_expr(callee, closures);
-                for arg in args {
-                    Self::collect_closures_from_expr(arg, closures);
-                }
-            }
-            TirExprKind::OptionSome { value } => {
-                Self::collect_closures_from_expr(value, closures);
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    Self::collect_closures_from_expr(payload_expr, closures);
-                }
-            }
-            TirExprKind::Move { value } => {
-                Self::collect_closures_from_expr(value, closures);
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                Self::collect_closures_from_block(block, closures);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                Self::collect_closures_from_expr(value, closures);
-            }
-            // Leaf nodes - no nested expressions
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-        }
-    }
-
-    /// Find return type in a closure block body by scanning for return statements.
-    /// Similar to `Resolver::find_return_type_in_block`.
-    fn find_return_type_in_closure_block(block: &TirBlock) -> Option<TypeId> {
-        for stmt in &block.stmts {
-            if let Some(type_id) = Self::find_return_type_in_closure_stmt(stmt) {
-                return Some(type_id);
-            }
-        }
-        None
-    }
-
-    /// Find return type in a statement by scanning for return statements.
-    fn find_return_type_in_closure_stmt(stmt: &TirStmt) -> Option<TypeId> {
-        match &stmt.kind {
-            TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),
-            TirStmtKind::Return { value: None } => Some(TypeTable::UNIT),
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                // Check then branch first
-                if let Some(type_id) = Self::find_return_type_in_closure_block(then_block) {
-                    return Some(type_id);
-                }
-                // Check else branch if present
-                if let Some(else_blk) = else_block
-                    && let Some(type_id) = Self::find_return_type_in_closure_block(else_blk)
-                {
-                    return Some(type_id);
-                }
-                None
-            }
-            TirStmtKind::While { body, .. }
-            | TirStmtKind::For { body, .. }
-            | TirStmtKind::ForOf { body, .. }
-            | TirStmtKind::Loop { body } => Self::find_return_type_in_closure_block(body),
-            _ => None,
-        }
-    }
-
-    /// Find local variables that store closure values.
-    /// Returns a map from `local_index` to `closure_id`.
-    /// This must traverse in the same order as `collect_closures_from`_* to match closure IDs.
-    fn find_closure_locals(block: &TirBlock) -> HashMap<u32, u32> {
-        let mut result = HashMap::new();
-        let mut closure_counter: u32 = 0;
-        Self::find_closure_locals_in_block(block, &mut result, &mut closure_counter);
-        result
-    }
-
-    fn find_closure_locals_in_block(
-        block: &TirBlock,
-        result: &mut HashMap<u32, u32>,
-        closure_counter: &mut u32,
-    ) {
-        for stmt in &block.stmts {
-            Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
-        }
-    }
-
-    fn find_closure_locals_in_stmt(
-        stmt: &TirStmt,
-        result: &mut HashMap<u32, u32>,
-        closure_counter: &mut u32,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                local_index, value, ..
-            } => {
-                // Check if value is a closure - if so, record the mapping
-                if matches!(value.kind, TirExprKind::Closure { .. }) {
-                    result.insert(*local_index, *closure_counter);
-                }
-                // Always traverse to count all closures (in same order as collect_closures_from_expr)
-                Self::find_closure_locals_in_expr(value, result, closure_counter);
-            }
-            TirStmtKind::Expr(value) => {
-                Self::find_closure_locals_in_expr(value, result, closure_counter);
-            }
-            TirStmtKind::While { condition, body } => {
-                Self::find_closure_locals_in_expr(condition, result, closure_counter);
-                Self::find_closure_locals_in_block(body, result, closure_counter);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                update,
-                body,
-            } => {
-                for stmt in init {
-                    Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
-                }
-                if let Some(cond) = condition {
-                    Self::find_closure_locals_in_expr(cond, result, closure_counter);
-                }
-                if let Some(upd) = update {
-                    Self::find_closure_locals_in_expr(upd, result, closure_counter);
-                }
-                Self::find_closure_locals_in_block(body, result, closure_counter);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                Self::find_closure_locals_in_expr(iterable, result, closure_counter);
-                Self::find_closure_locals_in_block(body, result, closure_counter);
-            }
-            TirStmtKind::Loop { body } => {
-                Self::find_closure_locals_in_block(body, result, closure_counter);
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                Self::find_closure_locals_in_expr(expr, result, closure_counter);
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::find_closure_locals_in_expr(condition, result, closure_counter);
-                Self::find_closure_locals_in_block(then_block, result, closure_counter);
-                if let Some(else_blk) = else_block {
-                    Self::find_closure_locals_in_block(else_blk, result, closure_counter);
-                }
-            }
-            TirStmtKind::LabeledBlock { block, .. } => {
-                Self::find_closure_locals_in_block(block, result, closure_counter);
-            }
-            TirStmtKind::IfPattern {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
-                Self::find_closure_locals_in_block(then_block, result, closure_counter);
-                if let Some(else_blk) = else_block {
-                    Self::find_closure_locals_in_block(else_blk, result, closure_counter);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
-                Self::find_closure_locals_in_block(body, result, closure_counter);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for stmt in init {
-                    Self::find_closure_locals_in_stmt(stmt, result, closure_counter);
-                }
-                Self::find_closure_locals_in_expr(scrutinee, result, closure_counter);
-                Self::find_closure_locals_in_block(body, result, closure_counter);
-                if let Some(upd) = update {
-                    Self::find_closure_locals_in_expr(upd, result, closure_counter);
-                }
-            }
-            TirStmtKind::LetPattern { value, .. } => {
-                Self::find_closure_locals_in_expr(value, result, closure_counter);
-            }
-            TirStmtKind::Return { value: None }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => {}
-        }
-    }
-
-    fn find_closure_locals_in_expr(
-        expr: &TirExpr,
-        result: &mut HashMap<u32, u32>,
-        closure_counter: &mut u32,
-    ) {
-        match &expr.kind {
-            TirExprKind::Closure { body, .. } => {
-                // Count this closure (but don't record it - that's done in Let handling)
-                *closure_counter += 1;
-                // Also check for nested closures in the body
-                Self::find_closure_locals_in_expr(body, result, closure_counter);
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                Self::find_closure_locals_in_expr(left, result, closure_counter);
-                Self::find_closure_locals_in_expr(right, result, closure_counter);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. } => {
-                Self::find_closure_locals_in_expr(inner, result, closure_counter);
-            }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
-            | TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    Self::find_closure_locals_in_expr(arg, result, closure_counter);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                Self::find_closure_locals_in_expr(receiver, result, closure_counter);
-                for arg in args {
-                    Self::find_closure_locals_in_expr(arg, result, closure_counter);
-                }
-            }
-            TirExprKind::Block(block) => {
-                Self::find_closure_locals_in_block(block, result, closure_counter);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                Self::find_closure_locals_in_expr(condition, result, closure_counter);
-                Self::find_closure_locals_in_block(then_branch, result, closure_counter);
-                if let Some(else_blk) = else_branch {
-                    Self::find_closure_locals_in_block(else_blk, result, closure_counter);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    Self::find_closure_locals_in_expr(&field.value, result, closure_counter);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements, .. } => {
-                for elem in elements {
-                    Self::find_closure_locals_in_expr(elem, result, closure_counter);
-                }
-            }
-            TirExprKind::Index { expr, index, .. } => {
-                Self::find_closure_locals_in_expr(expr, result, closure_counter);
-                Self::find_closure_locals_in_expr(index, result, closure_counter);
-            }
-            TirExprKind::Assign { target, value } => {
-                Self::find_closure_locals_in_expr(target, result, closure_counter);
-                Self::find_closure_locals_in_expr(value, result, closure_counter);
-            }
-            TirExprKind::Match { expr, arms } => {
-                Self::find_closure_locals_in_expr(expr, result, closure_counter);
-                for arm in arms {
-                    Self::find_closure_locals_in_expr(&arm.body, result, closure_counter);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                Self::find_closure_locals_in_expr(callee, result, closure_counter);
-                for arg in args {
-                    Self::find_closure_locals_in_expr(arg, result, closure_counter);
-                }
-            }
-            TirExprKind::OptionSome { value } => {
-                Self::find_closure_locals_in_expr(value, result, closure_counter);
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    Self::find_closure_locals_in_expr(payload_expr, result, closure_counter);
-                }
-            }
-            TirExprKind::Move { value } => {
-                Self::find_closure_locals_in_expr(value, result, closure_counter);
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                Self::find_closure_locals_in_block(block, result, closure_counter);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                Self::find_closure_locals_in_expr(value, result, closure_counter);
-            }
-            // Terminals - no closures inside
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
-        }
-    }
-
-    /// Register types for collected closures.
-    /// Called during the type definition phase before code generation.
-    /// Register closure types only (env structs, function types, closure structs).
-    /// Does NOT define the closure functions yet - that happens after imports.
-    /// Returns partial `ClosureInfo` with `func_idx` set to 0 (placeholder).
-    fn register_closure_types(
-        &self,
-        closures: &[CollectedClosure],
-        type_table: &TypeTable,
-        builder: &mut CoreModuleBuilder,
-    ) -> Vec<ClosureInfo> {
-        let mut closure_infos = Vec::new();
-
-        for (idx, collected) in closures.iter().enumerate() {
-            let closure_id = idx as u32;
-            let func_name = format!("$closure_{closure_id}");
-
-            // Create environment type (specific to this closure's captures)
-            let (env_type_idx, _env_type_name) =
-                self.get_or_create_closure_env_type(&collected.captures, type_table, builder);
-
-            // Get or create canonical closure type for this signature.
-            // The function type uses generic (ref struct) for env, allowing all closures
-            // with the same user-visible signature to use the same types.
-            let param_type_ids: Vec<TypeId> =
-                collected.params.iter().map(|(_, tid)| *tid).collect();
-            let (canonical_fn_type_idx, canonical_fn_type_name, canonical_closure_struct_type_idx) =
-                self.get_or_create_canonical_closure_type(
-                    &param_type_ids,
-                    collected.return_type,
-                    type_table,
-                    builder,
-                );
-
-            // Store info - func_idx will be set later
-            closure_infos.push(ClosureInfo {
-                id: closure_id,
-                captures: collected.captures.clone(),
-                params: collected.params.clone(),
-                body: collected.body.clone(),
-                return_type: collected.return_type,
-                env_type_idx, // Specific env type for this closure (for ref.cast inside)
-                fn_type_idx: canonical_fn_type_idx, // Canonical fn type with generic env
-                fn_type_name: canonical_fn_type_name, // Canonical fn type name for define_func
-                closure_struct_type_idx: canonical_closure_struct_type_idx, // Canonical struct
-                func_idx: 0,  // Placeholder - set in define_closure_funcs
-                func_name,
-            });
-        }
-
-        closure_infos
-    }
-
-    /// Define closure functions (must be called after imports are defined).
-    /// Updates the `func_idx` in each `ClosureInfo`.
-    fn define_closure_funcs(closure_infos: &mut [ClosureInfo], builder: &mut CoreModuleBuilder) {
-        for info in closure_infos.iter_mut() {
-            let func_idx = builder.define_func(&info.func_name, &info.fn_type_name);
-            info.func_idx = func_idx;
-        }
     }
 
     /// Pre-register primitive array types (where element type is a primitive).
@@ -8531,71 +7903,14 @@ impl Codegen {
                 }
             }
 
-            // === Capture ===
-            TirExprKind::Capture { index, name } => {
-                // Capture access: get the captured value from the environment struct.
-                // The environment is always the first parameter (local 0) in closure functions.
-                // Since the function type uses generic (ref struct), we need to cast to the
-                // specific env type before accessing fields.
-                let env_type_idx = ctx.closure_env_type_idx.unwrap_or_else(|| {
-                    panic!("capture access for '{name}' (index {index}) outside of closure context")
-                });
-
-                // Get env from local 0 (first parameter in closure functions)
-                func.instruction(&Instruction::LocalGet(0));
-                // Cast generic (ref struct) to specific env type
-                func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                    env_type_idx,
-                )));
-                // Get the captured value from the environment struct
-                func.instruction(&Instruction::StructGet {
-                    struct_type_index: env_type_idx,
-                    field_index: *index,
-                });
+            // === Capture (should be transformed to FieldAccess in lower.rs) ===
+            TirExprKind::Capture { .. } => {
+                panic!("TirExprKind::Capture should be transformed to FieldAccess in lower.rs");
             }
 
-            // === Closure ===
-            TirExprKind::Closure {
-                params: _,
-                body: _,
-                captures,
-                functor_id: _,
-            } => {
-                // Get the closure ID and look up its registered info
-                let closure_id = {
-                    let mut counter = self.closure_codegen_counter.borrow_mut();
-                    let id = *counter;
-                    *counter += 1;
-                    id
-                };
-
-                let pending = self.pending_closures.borrow();
-                let closure_info = pending.get(closure_id as usize).unwrap_or_else(|| {
-                    panic!(
-                        "closure {} not found in pending_closures (have {})",
-                        closure_id,
-                        pending.len()
-                    )
-                });
-
-                let env_type_idx = closure_info.env_type_idx;
-                let closure_struct_type_idx = closure_info.closure_struct_type_idx;
-                let func_idx = closure_info.func_idx;
-
-                // Push captured values onto the stack in order
-                for capture in captures {
-                    // Get the value from the outer function's local
-                    func.instruction(&Instruction::LocalGet(capture.outer_index));
-                }
-
-                // Create the environment struct
-                func.instruction(&Instruction::StructNew(env_type_idx));
-
-                // Create the closure struct (env + funcref)
-                // Stack now has: env_ref
-                // We need to create a struct with (env, funcref)
-                func.instruction(&Instruction::RefFunc(func_idx));
-                func.instruction(&Instruction::StructNew(closure_struct_type_idx));
+            // === Closure (should be transformed to StructLiteral or ClosureToCanonical in lower.rs) ===
+            TirExprKind::Closure { .. } => {
+                panic!("TirExprKind::Closure should be transformed in lower.rs");
             }
 
             // === Indirect Call (closure or funcref) ===
@@ -8671,6 +7986,59 @@ impl Codegen {
 
                 // Call via call_ref with the function type
                 func.instruction(&Instruction::CallRef(fn_type_idx));
+            }
+
+            // === Closure to Canonical Wrapper ===
+            TirExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+            } => {
+                // Generate the functor struct (pushes __Closure_N ref onto stack)
+                self.generate_expr(func, functor, type_table, ctx, builder);
+
+                // Look up the canonical wrapper function index
+                // The wrapper has signature (ref struct, params...) -> result
+                let wrapper_func_idx = self
+                    .closure_canonical_wrappers
+                    .borrow()
+                    .get(functor_id)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        panic!("canonical wrapper not found for closure functor {functor_id}")
+                    });
+
+                // Get canonical closure struct type for this function signature
+                let closure_struct_type_idx = if let ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } = type_table.get(*target_fn_type)
+                {
+                    // Look up canonical closure types for this function signature
+                    // These should have been registered during closure collection phase
+                    let key = (params.clone(), *return_type);
+                    if let Some((_, _, struct_idx)) =
+                        self.canonical_closure_types.borrow().get(&key).cloned()
+                    {
+                        struct_idx
+                    } else {
+                        panic!(
+                            "canonical closure type not found for ClosureToCanonical: {:?}",
+                            type_table.get(*target_fn_type)
+                        );
+                    }
+                } else {
+                    panic!(
+                        "ClosureToCanonical target_fn_type is not a function: {:?}",
+                        type_table.get(*target_fn_type)
+                    );
+                };
+
+                // Stack: functor_ref
+                // Create canonical closure: (env: functor as structref, func: wrapper funcref)
+                func.instruction(&Instruction::RefFunc(wrapper_func_idx));
+                func.instruction(&Instruction::StructNew(closure_struct_type_idx));
             }
 
             // === Labeled Block Expression ===
@@ -12110,16 +11478,6 @@ impl Codegen {
             func_ctx.add_param(&param.name, param_type);
         }
 
-        // Collect closure locals from the function body (locals that store closure values)
-        let closure_locals: HashMap<u32, u32> = if let Some(body) = &tir_func.body {
-            Self::find_closure_locals(body)
-        } else {
-            HashMap::new()
-        };
-
-        // Store closure_locals in func_ctx for use during IndirectCall codegen
-        func_ctx.local_closure_ids = closure_locals.clone();
-
         // Pre-allocate locals from TIR (skip params which are already added)
         for (i, &local_type_id) in tir_func.local_types.iter().enumerate() {
             let local_idx = i as u32;
@@ -12128,20 +11486,8 @@ impl Codegen {
                 continue;
             }
 
-            // Check if this local stores a closure (use closure struct type)
-            let local_type = if let Some(&closure_id) = closure_locals.get(&local_idx) {
-                // Use the closure struct type for this local
-                let pending = self.pending_closures.borrow();
-                if let Some(closure_info) = pending.get(closure_id as usize) {
-                    ValType::Ref(RefType {
-                        nullable: true,
-                        heap_type: HeapType::Concrete(closure_info.closure_struct_type_idx),
-                    })
-                } else {
-                    self.type_id_to_valtype(type_table, local_type_id)
-                }
             // For address-taken primitive locals, use box type instead
-            } else if func_ctx.address_taken_locals.contains(&local_idx) {
+            let local_type = if func_ctx.address_taken_locals.contains(&local_idx) {
                 if let ResolvedType::Primitive(prim) = type_table.get(local_type_id) {
                     let val_type = primitive_to_valtype(prim);
                     if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
@@ -12257,75 +11603,6 @@ impl Codegen {
         (wasm_func, branch_hints)
     }
 
-    /// Generate a closure implementation function.
-    ///
-    /// The closure function has the environment struct as its first parameter,
-    /// followed by the regular closure parameters.
-    /// The env parameter uses generic (ref struct) to allow canonical typing.
-    /// Captured variables are accessed via ref.cast + struct.get on the environment.
-    fn generate_closure_function(
-        &self,
-        closure_info: &ClosureInfo,
-        type_table: &TypeTable,
-        builder: &CoreModuleBuilder,
-    ) -> Function {
-        // Create function context with env as first param, then regular params
-        let param_count = 1 + closure_info.params.len() as u32; // env + params
-        let mut func_ctx = FunctionContext::new(param_count);
-
-        // Add env parameter (index 0) - uses generic (ref struct) for canonical typing
-        let env_type = ValType::Ref(RefType {
-            nullable: false,
-            heap_type: HeapType::Abstract {
-                shared: false,
-                ty: AbstractHeapType::Struct,
-            },
-        });
-        func_ctx.add_param("$env", env_type);
-
-        // Add regular parameters
-        for (name, type_id) in &closure_info.params {
-            let param_type = self.type_id_to_valtype(type_table, *type_id);
-            func_ctx.add_param(name, param_type);
-        }
-
-        // Set return type
-        if closure_info.return_type != TypeTable::UNIT
-            && closure_info.return_type != TypeTable::NEVER
-        {
-            func_ctx.set_return_type(self.type_id_to_valtype(type_table, closure_info.return_type));
-        }
-
-        // Store closure info in context for capture access
-        func_ctx.set_closure_info(closure_info.env_type_idx, &closure_info.captures);
-
-        // Pre-allocate locals from block body if present
-        if let TirExprKind::Block(ref block) = closure_info.body.kind {
-            self.preallocate_locals_from_block(block, type_table, &mut func_ctx);
-        }
-
-        // Generate the function code
-        let mut wasm_func = Function::new(func_ctx.get_local_decls());
-
-        // Generate closure body
-        self.generate_expr(
-            &mut wasm_func,
-            &closure_info.body,
-            type_table,
-            &mut func_ctx,
-            builder,
-        );
-
-        // Add implicit return handling
-        if closure_info.return_type == TypeTable::UNIT {
-            // Drop the unit value if any
-        }
-
-        wasm_func.instruction(&Instruction::End);
-
-        wasm_func
-    }
-
     /// Generate the 'run' function for TIR with task.return wrapper
     ///
     /// This is a special case of function generation for the WASI CLI entry point.
@@ -12353,16 +11630,6 @@ impl Codegen {
             func_ctx.add_param(&param.name, param_type);
         }
 
-        // Collect closure locals from the function body (locals that store closure values)
-        let closure_locals: HashMap<u32, u32> = if let Some(body) = &tir_func.body {
-            Self::find_closure_locals(body)
-        } else {
-            HashMap::new()
-        };
-
-        // Store closure_locals in func_ctx for use during IndirectCall codegen
-        func_ctx.local_closure_ids = closure_locals.clone();
-
         // Pre-allocate locals from TIR (skip params which are already added)
         for (i, &local_type_id) in tir_func.local_types.iter().enumerate() {
             let local_idx = i as u32;
@@ -12371,20 +11638,8 @@ impl Codegen {
                 continue;
             }
 
-            // Check if this local stores a closure (use closure struct type)
-            let local_type = if let Some(&closure_id) = closure_locals.get(&local_idx) {
-                // Use the closure struct type for this local
-                let pending = self.pending_closures.borrow();
-                if let Some(closure_info) = pending.get(closure_id as usize) {
-                    ValType::Ref(RefType {
-                        nullable: true,
-                        heap_type: HeapType::Concrete(closure_info.closure_struct_type_idx),
-                    })
-                } else {
-                    self.type_id_to_valtype(type_table, local_type_id)
-                }
             // For address-taken primitive locals, use box type instead
-            } else if func_ctx.address_taken_locals.contains(&local_idx) {
+            let local_type = if func_ctx.address_taken_locals.contains(&local_idx) {
                 if let ResolvedType::Primitive(prim) = type_table.get(local_type_id) {
                     let val_type = primitive_to_valtype(prim);
                     if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
@@ -13741,6 +12996,9 @@ impl Codegen {
             TirExprKind::Move { value } => self.expr_needs_async_scratch_locals(value),
             TirExprKind::LabeledBlock { block, .. } => self.needs_async_scratch_locals(block),
             TirExprKind::GlobalVarSet { value, .. } => self.expr_needs_async_scratch_locals(value),
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.expr_needs_async_scratch_locals(functor)
+            }
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }

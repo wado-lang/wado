@@ -2885,6 +2885,13 @@ impl<'a> TirUnparser<'a> {
                 fields,
                 ..
             } => {
+                // If expression type is a reference, show it (for functor structs)
+                if matches!(
+                    self.type_table.get(expr.type_id),
+                    crate::tir::ResolvedType::Ref(_)
+                ) {
+                    self.output.push('&');
+                }
                 self.output.push_str(struct_name);
                 self.output.push_str(" { ");
                 for (i, field) in fields.iter().enumerate() {
@@ -2957,6 +2964,10 @@ impl<'a> TirUnparser<'a> {
                     self.unparse_expr(arg);
                 }
                 self.output.push(')');
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                // Just unparse the functor - the canonical wrapper is invisible
+                self.unparse_expr(functor);
             }
             TirExprKind::LabeledBlock { label, block, .. } => {
                 self.output.push_str(label);

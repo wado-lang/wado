@@ -15,6 +15,12 @@ pub struct "ArrayIter<i32>" {
     index: i32,
 }
 
+struct __Closure_0 {
+}
+
+struct __Closure_1 {
+}
+
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5];
     let doubled: Array<i32> = __inline_MapIter_i32_i32___collect_0: {
@@ -22,7 +28,7 @@ fn run() with Stdout {
             let self: &ArrayIter<i32> = &__inline_Array_i32___iter_1: {
                 break __inline_Array_i32___iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
             };
-            let f: fn(i32) -> i32 = |x: i32| (x * 2);
+            let f: fn(i32) -> i32 = &__Closure_0 {  };
             break __inline_ArrayIter_i32___map_i32__2: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
         };
         let mut result: Array<i32> = move [];
@@ -43,7 +49,7 @@ fn run() with Stdout {
             let self: &ArrayIter<i32> = &__inline_Array_i32___iter_4: {
                 break __inline_Array_i32___iter_4: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
             };
-            let f: fn(i32) -> i32 = |x: i32| (x * x);
+            let f: fn(i32) -> i32 = &__Closure_1 {  };
             break __inline_ArrayIter_i32___map_i32__5: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
         };
         let mut result: Array<i32> = move [];
@@ -88,4 +94,12 @@ fn "MapIter<i32,i32>^Iterator::next"(self: &mut MapIter<i32,i32>) -> Option<i32>
 }
 
 fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
+
+fn "__Closure_0::__call"(self: &__Closure_0, x: i32) -> i32 {
+    return (x * 2);
+}
+
+fn "__Closure_1::__call"(self: &__Closure_1, x: i32) -> i32 {
+    return (x * x);
+}
 

@@ -721,6 +721,59 @@ Fn(P) -> R  <:  Fn(P) -> R with captures[...]
 
 A pure function can be used where a capturing function is expected.
 
+#### Closure Mutability
+
+Closures are distinguished by whether they mutate their captures:
+
+| Type             | Description              |
+| ---------------- | ------------------------ |
+| `fn(T) -> U`     | Pure/stateless closure   |
+| `fn mut(T) -> U` | Stateful/mutable closure |
+
+**Comparison with Rust:**
+
+| Wado             | Rust equivalent          |
+| ---------------- | ------------------------ |
+| `fn(T) -> U`     | `&dyn Fn(T) -> U`        |
+| `fn mut(T) -> U` | `&mut dyn FnMut(T) -> U` |
+
+Unlike Rust, Wado does not have bare function pointers (`fn(T) -> U` in Rust). All callable values are closures (reference types), possibly with empty captures. This simplifies the type system since functions without captures are just closures with empty functor structs.
+
+**Syntax:**
+
+```wado
+// Pure closure (default)
+let double = |x: i32| x * 2;
+// Type: fn(i32) -> i32
+
+// Stateful closure (explicit &mut prefix)
+let mut count = 0;
+let counter = &mut || {
+    count += 1;
+    count
+};
+// Type: fn mut() -> i32
+```
+
+**Compiler enforcement:**
+
+```wado
+let mut count = 0;
+
+// ERROR: closure mutates capture, must use &mut
+let f = || { count += 1; count };
+
+// OK: explicit mutable closure
+let f = &mut || { count += 1; count };
+
+// OK: pure closure (reads only)
+let f = || count + 1;
+```
+
+**Subtyping:**
+
+`fn(T) -> U` coerces to `fn mut(T) -> U`, but not vice versa.
+
 #### Component Model Boundary
 
 At Component Model boundaries, closures cannot be passed directly (Component Model doesn't support closure types). Instead:
@@ -800,6 +853,7 @@ This requires a resource table mapping handles to closure structs.
 
 - **Optimization**: Avoid heap allocation for non-escaping closures (use locals + trampoline)
 - **Optimization**: Inline small closures at call sites
+- **Optimization**: Auto-switch between type-erased (`fn(T) -> U`) and monomorphized (generic `F`) forms based on whether closure escapes. This would enable inlining for iterator chains like `arr.iter().map(|x| x * 2).collect()`.
 - **Component Model export**: Support closures at CM boundary via resource adapters
 - **Generic closures**: Support `Fn<T>(T) -> T` with type parameters
 

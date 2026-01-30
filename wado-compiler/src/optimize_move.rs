@@ -38,6 +38,9 @@ fn is_fresh_value(expr: &TirExpr) -> bool {
         | TirExprKind::EffectCall { .. }
         | TirExprKind::IndirectCall { .. } => true,
 
+        // ClosureToCanonical creates a fresh closure struct
+        TirExprKind::ClosureToCanonical { .. } => true,
+
         // OptionSome is fresh if its inner value is fresh
         TirExprKind::OptionSome { value } => is_fresh_value(value),
 
@@ -262,6 +265,9 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
                 );
                 args[i] = wrap_in_move_if_eligible(arg, type_table);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            insert_moves_in_expr(functor, type_table);
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
             insert_moves_in_expr(inner, type_table);
@@ -531,6 +537,9 @@ fn collect_value_copy_types_in_expr(
             for arg in args {
                 collect_value_copy_types_in_expr(arg, type_table, copy_types);
             }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_value_copy_types_in_expr(functor, type_table, copy_types);
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
             // Field access on a value type requires a copy source local
