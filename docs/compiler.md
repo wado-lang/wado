@@ -252,7 +252,6 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:prelude`        | `prelude.wado`        | Auto-imported types and functions                  |
 | `core:cli`            | `cli.wado`            | CLI output (println, eprintln, etc.)               |
 | `core:clocks`         | `clocks.wado`         | MonotonicClock, now()                              |
-| `core:filesystem`     | `filesystem.wado`     | Filesystem operations                              |
 | `core:stream`         | `stream.wado`         | Stream utilities                                   |
 | `core:collections`    | `collections.wado`    | TreeMap and other collections                      |
 | `core:prelude/int128` | `prelude/int128.wado` | u128/i128 types (re-exported from prelude)         |

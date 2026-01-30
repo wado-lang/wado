@@ -463,14 +463,21 @@ impl<'a> Transformer<'a> {
             let iface = &self.resolve.interfaces[iface_id];
             for (func_name, func) in &iface.functions {
                 // Determine the method kind prefix for the WASI attribute
-                let method_kind = match &func.kind {
+                // Handle both sync and async method variants
+                let (method_kind, is_async) = match &func.kind {
                     FunctionKind::Method(resource_id) if *resource_id == type_id => {
-                        Some("[method]")
+                        (Some("[method]"), false)
                     }
                     FunctionKind::Static(resource_id) if *resource_id == type_id => {
-                        Some("[static]")
+                        (Some("[static]"), false)
                     }
-                    _ => None,
+                    FunctionKind::AsyncMethod(resource_id) if *resource_id == type_id => {
+                        (Some("[method]"), true)
+                    }
+                    FunctionKind::AsyncStatic(resource_id) if *resource_id == type_id => {
+                        (Some("[static]"), true)
+                    }
+                    _ => (None, false),
                 };
 
                 if let Some(kind_prefix) = method_kind {
@@ -495,7 +502,7 @@ impl<'a> Transformer<'a> {
                         wasi_attr: method_attr,
                         params: self.transform_params(&func.params)?,
                         return_type: self.transform_result(func.result.as_ref())?,
-                        is_async: false,
+                        is_async,
                         never_returns: false,
                     });
                 }

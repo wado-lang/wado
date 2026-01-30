@@ -55,6 +55,8 @@ pub enum SymbolKind {
     Struct(StructSymbol),
     /// An enum definition
     Enum(EnumSymbol),
+    /// A flags definition (bitset)
+    Flags(FlagsSymbol),
     /// A variant definition (tagged union with payloads)
     Variant(VariantSymbol),
     /// A trait definition
@@ -105,6 +107,13 @@ pub struct StructSymbol {
 pub struct EnumSymbol {
     /// Case names
     pub cases: Vec<String>,
+}
+
+/// Flags symbol data (bitset type)
+#[derive(Debug, Clone)]
+pub struct FlagsSymbol {
+    /// Member names
+    pub members: Vec<String>,
 }
 
 /// Variant symbol data (tagged union with payloads)

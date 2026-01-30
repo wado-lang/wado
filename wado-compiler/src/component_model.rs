@@ -162,15 +162,17 @@ impl WasiRegistry {
         let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
         registry.register_module(&wasi_sockets, &mut world_registry);
 
+        // Note: wasi:filesystem uses resource types (Descriptor) which aren't
+        // fully supported in CM codegen yet. Register for worlds only.
+        let wasi_filesystem = parse_module(stdlib::WASI_FILESYSTEM);
+        registry.register_world_definitions(&wasi_filesystem, &mut world_registry);
+
         // Parse and register wasi:http (for world definitions only)
         // Note: HTTP functions with resource types (Request, Response) are not yet
         // fully supported for Component Model lowering. We register the module
         // to get the world definitions, but skip function registration.
         let wasi_http = parse_module(stdlib::WASI_HTTP);
         registry.register_world_definitions(&wasi_http, &mut world_registry);
-
-        // Note: wasi:filesystem uses `flags` syntax which isn't supported yet
-        // TODO: Add wasi:filesystem registration when `flags` parsing is implemented
 
         (registry, world_registry)
     }

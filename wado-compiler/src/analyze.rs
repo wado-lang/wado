@@ -8,9 +8,9 @@
 use crate::ast::{Item, Module, UseItem};
 use crate::name::{resolve_import_path, validate_module_path};
 use crate::symbol::{
-    EffectSymbol, EnumSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol, SymbolKind,
-    SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol, WorldExportSymbol, WorldImportSymbol,
-    WorldSymbol,
+    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol,
+    SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol, WorldExportSymbol,
+    WorldImportSymbol, WorldSymbol,
 };
 use crate::token::Span;
 
@@ -305,9 +305,13 @@ impl Analyzer {
                     // Impl blocks are handled later
                 }
 
-                Item::Flags(_) => {
-                    // Flags are currently parsed but not used directly
-                    // They are handled by the WASI registry
+                Item::Flags(flags_decl) => {
+                    let kind = SymbolKind::Flags(FlagsSymbol {
+                        members: flags_decl.flags.iter().map(|m| m.name.clone()).collect(),
+                    });
+
+                    self.symbols
+                        .define(&flags_decl.name, kind, module_path, Some(flags_decl.span));
                 }
 
                 Item::Test(_) => {

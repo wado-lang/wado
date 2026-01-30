@@ -1,28 +1,84 @@
-// A simple cat(1) placeholder in Wado
+// A simple cat(1) implementation in Wado
 //
-// Note: Full cat functionality (reading files) requires:
-// 1. Filesystem stdlib to be fixed (uses unsupported tuple destructuring)
-// 2. Stdin stream support (currently has codegen issues)
+// Usage: wado run --dir . example/cat.wado <file>...
 //
-// This placeholder demonstrates the intended usage pattern.
+// This demonstrates WASI P3 filesystem operations:
+// - Getting preopened directories
+// - Opening files
+// - Reading file streams and writing to stdout
+//
+// Current Status: The wasi:filesystem module is fully generated with all
+// Descriptor methods (open_at, read_via_stream, stat, etc.), but resource
+// type codegen is not yet implemented. This file documents the intended API.
 
-use {println, eprintln, args, Stdout, Stderr, Environment} from "core:cli";
+use {eprintln, args, Stdout, Stderr, Environment} from "core:cli";
+
+// These imports work but Descriptor resource codegen is not yet implemented:
+// use {
+//     Preopens,
+//     Descriptor,
+//     PathFlags,
+//     OpenFlags,
+//     DescriptorFlags,
+//     ErrorCode,
+// } from "wasi:filesystem";
 
 fn run() with Stdout, Stderr, Environment {
     let arguments = args();
 
     if arguments.len() <= 1 {
-        // No files specified - would read from stdin
-        eprintln("cat: reading from stdin not yet implemented");
         eprintln("cat: usage: cat <file>...");
-    } else {
-        // File arguments provided
-        eprintln("cat: file reading not yet implemented");
-        eprintln("cat: (filesystem stdlib uses unsupported syntax)");
+        eprintln("cat: note: filesystem resource codegen not yet implemented");
+        return;
+    }
 
-        // Show what files were requested
-        for (let mut i = 1; i < arguments.len(); i = i + 1) {
-            eprintln(`cat: would read: {arguments[i]}`);
-        }
+    // When resource codegen is implemented, the following will work:
+    //
+    // // Get preopened directories
+    // let preopens = Preopens::get_directories();
+    // if preopens.len() == 0 {
+    //     eprintln("cat: no preopened directories available");
+    //     return;
+    // }
+    //
+    // // Use first preopened directory as base
+    // let root_entry = preopens[0];
+    // let root_dir = root_entry.0;
+    //
+    // // Process each file argument
+    // for let mut i = 1; i < arguments.len(); i = i + 1 {
+    //     let path = arguments[i];
+    //     cat_file(&root_dir, path);
+    // }
+
+    // Temporary: Show what files were requested
+    eprintln("cat: file reading not yet implemented (resource codegen needed)");
+    for let mut i = 1; i < arguments.len(); i = i + 1 {
+        eprintln(`cat: would read: {arguments[i]}`);
     }
 }
+
+// When resource codegen is implemented:
+//
+// fn cat_file(dir: &Descriptor, path: String) with Stdout, Stderr {
+//     // Open the file for reading
+//     let open_result = dir.method_descriptor_open_at(
+//         PathFlags::none(),
+//         path,
+//         OpenFlags::none(),
+//         DescriptorFlags::Read
+//     );
+//
+//     if let Ok(file) = open_result {
+//         // Get read stream from file (offset 0 = start of file)
+//         let stream_result = file.method_descriptor_read_via_stream(0 as u64);
+//
+//         // stream_result is [Stream<u8>, Future<Result<(), ErrorCode>>]
+//         let read_stream = stream_result.0;
+//
+//         // Write the file contents to stdout
+//         Stdout::write_via_stream(read_stream);
+//     } else {
+//         eprintln(`cat: {path}: cannot open file`);
+//     }
+// }
