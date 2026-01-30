@@ -238,8 +238,8 @@ pub fn short(f: f64) -> FormatResult {
     let can_trim = d_div_10 * 10 as i64 >= dmin;
 
     if can_trim {
-        let trimmed = trim_zeros(d_div_10, -(p - 1));
-        return FormatResult { digits: trimmed.0, exponent: trimmed.1 };
+        let [digits, exponent] = trim_zeros(d_div_10, -(p - 1));
+        return FormatResult { digits, exponent };
     }
 
     let mut d = dmin;
@@ -837,10 +837,10 @@ pub fn add_sign_prefix(s: String, is_neg: bool, sign: Sign) -> String {
 
 /// Format f64 with full format specification
 pub fn format_f64(f: f64, spec: FormatSpec) -> String {
-    let special = check_special(f);
-    if special.0 {
+    let [is_special, is_neg, special_str] = check_special(f);
+    if is_special {
         // Special value (zero, inf, NaN)
-        let base_str = if special.1 && special.2 != "NaN" && special.2 != "Inf" && special.2 != "-Inf" {
+        let base_str = if is_neg && special_str != "NaN" && special_str != "Inf" && special_str != "-Inf" {
             // Negative zero
             let is_exp = match spec.format_type {
                 LowerExp => true,
@@ -877,7 +877,7 @@ pub fn format_f64(f: f64, spec: FormatSpec) -> String {
                     "-0"
                 }
             }
-        } else if special.2 == "0" {
+        } else if special_str == "0" {
             // Positive zero
             let is_exp = match spec.format_type {
                 LowerExp => true,
@@ -915,12 +915,10 @@ pub fn format_f64(f: f64, spec: FormatSpec) -> String {
                 }
             }
         } else {
-            special.2
+            special_str
         };
-        return apply_padding(base_str, spec, special.1);
+        return apply_padding(base_str, spec, is_neg);
     }
-
-    let is_neg = special.1;
     let abs_f = if is_neg { -f } else { f };
 
     // Get the raw digits and exponent
@@ -1084,15 +1082,13 @@ pub fn check_special(f: f64) -> [bool, bool, String] {
 
 // Convert f64 to decimal string (no exponent, e.g., "3.14", "0.001", "12345")
 pub fn f64_to_string(f: f64) -> String {
-    let special = check_special(f);
-    if special.0 {
-        if special.1 {
-            return String::concat("-", special.2);
+    let [is_special, is_neg, special_str] = check_special(f);
+    if is_special {
+        if is_neg {
+            return String::concat("-", special_str);
         }
-        return special.2;
+        return special_str;
     }
-
-    let is_neg = special.1;
     let abs_f = if is_neg { -f } else { f };
 
     let result = short(abs_f);
@@ -1111,19 +1107,17 @@ pub fn f64_to_string(f: f64) -> String {
 // Convert f64 to exponential string (e.g., "3.14e+00" or "3.14E+00")
 // upper: true for 'E', false for 'e'
 pub fn f64_to_string_exp(f: f64, upper: bool) -> String {
-    let special = check_special(f);
-    if special.0 {
+    let [is_special, is_neg, special_str] = check_special(f);
+    if is_special {
         // For exponential format, zero is "0e+00" or "0E+00"
-        if special.2 == "0" {
-            if special.1 {
+        if special_str == "0" {
+            if is_neg {
                 return if upper { "-0E+00" } else { "-0e+00" };
             }
             return if upper { "0E+00" } else { "0e+00" };
         }
-        return special.2;
+        return special_str;
     }
-
-    let is_neg = special.1;
     let abs_f = if is_neg { -f } else { f };
 
     let result = short(abs_f);
@@ -1142,15 +1136,13 @@ pub fn f64_to_string_exp(f: f64, upper: bool) -> String {
 // Convert f64 to string, choosing decimal or exponential based on magnitude
 // Similar to Rust's Debug: uses exponential if exponent < -4 or >= 16
 pub fn f64_to_string_auto(f: f64) -> String {
-    let special = check_special(f);
-    if special.0 {
-        if special.1 {
-            return String::concat("-", special.2);
+    let [is_special, is_neg, special_str] = check_special(f);
+    if is_special {
+        if is_neg {
+            return String::concat("-", special_str);
         }
-        return special.2;
+        return special_str;
     }
-
-    let is_neg = special.1;
     let abs_f = if is_neg { -f } else { f };
 
     let result = short(abs_f);
