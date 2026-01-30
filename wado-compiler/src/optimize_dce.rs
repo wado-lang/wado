@@ -269,6 +269,56 @@ pub fn analyze_project(project: &mut Project) {
                 "f32_to_buffer" => {
                     used_builtins.insert(CanonBuiltin::F32ToBuffer);
                 }
+                // Libm builtins (f64)
+                "f64_sin" => { used_builtins.insert(CanonBuiltin::LibmSin); }
+                "f64_cos" => { used_builtins.insert(CanonBuiltin::LibmCos); }
+                "f64_tan" => { used_builtins.insert(CanonBuiltin::LibmTan); }
+                "f64_asin" => { used_builtins.insert(CanonBuiltin::LibmAsin); }
+                "f64_acos" => { used_builtins.insert(CanonBuiltin::LibmAcos); }
+                "f64_atan" => { used_builtins.insert(CanonBuiltin::LibmAtan); }
+                "f64_atan2" => { used_builtins.insert(CanonBuiltin::LibmAtan2); }
+                "f64_sinh" => { used_builtins.insert(CanonBuiltin::LibmSinh); }
+                "f64_cosh" => { used_builtins.insert(CanonBuiltin::LibmCosh); }
+                "f64_tanh" => { used_builtins.insert(CanonBuiltin::LibmTanh); }
+                "f64_asinh" => { used_builtins.insert(CanonBuiltin::LibmAsinh); }
+                "f64_acosh" => { used_builtins.insert(CanonBuiltin::LibmAcosh); }
+                "f64_atanh" => { used_builtins.insert(CanonBuiltin::LibmAtanh); }
+                "f64_exp" => { used_builtins.insert(CanonBuiltin::LibmExp); }
+                "f64_exp2" => { used_builtins.insert(CanonBuiltin::LibmExp2); }
+                "f64_expm1" => { used_builtins.insert(CanonBuiltin::LibmExpm1); }
+                "f64_ln" => { used_builtins.insert(CanonBuiltin::LibmLog); }
+                "f64_log2" => { used_builtins.insert(CanonBuiltin::LibmLog2); }
+                "f64_log10" => { used_builtins.insert(CanonBuiltin::LibmLog10); }
+                "f64_ln1p" => { used_builtins.insert(CanonBuiltin::LibmLog1p); }
+                "f64_pow" => { used_builtins.insert(CanonBuiltin::LibmPow); }
+                "f64_cbrt" => { used_builtins.insert(CanonBuiltin::LibmCbrt); }
+                "f64_hypot" => { used_builtins.insert(CanonBuiltin::LibmHypot); }
+                "f64_fmod" => { used_builtins.insert(CanonBuiltin::LibmFmod); }
+                // Libm builtins (f32)
+                "f32_sin" => { used_builtins.insert(CanonBuiltin::LibmSinf); }
+                "f32_cos" => { used_builtins.insert(CanonBuiltin::LibmCosf); }
+                "f32_tan" => { used_builtins.insert(CanonBuiltin::LibmTanf); }
+                "f32_asin" => { used_builtins.insert(CanonBuiltin::LibmAsinf); }
+                "f32_acos" => { used_builtins.insert(CanonBuiltin::LibmAcosf); }
+                "f32_atan" => { used_builtins.insert(CanonBuiltin::LibmAtanf); }
+                "f32_atan2" => { used_builtins.insert(CanonBuiltin::LibmAtan2f); }
+                "f32_sinh" => { used_builtins.insert(CanonBuiltin::LibmSinhf); }
+                "f32_cosh" => { used_builtins.insert(CanonBuiltin::LibmCoshf); }
+                "f32_tanh" => { used_builtins.insert(CanonBuiltin::LibmTanhf); }
+                "f32_asinh" => { used_builtins.insert(CanonBuiltin::LibmAsinhf); }
+                "f32_acosh" => { used_builtins.insert(CanonBuiltin::LibmAcoshf); }
+                "f32_atanh" => { used_builtins.insert(CanonBuiltin::LibmAtanhf); }
+                "f32_exp" => { used_builtins.insert(CanonBuiltin::LibmExpf); }
+                "f32_exp2" => { used_builtins.insert(CanonBuiltin::LibmExp2f); }
+                "f32_expm1" => { used_builtins.insert(CanonBuiltin::LibmExpm1f); }
+                "f32_ln" => { used_builtins.insert(CanonBuiltin::LibmLogf); }
+                "f32_log2" => { used_builtins.insert(CanonBuiltin::LibmLog2f); }
+                "f32_log10" => { used_builtins.insert(CanonBuiltin::LibmLog10f); }
+                "f32_ln1p" => { used_builtins.insert(CanonBuiltin::LibmLog1pf); }
+                "f32_pow" => { used_builtins.insert(CanonBuiltin::LibmPowf); }
+                "f32_cbrt" => { used_builtins.insert(CanonBuiltin::LibmCbrtf); }
+                "f32_hypot" => { used_builtins.insert(CanonBuiltin::LibmHypotf); }
+                "f32_fmod" => { used_builtins.insert(CanonBuiltin::LibmFmodf); }
                 _ => {}
             }
         }
