@@ -1,0 +1,12 @@
+// Test: match expression with imported variant
+use { Align, FormatSpec, f64_to_string_fill } from "./match_variant_import_module.wado";
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    println(f64_to_string_fill(42.0, 8, '_', Align::Right));
+    println(f64_to_string_fill(42.0, 8, '_', Align::Left));
+    println(f64_to_string_fill(42.0, 8, '_', Align::Center));
+}
+
+__DATA__
+{"stdout": "____42.0\n42.0____\n__42.0__\n"}

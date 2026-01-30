@@ -547,9 +547,10 @@ impl<'a> Resolver<'a> {
     /// Create a new resolver
     pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
-        let builtin_registry = BuiltinRegistry::build_from_stdlib();
+        let type_table = Rc::new(RefCell::new(TypeTable::new()));
+        let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
         Self {
-            type_table: Rc::new(RefCell::new(TypeTable::new())),
+            type_table,
             symbols,
             loaded_modules,
             type_aliases: HashMap::new(),
@@ -977,9 +978,9 @@ impl<'a> Resolver<'a> {
             }
 
             let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
-            let builtin_registry = BuiltinRegistry::build_from_stdlib();
+            let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
             let mut resolver = Resolver {
-                type_table: Rc::clone(&type_table), // Share the same TypeTable via Rc::clone
+                type_table: Rc::clone(&type_table),
                 symbols,
                 loaded_modules: modules,
                 type_aliases: type_aliases.clone(),
@@ -4784,106 +4785,13 @@ impl<'a> Resolver<'a> {
 
     /// Get the return type of a builtin function
     ///
-    /// Most builtin functions are looked up from the `BuiltinRegistry` which parses
-    /// `lib/core/builtin.wado`. Generic builtins like `array_new<T>` and `array_get<T>`
-    /// have special handling because their return types involve type parameters.
-    fn get_builtin_return_type(&mut self, name: &str) -> TypeId {
-        // Special cases for generic builtins that need type parameter handling
-        match name {
-            "array_new" => {
-                // Returns builtin::array<T> where T is the first type param
-                let type_param = self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::TypeParam {
-                        index: 0,
-                        name: "T".to_string(),
-                    });
-                return self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::BuiltinArray(type_param));
-            }
-            "array_get" => {
-                // Returns T where T is the first type param
-                return self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::TypeParam {
-                        index: 0,
-                        name: "T".to_string(),
-                    });
-            }
-            "array_fill" => {
-                // Returns builtin::array<T> where T is the first type param
-                let type_param = self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::TypeParam {
-                        index: 0,
-                        name: "T".to_string(),
-                    });
-                return self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::BuiltinArray(type_param));
-            }
-            _ => {}
-        }
-
-        // Look up in the builtin registry (populated from builtin.wado)
-        // Clone the return type to avoid borrow checker issues
-        let builtin_info = self
-            .builtin_registry
-            .get(name)
-            .map(|info| (info.diverges, info.return_type.clone()));
-
-        if let Some((diverges, return_type)) = builtin_info {
-            if diverges {
-                return TypeTable::NEVER;
-            }
-            if let Some(ref ty) = return_type {
-                return self.resolve_builtin_type(ty);
-            }
-            return TypeTable::UNIT;
-        }
-
-        // Unknown builtin - default to UNIT
-        TypeTable::UNIT
-    }
-
-    /// Resolve a type from builtin.wado to a `TypeId`
-    ///
-    /// This is a simplified version of `resolve_type` that handles the subset
-    /// of types used in builtin function signatures.
-    fn resolve_builtin_type(&mut self, ty: &Type) -> TypeId {
-        match ty {
-            Type::Named(named) => match named.name.as_str() {
-                "i8" => TypeTable::I8,
-                "i16" => TypeTable::I16,
-                "i32" => TypeTable::I32,
-                "i64" => TypeTable::I64,
-                "u8" => TypeTable::U8,
-                "u16" => TypeTable::U16,
-                "u32" => TypeTable::U32,
-                "u64" => TypeTable::U64,
-                "f32" => TypeTable::F32,
-                "f64" => TypeTable::F64,
-                "bool" => TypeTable::BOOL,
-                "!" => TypeTable::NEVER,
-                _ => TypeTable::UNIT, // Unknown type
-            },
-            Type::Tuple(elements) => {
-                let element_types: Vec<TypeId> = elements
-                    .iter()
-                    .map(|t| self.resolve_builtin_type(t))
-                    .collect();
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Tuple(element_types))
-            }
-            _ => TypeTable::UNIT, // Other types default to UNIT
-        }
+    /// Returns the pre-resolved `TypeId` from the `BuiltinRegistry`.
+    /// For generic builtins like `array_new<T>`, returns a type containing
+    /// `TypeParam` placeholders that get substituted during monomorphization.
+    fn get_builtin_return_type(&self, name: &str) -> TypeId {
+        self.builtin_registry
+            .get_return_type(name)
+            .unwrap_or(TypeTable::UNIT)
     }
 
     /// Look up function parameter types from callee expression
@@ -7967,6 +7875,34 @@ impl<'a> Resolver<'a> {
             .last()
             .and_then(|s| match &s.kind {
                 TirStmtKind::Expr(e) => Some(e.type_id),
+                // If statement can produce a value if both branches exist and have the same type
+                TirStmtKind::If {
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } => {
+                    let then_type = Self::block_result_type(then_block);
+                    let else_type = Self::block_result_type(else_block);
+                    if then_type == else_type {
+                        Some(then_type)
+                    } else {
+                        None
+                    }
+                }
+                // IfPattern can also produce a value if both branches exist and have the same type
+                TirStmtKind::IfPattern {
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } => {
+                    let then_type = Self::block_result_type(then_block);
+                    let else_type = Self::block_result_type(else_block);
+                    if then_type == else_type {
+                        Some(then_type)
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             })
             .unwrap_or(TypeTable::UNIT)

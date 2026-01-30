@@ -3,9 +3,11 @@
 //! This module collects function signatures from lib/core/builtin.wado
 //! and provides type information for code generation.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use crate::ast::{Function, Type};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a builtin function
 #[derive(Debug, Clone)]
@@ -18,10 +20,12 @@ pub struct BuiltinFunctionInfo {
     /// Import namespace from #[namespace("...")] attribute (default: "wasi")
     /// Only relevant for functions with `canonical_name`
     pub namespace: String,
-    /// Parameter types
-    pub params: Vec<(String, Type)>,
-    /// Return type (None for void/diverging functions)
-    pub return_type: Option<Type>,
+    /// Generic type parameter names (e.g., ["T"] for `fn array_new<T>`)
+    pub type_params: Vec<String>,
+    /// Parameter types (resolved to `TypeIds`)
+    pub params: Vec<(String, TypeId)>,
+    /// Return type (resolved to `TypeId`, UNIT for void functions)
+    pub return_type: TypeId,
     /// Whether this function diverges (returns !)
     pub diverges: bool,
 }
@@ -46,7 +50,8 @@ impl BuiltinRegistry {
     /// Build the registry from the embedded stdlib
     ///
     /// Parses lib/core/builtin.wado and registers all function signatures.
-    pub fn build_from_stdlib() -> Self {
+    /// Types are resolved to `TypeId`s using the provided `TypeTable`.
+    pub fn build_from_stdlib(type_table: &RefCell<TypeTable>) -> Self {
         use crate::lexer::Lexer;
         use crate::parser::Parser;
         use crate::stdlib;
@@ -60,29 +65,34 @@ impl BuiltinRegistry {
         let mut registry = Self::new();
         for item in &module.items {
             if let crate::ast::Item::Function(func) = item {
-                registry.register(func);
+                registry.register(func, type_table);
             }
         }
         registry
     }
 
     /// Register a builtin function from a parsed function declaration
-    pub fn register(&mut self, func: &Function) {
-        let params: Vec<(String, Type)> = func
+    fn register(&mut self, func: &Function, type_table: &RefCell<TypeTable>) {
+        let type_params: Vec<String> = func.type_params.iter().map(|p| p.name.clone()).collect();
+
+        let params: Vec<(String, TypeId)> = func
             .params
             .iter()
-            .map(|p| (p.name.clone(), p.ty.clone()))
+            .map(|p| {
+                let type_id = Self::resolve_type(&p.ty, &type_params, type_table);
+                (p.name.clone(), type_id)
+            })
             .collect();
 
         let (return_type, diverges) = if let Some(ref ty) = func.return_type {
             // Check if it's the never type (!)
             if matches!(ty, Type::Named(named) if named.name == "!") {
-                (None, true)
+                (TypeTable::NEVER, true)
             } else {
-                (Some(ty.clone()), false)
+                (Self::resolve_type(ty, &type_params, type_table), false)
             }
         } else {
-            (None, false)
+            (TypeTable::UNIT, false)
         };
 
         // Extract canonical info from #[canonical("namespace", "name")] attribute
@@ -110,12 +120,70 @@ impl BuiltinRegistry {
             name: func.name.clone(),
             canonical_name,
             namespace,
+            type_params,
             params,
             return_type,
             diverges,
         };
 
         self.functions.insert(func.name.clone(), info);
+    }
+
+    /// Resolve an AST Type to a `TypeId`
+    ///
+    /// Handles primitive types, type parameters, and `builtin::array`<T>.
+    fn resolve_type(ty: &Type, type_params: &[String], type_table: &RefCell<TypeTable>) -> TypeId {
+        match ty {
+            Type::Named(named) => {
+                // Check if it's a type parameter
+                if let Some(index) = type_params.iter().position(|p| p == &named.name) {
+                    return type_table.borrow_mut().intern(ResolvedType::TypeParam {
+                        index: index as u32,
+                        name: named.name.clone(),
+                    });
+                }
+                // Otherwise, check for primitive types
+                match named.name.as_str() {
+                    "i8" => TypeTable::I8,
+                    "i16" => TypeTable::I16,
+                    "i32" => TypeTable::I32,
+                    "i64" => TypeTable::I64,
+                    "i128" => TypeTable::I128,
+                    "u8" => TypeTable::U8,
+                    "u16" => TypeTable::U16,
+                    "u32" => TypeTable::U32,
+                    "u64" => TypeTable::U64,
+                    "u128" => TypeTable::U128,
+                    "f32" => TypeTable::F32,
+                    "f64" => TypeTable::F64,
+                    "bool" => TypeTable::BOOL,
+                    "char" => TypeTable::CHAR,
+                    "!" => TypeTable::NEVER,
+                    _ => TypeTable::UNIT, // Unknown type defaults to UNIT
+                }
+            }
+            Type::NamespacedGeneric(ng) if ng.namespace == "builtin" && ng.name == "array" => {
+                // builtin::array<T> -> BuiltinArray(T)
+                if let Some(first_arg) = ng.args.first() {
+                    let element_type = Self::resolve_type(first_arg, type_params, type_table);
+                    type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::BuiltinArray(element_type))
+                } else {
+                    TypeTable::UNIT
+                }
+            }
+            Type::Tuple(elements) => {
+                let element_types: Vec<TypeId> = elements
+                    .iter()
+                    .map(|t| Self::resolve_type(t, type_params, type_table))
+                    .collect();
+                type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Tuple(element_types))
+            }
+            _ => TypeTable::UNIT, // Other types default to UNIT
+        }
     }
 
     /// Get function info by name
@@ -131,10 +199,8 @@ impl BuiltinRegistry {
     }
 
     /// Get the return type of a builtin function
-    pub fn get_return_type(&self, name: &str) -> Option<&Type> {
-        self.functions
-            .get(name)
-            .and_then(|f| f.return_type.as_ref())
+    pub fn get_return_type(&self, name: &str) -> Option<TypeId> {
+        self.functions.get(name).map(|f| f.return_type)
     }
 
     /// Check if a builtin function diverges (returns !)
@@ -183,8 +249,13 @@ mod tests {
         Span::new(0, 0, 1, 1)
     }
 
+    fn make_type_table() -> RefCell<TypeTable> {
+        RefCell::new(TypeTable::new())
+    }
+
     #[test]
     fn test_register_and_get() {
+        let type_table = make_type_table();
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
@@ -203,7 +274,7 @@ mod tests {
             span: make_span(),
         };
 
-        registry.register(&func);
+        registry.register(&func, &type_table);
 
         assert!(registry.is_builtin("stream_new"));
         assert!(!registry.is_builtin("unknown"));
@@ -216,6 +287,7 @@ mod tests {
 
     #[test]
     fn test_diverging_function() {
+        let type_table = make_type_table();
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
@@ -234,7 +306,7 @@ mod tests {
             span: make_span(),
         };
 
-        registry.register(&func);
+        registry.register(&func, &type_table);
 
         assert!(registry.diverges("unreachable"));
         assert!(!registry.diverges("stream_new"));
@@ -242,6 +314,7 @@ mod tests {
 
     #[test]
     fn test_function_with_params() {
+        let type_table = make_type_table();
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
@@ -288,7 +361,7 @@ mod tests {
             span: make_span(),
         };
 
-        registry.register(&func);
+        registry.register(&func, &type_table);
 
         let info = registry.get("stream_write").unwrap();
         assert_eq!(info.params.len(), 3);
@@ -310,11 +383,12 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let module = parser.parse().expect("parser error");
 
-        // Build registry
+        // Build registry with type table
+        let type_table = make_type_table();
         let mut registry = BuiltinRegistry::new();
         for item in &module.items {
             if let Item::Function(func) = item {
-                registry.register(func);
+                registry.register(func, &type_table);
             }
         }
 
@@ -327,11 +401,12 @@ mod tests {
         assert!(registry.is_builtin("array_len"), "array_len not found");
         assert!(registry.is_builtin("unreachable"), "unreachable not found");
 
-        // Verify return types
+        // Verify return types (stream_new returns i64, not UNIT)
         let stream_new = registry.get("stream_new").unwrap();
-        assert!(
-            stream_new.return_type.is_some(),
-            "stream_new should have return type"
+        assert_ne!(
+            stream_new.return_type,
+            TypeTable::UNIT,
+            "stream_new should have non-unit return type"
         );
 
         let stream_write = registry.get("stream_write").unwrap();

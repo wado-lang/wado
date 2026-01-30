@@ -10,6 +10,7 @@ use heck::ToKebabCase;
 use wasm_encoder::ValType;
 
 use crate::ast::{GenericType, Type, WasiImport};
+use crate::tir::{TypeId, TypeTable};
 
 /// Convert a name to kebab-case
 fn to_kebab_case(name: &str) -> String {
@@ -785,6 +786,35 @@ pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
         },
         Type::Tuple(_) => ValType::I32,
         other => panic!("unsupported type variant in wasi_type_to_valtype: {other:?}"),
+    }
+}
+
+/// Convert a resolved `TypeId` to Wasm `ValType`
+///
+/// Works with primitive `TypeIds` from `TypeTable` constants.
+/// For builtin functions, this handles parameter and return types.
+pub fn type_id_to_valtype(type_id: TypeId) -> ValType {
+    match type_id {
+        TypeTable::I8 | TypeTable::I16 | TypeTable::I32 => ValType::I32,
+        TypeTable::U8 | TypeTable::U16 | TypeTable::U32 => ValType::I32,
+        TypeTable::BOOL | TypeTable::CHAR => ValType::I32,
+        TypeTable::I64 | TypeTable::U64 => ValType::I64,
+        TypeTable::I128 | TypeTable::U128 => {
+            // 128-bit integers are handled specially in wide arithmetic
+            // Default to i64 for now (caller should handle specially)
+            ValType::I64
+        }
+        TypeTable::F32 => ValType::F32,
+        TypeTable::F64 => ValType::F64,
+        TypeTable::UNIT | TypeTable::NEVER => {
+            // Unit/Never have no representation - caller should handle
+            ValType::I32
+        }
+        _ => {
+            // Other types (structs, arrays, etc.) are GC references
+            // represented as i32 in core wasm contexts
+            ValType::I32
+        }
     }
 }
 

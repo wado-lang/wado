@@ -1,0 +1,11 @@
+// Test: simple variant in struct from imported module
+use { Status, Item } from "./variant_in_struct_simple_module.wado";
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let item = Item { status: Status::Active, value: 42 };
+    println(`{item.value}`);
+}
+
+__DATA__
+{"stdout": "42\n"}

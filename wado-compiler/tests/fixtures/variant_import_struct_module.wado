@@ -1,0 +1,62 @@
+// Module that exports a variant type used in struct
+use { println, Stdout } from "core:cli";
+
+pub variant Align {
+    Left,
+    Right,
+    Center,
+}
+
+pub struct Options {
+    align: Align,
+    width: i32,
+}
+
+impl Options {
+    pub fn default() -> Options {
+        return Options {
+            align: Align::Right,
+            width: 0,
+        };
+    }
+}
+
+pub fn format_with_opts(s: String, opts: Options) -> String {
+    if opts.width <= 0 {
+        return s;
+    }
+    if s.len() >= opts.width {
+        return s;
+    }
+    let pad_len = opts.width - s.len();
+    let mut pad = String::with_capacity(pad_len);
+    for let mut i = 0; i < pad_len; i += 1 {
+        pad.append(" ");
+    }
+    return match opts.align {
+        Left => String::concat(s, pad),
+        Right => String::concat(pad, s),
+        Center => {
+            let left = pad_len / 2;
+            let right = pad_len - left;
+            let mut lpad = String::with_capacity(left);
+            let mut rpad = String::with_capacity(right);
+            for let mut i = 0; i < left; i += 1 {
+                lpad.append(" ");
+            }
+            for let mut i = 0; i < right; i += 1 {
+                rpad.append(" ");
+            }
+            String::concat(String::concat(lpad, s), rpad);
+        },
+    };
+}
+
+fn run() with Stdout {
+    let opts = Options::default();
+    let s = format_with_opts("test", opts);
+    println(s);
+}
+
+__DATA__
+{"stdout": "test\n"}
