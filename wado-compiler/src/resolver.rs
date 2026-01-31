@@ -2486,7 +2486,8 @@ impl<'a> Resolver<'a> {
                 ctx.enter_scope();
 
                 // Resolve the pattern with type information from scrutinee
-                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx);
+                let tir_pattern =
+                    self.resolve_if_pattern(pattern, scrutinee_type, ctx, if_stmt.span);
 
                 let then_block = self.resolve_block(&if_stmt.then_block, ctx);
 
@@ -2523,6 +2524,7 @@ impl<'a> Resolver<'a> {
         pattern: &Pattern,
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
+        span: Span,
     ) -> TirPattern {
         match pattern {
             Pattern::Wildcard => TirPattern::Wildcard,
@@ -2561,6 +2563,13 @@ impl<'a> Resolver<'a> {
                             }
                         }
                     }
+                    Literal::Float(_) => {
+                        self.errors.push(TypeError::InvalidPattern {
+                            message: "float literals cannot be used in match patterns".to_string(),
+                            span,
+                        });
+                        return TirPattern::Wildcard;
+                    }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     Literal::Char(c) => TirLiteralPattern::Char(*c),
                     Literal::String(s) => TirLiteralPattern::String(s.value.clone()),
@@ -2586,7 +2595,7 @@ impl<'a> Resolver<'a> {
                             .iter()
                             .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
                     )
-                    .map(|(p, &ty)| self.resolve_if_pattern(p, ty, ctx))
+                    .map(|(p, &ty)| self.resolve_if_pattern(p, ty, ctx, span))
                     .collect();
                 TirPattern::Tuple(resolved)
             }
@@ -2641,7 +2650,7 @@ impl<'a> Resolver<'a> {
                 // Single payload = single binding pattern.
                 // For backward compatibility, we still accept `Some(x)` as single binding.
                 let resolved_bindings: Vec<TirPattern> = if bindings.len() == 1 {
-                    vec![self.resolve_if_pattern(&bindings[0], payload_type, ctx)]
+                    vec![self.resolve_if_pattern(&bindings[0], payload_type, ctx, *span)]
                 } else if bindings.is_empty() {
                     // Unit case like `None` - no bindings
                     vec![]
@@ -2650,7 +2659,7 @@ impl<'a> Resolver<'a> {
                     // Error will be caught by test fixture updates.
                     bindings
                         .iter()
-                        .map(|p| self.resolve_if_pattern(p, TypeTable::UNKNOWN, ctx))
+                        .map(|p| self.resolve_if_pattern(p, TypeTable::UNKNOWN, ctx, *span))
                         .collect()
                 };
 
@@ -2718,7 +2727,8 @@ impl<'a> Resolver<'a> {
                 // Enter scope for pattern bindings (visible in body)
                 ctx.enter_scope();
 
-                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx);
+                let tir_pattern =
+                    self.resolve_if_pattern(pattern, scrutinee_type, ctx, while_stmt.span);
                 let body = self.resolve_block(&while_stmt.body, ctx);
 
                 ctx.exit_scope();
@@ -2759,7 +2769,8 @@ impl<'a> Resolver<'a> {
                 // Enter scope for pattern bindings (visible in body)
                 ctx.enter_scope();
 
-                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx);
+                let tir_pattern =
+                    self.resolve_if_pattern(pattern, scrutinee_type, ctx, for_stmt.span);
                 let body = self.resolve_block(&for_stmt.body, ctx);
 
                 ctx.exit_scope();
@@ -8506,7 +8517,7 @@ impl<'a> Resolver<'a> {
         ctx.enter_scope();
 
         // Resolve pattern with scrutinee type information (same as if let)
-        let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx);
+        let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
 
         // Resolve arm body
         let body = self.resolve_expr(&arm.body, ctx);

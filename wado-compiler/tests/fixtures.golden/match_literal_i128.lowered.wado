@@ -4,10 +4,14 @@
 
 fn run() with Stdout {
     let x: i128 = move "i128::from_i64"(42);
-    let r1: String = match x {
-        0 => "zero",
-        42 => "answer",
-        _ => "other",
+    let r1: String = if "i128^Eq::eq"(&x, &"i128::from_i64"(0)) {
+        "zero";
+    } else {
+        if "i128^Eq::eq"(&x, &"i128::from_i64"(42)) {
+            "answer";
+        } else {
+            "other";
+        };
     };
     core::cli::println(r1);
 }
