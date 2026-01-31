@@ -1475,6 +1475,9 @@ pub struct TirGlobal {
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
+    /// True if this global's Wasm type should be nullable.
+    /// Set by lower phase for lazy-initialized reference type globals.
+    pub is_nullable: bool,
 }
 
 #[derive(Debug, Clone)]

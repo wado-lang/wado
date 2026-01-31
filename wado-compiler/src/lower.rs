@@ -8,7 +8,7 @@
 //! Note: Monomorphization has been moved to a separate phase (see `monomorphize.rs`)
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
 use indexmap::IndexMap;
@@ -18,16 +18,17 @@ use crate::project::Project;
 use crate::tir::FunctionRef;
 use crate::tir::{
     ClosureFunctor, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirUnaryOp, TypeId, TypeTable,
+    TirFunction, TirGlobal, TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 /// Lower a TIR module
 ///
 /// Performs:
-/// 1. Closure lowering (transform closures to functor structs with `__call` methods)
-/// 2. String literal collection for the data section
+/// 1. Global variable initialization lowering (extract non-constant initializers)
+/// 2. Closure lowering (transform closures to functor structs with `__call` methods)
+/// 3. String literal collection for the data section
 pub fn lower(mut module: TirModule) -> TirModule {
     // Phase 0: Lower i128/u128 match patterns to if-else chains
     // WebAssembly doesn't have i128/u128 comparison instructions, so we convert
@@ -35,7 +36,12 @@ pub fn lower(mut module: TirModule) -> TirModule {
     // explicit equality comparisons that use the wide arithmetic extension.
     lower_wide_int_match_patterns(&mut module);
 
-    // Phase 1: Lower closures to functor structs
+    // Phase 1: Lower global variable initializers
+    // For non-constant initializers, this generates a __initialize_globals function
+    // and injects calls to it at entry points.
+    lower_global_initializers(&mut module);
+
+    // Phase 2: Lower closures to functor structs
     // This generates synthetic structs and __call methods, and transforms:
     // - Closure expressions -> StructLiteral
     // - IndirectCall (known closure) -> MethodCall
@@ -44,7 +50,7 @@ pub fn lower(mut module: TirModule) -> TirModule {
     let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
     closure_lowerer.lower_module(&mut module);
 
-    // Phase 2: Collect string literals and their function mappings
+    // Phase 3: Collect string literals and their function mappings
     let mut collector = StringCollector::new();
     collector.collect_module(&module);
     let (strings, function_strings) = collector.into_results();
@@ -60,6 +66,10 @@ pub fn lower(mut module: TirModule) -> TirModule {
 /// in the project.
 pub fn lower_project(mut project: Project) -> Project {
     project.tir_modules = lower_modules_indexed(project.tir_modules);
+
+    // Post-processing: generate __initialize_modules in entry module
+    generate_initialize_modules(&mut project.tir_modules);
+
     project
 }
 
@@ -557,6 +567,544 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+// ============================================================================
+// Global Variable Initialization Lowering
+// ============================================================================
+
+/// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
+fn is_constant_initializer(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit => true,
+        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner),
+        TirExprKind::Unary { op, expr: inner } => {
+            // Negation of literals is constant
+            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner)
+        }
+        _ => false,
+    }
+}
+
+/// Create a default value expression for a type (used for lazy-initialized globals)
+fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
+    let base_type = type_table.get_ultimate_base_type(type_id);
+    match type_table.get(base_type) {
+        ResolvedType::Primitive(prim) => match prim {
+            crate::tir::PrimitiveType::I8
+            | crate::tir::PrimitiveType::I16
+            | crate::tir::PrimitiveType::I32
+            | crate::tir::PrimitiveType::U8
+            | crate::tir::PrimitiveType::U16
+            | crate::tir::PrimitiveType::U32 => TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: 0,
+                    repr: "0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::I64 | crate::tir::PrimitiveType::U64 => TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: 0,
+                    repr: "0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::I128 | crate::tir::PrimitiveType::U128 => {
+                // i128/u128 need special handling - call from_i64(0) / from_u64(0)
+                if matches!(prim, crate::tir::PrimitiveType::I128) {
+                    create_i128_literal(0, type_id, span)
+                } else {
+                    create_u128_literal(0, type_id, span)
+                }
+            }
+            crate::tir::PrimitiveType::F32 => TirExpr::new(
+                TirExprKind::FloatLiteral {
+                    value: 0.0,
+                    repr: "0.0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::F64 => TirExpr::new(
+                TirExprKind::FloatLiteral {
+                    value: 0.0,
+                    repr: "0.0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::Bool => {
+                TirExpr::new(TirExprKind::BoolLiteral(false), type_id, span)
+            }
+            crate::tir::PrimitiveType::Char => {
+                TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span)
+            }
+        },
+        ResolvedType::Unit => TirExpr::new(TirExprKind::Unit, type_id, span),
+        // For reference types (String, Array, struct, etc.), use null
+        _ => TirExpr::new(TirExprKind::Null, type_id, span),
+    }
+}
+
+/// Check if a type is a reference type (needs nullable Wasm type for lazy init)
+fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    let base_type = type_table.get_ultimate_base_type(type_id);
+    match type_table.get(base_type) {
+        ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never => false,
+        // Struct, Array, String, etc. are reference types in Wasm GC
+        _ => true,
+    }
+}
+
+/// Lower global variable initializers
+///
+/// For non-constant initializers, this:
+/// 1. Replaces the initializer with a default value
+/// 2. Generates a `__initialize_module` function containing the actual initialization
+///
+/// Note: The `__initialize_modules` function that calls all modules' `__initialize_module`
+/// is generated in the post-processing step (see `generate_initialize_modules`).
+fn lower_global_initializers(module: &mut TirModule) {
+    let type_table = module.type_table.borrow();
+
+    // Collect non-constant initializers with their indices for topological sorting
+    let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr)> = Vec::new();
+
+    for (idx, global) in module.globals.iter_mut().enumerate() {
+        if !is_constant_initializer(&global.initializer) {
+            // Save the original initializer with index
+            lazy_inits.push((
+                idx,
+                global.name.clone(),
+                global.module_source.clone(),
+                global.ty,
+                global.initializer.clone(),
+            ));
+            // Replace with default value
+            global.initializer = default_value_for_type(global.ty, &type_table, global.span);
+            // Lazy-init globals must be Wasm-mutable (even if Wado-immutable)
+            global.mutable = true;
+            // Reference types need nullable Wasm type for lazy init
+            if is_reference_type(global.ty, &type_table) {
+                global.is_nullable = true;
+            }
+        }
+    }
+
+    drop(type_table);
+
+    // If no lazy initializers, nothing to do
+    if lazy_inits.is_empty() {
+        return;
+    }
+
+    // Topologically sort the lazy initializers based on dependencies
+    let sorted_inits = topological_sort_global_inits(&lazy_inits, &module.globals);
+
+    // Generate __initialize_module function
+    let span = Span::new(0, 0, 1, 1);
+    let mut init_stmts: Vec<TirStmt> = Vec::new();
+
+    for (_, name, module_source, _, initializer) in sorted_inits {
+        // Create: global_name = initializer;
+        let global_set = TirExpr::new(
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value: Box::new(initializer),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
+    }
+
+    let init_body = TirBlock {
+        stmts: init_stmts,
+        span,
+    };
+
+    let init_func = TirFunction {
+        name: "__initialize_module".to_string(),
+        is_pub: true, // pub so it can be called from entry module's __initialize_modules
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: None,
+        params: Vec::new(),
+        return_type: TypeTable::UNIT,
+        effects: Vec::new(),
+        body: Some(init_body),
+        span,
+        local_count: 0,
+        local_types: Vec::new(),
+        address_taken_locals: std::collections::HashSet::new(),
+        needed_copy_types: std::collections::HashSet::new(),
+    };
+
+    module.functions.push(Rc::new(RefCell::new(init_func)));
+}
+
+/// Collect global variable references from an expression
+fn collect_global_refs(expr: &TirExpr, refs: &mut HashSet<String>) {
+    match &expr.kind {
+        TirExprKind::GlobalVarGet { name, .. } => {
+            refs.insert(name.clone());
+        }
+        // Recursively search in sub-expressions
+        TirExprKind::Binary { left, right, .. } => {
+            collect_global_refs(left, refs);
+            collect_global_refs(right, refs);
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            collect_global_refs(inner, refs);
+        }
+        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+            for arg in args {
+                collect_global_refs(arg, refs);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            collect_global_refs(receiver, refs);
+            for arg in args {
+                collect_global_refs(arg, refs);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                collect_global_refs(&field.value, refs);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements, .. } => {
+            for elem in elements {
+                collect_global_refs(elem, refs);
+            }
+        }
+        TirExprKind::TupleLiteral { elements, .. } => {
+            for elem in elements {
+                collect_global_refs(elem, refs);
+            }
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_global_refs(condition, refs);
+            for stmt in &then_branch.stmts {
+                if let TirStmtKind::Expr(e) = &stmt.kind {
+                    collect_global_refs(e, refs);
+                }
+            }
+            if let Some(else_blk) = else_branch {
+                for stmt in &else_blk.stmts {
+                    if let TirStmtKind::Expr(e) = &stmt.kind {
+                        collect_global_refs(e, refs);
+                    }
+                }
+            }
+        }
+        TirExprKind::Block(block) => {
+            for stmt in &block.stmts {
+                if let TirStmtKind::Expr(e) = &stmt.kind {
+                    collect_global_refs(e, refs);
+                }
+            }
+        }
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            collect_global_refs(inner, refs);
+        }
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
+            collect_global_refs(inner, refs);
+            collect_global_refs(index, refs);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            collect_global_refs(inner, refs);
+        }
+        TirExprKind::Assign { target, value } => {
+            collect_global_refs(target, refs);
+            collect_global_refs(value, refs);
+        }
+        // Leaf expressions - no sub-expressions
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. } => {}
+        // Other expressions - skip for now
+        _ => {}
+    }
+}
+
+/// Topologically sort global initializers based on dependencies.
+///
+/// Returns the initializers in an order where dependencies are initialized first.
+fn topological_sort_global_inits(
+    lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr)],
+    _all_globals: &[TirGlobal],
+) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr)> {
+    if lazy_inits.len() <= 1 {
+        return lazy_inits.to_vec();
+    }
+
+    // Build a map from global name to its index in lazy_inits
+    let name_to_idx: HashMap<String, usize> = lazy_inits
+        .iter()
+        .enumerate()
+        .map(|(i, (_, name, _, _, _))| (name.clone(), i))
+        .collect();
+
+    // Build dependency graph: deps[i] = set of indices that i depends on
+    let mut deps: Vec<HashSet<usize>> = vec![HashSet::new(); lazy_inits.len()];
+
+    for (i, (_, _, _, _, initializer)) in lazy_inits.iter().enumerate() {
+        let mut refs = HashSet::new();
+        collect_global_refs(initializer, &mut refs);
+
+        for ref_name in refs {
+            // Only consider dependencies on other lazy-init globals in this module
+            if let Some(&dep_idx) = name_to_idx.get(&ref_name)
+                && dep_idx != i
+            {
+                deps[i].insert(dep_idx);
+            }
+        }
+    }
+
+    // Kahn's algorithm for topological sort
+    let mut in_degree: Vec<usize> = deps.iter().map(HashSet::len).collect();
+    let mut queue: VecDeque<usize> = in_degree
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| **d == 0)
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut sorted = Vec::with_capacity(lazy_inits.len());
+
+    while let Some(idx) = queue.pop_front() {
+        sorted.push(lazy_inits[idx].clone());
+
+        // Update dependents
+        for (i, dep_set) in deps.iter().enumerate() {
+            if dep_set.contains(&idx) {
+                in_degree[i] -= 1;
+                if in_degree[i] == 0 {
+                    queue.push_back(i);
+                }
+            }
+        }
+    }
+
+    // Check for cycles
+    if sorted.len() < lazy_inits.len() {
+        // Cycle detected - report which globals are involved
+        let in_cycle: Vec<&str> = lazy_inits
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| in_degree[*i] > 0)
+            .map(|(_, (_, name, _, _, _))| name.as_str())
+            .collect();
+        panic!(
+            "Circular dependency detected among global variables: {}",
+            in_cycle.join(", ")
+        );
+    }
+
+    sorted
+}
+
+/// Generate `__initialize_modules` function in the entry module.
+///
+/// This function:
+/// 1. Checks an initialization flag and returns early if already initialized
+/// 2. Calls each module's `__initialize_module` in topological order
+/// 3. Sets the initialization flag to true
+/// 4. Injects a call to `__initialize_modules` at the start of entry point functions
+fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) {
+    // Find the entry module
+    let entry_source = modules.keys().find(|ms| ms.is_entry_point()).cloned();
+
+    let Some(entry_source) = entry_source else {
+        return; // No entry module
+    };
+
+    // Collect all modules that have __initialize_module function
+    let mut modules_with_init: Vec<ModuleSource> = Vec::new();
+    for (module_source, module) in modules.iter() {
+        let has_init = module
+            .functions
+            .iter()
+            .any(|f| f.borrow().name == "__initialize_module");
+        if has_init {
+            modules_with_init.push(module_source.clone());
+        }
+    }
+
+    // If no modules have initialization, nothing to do
+    if modules_with_init.is_empty() {
+        return;
+    }
+
+    // Sort modules so that dependencies are initialized before dependents.
+    // For now, put the entry module last (it typically imports from other modules).
+    // Non-entry modules are sorted by their appearance order in the IndexMap
+    // (which the loader already sorts by dependency).
+    modules_with_init.sort_by_key(|ms| {
+        if ms == &entry_source {
+            1 // Entry module last
+        } else {
+            0 // Other modules first
+        }
+    });
+
+    let span = Span::new(0, 0, 1, 1);
+
+    // Get mutable reference to entry module
+    let entry_module = modules.get_mut(&entry_source).unwrap();
+
+    // Create __modules_initialized flag global
+    let init_flag_global = TirGlobal {
+        name: "__modules_initialized".to_string(),
+        ty: TypeTable::BOOL,
+        initializer: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span),
+        mutable: true,
+        is_pub: false,
+        module_source: entry_source.clone(),
+        span,
+        is_nullable: false,
+    };
+    entry_module.globals.push(init_flag_global);
+
+    // Build __initialize_modules function body
+    let mut init_stmts: Vec<TirStmt> = Vec::new();
+
+    // Check flag: if __modules_initialized { return; }
+    let flag_check = TirExpr::new(
+        TirExprKind::GlobalVarGet {
+            module_source: entry_source.clone(),
+            name: "__modules_initialized".to_string(),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    let early_return_stmt = TirStmt::new(TirStmtKind::Return { value: None }, span);
+    let early_return_block = TirBlock {
+        stmts: vec![early_return_stmt],
+        span,
+    };
+    let if_already_init = TirStmt::new(
+        TirStmtKind::If {
+            condition: flag_check,
+            then_block: early_return_block,
+            else_block: None,
+        },
+        span,
+    );
+    init_stmts.push(if_already_init);
+
+    // Call each module's __initialize_module
+    for module_source in &modules_with_init {
+        let call = TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef::External {
+                    module_source: module_source.clone(),
+                    name: "__initialize_module".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: Vec::new(),
+                args: Vec::new(),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        init_stmts.push(TirStmt::new(TirStmtKind::Expr(call), span));
+    }
+
+    // Set flag: __modules_initialized = true;
+    let set_flag = TirExpr::new(
+        TirExprKind::GlobalVarSet {
+            module_source: entry_source.clone(),
+            name: "__modules_initialized".to_string(),
+            value: Box::new(TirExpr::new(
+                TirExprKind::BoolLiteral(true),
+                TypeTable::BOOL,
+                span,
+            )),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    init_stmts.push(TirStmt::new(TirStmtKind::Expr(set_flag), span));
+
+    let init_body = TirBlock {
+        stmts: init_stmts,
+        span,
+    };
+
+    let init_modules_func = TirFunction {
+        name: "__initialize_modules".to_string(),
+        is_pub: false, // Not pub - internal to entry module
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: None,
+        params: Vec::new(),
+        return_type: TypeTable::UNIT,
+        effects: Vec::new(),
+        body: Some(init_body),
+        span,
+        local_count: 0,
+        local_types: Vec::new(),
+        address_taken_locals: std::collections::HashSet::new(),
+        needed_copy_types: std::collections::HashSet::new(),
+    };
+
+    entry_module
+        .functions
+        .push(Rc::new(RefCell::new(init_modules_func)));
+
+    // Inject call to __initialize_modules at the start of entry point functions
+    let init_call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::External {
+                module_source: entry_source.clone(),
+                name: "__initialize_modules".to_string(),
+                monomorph_info: None,
+                method_info: None,
+            },
+            type_args: Vec::new(),
+            args: Vec::new(),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    let init_call_stmt = TirStmt::new(TirStmtKind::Expr(init_call), span);
+
+    for func_rc in &entry_module.functions {
+        let mut func = func_rc.borrow_mut();
+        let is_entry = func.name == "run" || func.name.starts_with("__test_");
+
+        if is_entry && let Some(ref mut body) = func.body {
+            body.stmts.insert(0, init_call_stmt.clone());
+        }
     }
 }
 

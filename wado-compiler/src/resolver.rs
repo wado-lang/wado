@@ -1774,6 +1774,7 @@ impl<'a> Resolver<'a> {
             is_pub: global_decl.is_pub,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
+            is_nullable: false, // Set by lower phase for lazy-init reference types
         })
     }
 
@@ -4809,10 +4810,18 @@ impl<'a> Resolver<'a> {
             return_type = self.substitute_type_params(return_type, &type_args);
         }
 
+        // For local function calls (empty module_path), use the current module source
+        // to ensure DCE and codegen can find the function correctly
+        let module_source = if module_path.is_empty() {
+            self.current_module_source.clone()
+        } else {
+            ModuleSource::from_path(&module_path)
+        };
+
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef::External {
-                    module_source: ModuleSource::from_path(&module_path),
+                    module_source,
                     name: func_name,
                     monomorph_info: None,
                     method_info: None, // Free function call

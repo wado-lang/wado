@@ -943,10 +943,10 @@ impl Codegen {
                 if tir_func.name == "run" {
                     continue;
                 }
-                // Skip non-pub functions from other modules
-                if !tir_func.is_pub {
-                    continue;
-                }
+                // Note: We no longer skip non-pub functions unconditionally.
+                // Non-pub functions may be called by pub functions (e.g., __initialize_module
+                // calling module-private initialization helpers). The reachability check
+                // below will determine if the function should be included.
                 // Skip bodyless functions
                 if tir_func.body.is_none() {
                     continue;
@@ -1835,9 +1835,11 @@ impl Codegen {
             let func_idx = builder.define_func(qualified_name, qualified_name);
             let is_from_internal = module_source == &internal_source;
 
-            // Register simple name alias for all functions EXCEPT internal
-            // Internal functions require explicit import to be accessible
-            if qualified_name != &tir_func.name && !is_from_internal {
+            // Register simple name alias for all functions EXCEPT:
+            // - Internal functions (require explicit import to be accessible)
+            // - __initialize_module (each module has its own, called by qualified name)
+            let is_init_module = tir_func.name == "__initialize_module";
+            if qualified_name != &tir_func.name && !is_from_internal && !is_init_module {
                 builder.define_func_alias(&tir_func.name, func_idx);
             }
 
@@ -1891,7 +1893,16 @@ impl Codegen {
         for (module_source, tir_mod) in all_tir_modules {
             let mod_type_table = &*tir_mod.type_table.borrow();
             for global in &tir_mod.globals {
-                let val_type = self.type_id_to_valtype(mod_type_table, global.ty);
+                let mut val_type = self.type_id_to_valtype(mod_type_table, global.ty);
+                // For nullable globals (lazy-init reference types), make the Wasm type nullable
+                if global.is_nullable
+                    && let ValType::Ref(ref_type) = val_type
+                {
+                    val_type = ValType::Ref(RefType {
+                        nullable: true,
+                        ..ref_type
+                    });
+                }
                 // Get constant expression for initializer
                 let init_expr =
                     Self::global_init_to_const_expr(&global.initializer, mod_type_table);
@@ -1902,7 +1913,14 @@ impl Codegen {
                     let module_path = module_source.to_path();
                     format!("global:{}::{}", module_path.join("::"), global.name)
                 };
-                builder.define_global(&global_name, val_type, global.mutable, init_expr);
+                // mutable is already set by lower phase (includes lazy-init globals)
+                builder.define_global(
+                    &global_name,
+                    val_type,
+                    global.mutable,
+                    init_expr,
+                    global.is_nullable,
+                );
             }
         }
         // Add globals section only if there are globals
@@ -5993,12 +6011,12 @@ impl Codegen {
                 Self::global_init_to_const_expr(&typed_inner, type_table)
             }
             _ => {
-                // For non-constant initializers, we'll need lazy initialization
-                // For now, panic with a clear message
-                panic!(
-                    "non-constant global initializer not yet supported: {:?}",
-                    init.kind
-                );
+                // For non-constant initializers, use null as placeholder
+                // The actual initialization happens in __initialize_globals
+                ConstExpr::ref_null(HeapType::Abstract {
+                    shared: false,
+                    ty: AbstractHeapType::None,
+                })
             }
         }
     }
@@ -6633,6 +6651,14 @@ impl Codegen {
                 };
                 let global_idx = builder.global_idx(&global_name);
                 func.instruction(&Instruction::GlobalGet(global_idx));
+                // For nullable globals (lazy init) with reference types, convert to non-null
+                if builder.is_nullable_global(&global_name) {
+                    // Only add ref.as_non_null for reference types
+                    let val_type = self.type_id_to_valtype(type_table, expr.type_id);
+                    if matches!(val_type, ValType::Ref(_)) {
+                        func.instruction(&Instruction::RefAsNonNull);
+                    }
+                }
             }
 
             TirExprKind::GlobalVarSet {
@@ -6651,8 +6677,14 @@ impl Codegen {
                 };
                 let global_idx = builder.global_idx(&global_name);
                 func.instruction(&Instruction::GlobalSet(global_idx));
-                // Push the assigned value back for expression result
-                func.instruction(&Instruction::GlobalGet(global_idx));
+                // Push the assigned value back for expression result (unless UNIT type)
+                if expr.type_id != TypeTable::UNIT {
+                    func.instruction(&Instruction::GlobalGet(global_idx));
+                    // For nullable globals, convert to non-null reference
+                    if builder.is_nullable_global(&global_name) {
+                        func.instruction(&Instruction::RefAsNonNull);
+                    }
+                }
             }
 
             // === Binary Operations ===

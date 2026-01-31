@@ -70,6 +70,16 @@ global mut counter: i32 = 0;        // mutable
 // With visibility
 pub global VERSION: i32 = 1;        // accessible from other modules
 
+// Arithmetic expressions
+global DOUBLED: i32 = 21 * 2;       // evaluated at initialization
+
+// Object type globals (lazy initialized)
+global mut MESSAGE: String = "Hello, World!";
+global mut ITEMS: Array<i32> = [1, 2, 3];
+
+struct Point { x: i32, y: i32 }
+global mut ORIGIN: Point = Point { x: 0, y: 0 };
+
 // Usage
 fn example() {
     println(`{PI}`);                // read global
@@ -77,7 +87,7 @@ fn example() {
 }
 ```
 
-Global variables map directly to WebAssembly globals. Only literal initializers are currently supported.
+Global variables map directly to WebAssembly globals. Constant expressions are evaluated at instantiation; non-constant expressions use lazy initialization.
 
 ## Types
 

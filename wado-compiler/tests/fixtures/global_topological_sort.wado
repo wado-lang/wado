@@ -1,0 +1,28 @@
+// Test topological sorting of global initializers
+// Globals should be initialized in dependency order
+use { println, Stdout } from "core:cli";
+
+// Define globals in reverse dependency order to test sorting
+// C depends on B, B depends on A
+global C: i32 = B * 2;      // depends on B
+global B: i32 = A + 10;     // depends on A
+global A: i32 = 5;          // no dependencies
+
+// Also test a chain through function calls
+fn compute_x() -> i32 {
+    return A * 3;
+}
+
+global X: i32 = compute_x();  // depends on A (indirectly via function)
+global Y: i32 = X + C;        // depends on X and C
+
+fn run() with Stdout {
+    println(`A={A}`);
+    println(`B={B}`);
+    println(`C={C}`);
+    println(`X={X}`);
+    println(`Y={Y}`);
+}
+
+__DATA__
+{"stdout": "A=5\nB=15\nC=30\nX=15\nY=45\n"}
