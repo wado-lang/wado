@@ -237,9 +237,25 @@ For `-O2` and `-Os`:
 | Flag  | Effect                                                      |
 | ----- | ----------------------------------------------------------- |
 | `-O0` | No optimizations, includes all functions/features           |
-| `-O1` | DCE only, keeps debug names                                 |
+| `-O1` | All passes except TIR-level DCE, keeps debug names          |
 | `-O2` | Full optimizations (inline, ref-elim, copy-prop, LICM, DCE) |
+| `-O3` | Aggressive optimizations (100 iterations, higher inline)    |
 | `-Os` | Full optimizations + strips debug name sections             |
+
+### Wasm-Level DCE
+
+In addition to TIR-level DCE (dead code elimination at the intermediate representation level), the compiler performs Wasm-level DCE on the bundled module using [walrus](https://crates.io/crates/walrus).
+
+The bundled module (`wado-bundled`) contains:
+
+- Float-to-string conversion (for template string formatting)
+- libm mathematical functions (sin, cos, exp, log, etc.)
+
+Without Wasm DCE, the entire bundled module (~53KB) is included even when only a small subset is used. With Wasm DCE enabled, only the actually-used functions are kept, reducing binary size significantly (e.g., ~12KB for a simple program using only float formatting).
+
+**Wasm DCE is enabled for `-O1` and above, disabled for `-O0`.**
+
+Benchmarking shows that Wasm DCE slightly improves test execution speed (smaller binaries = faster JIT compilation), so it is enabled by default for all optimization levels except `-O0`.
 
 ### Standard Library
 
