@@ -1041,6 +1041,10 @@ pub struct FormatSpec {
 - Float interpolation (f32/f64 via `wado-bundled` functions using the `ryu` algorithm)
 - String concatenation using GC array allocation and `array.copy`
 
+### String Literal Data Segments
+
+String literals are stored in Wasm **passive data segments**. This allows direct initialization of GC arrays using `array.init_data`, which is more efficient than loading from linear memory.
+
 ### The `assert` Statement
 
 `assert` behaves like a power-assert, which shows source conditions, collects intermediate values, and prints them if the assertion fails.
