@@ -1,0 +1,210 @@
+# Mise configuration for Wasm Size Comparison
+# https://mise.jdx.dev/
+#
+# Compares .wasm binary sizes across different languages
+#
+# Some tools require manual installation:
+# - Rust wasm target: rustup target add wasm32-wasip1
+# - TinyGo: brew install tinygo (macOS)
+# - Moonbit: curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+# - C: brew install llvm lld wasi-libc wasi-runtimes (macOS)
+
+[tools]
+node = "latest"
+zig = "latest"
+wasmtime = "41"  # matches project's Cargo.toml
+
+[env]
+OUT_DIR = "out"
+WASMTIME = "wasmtime"
+# C compiler paths (macOS Homebrew)
+LLVM_PATH = "/opt/homebrew/opt/llvm"
+LLD_PATH = "/opt/homebrew/opt/lld"
+WASI_LIBC_PATH = "/opt/homebrew/opt/wasi-libc"
+WASI_RUNTIMES_PATH = "/opt/homebrew/opt/wasi-runtimes"
+
+[tasks.build-c]
+description = "Build C programs to Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+
+WASI_SYSROOT="$WASI_LIBC_PATH/share/wasi-sysroot"
+if [ -x "$LLVM_PATH/bin/clang" ] && [ -x "$LLD_PATH/bin/wasm-ld" ] && [ -d "$WASI_SYSROOT" ] && [ -d "$WASI_RUNTIMES_PATH/share/wasi-runtimes" ]; then
+    echo "Building C..."
+    WASM_CLANG="PATH=$LLD_PATH/bin:$PATH $LLVM_PATH/bin/clang --target=wasm32-wasi --sysroot=$WASI_SYSROOT -resource-dir $WASI_RUNTIMES_PATH/share/wasi-runtimes"
+    eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/hello_world_c.wasm" c/hello_world.c
+    eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/pi_approx_c.wasm" c/pi_approx.c
+else
+    echo "SKIP: C (brew install llvm lld wasi-libc wasi-runtimes)"
+fi
+"""
+
+[tasks.build-rust]
+description = "Build Rust programs to Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+
+if rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
+    echo "Building Rust..."
+    (cd rust/hello_world && cargo build --release --target wasm32-wasip1)
+    (cd rust/pi_approx && cargo build --release --target wasm32-wasip1)
+    cp rust/hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
+    cp rust/pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
+else
+    echo "SKIP: Rust (rustup target add wasm32-wasip1)"
+fi
+"""
+
+[tasks.build-zig]
+description = "Build Zig programs to Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+
+echo "Building Zig..."
+zig build-exe -O ReleaseSmall -target wasm32-wasi zig/hello_world.zig -femit-bin="$OUT_DIR/hello_world_zig.wasm"
+zig build-exe -O ReleaseSmall -target wasm32-wasi zig/pi_approx.zig -femit-bin="$OUT_DIR/pi_approx_zig.wasm"
+"""
+
+[tasks.build-tinygo]
+description = "Build TinyGo programs to Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+
+if command -v tinygo >/dev/null 2>&1; then
+    echo "Building TinyGo..."
+    tinygo build -o "$OUT_DIR/hello_world_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/hello_world.go
+    tinygo build -o "$OUT_DIR/pi_approx_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/pi_approx.go
+else
+    echo "SKIP: TinyGo (not installed)"
+fi
+"""
+
+[tasks.build-assemblyscript]
+description = "Build AssemblyScript programs to Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+
+echo "Building AssemblyScript..."
+(cd assemblyscript && npm install)
+(cd assemblyscript && npx asc hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/hello_world_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
+(cd assemblyscript && npx asc pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/pi_approx_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
+"""
+
+[tasks.build-moonbit]
+description = "Build Moonbit programs to Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+
+if command -v moon >/dev/null 2>&1; then
+    echo "Building Moonbit..."
+    (cd moonbit/hello_world && moon build --target wasm --strip)
+    (cd moonbit/pi_approx && moon build --target wasm --strip)
+    cp moonbit/hello_world/target/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
+    cp moonbit/pi_approx/target/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
+else
+    echo "SKIP: Moonbit (not installed)"
+fi
+"""
+
+[tasks.build-wado]
+description = "Build Wado programs to Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+
+echo "Building Wado..."
+if [ -f wado/hello_world.wado ]; then
+    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/hello_world_wado.wasm" wado/hello_world.wado
+    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/pi_approx_wado.wasm" wado/pi_approx.wado
+else
+    echo "SKIP: Wado (source files not found)"
+fi
+"""
+
+[tasks.build-all]
+description = "Build all language targets"
+depends = ["build-rust", "build-zig", "build-tinygo", "build-assemblyscript", "build-moonbit", "build-c", "build-wado"]
+
+[tasks.validate]
+description = "Validate built Wasm files with wasmtime"
+run = """
+#!/usr/bin/env bash
+echo ""
+echo "=== Validation (running with wasmtime) ==="
+for f in "$OUT_DIR"/*_rust.wasm "$OUT_DIR"/*_zig.wasm "$OUT_DIR"/*_tinygo.wasm "$OUT_DIR"/*_c.wasm "$OUT_DIR"/*_assemblyscript.wasm "$OUT_DIR"/*_moonbit.wasm; do
+    if [ -f "$f" ]; then
+        printf "%-40s " "$f:"
+        $WASMTIME "$f" 2>&1 | head -1 || echo "(failed)"
+    fi
+done
+# Wado uses WASI P3 component model (requires wasmtime 41+)
+for f in "$OUT_DIR"/*_wado.wasm; do
+    if [ -f "$f" ]; then
+        printf "%-40s " "$f:"
+        $WASMTIME run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' "$f" 2>&1 | head -1 || echo "(failed)"
+    fi
+done
+"""
+
+[tasks.report-wasm-size]
+description = "Build all and report Wasm sizes"
+depends = ["build-all", "validate"]
+run = """
+#!/usr/bin/env bash
+PROGRAMS="hello_world pi_approx"
+
+echo ""
+echo "=== Wasm Size Report ==="
+echo ""
+echo "| Program      | Language       | Size (bytes) |"
+echo "|--------------|----------------|--------------|"
+for prog in $PROGRAMS; do
+    for f in "$OUT_DIR"/${prog}_*.wasm; do
+        if [ -f "$f" ]; then
+            lang=$(basename "$f" .wasm | sed "s/${prog}_//")
+            size=$(wc -c < "$f" | tr -d ' ')
+            printf "%s\t%s\t%s\n" "$size" "$prog" "$lang"
+        fi
+    done | sort -n | while IFS=$'\t' read -r size prog lang; do
+        printf "| %-12s | %-14s | %12s |\n" "$prog" "$lang" "$size"
+    done
+done
+echo ""
+"""
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = """
+#!/usr/bin/env bash
+rm -rf "$OUT_DIR"
+rm -rf rust/hello_world/target rust/pi_approx/target
+rm -rf moonbit/hello_world/target moonbit/pi_approx/target
+rm -rf assemblyscript/node_modules
+"""
+
+[tasks.install-deps]
+description = "Show dependency installation instructions"
+run = """
+#!/usr/bin/env bash
+echo "Managed by mise (run 'mise install' in this directory):"
+echo "  node, zig"
+echo ""
+echo "Manual installation required:"
+echo "  rustup target add wasm32-wasip1                                # Rust wasm target"
+echo "  brew install tinygo                                            # TinyGo (macOS)"
+echo "  curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit"
+echo "  brew install llvm lld wasi-libc wasi-runtimes                  # C (macOS)"
+"""

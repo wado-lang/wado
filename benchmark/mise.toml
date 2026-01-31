@@ -1,0 +1,98 @@
+# Mise configuration for Wado benchmarks
+# https://mise.jdx.dev/
+#
+# Prerequisites (system-installed):
+# - cc (C compiler)
+# - node (Node.js)
+# - python3
+# - ruby
+
+[tasks.count-prime]
+description = "Run count_prime benchmark (integer arithmetic)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Wado benchmark ==="
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o count_prime.wasm count_prime.wado
+
+echo "=== Compiling C benchmark ==="
+cc -O3 -o count_prime_c count_prime.c
+
+echo "=== C ==="
+./count_prime_c
+
+echo "=== JavaScript ==="
+node count_prime.js
+
+echo "=== Python ==="
+python3 count_prime.py
+
+echo "=== Ruby ==="
+ruby count_prime.rb
+
+echo "=== Wado ==="
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 count_prime.wado
+"""
+
+[tasks.mandelbrot]
+description = "Run mandelbrot benchmark (float arithmetic)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Wado benchmark ==="
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o mandelbrot.wasm mandelbrot.wado
+
+echo "=== Compiling C benchmark ==="
+cc -O3 -ffp-contract=off -o mandelbrot_c mandelbrot.c
+
+echo "=== C ==="
+./mandelbrot_c
+
+echo "=== JavaScript ==="
+node mandelbrot.js
+
+echo "=== Python ==="
+python3 mandelbrot.py
+
+echo "=== Ruby ==="
+ruby mandelbrot.rb
+
+echo "=== Wado ==="
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 mandelbrot.wado
+"""
+
+[tasks.sieve]
+description = "Run sieve benchmark (array operations)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Wado benchmark ==="
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o sieve.wasm sieve.wado
+
+echo "=== Compiling C benchmark ==="
+cc -O3 -o sieve_c sieve.c
+
+echo "=== C ==="
+./sieve_c
+
+echo "=== JavaScript ==="
+node sieve.js
+
+echo "=== Python ==="
+python3 sieve.py
+
+echo "=== Ruby ==="
+ruby sieve.rb
+
+echo "=== Wado ==="
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sieve.wado
+"""
+
+[tasks.clean]
+description = "Clean benchmark artifacts"
+run = """
+rm -f *.wasm count_prime_c mandelbrot_c sieve_c
+"""

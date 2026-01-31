@@ -86,8 +86,8 @@ clippy-fix:
 clean:
 	cargo clean
 	rm -f example/*.wat example/*.wasm
-	rm -f benchmark/*.wasm benchmark/count_prime_c benchmark/mandelbrot_c benchmark/sieve_c
-	$(MAKE) -C wasm-size clean
+	mise run -C benchmark clean
+	mise run -C wasm-size clean
 
 # VS Code extension targets
 .PHONY: install-wado-vscode-dev
@@ -161,73 +161,16 @@ check-bundled:
 
 .PHONY: benchmark-count-prime
 benchmark-count-prime:
-	@echo "=== Compiling Wado benchmark ==="
-	cargo run --bin wado --quiet -- compile -O2 -o benchmark/count_prime.wasm benchmark/count_prime.wado
-	@echo ""
-	@echo "=== Compiling C benchmark ==="
-	cc -O3 -o benchmark/count_prime_c benchmark/count_prime.c
-	@echo ""
-	@echo "=== C (cc -O3) ==="
-	@./benchmark/count_prime_c
-	@echo ""
-	@echo "=== JavaScript (Node.js) ==="
-	@node benchmark/count_prime.js
-	@echo ""
-	@echo "=== Python ==="
-	@python3 benchmark/count_prime.py
-	@echo ""
-	@echo "=== Ruby ==="
-	@ruby benchmark/count_prime.rb
-	@echo ""
-	@echo "=== Wado (wasmtime) ==="
-	@cargo run --bin wado --quiet -- run -O2 benchmark/count_prime.wado
+	mise run -C benchmark count-prime
 
 .PHONY: benchmark-mandelbrot
 benchmark-mandelbrot:
-	@echo "=== Compiling Wado benchmark ==="
-	cargo run --bin wado --quiet -- compile -O2 -o benchmark/mandelbrot.wasm benchmark/mandelbrot.wado
-	@echo ""
-	@echo "=== Compiling C benchmark ==="
-	cc -O3 -ffp-contract=off -o benchmark/mandelbrot_c benchmark/mandelbrot.c
-	@echo ""
-	@echo "=== C (cc -O3) ==="
-	@./benchmark/mandelbrot_c
-	@echo ""
-	@echo "=== JavaScript (Node.js) ==="
-	@node benchmark/mandelbrot.js
-	@echo ""
-	@echo "=== Python ==="
-	@python3 benchmark/mandelbrot.py
-	@echo ""
-	@echo "=== Ruby ==="
-	@ruby benchmark/mandelbrot.rb
-	@echo ""
-	@echo "=== Wado (wasmtime) ==="
-	@cargo run --bin wado --quiet -- run -O2 benchmark/mandelbrot.wado
-
-.PHONY: report-wasm-size
-report-wasm-size:
-	$(MAKE) -C wasm-size report-wasm-size
+	mise run -C benchmark mandelbrot
 
 .PHONY: benchmark-sieve
 benchmark-sieve:
-	@echo "=== Compiling Wado benchmark ==="
-	cargo run --bin wado --quiet -- compile -O2 -o benchmark/sieve.wasm benchmark/sieve.wado
-	@echo ""
-	@echo "=== Compiling C benchmark ==="
-	cc -O3 -o benchmark/sieve_c benchmark/sieve.c
-	@echo ""
-	@echo "=== C (cc -O3) ==="
-	@./benchmark/sieve_c
-	@echo ""
-	@echo "=== JavaScript (Node.js) ==="
-	@node benchmark/sieve.js
-	@echo ""
-	@echo "=== Python ==="
-	@python3 benchmark/sieve.py
-	@echo ""
-	@echo "=== Ruby ==="
-	@ruby benchmark/sieve.rb
-	@echo ""
-	@echo "=== Wado (wasmtime) ==="
-	@cargo run --bin wado --quiet -- run -O2 benchmark/sieve.wado
+	mise run -C benchmark sieve
+
+.PHONY: report-wasm-size
+report-wasm-size:
+	mise run -C wasm-size report-wasm-size
