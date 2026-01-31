@@ -23,7 +23,7 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |        1,069 |
+| wado           |        1,057 |
 | c              |        2,122 |
 | zig            |        4,449 |
 | assemblyscript |        6,913 |
