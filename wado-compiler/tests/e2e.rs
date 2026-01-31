@@ -231,13 +231,21 @@ fn fixture_test_o2(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Test function for O3 (aggressive optimization)
+/// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
 fn fixture_test_o3(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
+        return Ok(()); // Skip locally by default
+    }
     run_fixture_test_with_opt(path, OptLevel::O3);
     Ok(())
 }
 
 /// Test function for Os (size optimization)
+/// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
 fn fixture_test_os(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
+        return Ok(()); // Skip locally by default
+    }
     run_fixture_test_with_opt(path, OptLevel::Os);
     Ok(())
 }

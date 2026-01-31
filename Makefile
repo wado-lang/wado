@@ -37,7 +37,7 @@ hello-run-wasmtime: hello
 
 .PHONY: test
 test:
-	cargo test -- --skip fixture_test_o3 --skip fixture_test_os
+	cargo test
 
 .PHONY: test-wado
 test-wado:
