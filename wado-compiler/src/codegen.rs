@@ -2195,11 +2195,35 @@ impl Codegen {
         // Wado-bundled module (float-to-string and libm, conditionally included)
         // ========================================
         if project.needs_wado_bundled() {
+            // Convert memory to import
             let bundled_module =
                 wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
                     .expect("Failed to process wado-bundled module");
+
+            // Build set of exports to keep based on used builtins
+            let mut keep_exports = std::collections::HashSet::new();
+            for builtin in &project.used_builtins {
+                match builtin {
+                    CanonBuiltin::F32ToBuffer => {
+                        keep_exports.insert("f32_to_buffer".to_string());
+                    }
+                    CanonBuiltin::F64ToBuffer => {
+                        keep_exports.insert("f64_to_buffer".to_string());
+                    }
+                    _ if builtin.is_libm() => {
+                        keep_exports.insert(builtin.canonical_name().to_string());
+                    }
+                    _ => {}
+                }
+            }
+
+            // Apply DCE to remove unused functions
+            let optimized_module =
+                wasm_postprocess::eliminate_dead_code(&bundled_module, &keep_exports)
+                    .expect("Failed to apply DCE to bundled module");
+
             ctx.register_core_module("fts-mod");
-            builder.core_module_raw(Some("fts-mod"), &bundled_module);
+            builder.core_module_raw(Some("fts-mod"), &optimized_module);
 
             // Create env instance for bundled module (just memory)
             ctx.register_core_instance("fts-env");

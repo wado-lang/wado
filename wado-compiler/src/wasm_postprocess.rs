@@ -1,12 +1,46 @@
 //! Post-processing for Wasm modules
 //!
 //! This module provides utilities to transform Wasm modules, such as
-//! converting memory definitions to imports.
+//! converting memory definitions to imports and dead code elimination.
 
 use wasm_encoder::{
     CodeSection, ExportKind, ExportSection, ImportSection, MemoryType, Module, RawSection,
 };
 use wasmparser::{Parser, Payload};
+
+/// Perform dead code elimination on a Wasm module, keeping only the specified exports.
+///
+/// This uses walrus to remove unused functions and other items from the module.
+/// The `keep_exports` set contains the names of exports that should be preserved.
+/// The gc pass automatically treats exports as roots, so we remove unwanted exports first.
+pub fn eliminate_dead_code(
+    wasm_bytes: &[u8],
+    keep_exports: &std::collections::HashSet<String>,
+) -> Result<Vec<u8>, String> {
+    use walrus::passes;
+
+    let mut module =
+        walrus::Module::from_buffer(wasm_bytes).map_err(|e| format!("Failed to parse: {e}"))?;
+
+    // Remove exports that are not in the keep set
+    // The gc pass will treat remaining exports as roots
+    let exports_to_remove: Vec<_> = module
+        .exports
+        .iter()
+        .filter(|e| !keep_exports.contains(&e.name))
+        .map(|e| e.id())
+        .collect();
+
+    for id in exports_to_remove {
+        module.exports.delete(id);
+    }
+
+    // Run garbage collection to remove unreferenced items
+    // (exports are automatically treated as roots)
+    passes::gc::run(&mut module);
+
+    Ok(module.emit_wasm())
+}
 
 /// Convert a Wasm module that defines memory to one that imports memory
 /// This allows the module to share memory with other modules in a component
