@@ -306,6 +306,11 @@ impl CanonBuiltin {
         )
     }
 
+    /// Check if this builtin comes from wado-bundled module (float-to-string or libm)
+    pub fn is_bundled(&self) -> bool {
+        self.is_float_to_string() || self.is_libm()
+    }
+
     /// All importable builtins (for Command world / standard CLI programs)
     /// Note: Future intrinsics are NOT included here as they're Service-world-specific
     pub const ALL: &'static [CanonBuiltin] = &[
@@ -453,6 +458,8 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             populate_all_features(&mut project);
             // Note: O0 mode only enables standard WASI functions from the stdlib.
             // Non-standard functions like sockets require O2+ to be detected via DCE analysis.
+            // Disable Wasm-level DCE for bundled module (for faster compilation)
+            project.wasm_dce_enabled = false;
         }
         OptLevel::O1 => {
             // Development mode: all optimizations except DCE
