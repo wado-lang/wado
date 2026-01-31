@@ -9,9 +9,9 @@ use {
     f64_to_string, f64_to_string_exp, f64_to_string_auto,
     f32_to_string, f32_to_string_exp, f32_to_string_auto,
     short, fixed_width, digits, format_exp, format_decimal,
-    log10_pow2, log2_pow10, i64_bit_len, pow10,
+    log10_pow2, log2_pow10, u64_bit_len, pow10,
     unpack64, FormatResult, UnpackResult,
-    trim_zeros, rotate_right, logical_shr,
+    trim_zeros, rotate_right,
     // New format specifier types and functions
     FormatSpec, Align, Sign, FormatType,
     format_f64,
@@ -52,120 +52,96 @@ test "log2_pow10 approximation" {
     assert log2_pow10(100) == 332;
 }
 
-test "i64_bit_len" {
-    assert i64_bit_len(0 as i64) == 0;
-    assert i64_bit_len(1 as i64) == 1;
-    assert i64_bit_len(2 as i64) == 2;
-    assert i64_bit_len(3 as i64) == 2;
-    assert i64_bit_len(4 as i64) == 3;
-    assert i64_bit_len(7 as i64) == 3;
-    assert i64_bit_len(8 as i64) == 4;
-    assert i64_bit_len(255 as i64) == 8;
-    assert i64_bit_len(256 as i64) == 9;
-    assert i64_bit_len(0x7FFFFFFFFFFFFFFF as i64) == 63;
-    // Note: 0x8000000000000000 is negative in i64, special case
+test "u64_bit_len" {
+    assert u64_bit_len(0 as u64) == 0;
+    assert u64_bit_len(1 as u64) == 1;
+    assert u64_bit_len(2 as u64) == 2;
+    assert u64_bit_len(3 as u64) == 2;
+    assert u64_bit_len(4 as u64) == 3;
+    assert u64_bit_len(7 as u64) == 3;
+    assert u64_bit_len(8 as u64) == 4;
+    assert u64_bit_len(255 as u64) == 8;
+    assert u64_bit_len(256 as u64) == 9;
+    assert u64_bit_len(0x7FFFFFFFFFFFFFFF as u64) == 63;
+    assert u64_bit_len(0x8000000000000000 as u64) == 64;
 }
 
 test "pow10 lookup" {
-    assert pow10(0) == 1 as i64;
-    assert pow10(1) == 10 as i64;
-    assert pow10(2) == 100 as i64;
-    assert pow10(3) == 1000 as i64;
-    assert pow10(9) == 1000000000 as i64;
-    assert pow10(18) == 1000000000000000000 as i64;
+    assert pow10(0) == 1 as u64;
+    assert pow10(1) == 10 as u64;
+    assert pow10(2) == 100 as u64;
+    assert pow10(3) == 1000 as u64;
+    assert pow10(9) == 1000000000 as u64;
+    assert pow10(18) == 1000000000000000000 as u64;
     // pow10(19) = 10^19 = 0x8AC7230489E80000
 }
 
 test "digits count" {
-    assert digits(0 as i64) == 0;
-    assert digits(1 as i64) == 1;
-    assert digits(9 as i64) == 1;
-    assert digits(10 as i64) == 2;
-    assert digits(99 as i64) == 2;
-    assert digits(100 as i64) == 3;
-    assert digits(999 as i64) == 3;
-    assert digits(1000 as i64) == 4;
-    assert digits(9999999999999999 as i64) == 16;
-    assert digits(10000000000000000 as i64) == 17;
+    assert digits(0 as u64) == 0;
+    assert digits(1 as u64) == 1;
+    assert digits(9 as u64) == 1;
+    assert digits(10 as u64) == 2;
+    assert digits(99 as u64) == 2;
+    assert digits(100 as u64) == 3;
+    assert digits(999 as u64) == 3;
+    assert digits(1000 as u64) == 4;
+    assert digits(9999999999999999 as u64) == 16;
+    assert digits(10000000000000000 as u64) == 17;
 }
 
-// ============================================================================
-// Unsigned comparison tests (i64 treated as u64)
 // ============================================================================
 // Bit manipulation tests
 // ============================================================================
 
-test "logical_shr logical right shift" {
-    // Logical shift should NOT sign-extend
-    let neg = 0x8000000000000000 as i64;
-    let shifted1 = logical_shr(neg, 1);
-    // Should be 0x4000000000000000, NOT 0xC000000000000000
-    assert shifted1 == 0x4000000000000000 as i64;
-
-    let shifted4 = logical_shr(neg, 4);
-    assert shifted4 == 0x0800000000000000 as i64;
-
-    let shifted63 = logical_shr(neg, 63);
-    assert shifted63 == 1 as i64;
-
-    // Positive numbers work normally
-    let pos = 0x100 as i64;
-    assert logical_shr(pos, 4) == 0x10 as i64;
-
-    // Edge cases
-    assert logical_shr(1 as i64, 0) == 1 as i64;
-    assert logical_shr(1 as i64, 64) == 0 as i64;
-}
-
 test "rotate_right" {
     // Rotate 1 right by 1 puts it in MSB
-    let r1 = rotate_right(1 as i64, 1);
-    assert r1 == 0x8000000000000000 as i64;
+    let r1 = rotate_right(1 as u64, 1);
+    assert r1 == 0x8000000000000000 as u64;
 
     // Rotate MSB right by 1 puts it in bit 62
-    let r2 = rotate_right(0x8000000000000000 as i64, 1);
-    assert r2 == 0x4000000000000000 as i64;
+    let r2 = rotate_right(0x8000000000000000 as u64, 1);
+    assert r2 == 0x4000000000000000 as u64;
 
     // Full rotation
-    let r64 = rotate_right(1 as i64, 64);
-    assert r64 == 1 as i64;
+    let r64 = rotate_right(1 as u64, 64);
+    assert r64 == 1 as u64;
 
     // Rotate by 32
-    let r32 = rotate_right(0x00000001FFFFFFFF as i64, 32);
-    assert r32 == 0xFFFFFFFF00000001 as i64;
+    let r32 = rotate_right(0x00000001FFFFFFFF as u64, 32);
+    assert r32 == 0xFFFFFFFF00000001 as u64;
 }
 
 test "trim_zeros basic" {
     // 1000 should trim to 1 with exponent +3
-    let t1 = trim_zeros(1000 as i64, 0);
-    assert t1.0 == 1 as i64;
+    let t1 = trim_zeros(1000 as u64, 0);
+    assert t1.0 == 1 as u64;
     assert t1.1 == 3;
 
     // 1200 should trim to 12 with exponent +2
-    let t2 = trim_zeros(1200 as i64, 0);
-    assert t2.0 == 12 as i64;
+    let t2 = trim_zeros(1200 as u64, 0);
+    assert t2.0 == 12 as u64;
     assert t2.1 == 2;
 
     // 123 has no trailing zeros
-    let t3 = trim_zeros(123 as i64, 0);
-    assert t3.0 == 123 as i64;
+    let t3 = trim_zeros(123 as u64, 0);
+    assert t3.0 == 123 as u64;
     assert t3.1 == 0;
 
     // 10 trims to 1
-    let t4 = trim_zeros(10 as i64, 0);
-    assert t4.0 == 1 as i64;
+    let t4 = trim_zeros(10 as u64, 0);
+    assert t4.0 == 1 as u64;
     assert t4.1 == 1;
 
     // 100000000 (10^8) trims to 1 with exp +8
-    let t5 = trim_zeros(100000000 as i64, 0);
-    assert t5.0 == 1 as i64;
+    let t5 = trim_zeros(100000000 as u64, 0);
+    assert t5.0 == 1 as u64;
     assert t5.1 == 8;
 }
 
 test "trim_zeros with initial exponent" {
     // With initial exponent -3
-    let t1 = trim_zeros(1000 as i64, -3);
-    assert t1.0 == 1 as i64;
+    let t1 = trim_zeros(1000 as u64, -3);
+    assert t1.0 == 1 as u64;
     assert t1.1 == 0;  // -3 + 3 = 0
 
     let t2 = trim_zeros(500 as i64, -2);
@@ -1582,7 +1558,7 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
         let _ = f64_to_string_exp(val, false);
     }
     let end_fpfmt = now();
-    let fpfmt_time = (end_fpfmt - start_fpfmt) / (iterations as u64);
+    let fpfmt_time = ((end_fpfmt - start_fpfmt) as u64) / (iterations as u64);
 
     // Benchmark ryu (internal::f64_to_string)
     let start_ryu = now();
@@ -1590,10 +1566,10 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
         let _ = ryu_f64_to_string(val);
     }
     let end_ryu = now();
-    let ryu_time = (end_ryu - start_ryu) / (iterations as u64);
+    let ryu_time = ((end_ryu - start_ryu) as u64) / (iterations as u64);
 
     // Calculate ratio (fpfmt / ryu)
-    let ratio = if ryu_time > 0 as u64 {
+    let ratio = if ryu_time > 0 {
         (fpfmt_time as f64) / (ryu_time as f64)
     } else {
         0.0
