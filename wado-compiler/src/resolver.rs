@@ -5301,7 +5301,10 @@ impl<'a> Resolver<'a> {
                 self.errors.push(TypeError::TypeMismatch {
                     expected: format!("argument {} to be {}", i + 1, expected_name),
                     found: actual_name,
-                    span: method_call.args.get(i).map_or(method_call.span, |a| a.span()),
+                    span: method_call
+                        .args
+                        .get(i)
+                        .map_or(method_call.span, super::ast::Expr::span),
                 });
             }
         }
@@ -5647,103 +5650,107 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        let (struct_name, module_path, mangled_struct_name, struct_type_args) =
-            match self.type_table.borrow().get(target_type_id) {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
-                ResolvedType::Resource {
-                    name,
-                    module_source,
-                } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => {
-                    // Build mangled name for generic type: Array<i32>
-                    let type_arg_names: Vec<String> = type_args
-                        .iter()
-                        .map(|t| self.mangle_type_name(*t))
-                        .collect();
-                    let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                    (
-                        name.clone(),
-                        module_source.to_path(),
-                        mangled,
-                        type_args.clone(),
-                    )
-                }
-                ResolvedType::Newtype { base_type, .. } => {
-                    // For newtypes, look through to the base type for static method lookup
-                    match self.type_table.borrow().get(*base_type).clone() {
-                        ResolvedType::Struct {
-                            name,
-                            module_source,
-                            ..
-                        } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
-                        ResolvedType::GenericInstance {
-                            name,
-                            module_source,
-                            type_args,
-                        } => {
-                            let type_arg_names: Vec<String> = type_args
-                                .iter()
-                                .map(|t| self.mangle_type_name(*t))
-                                .collect();
-                            let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                            (name.clone(), module_source.to_path(), mangled, type_args.clone())
-                        }
-                        // Handle chained newtypes recursively
-                        ResolvedType::Newtype {
-                            base_type: inner_base,
-                            ..
-                        } => {
-                            // Follow the chain to find the ultimate struct
-                            let mut current = inner_base;
-                            loop {
-                                match self.type_table.borrow().get(current).clone() {
-                                    ResolvedType::Struct {
-                                        name,
-                                        module_source,
-                                        ..
-                                    } => {
-                                        break (
-                                            name.clone(),
-                                            module_source.to_path(),
-                                            name.clone(),
-                                            vec![],
-                                        )
-                                    }
-                                    ResolvedType::Newtype {
-                                        base_type: next, ..
-                                    } => current = next,
-                                    _ => {
-                                        return TirExpr::new(
-                                            TirExprKind::Unit,
-                                            TypeTable::ERROR,
-                                            static_call.span,
-                                        )
-                                    }
+        let (struct_name, module_path, mangled_struct_name, struct_type_args) = match self
+            .type_table
+            .borrow()
+            .get(target_type_id)
+        {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+            ResolvedType::Resource {
+                name,
+                module_source,
+            } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                // Build mangled name for generic type: Array<i32>
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name(*t))
+                    .collect();
+                let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                (
+                    name.clone(),
+                    module_source.to_path(),
+                    mangled,
+                    type_args.clone(),
+                )
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                // For newtypes, look through to the base type for static method lookup
+                match self.type_table.borrow().get(*base_type).clone() {
+                    ResolvedType::Struct {
+                        name,
+                        module_source,
+                        ..
+                    } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+                    ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        type_args,
+                    } => {
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| self.mangle_type_name(*t))
+                            .collect();
+                        let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                        (
+                            name.clone(),
+                            module_source.to_path(),
+                            mangled,
+                            type_args.clone(),
+                        )
+                    }
+                    // Handle chained newtypes recursively
+                    ResolvedType::Newtype {
+                        base_type: inner_base,
+                        ..
+                    } => {
+                        // Follow the chain to find the ultimate struct
+                        let mut current = inner_base;
+                        loop {
+                            match self.type_table.borrow().get(current).clone() {
+                                ResolvedType::Struct {
+                                    name,
+                                    module_source,
+                                    ..
+                                } => {
+                                    break (
+                                        name.clone(),
+                                        module_source.to_path(),
+                                        name.clone(),
+                                        vec![],
+                                    );
+                                }
+                                ResolvedType::Newtype {
+                                    base_type: next, ..
+                                } => current = next,
+                                _ => {
+                                    return TirExpr::new(
+                                        TirExprKind::Unit,
+                                        TypeTable::ERROR,
+                                        static_call.span,
+                                    );
                                 }
                             }
                         }
-                        _ => {
-                            return TirExpr::new(
-                                TirExprKind::Unit,
-                                TypeTable::ERROR,
-                                static_call.span,
-                            )
-                        }
+                    }
+                    _ => {
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                     }
                 }
-                _ => {
-                    // Unknown type - return error expression
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
-                }
-            };
+            }
+            _ => {
+                // Unknown type - return error expression
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+            }
+        };
 
         // Build the mangled function name
         let mangled_func_name = format!("{}::{}", mangled_struct_name, static_call.method);
@@ -6114,15 +6121,14 @@ impl<'a> Resolver<'a> {
         }
 
         // For newtypes, check if the base type has the static method
-        if let Some(&newtype_id) = self.type_aliases.get(struct_name) {
-            if let ResolvedType::Newtype { base_type, .. } =
+        if let Some(&newtype_id) = self.type_aliases.get(struct_name)
+            && let ResolvedType::Newtype { base_type, .. } =
                 self.type_table.borrow().get(newtype_id).clone()
-            {
-                // Get the base type's name and recursively check
-                let base_name = self.type_table.borrow().type_name(base_type);
-                if self.is_static_method(&base_name, method_name) {
-                    return true;
-                }
+        {
+            // Get the base type's name and recursively check
+            let base_name = self.type_table.borrow().type_name(base_type);
+            if self.is_static_method(&base_name, method_name) {
+                return true;
             }
         }
 
@@ -6147,7 +6153,7 @@ impl<'a> Resolver<'a> {
                 {
                     // Follow the chain to find the ultimate struct
                     let base_name = self.get_ultimate_base_struct_name(base_type);
-                    let mangled = format!("{}::{}", base_name, method_name);
+                    let mangled = format!("{base_name}::{method_name}");
                     (base_name, mangled)
                 } else {
                     (struct_name.to_string(), mangled_func_name.to_string())
@@ -6629,7 +6635,7 @@ impl<'a> Resolver<'a> {
         None
     }
 
-    /// Find the method info (self_kind and param_types) for a method in current module items
+    /// Find the method info (`self_kind` and `param_types`) for a method in current module items
     fn find_local_method_info(
         &mut self,
         struct_name: &str,
@@ -6691,7 +6697,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Substitute a base type with a newtype in a type (handles references)
-    /// For example: if base_type is Point and newtype is Location:
+    /// For example: if `base_type` is Point and newtype is Location:
     ///   - Point -> Location
     ///   - &Point -> &Location
     ///   - &mut Point -> &mut Location
@@ -6709,22 +6715,22 @@ impl<'a> Resolver<'a> {
             // Reference: substitute the inner type
             ResolvedType::Ref(inner) => {
                 let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
-                if new_inner != inner {
+                if new_inner == inner {
+                    type_id
+                } else {
                     self.type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(new_inner))
-                } else {
-                    type_id
                 }
             }
             ResolvedType::MutRef(inner) => {
                 let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
-                if new_inner != inner {
+                if new_inner == inner {
+                    type_id
+                } else {
                     self.type_table
                         .borrow_mut()
                         .intern(ResolvedType::MutRef(new_inner))
-                } else {
-                    type_id
                 }
             }
 
@@ -6757,7 +6763,8 @@ impl<'a> Resolver<'a> {
         };
 
         // Check if either inner type is a newtype
-        let actual_is_newtype = matches!(type_table.get(actual_inner), ResolvedType::Newtype { .. });
+        let actual_is_newtype =
+            matches!(type_table.get(actual_inner), ResolvedType::Newtype { .. });
         let expected_is_newtype =
             matches!(type_table.get(expected_inner), ResolvedType::Newtype { .. });
 
@@ -6769,19 +6776,19 @@ impl<'a> Resolver<'a> {
         }
 
         // Also check if one is the base type of the other
-        if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner) {
-            if *base_type == expected_inner {
-                let actual_name = type_table.type_name(actual);
-                let expected_name = type_table.type_name(expected);
-                return Some((expected_name, actual_name));
-            }
+        if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
+            && *base_type == expected_inner
+        {
+            let actual_name = type_table.type_name(actual);
+            let expected_name = type_table.type_name(expected);
+            return Some((expected_name, actual_name));
         }
-        if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner) {
-            if *base_type == actual_inner {
-                let actual_name = type_table.type_name(actual);
-                let expected_name = type_table.type_name(expected);
-                return Some((expected_name, actual_name));
-            }
+        if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner)
+            && *base_type == actual_inner
+        {
+            let actual_name = type_table.type_name(actual);
+            let expected_name = type_table.type_name(expected);
+            return Some((expected_name, actual_name));
         }
 
         None
