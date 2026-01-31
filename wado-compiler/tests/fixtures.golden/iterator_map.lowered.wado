@@ -24,13 +24,7 @@ struct __Closure_1 {
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5];
     let doubled: Array<i32> = __inline_MapIter_i32_i32___collect_0: {
-        let self: &mut MapIter<i32,i32> = &mut __inline_ArrayIter_i32___map_i32__2: {
-            let self: &ArrayIter<i32> = &__inline_Array_i32___iter_1: {
-                break __inline_Array_i32___iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
-            };
-            let f: fn(i32) -> i32 = &__Closure_0 {  };
-            break __inline_ArrayIter_i32___map_i32__2: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
-        };
+        let self: &mut MapIter<i32,i32> = &mut "ArrayIter<i32>::map<i32>"(&"Array<i32>::iter"(&arr), &__Closure_0 {  });
         let mut result: Array<i32> = move [];
         loop {
             if Some(item) = "MapIter<i32,i32>^Iterator::next"(self) {
@@ -44,14 +38,8 @@ fn run() with Stdout {
     for let _item of doubled {
         core::cli::println(move "i32::to_string"(x));
     }
-    let squared: Array<i32> = __inline_MapIter_i32_i32___collect_3: {
-        let self: &mut MapIter<i32,i32> = &mut __inline_ArrayIter_i32___map_i32__5: {
-            let self: &ArrayIter<i32> = &__inline_Array_i32___iter_4: {
-                break __inline_Array_i32___iter_4: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
-            };
-            let f: fn(i32) -> i32 = &__Closure_1 {  };
-            break __inline_ArrayIter_i32___map_i32__5: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
-        };
+    let squared: Array<i32> = __inline_MapIter_i32_i32___collect_1: {
+        let self: &mut MapIter<i32,i32> = &mut "ArrayIter<i32>::map<i32>"(&"Array<i32>::iter"(&arr), &__Closure_1 {  });
         let mut result: Array<i32> = move [];
         loop {
             if Some(item) = "MapIter<i32,i32>^Iterator::next"(self) {
@@ -60,12 +48,20 @@ fn run() with Stdout {
                 break;
             }
         }
-        break __inline_MapIter_i32_i32___collect_3: result;
+        break __inline_MapIter_i32_i32___collect_1: result;
     };
     core::cli::println(move "squares:");
     for let _item of squared {
         core::cli::println(move "i32::to_string"(x));
     }
+}
+
+pub fn "Array<i32>::iter"(self: &Array<i32>) -> ArrayIter<i32> {
+    return ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
+}
+
+pub fn "ArrayIter<i32>::map<i32>"(self: &ArrayIter<i32>, f: fn(i32) -> i32) -> MapIter<i32,i32> {
+    return MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

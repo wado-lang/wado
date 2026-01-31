@@ -23,15 +23,13 @@ struct __Closure_3 {
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5];
     let sum: i32 = __inline_ArrayIter_i32___fold_i32____Closure_0_0: {
-        let self: &mut ArrayIter<i32> = &mut __inline_Array_i32___iter_1: {
-            break __inline_Array_i32___iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
-        };
+        let self: &mut ArrayIter<i32> = &mut "Array<i32>::iter"(&arr);
         let f: &__Closure_0 = &__Closure_0 {  };
         let mut acc: i32 = 0;
         loop {
             if Some(item) = "ArrayIter<i32>^Iterator::next"(self) {
-                acc = __inline___Closure_0____call_2: {
-                    break __inline___Closure_0____call_2: (acc + item);
+                acc = __inline___Closure_0____call_1: {
+                    break __inline___Closure_0____call_1: (acc + item);
                 };
             } else {
                 break;
@@ -40,53 +38,47 @@ fn run() with Stdout {
         break __inline_ArrayIter_i32___fold_i32____Closure_0_0: acc;
     };
     core::cli::println(move "String::concat"(move "sum: ", move "i32::to_string"(sum)));
-    let product: i32 = __inline_ArrayIter_i32___fold_i32____Closure_1_3: {
-        let self: &mut ArrayIter<i32> = &mut __inline_Array_i32___iter_4: {
-            break __inline_Array_i32___iter_4: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
-        };
+    let product: i32 = __inline_ArrayIter_i32___fold_i32____Closure_1_2: {
+        let self: &mut ArrayIter<i32> = &mut "Array<i32>::iter"(&arr);
         let f: &__Closure_1 = &__Closure_1 {  };
         let mut acc: i32 = 1;
         loop {
             if Some(item) = "ArrayIter<i32>^Iterator::next"(self) {
-                acc = __inline___Closure_1____call_5: {
-                    break __inline___Closure_1____call_5: (acc * item);
+                acc = __inline___Closure_1____call_3: {
+                    break __inline___Closure_1____call_3: (acc * item);
                 };
             } else {
                 break;
             }
         }
-        break __inline_ArrayIter_i32___fold_i32____Closure_1_3: acc;
+        break __inline_ArrayIter_i32___fold_i32____Closure_1_2: acc;
     };
     core::cli::println(move "String::concat"(move "product: ", move "i32::to_string"(product)));
-    let count: i32 = __inline_ArrayIter_i32___fold_i32____Closure_2_6: {
-        let self: &mut ArrayIter<i32> = &mut __inline_Array_i32___iter_7: {
-            break __inline_Array_i32___iter_7: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
-        };
+    let count: i32 = __inline_ArrayIter_i32___fold_i32____Closure_2_4: {
+        let self: &mut ArrayIter<i32> = &mut "Array<i32>::iter"(&arr);
         let f: &__Closure_2 = &__Closure_2 {  };
         let mut acc: i32 = 0;
         loop {
             if Some(item) = "ArrayIter<i32>^Iterator::next"(self) {
-                acc = __inline___Closure_2____call_8: {
-                    break __inline___Closure_2____call_8: (acc + 1);
+                acc = __inline___Closure_2____call_5: {
+                    break __inline___Closure_2____call_5: (acc + 1);
                 };
             } else {
                 break;
             }
         }
-        break __inline_ArrayIter_i32___fold_i32____Closure_2_6: acc;
+        break __inline_ArrayIter_i32___fold_i32____Closure_2_4: acc;
     };
     core::cli::println(move "String::concat"(move "count: ", move "i32::to_string"(count)));
     let arr2: Array<i32> = move [3, 1, 4, 1, 5, 9, 2, 6];
-    let max: i32 = __inline_ArrayIter_i32___fold_i32____Closure_3_9: {
-        let self: &mut ArrayIter<i32> = &mut __inline_Array_i32___iter_10: {
-            break __inline_Array_i32___iter_10: ArrayIter<i32> { repr: arr2.repr, used: arr2.used, index: 0 };
-        };
+    let max: i32 = __inline_ArrayIter_i32___fold_i32____Closure_3_6: {
+        let self: &mut ArrayIter<i32> = &mut "Array<i32>::iter"(&arr2);
         let f: &__Closure_3 = &__Closure_3 {  };
         let mut acc: i32 = 0;
         loop {
             if Some(item) = "ArrayIter<i32>^Iterator::next"(self) {
-                acc = __inline___Closure_3____call_11: {
-                    break __inline___Closure_3____call_11: if (item > acc) {
+                acc = __inline___Closure_3____call_7: {
+                    break __inline___Closure_3____call_7: if (item > acc) {
                         item;
                     } else {
                         acc;
@@ -96,9 +88,13 @@ fn run() with Stdout {
                 break;
             }
         }
-        break __inline_ArrayIter_i32___fold_i32____Closure_3_9: acc;
+        break __inline_ArrayIter_i32___fold_i32____Closure_3_6: acc;
     };
     core::cli::println(move "String::concat"(move "max: ", move "i32::to_string"(max)));
+}
+
+pub fn "Array<i32>::iter"(self: &Array<i32>) -> ArrayIter<i32> {
+    return ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {

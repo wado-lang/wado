@@ -4,10 +4,17 @@
 
 fn run() with Stdout {
     let s: String = move "Hi!";
-    let bytes: Array<u8> = move "StrUtf8ByteIter::collect"(&mut "String::bytes"(&s));
+    let bytes: Array<u8> = __inline_StrUtf8ByteIter__collect_0: {
+        let self: &mut StrUtf8ByteIter = &mut "String::bytes"(&s);
+        let mut result: Array<u8> = move [];
+        while let Some(item) = "StrUtf8ByteIter^Iterator::next"(self) {
+            "Array<u8>::append"(&mut result, item);
+        }
+        break __inline_StrUtf8ByteIter__collect_0: result;
+    };
     __assert_0: {
-        let __v0: i32 = __inline_Array_u8___len_0: {
-            break __inline_Array_u8___len_0: bytes.used;
+        let __v0: i32 = __inline_Array_u8___len_1: {
+            break __inline_Array_u8___len_1: bytes.used;
         };
         let __cond: bool = (__v0 == 3);
         if !__cond {
@@ -15,36 +22,37 @@ fn run() with Stdout {
         }
     }
     __assert_1: {
-        let __v0: u8 = __inline_Array_u8__IndexValue__index_value_1: {
-            break __inline_Array_u8__IndexValue__index_value_1: core::builtin::array_get::<u8>(bytes.repr, 0);
-        };
+        let __v0: u8 = "Array<u8>^IndexValue::index_value"(&bytes, 0);
         let __cond: bool = (__v0 == 'H' as u8);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(9)), move "\ncondition: bytes[0] == 'H' as Named(NamedType { name: \"u8\", span: Span { start: 335, end: 337, line: 9, column: 31, end_line: 9 } })\n"), move "bytes[0]: "), move "u8::to_string"(__v0)), move "\n"));
         }
     }
     __assert_2: {
-        let __v0: u8 = __inline_Array_u8__IndexValue__index_value_2: {
-            break __inline_Array_u8__IndexValue__index_value_2: core::builtin::array_get::<u8>(bytes.repr, 1);
-        };
+        let __v0: u8 = "Array<u8>^IndexValue::index_value"(&bytes, 1);
         let __cond: bool = (__v0 == 'i' as u8);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(10)), move "\ncondition: bytes[1] == 'i' as Named(NamedType { name: \"u8\", span: Span { start: 369, end: 371, line: 10, column: 31, end_line: 10 } })\n"), move "bytes[1]: "), move "u8::to_string"(__v0)), move "\n"));
         }
     }
     __assert_3: {
-        let __v0: u8 = __inline_Array_u8__IndexValue__index_value_3: {
-            break __inline_Array_u8__IndexValue__index_value_3: core::builtin::array_get::<u8>(bytes.repr, 2);
-        };
+        let __v0: u8 = "Array<u8>^IndexValue::index_value"(&bytes, 2);
         let __cond: bool = (__v0 == '!' as u8);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(11)), move "\ncondition: bytes[2] == '!' as Named(NamedType { name: \"u8\", span: Span { start: 403, end: 405, line: 11, column: 31, end_line: 11 } })\n"), move "bytes[2]: "), move "u8::to_string"(__v0)), move "\n"));
         }
     }
-    let chars: Array<char> = move "StrCharIter::collect"(&mut "String::chars"(&s));
+    let chars: Array<char> = __inline_StrCharIter__collect_2: {
+        let self: &mut StrCharIter = &mut "String::chars"(&s);
+        let mut result: Array<char> = move [];
+        while let Some(item) = "StrCharIter^Iterator::next"(self) {
+            "Array<char>::append"(&mut result, item);
+        }
+        break __inline_StrCharIter__collect_2: result;
+    };
     __assert_4: {
-        let __v0: i32 = __inline_Array_char___len_4: {
-            break __inline_Array_char___len_4: chars.used;
+        let __v0: i32 = __inline_Array_char___len_3: {
+            break __inline_Array_char___len_3: chars.used;
         };
         let __cond: bool = (__v0 == 3);
         if !__cond {
@@ -52,37 +60,38 @@ fn run() with Stdout {
         }
     }
     __assert_5: {
-        let __v0: char = __inline_Array_char__IndexValue__index_value_5: {
-            break __inline_Array_char__IndexValue__index_value_5: core::builtin::array_get::<char>(chars.repr, 0);
-        };
+        let __v0: char = "Array<char>^IndexValue::index_value"(&chars, 0);
         let __cond: bool = (__v0 == 'H');
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(16)), move "\ncondition: chars[0] == 'H'\n"), move "chars[0]: "), move "char::to_string"(__v0)), move "\n"));
         }
     }
     __assert_6: {
-        let __v0: char = __inline_Array_char__IndexValue__index_value_6: {
-            break __inline_Array_char__IndexValue__index_value_6: core::builtin::array_get::<char>(chars.repr, 1);
-        };
+        let __v0: char = "Array<char>^IndexValue::index_value"(&chars, 1);
         let __cond: bool = (__v0 == 'i');
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(17)), move "\ncondition: chars[1] == 'i'\n"), move "chars[1]: "), move "char::to_string"(__v0)), move "\n"));
         }
     }
     __assert_7: {
-        let __v0: char = __inline_Array_char__IndexValue__index_value_7: {
-            break __inline_Array_char__IndexValue__index_value_7: core::builtin::array_get::<char>(chars.repr, 2);
-        };
+        let __v0: char = "Array<char>^IndexValue::index_value"(&chars, 2);
         let __cond: bool = (__v0 == '!');
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(18)), move "\ncondition: chars[2] == '!'\n"), move "chars[2]: "), move "char::to_string"(__v0)), move "\n"));
         }
     }
     let utf8: String = move "日😀";
-    let utf8_chars: Array<char> = move "StrCharIter::collect"(&mut "String::chars"(&utf8));
+    let utf8_chars: Array<char> = __inline_StrCharIter__collect_4: {
+        let self: &mut StrCharIter = &mut "String::chars"(&utf8);
+        let mut result: Array<char> = move [];
+        while let Some(item) = "StrCharIter^Iterator::next"(self) {
+            "Array<char>::append"(&mut result, item);
+        }
+        break __inline_StrCharIter__collect_4: result;
+    };
     __assert_8: {
-        let __v0: i32 = __inline_Array_char___len_8: {
-            break __inline_Array_char___len_8: utf8_chars.used;
+        let __v0: i32 = __inline_Array_char___len_5: {
+            break __inline_Array_char___len_5: utf8_chars.used;
         };
         let __cond: bool = (__v0 == 2);
         if !__cond {
@@ -90,45 +99,62 @@ fn run() with Stdout {
         }
     }
     __assert_9: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_9: {
-            break __inline_Array_char__IndexValue__index_value_9: core::builtin::array_get::<char>(utf8_chars.repr, 0);
-        } as i32 == 0x65E5);
+        let __cond: bool = ("Array<char>^IndexValue::index_value"(&utf8_chars, 0) as i32 == 0x65E5);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(24)), move "\ncondition: utf8_chars[0] as Named(NamedType { name: \"i32\", span: Span { start: 827, end: 830, line: 24, column: 29, end_line: 24 } }) == 0x65E5\n"));
         }
     }
     __assert_10: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_10: {
-            break __inline_Array_char__IndexValue__index_value_10: core::builtin::array_get::<char>(utf8_chars.repr, 1);
-        } as i32 == 0x1F600);
+        let __cond: bool = ("Array<char>^IndexValue::index_value"(&utf8_chars, 1) as i32 == 0x1F600);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(25)), move "\ncondition: utf8_chars[1] as Named(NamedType { name: \"i32\", span: Span { start: 878, end: 881, line: 25, column: 29, end_line: 25 } }) == 0x1F600\n"));
         }
     }
-    let utf8_bytes: Array<u8> = move "StrUtf8ByteIter::collect"(&mut "String::bytes"(&utf8));
+    let utf8_bytes: Array<u8> = __inline_StrUtf8ByteIter__collect_6: {
+        let self: &mut StrUtf8ByteIter = &mut "String::bytes"(&utf8);
+        let mut result: Array<u8> = move [];
+        while let Some(item) = "StrUtf8ByteIter^Iterator::next"(self) {
+            "Array<u8>::append"(&mut result, item);
+        }
+        break __inline_StrUtf8ByteIter__collect_6: result;
+    };
     __assert_11: {
-        let __v0: i32 = __inline_Array_u8___len_11: {
-            break __inline_Array_u8___len_11: utf8_bytes.used;
+        let __v0: i32 = __inline_Array_u8___len_7: {
+            break __inline_Array_u8___len_7: utf8_bytes.used;
         };
         let __cond: bool = (__v0 == 7);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(30)), move "\ncondition: utf8_bytes.len() == 7\n"), move "utf8_bytes.len(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
-    let empty_bytes: Array<u8> = move "StrUtf8ByteIter::collect"(&mut "String::bytes"(&""));
+    let empty_bytes: Array<u8> = __inline_StrUtf8ByteIter__collect_8: {
+        let self: &mut StrUtf8ByteIter = &mut "String::bytes"(&"");
+        let mut result: Array<u8> = move [];
+        while let Some(item) = "StrUtf8ByteIter^Iterator::next"(self) {
+            "Array<u8>::append"(&mut result, item);
+        }
+        break __inline_StrUtf8ByteIter__collect_8: result;
+    };
     __assert_12: {
-        let __v0: i32 = __inline_Array_u8___len_12: {
-            break __inline_Array_u8___len_12: empty_bytes.used;
+        let __v0: i32 = __inline_Array_u8___len_9: {
+            break __inline_Array_u8___len_9: empty_bytes.used;
         };
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_iter_collect.wado"), move ":"), move "i32::to_string"(34)), move "\ncondition: empty_bytes.len() == 0\n"), move "empty_bytes.len(): "), move "i32::to_string"(__v0)), move "\n"));
         }
     }
-    let empty_chars: Array<char> = move "StrCharIter::collect"(&mut "String::chars"(&""));
+    let empty_chars: Array<char> = __inline_StrCharIter__collect_10: {
+        let self: &mut StrCharIter = &mut "String::chars"(&"");
+        let mut result: Array<char> = move [];
+        while let Some(item) = "StrCharIter^Iterator::next"(self) {
+            "Array<char>::append"(&mut result, item);
+        }
+        break __inline_StrCharIter__collect_10: result;
+    };
     __assert_13: {
-        let __v0: i32 = __inline_Array_char___len_13: {
-            break __inline_Array_char___len_13: empty_chars.used;
+        let __v0: i32 = __inline_Array_char___len_11: {
+            break __inline_Array_char___len_11: empty_chars.used;
         };
         let __cond: bool = (__v0 == 0);
         if !__cond {
@@ -136,5 +162,13 @@ fn run() with Stdout {
         }
     }
     core::cli::println(move "collect tests passed");
+}
+
+fn "Array<char>^IndexValue::index_value"(self: &Array<char>, index: i32) -> char {
+    return core::builtin::array_get::<char>(self.repr, index);
+}
+
+fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
+    return core::builtin::array_get::<u8>(self.repr, index);
 }
 

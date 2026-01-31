@@ -5226,12 +5226,20 @@ impl<'a> Resolver<'a> {
                     name,
                     module_source,
                     ..
-                } => (name.clone(), module_source.to_path(), Some(module_source.clone())),
+                } => (
+                    name.clone(),
+                    module_source.to_path(),
+                    Some(module_source.clone()),
+                ),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
                     ..
-                } => (name.clone(), module_source.to_path(), Some(module_source.clone())),
+                } => (
+                    name.clone(),
+                    module_source.to_path(),
+                    Some(module_source.clone()),
+                ),
                 _ => (self.mangle_type_name(base_type_id), vec![], None),
             };
 

@@ -14,15 +14,23 @@ fn run() with Stdout {
     "String::append"(&mut builder, move "World!");
     core::cli::println(builder);
     let mut s: String = move "String::with_capacity"(10);
-    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"("String::len"(&s))));
+    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"(__inline_String__len_0: {
+        break __inline_String__len_0: s.used;
+    })));
     "String::append"(&mut s, move "Hi");
-    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"("String::len"(&s))));
+    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"(__inline_String__len_1: {
+        break __inline_String__len_1: s.used;
+    })));
     let empty: String = move "String::with_capacity"(0);
-    if "String::is_empty"(&empty) {
+    if __inline_String__is_empty_2: {
+        break __inline_String__is_empty_2: (empty.used == 0);
+    } {
         core::cli::println(move "empty is empty");
     }
     let nonempty: String = move "test";
-    if !"String::is_empty"(&nonempty) {
+    if !__inline_String__is_empty_3: {
+        break __inline_String__is_empty_3: (nonempty.used == 0);
+    } {
         core::cli::println(move "nonempty is not empty");
     }
 }

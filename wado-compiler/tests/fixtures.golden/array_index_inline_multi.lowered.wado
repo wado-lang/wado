@@ -10,53 +10,43 @@ struct "Container<String>" {
 fn run() with Stdout {
     let c: Container<String> = move Container<String> { items: ["apple", "banana", "cherry"], markers: [true, false, true] };
     let item0: String = __inline_Container_String___get_item_0: {
-        break __inline_Container_String___get_item_0: __inline_Array_String__IndexValue__index_value_1: {
-            let self: &Array<String> = &c.items;
-            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, 0);
-        };
+        break __inline_Container_String___get_item_0: "Array<String>^IndexValue::index_value"(&c.items, 0);
     };
-    let item1: String = __inline_Container_String___get_item_2: {
-        break __inline_Container_String___get_item_2: __inline_Array_String__IndexValue__index_value_3: {
-            let self: &Array<String> = &c.items;
-            break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, 1);
-        };
+    let item1: String = __inline_Container_String___get_item_1: {
+        break __inline_Container_String___get_item_1: "Array<String>^IndexValue::index_value"(&c.items, 1);
     };
-    let item2: String = __inline_Container_String___get_item_4: {
-        break __inline_Container_String___get_item_4: __inline_Array_String__IndexValue__index_value_5: {
-            let self: &Array<String> = &c.items;
-            break __inline_Array_String__IndexValue__index_value_5: core::builtin::array_get::<String>(self.repr, 2);
-        };
+    let item2: String = __inline_Container_String___get_item_2: {
+        break __inline_Container_String___get_item_2: "Array<String>^IndexValue::index_value"(&c.items, 2);
     };
-    let flag0: bool = __inline_Container_String___is_flagged_6: {
-        break __inline_Container_String___is_flagged_6: __inline_Array_bool__IndexValue__index_value_7: {
-            let self: &Array<bool> = &c.markers;
-            break __inline_Array_bool__IndexValue__index_value_7: core::builtin::array_get::<bool>(self.repr, 0);
-        };
+    let flag0: bool = __inline_Container_String___is_flagged_3: {
+        break __inline_Container_String___is_flagged_3: "Array<bool>^IndexValue::index_value"(&c.markers, 0);
     };
-    let flag1: bool = __inline_Container_String___is_flagged_8: {
-        break __inline_Container_String___is_flagged_8: __inline_Array_bool__IndexValue__index_value_9: {
-            let self: &Array<bool> = &c.markers;
-            break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(self.repr, 1);
-        };
+    let flag1: bool = __inline_Container_String___is_flagged_4: {
+        break __inline_Container_String___is_flagged_4: "Array<bool>^IndexValue::index_value"(&c.markers, 1);
     };
-    let count: i32 = __inline_Container_String___count_flagged_10: {
+    let count: i32 = __inline_Container_String___count_flagged_5: {
         let mut count: i32 = 0;
         for let mut i: i32 = 0; (i < "Array<bool>::len"(&c.markers)); i = (i + 1) {
-            if __inline_Array_bool__IndexValue__index_value_11: {
-                let self: &Array<bool> = &c.markers;
-                break __inline_Array_bool__IndexValue__index_value_11: core::builtin::array_get::<bool>(self.repr, i);
-            } {
+            if "Array<bool>^IndexValue::index_value"(&c.markers, i) {
                 count = (count + 1);
             }
         }
-        break __inline_Container_String___count_flagged_10: count;
+        break __inline_Container_String___count_flagged_5: count;
     };
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "items: ", item0), move ", "), item1), move ", "), item2));
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "flags: ", move "bool::to_string"(flag0)), move ", "), move "bool::to_string"(flag1)));
     core::cli::println(move "String::concat"(move "count: ", move "i32::to_string"(count)));
 }
 
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    return core::builtin::array_get::<bool>(self.repr, index);
+}
+
 pub fn "Array<bool>::len"(self: &Array<bool>) -> i32 {
     return self.used;
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
+    return core::builtin::array_get::<String>(self.repr, index);
 }
 

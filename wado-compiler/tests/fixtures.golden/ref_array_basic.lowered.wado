@@ -4,18 +4,21 @@
 
 fn run() with Stdout {
     let mut nums: Array<i32> = move [1, 2, 3];
-    let before: i32 = __inline_Array_i32__IndexValue__index_value_0: {
-        break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(nums.repr, 0);
-    };
+    let before: i32 = "Array<i32>^IndexValue::index_value"(&nums, 0);
     core::cli::println(move "String::concat"(move "before: ", move "i32::to_string"(before)));
-    __inline_modify_array_1: {
-        __inline_Array_i32__IndexAssign__index_assign_2: {
-            core::builtin::array_set::<i32>(nums.repr, 0, 100);
-        };
+    __inline_modify_array_0: {
+        let arr: &mut Array<i32> = &mut nums;
+        "Array<i32>^IndexAssign::index_assign"(arr, 0, 100);
     };
-    let after: i32 = __inline_Array_i32__IndexValue__index_value_3: {
-        break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(nums.repr, 0);
-    };
+    let after: i32 = "Array<i32>^IndexValue::index_value"(&nums, 0);
     core::cli::println(move "String::concat"(move "after: ", move "i32::to_string"(after)));
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    return core::builtin::array_get::<i32>(self.repr, index);
+}
+
+fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
+    core::builtin::array_set::<i32>(self.repr, index, value);
 }
 

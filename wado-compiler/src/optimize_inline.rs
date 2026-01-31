@@ -85,7 +85,10 @@ fn is_inline_eligible(
         return false;
     }
     // Don't inline functions returning BuiltinArray - TypeIds may be incompatible
-    if matches!(type_table.get(func.return_type), ResolvedType::BuiltinArray(_)) {
+    if matches!(
+        type_table.get(func.return_type),
+        ResolvedType::BuiltinArray(_)
+    ) {
         return false;
     }
 
@@ -437,8 +440,8 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
     }
 }
 
-/// Check if any expression in the function body has a BuiltinArray type.
-/// BuiltinArray types have module-specific TypeIds that can cause issues when inlining.
+/// Check if any expression in the function body has a `BuiltinArray` type.
+/// `BuiltinArray` types have module-specific `TypeIds` that can cause issues when inlining.
 fn body_has_builtin_array_types(body: &TirBlock, type_table: &TypeTable) -> bool {
     for stmt in &body.stmts {
         if stmt_has_builtin_array_types(stmt, type_table) {
@@ -475,7 +478,9 @@ fn stmt_has_builtin_array_types(stmt: &TirStmt, type_table: &TypeTable) -> bool 
                     .as_ref()
                     .is_some_and(|b| block_has_builtin_array_types(b, type_table))
         }
-        TirStmtKind::While { condition, body, .. } => {
+        TirStmtKind::While {
+            condition, body, ..
+        } => {
             expr_has_builtin_array_types(condition, type_table)
                 || block_has_builtin_array_types(body, type_table)
         }
@@ -549,16 +554,20 @@ fn expr_has_builtin_array_types(expr: &TirExpr, type_table: &TypeTable) -> bool 
     match &expr.kind {
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
-            args.iter().any(|a| expr_has_builtin_array_types(a, type_table))
-        }
+        | TirExprKind::EffectCall { args, .. } => args
+            .iter()
+            .any(|a| expr_has_builtin_array_types(a, type_table)),
         TirExprKind::MethodCall { receiver, args, .. } => {
             expr_has_builtin_array_types(receiver, type_table)
-                || args.iter().any(|a| expr_has_builtin_array_types(a, type_table))
+                || args
+                    .iter()
+                    .any(|a| expr_has_builtin_array_types(a, type_table))
         }
         TirExprKind::IndirectCall { callee, args } => {
             expr_has_builtin_array_types(callee, type_table)
-                || args.iter().any(|a| expr_has_builtin_array_types(a, type_table))
+                || args
+                    .iter()
+                    .any(|a| expr_has_builtin_array_types(a, type_table))
         }
         TirExprKind::Assign { target, value } => {
             expr_has_builtin_array_types(target, type_table)

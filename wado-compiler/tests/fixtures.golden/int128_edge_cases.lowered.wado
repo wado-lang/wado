@@ -25,10 +25,16 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "i128 max_i64: ", move "i128::to_string"(i128_max_i64)));
     let i128_min_i64: i128 = move "i128::from_i64"(-9223372036854775808 as i64);
     core::cli::println(move "String::concat"(move "i128 min_i64: ", move "i128::to_string"(i128_min_i64)));
-    if (("u128::low"(&u128_max) == 18446744073709551615 as u64) && ("u128::high"(&u128_max) == 18446744073709551615 as u64)) {
+    if ((__inline_u128__low_0: {
+        break __inline_u128__low_0: u128_max.low;
+    } == 18446744073709551615 as u64) && (__inline_u128__high_1: {
+        break __inline_u128__high_1: u128_max.high;
+    } == 18446744073709551615 as u64)) {
         core::cli::println(move "u128 max low/high correct");
     }
-    if "i128::is_negative"(&i128_min) {
+    if __inline_i128__is_negative_2: {
+        break __inline_i128__is_negative_2: (i128_min.high < 0 as i64);
+    } {
         core::cli::println(move "i128 min is negative");
     }
     core::cli::println(move "All edge case tests passed!");

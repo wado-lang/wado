@@ -4,34 +4,20 @@
 
 fn run() with Stdout {
     let mut strings: Array<String> = move ["a", "b", "c"];
-    __inline_Array_String__IndexAssign__index_assign_0: {
-        let value: String = move "hello";
-        core::builtin::array_set::<String>(strings.repr, 0, value);
-    };
-    __inline_Array_String__IndexAssign__index_assign_1: {
-        let value: String = move "world";
-        core::builtin::array_set::<String>(strings.repr, 1, value);
-    };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(__inline_Array_String__IndexValue__index_value_2: {
-        break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(strings.repr, 0);
-    }, move " "), __inline_Array_String__IndexValue__index_value_3: {
-        break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(strings.repr, 1);
-    }), move " "), __inline_Array_String__IndexValue__index_value_4: {
-        break __inline_Array_String__IndexValue__index_value_4: core::builtin::array_get::<String>(strings.repr, 2);
-    }));
+    "Array<String>^IndexAssign::index_assign"(&mut strings, 0, move "hello");
+    "Array<String>^IndexAssign::index_assign"(&mut strings, 1, move "world");
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Array<String>^IndexValue::index_value"(&strings, 0), move " "), move "Array<String>^IndexValue::index_value"(&strings, 1)), move " "), move "Array<String>^IndexValue::index_value"(&strings, 2)));
     let mut messages: Array<String> = move ["", ""];
-    __inline_Array_String__IndexAssign__index_assign_5: {
-        let value: String = move "first";
-        core::builtin::array_set::<String>(messages.repr, 0, value);
-    };
-    __inline_Array_String__IndexAssign__index_assign_6: {
-        let value: String = move "second";
-        core::builtin::array_set::<String>(messages.repr, 1, value);
-    };
-    core::cli::println(move "String::concat"(move "String::concat"(__inline_Array_String__IndexValue__index_value_7: {
-        break __inline_Array_String__IndexValue__index_value_7: core::builtin::array_get::<String>(messages.repr, 0);
-    }, move " "), __inline_Array_String__IndexValue__index_value_8: {
-        break __inline_Array_String__IndexValue__index_value_8: core::builtin::array_get::<String>(messages.repr, 1);
-    }));
+    "Array<String>^IndexAssign::index_assign"(&mut messages, 0, move "first");
+    "Array<String>^IndexAssign::index_assign"(&mut messages, 1, move "second");
+    core::cli::println(move "String::concat"(move "String::concat"(move "Array<String>^IndexValue::index_value"(&messages, 0), move " "), move "Array<String>^IndexValue::index_value"(&messages, 1)));
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
+    return core::builtin::array_get::<String>(self.repr, index);
+}
+
+fn "Array<String>^IndexAssign::index_assign"(self: &mut Array<String>, index: i32, value: String) {
+    core::builtin::array_set::<String>(self.repr, index, value);
 }
 

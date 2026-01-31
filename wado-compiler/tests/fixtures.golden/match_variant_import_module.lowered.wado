@@ -10,11 +10,15 @@ pub struct FormatSpec {
 
 pub fn apply_padding(s: String, spec: FormatSpec) -> String {
     let width: i32 = spec.width;
-    if ((width <= 0) || ("String::len"(&s) >= width)) {
+    if ((width <= 0) || (__inline_String__len_0: {
+        break __inline_String__len_0: s.used;
+    } >= width)) {
         return s;
     }
     let fill: char = spec.fill;
-    let pad_len: i32 = (width - "String::len"(&s));
+    let pad_len: i32 = (width - __inline_String__len_1: {
+        break __inline_String__len_1: s.used;
+    });
     let mut result: String = move "String::with_capacity"(width);
     return match spec.align {
         Left => {
