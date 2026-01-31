@@ -16,7 +16,9 @@ use indexmap::IndexMap;
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
-use crate::name::{LocalMethodName, ModuleSource, mangle_generic_name, strip_type_params};
+use crate::name::{
+    self as name, LocalMethodName, ModuleSource, mangle_generic_name, strip_type_params,
+};
 
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
@@ -488,6 +490,8 @@ pub struct Resolver<'a> {
     builtin_registry: BuiltinRegistry,
     /// Global variables in the current module (name -> (type, `is_mutable`))
     current_module_globals: HashMap<String, (TypeId, bool)>,
+    /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
+    imported_globals: HashMap<String, (ModuleSource, String, TypeId, bool)>,
 }
 
 /// Info about an Index trait implementation
@@ -577,6 +581,7 @@ impl<'a> Resolver<'a> {
             wasi_registry,
             builtin_registry,
             current_module_globals: HashMap::new(),
+            imported_globals: HashMap::new(),
         }
     }
 
@@ -599,11 +604,54 @@ impl<'a> Resolver<'a> {
 
         // Collect global variable names and types (before resolving functions that may reference them)
         self.current_module_globals.clear();
+        self.imported_globals.clear();
         for item in &module.items {
             if let Item::Global(global_decl) = item {
                 let ty = self.resolve_type(&global_decl.ty);
                 self.current_module_globals
                     .insert(global_decl.name.clone(), (ty, global_decl.mutable));
+            }
+        }
+
+        // Also collect imported globals from use declarations
+        for item in &module.items {
+            if let Item::Use(use_decl) = item {
+                let source_module_path =
+                    name::resolve_import_path(&module_source.to_path(), &use_decl.source);
+                let source_module_source = ModuleSource::from_path(&source_module_path);
+
+                // Look up the source module to find global declarations
+                if let Some(source_module) = self.loaded_modules.get(&source_module_path) {
+                    for use_item in &use_decl.items {
+                        if let ast::UseItem::Simple { name, alias } = use_item {
+                            // Check if this import refers to a global variable
+                            if let Some(symbol) =
+                                self.symbols.lookup_in_module(&source_module_path, name)
+                                && let crate::symbol::SymbolKind::Global(global_sym) = &symbol.kind
+                            {
+                                // Find the global declaration in the source module to get its type
+                                for src_item in &source_module.items {
+                                    if let Item::Global(global_decl) = src_item
+                                        && &global_decl.name == name
+                                    {
+                                        let ty = self.resolve_type(&global_decl.ty);
+                                        let local_name = alias.as_ref().unwrap_or(name).clone();
+                                        self.imported_globals.insert(
+                                            local_name,
+                                            (
+                                                source_module_source.clone(),
+                                                name.clone(),
+                                                ty,
+                                                global_sym.is_mut,
+                                            ),
+                                        );
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1032,6 +1080,7 @@ impl<'a> Resolver<'a> {
                 wasi_registry,
                 builtin_registry,
                 current_module_globals: HashMap::new(),
+                imported_globals: HashMap::new(),
             };
 
             // Use the provided entry_module_source for the entry module (empty path)
@@ -3703,7 +3752,7 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Check for global variables
+        // Check for global variables in current module
         if let Some(&(ty, _mutable)) = self.current_module_globals.get(&ident.name) {
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
@@ -3711,6 +3760,20 @@ impl<'a> Resolver<'a> {
                     name: ident.name.clone(),
                 },
                 ty,
+                ident.span,
+            );
+        }
+
+        // Check for imported global variables
+        if let Some((source_module, original_name, ty, _mutable)) =
+            self.imported_globals.get(&ident.name)
+        {
+            return TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source: source_module.clone(),
+                    name: original_name.clone(),
+                },
+                *ty,
                 ident.span,
             );
         }
@@ -4360,9 +4423,22 @@ impl<'a> Resolver<'a> {
             name,
         } = &target.kind
         {
-            // Check if the global is mutable
-            if let Some(&(_, is_mutable)) = self.current_module_globals.get(name) {
-                if !is_mutable {
+            // Check if the global is mutable (check both local and imported globals)
+            let is_mutable = self
+                .current_module_globals
+                .get(name)
+                .map(|(_, m)| *m)
+                .or_else(|| {
+                    // For imported globals, the name in the TIR is the original name from source
+                    // We need to find it by iterating through imported_globals
+                    self.imported_globals
+                        .values()
+                        .find(|(src, orig_name, _, _)| src == module_source && orig_name == name)
+                        .map(|(_, _, _, m)| *m)
+                });
+
+            if let Some(is_mut) = is_mutable {
+                if !is_mut {
                     self.errors.push(TypeError::CannotAssign {
                         message: format!("cannot assign to immutable global variable '{name}'"),
                         span: assign.target.span(),
@@ -8710,7 +8786,9 @@ impl<'a> Resolver<'a> {
         let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
-            .map(|arm| self.resolve_match_arm_with_expected_type(arm, scrutinee_type, ctx, expected_type))
+            .map(|arm| {
+                self.resolve_match_arm_with_expected_type(arm, scrutinee_type, ctx, expected_type)
+            })
             .collect();
 
         TirExpr::new(

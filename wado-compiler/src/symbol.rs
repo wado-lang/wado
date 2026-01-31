@@ -69,6 +69,8 @@ pub enum SymbolKind {
     Resource(ResourceSymbol),
     /// A world definition
     World(WorldSymbol),
+    /// A global variable
+    Global(GlobalSymbol),
 }
 
 /// Function symbol data
@@ -146,6 +148,13 @@ pub struct VariableSymbol {
     pub is_mut: bool,
     /// Whether the variable is reactive
     pub is_reactive: bool,
+}
+
+/// Global variable symbol data
+#[derive(Debug, Clone)]
+pub struct GlobalSymbol {
+    /// Whether the global is mutable
+    pub is_mut: bool,
 }
 
 /// Resource symbol data

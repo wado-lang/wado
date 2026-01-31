@@ -504,6 +504,13 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 wado_compiler::symbol::SymbolKind::Trait(t) => {
                     format!("trait{{ {} }}", t.methods.join(", "))
                 }
+                wado_compiler::symbol::SymbolKind::Global(g) => {
+                    if g.is_mut {
+                        "global mut".to_string()
+                    } else {
+                        "global".to_string()
+                    }
+                }
             };
             println!(
                 "  [{}] {} :: {} = {}",
