@@ -5,6 +5,22 @@
 // implemented in Wado itself rather than as inline Wasm instructions,
 // making the codegen simpler and the compiler more maintainable.
 
+/// Copy bytes from linear memory to a new GC array
+pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
+    let arr = builtin::array_new::<u8>(len);
+    for (let mut i = 0; i < len; i += 1) {
+        builtin::array_set_u8(arr, i, builtin::memory_load8_u(ptr + i));
+    }
+    return arr;
+}
+
+/// Copy bytes from a GC array to linear memory
+pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
+    for (let mut i = 0; i < len; i += 1) {
+        builtin::memory_store8(ptr + i, builtin::array_get_u8(arr, i));
+    }
+}
+
 /// Convert f64 to String using the bundled float-to-string algorithm
 pub fn f64_to_string(value: f64) -> String {
     // Allocate linear memory buffer (24 bytes max for f64)
@@ -13,12 +29,7 @@ pub fn f64_to_string(value: f64) -> String {
     // Convert float to bytes in linear memory
     let len = builtin::f64_to_buffer(value, ptr);
 
-    // Create GC array and copy from linear memory
-    let arr = builtin::array_new::<u8>(len);
-    for (let mut i = 0; i < len; i += 1) {
-        let byte = builtin::memory_load8_u(ptr + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(ptr, len);
 
     // Free linear memory buffer
     builtin::realloc(ptr, 24, 1, 0);
@@ -34,12 +45,7 @@ pub fn f32_to_string(value: f32) -> String {
     // Convert float to bytes in linear memory
     let len = builtin::f32_to_buffer(value, ptr);
 
-    // Create GC array and copy from linear memory
-    let arr = builtin::array_new::<u8>(len);
-    for (let mut i = 0; i < len; i += 1) {
-        let byte = builtin::memory_load8_u(ptr + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(ptr, len);
 
     // Free linear memory buffer
     builtin::realloc(ptr, 16, 1, 0);
@@ -85,11 +91,7 @@ pub fn i32_to_string(value: i32) -> String {
 
     // Calculate length and copy to GC array
     let len = 11 - pos;
-    let arr = builtin::array_new::<u8>(len);
-    for (let mut i = 0; i < len; i += 1) {
-        let byte = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(ptr + pos, len);
 
     // Free linear memory buffer
     builtin::realloc(ptr, 12, 1, 0);
@@ -130,11 +132,7 @@ pub fn u32_to_string(value: i32) -> String {
 
     // Calculate length and copy to GC array
     let len: i32 = 10 - pos;
-    let arr = builtin::array_new::<u8>(len);
-    for (let mut i: i32 = 0; i < len; i += 1) {
-        let byte = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(ptr + pos, len);
 
     // Free linear memory buffer
     builtin::realloc(ptr, 11, 1, 0);
@@ -185,11 +183,7 @@ pub fn i64_to_string(value: i64) -> String {
 
     // Calculate length and copy to GC array
     let len: i32 = 20 - pos;
-    let arr = builtin::array_new::<u8>(len);
-    for (let mut i: i32 = 0; i < len; i += 1) {
-        let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(ptr + pos, len);
 
     // Free linear memory buffer
     builtin::realloc(ptr, 21, 1, 0);
@@ -255,11 +249,7 @@ pub fn u64_to_string(value: i64) -> String {
 
     // Calculate length and copy to GC array
     let len: i32 = 20 - pos;
-    let arr = builtin::array_new::<u8>(len);
-    for (let mut i: i32 = 0; i < len; i += 1) {
-        let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(ptr + pos, len);
 
     // Free linear memory buffer
     builtin::realloc(ptr, 21, 1, 0);
@@ -295,11 +285,7 @@ pub fn u128_to_string(value: u128) -> String {
 
     // Calculate length and copy to GC array
     let len: i32 = 39 - pos;
-    let arr = builtin::array_new::<u8>(len);
-    for (let mut i: i32 = 0; i < len; i += 1) {
-        let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(ptr + pos, len);
 
     // Free linear memory buffer
     builtin::realloc(ptr, 40, 1, 0);
@@ -388,10 +374,7 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
     let msg_bytes = message.internal_raw_bytes();
     let alloc_size = if add_newline { len + 1 } else { len };
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
-    for (let mut i = 0; i < len; i += 1) {
-        let byte = builtin::array_get_u8(msg_bytes, i);
-        builtin::memory_store8(ptr + i, byte);
-    }
+    gc_array_to_memory(msg_bytes, ptr, len);
     if add_newline {
         builtin::memory_store8(ptr + len, '\n');
     }
@@ -446,12 +429,7 @@ pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
         let str_ptr = builtin::memory_load32(base_ptr + i * 8);
         let str_len = builtin::memory_load32(base_ptr + i * 8 + 4);
 
-        // Create GC array and copy bytes from linear memory
-        let arr = builtin::array_new::<u8>(str_len);
-        for (let mut j = 0; j < str_len; j += 1) {
-            let byte = builtin::memory_load8_u(str_ptr + j);
-            builtin::array_set_u8(arr, j, byte);
-        }
+        let arr = memory_to_gc_array(str_ptr, str_len);
 
         result.append(String::internal_from_utf8_raw(arr, str_len));
     }
@@ -475,13 +453,7 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
     // Some - read string pointer and length
     let str_ptr = builtin::memory_load32(outptr + 4);
     let str_len = builtin::memory_load32(outptr + 8);
-
-    // Create GC array and copy bytes from linear memory
-    let arr = builtin::array_new::<u8>(str_len);
-    for (let mut i = 0; i < str_len; i += 1) {
-        let byte = builtin::memory_load8_u(str_ptr + i);
-        builtin::array_set_u8(arr, i, byte);
-    }
+    let arr = memory_to_gc_array(str_ptr, str_len);
 
     return String::internal_from_utf8_raw(arr, str_len);
 }
@@ -509,20 +481,12 @@ pub fn cm_list_tuple_string_string_to_array(outptr: i32) -> Array<[String, Strin
         // Read first string
         let str1_ptr = builtin::memory_load32(tuple_offset);
         let str1_len = builtin::memory_load32(tuple_offset + 4);
-        let arr1 = builtin::array_new::<u8>(str1_len);
-        for (let mut j = 0; j < str1_len; j += 1) {
-            let byte = builtin::memory_load8_u(str1_ptr + j);
-            builtin::array_set_u8(arr1, j, byte);
-        }
+        let arr1 = memory_to_gc_array(str1_ptr, str1_len);
 
         // Read second string
         let str2_ptr = builtin::memory_load32(tuple_offset + 8);
         let str2_len = builtin::memory_load32(tuple_offset + 12);
-        let arr2 = builtin::array_new::<u8>(str2_len);
-        for (let mut j = 0; j < str2_len; j += 1) {
-            let byte = builtin::memory_load8_u(str2_ptr + j);
-            builtin::array_set_u8(arr2, j, byte);
-        }
+        let arr2 = memory_to_gc_array(str2_ptr, str2_len);
 
         result.append([String::internal_from_utf8_raw(arr1, str1_len), String::internal_from_utf8_raw(arr2, str2_len)]);
     }
