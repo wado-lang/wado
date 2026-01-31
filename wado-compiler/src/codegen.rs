@@ -33,10 +33,10 @@ use std::collections::{HashMap, HashSet};
 use wasm_encoder::{
     AbstractHeapType, Alias, BlockType, BranchHint, BranchHints, CanonicalOption, CodeSection,
     ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr,
-    DataCountSection, DataSection, DataSegment, DataSegmentMode, ElementSection, Elements,
-    ExportKind, ExportSection, FieldType, Function, FunctionSection, HeapType, InstanceType,
-    Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
-    PrimitiveValType, RefType, StorageType, TypeBounds, TypeSection, ValType,
+    DataCountSection, DataSection, ElementSection, Elements, ExportKind, ExportSection, FieldType,
+    Function, FunctionSection, HeapType, InstanceType, Instruction, MemArg, MemorySection,
+    MemoryType, Module, ModuleArg, NameMap, NameSection, PrimitiveValType, RefType, StorageType,
+    TypeBounds, TypeSection, ValType,
 };
 use wasmparser::{Validator, WasmFeatures};
 
@@ -2182,7 +2182,7 @@ impl Codegen {
         // ========================================
         // Core memory module
         // ========================================
-        let mem_module = self.build_memory_module(&string_data, project.strip_names);
+        let mem_module = self.build_memory_module(project.strip_names);
         ctx.register_core_module("mem-mod");
         builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -14536,7 +14536,7 @@ impl Codegen {
     }
 
     /// Build the memory module (provides shared memory and realloc for all core modules)
-    fn build_memory_module(&self, string_data: &[u8], strip_names: bool) -> Vec<u8> {
+    fn build_memory_module(&self, strip_names: bool) -> Vec<u8> {
         let mut module = Module::new();
 
         // Type section: realloc type
@@ -14579,18 +14579,9 @@ impl Codegen {
         code.function(&realloc_func);
         module.section(&code);
 
-        // Data section: string literals
-        if !string_data.is_empty() {
-            let mut data = DataSection::new();
-            data.segment(DataSegment {
-                mode: DataSegmentMode::Active {
-                    memory_index: 0,
-                    offset: &ConstExpr::i32_const(0),
-                },
-                data: string_data.iter().copied(),
-            });
-            module.section(&data);
-        }
+        // Note: String literals are stored in the main module's passive data segment
+        // for use with array.new_data. The memory module doesn't need a copy since
+        // realloc returns offset 1024+ and no code reads from offset 0.
 
         // Name section (skip in size-optimized builds)
         if !strip_names {
