@@ -74,9 +74,18 @@ fn is_inline_eligible(
         if type_table.has_nested_generics(param.type_id) {
             return false;
         }
+        // Don't inline functions with BuiltinArray parameters - TypeIds may be
+        // incompatible when inlined across modules
+        if matches!(type_table.get(param.type_id), ResolvedType::BuiltinArray(_)) {
+            return false;
+        }
     }
     // Also check return type for nested generics
     if type_table.has_nested_generics(func.return_type) {
+        return false;
+    }
+    // Don't inline functions returning BuiltinArray - TypeIds may be incompatible
+    if matches!(type_table.get(func.return_type), ResolvedType::BuiltinArray(_)) {
         return false;
     }
 
@@ -84,6 +93,12 @@ fn is_inline_eligible(
     // This catches cases like methods on TreeMap that access fields with nested generics.
     // Fix the underlying type normalization issues to allow inlining these functions.
     if body_has_complex_generic_types(body, type_table) {
+        return false;
+    }
+
+    // Don't inline functions that use BuiltinArray types in their body
+    // TypeIds for BuiltinArray may differ between modules, causing codegen errors
+    if body_has_builtin_array_types(body, type_table) {
         return false;
     }
 
@@ -406,6 +421,196 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::GlobalVarSet { value, .. } => {
             expr_has_complex_generic_types(value, type_table)
         }
+        // Leaf nodes
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => false,
+    }
+}
+
+/// Check if any expression in the function body has a BuiltinArray type.
+/// BuiltinArray types have module-specific TypeIds that can cause issues when inlining.
+fn body_has_builtin_array_types(body: &TirBlock, type_table: &TypeTable) -> bool {
+    for stmt in &body.stmts {
+        if stmt_has_builtin_array_types(stmt, type_table) {
+            return true;
+        }
+    }
+    false
+}
+
+fn stmt_has_builtin_array_types(stmt: &TirStmt, type_table: &TypeTable) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Let { value, type_id, .. } => {
+            if matches!(type_table.get(*type_id), ResolvedType::BuiltinArray(_)) {
+                return true;
+            }
+            expr_has_builtin_array_types(value, type_table)
+        }
+        TirStmtKind::Expr(expr) => expr_has_builtin_array_types(expr, type_table),
+        TirStmtKind::Return { value } => {
+            if let Some(expr) = value {
+                return expr_has_builtin_array_types(expr, type_table);
+            }
+            false
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_has_builtin_array_types(condition, type_table)
+                || block_has_builtin_array_types(then_block, type_table)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| block_has_builtin_array_types(b, type_table))
+        }
+        TirStmtKind::While { condition, body, .. } => {
+            expr_has_builtin_array_types(condition, type_table)
+                || block_has_builtin_array_types(body, type_table)
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            block_has_builtin_array_types(body, type_table)
+        }
+        TirStmtKind::For {
+            init,
+            condition,
+            update,
+            body,
+        } => {
+            init.iter()
+                .any(|s| stmt_has_builtin_array_types(s, type_table))
+                || condition
+                    .as_ref()
+                    .is_some_and(|e| expr_has_builtin_array_types(e, type_table))
+                || update
+                    .as_ref()
+                    .is_some_and(|e| expr_has_builtin_array_types(e, type_table))
+                || block_has_builtin_array_types(body, type_table)
+        }
+        TirStmtKind::ForOf { body, .. } | TirStmtKind::WhilePattern { body, .. } => {
+            block_has_builtin_array_types(body, type_table)
+        }
+        TirStmtKind::IfPattern {
+            then_block,
+            else_block,
+            ..
+        } => {
+            block_has_builtin_array_types(then_block, type_table)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| block_has_builtin_array_types(b, type_table))
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            init.iter()
+                .any(|s| stmt_has_builtin_array_types(s, type_table))
+                || expr_has_builtin_array_types(scrutinee, type_table)
+                || update
+                    .as_ref()
+                    .is_some_and(|e| expr_has_builtin_array_types(e, type_table))
+                || block_has_builtin_array_types(body, type_table)
+        }
+        TirStmtKind::LetPattern { value, .. } => expr_has_builtin_array_types(value, type_table),
+        TirStmtKind::Break { .. } | TirStmtKind::Continue => false,
+    }
+}
+
+fn block_has_builtin_array_types(block: &TirBlock, type_table: &TypeTable) -> bool {
+    for stmt in &block.stmts {
+        if stmt_has_builtin_array_types(stmt, type_table) {
+            return true;
+        }
+    }
+    false
+}
+
+fn expr_has_builtin_array_types(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    // Check this expression's type
+    if matches!(type_table.get(expr.type_id), ResolvedType::BuiltinArray(_)) {
+        return true;
+    }
+    // Check child expressions
+    match &expr.kind {
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::EffectCall { args, .. } => {
+            args.iter().any(|a| expr_has_builtin_array_types(a, type_table))
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            expr_has_builtin_array_types(receiver, type_table)
+                || args.iter().any(|a| expr_has_builtin_array_types(a, type_table))
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            expr_has_builtin_array_types(callee, type_table)
+                || args.iter().any(|a| expr_has_builtin_array_types(a, type_table))
+        }
+        TirExprKind::Assign { target, value } => {
+            expr_has_builtin_array_types(target, type_table)
+                || expr_has_builtin_array_types(value, type_table)
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            expr_has_builtin_array_types(left, type_table)
+                || expr_has_builtin_array_types(right, type_table)
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::OptionSome { value: inner }
+        | TirExprKind::Move { value: inner } => expr_has_builtin_array_types(inner, type_table),
+        TirExprKind::Index { expr: base, index } => {
+            expr_has_builtin_array_types(base, type_table)
+                || expr_has_builtin_array_types(index, type_table)
+        }
+        TirExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .any(|f| expr_has_builtin_array_types(&f.value, type_table)),
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .any(|e| expr_has_builtin_array_types(e, type_table)),
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expr_has_builtin_array_types(condition, type_table)
+                || block_has_builtin_array_types(then_branch, type_table)
+                || else_branch
+                    .as_ref()
+                    .is_some_and(|b| block_has_builtin_array_types(b, type_table))
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block_has_builtin_array_types(block, type_table)
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            expr_has_builtin_array_types(inner, type_table)
+                || arms
+                    .iter()
+                    .any(|arm| expr_has_builtin_array_types(&arm.body, type_table))
+        }
+        TirExprKind::Closure { body, .. } => expr_has_builtin_array_types(body, type_table),
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            expr_has_builtin_array_types(functor, type_table)
+        }
+        TirExprKind::VariantConstruct { payload, .. } => payload
+            .as_ref()
+            .is_some_and(|p| expr_has_builtin_array_types(p, type_table)),
+        TirExprKind::GlobalVarSet { value, .. } => expr_has_builtin_array_types(value, type_table),
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }

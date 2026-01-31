@@ -375,7 +375,7 @@ impl<'a> EffectChecker<'a> {
     /// Get the effects required by a function
     fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<String> {
         match func_ref {
-            FunctionRef::Resolved(func_rc) => func_rc.borrow().effects.clone(),
+            FunctionRef::Resolved { func, .. } => func.borrow().effects.clone(),
             FunctionRef::External {
                 module_source,
                 name,

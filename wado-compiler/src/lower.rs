@@ -3624,7 +3624,10 @@ impl ClosureLowerer {
                     let args_owned = std::mem::take(args);
                     expr.kind = TirExprKind::MethodCall {
                         receiver: Box::new(callee_owned),
-                        func: crate::tir::FunctionRef::Resolved(Rc::clone(&functor.call_method)),
+                        func: crate::tir::FunctionRef::Resolved {
+                            func: Rc::clone(&functor.call_method),
+                            module_source: self.module_source.clone(),
+                        },
                         type_args: Vec::new(),
                         args: args_owned,
                     };
