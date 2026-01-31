@@ -943,10 +943,10 @@ impl Codegen {
                 if tir_func.name == "run" {
                     continue;
                 }
-                // Skip non-pub functions from other modules
-                if !tir_func.is_pub {
-                    continue;
-                }
+                // Note: We no longer skip non-pub functions unconditionally.
+                // Non-pub functions may be called by pub functions (e.g., __initialize_module
+                // calling module-private initialization helpers). The reachability check
+                // below will determine if the function should be included.
                 // Skip bodyless functions
                 if tir_func.body.is_none() {
                     continue;
@@ -1835,9 +1835,11 @@ impl Codegen {
             let func_idx = builder.define_func(qualified_name, qualified_name);
             let is_from_internal = module_source == &internal_source;
 
-            // Register simple name alias for all functions EXCEPT internal
-            // Internal functions require explicit import to be accessible
-            if qualified_name != &tir_func.name && !is_from_internal {
+            // Register simple name alias for all functions EXCEPT:
+            // - Internal functions (require explicit import to be accessible)
+            // - __initialize_module (each module has its own, called by qualified name)
+            let is_init_module = tir_func.name == "__initialize_module";
+            if qualified_name != &tir_func.name && !is_from_internal && !is_init_module {
                 builder.define_func_alias(&tir_func.name, func_idx);
             }
 

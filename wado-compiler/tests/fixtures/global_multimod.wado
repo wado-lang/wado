@@ -1,0 +1,23 @@
+// Test multi-module global initialization
+// Verifies that helper module's globals are initialized before main module uses them
+use { println, Stdout } from "core:cli";
+use { get_counter, increment, HELPER_COUNTER } from "./sub/global_multimod_helper.wado";
+
+// Main module also has its own lazy-init global that depends on helper
+global MAIN_VALUE: i32 = get_counter() * 2;
+
+fn run() with Stdout {
+    // Helper module's global should be initialized (42)
+    println(`HELPER_COUNTER={HELPER_COUNTER}`);
+    println(`get_counter()={get_counter()}`);
+
+    // Main module's global depends on helper (42 * 2 = 84)
+    println(`MAIN_VALUE={MAIN_VALUE}`);
+
+    // Mutate and verify
+    increment();
+    println(`after increment={get_counter()}`);
+}
+
+__DATA__
+{"stdout": "HELPER_COUNTER=42\nget_counter()=42\nMAIN_VALUE=84\nafter increment=43\n"}

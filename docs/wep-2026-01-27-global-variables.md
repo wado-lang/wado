@@ -89,7 +89,7 @@ global NEGATIVE: i32 = -42;     // negation
 
 #### Lazy Initialization
 
-For non-constant expressions (function calls, object construction), the compiler generates a `__initialize_globals()` function that initializes these globals at program start:
+For non-constant expressions (function calls, object construction), the compiler uses lazy initialization:
 
 ```wado
 global mut MESSAGE: String = "Hello, World!";
@@ -100,9 +100,66 @@ global mut ORIGIN: Point = Point { x: 0, y: 0 };
 Implementation details:
 
 1. Non-constant globals are initialized to a default value (0 for primitives, null for references) in the Wasm global section
-2. The `__initialize_globals()` function contains the actual initialization logic
-3. Entry point functions (`run`, test functions) automatically call `__initialize_globals()` at start
-4. For immutable globals with non-constant initializers, Wasm declares them as mutable internally (Wado still enforces immutability at the language level)
+2. Wasm declares them as mutable internally (Wado still enforces immutability at the language level for non-`mut` globals)
+
+### Multi-Module Initialization
+
+When a program consists of multiple modules, global initialization is coordinated through a two-level system:
+
+#### Per-Module: `__initialize_module`
+
+Each module with lazy-initialized globals generates a `pub fn __initialize_module()` function:
+
+- Contains initialization statements for that module's non-constant globals only
+- Always `pub` so it can be called from the entry module
+- Initializers are topologically sorted based on dependencies (globals that depend on other globals are initialized after their dependencies)
+- Future: Users will be able to hook into this with `#[module_init]` attribute
+
+#### Entry Module: `__initialize_modules`
+
+The entry module generates a `fn __initialize_modules()` function:
+
+- **Not** `pub` (internal to entry module)
+- Uses an initialization flag (`__modules_initialized: bool`) to prevent re-initialization
+- Checks flag at start, returns early if already initialized (for handlers like `wasi:http` that may be called multiple times on the same instance)
+- Calls each linked module's `__initialize_module` in topological order (modules are initialized before modules that depend on them)
+- Sets the flag to `true` after all modules are initialized
+
+Entry point functions (`run`, test functions) call `__initialize_modules()` at start.
+
+#### Initialization Order
+
+##### Within a Module
+
+Global initializers within `__initialize_module` are topologically sorted:
+
+```wado
+// These are reordered so B is initialized before A
+global A: i32 = B + 1;   // depends on B
+global B: i32 = 10;      // no dependencies
+// Lowered to: B = 10; A = B + 1;
+```
+
+##### Across Modules
+
+Module initialization order follows import dependencies:
+
+```wado
+// main.wado
+use { helper_global } from "./helper.wado";
+global MAIN_GLOBAL: i32 = helper_global + 1;
+
+// helper.wado
+pub global helper_global: i32 = compute();
+```
+
+`helper.wado`'s `__initialize_module` is called before `main.wado`'s.
+
+#### Edge Cases
+
+1. **Circular dependencies**: Detected at compile time and reported as an error
+2. **No lazy globals**: Modules without lazy-initialized globals don't generate `__initialize_module`
+3. **Multiple entry points**: Each entry point calls `__initialize_modules`, but the flag ensures initialization happens only once
 
 ### Mutability Checking
 
