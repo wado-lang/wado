@@ -37,9 +37,9 @@ Compares WebAssembly binary sizes across different languages.
 | -------------- | -----------: |
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
+| wado           |       12,021 |
 | c              |       14,151 |
 | moonbit        |       32,940 |
-| wado           |       53,707 |
 | rust           |       62,952 |
 | tinygo         |      186,022 |
 

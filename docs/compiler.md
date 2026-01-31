@@ -139,7 +139,6 @@ The `wado-bundled` crate provides pre-compiled Wasm functions for operations tha
 
 ```bash
 make update-bundled   # Rebuild wado-bundled.wat from Rust source
-make check-bundled    # Verify committed WAT is up-to-date (used in CI)
 ```
 
 The bundled module is stored as WAT in `wado-compiler/lib/builtins/wado-bundled.wat` for version control visibility. It's parsed at compile time using the `wat` crate.
