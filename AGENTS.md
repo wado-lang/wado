@@ -12,13 +12,11 @@ When updating spec.md, keep it mutually exclusive and collectively exhaustive (M
 
 ## The Compiler
 
-The compiler is implemented in `wado-compiler/` with a hand-written recursive descent parser.
+The compiler is implemented in `wado-compiler/`.
 
-Standard libraries (a.k.a. stdlib) are implemented in `wado-compiler/lib`, with `wasi/` for WASI and `core/` for the core library.
+Standard libraries (a.k.a. stdlib) are implemented in `wado-compiler/lib`, with `wasi/` for WASI interface and `core/` for the core library.
 
 See `docs/compiler.md` in order to develop the compiler.
-
-There are E2E test fixtures in `wado-compiler/tests/fixtures/*.wado`.
 
 Builtin functions that are directly mapped to wasm instructions or external functions are implemented in `wado-compiler/lib/core/builtin.wado`.
 
@@ -89,6 +87,8 @@ Those modules are generated from WIT files by the `wado-from-wit` tool, so if `w
 ```sh
 make update-stdlib-wasi
 ```
+
+It requires a git submodule `vendor/wasmtime`.
 
 ## The CLI
 
@@ -211,9 +211,10 @@ This project relies on the following Wasm features:
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
 - YAGNI. Do the simplest thing that could possibly work.
 
-### Rules for Compiler Development
+### Rules for the Compiler Code Base
 
-- Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formatting.
+- The principle: `codegen.rs` emits the `Project` as is, which does not have the knowledge of the previous phases.
+- Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formats.
 - Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
 - Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
 
@@ -295,12 +296,10 @@ make test
 make hello     # generates example/hello.wat and example/hello.wasm
 make hello-run # simple smoke test
 
-# for benchmarks
 make benchmark-count-prime # use integer arithmetic
 make benchmark-mandelbrot  # use float arithmetic
 make benchmark-sieve       # use arrays
 
-# for wasm-size reports
 make report-wasm-size
 ```
 
@@ -317,7 +316,7 @@ make on-task-started  # install mise and project tools
 If this is your first time running mise in this repository, you may need to trust the configuration file:
 
 ```sh
-mise trust  # trust .mise.toml (first time only)
+mise trust
 ```
 
 ### When Completing a Task

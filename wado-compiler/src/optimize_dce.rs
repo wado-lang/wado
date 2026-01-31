@@ -3,17 +3,20 @@
 //! This module provides function-level dead code elimination through reachability analysis.
 //! It starts from the entry point and traces all reachable functions via the call graph.
 
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+
+use indexmap::IndexMap;
+
 use crate::ast::Type;
+use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, MethodName, ModuleSource};
-use crate::optimize::CanonBuiltin;
 use crate::project::Project;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
+    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use indexmap::IndexMap;
-use std::collections::{HashMap, HashSet};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
@@ -39,7 +42,7 @@ struct FunctionAnalysis {
 ///
 /// This performs dead code elimination analysis starting from the entry point
 /// and populates the project's `reachable_functions`, `used_wasi_functions`,
-/// `used_builtins`, etc. fields.
+/// `used_box_primitives` fields, and the entry module's `imports` list.
 pub fn analyze_project(project: &mut Project) {
     // Build call graph, effect usage, and box primitives from all modules
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
@@ -220,215 +223,57 @@ pub fn analyze_project(project: &mut Project) {
         used_wasi_functions.insert("Stderr::write_via_stream".to_string());
     }
 
-    // Compute precise builtin usage based on reachable builtin function calls
-    let mut used_builtins: HashSet<CanonBuiltin> = HashSet::new();
+    // Build the builtin registry to look up canonical names
+    let type_table = RefCell::new(TypeTable::new());
+    let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
 
-    // Map builtin function names to canonical CanonBuiltin variants
+    // Collect imports using registry lookup instead of hard-coded match
+    let mut imports: HashSet<TirImport> = HashSet::new();
+
+    // Helper to add an import from builtin registry by function name
+    let add_import_by_name = |imports: &mut HashSet<TirImport>, name: &str| {
+        if let Some(info) = builtin_registry.get(name)
+            && let Some(canonical_name) = &info.canonical_name
+        {
+            imports.insert(TirImport {
+                namespace: info.namespace.clone(),
+                canonical_name: canonical_name.clone(),
+                func_name: name.to_string(),
+                params: info.params.iter().map(|(_, ty)| *ty).collect(),
+                return_type: info.return_type,
+            });
+        }
+    };
+
+    // Map reachable builtin function calls to imports via registry lookup
     for func_id in &reachable {
         if let FunctionId::Free(f) = func_id
             && is_builtin_func(f)
         {
             let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-            match name {
-                "stream_new" => {
-                    used_builtins.insert(CanonBuiltin::StreamNew);
-                }
-                "stream_write" => {
-                    used_builtins.insert(CanonBuiltin::StreamWrite);
-                }
-                "stream_drop_writable" => {
-                    used_builtins.insert(CanonBuiltin::StreamDropWritable);
-                }
-                "stream_drop_readable" => {
-                    used_builtins.insert(CanonBuiltin::StreamDropReadable);
-                }
-                "future_new" => {
-                    used_builtins.insert(CanonBuiltin::FutureNew);
-                }
-                "future_write" => {
-                    used_builtins.insert(CanonBuiltin::FutureWrite);
-                }
-                "future_drop_writable" => {
-                    used_builtins.insert(CanonBuiltin::FutureDropWritable);
-                }
-                "future_drop_readable" => {
-                    used_builtins.insert(CanonBuiltin::FutureDropReadable);
-                }
-                // Ambient logging builtins also need stream intrinsics
-                n if n.starts_with("call_indirect_stdout")
-                    || n.starts_with("call_indirect_stderr") =>
-                {
-                    used_builtins.insert(CanonBuiltin::StreamNew);
-                    used_builtins.insert(CanonBuiltin::StreamWrite);
-                    used_builtins.insert(CanonBuiltin::StreamDropWritable);
-                }
-                // Float-to-buffer builtins (called by inlined f64_to_string/f32_to_string)
-                "f64_to_buffer" => {
-                    used_builtins.insert(CanonBuiltin::F64ToBuffer);
-                }
-                "f32_to_buffer" => {
-                    used_builtins.insert(CanonBuiltin::F32ToBuffer);
-                }
-                // Libm builtins (f64)
-                "f64_sin" => {
-                    used_builtins.insert(CanonBuiltin::LibmSin);
-                }
-                "f64_cos" => {
-                    used_builtins.insert(CanonBuiltin::LibmCos);
-                }
-                "f64_tan" => {
-                    used_builtins.insert(CanonBuiltin::LibmTan);
-                }
-                "f64_asin" => {
-                    used_builtins.insert(CanonBuiltin::LibmAsin);
-                }
-                "f64_acos" => {
-                    used_builtins.insert(CanonBuiltin::LibmAcos);
-                }
-                "f64_atan" => {
-                    used_builtins.insert(CanonBuiltin::LibmAtan);
-                }
-                "f64_atan2" => {
-                    used_builtins.insert(CanonBuiltin::LibmAtan2);
-                }
-                "f64_sinh" => {
-                    used_builtins.insert(CanonBuiltin::LibmSinh);
-                }
-                "f64_cosh" => {
-                    used_builtins.insert(CanonBuiltin::LibmCosh);
-                }
-                "f64_tanh" => {
-                    used_builtins.insert(CanonBuiltin::LibmTanh);
-                }
-                "f64_asinh" => {
-                    used_builtins.insert(CanonBuiltin::LibmAsinh);
-                }
-                "f64_acosh" => {
-                    used_builtins.insert(CanonBuiltin::LibmAcosh);
-                }
-                "f64_atanh" => {
-                    used_builtins.insert(CanonBuiltin::LibmAtanh);
-                }
-                "f64_exp" => {
-                    used_builtins.insert(CanonBuiltin::LibmExp);
-                }
-                "f64_exp2" => {
-                    used_builtins.insert(CanonBuiltin::LibmExp2);
-                }
-                "f64_expm1" => {
-                    used_builtins.insert(CanonBuiltin::LibmExpm1);
-                }
-                "f64_ln" => {
-                    used_builtins.insert(CanonBuiltin::LibmLog);
-                }
-                "f64_log2" => {
-                    used_builtins.insert(CanonBuiltin::LibmLog2);
-                }
-                "f64_log10" => {
-                    used_builtins.insert(CanonBuiltin::LibmLog10);
-                }
-                "f64_ln1p" => {
-                    used_builtins.insert(CanonBuiltin::LibmLog1p);
-                }
-                "f64_pow" => {
-                    used_builtins.insert(CanonBuiltin::LibmPow);
-                }
-                "f64_cbrt" => {
-                    used_builtins.insert(CanonBuiltin::LibmCbrt);
-                }
-                "f64_hypot" => {
-                    used_builtins.insert(CanonBuiltin::LibmHypot);
-                }
-                "f64_fmod" => {
-                    used_builtins.insert(CanonBuiltin::LibmFmod);
-                }
-                // Libm builtins (f32)
-                "f32_sin" => {
-                    used_builtins.insert(CanonBuiltin::LibmSinf);
-                }
-                "f32_cos" => {
-                    used_builtins.insert(CanonBuiltin::LibmCosf);
-                }
-                "f32_tan" => {
-                    used_builtins.insert(CanonBuiltin::LibmTanf);
-                }
-                "f32_asin" => {
-                    used_builtins.insert(CanonBuiltin::LibmAsinf);
-                }
-                "f32_acos" => {
-                    used_builtins.insert(CanonBuiltin::LibmAcosf);
-                }
-                "f32_atan" => {
-                    used_builtins.insert(CanonBuiltin::LibmAtanf);
-                }
-                "f32_atan2" => {
-                    used_builtins.insert(CanonBuiltin::LibmAtan2f);
-                }
-                "f32_sinh" => {
-                    used_builtins.insert(CanonBuiltin::LibmSinhf);
-                }
-                "f32_cosh" => {
-                    used_builtins.insert(CanonBuiltin::LibmCoshf);
-                }
-                "f32_tanh" => {
-                    used_builtins.insert(CanonBuiltin::LibmTanhf);
-                }
-                "f32_asinh" => {
-                    used_builtins.insert(CanonBuiltin::LibmAsinhf);
-                }
-                "f32_acosh" => {
-                    used_builtins.insert(CanonBuiltin::LibmAcoshf);
-                }
-                "f32_atanh" => {
-                    used_builtins.insert(CanonBuiltin::LibmAtanhf);
-                }
-                "f32_exp" => {
-                    used_builtins.insert(CanonBuiltin::LibmExpf);
-                }
-                "f32_exp2" => {
-                    used_builtins.insert(CanonBuiltin::LibmExp2f);
-                }
-                "f32_expm1" => {
-                    used_builtins.insert(CanonBuiltin::LibmExpm1f);
-                }
-                "f32_ln" => {
-                    used_builtins.insert(CanonBuiltin::LibmLogf);
-                }
-                "f32_log2" => {
-                    used_builtins.insert(CanonBuiltin::LibmLog2f);
-                }
-                "f32_log10" => {
-                    used_builtins.insert(CanonBuiltin::LibmLog10f);
-                }
-                "f32_ln1p" => {
-                    used_builtins.insert(CanonBuiltin::LibmLog1pf);
-                }
-                "f32_pow" => {
-                    used_builtins.insert(CanonBuiltin::LibmPowf);
-                }
-                "f32_cbrt" => {
-                    used_builtins.insert(CanonBuiltin::LibmCbrtf);
-                }
-                "f32_hypot" => {
-                    used_builtins.insert(CanonBuiltin::LibmHypotf);
-                }
-                "f32_fmod" => {
-                    used_builtins.insert(CanonBuiltin::LibmFmodf);
-                }
-                _ => {}
+
+            // Ambient logging builtins also need stream intrinsics
+            if name.starts_with("call_indirect_stdout") || name.starts_with("call_indirect_stderr")
+            {
+                add_import_by_name(&mut imports, "stream_new");
+                add_import_by_name(&mut imports, "stream_write");
+                add_import_by_name(&mut imports, "stream_drop_writable");
+            } else {
+                // Look up the builtin in the registry
+                add_import_by_name(&mut imports, name);
             }
         }
     }
 
     // realloc is always needed for memory management
-    used_builtins.insert(CanonBuiltin::Realloc);
+    add_import_by_name(&mut imports, "realloc");
 
     // Float-to-string builtins if their internal wrappers are used
     if needs_f64_to_buffer {
-        used_builtins.insert(CanonBuiltin::F64ToBuffer);
+        add_import_by_name(&mut imports, "f64_to_buffer");
     }
     if needs_f32_to_buffer {
-        used_builtins.insert(CanonBuiltin::F32ToBuffer);
+        add_import_by_name(&mut imports, "f32_to_buffer");
     }
 
     // Effect usage requires TaskReturn for async entry point
@@ -437,31 +282,40 @@ pub fn analyze_project(project: &mut Project) {
     let is_async_world = project.target_world == "Service";
     if !used_wasi_functions.is_empty() || uses_stream_builtins || is_async_world {
         // TaskReturn is always needed for async exports
-        used_builtins.insert(CanonBuiltin::TaskReturn);
+        add_import_by_name(&mut imports, "task_return");
 
         // Waitable-set builtins only needed when effect_wait is called
         // effect_wait is used by ambient logging functions (log_stdout, log_stderr)
         // but NOT by regular println/eprintln which don't wait for completion
         if reachable.contains(&core_builtin("effect_wait")) {
-            for builtin in CanonBuiltin::WAITABLE_SET {
-                used_builtins.insert(*builtin);
-            }
+            add_import_by_name(&mut imports, "waitable_set_new");
+            add_import_by_name(&mut imports, "waitable_join");
+            add_import_by_name(&mut imports, "waitable_set_wait");
+            add_import_by_name(&mut imports, "subtask_drop");
         }
 
         // Service world needs future intrinsics for response creation
         // (trailers parameter to response.new is a future)
         if is_async_world {
-            used_builtins.insert(CanonBuiltin::FutureNew);
-            used_builtins.insert(CanonBuiltin::FutureWrite);
-            used_builtins.insert(CanonBuiltin::FutureDropWritable);
+            add_import_by_name(&mut imports, "future_new");
+            add_import_by_name(&mut imports, "future_write");
+            add_import_by_name(&mut imports, "future_drop_writable");
         }
+    }
+
+    // Store imports in the entry module
+    if let Some(entry_module) = project.tir_modules.get_mut(&project.entry_module_source) {
+        entry_module.imports = imports.into_iter().collect();
+        // Sort imports for deterministic output
+        entry_module
+            .imports
+            .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
     }
 
     // Apply results to project
     project.reachable_functions = reachable.clone();
     project.all_reachable = false;
     project.used_wasi_functions = used_wasi_functions;
-    project.used_builtins = used_builtins;
     project.used_box_primitives = used_box_primitives;
 
     // Filter string literals in each module to only include strings from reachable functions
@@ -527,14 +381,37 @@ pub fn populate_all_features(project: &mut Project) {
         .standard_function_names()
         .map(std::string::ToString::to_string)
         .collect();
-    // All importable builtins when DCE is disabled
-    project.used_builtins = CanonBuiltin::ALL.iter().copied().collect();
-    // Future intrinsics are only available in Service world (for HTTP trailers)
-    if project.target_world == "Service" {
-        for builtin in CanonBuiltin::FUTURE {
-            project.used_builtins.insert(*builtin);
+
+    // Build all imports from the builtin registry
+    let type_table = RefCell::new(TypeTable::new());
+    let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
+    let is_service_world = project.target_world == "Service";
+
+    let mut imports: Vec<TirImport> = Vec::new();
+    for info in builtin_registry.imported_builtins() {
+        if let Some(canonical_name) = &info.canonical_name {
+            // Skip future intrinsics unless in Service world
+            if canonical_name.starts_with("future-") && !is_service_world {
+                continue;
+            }
+            imports.push(TirImport {
+                namespace: info.namespace.clone(),
+                canonical_name: canonical_name.clone(),
+                func_name: info.name.clone(),
+                params: info.params.iter().map(|(_, ty)| *ty).collect(),
+                return_type: info.return_type,
+            });
         }
     }
+
+    // Sort imports for deterministic output
+    imports.sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
+
+    // Store imports in the entry module
+    if let Some(entry_module) = project.tir_modules.get_mut(&project.entry_module_source) {
+        entry_module.imports = imports;
+    }
+
     // All primitives that map to box types when DCE is disabled
     project.used_box_primitives = HashSet::from([I32, I64, F32, F64]);
 }

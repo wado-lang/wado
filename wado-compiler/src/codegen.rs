@@ -16,13 +16,12 @@ use crate::copy_context::{ArrayCopyLocals, CopyContext};
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
 };
-use crate::optimize::CanonBuiltin;
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    TirImport, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
@@ -1109,16 +1108,18 @@ impl Codegen {
         // ========================================
 
         // Builtin function types - derived from core/builtin.wado
-        // DCE: Only define types for builtins that are actually used
+        // DCE: Only define types for builtins that are actually used (via TIR imports)
+        // Build set of imported canonical names for quick lookup
+        let imported_canonical_names: HashSet<&str> = entry_tir
+            .imports
+            .iter()
+            .map(|i| i.canonical_name.as_str())
+            .collect();
         for func in self.builtin_registry.imported_builtins() {
             let canonical_name = func.canonical_name.as_ref().unwrap();
             // Skip if this builtin is not used
-            if let Some(builtin) = CanonBuiltin::from_str(canonical_name) {
-                if !project.used_builtins.contains(&builtin) {
-                    continue;
-                }
-            } else {
-                continue; // Unknown builtin, skip
+            if !imported_canonical_names.contains(canonical_name.as_str()) {
+                continue;
             }
             // For Service world, task-return needs different signature
             // result<own<response>, error-code> flattens based on the error-code variant payloads.
@@ -1731,12 +1732,9 @@ impl Codegen {
         // ========================================
         // Import section
         // ========================================
-        // DCE: Only import builtins that are actually used
-        for builtin in &project.used_builtins {
-            let canonical_name = builtin.canonical_name();
-            if let Some(info) = self.builtin_registry.get_by_canonical(canonical_name) {
-                builder.import_func(&info.namespace, canonical_name);
-            }
+        // DCE: Only import builtins that are actually used (from TIR imports)
+        for import in &entry_tir.imports {
+            builder.import_func(&import.namespace, &import.canonical_name);
         }
 
         // Import lowered WASI functions
@@ -1751,7 +1749,7 @@ impl Codegen {
             builder.import_func("wasi", "http-response-new");
         }
 
-        builder.import_memory("env", "memory", 1);
+        builder.import_memory("mem", "memory", 1);
         module.section(builder.imports());
 
         // ========================================
@@ -2213,7 +2211,14 @@ impl Codegen {
         // ========================================
         // Wado-bundled module (float-to-string and libm, conditionally included)
         // ========================================
-        if project.needs_wado_bundled() {
+        // Check if we need bundled module (float-to-string or libm)
+        // Bundled imports have namespace "bundled"
+        let bundled_imports: Vec<&TirImport> = entry_tir
+            .imports
+            .iter()
+            .filter(|i| i.namespace == "bundled")
+            .collect();
+        if !bundled_imports.is_empty() {
             // Convert memory to import
             let bundled_module =
                 wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
@@ -2221,12 +2226,10 @@ impl Codegen {
 
             // Apply Wasm-level DCE if enabled (disabled for -O0)
             let final_module = if project.wasm_dce_enabled {
-                // Build set of exports to keep based on used builtins
-                let keep_exports: std::collections::HashSet<_> = project
-                    .used_builtins
+                // Build set of exports to keep based on used bundled imports
+                let keep_exports: std::collections::HashSet<_> = bundled_imports
                     .iter()
-                    .filter(|b| b.is_bundled())
-                    .map(|b| b.canonical_name().to_string())
+                    .map(|i| i.canonical_name.clone())
                     .collect();
                 wasm_postprocess::eliminate_dead_code(&bundled_module, &keep_exports)
             } else {
@@ -2250,83 +2253,32 @@ impl Codegen {
                 [("env", ModuleArg::Instance(fts_env_instance))],
             );
 
-            // Alias float-to-string exports (only the ones needed)
-            if project.used_builtins.contains(&CanonBuiltin::F64ToBuffer) {
-                ctx.register_core_func("f64-to-buffer");
+            // Alias bundled exports (float-to-string and libm)
+            for import in &bundled_imports {
+                ctx.register_core_func(&import.canonical_name);
                 builder.core_alias_export(
-                    Some("f64-to-buffer"),
+                    Some(&import.canonical_name),
                     ctx.core_instance_idx("fts"),
-                    "f64_to_buffer",
+                    &import.canonical_name,
                     ExportKind::Func,
                 );
             }
-
-            if project.used_builtins.contains(&CanonBuiltin::F32ToBuffer) {
-                ctx.register_core_func("f32-to-buffer");
-                builder.core_alias_export(
-                    Some("f32-to-buffer"),
-                    ctx.core_instance_idx("fts"),
-                    "f32_to_buffer",
-                    ExportKind::Func,
-                );
-            }
-
-            // Alias libm exports (only the ones needed)
-            for builtin in &project.used_builtins {
-                if builtin.is_libm() {
-                    let canonical_name = builtin.canonical_name();
-                    ctx.register_core_func(canonical_name);
-                    builder.core_alias_export(
-                        Some(canonical_name),
-                        ctx.core_instance_idx("fts"),
-                        canonical_name,
-                        ExportKind::Func,
-                    );
-                }
-            }
         }
 
         // ========================================
-        // Stream canonical intrinsics for stream<u8>
-        // DCE: Only generate canon functions that are actually used
+        // HTTP response types for future<T> canonical intrinsics
+        // Only defined if any future-* canonical intrinsics are used
+        // (DCE determines this from reachability analysis starting from world exports)
         // ========================================
-        if project.used_builtins.contains(&CanonBuiltin::StreamNew) {
-            ctx.register_core_func("stream-new");
-            builder.stream_new(stream_u8_type);
-        }
+        let needs_future_intrinsics = entry_tir.imports.iter().any(|i| {
+            i.namespace == "wasi"
+                && matches!(
+                    i.canonical_name.as_str(),
+                    "future-new" | "future-write" | "future-drop-writable" | "future-drop-readable"
+                )
+        });
 
-        if project.used_builtins.contains(&CanonBuiltin::StreamWrite) {
-            ctx.register_core_func("stream-write");
-            builder.stream_write(
-                stream_u8_type,
-                [
-                    CanonicalOption::Memory(ctx.memory_idx()),
-                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-                ],
-            );
-        }
-
-        if project
-            .used_builtins
-            .contains(&CanonBuiltin::StreamDropWritable)
-        {
-            ctx.register_core_func("stream-drop-writable");
-            builder.stream_drop_writable(stream_u8_type);
-        }
-
-        if project
-            .used_builtins
-            .contains(&CanonBuiltin::StreamDropReadable)
-        {
-            ctx.register_core_func("stream-drop-readable");
-            builder.stream_drop_readable(stream_u8_type);
-        }
-
-        // ========================================
-        // HTTP response types for Service world
-        // These are defined here because they depend on stream-u8
-        // ========================================
-        let trailers_future_type = if project.target_world == "Service" {
+        let trailers_future_type = if needs_future_intrinsics {
             // Define own<fields> type for use in option<fields> (trailers)
             // This must be an owned handle type, not just u32, for type compatibility
             // with response.new's trailers parameter
@@ -2395,44 +2347,86 @@ impl Codegen {
 
             trailers_future_type
         } else {
-            0 // Placeholder - not used for non-Service worlds
+            0 // Placeholder - not used when future intrinsics aren't needed
         };
 
         // ========================================
-        // Future canonical intrinsics for HTTP trailers
-        // Only generated for Service world
+        // Canonical intrinsics - emit based on TIR imports with "wasi" namespace
+        // Each import is emitted exactly once, driven by DCE reachability
         // ========================================
-        if project.target_world == "Service" {
-            if project.used_builtins.contains(&CanonBuiltin::FutureNew) {
-                ctx.register_core_func("future-new");
-                builder.future_new(trailers_future_type);
-            }
+        for import in entry_tir.imports.iter().filter(|i| i.namespace == "wasi") {
+            let name = import.canonical_name.as_str();
+            ctx.register_core_func(name);
 
-            if project.used_builtins.contains(&CanonBuiltin::FutureWrite) {
-                ctx.register_core_func("future-write");
-                builder.future_write(
-                    trailers_future_type,
-                    [
-                        CanonicalOption::Memory(ctx.memory_idx()),
-                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-                    ],
-                );
-            }
+            match name {
+                // Stream intrinsics (stream<u8>)
+                "stream-new" => {
+                    builder.stream_new(stream_u8_type);
+                }
+                "stream-write" => {
+                    builder.stream_write(
+                        stream_u8_type,
+                        [
+                            CanonicalOption::Memory(ctx.memory_idx()),
+                            CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                        ],
+                    );
+                }
+                "stream-drop-writable" => {
+                    builder.stream_drop_writable(stream_u8_type);
+                }
+                "stream-drop-readable" => {
+                    builder.stream_drop_readable(stream_u8_type);
+                }
 
-            if project
-                .used_builtins
-                .contains(&CanonBuiltin::FutureDropWritable)
-            {
-                ctx.register_core_func("future-drop-writable");
-                builder.future_drop_writable(trailers_future_type);
-            }
+                // Future intrinsics (future<trailers>)
+                "future-new" => {
+                    builder.future_new(trailers_future_type);
+                }
+                "future-write" => {
+                    builder.future_write(
+                        trailers_future_type,
+                        [
+                            CanonicalOption::Memory(ctx.memory_idx()),
+                            CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                        ],
+                    );
+                }
+                "future-drop-writable" => {
+                    builder.future_drop_writable(trailers_future_type);
+                }
+                "future-drop-readable" => {
+                    builder.future_drop_readable(trailers_future_type);
+                }
 
-            if project
-                .used_builtins
-                .contains(&CanonBuiltin::FutureDropReadable)
-            {
-                ctx.register_core_func("future-drop-readable");
-                builder.future_drop_readable(trailers_future_type);
+                // Async task intrinsics
+                "task-return" => {
+                    // task-return type depends on whether http-handler-result is defined
+                    let task_return_type = if ctx.has_type("http-handler-result") {
+                        ctx.type_idx("http-handler-result")
+                    } else {
+                        result_unit_type
+                    };
+                    builder.task_return(
+                        Some(ComponentValType::Type(task_return_type)),
+                        [CanonicalOption::Memory(ctx.memory_idx())],
+                    );
+                }
+                "waitable-set-new" => {
+                    builder.waitable_set_new();
+                }
+                "waitable-join" => {
+                    builder.waitable_join();
+                }
+                "waitable-set-wait" => {
+                    builder.waitable_set_wait(false, ctx.memory_idx());
+                }
+                "subtask-drop" => {
+                    builder.subtask_drop();
+                }
+
+                // Unknown canonical intrinsic - skip (might be handled elsewhere)
+                _ => {}
             }
         }
 
@@ -2443,9 +2437,9 @@ impl Codegen {
         self.lower_wasi_functions(&mut builder, &mut ctx);
 
         // ========================================
-        // Lower HTTP types functions for Service world
+        // Lower HTTP types functions (if component functions are available)
         // ========================================
-        if project.target_world == "Service" && ctx.has_comp_func("http-fields-constructor") {
+        if ctx.has_comp_func("http-fields-constructor") {
             // Lower [constructor]fields: () -> own<fields>
             // Constructor returns a resource handle (i32)
             ctx.register_core_func("http-fields-constructor");
@@ -2467,48 +2461,6 @@ impl Codegen {
                     CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                 ],
             );
-        }
-
-        // Async intrinsics - DCE: only generate if used
-        if project.used_builtins.contains(&CanonBuiltin::TaskReturn) {
-            ctx.register_core_func("task-return");
-            // For Service world, task-return should use result<response, error-code>
-            let task_return_type = if project.target_world == "Service" {
-                ctx.type_idx("http-handler-result")
-            } else {
-                result_unit_type
-            };
-            // task.return only accepts memory option, not realloc
-            builder.task_return(
-                Some(ComponentValType::Type(task_return_type)),
-                [CanonicalOption::Memory(ctx.memory_idx())],
-            );
-        }
-
-        if project
-            .used_builtins
-            .contains(&CanonBuiltin::WaitableSetNew)
-        {
-            ctx.register_core_func("waitable-set-new");
-            builder.waitable_set_new();
-        }
-
-        if project.used_builtins.contains(&CanonBuiltin::WaitableJoin) {
-            ctx.register_core_func("waitable-join");
-            builder.waitable_join();
-        }
-
-        if project
-            .used_builtins
-            .contains(&CanonBuiltin::WaitableSetWait)
-        {
-            ctx.register_core_func("waitable-set-wait");
-            builder.waitable_set_wait(false, ctx.memory_idx());
-        }
-
-        if project.used_builtins.contains(&CanonBuiltin::SubtaskDrop) {
-            ctx.register_core_func("subtask-drop");
-            builder.subtask_drop();
         }
 
         // ========================================
@@ -2556,16 +2508,13 @@ impl Codegen {
         // (env intrinsics are handled separately in env-instance)
         let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
 
-        // Add canonical builtins with namespace "wasi"
-        for builtin in &project.used_builtins {
-            let canonical_name = builtin.canonical_name();
-            if let Some(info) = self.builtin_registry.get_by_canonical(canonical_name)
-                && info.namespace == "wasi"
-            {
+        // Add canonical builtins with namespace "wasi" (from TIR imports)
+        for import in &entry_tir.imports {
+            if import.namespace == "wasi" {
                 wasi_exports.push((
-                    canonical_name.to_string(),
+                    import.canonical_name.clone(),
                     ExportKind::Func,
-                    ctx.core_func_idx(canonical_name),
+                    ctx.core_func_idx(&import.canonical_name),
                 ));
             }
         }
@@ -2601,48 +2550,51 @@ impl Codegen {
             builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports_refs);
         ctx.register_core_instance("wasi");
 
-        let mut env_exports: Vec<(&str, ExportKind, u32)> = vec![
+        // Build "mem" instance with memory + realloc
+        let mem_exports: Vec<(&str, ExportKind, u32)> = vec![
             ("memory", ExportKind::Memory, ctx.memory_idx()),
             ("realloc", ExportKind::Func, ctx.core_func_idx("realloc")),
         ];
-        if project.used_builtins.contains(&CanonBuiltin::F64ToBuffer) {
-            env_exports.push((
-                "f64_to_buffer",
-                ExportKind::Func,
-                ctx.core_func_idx("f64-to-buffer"),
-            ));
-        }
-        if project.used_builtins.contains(&CanonBuiltin::F32ToBuffer) {
-            env_exports.push((
-                "f32_to_buffer",
-                ExportKind::Func,
-                ctx.core_func_idx("f32-to-buffer"),
-            ));
-        }
-        // Add libm exports
-        for builtin in &project.used_builtins {
-            if builtin.is_libm() {
-                let canonical_name = builtin.canonical_name();
-                env_exports.push((
-                    canonical_name,
-                    ExportKind::Func,
-                    ctx.core_func_idx(canonical_name),
-                ));
-            }
-        }
-        let env_instance = builder.core_instantiate_exports(Some("env-instance"), env_exports);
-        ctx.register_core_instance("env");
+        let mem_instance = builder.core_instantiate_exports(Some("mem-instance"), mem_exports);
+        ctx.register_core_instance("mem");
 
-        // Instantiate main module
+        // Build "bundled" instance with bundled exports (if any)
+        let bundled_exports: Vec<(String, ExportKind, u32)> = entry_tir
+            .imports
+            .iter()
+            .filter(|i| i.namespace == "bundled")
+            .map(|import| {
+                (
+                    import.canonical_name.clone(),
+                    ExportKind::Func,
+                    ctx.core_func_idx(&import.canonical_name),
+                )
+            })
+            .collect();
+
+        let bundled_instance = if bundled_exports.is_empty() {
+            None
+        } else {
+            let bundled_exports_refs: Vec<_> = bundled_exports
+                .iter()
+                .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
+                .collect();
+            let instance =
+                builder.core_instantiate_exports(Some("bundled-instance"), bundled_exports_refs);
+            ctx.register_core_instance("bundled");
+            Some(instance)
+        };
+
+        // Instantiate main module with wasi, mem, and optionally bundled instances
         ctx.register_core_instance("main");
-        builder.core_instantiate(
-            Some("main"),
-            ctx.core_module_idx("main-mod"),
-            [
-                ("wasi", ModuleArg::Instance(wasi_instance)),
-                ("env", ModuleArg::Instance(env_instance)),
-            ],
-        );
+        let mut main_args: Vec<(&str, ModuleArg)> = vec![
+            ("wasi", ModuleArg::Instance(wasi_instance)),
+            ("mem", ModuleArg::Instance(mem_instance)),
+        ];
+        if let Some(bundled_inst) = bundled_instance {
+            main_args.push(("bundled", ModuleArg::Instance(bundled_inst)));
+        }
+        builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
         // Export world functions based on target world
         let world_exports: Vec<_> = self

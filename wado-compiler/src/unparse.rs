@@ -2063,6 +2063,21 @@ impl<'a> TirUnparser<'a> {
     }
 
     fn unparse_module(&mut self, module: &TirModule) {
+        // Imports
+        if !module.imports.is_empty() {
+            self.output.push_str("// Imports\n");
+            for import in &module.imports {
+                self.output.push_str("// ");
+                self.output.push_str(&import.namespace);
+                self.output.push_str("::");
+                self.output.push_str(&import.canonical_name);
+                self.output.push_str(" (");
+                self.output.push_str(&import.func_name);
+                self.output.push_str(")\n");
+            }
+            self.output.push('\n');
+        }
+
         // Globals
         for g in &module.globals {
             self.unparse_tir_global(g);

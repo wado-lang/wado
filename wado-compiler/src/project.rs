@@ -9,7 +9,6 @@
 //! 3. Codegen takes Project and generates Wasm
 
 use crate::name::{FunctionId, ModuleSource};
-use crate::optimize::CanonBuiltin;
 use crate::symbol::SymbolTable;
 use crate::tir::{PrimitiveType, TirModule};
 use indexmap::IndexMap;
@@ -45,8 +44,6 @@ pub struct Project {
     pub all_reachable: bool,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: HashSet<String>,
-    /// Set of used builtin functions
-    pub used_builtins: HashSet<CanonBuiltin>,
     /// Primitive types that need box types (for references like &i32, &mut f64)
     pub used_box_primitives: HashSet<PrimitiveType>,
 
@@ -81,7 +78,6 @@ impl Project {
             reachable_functions: HashSet::new(),
             all_reachable: false,
             used_wasi_functions: HashSet::new(),
-            used_builtins: HashSet::new(),
             used_box_primitives: HashSet::new(),
             // Codegen options
             strip_names: false,
@@ -100,24 +96,6 @@ impl Project {
     /// Check if a function is reachable (should be included in the binary)
     pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
         self.all_reachable || self.reachable_functions.contains(func_id)
-    }
-
-    /// Check if float-to-string conversion is needed
-    pub fn needs_float_to_string(&self) -> bool {
-        self.used_builtins.contains(&CanonBuiltin::F64ToBuffer)
-            || self.used_builtins.contains(&CanonBuiltin::F32ToBuffer)
-    }
-
-    /// Check if any libm math function is used
-    pub fn needs_libm(&self) -> bool {
-        self.used_builtins
-            .iter()
-            .any(super::optimize::CanonBuiltin::is_libm)
-    }
-
-    /// Check if the wado-bundled module is needed (float-to-string or libm)
-    pub fn needs_wado_bundled(&self) -> bool {
-        self.needs_float_to_string() || self.needs_libm()
     }
 
     /// Check if any function from the given WASI effect is used.

@@ -1699,6 +1699,22 @@ pub struct ClosureFunctor {
 // Module
 // ============================================================================
 
+/// External function import from Component Model canonical builtins.
+/// These are functions that need to be imported at the Wasm level.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TirImport {
+    /// Import namespace ("wasi" or "env")
+    pub namespace: String,
+    /// Canonical name for the import (e.g., "stream-new", "`libm_sin`")
+    pub canonical_name: String,
+    /// Internal function name (e.g., "`stream_new`", "`f64_sin`")
+    pub func_name: String,
+    /// Parameter types
+    pub params: Vec<TypeId>,
+    /// Return type
+    pub return_type: TypeId,
+}
+
 /// Tracks a requested instantiation of a generic item
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InstantiationKey {
@@ -1713,6 +1729,8 @@ pub struct TirModule {
     pub module_source: ModuleSource,
     /// Shared type table across all modules (enables cross-module type references)
     pub type_table: Rc<RefCell<TypeTable>>,
+    /// External function imports (canonical builtins from wasi/env namespaces)
+    pub imports: Vec<TirImport>,
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
     pub structs: Vec<TirStruct>,
     pub enums: Vec<TirEnum>,
@@ -1748,6 +1766,7 @@ impl TirModule {
         Self {
             module_source,
             type_table: Rc::new(RefCell::new(TypeTable::new())),
+            imports: Vec::new(),
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
@@ -1775,6 +1794,7 @@ impl TirModule {
         Self {
             module_source,
             type_table,
+            imports: Vec::new(),
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
