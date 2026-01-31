@@ -62,7 +62,7 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | OptimizeLICM     | `optimize_licm.rs`      | Loop-invariant code motion                            |
 | OptimizeMove     | `optimize_move.rs`      | Move insertion for fresh values, copy type collection |
 | Stdlib           | `stdlib.rs`             | Embedded core library sources                         |
-| WasiRegistry     | `wasi_registry.rs`      | WASI import registry, type alias resolution           |
+| WasiRegistry     | `wasi_registry.rs`      | WASI import registry, WASI type resolution            |
 | BuiltinRegistry  | `builtin_registry.rs`   | Builtin function registry from `core:builtin`         |
 | WorldRegistry    | `world_registry.rs`     | World definitions registry for export signatures      |
 | WasmBuilder      | `wasm_builder.rs`       | Wasm index tracking utilities                         |
@@ -303,7 +303,7 @@ The registry provides `build_local_alias_name()` utility function and `resolve()
 | Function async flag  | `is_async` from effect method definition                         |
 | Interface presence   | `has_interface("monotonic-clock")` for conditional codegen       |
 | Local alias names    | `build_local_alias_name("cli", "Stdout", "write_via_stream")`    |
-| Type aliases         | `Instant` → `u64`, `Duration` → `u64` resolved from wasi/\*.wado |
+| WASI type resolution | `Instant` → `u64`, `Duration` → `u64` resolved from wasi/\*.wado |
 | Function signatures  | Params and return types parsed from effect methods               |
 | Supported interfaces | Dynamically filtered based on type support                       |
 
@@ -314,7 +314,7 @@ Instead of a hardcoded whitelist, interfaces are included based on type support:
 - Only interfaces where ALL functions have supported types are imported
 - Supported param types: primitives (`i32`, `u64`, `bool`, `char`, `String`, etc.), `Stream<T>`
 - Supported return types: same as params plus `Result<T, E>`
-- Type aliases are resolved before filtering (e.g., `Instant` → `u64`)
+- WASI newtypes are resolved to base types before filtering (e.g., `Instant` → `u64`)
 - The "run" interface is skipped (it defines exports, not imports; needed for Command world)
 
 **What's Still Hardcoded (TODO):**
@@ -629,6 +629,53 @@ impl Container for IntBox {
     }
 }
 ```
+
+### Newtype Semantics
+
+`type T = U` creates a **newtype** - a distinct type that shares representation with its base type but is not interchangeable.
+
+**Key Properties:**
+
+- `T` and `U` are distinct types (no implicit conversion)
+- `T` inherits methods, operators, and traits from `U`
+- Explicit `as` cast required to convert between `T` and `U`
+- Zero runtime cost (same Wasm representation)
+
+**Method Signature Substitution:**
+
+When calling an inherited method on a newtype, the method signature is substituted:
+
+```wado
+type Location = Point;
+
+impl Point {
+    fn distance(&self, other: &Point) -> f64 { ... }
+}
+
+let loc1: Location = ...;
+let loc2: Location = ...;
+loc1.distance(&loc2);  // Parameters expect &Location, not &Point
+```
+
+The resolver substitutes all occurrences of the base type with the newtype in:
+
+- Parameter types (including `&BaseType` → `&Newtype`)
+- Return type
+
+**Static Methods and Traits:**
+
+Newtypes inherit static methods and trait implementations from their base type:
+
+```wado
+Location::origin()  // Calls Point::origin()
+loc.describe()      // Calls Point's Describable::describe()
+```
+
+**Chained Newtypes:**
+
+Newtypes can chain: `type C = B; type B = A;` - the resolver traces back to the ultimate base type for method lookup.
+
+See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md) for full specification.
 
 ### Iterator Trait Resolution
 
@@ -1282,7 +1329,7 @@ Key design decisions:
 - Associated types in traits (`type Output;` and `type Output = T;`)
 - `enum` declarations (payload-free, CM semantics)
 - `global` declarations (module-level Wasm globals)
-- `type` aliases
+- `type` declarations (newtypes)
 - `resource` declarations
 - `world` declarations (with imports/exports)
 - Attributes (`#[...]`)
