@@ -1892,8 +1892,8 @@ impl Codegen {
             let mod_type_table = &*tir_mod.type_table.borrow();
             for global in &tir_mod.globals {
                 let mut val_type = self.type_id_to_valtype(mod_type_table, global.ty);
-                // For lazy-init globals with reference types, make the type nullable
-                if global.needs_lazy_init
+                // For nullable globals (lazy-init reference types), make the Wasm type nullable
+                if global.is_nullable
                     && let ValType::Ref(ref_type) = val_type
                 {
                     val_type = ValType::Ref(RefType {
@@ -1911,14 +1911,13 @@ impl Codegen {
                     let module_path = module_source.to_path();
                     format!("global:{}::{}", module_path.join("::"), global.name)
                 };
-                // For lazy-init globals, Wasm must be mutable even if Wado declares them immutable
-                let wasm_mutable = global.mutable || global.needs_lazy_init;
+                // mutable is already set by lower phase (includes lazy-init globals)
                 builder.define_global(
                     &global_name,
                     val_type,
-                    wasm_mutable,
+                    global.mutable,
                     init_expr,
-                    global.needs_lazy_init,
+                    global.is_nullable,
                 );
             }
         }

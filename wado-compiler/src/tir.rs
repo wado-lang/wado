@@ -1475,9 +1475,9 @@ pub struct TirGlobal {
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
-    /// True if this global needs lazy initialization (non-constant initializer).
-    /// Set by the lower phase when the initializer is moved to `__initialize_globals`.
-    pub needs_lazy_init: bool,
+    /// True if this global's Wasm type should be nullable.
+    /// Set by lower phase for lazy-initialized reference type globals.
+    pub is_nullable: bool,
 }
 
 #[derive(Debug, Clone)]

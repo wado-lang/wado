@@ -651,6 +651,16 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     }
 }
 
+/// Check if a type is a reference type (needs nullable Wasm type for lazy init)
+fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    let base_type = type_table.get_ultimate_base_type(type_id);
+    match type_table.get(base_type) {
+        ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never => false,
+        // Struct, Array, String, etc. are reference types in Wasm GC
+        _ => true,
+    }
+}
+
 /// Lower global variable initializers
 ///
 /// For non-constant initializers, this:
@@ -673,8 +683,12 @@ fn lower_global_initializers(module: &mut TirModule) {
             ));
             // Replace with default value
             global.initializer = default_value_for_type(global.ty, &type_table, global.span);
-            // Mark this global as needing lazy initialization
-            global.needs_lazy_init = true;
+            // Lazy-init globals must be Wasm-mutable (even if Wado-immutable)
+            global.mutable = true;
+            // Reference types need nullable Wasm type for lazy init
+            if is_reference_type(global.ty, &type_table) {
+                global.is_nullable = true;
+            }
         }
     }
 

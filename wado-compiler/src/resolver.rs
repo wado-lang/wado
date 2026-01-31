@@ -1774,7 +1774,7 @@ impl<'a> Resolver<'a> {
             is_pub: global_decl.is_pub,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
-            needs_lazy_init: false, // Set by lower phase if needed
+            is_nullable: false, // Set by lower phase for lazy-init reference types
         })
     }
 
