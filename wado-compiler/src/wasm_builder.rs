@@ -510,6 +510,11 @@ impl ComponentModelContext {
             .unwrap_or_else(|| panic!("unknown component type: {name}"))
     }
 
+    /// Check if a component type exists
+    pub fn has_type(&self, name: &str) -> bool {
+        self.type_names.contains_key(name)
+    }
+
     /// Register a component instance and return its index
     pub fn register_instance(&mut self, name: &str) -> u32 {
         let idx = self.next_instance_idx;
