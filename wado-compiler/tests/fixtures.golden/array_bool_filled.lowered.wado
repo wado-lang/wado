@@ -4,13 +4,11 @@
 
 fn run() with Stdout {
     let arr: Array<bool> = move "Array<bool>::filled"(3, true);
-    if "Array<bool>^IndexValue::index_value"(&arr, 0) {
+    if __inline_Array_bool__IndexValue__index_value_0: {
+        break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(arr.repr, 0);
+    } {
         core::cli::println(move "true");
     }
-}
-
-fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 pub fn "Array<bool>::filled"(n: i32, element: bool) -> Array<bool> {

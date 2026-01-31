@@ -17,23 +17,24 @@ fn run() with Stdout {
     __inline_Container__process_1: {
         let mut temp: Array<i32> = move [];
         for let mut i: i32 = 0; (i < "Array<i32>::len"(&c.items)); i = (i + 1) {
-            let val: i32 = "Array<i32>^IndexValue::index_value"(&c.items, i);
+            let val: i32 = __inline_Array_i32__IndexValue__index_value_2: {
+                let self: &Array<i32> = &c.items;
+                break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(self.repr, i);
+            };
             if ((val % 2) == 0) {
                 "Array<i32>::append"(&mut temp, val);
             }
         }
         for let mut j: i32 = 0; (j < "Array<i32>::len"(&temp)); j = (j + 1) {
-            "Array<i32>::append"(&mut c.items, ("Array<i32>^IndexValue::index_value"(&temp, j) + 100));
+            "Array<i32>::append"(&mut c.items, (__inline_Array_i32__IndexValue__index_value_3: {
+                break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(temp.repr, j);
+            } + 100));
         }
     };
-    core::cli::println(move "String::concat"(move "len=", move "i32::to_string"(__inline_Array_i32___len_2: {
+    core::cli::println(move "String::concat"(move "len=", move "i32::to_string"(__inline_Array_i32___len_4: {
         let self: &Array<i32> = &c.items;
-        break __inline_Array_i32___len_2: self.used;
+        break __inline_Array_i32___len_4: self.used;
     })));
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {

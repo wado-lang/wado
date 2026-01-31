@@ -5,12 +5,12 @@
 fn run() with Stdout {
     let result: String = __inline_join_names_0: {
         let names: Array<String> = move ["Alice", "Bob"];
-        break __inline_join_names_0: "String::concat"(move "String::concat"(move "Array<String>^IndexValue::index_value"(&names, 0), move " and "), move "Array<String>^IndexValue::index_value"(&names, 1));
+        break __inline_join_names_0: "String::concat"(move "String::concat"(__inline_Array_String__IndexValue__index_value_1: {
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(names.repr, 0);
+        }, move " and "), __inline_Array_String__IndexValue__index_value_2: {
+            break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(names.repr, 1);
+        });
     };
     core::cli::println(result);
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    return core::builtin::array_get::<String>(self.repr, index);
 }
 

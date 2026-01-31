@@ -10,7 +10,9 @@ pub struct "ArrayIter<i32>" {
 
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3];
-    let mut iter: ArrayIter<i32> = move "Array<i32>^IntoIterator::into_iter"(&arr);
+    let mut iter: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_0: {
+        break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+    };
     let mut sum: i32 = 0;
     loop {
         if Some(x) = "ArrayIter<i32>^Iterator::next"(&mut iter) {
@@ -32,8 +34,4 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
 }
 
 fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
-
-fn "Array<i32>^IntoIterator::into_iter"(self: &Array<i32>) -> ArrayIter<i32> {
-    return ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
-}
 

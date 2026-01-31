@@ -4,10 +4,10 @@
 
 fn run() with Stdout {
     let names: Array<String> = move ["Hello", "World"];
-    core::cli::println(move "String::concat"(move "String::concat"(move "Array<String>^IndexValue::index_value"(&names, 0), move " "), move "Array<String>^IndexValue::index_value"(&names, 1)));
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    return core::builtin::array_get::<String>(self.repr, index);
+    core::cli::println(move "String::concat"(move "String::concat"(__inline_Array_String__IndexValue__index_value_0: {
+        break __inline_Array_String__IndexValue__index_value_0: core::builtin::array_get::<String>(names.repr, 0);
+    }, move " "), __inline_Array_String__IndexValue__index_value_1: {
+        break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(names.repr, 1);
+    }));
 }
 

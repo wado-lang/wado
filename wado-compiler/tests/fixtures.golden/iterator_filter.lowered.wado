@@ -24,7 +24,13 @@ struct __Closure_1 {
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let evens: Array<i32> = __inline_FilterIter_i32___collect_0: {
-        let self: &mut FilterIter<i32> = &mut "ArrayIter<i32>::filter"(&"Array<i32>::iter"(&arr), &__Closure_0 {  });
+        let self: &mut FilterIter<i32> = &mut __inline_ArrayIter_i32___filter_2: {
+            let self: &ArrayIter<i32> = &__inline_Array_i32___iter_1: {
+                break __inline_Array_i32___iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            };
+            let pred: fn(i32) -> bool = &__Closure_0 {  };
+            break __inline_ArrayIter_i32___filter_2: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+        };
         let mut result: Array<i32> = move [];
         loop {
             if Some(item) = "FilterIter<i32>^Iterator::next"(self) {
@@ -39,8 +45,14 @@ fn run() with Stdout {
     for let _item of evens {
         core::cli::println(move "i32::to_string"(x));
     }
-    let large: Array<i32> = __inline_FilterIter_i32___collect_1: {
-        let self: &mut FilterIter<i32> = &mut "ArrayIter<i32>::filter"(&"Array<i32>::iter"(&arr), &__Closure_1 {  });
+    let large: Array<i32> = __inline_FilterIter_i32___collect_3: {
+        let self: &mut FilterIter<i32> = &mut __inline_ArrayIter_i32___filter_5: {
+            let self: &ArrayIter<i32> = &__inline_Array_i32___iter_4: {
+                break __inline_Array_i32___iter_4: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            };
+            let pred: fn(i32) -> bool = &__Closure_1 {  };
+            break __inline_ArrayIter_i32___filter_5: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+        };
         let mut result: Array<i32> = move [];
         loop {
             if Some(item) = "FilterIter<i32>^Iterator::next"(self) {
@@ -49,20 +61,12 @@ fn run() with Stdout {
                 break;
             }
         }
-        break __inline_FilterIter_i32___collect_1: result;
+        break __inline_FilterIter_i32___collect_3: result;
     };
     core::cli::println(move "large:");
     for let _item of large {
         core::cli::println(move "i32::to_string"(x));
     }
-}
-
-pub fn "Array<i32>::iter"(self: &Array<i32>) -> ArrayIter<i32> {
-    return ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
-}
-
-pub fn "ArrayIter<i32>::filter"(self: &ArrayIter<i32>, pred: fn(i32) -> bool) -> FilterIter<i32> {
-    return FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
