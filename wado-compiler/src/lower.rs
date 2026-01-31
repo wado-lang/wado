@@ -709,7 +709,7 @@ fn lower_global_initializers(module: &mut TirModule) {
     };
 
     let init_func = TirFunction {
-        name: "__wado_init_globals".to_string(),
+        name: "__initialize_globals".to_string(),
         is_pub: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
@@ -728,20 +728,25 @@ fn lower_global_initializers(module: &mut TirModule) {
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
 
-    // Inject call to __wado_init_globals at the start of entry point functions
+    // Inject call to __initialize_globals at the start of entry point functions
     inject_init_globals_call(module);
 }
 
-/// Inject a call to __`wado_init_globals` at the start of entry point functions
+/// Inject a call to __`initialize_globals` at the start of entry point functions
 fn inject_init_globals_call(module: &mut TirModule) {
+    // Only inject into entry module functions
+    if !module.module_source.is_entry_point() {
+        return;
+    }
+
     let span = Span::new(0, 0, 1, 1);
 
-    // Create the call expression: __wado_init_globals()
+    // Create the call expression: __initialize_globals()
     let init_call = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::External {
                 module_source: module.module_source.clone(),
-                name: "__wado_init_globals".to_string(),
+                name: "__initialize_globals".to_string(),
                 monomorph_info: None,
                 method_info: None,
             },
@@ -753,8 +758,11 @@ fn inject_init_globals_call(module: &mut TirModule) {
     );
     let init_call_stmt = TirStmt::new(TirStmtKind::Expr(init_call), span);
 
-    // Find entry point functions (run, test functions, export functions)
-    // For now, we inject into "run" and any function starting with "__test_"
+    // Collect world export function names to inject init call
+    // Note: We only inject into "run" and test functions for now.
+    // Other exported functions (pub fn) are not entry points - they may be called
+    // by run or test functions which will have already initialized globals.
+    // TODO: For Component Model exports, we may need a different strategy.
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
         let is_entry = func.name == "run" || func.name.starts_with("__test_");
