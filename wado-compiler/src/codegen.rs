@@ -7710,6 +7710,8 @@ impl Codegen {
                             ResolvedType::GenericInstance { .. }
                                 | ResolvedType::Struct { .. }
                                 | ResolvedType::Function { .. }
+                                | ResolvedType::Ref(_)
+                                | ResolvedType::MutRef(_)
                         );
                         // For function types, we need to cast structref to canonical closure type
                         let closure_type_idx = if let ResolvedType::Function {
@@ -13532,8 +13534,21 @@ impl Codegen {
                     self.preallocate_match_pattern_locals(p, type_table, ctx);
                 }
             }
-            TirPattern::Variant { bindings, .. } => {
-                for binding in bindings {
+            TirPattern::Variant {
+                bindings,
+                payload_type,
+                ..
+            } => {
+                // Pre-allocate binding locals AND scratch locals for tuple destructuring
+                if let Some(binding) = bindings.first() {
+                    // Pre-allocate scratch locals for tuple patterns in variant payloads
+                    self.preallocate_let_pattern_for_pattern(
+                        binding,
+                        *payload_type,
+                        type_table,
+                        ctx,
+                    );
+                    // Also pre-allocate binding locals
                     self.preallocate_match_pattern_locals(binding, type_table, ctx);
                 }
             }
