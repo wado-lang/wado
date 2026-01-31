@@ -270,6 +270,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Global Variables](./docs/wep-2026-01-27-global-variables.md)
 - [WIT and Wado Mapping](./docs/wep-2026-01-29-wit-wado-mapping.md)
 - [Newtype Semantics](./docs/wep-2026-01-29-newtype-semantics.md)
+- [SIMD v128 Types](./docs/wep-2026-01-31-simd-v128.md)
 
 ### Structure
 
