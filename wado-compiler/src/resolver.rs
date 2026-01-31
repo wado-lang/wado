@@ -16,7 +16,7 @@ use indexmap::IndexMap;
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
-use crate::name::{LocalMethodName, ModuleSource, strip_type_params};
+use crate::name::{LocalMethodName, ModuleSource, mangle_generic_name, strip_type_params};
 
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
@@ -831,13 +831,31 @@ impl<'a> Resolver<'a> {
                 match item {
                     Item::Struct(struct_decl) => {
                         let mut fields = Vec::new();
+                        // Extract type parameter names for generic structs
+                        let type_params: Vec<String> = struct_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect();
                         for field in &struct_decl.fields {
-                            let type_id = Self::resolve_type_static(
-                                &field.ty,
-                                &mut type_table.borrow_mut(),
-                                &type_aliases,
-                                &struct_fields,
-                            );
+                            // Use resolve_type_static_with_params for generic structs
+                            // so that type params like K in Node<K> become TypeParam types
+                            let type_id = if type_params.is_empty() {
+                                Self::resolve_type_static(
+                                    &field.ty,
+                                    &mut type_table.borrow_mut(),
+                                    &type_aliases,
+                                    &struct_fields,
+                                )
+                            } else {
+                                Self::resolve_type_static_with_params(
+                                    &field.ty,
+                                    &mut type_table.borrow_mut(),
+                                    &type_aliases,
+                                    &struct_fields,
+                                    &type_params,
+                                )
+                            };
                             fields.push((field.name.clone(), type_id));
                         }
                         // Extract type parameter bounds
@@ -9077,41 +9095,47 @@ impl<'a> Resolver<'a> {
             .collect();
 
         // Check if this is a generic struct and infer type arguments
-        let (struct_type, mangled_struct_name) = if self.generic_struct_names.contains(&struct_name)
-        {
-            // This is a generic struct - infer type arguments from field values
-            let mut type_args = self.infer_type_args_from_fields(&struct_name, &fields);
-            // If we couldn't infer type from fields, try to use return type context
-            // This handles cases like `return Array { repr: ..., used: 0 }` in generic functions
-            if type_args.is_empty()
-                && struct_name == "Array"
-                && let Some(elem_type) = self.type_table.borrow().as_array(ctx.return_type)
-            {
-                type_args = vec![elem_type];
-            }
-            let struct_type = self.type_table.borrow_mut().make_generic_instance(
-                struct_name.clone(),
-                ModuleSource::from_path(&module_path),
-                type_args.clone(),
-            );
-            // Build mangled name with type arguments
-            let mangled_name = if type_args.is_empty() {
-                format!("{struct_name}<>")
-            } else {
+        let (struct_type, mangled_struct_name, fields) =
+            if self.generic_struct_names.contains(&struct_name) {
+                // This is a generic struct - infer type arguments from field values
+                let type_args = self.infer_type_args_from_fields(&struct_name, &fields);
+
+                // Substitute type parameters in field value types.
+                // This is necessary for empty array literals in self-referential fields
+                // (e.g., `children: []` in `Node<K> { children: Array<&Node<K>> }`)
+                // which get typed with TypeParams before inference.
+                let fields: Vec<TirStructField> = if type_args.is_empty() {
+                    fields
+                } else {
+                    fields
+                        .into_iter()
+                        .map(|mut field| {
+                            field.value.type_id =
+                                self.substitute_type_params(field.value.type_id, &type_args);
+                            field
+                        })
+                        .collect()
+                };
+
+                let struct_type = self.type_table.borrow_mut().make_generic_instance(
+                    struct_name.clone(),
+                    ModuleSource::from_path(&module_path),
+                    type_args.clone(),
+                );
+                // Build mangled name with type arguments
                 let arg_names: Vec<String> = type_args
                     .iter()
                     .map(|&t| self.type_table.borrow().type_name(t))
                     .collect();
-                format!("{}<{}>", struct_name, arg_names.join(","))
+                let mangled_name = mangle_generic_name(&struct_name, &arg_names);
+                (struct_type, mangled_name, fields)
+            } else {
+                let struct_type = self
+                    .type_table
+                    .borrow_mut()
+                    .make_struct(struct_name.clone(), ModuleSource::from_path(&module_path));
+                (struct_type, struct_name, fields)
             };
-            (struct_type, mangled_name)
-        } else {
-            let struct_type = self
-                .type_table
-                .borrow_mut()
-                .make_struct(struct_name.clone(), ModuleSource::from_path(&module_path));
-            (struct_type, struct_name)
-        };
 
         TirExpr::new(
             TirExprKind::StructLiteral {
@@ -9177,7 +9201,11 @@ impl<'a> Resolver<'a> {
         match (&expected_type, &actual_type) {
             // Direct type parameter mapping
             (ResolvedType::TypeParam { .. }, _) => {
-                type_param_map.insert(expected, actual);
+                // Only insert if we don't already have a concrete mapping for this type param.
+                // This prevents later fields with self-referential types (like Array<&Node<K>>)
+                // from overwriting earlier correct mappings (like K -> String) with
+                // incorrect mappings (like K -> K).
+                type_param_map.entry(expected).or_insert(actual);
             }
             // Generic instance: unify type arguments recursively
             (

@@ -731,9 +731,17 @@ impl Codegen {
                 // Exact name match only
                 name == struct_name
             }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                // Recurse into type args for Array<&mut BTreeNode> patterns
-                // GenericInstance name (like "Array") won't match struct_name (like "Node<i32>")
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                // Check if this GenericInstance IS the struct we're looking for.
+                // E.g., Node<String> is represented as GenericInstance { name: "Node", type_args: [String] }
+                // and we need to check if "Node<String>" matches struct_name.
+                let mangled_name = Self::mangle_generic_instance_name(name, type_args, type_table);
+                if mangled_name == struct_name {
+                    return true;
+                }
+                // Also recurse into type args for Array<&mut Node<String>> patterns
                 type_args
                     .iter()
                     .any(|arg| Self::type_references_struct(*arg, struct_name, type_table))
@@ -1473,6 +1481,15 @@ impl Codegen {
                     type_table,
                     &mut builder,
                 );
+            }
+        }
+
+        // Register remaining tuple types that were skipped earlier due to unregistered generic instances.
+        // Now that monomorphized structs are registered, these tuples can be created.
+        self.register_tuple_types_from_table(type_table, &mut builder);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source != entry_module_source {
+                self.register_tuple_types_from_table(&tir_mod.type_table.borrow(), &mut builder);
             }
         }
 
@@ -5210,6 +5227,31 @@ impl Codegen {
         func.instruction(&Instruction::End); // end $done
     }
 
+    /// Check if a type contains an unregistered generic instance (user-defined generic struct).
+    /// This is used to defer tuple registration until the generic struct is registered.
+    fn contains_unregistered_generic_instance(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+    ) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::GenericInstance { .. } => {
+                // Check if this generic instance is registered
+                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                !self
+                    .struct_types
+                    .contains_key(&StructName::new(ModuleSource::entry_point(), mangled_name))
+            }
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.contains_unregistered_generic_instance(*inner, type_table)
+            }
+            ResolvedType::Tuple(elements) => elements
+                .iter()
+                .any(|&elem| self.contains_unregistered_generic_instance(elem, type_table)),
+            _ => false,
+        }
+    }
+
     /// Pre-register all tuple types found in a `TypeTable`.
     /// This must be called before code generation to ensure tuple types are available.
     fn register_tuple_types_from_table(
@@ -5223,6 +5265,8 @@ impl Codegen {
                 && !self.tuple_types.borrow().contains_key(elements)
                 // Skip tuples that contain type parameters (these are from generic templates)
                 && !elements.iter().any(|&elem| type_table.contains_type_param(elem))
+                // Skip tuples that contain unregistered generic instances
+                && !elements.iter().any(|&elem| self.contains_unregistered_generic_instance(elem, type_table))
             {
                 // Create the tuple type
                 let mut fields = Vec::new();

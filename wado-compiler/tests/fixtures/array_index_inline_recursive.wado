@@ -9,10 +9,14 @@ struct Node<K> {
     is_leaf: bool,
 }
 
+fn print_depth(depth: i32) with Stdout {
+    println(`depth: {depth}`);
+}
+
 impl Node<K> {
-    fn traverse(&self, depth: i32) {
+    fn traverse(&self, depth: i32) with Stdout {
         // Print depth
-        println(`depth: {depth}`);
+        print_depth(depth);
 
         // Access children if not a leaf
         if !self.is_leaf {
@@ -51,4 +55,4 @@ fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "depth: 0\ndepth: 1\ndepth: 1\n"}
+{"stdout": "depth: 0\ndepth: 1\ndepth: 1\n"}
