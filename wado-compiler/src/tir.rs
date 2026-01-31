@@ -1476,7 +1476,7 @@ pub struct TirGlobal {
     pub module_source: ModuleSource,
     pub span: Span,
     /// True if this global needs lazy initialization (non-constant initializer).
-    /// Set by the lower phase when the initializer is moved to `__wado_init_globals`.
+    /// Set by the lower phase when the initializer is moved to `__initialize_globals`.
     pub needs_lazy_init: bool,
 }
 

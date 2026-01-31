@@ -6011,7 +6011,7 @@ impl Codegen {
             }
             _ => {
                 // For non-constant initializers, use null as placeholder
-                // The actual initialization happens in __wado_init_globals
+                // The actual initialization happens in __initialize_globals
                 ConstExpr::ref_null(HeapType::Abstract {
                     shared: false,
                     ty: AbstractHeapType::None,

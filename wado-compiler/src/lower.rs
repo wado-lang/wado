@@ -37,7 +37,7 @@ pub fn lower(mut module: TirModule) -> TirModule {
     lower_wide_int_match_patterns(&mut module);
 
     // Phase 1: Lower global variable initializers
-    // For non-constant initializers, this generates a __wado_init_globals function
+    // For non-constant initializers, this generates a __initialize_globals function
     // and injects calls to it at entry points.
     lower_global_initializers(&mut module);
 
@@ -655,8 +655,8 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 ///
 /// For non-constant initializers, this:
 /// 1. Replaces the initializer with a default value
-/// 2. Generates a `__wado_init_globals` function containing the actual initialization
-/// 3. Adds a call to `__wado_init_globals` at the start of entry point functions
+/// 2. Generates a `__initialize_globals` function containing the actual initialization
+/// 3. Adds a call to `__initialize_globals` at the start of entry point functions
 fn lower_global_initializers(module: &mut TirModule) {
     let type_table = module.type_table.borrow();
 
@@ -685,7 +685,7 @@ fn lower_global_initializers(module: &mut TirModule) {
         return;
     }
 
-    // Generate __wado_init_globals function
+    // Generate __initialize_globals function
     let span = Span::new(0, 0, 1, 1);
     let mut init_stmts: Vec<TirStmt> = Vec::new();
 
