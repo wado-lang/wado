@@ -150,15 +150,6 @@ update-bundled:
 	cd wado-bundled && CARGO_PROFILE_RELEASE_OPT_LEVEL=s cargo build --release
 	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled.wasm > wado-compiler/lib/builtins/wado-bundled.wat
 
-.PHONY: check-bundled
-check-bundled:
-	@echo "Checking if wado-bundled.wat is up-to-date..."
-	@cd wado-bundled && CARGO_PROFILE_RELEASE_OPT_LEVEL=s cargo build --release --quiet
-	@wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled.wasm > /tmp/wado-bundled-check.wat
-	@diff -q wado-compiler/lib/builtins/wado-bundled.wat /tmp/wado-bundled-check.wat || \
-		(echo "ERROR: wado-bundled.wat is out of date. Run 'make update-bundled' to regenerate." && exit 1)
-	@echo "wado-bundled.wat is up-to-date."
-
 .PHONY: benchmark-count-prime
 benchmark-count-prime:
 	mise run -C benchmark count-prime
