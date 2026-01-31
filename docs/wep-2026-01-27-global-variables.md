@@ -89,7 +89,7 @@ global NEGATIVE: i32 = -42;     // negation
 
 #### Lazy Initialization
 
-For non-constant expressions (function calls, object construction), the compiler generates a `__wado_init_globals()` function that initializes these globals at program start:
+For non-constant expressions (function calls, object construction), the compiler generates a `__initialize_globals()` function that initializes these globals at program start:
 
 ```wado
 global mut MESSAGE: String = "Hello, World!";
@@ -100,8 +100,8 @@ global mut ORIGIN: Point = Point { x: 0, y: 0 };
 Implementation details:
 
 1. Non-constant globals are initialized to a default value (0 for primitives, null for references) in the Wasm global section
-2. The `__wado_init_globals()` function contains the actual initialization logic
-3. Entry point functions (`run`, test functions) automatically call `__wado_init_globals()` at start
+2. The `__initialize_globals()` function contains the actual initialization logic
+3. Entry point functions (`run`, test functions) automatically call `__initialize_globals()` at start
 4. For immutable globals with non-constant initializers, Wasm declares them as mutable internally (Wado still enforces immutability at the language level)
 
 ### Mutability Checking
