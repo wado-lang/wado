@@ -23,7 +23,7 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |        1,100 |
+| wado           |        1,140 |
 | c              |        2,122 |
 | zig            |        4,449 |
 | assemblyscript |        6,913 |
@@ -37,9 +37,9 @@ Compares WebAssembly binary sizes across different languages.
 | -------------- | -----------: |
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
-| wado           |       11,838 |
 | c              |       14,151 |
 | moonbit        |       32,940 |
+| wado           |       53,707 |
 | rust           |       62,952 |
 | tinygo         |      186,022 |
 
@@ -81,6 +81,7 @@ Run `mise install` to install:
 
 - **Node.js** - for AssemblyScript
 - **Zig** - wasm32-wasi target
+- **wasmtime** - for validation (v41+ required for Wado's WASI P3)
 
 ### Manual installation
 

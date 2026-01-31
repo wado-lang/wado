@@ -12,6 +12,7 @@
 [tools]
 node = "latest"
 zig = "latest"
+wasmtime = "41"  # matches project's Cargo.toml
 
 [env]
 OUT_DIR = "out"
@@ -149,7 +150,7 @@ for f in "$OUT_DIR"/*_rust.wasm "$OUT_DIR"/*_zig.wasm "$OUT_DIR"/*_tinygo.wasm "
         $WASMTIME "$f" 2>&1 | head -1 || echo "(failed)"
     fi
 done
-# Wado uses WASI P3 component model
+# Wado uses WASI P3 component model (requires wasmtime 41+)
 for f in "$OUT_DIR"/*_wado.wasm; do
     if [ -f "$f" ]; then
         printf "%-40s " "$f:"
