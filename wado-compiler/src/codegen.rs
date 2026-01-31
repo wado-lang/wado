@@ -5977,6 +5977,12 @@ impl Codegen {
                 // Unit type - use 0
                 ConstExpr::i32_const(0)
             }
+            TirExprKind::Cast { expr: inner, .. } => {
+                // For casts, evaluate the inner expression with the cast's target type
+                // Create a synthetic TirExpr with the inner expression but outer type
+                let typed_inner = TirExpr::new(inner.kind.clone(), init.type_id, init.span);
+                Self::global_init_to_const_expr(&typed_inner, type_table)
+            }
             _ => {
                 // For non-constant initializers, we'll need lazy initialization
                 // For now, panic with a clear message

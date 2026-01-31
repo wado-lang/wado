@@ -4193,6 +4193,63 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Constant folding: fold -literal into a negative literal
+        if unary.op == UnaryOp::Neg {
+            match &expr.kind {
+                TirExprKind::IntLiteral { value, repr } => {
+                    // Fold -N into a negative literal
+                    // Use wrapping negation to handle edge cases like -i64::MIN
+                    // Store as u64 (two's complement representation)
+                    let neg_value = (*value as i64).wrapping_neg() as u64;
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: neg_value,
+                            repr: format!("-{repr}"),
+                        },
+                        expr.type_id,
+                        unary.span,
+                    );
+                }
+                TirExprKind::FloatLiteral { value, repr } => {
+                    // Fold -N.M into a negative float literal
+                    return TirExpr::new(
+                        TirExprKind::FloatLiteral {
+                            value: -value,
+                            repr: format!("-{repr}"),
+                        },
+                        expr.type_id,
+                        unary.span,
+                    );
+                }
+                // Handle -(N as T) -> (-N) as T for integer casts
+                TirExprKind::Cast {
+                    expr: inner,
+                    target_type,
+                } => {
+                    if let TirExprKind::IntLiteral { value, repr } = &inner.kind {
+                        let neg_value = (*value as i64).wrapping_neg() as u64;
+                        let neg_literal = TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: neg_value,
+                                repr: format!("-{repr}"),
+                            },
+                            inner.type_id,
+                            unary.span,
+                        );
+                        return TirExpr::new(
+                            TirExprKind::Cast {
+                                expr: Box::new(neg_literal),
+                                target_type: *target_type,
+                            },
+                            *target_type,
+                            unary.span,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
             UnaryOp::Ref => self.type_table.borrow_mut().make_ref(expr.type_id),
@@ -5008,6 +5065,43 @@ impl<'a> Resolver<'a> {
                 }
             }
 
+            // Negated integer literal coercion: -42 as i64
+            if let Expr::Unary(unary) = expr
+                && unary.op == UnaryOp::Neg
+                && let Expr::Literal(lit) = &unary.expr
+                && let Literal::Int(int_lit) = &lit.value
+                && self.type_table.borrow().is_integer(target_type)
+            {
+                match Self::parse_int_literal(&int_lit.repr) {
+                    Ok(value) => {
+                        // Negate as i64 then store as u64 (two's complement)
+                        let neg_value = (value as i64).wrapping_neg() as u64;
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: neg_value,
+                                repr: format!("-{}", int_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: 0,
+                                repr: format!("-{}", int_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                }
+            }
+
             // Float literal coercion
             if let Expr::Literal(lit) = expr
                 && let Literal::Float(float_lit) = &lit.value
@@ -5036,6 +5130,41 @@ impl<'a> Resolver<'a> {
                             },
                             target_type,
                             lit.span,
+                        );
+                    }
+                }
+            }
+
+            // Negated float literal coercion: -3.14 as f32
+            if let Expr::Unary(unary) = expr
+                && unary.op == UnaryOp::Neg
+                && let Expr::Literal(lit) = &unary.expr
+                && let Literal::Float(float_lit) = &lit.value
+                && self.type_table.borrow().is_float(target_type)
+            {
+                match Self::parse_float_literal(&float_lit.repr) {
+                    Ok(value) => {
+                        return TirExpr::new(
+                            TirExprKind::FloatLiteral {
+                                value: -value,
+                                repr: format!("-{}", float_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        return TirExpr::new(
+                            TirExprKind::FloatLiteral {
+                                value: 0.0,
+                                repr: format!("-{}", float_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
                         );
                     }
                 }
@@ -5194,6 +5323,13 @@ impl<'a> Resolver<'a> {
                 target_type,
                 expr.span(),
             );
+        }
+
+        // Handle match expression coercion - propagate expected type to arm bodies
+        if let Some(target_type) = expected_type
+            && let Expr::Match(match_expr) = expr
+        {
+            return self.resolve_match_expr_with_expected_type(match_expr, ctx, target_type);
         }
 
         // Normal expression resolution
@@ -8561,6 +8697,56 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Resolve a match expression with an expected result type for arm coercion
+    fn resolve_match_expr_with_expected_type(
+        &mut self,
+        match_expr: &ast::MatchExpr,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirExpr {
+        let scrutinee = self.resolve_expr(&match_expr.expr, ctx);
+        let scrutinee_type = scrutinee.type_id;
+
+        let arms: Vec<TirMatchArm> = match_expr
+            .arms
+            .iter()
+            .map(|arm| self.resolve_match_arm_with_expected_type(arm, scrutinee_type, ctx, expected_type))
+            .collect();
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(scrutinee),
+                arms,
+            },
+            expected_type,
+            match_expr.span,
+        )
+    }
+
+    /// Resolve a match arm with expected body type for coercion
+    fn resolve_match_arm_with_expected_type(
+        &mut self,
+        arm: &MatchArm,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirMatchArm {
+        ctx.enter_scope();
+
+        let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
+
+        // Resolve arm body with expected type for coercion
+        let body = self.resolve_expr_with_expected_type(&arm.body, ctx, Some(expected_type));
+
+        ctx.exit_scope();
+
+        TirMatchArm {
+            pattern,
+            body,
+            span: arm.span,
+        }
+    }
+
     /// Resolve a closure
     fn resolve_closure(
         &mut self,
@@ -9020,15 +9206,26 @@ impl<'a> Resolver<'a> {
             .enumerate()
             .map(|(index, field)| {
                 // Find expected field type for literal coercion (only for numeric literals)
-                // We only use expected type for integer/float literals to avoid interfering
-                // with tuple-to-array coercion for generic struct fields
-                let expected_field_type = if matches!(
+                // We only use expected type for integer/float literals (including negated ones)
+                // to avoid interfering with tuple-to-array coercion for generic struct fields
+                let is_numeric_literal = matches!(
                     &field.value,
                     ast::Expr::Literal(lit) if matches!(
                         &lit.value,
                         ast::Literal::Int(_) | ast::Literal::Float(_)
                     )
-                ) {
+                ) || matches!(
+                    &field.value,
+                    ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg && matches!(
+                        &unary.expr,
+                        ast::Expr::Literal(lit) if matches!(
+                            &lit.value,
+                            ast::Literal::Int(_) | ast::Literal::Float(_)
+                        )
+                    )
+                );
+
+                let expected_field_type = if is_numeric_literal {
                     struct_field_types
                         .iter()
                         .find(|(name, _)| name == &field.name)
