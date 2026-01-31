@@ -1,8 +1,8 @@
-// Test basic type alias declarations
+// Test basic type alias (newtype) declarations
 
 use { println, Stdout } from "core:cli";
 
-// Type alias for primitive types (like WASI's Instant and Duration)
+// Type alias creates distinct types (like WASI's Instant and Duration)
 type Instant = u64;
 type Duration = u64;
 
@@ -19,8 +19,9 @@ fn run() with Stdout {
         println("comparison works");
     }
 
-    // Arithmetic on aliased types
-    let elapsed: Duration = later - now;
+    // Arithmetic on same newtype returns the newtype
+    // Instant - Instant -> Instant, so we need explicit cast to Duration
+    let elapsed: Duration = (later - now) as Duration;
 
     if elapsed == 1000 {
         println("arithmetic works");

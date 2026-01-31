@@ -1,0 +1,48 @@
+// Test chained newtypes wrapping WASI newtypes
+// Mark is a newtype of u64, and we create another newtype of Mark
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock, Mark } from "wasi:clocks";
+
+// Create a newtype of the WASI newtype
+type Timestamp = Mark;
+
+// Create a double-chained newtype
+type EventTime = Timestamp;
+
+fn run() with Stdout, MonotonicClock {
+    // Get time as Mark
+    let t1: Mark = MonotonicClock::now();
+
+    // Cast to our Timestamp newtype
+    let ts: Timestamp = t1 as Timestamp;
+
+    // Cast to EventTime (double-chained)
+    let evt: EventTime = t1 as EventTime;
+
+    // All should compare as u64 values
+    let t1_u64 = t1 as u64;
+    let ts_u64 = ts as u64;
+    let evt_u64 = evt as u64;
+
+    if t1_u64 == ts_u64 && ts_u64 == evt_u64 {
+        println("all casts produce same u64 value");
+    } else {
+        println("FAILED: values differ");
+    }
+
+    // Arithmetic should work on chained newtypes
+    let t2: Mark = MonotonicClock::now();
+    let ts2: Timestamp = t2 as Timestamp;
+
+    // Subtraction on Timestamp
+    let diff = ts2 - ts;
+    if diff >= 0 {
+        println("timestamp arithmetic works");
+    }
+
+    println("chained newtype tests passed");
+}
+
+__DATA__
+{"stdout": "all casts produce same u64 value\ntimestamp arithmetic works\nchained newtype tests passed\n"}

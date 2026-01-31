@@ -1,0 +1,26 @@
+// Chained newtypes
+
+use { println, Stdout } from "core:cli";
+
+type A = i32;
+type B = A;
+type C = B;
+
+fn run() with Stdout {
+    let c: C = 1;
+
+    // Can cast through chain
+    let b = c as B;
+    let a = c as A;
+    let i = c as i32;
+
+    println(`c={c}, b={b}, a={a}, i={i}`);
+
+    // Operations work on C
+    let c2: C = 2;
+    let sum = c + c2;
+    println(`sum: {sum}`);
+}
+
+__DATA__
+{"stdout": "c=1, b=1, a=1, i=1\nsum: 3\n"}

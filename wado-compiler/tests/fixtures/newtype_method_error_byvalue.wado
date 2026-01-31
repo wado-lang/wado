@@ -1,0 +1,27 @@
+// Error: cannot pass base type to newtype method (by value)
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    // Method taking by-value parameter
+    fn merge(&self, other: Counter) -> Counter {
+        return Counter { value: self.value + other.value };
+    }
+}
+
+type Score = Counter;
+
+fn run() with Stdout {
+    let score: Score = Counter { value: 10 } as Score;
+    let counter = Counter { value: 5 };
+
+    // ERROR: merge expects Score, got Counter (by value)
+    let bad = score.merge(counter);
+}
+
+__DATA__
+{"compile_error": "expected 'argument 1 to be Score'"}

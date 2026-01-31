@@ -1,0 +1,26 @@
+// Trait method on newtype
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+
+trait Describable {
+    fn describe(&self) -> i32;
+}
+
+impl Describable for Point {
+    fn describe(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    let loc: Location = Point { x: 10, y: 20 } as Location;
+    // Trait method inherited from base type
+    let d = loc.describe();
+    println(`{d}`);
+}
+
+__DATA__
+{"stdout": "30\n"}

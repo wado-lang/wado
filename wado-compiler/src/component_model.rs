@@ -254,7 +254,8 @@ impl WasiRegistry {
             }
         };
 
-        // Register effect methods with resolved types
+        // Register effect methods with resolved types for params but NOT for return type
+        // Return type must keep original names (e.g., Mark not u64) for newtype semantics
         for item in &module.items {
             if let Item::Effect(effect) = item {
                 for method in &effect.methods {
@@ -265,10 +266,9 @@ impl WasiRegistry {
                             .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.type_aliases)))
                             .collect();
 
-                        let return_type = method
-                            .return_type
-                            .as_ref()
-                            .map(|ty| resolve_type(ty, &self.type_aliases));
+                        // Keep original return type for newtype semantics
+                        // The resolver will handle Mark -> newtype mapping
+                        let return_type = method.return_type.clone();
 
                         self.register(
                             &effect.name,
@@ -283,7 +283,7 @@ impl WasiRegistry {
             }
         }
 
-        // Register resource methods with resolved types
+        // Register resource methods with resolved types for params but NOT for return type
         for item in &module.items {
             if let Item::Resource(resource) = item {
                 for method in &resource.methods {
@@ -294,10 +294,8 @@ impl WasiRegistry {
                             .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.type_aliases)))
                             .collect();
 
-                        let return_type = method
-                            .return_type
-                            .as_ref()
-                            .map(|ty| resolve_type(ty, &self.type_aliases));
+                        // Keep original return type for newtype semantics
+                        let return_type = method.return_type.clone();
 
                         self.register(
                             &resource.name,
@@ -446,11 +444,14 @@ impl WasiRegistry {
                 return false;
             }
         }
-        // Check return type if present
-        if let Some(ret_ty) = &func.return_type
-            && !is_return_type_supported_with_types(ret_ty, &enums, &resources)
-        {
-            return false;
+        // Check return type if present - resolve type aliases first
+        // Return types may contain type aliases like Mark, Duration, Instant
+        // that need to be resolved to their underlying types for the support check
+        if let Some(ret_ty) = &func.return_type {
+            let resolved_ret = self.resolve_type(ret_ty);
+            if !is_return_type_supported_with_types(&resolved_ret, &enums, &resources) {
+                return false;
+            }
         }
         true
     }
@@ -481,16 +482,18 @@ impl WasiRegistry {
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
 
-        // Resolve type aliases in params and return type upfront
+        // Resolve type aliases in params upfront
         // This ensures codegen doesn't need any type resolution logic
         let resolved_params: Vec<(String, Type)> = params
             .into_iter()
             .map(|(name, ty)| (name, self.resolve_type(&ty)))
             .collect();
-        let resolved_return_type = return_type.map(|ty| self.resolve_type(&ty));
+        // Don't resolve return type upfront - keep original for newtype semantics
+        // The resolver will handle type alias -> newtype mapping
+        let resolved_return_for_convention = return_type.as_ref().map(|ty| self.resolve_type(ty));
 
-        // Derive CM call convention from return type, params, and async flag
-        let call_convention = CmCallConvention::from_return_type(&resolved_return_type)
+        // Derive CM call convention from resolved return type, params, and async flag
+        let call_convention = CmCallConvention::from_return_type(&resolved_return_for_convention)
             .with_params(&resolved_params)
             .with_async(is_async);
 
@@ -502,7 +505,7 @@ impl WasiRegistry {
             package: wasi.package.clone(),
             is_async,
             params: resolved_params,
-            return_type: resolved_return_type,
+            return_type,
             call_convention,
         };
 

@@ -1,0 +1,28 @@
+// Error: cannot pass newtype to method expecting base type
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn add(&self, other: &Point) -> Point {
+        return Point { x: self.x + other.x, y: self.y + other.y };
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    let pt = Point { x: 10, y: 20 };
+    let loc: Location = Point { x: 5, y: 5 } as Location;
+
+    // ERROR: add expects &Point, got &Location
+    // (calling on Point, not Location, so no substitution)
+    let bad = pt.add(&loc);
+}
+
+__DATA__
+{"compile_error": "expected 'argument 1 to be &Point'"}

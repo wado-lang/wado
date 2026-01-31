@@ -1360,25 +1360,71 @@ let id = 42;
 let query = sql`SELECT * FROM users WHERE id = ${id}`;
 ```
 
-### Type Alias
+### Newtype
 
-`type T = U` creates an alias where `T` and `U` are identical types—completely interchangeable in type checking.
+`type T = U` creates a **newtype** - a distinct type that shares representation with its base type.
 
 ```wado
-type Kilometers = i32;
-type UserID = String;
+type Meters = f64;
+type Kilometers = f64;
 
-let km: Kilometers = 100;
-let m: i32 = km;  // OK - same type
+let m: Meters = 1000.0;       // literal coercion
+let km: Kilometers = 1.0;
+
+let sum = m + m;              // OK: Meters + Meters -> Meters
+// let bad = m + km;          // ERROR: cannot mix Meters and Kilometers
+
+let raw: f64 = m as f64;      // explicit cast required
 ```
 
-For distinct types that should not be interchangeable, use a struct wrapper (newtype pattern):
+**Properties:**
+
+- `T` is a distinct type from `U` (no implicit conversion)
+- `T` inherits all methods, operators, and traits from `U`
+- Explicit `as` cast required to convert between `T` and `U`
+- Zero runtime cost (same Wasm representation)
+- Literal coercion to `T` when type context expects `T`
+
+**Method Signature Substitution:**
+
+When calling inherited methods on a newtype, parameters and return types are substituted:
+
+```wado
+type Location = Point;
+
+impl Point {
+    fn distance(&self, other: &Point) -> f64 { ... }
+}
+
+let loc1: Location = Point { x: 0, y: 0 } as Location;
+let loc2: Location = Point { x: 3, y: 4 } as Location;
+loc1.distance(&loc2);  // params expect &Location, returns f64
+```
+
+**Newtype-Specific Methods:**
+
+```wado
+impl Location {
+    fn name(&self) -> String { ... }  // only on Location, not Point
+}
+```
+
+**Chained Newtypes:**
+
+```wado
+type A = i32;
+type B = A;
+type C = B;
+
+let c: C = 1;
+let a = c as A;    // OK: direct cast through chain
+let i = c as i32;  // OK: direct cast to ultimate base
+```
+
+For complete type isolation where you want to hide base type methods, use a struct wrapper:
 
 ```wado
 struct Miles { value: i32 }
-
-let miles = Miles { value: 50 };
-let m: i32 = miles.value;  // explicit access required
 ```
 
 ### Literal Types

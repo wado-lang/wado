@@ -1,0 +1,13 @@
+// Error: cannot assign newtype to base type without cast
+
+type Duration = u64;
+
+fn run() {
+    let d: Duration = 1000;
+
+    // ERROR: cannot assign Duration to u64 without cast
+    let raw: u64 = d;
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

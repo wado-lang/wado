@@ -103,17 +103,44 @@ Result<T, E>            // result type
 ()
 ```
 
-## Type Alias
+## Newtype
 
 ```wado
-type Kilometers = i32;    // alias - same type as i32
-type UserID = String;
+type Meters = f64;
+type Kilometers = f64;
 
-let km: Kilometers = 100;
-let m: i32 = km;          // OK - interchangeable
+let m: Meters = 1000.0;       // literal coercion
+let km: Kilometers = 1.0;
 
-// For distinct types, use struct wrapper (newtype pattern)
-struct Miles { value: i32 }
+let sum = m + m;              // OK: Meters + Meters -> Meters
+// let bad = m + km;          // ERROR: cannot mix Meters and Kilometers
+
+let raw: f64 = m as f64;      // explicit cast required
+let conv = (m as f64) / 1000.0 as Kilometers;
+```
+
+Newtypes are distinct types that:
+
+- Inherit methods, operators, and traits from the base type
+- Require explicit `as` cast to convert to/from base type
+- Have zero runtime cost (same representation)
+
+```wado
+// Newtype of struct - inherits methods
+type Location = Point;
+
+impl Point {
+    fn distance(&self, other: &Point) -> f64 { ... }
+}
+
+let loc1: Location = Point { x: 0, y: 0 } as Location;
+let loc2: Location = Point { x: 3, y: 4 } as Location;
+let d = loc1.distance(&loc2);  // returns f64, params expect &Location
+
+// Newtype-specific methods
+impl Location {
+    fn name(&self) -> String { ... }  // only on Location, not Point
+}
 ```
 
 ## Tuples and Arrays

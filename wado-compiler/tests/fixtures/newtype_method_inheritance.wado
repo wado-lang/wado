@@ -1,0 +1,38 @@
+// Newtypes inherit methods from base type (struct-based newtype)
+// Primitives don't have user-callable methods in Wado, so we test with struct base
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+
+    fn add(&self, other: &Point) -> Point {
+        return Point { x: self.x + other.x, y: self.y + other.y };
+    }
+}
+
+type Location = Point;
+
+fn run() with Stdout {
+    let loc1: Location = Point { x: 10, y: 20 } as Location;
+    let loc2: Location = Point { x: 5, y: 5 } as Location;
+
+    // Method inherited from Point, returns i32 (no substitution for non-Self return types)
+    let s = loc1.sum();
+    println(`sum: {s}`);
+
+    // Method inherited from Point, Self types substituted
+    // add(&self, other: &Point) -> Point becomes add(&self, other: &Location) -> Location
+    let loc3 = loc1.add(&loc2);
+    println(`added: ({loc3.x}, {loc3.y})`);
+}
+
+__DATA__
+{"stdout": "sum: 30\nadded: (15, 25)\n"}

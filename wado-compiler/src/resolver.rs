@@ -250,11 +250,16 @@ struct LocalVar {
     is_mut: bool,
 }
 
-/// Method lookup result including return type and self parameter kind
-#[derive(Debug, Clone, Copy)]
+/// Method lookup result including return type, self parameter kind, and parameter types
+#[derive(Debug, Clone)]
 struct MethodInfo {
     return_type: TypeId,
     self_kind: ast::SelfKind,
+    /// Parameter types (excluding self)
+    param_types: Vec<TypeId>,
+    /// If this method was inherited from a newtype's base type, the base type ID
+    /// Used for method signature substitution
+    inherited_from_base: Option<TypeId>,
 }
 
 /// Labeled block expression target for tracking break types
@@ -852,13 +857,20 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     Item::Type(type_alias) => {
-                        let type_id = Self::resolve_type_static(
+                        // Resolve the base type
+                        let base_type_id = Self::resolve_type_static(
                             &type_alias.ty,
                             &mut type_table.borrow_mut(),
                             &type_aliases,
                             &struct_fields,
                         );
-                        type_aliases.insert(type_alias.name.clone(), type_id);
+                        // Create a newtype wrapping the base type
+                        let newtype_id = type_table.borrow_mut().make_newtype(
+                            type_alias.name.clone(),
+                            module_source.clone(),
+                            base_type_id,
+                        );
+                        type_aliases.insert(type_alias.name.clone(), newtype_id);
                     }
                     Item::Variant(variant_decl) => {
                         // Resolve variant case field types
@@ -1354,13 +1366,22 @@ impl<'a> Resolver<'a> {
     /// Collect type definitions from the module
     fn collect_types(&mut self, module: &Module) {
         // First, collect types from loaded modules (so aliases like Instant = u64 are available)
-        for loaded_module in self.loaded_modules.values() {
+        for (path, loaded_module) in self.loaded_modules {
+            let module_source = ModuleSource::from_path(path);
             for item in &loaded_module.items {
                 if let Item::Type(type_alias) = item {
                     // Only add if not already present (main module takes priority)
                     if !self.type_aliases.contains_key(&type_alias.name) {
-                        let type_id = self.resolve_type(&type_alias.ty);
-                        self.type_aliases.insert(type_alias.name.clone(), type_id);
+                        // Resolve the base type
+                        let base_type_id = self.resolve_type(&type_alias.ty);
+                        // Create a newtype wrapping the base type
+                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                            type_alias.name.clone(),
+                            module_source.clone(),
+                            base_type_id,
+                        );
+                        self.type_aliases
+                            .insert(type_alias.name.clone(), newtype_id);
                     }
                 }
             }
@@ -1425,8 +1446,16 @@ impl<'a> Resolver<'a> {
                     self.current_type_params = old_type_params;
                 }
                 Item::Type(type_alias) => {
-                    let type_id = self.resolve_type(&type_alias.ty);
-                    self.type_aliases.insert(type_alias.name.clone(), type_id);
+                    // Resolve the base type
+                    let base_type_id = self.resolve_type(&type_alias.ty);
+                    // Create a newtype wrapping the base type
+                    let newtype_id = self.type_table.borrow_mut().make_newtype(
+                        type_alias.name.clone(),
+                        self.current_module_source.clone(),
+                        base_type_id,
+                    );
+                    self.type_aliases
+                        .insert(type_alias.name.clone(), newtype_id);
                 }
                 Item::Variant(variant_decl) => {
                     // Set up type parameters in scope for resolving field types
@@ -2251,6 +2280,29 @@ impl<'a> Resolver<'a> {
             let value = self.resolve_expr(&let_stmt.value, ctx);
             (value.clone(), value.type_id)
         };
+
+        // Type check: if type annotation is present, verify value type matches
+        if let Some(_annotated_type) = &let_stmt.ty
+            && value.type_id != type_id
+            && value.type_id != TypeTable::UNKNOWN
+        {
+            // Allow null (Option<unknown>) to be assigned to Option<T>
+            let is_null_to_option = {
+                let type_table = self.type_table.borrow();
+                matches!(
+                    (type_table.get(value.type_id), type_table.get(type_id)),
+                    (ResolvedType::Option(inner), ResolvedType::Option(_))
+                        if *inner == TypeTable::UNKNOWN
+                )
+            };
+            if !is_null_to_option {
+                self.errors.push(TypeError::TypeMismatch {
+                    expected: self.type_table.borrow().type_name(type_id),
+                    found: self.type_table.borrow().type_name(value.type_id),
+                    span: let_stmt.value.span(),
+                });
+            }
+        }
 
         // Handle different pattern types
         match &let_stmt.pattern {
@@ -3947,6 +3999,26 @@ impl<'a> Resolver<'a> {
 
         let op = convert_binary_op(binary.op);
 
+        // Type check for newtypes: if either operand is a newtype, they must be the same type
+        // (This prevents mixing Meters and Seconds even though both wrap i32)
+        {
+            let type_table = self.type_table.borrow();
+            let left_is_newtype =
+                matches!(type_table.get(left.type_id), ResolvedType::Newtype { .. });
+            let right_is_newtype =
+                matches!(type_table.get(right.type_id), ResolvedType::Newtype { .. });
+
+            if (left_is_newtype || right_is_newtype) && left.type_id != right.type_id {
+                let left_name = type_table.type_name(left.type_id);
+                let right_name = type_table.type_name(right.type_id);
+                self.errors.push(TypeError::TypeMismatch {
+                    expected: left_name,
+                    found: right_name,
+                    span: binary.span,
+                });
+            }
+        }
+
         // Determine result type based on operator
         let type_id = match binary.op {
             BinaryOp::Eq
@@ -4691,12 +4763,25 @@ impl<'a> Resolver<'a> {
                 "f32" => TypeTable::F32,
                 "f64" => TypeTable::F64,
                 "bool" => TypeTable::BOOL,
-                // Type aliases from WASI (e.g., Instant, Duration)
+                // Type aliases from WASI (e.g., Mark, Instant, Duration)
                 _ => {
-                    // Clone to avoid borrow checker issues
+                    // First check if it's a registered newtype in type_aliases
+                    if let Some(&newtype_id) = self.type_aliases.get(&named.name) {
+                        return newtype_id;
+                    }
+                    // Otherwise, try to resolve via WASI registry's type aliases
                     let aliased = self.wasi_registry.get_type_alias(&named.name).cloned();
                     if let Some(aliased) = aliased {
-                        self.resolve_wasi_type(&aliased)
+                        // Create a newtype for this WASI type alias
+                        let base_type = self.resolve_wasi_type(&aliased);
+                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                            named.name.clone(),
+                            ModuleSource::wasi("clocks"),
+                            base_type,
+                        );
+                        // Cache the newtype for future lookups
+                        self.type_aliases.insert(named.name.clone(), newtype_id);
+                        newtype_id
                     } else {
                         // Resource types are represented as i32 handles
                         TypeTable::I32
@@ -5171,6 +5256,8 @@ impl<'a> Resolver<'a> {
         let MethodInfo {
             mut return_type,
             self_kind,
+            param_types,
+            inherited_from_base,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -5187,8 +5274,47 @@ impl<'a> Resolver<'a> {
             MethodInfo {
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
+                param_types: vec![],
+                inherited_from_base: None,
             }
         };
+
+        // Type check method arguments against expected parameter types (newtype-aware)
+        // If method was inherited from a newtype's base type, substitute base->newtype in params
+        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = inherited_from_base {
+            // Get the newtype that the method is being called on
+            let newtype_id = self.get_base_type(receiver.type_id);
+            // Substitute base type with newtype in all parameter types
+            param_types
+                .iter()
+                .map(|&ty| self.substitute_newtype_in_type(ty, base_type_id, newtype_id))
+                .collect()
+        } else {
+            param_types
+        };
+
+        // Check each argument against expected parameter type
+        for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
+            if let Some((expected_name, actual_name)) =
+                self.check_newtype_arg_mismatch(arg.type_id, expected_type)
+            {
+                self.errors.push(TypeError::TypeMismatch {
+                    expected: format!("argument {} to be {}", i + 1, expected_name),
+                    found: actual_name,
+                    span: method_call
+                        .args
+                        .get(i)
+                        .map_or(method_call.span, super::ast::Expr::span),
+                });
+            }
+        }
+
+        // Substitute return type for inherited newtype methods
+        // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
+        if let Some(base_type_id) = inherited_from_base {
+            let newtype_id = self.get_base_type(receiver.type_id);
+            return_type = self.substitute_newtype_in_type(return_type, base_type_id, newtype_id);
+        }
 
         // Adjust receiver based on what the method expects (self_kind)
         receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, method_call.span);
@@ -5328,11 +5454,17 @@ impl<'a> Resolver<'a> {
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
 
-        // Extract struct name for parameter type lookup
-        let struct_name_for_lookup = match self.type_table.borrow().get(target_type_id).clone() {
-            ResolvedType::Struct { name, .. } => Some(name),
-            ResolvedType::GenericInstance { name, .. } => Some(name),
-            _ => None,
+        // Extract struct name for parameter type lookup (follow newtypes to base)
+        let struct_name_for_lookup = {
+            let mut current_type = target_type_id;
+            loop {
+                match self.type_table.borrow().get(current_type).clone() {
+                    ResolvedType::Struct { name, .. } => break Some(name),
+                    ResolvedType::GenericInstance { name, .. } => break Some(name),
+                    ResolvedType::Newtype { base_type, .. } => current_type = base_type,
+                    _ => break None,
+                }
+            }
         };
 
         // Look up parameter types for coercion
@@ -5518,40 +5650,107 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        let (struct_name, module_path, mangled_struct_name, struct_type_args) =
-            match self.type_table.borrow().get(target_type_id) {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
-                ResolvedType::Resource {
-                    name,
-                    module_source,
-                } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => {
-                    // Build mangled name for generic type: Array<i32>
-                    let type_arg_names: Vec<String> = type_args
-                        .iter()
-                        .map(|t| self.mangle_type_name(*t))
-                        .collect();
-                    let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                    (
-                        name.clone(),
-                        module_source.to_path(),
-                        mangled,
-                        type_args.clone(),
-                    )
+        let (struct_name, module_path, mangled_struct_name, struct_type_args) = match self
+            .type_table
+            .borrow()
+            .get(target_type_id)
+        {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+            ResolvedType::Resource {
+                name,
+                module_source,
+            } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                // Build mangled name for generic type: Array<i32>
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name(*t))
+                    .collect();
+                let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                (
+                    name.clone(),
+                    module_source.to_path(),
+                    mangled,
+                    type_args.clone(),
+                )
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                // For newtypes, look through to the base type for static method lookup
+                match self.type_table.borrow().get(*base_type).clone() {
+                    ResolvedType::Struct {
+                        name,
+                        module_source,
+                        ..
+                    } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+                    ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        type_args,
+                    } => {
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| self.mangle_type_name(*t))
+                            .collect();
+                        let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                        (
+                            name.clone(),
+                            module_source.to_path(),
+                            mangled,
+                            type_args.clone(),
+                        )
+                    }
+                    // Handle chained newtypes recursively
+                    ResolvedType::Newtype {
+                        base_type: inner_base,
+                        ..
+                    } => {
+                        // Follow the chain to find the ultimate struct
+                        let mut current = inner_base;
+                        loop {
+                            match self.type_table.borrow().get(current).clone() {
+                                ResolvedType::Struct {
+                                    name,
+                                    module_source,
+                                    ..
+                                } => {
+                                    break (
+                                        name.clone(),
+                                        module_source.to_path(),
+                                        name.clone(),
+                                        vec![],
+                                    );
+                                }
+                                ResolvedType::Newtype {
+                                    base_type: next, ..
+                                } => current = next,
+                                _ => {
+                                    return TirExpr::new(
+                                        TirExprKind::Unit,
+                                        TypeTable::ERROR,
+                                        static_call.span,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                    }
                 }
-                _ => {
-                    // Unknown type - return error expression
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
-                }
-            };
+            }
+            _ => {
+                // Unknown type - return error expression
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+            }
+        };
 
         // Build the mangled function name
         let mangled_func_name = format!("{}::{}", mangled_struct_name, static_call.method);
@@ -5921,6 +6120,18 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // For newtypes, check if the base type has the static method
+        if let Some(&newtype_id) = self.type_aliases.get(struct_name)
+            && let ResolvedType::Newtype { base_type, .. } =
+                self.type_table.borrow().get(newtype_id).clone()
+        {
+            // Get the base type's name and recursively check
+            let base_name = self.type_table.borrow().type_name(base_type);
+            if self.is_static_method(&base_name, method_name) {
+                return true;
+            }
+        }
+
         false
     }
 
@@ -5934,25 +6145,42 @@ impl<'a> Resolver<'a> {
         span: Span,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Look up return type
+        // For newtypes, resolve to the base type's static method
+        let (actual_struct_name, actual_mangled_name) =
+            if let Some(&newtype_id) = self.type_aliases.get(struct_name) {
+                if let ResolvedType::Newtype { base_type, .. } =
+                    self.type_table.borrow().get(newtype_id).clone()
+                {
+                    // Follow the chain to find the ultimate struct
+                    let base_name = self.get_ultimate_base_struct_name(base_type);
+                    let mangled = format!("{base_name}::{method_name}");
+                    (base_name, mangled)
+                } else {
+                    (struct_name.to_string(), mangled_func_name.to_string())
+                }
+            } else {
+                (struct_name.to_string(), mangled_func_name.to_string())
+            };
+
+        // Look up return type using the actual struct name
         let return_type = self.lookup_static_method_return_type(
-            struct_name,
+            &actual_struct_name,
             &[], // Module path will be looked up during lookup
             method_name,
-            mangled_func_name,
+            &actual_mangled_name,
         );
 
-        // Determine module source for the struct
-        let module_source = self.find_struct_module_source(struct_name);
+        // Determine module source for the actual struct
+        let module_source = self.find_struct_module_source(&actual_struct_name);
 
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
                     module_source,
-                    name: mangled_func_name.to_string(),
+                    name: actual_mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        struct_name.to_string(),
+                        actual_struct_name,
                         None, // Static methods are inherent, no trait
                         method_name.to_string(),
                     )),
@@ -5962,6 +6190,19 @@ impl<'a> Resolver<'a> {
             return_type,
             span,
         )
+    }
+
+    /// Get the ultimate base struct name following the newtype chain
+    fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
+        let mut current = type_id;
+        loop {
+            match self.type_table.borrow().get(current).clone() {
+                ResolvedType::Struct { name, .. } => return name,
+                ResolvedType::GenericInstance { name, .. } => return name,
+                ResolvedType::Newtype { base_type, .. } => current = base_type,
+                _ => return self.type_table.borrow().type_name(current),
+            }
+        }
     }
 
     /// Find the module source for a struct by name
@@ -6047,6 +6288,7 @@ impl<'a> Resolver<'a> {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.mangle_type_name(*elem))
             }
+            ResolvedType::Newtype { name, .. } => name.clone(),
             _ => "unknown".to_string(),
         }
     }
@@ -6063,17 +6305,17 @@ impl<'a> Resolver<'a> {
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
         // Get the struct name, module path, and type args from the base type
-        let (struct_name, module_path, receiver_type_args) = match &base_type {
+        let (struct_name, module_path, receiver_type_args, newtype_base) = match &base_type {
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.to_path(), None),
+            } => (name.clone(), module_source.to_path(), None, None),
             // Resource types use reference semantics - handle like struct for method lookup
             ResolvedType::Resource {
                 name,
                 module_source,
-            } => (name.clone(), module_source.to_path(), None),
+            } => (name.clone(), module_source.to_path(), None, None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
                 name,
@@ -6087,6 +6329,19 @@ impl<'a> Resolver<'a> {
                 } else {
                     Some(type_args.clone())
                 },
+                None,
+            ),
+            // Newtype: first try looking up methods on the newtype itself,
+            // then fall back to the base type for method inheritance
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                base_type,
+            } => (
+                name.clone(),
+                module_source.to_path(),
+                None,
+                Some(*base_type),
             ),
             // Primitive types have built-in methods like to_string()
             ResolvedType::Primitive(_) => {
@@ -6100,6 +6355,8 @@ impl<'a> Resolver<'a> {
                     return Some(MethodInfo {
                         return_type,
                         self_kind: ast::SelfKind::None,
+                        param_types: vec![],
+                        inherited_from_base: None,
                     });
                 }
                 return None;
@@ -6110,18 +6367,23 @@ impl<'a> Resolver<'a> {
         // Build the mangled method name and look it up locally first
         let mangled_name = format!("{struct_name}::{method_name}");
         if let Some(&return_type) = self.function_return_types.get(&mangled_name) {
-            // For locally registered methods, we need to find the self_kind from the AST
-            // Check current module items for the method definition
-            if let Some(self_kind) = self.find_method_self_kind(&struct_name, method_name) {
+            // For locally registered methods, find self_kind and param_types from the AST
+            if let Some((self_kind, param_types)) =
+                self.find_local_method_info(&struct_name, method_name)
+            {
                 return Some(MethodInfo {
                     return_type,
                     self_kind,
+                    param_types,
+                    inherited_from_base: None,
                 });
             }
-            // Fallback: assume &self for methods (most common case)
+            // Fallback: assume &self for methods (most common case), no param_types
             return Some(MethodInfo {
                 return_type,
                 self_kind: ast::SelfKind::Ref,
+                param_types: vec![],
+                inherited_from_base: None,
             });
         }
 
@@ -6183,12 +6445,15 @@ impl<'a> Resolver<'a> {
                                     .first()
                                     .map(|p| p.self_kind)
                                     .unwrap_or(ast::SelfKind::None);
+                                let param_types = self.extract_param_types(&method.params);
 
                                 self.current_type_params = old_type_params;
 
                                 return Some(MethodInfo {
                                     return_type,
                                     self_kind,
+                                    param_types,
+                                    inherited_from_base: None,
                                 });
                             }
                         }
@@ -6257,12 +6522,15 @@ impl<'a> Resolver<'a> {
                                         .first()
                                         .map(|p| p.self_kind)
                                         .unwrap_or(ast::SelfKind::None);
+                                    let param_types = self.extract_param_types(&method.params);
 
                                     self.current_type_params = old_type_params;
 
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind,
+                                        param_types,
+                                        inherited_from_base: None,
                                     });
                                 }
                             }
@@ -6295,10 +6563,13 @@ impl<'a> Resolver<'a> {
                                     .as_ref()
                                     .map(|t| self.resolve_type(t))
                                     .unwrap_or(TypeTable::UNIT);
+                                let param_types = self.extract_param_types(&method.params);
                                 // Resource instance methods use &self (Ref) by default
                                 return Some(MethodInfo {
                                     return_type,
                                     self_kind: ast::SelfKind::Ref,
+                                    param_types,
+                                    inherited_from_base: None,
                                 });
                             }
                         }
@@ -6328,10 +6599,13 @@ impl<'a> Resolver<'a> {
                                         .as_ref()
                                         .map(|t| self.resolve_type(t))
                                         .unwrap_or(TypeTable::UNIT);
+                                    let param_types = self.extract_param_types(&method.params);
                                     // Resource instance methods use &self (Ref) by default
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind: ast::SelfKind::Ref,
+                                        param_types,
+                                        inherited_from_base: None,
                                     });
                                 }
                             }
@@ -6341,11 +6615,35 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // For newtypes: if method not found on the newtype itself, try the base type
+        // This enables method inheritance: Location (newtype of Point) can use Point's methods
+        if let Some(base_type_id) = newtype_base {
+            if let Some(mut method_info) = self.lookup_method_info(base_type_id, method_name) {
+                // Mark that this method was inherited from the base type
+                // This enables proper type checking (e.g., Point::add expects &Point,
+                // but when called on Location, it should expect &Location)
+                // Only set if not already set (for chained newtypes like C -> B -> A -> Point,
+                // we want to keep the innermost base type where the method is defined)
+                if method_info.inherited_from_base.is_none() {
+                    method_info.inherited_from_base = Some(base_type_id);
+                }
+                return Some(method_info);
+            }
+            return None;
+        }
+
         None
     }
 
-    /// Find the `self_kind` for a method in current module items
-    fn find_method_self_kind(&self, struct_name: &str, method_name: &str) -> Option<ast::SelfKind> {
+    /// Find the method info (`self_kind` and `param_types`) for a method in current module items
+    fn find_local_method_info(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<(ast::SelfKind, Vec<TypeId>)> {
+        // First collect method info without resolving types
+        let mut found_method: Option<(ast::SelfKind, Vec<ast::Type>)> = None;
+
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item {
                 // Skip trait impls
@@ -6356,12 +6654,143 @@ impl<'a> Resolver<'a> {
                 if impl_struct_name == struct_name {
                     for method in &impl_block.methods {
                         if method.name == method_name {
-                            return method.params.first().map(|p| p.self_kind);
+                            let self_kind = method
+                                .params
+                                .first()
+                                .map(|p| p.self_kind)
+                                .unwrap_or(ast::SelfKind::None);
+                            // Extract non-self parameter types
+                            let param_types: Vec<ast::Type> = method
+                                .params
+                                .iter()
+                                .filter(|p| p.name != "self")
+                                .map(|p| p.ty.clone())
+                                .collect();
+                            found_method = Some((self_kind, param_types));
+                            break;
                         }
                     }
                 }
             }
+            if found_method.is_some() {
+                break;
+            }
         }
+
+        // Now resolve the types (needs mutable borrow)
+        found_method.map(|(self_kind, param_types_ast)| {
+            let param_types: Vec<TypeId> = param_types_ast
+                .iter()
+                .map(|ty| self.resolve_type(ty))
+                .collect();
+            (self_kind, param_types)
+        })
+    }
+
+    /// Extract parameter types (excluding self) from method parameters
+    fn extract_param_types(&mut self, params: &[ast::Param]) -> Vec<TypeId> {
+        params
+            .iter()
+            .filter(|p| p.name != "self")
+            .map(|p| self.resolve_type(&p.ty))
+            .collect()
+    }
+
+    /// Substitute a base type with a newtype in a type (handles references)
+    /// For example: if `base_type` is Point and newtype is Location:
+    ///   - Point -> Location
+    ///   - &Point -> &Location
+    ///   - &mut Point -> &mut Location
+    fn substitute_newtype_in_type(
+        &mut self,
+        type_id: TypeId,
+        base_type: TypeId,
+        newtype: TypeId,
+    ) -> TypeId {
+        let ty = self.type_table.borrow().get(type_id).clone();
+        match ty {
+            // Direct match: base type -> newtype
+            _ if type_id == base_type => newtype,
+
+            // Reference: substitute the inner type
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(new_inner))
+                }
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::MutRef(new_inner))
+                }
+            }
+
+            // Other types: no substitution
+            _ => type_id,
+        }
+    }
+
+    /// Check if actual argument type matches expected parameter type (newtype-aware)
+    /// Returns true if there's a mismatch involving newtypes
+    fn check_newtype_arg_mismatch(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+    ) -> Option<(String, String)> {
+        if actual == expected {
+            return None;
+        }
+
+        let type_table = self.type_table.borrow();
+
+        // Unwrap references to get the inner types
+        let actual_inner = match type_table.get(actual) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => actual,
+        };
+        let expected_inner = match type_table.get(expected) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => expected,
+        };
+
+        // Check if either inner type is a newtype
+        let actual_is_newtype =
+            matches!(type_table.get(actual_inner), ResolvedType::Newtype { .. });
+        let expected_is_newtype =
+            matches!(type_table.get(expected_inner), ResolvedType::Newtype { .. });
+
+        // If either is a newtype and they're different, that's a mismatch
+        if (actual_is_newtype || expected_is_newtype) && actual_inner != expected_inner {
+            let actual_name = type_table.type_name(actual);
+            let expected_name = type_table.type_name(expected);
+            return Some((expected_name, actual_name));
+        }
+
+        // Also check if one is the base type of the other
+        if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
+            && *base_type == expected_inner
+        {
+            let actual_name = type_table.type_name(actual);
+            let expected_name = type_table.type_name(expected);
+            return Some((expected_name, actual_name));
+        }
+        if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner)
+            && *base_type == actual_inner
+        {
+            let actual_name = type_table.type_name(actual);
+            let expected_name = type_table.type_name(expected);
+            return Some((expected_name, actual_name));
+        }
+
         None
     }
 
@@ -6696,12 +7125,32 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // For newtypes, also check base type for trait implementations
+        let names_to_check: Vec<String> = {
+            let mut names = vec![struct_name.to_string()];
+            // If struct_name is a newtype, also check base type names
+            if let Some(&newtype_id) = self.type_aliases.get(struct_name) {
+                let mut current = newtype_id;
+                loop {
+                    match self.type_table.borrow().get(current).clone() {
+                        ResolvedType::Newtype { base_type, .. } => {
+                            let base_name = self.type_table.borrow().type_name(base_type);
+                            names.push(base_name);
+                            current = base_type;
+                        }
+                        _ => break,
+                    }
+                }
+            }
+            names
+        };
+
         // Now process the collected impl blocks with mutable access
         for (impl_ty, trait_type, methods, associated_types, impl_module_source) in
             impl_blocks_to_check
         {
             let impl_struct_name = self.get_type_name(&impl_ty);
-            if impl_struct_name == struct_name {
+            if names_to_check.contains(&impl_struct_name) {
                 // Set up type parameters for resolving generic associated types
                 // e.g., for `impl Container for Box_<T>` called on `Box_<i32>`,
                 // we need to map T -> i32 so `type Item = T` resolves to i32
@@ -6742,11 +7191,14 @@ impl<'a> Resolver<'a> {
                             .first()
                             .map(|p| p.self_kind)
                             .unwrap_or(ast::SelfKind::None);
+                        let param_types = self.extract_param_types(&method.params);
                         found_traits.push((
                             trait_name,
                             MethodInfo {
                                 return_type,
                                 self_kind,
+                                param_types,
+                                inherited_from_base: None,
                             },
                             impl_module_source.clone(),
                         ));
@@ -7480,6 +7932,8 @@ impl<'a> Resolver<'a> {
         let MethodInfo {
             return_type,
             self_kind,
+            param_types: _,
+            inherited_from_base: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -7628,6 +8082,10 @@ impl<'a> Resolver<'a> {
             // Reference types - look through to inner type
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.lookup_field_type(inner, field_name, _span);
+            }
+            // Newtype - look through to base type for field access
+            ResolvedType::Newtype { base_type, .. } => {
+                return self.lookup_field_type(base_type, field_name, _span);
             }
             // Generic instance - look up field from generic struct definition
             // and substitute type parameters with concrete type args
