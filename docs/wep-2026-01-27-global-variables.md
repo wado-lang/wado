@@ -61,56 +61,48 @@ pub global mut state: bool = false;
 
 ### Supported Types
 
-Global variables support numeric types that Wasm globals support:
+Global variables support all types:
 
 - Integers: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `i128`, `u128`
 - Floats: `f32`, `f64`
 - Boolean: `bool`
 - Character: `char`
+- Object types: `String`, `Array<T>`, structs
 
-Note: Object types (`String`, `Array<T>`, structs) are **not yet supported** as Wasm global initialization for GC types has limitations.
+Object type globals use lazy initialization (see below).
 
 ### Initialization
 
-Global initialization follows Wasm's constant expression rules:
+Globals support arbitrary initialization expressions:
 
-**Phase 1 (Current Implementation)**: Literal-only initialization
+#### Constant Initialization
 
-```wado
-global ANSWER: i32 = 42;        // OK: integer literal
-global PI: f64 = 3.14159;       // OK: float literal
-global FLAG: bool = true;       // OK: boolean literal
-```
-
-**Phase 2 (Future)**: Constant expression evaluation
+For literals and constant expressions, globals are initialized at Wasm instantiation time:
 
 ```wado
-global DOUBLED: i32 = 21 * 2;   // Future: compile-time arithmetic
-global OFFSET: i32 = BASE + 10; // Future: reference other globals
+global ANSWER: i32 = 42;        // integer literal
+global PI: f64 = 3.14159;       // float literal
+global FLAG: bool = true;       // boolean literal
+global DOUBLED: i32 = 21 * 2;   // arithmetic expression
+global NEGATIVE: i32 = -42;     // negation
 ```
 
-**Phase 3 (Future)**: Lazy initialization for complex expressions
+#### Lazy Initialization
 
-For initializers that cannot be expressed as Wasm constant expressions:
+For non-constant expressions (function calls, object construction), the compiler generates a `__wado_init_globals()` function that initializes these globals at program start:
 
 ```wado
-global mut cache: Array<i32> = Array::<i32>::with_capacity(100);
+global mut MESSAGE: String = "Hello, World!";
+global mut ITEMS: Array<i32> = [1, 2, 3];
+global mut ORIGIN: Point = Point { x: 0, y: 0 };
 ```
 
-This would require:
+Implementation details:
 
-1. Initialize to a default/null value in Wasm global section
-2. Generate a `__init_globals()` function with actual initialization logic
-3. Ensure `__init_globals()` is called before any access
-
-The `#[module_init]` attribute (future feature) could allow user-defined initialization order:
-
-```wado
-#[module_init]
-fn setup() {
-    cache = Array::<i32>::with_capacity(100);
-}
-```
+1. Non-constant globals are initialized to a default value (0 for primitives, null for references) in the Wasm global section
+2. The `__wado_init_globals()` function contains the actual initialization logic
+3. Entry point functions (`run`, test functions) automatically call `__wado_init_globals()` at start
+4. For immutable globals with non-constant initializers, Wasm declares them as mutable internally (Wado still enforces immutability at the language level)
 
 ### Mutability Checking
 
@@ -136,13 +128,11 @@ fn example() {
 
 ### Limitations
 
-1. **Limited initialization**: Complex initialization requires lazy evaluation (not yet implemented)
-2. **No object type globals**: GC type globals need additional work for proper initialization
-3. **Cross-module access**: Globals are module-private by default; `pub` enables cross-module access but not Component Model export
+1. **Cross-module access**: Globals are module-private by default; `pub` enables cross-module access but not Component Model export
+2. **Initialization order**: Lazy-initialized globals depend on entry point execution; accessing before initialization returns default/null values
 
 ### Future Work
 
-1. **Lazy initialization**: Support non-constant initializers with generated init code
-2. **Object type globals**: Support `String`, `Array<T>`, and struct globals
-3. **Component Model export**: `export global` syntax for exposing globals at CM boundary
-4. **Thread safety**: Consider `global atomic` for thread-safe mutable globals (requires Wasm threads)
+1. **Component Model export**: `export global` syntax for exposing globals at CM boundary
+2. **Thread safety**: Consider `global atomic` for thread-safe mutable globals (requires Wasm threads)
+3. **Constant folding optimization**: Evaluate arithmetic expressions at compile time to avoid lazy initialization overhead

@@ -1,0 +1,14 @@
+// Test global variable with Array type
+use { println, Stdout } from "core:cli";
+
+global mut ITEMS: Array<i32> = [1, 2, 3];
+
+fn run() with Stdout {
+    println(`len={ITEMS.len()}`);
+    println(`item0={ITEMS[0]}`);
+    ITEMS.append(4);
+    println(`after append len={ITEMS.len()}`);
+}
+
+__DATA__
+{"stdout": "len=3\nitem0=1\nafter append len=4\n"}

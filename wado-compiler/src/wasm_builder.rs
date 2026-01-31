@@ -56,6 +56,8 @@ pub struct CoreModuleBuilder {
     // Global tracking
     global_names: HashMap<String, u32>,
     next_global_idx: u32,
+    /// Globals that are initialized with null (need `ref.as_non_null` on access)
+    nullable_globals: HashSet<String>,
 
     // Memory tracking
     pub has_memory: bool,
@@ -84,6 +86,7 @@ impl CoreModuleBuilder {
             import_func_count: 0,
             global_names: HashMap::new(),
             next_global_idx: 0,
+            nullable_globals: HashSet::new(),
             has_memory: false,
             internal_functions: HashSet::new(),
         }
@@ -327,12 +330,16 @@ impl CoreModuleBuilder {
     }
 
     /// Define a global variable and return its index
+    ///
+    /// If `is_nullable` is true, the global is marked as requiring `ref.as_non_null`
+    /// when accessed (for lazy-initialized reference type globals).
     pub fn define_global(
         &mut self,
         name: &str,
         val_type: ValType,
         mutable: bool,
         init: ConstExpr,
+        is_nullable: bool,
     ) -> u32 {
         let idx = self.next_global_idx;
         let global_type = GlobalType {
@@ -342,8 +349,16 @@ impl CoreModuleBuilder {
         };
         self.globals.global(global_type, &init);
         self.global_names.insert(name.to_string(), idx);
+        if is_nullable {
+            self.nullable_globals.insert(name.to_string());
+        }
         self.next_global_idx += 1;
         idx
+    }
+
+    /// Check if a global was defined as nullable (needs `ref.as_non_null` on access)
+    pub fn is_nullable_global(&self, name: &str) -> bool {
+        self.nullable_globals.contains(name)
     }
 
     /// Get global index by name

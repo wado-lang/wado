@@ -26,8 +26,9 @@ use crate::token::Span;
 /// Lower a TIR module
 ///
 /// Performs:
-/// 1. Closure lowering (transform closures to functor structs with `__call` methods)
-/// 2. String literal collection for the data section
+/// 1. Global variable initialization lowering (extract non-constant initializers)
+/// 2. Closure lowering (transform closures to functor structs with `__call` methods)
+/// 3. String literal collection for the data section
 pub fn lower(mut module: TirModule) -> TirModule {
     // Phase 0: Lower i128/u128 match patterns to if-else chains
     // WebAssembly doesn't have i128/u128 comparison instructions, so we convert
@@ -35,7 +36,12 @@ pub fn lower(mut module: TirModule) -> TirModule {
     // explicit equality comparisons that use the wide arithmetic extension.
     lower_wide_int_match_patterns(&mut module);
 
-    // Phase 1: Lower closures to functor structs
+    // Phase 1: Lower global variable initializers
+    // For non-constant initializers, this generates a __wado_init_globals function
+    // and injects calls to it at entry points.
+    lower_global_initializers(&mut module);
+
+    // Phase 2: Lower closures to functor structs
     // This generates synthetic structs and __call methods, and transforms:
     // - Closure expressions -> StructLiteral
     // - IndirectCall (known closure) -> MethodCall
@@ -44,7 +50,7 @@ pub fn lower(mut module: TirModule) -> TirModule {
     let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
     closure_lowerer.lower_module(&mut module);
 
-    // Phase 2: Collect string literals and their function mappings
+    // Phase 3: Collect string literals and their function mappings
     let mut collector = StringCollector::new();
     collector.collect_module(&module);
     let (strings, function_strings) = collector.into_results();
@@ -557,6 +563,206 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+// ============================================================================
+// Global Variable Initialization Lowering
+// ============================================================================
+
+/// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
+fn is_constant_initializer(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit => true,
+        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner),
+        TirExprKind::Unary { op, expr: inner } => {
+            // Negation of literals is constant
+            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner)
+        }
+        _ => false,
+    }
+}
+
+/// Create a default value expression for a type (used for lazy-initialized globals)
+fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
+    let base_type = type_table.get_ultimate_base_type(type_id);
+    match type_table.get(base_type) {
+        ResolvedType::Primitive(prim) => match prim {
+            crate::tir::PrimitiveType::I8
+            | crate::tir::PrimitiveType::I16
+            | crate::tir::PrimitiveType::I32
+            | crate::tir::PrimitiveType::U8
+            | crate::tir::PrimitiveType::U16
+            | crate::tir::PrimitiveType::U32 => TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: 0,
+                    repr: "0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::I64 | crate::tir::PrimitiveType::U64 => TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: 0,
+                    repr: "0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::I128 | crate::tir::PrimitiveType::U128 => {
+                // i128/u128 need special handling - call from_i64(0) / from_u64(0)
+                if matches!(prim, crate::tir::PrimitiveType::I128) {
+                    create_i128_literal(0, type_id, span)
+                } else {
+                    create_u128_literal(0, type_id, span)
+                }
+            }
+            crate::tir::PrimitiveType::F32 => TirExpr::new(
+                TirExprKind::FloatLiteral {
+                    value: 0.0,
+                    repr: "0.0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::F64 => TirExpr::new(
+                TirExprKind::FloatLiteral {
+                    value: 0.0,
+                    repr: "0.0".to_string(),
+                },
+                type_id,
+                span,
+            ),
+            crate::tir::PrimitiveType::Bool => {
+                TirExpr::new(TirExprKind::BoolLiteral(false), type_id, span)
+            }
+            crate::tir::PrimitiveType::Char => {
+                TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span)
+            }
+        },
+        ResolvedType::Unit => TirExpr::new(TirExprKind::Unit, type_id, span),
+        // For reference types (String, Array, struct, etc.), use null
+        _ => TirExpr::new(TirExprKind::Null, type_id, span),
+    }
+}
+
+/// Lower global variable initializers
+///
+/// For non-constant initializers, this:
+/// 1. Replaces the initializer with a default value
+/// 2. Generates a `__wado_init_globals` function containing the actual initialization
+/// 3. Adds a call to `__wado_init_globals` at the start of entry point functions
+fn lower_global_initializers(module: &mut TirModule) {
+    let type_table = module.type_table.borrow();
+
+    // Collect non-constant initializers
+    let mut lazy_inits: Vec<(String, ModuleSource, TirExpr)> = Vec::new();
+
+    for global in &mut module.globals {
+        if !is_constant_initializer(&global.initializer) {
+            // Save the original initializer
+            lazy_inits.push((
+                global.name.clone(),
+                global.module_source.clone(),
+                global.initializer.clone(),
+            ));
+            // Replace with default value
+            global.initializer = default_value_for_type(global.ty, &type_table, global.span);
+            // Mark this global as needing lazy initialization
+            global.needs_lazy_init = true;
+        }
+    }
+
+    drop(type_table);
+
+    // If no lazy initializers, nothing to do
+    if lazy_inits.is_empty() {
+        return;
+    }
+
+    // Generate __wado_init_globals function
+    let span = Span::new(0, 0, 1, 1);
+    let mut init_stmts: Vec<TirStmt> = Vec::new();
+
+    for (name, module_source, initializer) in lazy_inits {
+        // Create: global_name = initializer;
+        let global_set = TirExpr::new(
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value: Box::new(initializer),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
+    }
+
+    let init_body = TirBlock {
+        stmts: init_stmts,
+        span,
+    };
+
+    let init_func = TirFunction {
+        name: "__wado_init_globals".to_string(),
+        is_pub: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: None,
+        params: Vec::new(),
+        return_type: TypeTable::UNIT,
+        effects: Vec::new(),
+        body: Some(init_body),
+        span,
+        local_count: 0,
+        local_types: Vec::new(),
+        address_taken_locals: std::collections::HashSet::new(),
+        needed_copy_types: std::collections::HashSet::new(),
+    };
+
+    module.functions.push(Rc::new(RefCell::new(init_func)));
+
+    // Inject call to __wado_init_globals at the start of entry point functions
+    inject_init_globals_call(module);
+}
+
+/// Inject a call to __`wado_init_globals` at the start of entry point functions
+fn inject_init_globals_call(module: &mut TirModule) {
+    let span = Span::new(0, 0, 1, 1);
+
+    // Create the call expression: __wado_init_globals()
+    let init_call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::External {
+                module_source: module.module_source.clone(),
+                name: "__wado_init_globals".to_string(),
+                monomorph_info: None,
+                method_info: None,
+            },
+            type_args: Vec::new(),
+            args: Vec::new(),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    let init_call_stmt = TirStmt::new(TirStmtKind::Expr(init_call), span);
+
+    // Find entry point functions (run, test functions, export functions)
+    // For now, we inject into "run" and any function starting with "__test_"
+    for func_rc in &module.functions {
+        let mut func = func_rc.borrow_mut();
+        let is_entry = func.name == "run" || func.name.starts_with("__test_");
+
+        if is_entry && let Some(ref mut body) = func.body {
+            // Insert at the beginning
+            body.stmts.insert(0, init_call_stmt.clone());
+        }
     }
 }
 

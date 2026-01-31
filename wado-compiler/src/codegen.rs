@@ -1891,7 +1891,16 @@ impl Codegen {
         for (module_source, tir_mod) in all_tir_modules {
             let mod_type_table = &*tir_mod.type_table.borrow();
             for global in &tir_mod.globals {
-                let val_type = self.type_id_to_valtype(mod_type_table, global.ty);
+                let mut val_type = self.type_id_to_valtype(mod_type_table, global.ty);
+                // For lazy-init globals with reference types, make the type nullable
+                if global.needs_lazy_init
+                    && let ValType::Ref(ref_type) = val_type
+                {
+                    val_type = ValType::Ref(RefType {
+                        nullable: true,
+                        ..ref_type
+                    });
+                }
                 // Get constant expression for initializer
                 let init_expr =
                     Self::global_init_to_const_expr(&global.initializer, mod_type_table);
@@ -1902,7 +1911,15 @@ impl Codegen {
                     let module_path = module_source.to_path();
                     format!("global:{}::{}", module_path.join("::"), global.name)
                 };
-                builder.define_global(&global_name, val_type, global.mutable, init_expr);
+                // For lazy-init globals, Wasm must be mutable even if Wado declares them immutable
+                let wasm_mutable = global.mutable || global.needs_lazy_init;
+                builder.define_global(
+                    &global_name,
+                    val_type,
+                    wasm_mutable,
+                    init_expr,
+                    global.needs_lazy_init,
+                );
             }
         }
         // Add globals section only if there are globals
@@ -5993,12 +6010,12 @@ impl Codegen {
                 Self::global_init_to_const_expr(&typed_inner, type_table)
             }
             _ => {
-                // For non-constant initializers, we'll need lazy initialization
-                // For now, panic with a clear message
-                panic!(
-                    "non-constant global initializer not yet supported: {:?}",
-                    init.kind
-                );
+                // For non-constant initializers, use null as placeholder
+                // The actual initialization happens in __wado_init_globals
+                ConstExpr::ref_null(HeapType::Abstract {
+                    shared: false,
+                    ty: AbstractHeapType::None,
+                })
             }
         }
     }
@@ -6633,6 +6650,14 @@ impl Codegen {
                 };
                 let global_idx = builder.global_idx(&global_name);
                 func.instruction(&Instruction::GlobalGet(global_idx));
+                // For nullable globals (lazy init) with reference types, convert to non-null
+                if builder.is_nullable_global(&global_name) {
+                    // Only add ref.as_non_null for reference types
+                    let val_type = self.type_id_to_valtype(type_table, expr.type_id);
+                    if matches!(val_type, ValType::Ref(_)) {
+                        func.instruction(&Instruction::RefAsNonNull);
+                    }
+                }
             }
 
             TirExprKind::GlobalVarSet {
@@ -6651,8 +6676,14 @@ impl Codegen {
                 };
                 let global_idx = builder.global_idx(&global_name);
                 func.instruction(&Instruction::GlobalSet(global_idx));
-                // Push the assigned value back for expression result
-                func.instruction(&Instruction::GlobalGet(global_idx));
+                // Push the assigned value back for expression result (unless UNIT type)
+                if expr.type_id != TypeTable::UNIT {
+                    func.instruction(&Instruction::GlobalGet(global_idx));
+                    // For nullable globals, convert to non-null reference
+                    if builder.is_nullable_global(&global_name) {
+                        func.instruction(&Instruction::RefAsNonNull);
+                    }
+                }
             }
 
             // === Binary Operations ===
