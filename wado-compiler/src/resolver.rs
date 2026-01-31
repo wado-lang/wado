@@ -5236,20 +5236,30 @@ impl<'a> Resolver<'a> {
         // Get the base (non-ref) type for method lookup and struct name extraction
         let base_type_id = self.get_base_type(receiver.type_id);
 
-        // Get struct name from base type
-        let (struct_name, module_path) = match self.type_table.borrow().get(base_type_id) {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.to_path()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.to_path()),
-            _ => (self.mangle_type_name(base_type_id), vec![]),
-        };
+        // Get struct name and module source from base type
+        // The struct_module_source is where the struct is defined (and inherent methods live)
+        let (struct_name, module_path, struct_module_source) =
+            match self.type_table.borrow().get(base_type_id) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                } => (
+                    name.clone(),
+                    module_source.to_path(),
+                    Some(module_source.clone()),
+                ),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    ..
+                } => (
+                    name.clone(),
+                    module_source.to_path(),
+                    Some(module_source.clone()),
+                ),
+                _ => (self.mangle_type_name(base_type_id), vec![], None),
+            };
 
         // Look up method info based on receiver type
         // First try inherent method, then trait methods
@@ -5453,9 +5463,11 @@ impl<'a> Resolver<'a> {
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
 
-        // Use trait impl module source if this is a trait method, otherwise current module
-        let method_module_source =
-            trait_impl_module_source.unwrap_or_else(|| self.current_module_source.clone());
+        // Use trait impl module source if this is a trait method,
+        // otherwise use the struct's module (where inherent methods are defined)
+        let method_module_source = trait_impl_module_source
+            .or(struct_module_source)
+            .unwrap_or_else(|| self.current_module_source.clone());
 
         TirExpr::new(
             TirExprKind::MethodCall {

@@ -4,14 +4,16 @@
 
 fn run() with Stdout {
     let p: MyPoint = move "MyPoint::new"(10, 20);
-    let sum: i32 = "MyPoint::sum"(&p);
+    let sum: i32 = __inline_MyPoint__sum_0: {
+        break __inline_MyPoint__sum_0: (p.x + p.y);
+    };
     if (sum == 30) {
         core::cli::println(move "struct ok");
     } else {
         core::cli::println(move "struct fail");
     }
-    let doubled: i32 = __inline_helper_fn_0: {
-        break __inline_helper_fn_0: (21 * 2);
+    let doubled: i32 = __inline_helper_fn_1: {
+        break __inline_helper_fn_1: (21 * 2);
     };
     if (doubled == 42) {
         core::cli::println(move "fn ok");

@@ -15,10 +15,14 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
     if (opts.width <= 0) {
         return s;
     }
-    if ("String::len"(&s) >= opts.width) {
+    if (__inline_String__len_0: {
+        break __inline_String__len_0: s.used;
+    } >= opts.width) {
         return s;
     }
-    let pad_len: i32 = (opts.width - "String::len"(&s));
+    let pad_len: i32 = (opts.width - __inline_String__len_1: {
+        break __inline_String__len_1: s.used;
+    });
     let mut pad: String = move "String::with_capacity"(pad_len);
     for let mut i: i32 = 0; (i < pad_len); i = (i + 1) {
         "String::append"(&mut pad, move " ");

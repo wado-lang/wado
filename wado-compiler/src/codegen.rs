@@ -2124,9 +2124,11 @@ impl Codegen {
             module.section(&names);
         }
 
-        // Producers section (always include - small overhead, useful for analysis)
-        let producers = CoreModuleBuilder::build_producers_section();
-        module.section(&producers);
+        // Producers section (skip in size-optimized builds)
+        if !strip_names {
+            let producers = CoreModuleBuilder::build_producers_section();
+            module.section(&producers);
+        }
 
         module.finish()
     }
@@ -4793,7 +4795,18 @@ impl Codegen {
                     });
 
                     // 3. Copy the raw array
-                    self.generate_array_copy(func, raw_array_type_idx, false, ctx);
+                    // Check if element type is packed (i8/u8/i16/u16)
+                    let elem_resolved = type_table.get(elem_type);
+                    let is_packed = matches!(
+                        elem_resolved,
+                        ResolvedType::Primitive(
+                            PrimitiveType::I8
+                                | PrimitiveType::U8
+                                | PrimitiveType::I16
+                                | PrimitiveType::U16
+                        )
+                    );
+                    self.generate_array_copy(func, raw_array_type_idx, is_packed, ctx);
 
                     // 4. Get the used field from source
                     func.instruction(&Instruction::LocalGet(source_struct_local));
@@ -5383,9 +5396,18 @@ impl Codegen {
 
         // Create new array type
         // Use packed storage types for i8/i16/u8/u16, otherwise use ValType
-        let storage_type = if element_type_id == TypeTable::I8 || element_type_id == TypeTable::U8 {
+        // Use matches! on the actual type, not TypeId comparison,
+        // because TypeIds may differ across modules
+        let elem_resolved = type_table.get(element_type_id);
+        let storage_type = if matches!(
+            elem_resolved,
+            ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::U8)
+        ) {
             StorageType::I8
-        } else if element_type_id == TypeTable::I16 || element_type_id == TypeTable::U16 {
+        } else if matches!(
+            elem_resolved,
+            ResolvedType::Primitive(PrimitiveType::I16 | PrimitiveType::U16)
+        ) {
             StorageType::I16
         } else {
             let wasm_type = self.type_id_to_valtype(type_table, element_type_id);
@@ -6892,7 +6914,7 @@ impl Codegen {
                             _ => array_expr.type_id,
                         };
                         let base_type = type_table.get(base_type_id);
-                        let (raw_array_type_idx, struct_type_idx) =
+                        let (raw_array_type_idx, struct_type_idx, element_type) =
                             if let Some(element_type) = type_table.as_array(base_type_id) {
                                 let raw_type_idx = self
                                     .array_types
@@ -6903,7 +6925,7 @@ impl Codegen {
                                 let struct_type_idx = self
                                     .lookup_array_struct_type(element_type, type_table)
                                     .expect("Array struct type should be registered");
-                                (raw_type_idx, struct_type_idx)
+                                (raw_type_idx, struct_type_idx, element_type)
                             } else {
                                 panic!("index assignment on non-array type: {base_type:?}");
                             };
@@ -6929,7 +6951,21 @@ impl Codegen {
                             field_index: 0,
                         });
                         self.generate_expr(func, index_expr, type_table, ctx, builder);
-                        func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
+                        // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
+                        let elem_resolved = type_table.get(element_type);
+                        if matches!(
+                            elem_resolved,
+                            ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16)
+                        ) {
+                            func.instruction(&Instruction::ArrayGetU(raw_array_type_idx));
+                        } else if matches!(
+                            elem_resolved,
+                            ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::I16)
+                        ) {
+                            func.instruction(&Instruction::ArrayGetS(raw_array_type_idx));
+                        } else {
+                            func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
+                        }
                     }
                     TirExprKind::Unary {
                         op: TirUnaryOp::Deref,
@@ -7762,7 +7798,7 @@ impl Codegen {
                     _ => array.type_id,
                 };
                 // Track element type info for post-array-get processing
-                let (raw_array_type_idx, element_is_ref, closure_cast_type_idx) =
+                let (raw_array_type_idx, element_type_id, element_is_ref, closure_cast_type_idx) =
                     if let Some(element_type) = type_table.as_array(base_type_id) {
                         let element_resolved = type_table.get(element_type);
                         let is_ref = matches!(
@@ -7801,17 +7837,36 @@ impl Codegen {
                                 .get(&element_type)
                                 .copied()
                                 .unwrap_or(u8_array_idx),
+                            Some(element_type),
                             is_ref,
                             closure_type_idx,
                         )
                     } else {
                         let u8_array_idx = self.get_array_type_index(TypeTable::U8);
-                        (u8_array_idx, false, None)
+                        (u8_array_idx, None, false, None)
                     };
 
                 // Now generate index and do array access
                 self.generate_expr(func, index, type_table, ctx, builder);
-                func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
+                // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
+                if let Some(elem_id) = element_type_id {
+                    let elem_resolved = type_table.get(elem_id);
+                    if matches!(
+                        elem_resolved,
+                        ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16)
+                    ) {
+                        func.instruction(&Instruction::ArrayGetU(raw_array_type_idx));
+                    } else if matches!(
+                        elem_resolved,
+                        ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::I16)
+                    ) {
+                        func.instruction(&Instruction::ArrayGetS(raw_array_type_idx));
+                    } else {
+                        func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
+                    }
+                } else {
+                    func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
+                }
                 // For reference element types, convert nullable to non-null
                 // (array elements are stored as nullable refs, but we expect non-null at usage)
                 if element_is_ref {
@@ -9581,9 +9636,18 @@ impl Codegen {
                 });
                 func.instruction(&Instruction::LocalGet(counter_local));
                 // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU instead of ArrayGet
-                if element_type_id == TypeTable::U8 || element_type_id == TypeTable::U16 {
+                // Use matches! on the actual type, not TypeId comparison,
+                // because TypeIds may differ across modules
+                let elem_resolved = type_table.get(element_type_id);
+                if matches!(
+                    elem_resolved,
+                    ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16)
+                ) {
                     func.instruction(&Instruction::ArrayGetU(raw_array_type_idx));
-                } else if element_type_id == TypeTable::I8 || element_type_id == TypeTable::I16 {
+                } else if matches!(
+                    elem_resolved,
+                    ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::I16)
+                ) {
                     func.instruction(&Instruction::ArrayGetS(raw_array_type_idx));
                 } else {
                     func.instruction(&Instruction::ArrayGet(raw_array_type_idx));
@@ -12354,10 +12418,18 @@ impl Codegen {
                         // Generate remaining arguments (index)
                         self.generate_args(func, &args[1..], type_table, ctx, builder);
                         // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
-                        if *element_type == TypeTable::U8 || *element_type == TypeTable::U16 {
+                        // Use matches! on the actual type, not TypeId comparison,
+                        // because TypeIds may differ across modules
+                        let elem_resolved = type_table.get(*element_type);
+                        if matches!(
+                            elem_resolved,
+                            ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16)
+                        ) {
                             func.instruction(&Instruction::ArrayGetU(array_type_idx));
-                        } else if *element_type == TypeTable::I8 || *element_type == TypeTable::I16
-                        {
+                        } else if matches!(
+                            elem_resolved,
+                            ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::I16)
+                        ) {
                             func.instruction(&Instruction::ArrayGetS(array_type_idx));
                         } else {
                             func.instruction(&Instruction::ArrayGet(array_type_idx));
