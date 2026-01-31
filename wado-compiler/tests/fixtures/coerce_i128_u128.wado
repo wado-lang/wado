@@ -1,0 +1,26 @@
+// Test literal coercion for i128/u128 types
+use { println, Stdout } from "core:cli";
+
+struct BigInts {
+    a: u128,
+    b: i128,
+}
+
+fn get_big() -> BigInts {
+    return BigInts { a: 42, b: -100 };
+}
+
+fn run() with Stdout {
+    let b = get_big();
+    println(`a={b.a}`);
+    println(`b={b.b}`);
+
+    // Direct variable coercion
+    let x: u128 = 12345;
+    let y: i128 = -67890;
+    println(`x={x}`);
+    println(`y={y}`);
+}
+
+__DATA__
+{"stdout": "a=42\nb=-100\nx=12345\ny=-67890\n"}

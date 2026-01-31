@@ -8,9 +8,9 @@
 use crate::ast::{Item, Module, UseItem};
 use crate::name::{resolve_import_path, validate_module_path};
 use crate::symbol::{
-    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, ResourceSymbol, StructSymbol, Symbol,
-    SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol, WorldExportSymbol,
-    WorldImportSymbol, WorldSymbol,
+    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, ResourceSymbol,
+    StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol,
+    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
 use crate::token::Span;
 
@@ -319,9 +319,13 @@ impl Analyzer {
                     // Tests are converted to functions with generated names.
                 }
 
-                Item::Global(_global) => {
-                    // Global variables are handled in the resolver phase.
-                    // They are converted to TirGlobal and registered in the TIR module.
+                Item::Global(global) => {
+                    let kind = SymbolKind::Global(GlobalSymbol {
+                        is_mut: global.mutable,
+                    });
+
+                    self.symbols
+                        .define(&global.name, kind, module_path, Some(global.span));
                 }
             }
         }

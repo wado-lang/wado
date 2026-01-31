@@ -1887,14 +1887,23 @@ impl Codegen {
         // ========================================
         // Global section
         // ========================================
-        // Define user-defined global variables
-        for global in &entry_tir.globals {
-            let val_type = self.type_id_to_valtype(type_table, global.ty);
-            // Get constant expression for initializer
-            let init_expr = Self::global_init_to_const_expr(&global.initializer, type_table);
-            // Create qualified name for the global
-            let global_name = format!("global:{}", global.name);
-            builder.define_global(&global_name, val_type, global.mutable, init_expr);
+        // Define user-defined global variables from all modules
+        for (module_source, tir_mod) in all_tir_modules {
+            let mod_type_table = &*tir_mod.type_table.borrow();
+            for global in &tir_mod.globals {
+                let val_type = self.type_id_to_valtype(mod_type_table, global.ty);
+                // Get constant expression for initializer
+                let init_expr =
+                    Self::global_init_to_const_expr(&global.initializer, mod_type_table);
+                // Create qualified name for the global (matching the lookup pattern)
+                let global_name = if module_source == entry_module_source {
+                    format!("global:{}", global.name)
+                } else {
+                    let module_path = module_source.to_path();
+                    format!("global:{}::{}", module_path.join("::"), global.name)
+                };
+                builder.define_global(&global_name, val_type, global.mutable, init_expr);
+            }
         }
         // Add globals section only if there are globals
         if builder.has_globals() {
@@ -5976,6 +5985,12 @@ impl Codegen {
             TirExprKind::Unit => {
                 // Unit type - use 0
                 ConstExpr::i32_const(0)
+            }
+            TirExprKind::Cast { expr: inner, .. } => {
+                // For casts, evaluate the inner expression with the cast's target type
+                // Create a synthetic TirExpr with the inner expression but outer type
+                let typed_inner = TirExpr::new(inner.kind.clone(), init.type_id, init.span);
+                Self::global_init_to_const_expr(&typed_inner, type_table)
             }
             _ => {
                 // For non-constant initializers, we'll need lazy initialization

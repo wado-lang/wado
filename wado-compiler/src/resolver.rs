@@ -16,7 +16,9 @@ use indexmap::IndexMap;
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
-use crate::name::{LocalMethodName, ModuleSource, mangle_generic_name, strip_type_params};
+use crate::name::{
+    self as name, LocalMethodName, ModuleSource, mangle_generic_name, strip_type_params,
+};
 
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
@@ -488,6 +490,8 @@ pub struct Resolver<'a> {
     builtin_registry: BuiltinRegistry,
     /// Global variables in the current module (name -> (type, `is_mutable`))
     current_module_globals: HashMap<String, (TypeId, bool)>,
+    /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
+    imported_globals: HashMap<String, (ModuleSource, String, TypeId, bool)>,
 }
 
 /// Info about an Index trait implementation
@@ -577,6 +581,7 @@ impl<'a> Resolver<'a> {
             wasi_registry,
             builtin_registry,
             current_module_globals: HashMap::new(),
+            imported_globals: HashMap::new(),
         }
     }
 
@@ -599,11 +604,54 @@ impl<'a> Resolver<'a> {
 
         // Collect global variable names and types (before resolving functions that may reference them)
         self.current_module_globals.clear();
+        self.imported_globals.clear();
         for item in &module.items {
             if let Item::Global(global_decl) = item {
                 let ty = self.resolve_type(&global_decl.ty);
                 self.current_module_globals
                     .insert(global_decl.name.clone(), (ty, global_decl.mutable));
+            }
+        }
+
+        // Also collect imported globals from use declarations
+        for item in &module.items {
+            if let Item::Use(use_decl) = item {
+                let source_module_path =
+                    name::resolve_import_path(&module_source.to_path(), &use_decl.source);
+                let source_module_source = ModuleSource::from_path(&source_module_path);
+
+                // Look up the source module to find global declarations
+                if let Some(source_module) = self.loaded_modules.get(&source_module_path) {
+                    for use_item in &use_decl.items {
+                        if let ast::UseItem::Simple { name, alias } = use_item {
+                            // Check if this import refers to a global variable
+                            if let Some(symbol) =
+                                self.symbols.lookup_in_module(&source_module_path, name)
+                                && let crate::symbol::SymbolKind::Global(global_sym) = &symbol.kind
+                            {
+                                // Find the global declaration in the source module to get its type
+                                for src_item in &source_module.items {
+                                    if let Item::Global(global_decl) = src_item
+                                        && &global_decl.name == name
+                                    {
+                                        let ty = self.resolve_type(&global_decl.ty);
+                                        let local_name = alias.as_ref().unwrap_or(name).clone();
+                                        self.imported_globals.insert(
+                                            local_name,
+                                            (
+                                                source_module_source.clone(),
+                                                name.clone(),
+                                                ty,
+                                                global_sym.is_mut,
+                                            ),
+                                        );
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1032,6 +1080,7 @@ impl<'a> Resolver<'a> {
                 wasi_registry,
                 builtin_registry,
                 current_module_globals: HashMap::new(),
+                imported_globals: HashMap::new(),
             };
 
             // Use the provided entry_module_source for the entry module (empty path)
@@ -3703,7 +3752,7 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Check for global variables
+        // Check for global variables in current module
         if let Some(&(ty, _mutable)) = self.current_module_globals.get(&ident.name) {
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
@@ -3711,6 +3760,20 @@ impl<'a> Resolver<'a> {
                     name: ident.name.clone(),
                 },
                 ty,
+                ident.span,
+            );
+        }
+
+        // Check for imported global variables
+        if let Some((source_module, original_name, ty, _mutable)) =
+            self.imported_globals.get(&ident.name)
+        {
+            return TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source: source_module.clone(),
+                    name: original_name.clone(),
+                },
+                *ty,
                 ident.span,
             );
         }
@@ -4193,6 +4256,63 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Constant folding: fold -literal into a negative literal
+        if unary.op == UnaryOp::Neg {
+            match &expr.kind {
+                TirExprKind::IntLiteral { value, repr } => {
+                    // Fold -N into a negative literal
+                    // Use wrapping negation to handle edge cases like -i64::MIN
+                    // Store as u64 (two's complement representation)
+                    let neg_value = (*value as i64).wrapping_neg() as u64;
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: neg_value,
+                            repr: format!("-{repr}"),
+                        },
+                        expr.type_id,
+                        unary.span,
+                    );
+                }
+                TirExprKind::FloatLiteral { value, repr } => {
+                    // Fold -N.M into a negative float literal
+                    return TirExpr::new(
+                        TirExprKind::FloatLiteral {
+                            value: -value,
+                            repr: format!("-{repr}"),
+                        },
+                        expr.type_id,
+                        unary.span,
+                    );
+                }
+                // Handle -(N as T) -> (-N) as T for integer casts
+                TirExprKind::Cast {
+                    expr: inner,
+                    target_type,
+                } => {
+                    if let TirExprKind::IntLiteral { value, repr } = &inner.kind {
+                        let neg_value = (*value as i64).wrapping_neg() as u64;
+                        let neg_literal = TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: neg_value,
+                                repr: format!("-{repr}"),
+                            },
+                            inner.type_id,
+                            unary.span,
+                        );
+                        return TirExpr::new(
+                            TirExprKind::Cast {
+                                expr: Box::new(neg_literal),
+                                target_type: *target_type,
+                            },
+                            *target_type,
+                            unary.span,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
             UnaryOp::Ref => self.type_table.borrow_mut().make_ref(expr.type_id),
@@ -4303,9 +4423,22 @@ impl<'a> Resolver<'a> {
             name,
         } = &target.kind
         {
-            // Check if the global is mutable
-            if let Some(&(_, is_mutable)) = self.current_module_globals.get(name) {
-                if !is_mutable {
+            // Check if the global is mutable (check both local and imported globals)
+            let is_mutable = self
+                .current_module_globals
+                .get(name)
+                .map(|(_, m)| *m)
+                .or_else(|| {
+                    // For imported globals, the name in the TIR is the original name from source
+                    // We need to find it by iterating through imported_globals
+                    self.imported_globals
+                        .values()
+                        .find(|(src, orig_name, _, _)| src == module_source && orig_name == name)
+                        .map(|(_, _, _, m)| *m)
+                });
+
+            if let Some(is_mut) = is_mutable {
+                if !is_mut {
                     self.errors.push(TypeError::CannotAssign {
                         message: format!("cannot assign to immutable global variable '{name}'"),
                         span: assign.target.span(),
@@ -5008,6 +5141,43 @@ impl<'a> Resolver<'a> {
                 }
             }
 
+            // Negated integer literal coercion: -42 as i64
+            if let Expr::Unary(unary) = expr
+                && unary.op == UnaryOp::Neg
+                && let Expr::Literal(lit) = &unary.expr
+                && let Literal::Int(int_lit) = &lit.value
+                && self.type_table.borrow().is_integer(target_type)
+            {
+                match Self::parse_int_literal(&int_lit.repr) {
+                    Ok(value) => {
+                        // Negate as i64 then store as u64 (two's complement)
+                        let neg_value = (value as i64).wrapping_neg() as u64;
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: neg_value,
+                                repr: format!("-{}", int_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: 0,
+                                repr: format!("-{}", int_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                }
+            }
+
             // Float literal coercion
             if let Expr::Literal(lit) = expr
                 && let Literal::Float(float_lit) = &lit.value
@@ -5036,6 +5206,41 @@ impl<'a> Resolver<'a> {
                             },
                             target_type,
                             lit.span,
+                        );
+                    }
+                }
+            }
+
+            // Negated float literal coercion: -3.14 as f32
+            if let Expr::Unary(unary) = expr
+                && unary.op == UnaryOp::Neg
+                && let Expr::Literal(lit) = &unary.expr
+                && let Literal::Float(float_lit) = &lit.value
+                && self.type_table.borrow().is_float(target_type)
+            {
+                match Self::parse_float_literal(&float_lit.repr) {
+                    Ok(value) => {
+                        return TirExpr::new(
+                            TirExprKind::FloatLiteral {
+                                value: -value,
+                                repr: format!("-{}", float_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
+                        );
+                    }
+                    Err(message) => {
+                        self.errors.push(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        return TirExpr::new(
+                            TirExprKind::FloatLiteral {
+                                value: 0.0,
+                                repr: format!("-{}", float_lit.repr),
+                            },
+                            target_type,
+                            unary.span,
                         );
                     }
                 }
@@ -5194,6 +5399,13 @@ impl<'a> Resolver<'a> {
                 target_type,
                 expr.span(),
             );
+        }
+
+        // Handle match expression coercion - propagate expected type to arm bodies
+        if let Some(target_type) = expected_type
+            && let Expr::Match(match_expr) = expr
+        {
+            return self.resolve_match_expr_with_expected_type(match_expr, ctx, target_type);
         }
 
         // Normal expression resolution
@@ -8561,6 +8773,58 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Resolve a match expression with an expected result type for arm coercion
+    fn resolve_match_expr_with_expected_type(
+        &mut self,
+        match_expr: &ast::MatchExpr,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirExpr {
+        let scrutinee = self.resolve_expr(&match_expr.expr, ctx);
+        let scrutinee_type = scrutinee.type_id;
+
+        let arms: Vec<TirMatchArm> = match_expr
+            .arms
+            .iter()
+            .map(|arm| {
+                self.resolve_match_arm_with_expected_type(arm, scrutinee_type, ctx, expected_type)
+            })
+            .collect();
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(scrutinee),
+                arms,
+            },
+            expected_type,
+            match_expr.span,
+        )
+    }
+
+    /// Resolve a match arm with expected body type for coercion
+    fn resolve_match_arm_with_expected_type(
+        &mut self,
+        arm: &MatchArm,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirMatchArm {
+        ctx.enter_scope();
+
+        let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
+
+        // Resolve arm body with expected type for coercion
+        let body = self.resolve_expr_with_expected_type(&arm.body, ctx, Some(expected_type));
+
+        ctx.exit_scope();
+
+        TirMatchArm {
+            pattern,
+            body,
+            span: arm.span,
+        }
+    }
+
     /// Resolve a closure
     fn resolve_closure(
         &mut self,
@@ -9020,15 +9284,26 @@ impl<'a> Resolver<'a> {
             .enumerate()
             .map(|(index, field)| {
                 // Find expected field type for literal coercion (only for numeric literals)
-                // We only use expected type for integer/float literals to avoid interfering
-                // with tuple-to-array coercion for generic struct fields
-                let expected_field_type = if matches!(
+                // We only use expected type for integer/float literals (including negated ones)
+                // to avoid interfering with tuple-to-array coercion for generic struct fields
+                let is_numeric_literal = matches!(
                     &field.value,
                     ast::Expr::Literal(lit) if matches!(
                         &lit.value,
                         ast::Literal::Int(_) | ast::Literal::Float(_)
                     )
-                ) {
+                ) || matches!(
+                    &field.value,
+                    ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg && matches!(
+                        &unary.expr,
+                        ast::Expr::Literal(lit) if matches!(
+                            &lit.value,
+                            ast::Literal::Int(_) | ast::Literal::Float(_)
+                        )
+                    )
+                );
+
+                let expected_field_type = if is_numeric_literal {
                     struct_field_types
                         .iter()
                         .find(|(name, _)| name == &field.name)

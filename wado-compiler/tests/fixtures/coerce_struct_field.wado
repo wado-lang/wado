@@ -1,0 +1,51 @@
+// Test literal coercion in struct field initialization
+// Literals should coerce to the declared field types
+use { println, Stdout } from "core:cli";
+
+struct PmHiLo {
+    hi: i64,
+    lo: u64,
+}
+
+struct Point64 {
+    x: i64,
+    y: i64,
+}
+
+struct SmallInts {
+    a: u8,
+    b: i8,
+    c: u8,
+    d: i8,
+}
+
+fn get_pm() -> PmHiLo {
+    // Hex literals should coerce to i64/u64 based on field type
+    return PmHiLo { hi: 0xfa8fd5a0081c0289, lo: 0xe8cd3796329f1bac };
+}
+
+fn get_point() -> Point64 {
+    // Negative literals should coerce to i64
+    return Point64 { x: -100, y: 200 };
+}
+
+fn get_small() -> SmallInts {
+    // Literals should coerce to u8/i8
+    return SmallInts { a: 255, b: -128, c: 0, d: 127 };
+}
+
+fn run() with Stdout {
+    let pm = get_pm();
+    println(`hi={pm.hi}`);
+    println(`lo={pm.lo}`);
+
+    let p = get_point();
+    println(`x={p.x}`);
+    println(`y={p.y}`);
+
+    let s = get_small();
+    println(`a={s.a}, b={s.b}, c={s.c}, d={s.d}`);
+}
+
+__DATA__
+{"stdout": "hi=-391859759250406775\nlo=16775125305258875820\nx=-100\ny=200\na=255, b=-128, c=0, d=127\n"}

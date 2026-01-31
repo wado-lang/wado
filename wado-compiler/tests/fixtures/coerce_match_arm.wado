@@ -1,0 +1,57 @@
+// Test literal coercion in match arms
+// The match expression return type should propagate to arm expressions
+use { println, Stdout } from "core:cli";
+
+fn get_u64(n: i32) -> u64 {
+    return match n {
+        0 => 1,
+        1 => 10,
+        _ => 0,
+    };
+}
+
+fn get_i64(n: i32) -> i64 {
+    return match n {
+        0 => -1,
+        1 => -100,
+        _ => 0,
+    };
+}
+
+fn get_u8(n: i32) -> u8 {
+    return match n {
+        0 => 1,
+        1 => 255,
+        _ => 0,
+    };
+}
+
+fn get_i8(n: i32) -> i8 {
+    return match n {
+        0 => -1,
+        1 => -128,
+        _ => 0,
+    };
+}
+
+fn run() with Stdout {
+    // u64 coercion
+    let u64_0 = get_u64(0);
+    let u64_1 = get_u64(1);
+    println(`u64: {u64_0}, {u64_1}`);
+    // i64 coercion with negatives
+    let i64_0 = get_i64(0);
+    let i64_1 = get_i64(1);
+    println(`i64: {i64_0}, {i64_1}`);
+    // u8 coercion
+    let u8_0 = get_u8(0);
+    let u8_1 = get_u8(1);
+    println(`u8: {u8_0}, {u8_1}`);
+    // i8 coercion with negatives
+    let i8_0 = get_i8(0);
+    let i8_1 = get_i8(1);
+    println(`i8: {i8_0}, {i8_1}`);
+}
+
+__DATA__
+{"stdout": "u64: 1, 10\ni64: -1, -100\nu8: 1, 255\ni8: -1, -128\n"}

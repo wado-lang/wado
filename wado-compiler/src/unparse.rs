@@ -1972,11 +1972,10 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
         Expr::Cast(c) => {
             unparse_expr_into(&c.expr, output, true);
             output.push_str(" as ");
-            // Simplified type output
-            output.push_str(&format!("{:?}", c.target_type));
+            unparse_type_into(&c.target_type, output);
         }
         Expr::StaticMethodCall(s) => {
-            output.push_str(&format!("{:?}", s.target_type));
+            unparse_type_into(&s.target_type, output);
             output.push_str("::");
             output.push_str(&s.method);
             output.push('(');
@@ -1990,6 +1989,67 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
         }
         // For complex expressions, use a placeholder
         _ => output.push_str("<expr>"),
+    }
+}
+
+fn unparse_type_into(ty: &Type, output: &mut String) {
+    match ty {
+        Type::Named(n) => output.push_str(&n.name),
+        Type::Generic(g) => {
+            output.push_str(&g.name);
+            output.push('<');
+            for (i, arg) in g.args.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_type_into(arg, output);
+            }
+            output.push('>');
+        }
+        Type::Function(f) => {
+            output.push_str("Fn(");
+            for (i, param) in f.params.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_type_into(param, output);
+            }
+            output.push_str(") -> ");
+            unparse_type_into(&f.return_type, output);
+        }
+        Type::Tuple(types) => {
+            output.push('[');
+            for (i, t) in types.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_type_into(t, output);
+            }
+            output.push(']');
+        }
+        Type::Reference(inner) => {
+            output.push('&');
+            unparse_type_into(inner, output);
+        }
+        Type::MutReference(inner) => {
+            output.push_str("&mut ");
+            unparse_type_into(inner, output);
+        }
+        Type::NamespacedGeneric(ng) => {
+            output.push_str(&ng.namespace);
+            output.push_str("::");
+            output.push_str(&ng.name);
+            if !ng.args.is_empty() {
+                output.push('<');
+                for (i, arg) in ng.args.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str(", ");
+                    }
+                    unparse_type_into(arg, output);
+                }
+                output.push('>');
+            }
+        }
     }
 }
 
