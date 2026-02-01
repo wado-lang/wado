@@ -1894,9 +1894,31 @@ impl ClosureLowerer {
 
             let body_block = TirBlock::new(body_stmts, collected.span);
 
-            let local_count = 1 + collected.params.len() as u32;
+            // Collect local types: self + params + internal locals from body
+            // Parameters are locals 0 (self) through params.len()
+            let param_count = 1 + collected.params.len() as u32;
             let mut local_types = vec![self_ref_type];
             local_types.extend(collected.params.iter().map(|(_, t)| *t));
+
+            // Collect internal locals from the body (Let statements with index >= param_count)
+            let mut body_locals: Vec<(u32, TypeId)> = Vec::new();
+            Self::collect_locals_from_block(&body_block, &mut body_locals);
+
+            // Extend local_types with body locals, sorted by index
+            body_locals.sort_by_key(|(idx, _)| *idx);
+            for (idx, type_id) in &body_locals {
+                // Ensure we only add locals beyond parameter range
+                if *idx >= param_count {
+                    // Extend vector if needed to accommodate sparse indices
+                    while local_types.len() <= *idx as usize {
+                        local_types.push(TypeTable::UNKNOWN);
+                    }
+                    local_types[*idx as usize] = *type_id;
+                }
+            }
+
+            // local_count is the total number of locals
+            let local_count = local_types.len() as u32;
 
             // method_info tells codegen how to register this function with the proper mangled name
             let method_info = LocalMethodName::new(
@@ -1934,6 +1956,196 @@ impl ClosureLowerer {
                 call_method: call_method_rc,
                 captures: collected.captures.clone(),
             });
+        }
+    }
+
+    /// Collect all local variable declarations from a block, including nested blocks.
+    /// Returns pairs of (`local_index`, `type_id`) for each Let statement found.
+    fn collect_locals_from_block(block: &TirBlock, locals: &mut Vec<(u32, TypeId)>) {
+        for stmt in &block.stmts {
+            Self::collect_locals_from_stmt(stmt, locals);
+        }
+    }
+
+    fn collect_locals_from_stmt(stmt: &TirStmt, locals: &mut Vec<(u32, TypeId)>) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index,
+                type_id,
+                value,
+                ..
+            } => {
+                locals.push((*local_index, *type_id));
+                Self::collect_locals_from_expr(value, locals);
+            }
+            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
+                Self::collect_locals_from_expr(expr, locals);
+            }
+            TirStmtKind::Return { value: None }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => {}
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::collect_locals_from_expr(condition, locals);
+                Self::collect_locals_from_block(then_block, locals);
+                if let Some(else_blk) = else_block {
+                    Self::collect_locals_from_block(else_blk, locals);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::collect_locals_from_expr(condition, locals);
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::For {
+                init,
+                condition,
+                body,
+                update,
+            } => {
+                for s in init {
+                    Self::collect_locals_from_stmt(s, locals);
+                }
+                if let Some(cond) = condition {
+                    Self::collect_locals_from_expr(cond, locals);
+                }
+                Self::collect_locals_from_block(body, locals);
+                if let Some(upd) = update {
+                    Self::collect_locals_from_expr(upd, locals);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::collect_locals_from_expr(iterable, locals);
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                Self::collect_locals_from_block(then_block, locals);
+                if let Some(else_blk) = else_block {
+                    Self::collect_locals_from_block(else_blk, locals);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    Self::collect_locals_from_stmt(s, locals);
+                }
+                Self::collect_locals_from_expr(scrutinee, locals);
+                Self::collect_locals_from_block(body, locals);
+                if let Some(upd) = update {
+                    Self::collect_locals_from_expr(upd, locals);
+                }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                Self::collect_locals_from_expr(value, locals);
+            }
+        }
+    }
+
+    fn collect_locals_from_expr(expr: &TirExpr, locals: &mut Vec<(u32, TypeId)>) {
+        match &expr.kind {
+            TirExprKind::Block(block) => {
+                Self::collect_locals_from_block(block, locals);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::collect_locals_from_expr(condition, locals);
+                Self::collect_locals_from_block(then_branch, locals);
+                if let Some(else_blk) = else_branch {
+                    Self::collect_locals_from_block(else_blk, locals);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::collect_locals_from_expr(left, locals);
+                Self::collect_locals_from_expr(right, locals);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::OptionSome { value: inner }
+            | TirExprKind::Move { value: inner } => {
+                Self::collect_locals_from_expr(inner, locals);
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::StaticCall { args, .. }
+            | TirExprKind::EffectCall { args, .. } => {
+                for arg in args {
+                    Self::collect_locals_from_expr(arg, locals);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::collect_locals_from_expr(receiver, locals);
+                for arg in args {
+                    Self::collect_locals_from_expr(arg, locals);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::collect_locals_from_expr(callee, locals);
+                for arg in args {
+                    Self::collect_locals_from_expr(arg, locals);
+                }
+            }
+            TirExprKind::Index { expr: array, index } => {
+                Self::collect_locals_from_expr(array, locals);
+                Self::collect_locals_from_expr(index, locals);
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::collect_locals_from_expr(target, locals);
+                Self::collect_locals_from_expr(value, locals);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::collect_locals_from_expr(&field.value, locals);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::collect_locals_from_expr(elem, locals);
+                }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                for arm in arms {
+                    Self::collect_locals_from_expr(&arm.body, locals);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    Self::collect_locals_from_expr(payload_expr, locals);
+                }
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::collect_locals_from_block(block, locals);
+            }
+            // Terminals - no locals to collect
+            _ => {}
         }
     }
 
@@ -2407,6 +2619,156 @@ impl ClosureLowerer {
                     self_ref_type,
                 ),
             },
+            TirStmtKind::For {
+                init,
+                condition,
+                body,
+                update,
+            } => TirStmtKind::For {
+                init: init
+                    .iter()
+                    .map(|s| {
+                        self.transform_closure_body_stmt(s, captures, struct_type_id, self_ref_type)
+                    })
+                    .collect(),
+                condition: condition.as_ref().map(|c| {
+                    self.transform_closure_body(c, captures, struct_type_id, self_ref_type, span)
+                }),
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+                update: update.as_ref().map(|u| {
+                    self.transform_closure_body(u, captures, struct_type_id, self_ref_type, span)
+                }),
+            },
+            TirStmtKind::ForOf {
+                binding_local,
+                binding_type,
+                is_mut,
+                iterable,
+                iterable_type,
+                body,
+            } => TirStmtKind::ForOf {
+                binding_local: binding_local + 1, // Shift by 1 for self parameter
+                binding_type: *binding_type,
+                is_mut: *is_mut,
+                iterable: self.transform_closure_body(
+                    iterable,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                iterable_type: *iterable_type,
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+            },
+            TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
+                label: label.clone(),
+                block: self.transform_closure_body_block(
+                    block,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+            },
+            TirStmtKind::IfPattern {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => TirStmtKind::IfPattern {
+                scrutinee: self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                pattern: self.transform_closure_body_pattern(pattern),
+                then_block: self.transform_closure_body_block(
+                    then_block,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+                else_block: else_block.as_ref().map(|b| {
+                    self.transform_closure_body_block(b, captures, struct_type_id, self_ref_type)
+                }),
+            },
+            TirStmtKind::WhilePattern {
+                scrutinee,
+                pattern,
+                body,
+            } => TirStmtKind::WhilePattern {
+                scrutinee: self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                pattern: self.transform_closure_body_pattern(pattern),
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+            },
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern,
+                body,
+                update,
+            } => TirStmtKind::ForPattern {
+                init: init
+                    .iter()
+                    .map(|s| {
+                        self.transform_closure_body_stmt(s, captures, struct_type_id, self_ref_type)
+                    })
+                    .collect(),
+                scrutinee: self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                pattern: self.transform_closure_body_pattern(pattern),
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+                update: update.as_ref().map(|u| {
+                    self.transform_closure_body(u, captures, struct_type_id, self_ref_type, span)
+                }),
+            },
+            TirStmtKind::LetPattern {
+                pattern,
+                is_mut,
+                value,
+            } => TirStmtKind::LetPattern {
+                pattern: self.transform_closure_body_pattern(pattern),
+                is_mut: *is_mut,
+                value: self.transform_closure_body(
+                    value,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+            },
             TirStmtKind::Break { label, value } => TirStmtKind::Break {
                 label: label.clone(),
                 value: value.as_ref().map(|v| {
@@ -2414,10 +2776,45 @@ impl ClosureLowerer {
                 }),
             },
             TirStmtKind::Continue => TirStmtKind::Continue,
-            // For other statement types, clone as-is
-            other => other.clone(),
         };
         TirStmt::new(kind, stmt.span)
+    }
+
+    /// Transform a pattern within a closure body, adjusting local indices by 1 for self parameter
+    fn transform_closure_body_pattern(&self, pattern: &TirPattern) -> TirPattern {
+        match pattern {
+            TirPattern::Wildcard => TirPattern::Wildcard,
+            TirPattern::Binding {
+                name,
+                local_index,
+                type_id,
+            } => TirPattern::Binding {
+                name: name.clone(),
+                local_index: local_index + 1, // Shift by 1 for self parameter
+                type_id: *type_id,
+            },
+            TirPattern::Literal(lit) => TirPattern::Literal(lit.clone()),
+            TirPattern::Tuple(patterns) => TirPattern::Tuple(
+                patterns
+                    .iter()
+                    .map(|p| self.transform_closure_body_pattern(p))
+                    .collect(),
+            ),
+            TirPattern::Variant {
+                enum_type,
+                variant_name,
+                bindings,
+                payload_type,
+            } => TirPattern::Variant {
+                enum_type: *enum_type,
+                variant_name: variant_name.clone(),
+                bindings: bindings
+                    .iter()
+                    .map(|p| self.transform_closure_body_pattern(p))
+                    .collect(),
+                payload_type: *payload_type,
+            },
+        }
     }
 
     // ========================================================================

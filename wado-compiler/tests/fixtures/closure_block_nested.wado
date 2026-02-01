@@ -1,0 +1,24 @@
+// Test closure with nested labeled blocks
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let compute = |x: i32| {
+        let a = x * 2;
+        scope: {
+            let b = a + 1;
+            let c = b * 3;
+            scope: {
+                let d = c - 5;
+                return d;
+            }
+        }
+    };
+
+    // x=3: a=6, b=7, c=21, d=16
+    println(`{compute(3)}`);
+    // x=5: a=10, b=11, c=33, d=28
+    println(`{compute(5)}`);
+}
+
+__DATA__
+{"stdout": "16\n28\n"}

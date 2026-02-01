@@ -9346,7 +9346,10 @@ impl<'a> Resolver<'a> {
             TirStmtKind::While { body, .. }
             | TirStmtKind::For { body, .. }
             | TirStmtKind::ForOf { body, .. }
-            | TirStmtKind::Loop { body } => Self::find_return_type_in_block(body),
+            | TirStmtKind::Loop { body }
+            | TirStmtKind::LabeledBlock { block: body, .. } => {
+                Self::find_return_type_in_block(body)
+            }
             _ => None,
         }
     }

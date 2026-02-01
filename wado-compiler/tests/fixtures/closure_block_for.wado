@@ -1,0 +1,19 @@
+// Test closure with block body containing C-style for loop
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let factorial = |n: i32| {
+        let mut result = 1;
+        for let mut i = 1; i <= n; i = i + 1 {
+            result = result * i;
+        }
+        return result;
+    };
+
+    println(`{factorial(5)}`);  // 120
+    println(`{factorial(3)}`);  // 6
+    println(`{factorial(4)}`);  // 24
+}
+
+__DATA__
+{"stdout": "120\n6\n24\n"}
