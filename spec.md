@@ -589,12 +589,11 @@ if opt matches { Some(_) } {
 **Scope:** Pattern bindings are scoped to the guard only and do not escape:
 
 ```wado
-// Bindings don't escape - use if let for value extraction
+// Bindings don't escape
 if opt matches { Some(x) } && x > 0 { }  // ERROR: x not in scope
 
-if let Some(x) = opt {  // Use if let instead
-    if x > 0 { ... }
-}
+// Use guard inside the pattern instead
+if opt matches { Some(x) && x > 0 } { }  // OK
 ```
 
 ## Memory Model
