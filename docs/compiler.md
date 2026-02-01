@@ -1345,6 +1345,43 @@ Global variables compile to WebAssembly globals with two initialization strategi
 - Initialization order: topologically sorted by dependencies (within module and across modules)
 - Re-initialization prevented via flag check
 
+### Match Expression
+
+Match expressions are lowered to a series of pattern checks with branching:
+
+**Lowering Strategy:**
+
+| Pattern Type | Lowering |
+| ------------ | -------- |
+| Variant | `br_on_cast_fail` to test discriminant, extract payload |
+| Literal | Equality check with `br_if` |
+| Wildcard `_` | No check (always matches) |
+| Or pattern | Chain of checks with shared arm body |
+| Guard `&&` | Pattern check followed by guard expression check |
+
+**Codegen to Wasm:**
+
+For dense integer patterns (e.g., enum discriminants), the codegen emits `br_table` for O(1) dispatch:
+
+```wat
+;; match color { Red => 0, Green => 1, Blue => 2 }
+(block $arm2
+  (block $arm1
+    (block $arm0
+      (br_table $arm0 $arm1 $arm2 (local.get $color)))
+    (i32.const 0)  ;; Red
+    (br $end))
+  (i32.const 1)    ;; Green
+  (br $end))
+(i32.const 2)      ;; Blue
+```
+
+For variant patterns, `br_on_cast_fail` tests the discriminant and extracts the payload in one instruction.
+
+**Exhaustiveness:**
+
+Checked during analysis phase. Non-exhaustive patterns are compile errors.
+
 ---
 
 ## Implemented
