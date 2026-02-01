@@ -15,7 +15,7 @@ struct Container {
 
 fn "Container::process"(self: &mut Container) {
     let mut temp: Array<i32> = move [];
-    __for_loop_2: {
+    __for_1: {
         let mut i: i32 = 0;
         let _licm_items: Array<i32> = self.items;
         let _licm_used: i32 = _licm_items.used;
@@ -24,9 +24,9 @@ fn "Container::process"(self: &mut Container) {
             if !(i < __inline_Array_i32___len_0: {
                 break __inline_Array_i32___len_0: _licm_used;
             }) {
-                break __for_loop_2;
+                break __for_1;
             }
-            __for_body_3: {
+            __for_1_body: {
                 let val: i32 = __inline_Array_i32__IndexValue__index_value_1: {
                     break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(_licm_repr, i);
                 };
@@ -37,7 +37,7 @@ fn "Container::process"(self: &mut Container) {
             i = (i + 1);
         }
     }
-    __for_loop_4: {
+    __for_2: {
         let mut j: i32 = 0;
         let _licm_used: i32 = temp.used;
         let _licm_repr: builtin::array<i32> = temp.repr;
@@ -45,9 +45,9 @@ fn "Container::process"(self: &mut Container) {
             if !(j < __inline_Array_i32___len_2: {
                 break __inline_Array_i32___len_2: _licm_used;
             }) {
-                break __for_loop_4;
+                break __for_2;
             }
-            __for_body_5: {
+            __for_2_body: {
                 self.items."Array<i32>::append"((__inline_Array_i32__IndexValue__index_value_3: {
                     break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(_licm_repr, j);
                 } + 100));
@@ -60,13 +60,13 @@ fn "Container::process"(self: &mut Container) {
 fn run() with Stdout {
     let mut c: Container = move Container { items: [] };
     __inline_Container__add_items_0: {
-        __for_loop_0: {
+        __for_0: {
             let mut i: i32 = 0;
             loop {
                 if !(i < 3) {
-                    break __for_loop_0;
+                    break __for_0;
                 }
-                __for_body_1: {
+                __for_0_body: {
                     c.items."Array<i32>::append"(i);
                     c.items."Array<i32>::append"((i * 2));
                 }

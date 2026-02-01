@@ -33,15 +33,15 @@ pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
     let remaining: i32 = (self.used - self.index);
     let mut repr: builtin::array<i32> = "array_new<i32>"(remaining);
     let mut result_used: i32 = 0;
-    __for_loop_0: {
+    __for_2: {
         let mut i: i32 = self.index;
         let _licm_used: i32 = self.used;
         let _licm_repr: builtin::array<i32> = self.repr;
         loop {
             if !(i < _licm_used) {
-                break __for_loop_0;
+                break __for_2;
             }
-            __for_body_1: {
+            __for_2_body: {
                 let item: i32 = "array_get<i32>"(_licm_repr, i);
                 "array_set<i32>"(repr, result_used, item);
                 result_used = (result_used + 1);
