@@ -1121,22 +1121,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
         ResolvedType::Primitive(prim) => {
             // Primitive to_string methods are defined in core:prelude/primitives as impl blocks
             // e.g., impl i32 { fn to_string(&self) -> String { ... } }
-            let prim_name = match prim {
-                PrimitiveType::I8 => "i8",
-                PrimitiveType::I16 => "i16",
-                PrimitiveType::I32 => "i32",
-                PrimitiveType::I64 => "i64",
-                PrimitiveType::I128 => "i128",
-                PrimitiveType::U8 => "u8",
-                PrimitiveType::U16 => "u16",
-                PrimitiveType::U32 => "u32",
-                PrimitiveType::U64 => "u64",
-                PrimitiveType::U128 => "u128",
-                PrimitiveType::F32 => "f32",
-                PrimitiveType::F64 => "f64",
-                PrimitiveType::Bool => "bool",
-                PrimitiveType::Char => "char",
-            };
+            let prim_name = prim.as_str();
             // Method format: module_path/StructName::method_name
             let method_id = FunctionId::Method(MethodName::new(
                 "core/prelude/primitives".to_string(),
@@ -1157,22 +1142,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
 /// Used for creating monomorphized function names like Array<i32>`::len`.
 fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
     match type_table.get(type_id) {
-        ResolvedType::Primitive(prim) => match prim {
-            PrimitiveType::I8 => "i8".to_string(),
-            PrimitiveType::I16 => "i16".to_string(),
-            PrimitiveType::I32 => "i32".to_string(),
-            PrimitiveType::I64 => "i64".to_string(),
-            PrimitiveType::I128 => "i128".to_string(),
-            PrimitiveType::U8 => "u8".to_string(),
-            PrimitiveType::U16 => "u16".to_string(),
-            PrimitiveType::U32 => "u32".to_string(),
-            PrimitiveType::U64 => "u64".to_string(),
-            PrimitiveType::U128 => "u128".to_string(),
-            PrimitiveType::F32 => "f32".to_string(),
-            PrimitiveType::F64 => "f64".to_string(),
-            PrimitiveType::Bool => "bool".to_string(),
-            PrimitiveType::Char => "char".to_string(),
-        },
+        ResolvedType::Primitive(prim) => prim.as_str().to_string(),
         ResolvedType::Unit => "unit".to_string(),
         ResolvedType::Struct { name, .. } => name.clone(),
         ResolvedType::GenericInstance {

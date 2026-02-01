@@ -550,22 +550,7 @@ impl Codegen {
     /// Mangle a type name for use in struct names (e.g., i32 for Box<i32>)
     fn mangle_type_for_struct_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => match prim {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -678,22 +663,7 @@ impl Codegen {
     /// Mangle a type for dependency tracking (static version of `mangle_type_for_struct_name`)
     fn mangle_type_for_dependency(type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => match prim {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -5290,22 +5260,7 @@ impl Codegen {
     /// This handles the case where multiple `TypeIds` represent the same type.
     fn canonical_element_type_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(p) => match p {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..

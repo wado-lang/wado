@@ -770,22 +770,7 @@ impl TypeTable {
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
         match self.get(id) {
-            ResolvedType::Primitive(p) => match p {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Unit => "()".to_string(),
             ResolvedType::Never => "!".to_string(),
             ResolvedType::Unknown => "unknown".to_string(),

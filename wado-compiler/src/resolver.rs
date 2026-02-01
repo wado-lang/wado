@@ -6622,22 +6622,7 @@ impl<'a> Resolver<'a> {
     /// Mangle a type name for use in function names
     fn mangle_type_name(&self, type_id: TypeId) -> String {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Primitive(prim) => match prim {
-                crate::tir::PrimitiveType::I8 => "i8".to_string(),
-                crate::tir::PrimitiveType::I16 => "i16".to_string(),
-                crate::tir::PrimitiveType::I32 => "i32".to_string(),
-                crate::tir::PrimitiveType::I64 => "i64".to_string(),
-                crate::tir::PrimitiveType::I128 => "i128".to_string(),
-                crate::tir::PrimitiveType::U8 => "u8".to_string(),
-                crate::tir::PrimitiveType::U16 => "u16".to_string(),
-                crate::tir::PrimitiveType::U32 => "u32".to_string(),
-                crate::tir::PrimitiveType::U64 => "u64".to_string(),
-                crate::tir::PrimitiveType::U128 => "u128".to_string(),
-                crate::tir::PrimitiveType::F32 => "f32".to_string(),
-                crate::tir::PrimitiveType::F64 => "f64".to_string(),
-                crate::tir::PrimitiveType::Bool => "bool".to_string(),
-                crate::tir::PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -6726,24 +6711,8 @@ impl<'a> Resolver<'a> {
             // Primitive types - search for impl blocks in loaded modules
             // (e.g., impl i32 { fn to_string(&self) -> String { ... } })
             ResolvedType::Primitive(prim) => {
-                let prim_name = match prim {
-                    crate::tir::PrimitiveType::I8 => "i8",
-                    crate::tir::PrimitiveType::I16 => "i16",
-                    crate::tir::PrimitiveType::I32 => "i32",
-                    crate::tir::PrimitiveType::I64 => "i64",
-                    crate::tir::PrimitiveType::I128 => "i128",
-                    crate::tir::PrimitiveType::U8 => "u8",
-                    crate::tir::PrimitiveType::U16 => "u16",
-                    crate::tir::PrimitiveType::U32 => "u32",
-                    crate::tir::PrimitiveType::U64 => "u64",
-                    crate::tir::PrimitiveType::U128 => "u128",
-                    crate::tir::PrimitiveType::F32 => "f32",
-                    crate::tir::PrimitiveType::F64 => "f64",
-                    crate::tir::PrimitiveType::Bool => "bool",
-                    crate::tir::PrimitiveType::Char => "char",
-                };
                 // Use empty module path to trigger "search all loaded modules" logic
-                (prim_name.to_string(), Vec::new(), None, None)
+                (prim.as_str().to_string(), Vec::new(), None, None)
             }
             _ => return None,
         };
