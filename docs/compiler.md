@@ -1329,6 +1329,22 @@ Key design decisions:
 - Uses auto-dereference so `a.len()` and `a.get(i)` work on references
 - Byte-by-byte comparison (UTF-8 safe since equal strings have identical byte sequences)
 
+### Global Variables
+
+Global variables compile to WebAssembly globals with two initialization strategies:
+
+| Category | Condition                                    | Strategy                                                  |
+| -------- | -------------------------------------------- | --------------------------------------------------------- |
+| Constant | Primitive type with Wasm constant expression | Direct initialization in Wasm global section              |
+| Lazy     | Object types or non-constant expressions     | Null/zero default, initialized in `__initialize_module()` |
+
+**Module Initialization:**
+
+- Each module with lazy globals generates `pub fn __initialize_module()`
+- Entry module generates `fn __initialize_modules()` which calls all modules' initializers
+- Initialization order: topologically sorted by dependencies (within module and across modules)
+- Re-initialization prevented via flag check
+
 ---
 
 ## Implemented

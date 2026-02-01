@@ -93,10 +93,13 @@ Global variables map directly to WebAssembly globals. Constant expressions are e
 
 ```wado
 // Primitives
-i8, i16, i32, i64, i128  // signed integers
-u8, u16, u32, u64, u128  // unsigned integers
-f32, f64                 // floats
+i8, i16, i32, i64         // signed integers
+u8, u16, u32, u64         // unsigned integers
+f32, f64                  // floats
 bool, char
+
+// 128-bit integers (prelude types, work like primitives)
+i128, u128
 
 // Composite
 String                  // UTF-8 string
@@ -112,6 +115,27 @@ Result<T, E>            // result type
 // Unit type
 ()
 ```
+
+### 128-bit Integers
+
+`i128` and `u128` are defined in the prelude as structs but work like primitives via operator overloading:
+
+```wado
+let a: u128 = 42;                      // literal coercion
+let b = u128::from_u64(1_000_000);     // explicit construction
+let sum = a + b;                       // arithmetic
+let cmp = a < b;                       // comparison
+
+// Bitwise operations
+let bits = a & b;
+let shifted = a << 10;
+
+// Access low/high 64-bit parts
+let low = a.low();
+let high = a.high();
+```
+
+All arithmetic (`+`, `-`, `*`, `/`, `%`), comparison, and bitwise operations are supported. Addition and subtraction use efficient Wasm Wide Arithmetic instructions.
 
 ## Newtype
 
