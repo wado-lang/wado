@@ -655,15 +655,15 @@ impl<'a> Lexer<'a> {
         if self.peek_char() == Some('.') {
             let mut chars = self.chars.clone();
             chars.next();
-            if let Some((_, ch)) = chars.peek() {
-                if ch.is_ascii_digit() {
-                    self.advance(); // consume '.'
-                    while let Some((_, ch)) = self.peek() {
-                        if ch.is_ascii_digit() || ch == '_' {
-                            self.advance();
-                        } else {
-                            break;
-                        }
+            if let Some((_, ch)) = chars.peek()
+                && ch.is_ascii_digit()
+            {
+                self.advance(); // consume '.'
+                while let Some((_, ch)) = self.peek() {
+                    if ch.is_ascii_digit() || ch == '_' {
+                        self.advance();
+                    } else {
+                        break;
                     }
                 }
             }

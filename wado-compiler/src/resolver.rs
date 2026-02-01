@@ -3527,8 +3527,8 @@ impl<'a> Resolver<'a> {
 
         // Handle hex/binary/octal literals as float values (not bit patterns)
         if clean.starts_with("0x") || clean.starts_with("0X") {
-            let value =
-                u64::from_str_radix(&clean[2..], 16).map_err(|_| format!("invalid hex literal: {repr}"))?;
+            let value = u64::from_str_radix(&clean[2..], 16)
+                .map_err(|_| format!("invalid hex literal: {repr}"))?;
             return Ok(value as f64);
         } else if clean.starts_with("0b") || clean.starts_with("0B") {
             let value = u64::from_str_radix(&clean[2..], 2)
