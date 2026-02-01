@@ -15,252 +15,394 @@ Template strings in Wado support format specifiers: `` `{x:spec}` ``. As defined
 | `e`       | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
 | `E`       | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
 
-This WEP defines the trait system that backs these format specifiers.
+This WEP defines the trait system and Formatter infrastructure that backs these format specifiers.
 
 ## Decision
 
-### Trait Hierarchy
+### Formatter Infrastructure
 
-Format specifiers are backed by traits in `core:prelude`. The `:?` specifier uses the compiler intrinsic `builtin::inspect()` and does not require a trait.
+Format traits write to a `Formatter` object that holds format options and an output buffer. This design follows Rust's `std::fmt` approach, adapted for Wado's semantics.
 
 ```wado
-// Default display formatting - used by `{expr}`
-trait Display {
-    fn fmt(&self) -> String;
+/// Text alignment for padding
+enum Alignment {
+    Left,
+    Center,
+    Right,
 }
 
-// Binary formatting - used by `{expr:b}`
-trait Binary {
-    fn fmt_binary(&self) -> String;
+/// Format specification parsed from `{expr:spec}`
+struct FormatSpec {
+    /// Minimum width (e.g., `{x:8}` → width = 8)
+    width: Option<i32>,
+    /// Precision for floats or max width for strings (e.g., `{x:.2}`)
+    precision: Option<i32>,
+    /// Fill character for padding (default: space)
+    fill: char,
+    /// Text alignment (default: Right for numbers, Left for strings)
+    align: Alignment,
+    /// Always show sign for positive numbers (`+` flag)
+    sign_plus: bool,
+    /// Use alternate form (`#` flag: 0x, 0b, 0o prefixes)
+    alternate: bool,
+    /// Zero-pad numbers (`0` flag, implies right-align)
+    zero_pad: bool,
 }
 
-// Octal formatting - used by `{expr:o}`
-trait Octal {
-    fn fmt_octal(&self) -> String;
-}
-
-// Lowercase hex formatting - used by `{expr:x}`
-trait LowerHex {
-    fn fmt_lower_hex(&self) -> String;
-}
-
-// Uppercase hex formatting - used by `{expr:X}`
-trait UpperHex {
-    fn fmt_upper_hex(&self) -> String;
-}
-
-// Lowercase exponential formatting - used by `{expr:e}`
-trait LowerExp {
-    fn fmt_lower_exp(&self) -> String;
-}
-
-// Uppercase exponential formatting - used by `{expr:E}`
-trait UpperExp {
-    fn fmt_upper_exp(&self) -> String;
+/// Formatter that accumulates formatted output
+struct Formatter {
+    spec: FormatSpec,
+    buf: String,
 }
 ```
 
-### Trait Method Naming
+### Formatter Methods
 
-Unlike Rust's `std::fmt` traits which all use a generic `fn fmt(&self, f: &mut Formatter)` pattern with a shared `Formatter` type, Wado uses distinct method names for each trait:
+```wado
+impl Formatter {
+    /// Write a string to the output buffer
+    fn write_str(&mut self, s: String);
 
-| Trait      | Method            | Rationale                                |
-| ---------- | ----------------- | ---------------------------------------- |
-| `Display`  | `fmt`             | Primary formatting, short name           |
-| `Binary`   | `fmt_binary`      | Explicit, avoids collision with Display  |
-| `Octal`    | `fmt_octal`       | Explicit, avoids collision with Display  |
-| `LowerHex` | `fmt_lower_hex`   | Explicit, avoids collision with Display  |
-| `UpperHex` | `fmt_upper_hex`   | Explicit, avoids collision with Display  |
-| `LowerExp` | `fmt_lower_exp`   | Explicit, avoids collision with Display  |
-| `UpperExp` | `fmt_upper_exp`   | Explicit, avoids collision with Display  |
+    /// Write a single character to the output buffer
+    fn write_char(&mut self, c: char);
 
-This design:
-1. Avoids the need for a `Formatter` infrastructure
-2. Allows types to implement multiple format traits without method name collisions
-3. Keeps each trait simple and self-contained
-4. Returns `String` directly, matching Wado's value semantics
+    /// Access the format specification
+    fn spec(&self) -> &FormatSpec;
+
+    /// Check if width is specified
+    fn width(&self) -> Option<i32>;
+
+    /// Check if precision is specified
+    fn precision(&self) -> Option<i32>;
+
+    /// Check if alternate form is requested
+    fn alternate(&self) -> bool;
+
+    /// Check if sign should always be shown
+    fn sign_plus(&self) -> bool;
+
+    /// Finish formatting and return the result with padding applied
+    fn finish(&mut self) -> String;
+}
+```
+
+### Format Traits
+
+All format traits follow the same pattern: write to a `Formatter`.
+
+```wado
+/// Default display formatting - used by `{expr}`
+trait Display {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+/// Binary formatting - used by `{expr:b}`
+trait Binary {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+/// Octal formatting - used by `{expr:o}`
+trait Octal {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+/// Lowercase hex formatting - used by `{expr:x}`
+trait LowerHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+/// Uppercase hex formatting - used by `{expr:X}`
+trait UpperHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+/// Lowercase exponential formatting - used by `{expr:e}`
+trait LowerExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+/// Uppercase exponential formatting - used by `{expr:E}`
+trait UpperExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+```
+
+### Method Name: `fmt` for All Traits
+
+Unlike the previous design with distinct method names (`fmt_binary`, `fmt_lower_hex`, etc.), all traits use the same method name `fmt`. This works because:
+
+1. **Trait dispatch**: The compiler knows which trait to use based on the format specifier
+2. **No ambiguity**: A type can implement multiple format traits, and the correct one is selected at compile time
+3. **Simpler implementation**: Consistent interface across all format traits
+4. **Rust compatibility**: Matches Rust's `std::fmt` design
+
+### Debug Formatting
+
+The `:?` specifier uses the compiler intrinsic `builtin::inspect()` and does not use a trait. This provides universal debug formatting for all types without requiring trait implementation.
 
 ### Format Resolution
 
 When the compiler processes `{expr:spec}`:
 
-1. **No specifier** (`{expr}`):
-   - If `expr` is `String` → use directly
-   - If `expr: Display` → call `expr.fmt()`
-   - Otherwise → call `builtin::inspect(expr)`
+1. Parse the format specification into `FormatSpec`
+2. Create a `Formatter` with the spec
+3. Dispatch to the appropriate trait based on specifier:
 
-2. **Debug specifier** (`{expr:?}`):
-   - Always call `builtin::inspect(expr)` (compiler intrinsic)
+| Specifier | Resolution                              |
+| --------- | --------------------------------------- |
+| (none)    | `Display::fmt` or `builtin::inspect`    |
+| `?`       | `builtin::inspect` (always)             |
+| `b`       | `Binary::fmt`                           |
+| `o`       | `Octal::fmt`                            |
+| `x`       | `LowerHex::fmt`                         |
+| `X`       | `UpperHex::fmt`                         |
+| `e`       | `LowerExp::fmt`                         |
+| `E`       | `UpperExp::fmt`                         |
 
-3. **Other specifiers** (`{expr:b}`, `{expr:x}`, etc.):
-   - Look up the corresponding trait (`Binary`, `LowerHex`, etc.)
-   - If type implements the trait → call the trait method
-   - Otherwise → **compile error**
+4. Call `formatter.finish()` to apply padding and get the result
+
+### Example: Display Resolution
+
+For `{expr}` (no specifier):
+
+1. If `expr` is `String` → use directly (no formatting needed)
+2. If `expr: Display` → call `Display::fmt(&expr, &mut formatter)`
+3. Otherwise → call `builtin::inspect(expr)`
 
 ### Primitive Implementations
 
 Integer types (`i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`) implement:
-- `Display` (via existing `to_string()`)
-- `Binary`
-- `Octal`
-- `LowerHex`
-- `UpperHex`
+- `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex`
 
 Float types (`f32`, `f64`) implement:
-- `Display` (via existing `to_string()`)
-- `LowerExp`
-- `UpperExp`
+- `Display`, `LowerExp`, `UpperExp`
 
 Other primitives:
-- `bool`: `Display` only (`"true"` / `"false"`)
-- `char`: `Display` only (single character string)
-- `String`: `Display` (returns self)
+- `bool`: `Display` only
+- `char`: `Display` only
+- `String`: `Display` only
 
-### Example Implementations
+### Example Implementation: i32
 
 ```wado
 impl Display for i32 {
-    fn fmt(&self) -> String {
-        return self.to_string();
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(self.to_string());
     }
 }
 
 impl Binary for i32 {
-    fn fmt_binary(&self) -> String {
+    fn fmt(&self, f: &mut Formatter) {
         let value = *self;
-        if value == 0 {
-            return "0";
+
+        // Handle alternate form: add "0b" prefix
+        if f.alternate() {
+            f.write_str("0b");
         }
 
-        // Handle negative numbers as two's complement
-        let bits = if value < 0 { 32 } else {
-            // Count significant bits for positive numbers
-            32 - builtin::i32_clz(value)
-        };
+        if value == 0 {
+            f.write_char('0');
+            return;
+        }
 
-        let mut result = String::with_capacity(bits);
+        // Calculate number of significant bits
+        let bits = if value < 0 { 32 } else { 32 - builtin::i32_clz(value) };
+
+        // Write bits from most significant to least significant
         for let mut i = bits - 1; i >= 0; i -= 1 {
             let bit = (value >> i) & 1;
-            result.append(if bit == 1 { "1" } else { "0" });
+            f.write_char(if bit == 1 { '1' } else { '0' });
         }
-        return result;
     }
 }
 
 impl LowerHex for i32 {
-    fn fmt_lower_hex(&self) -> String {
+    fn fmt(&self, f: &mut Formatter) {
         let value = *self;
+
+        // Handle alternate form: add "0x" prefix
+        if f.alternate() {
+            f.write_str("0x");
+        }
+
         if value == 0 {
-            return "0";
+            f.write_char('0');
+            return;
         }
 
         let digits = "0123456789abcdef";
         let nibbles = if value < 0 { 8 } else {
-            (35 - builtin::i32_clz(value)) / 4  // ceil((32 - clz) / 4)
+            (35 - builtin::i32_clz(value)) / 4
         };
 
-        let mut result = String::with_capacity(nibbles);
         for let mut i = nibbles - 1; i >= 0; i -= 1 {
             let nibble = (value >> (i * 4)) & 0xF;
-            result.append(digits.get_byte(nibble).to_string());
+            f.write_char(digits.char_at(nibble));
         }
-        return result;
+    }
+}
+```
+
+### Example Implementation: f64
+
+```wado
+impl Display for f64 {
+    fn fmt(&self, f: &mut Formatter) {
+        // Use precision if specified
+        if let Some(prec) = f.precision() {
+            f.write_str(builtin::f64_to_fixed_string(*self, prec));
+        } else {
+            f.write_str(self.to_string());
+        }
     }
 }
 
 impl LowerExp for f64 {
-    fn fmt_lower_exp(&self) -> String {
-        // Use bundled float-to-string with exponential mode
-        return builtin::f64_to_exp_string(*self, false);
+    fn fmt(&self, f: &mut Formatter) {
+        let prec = f.precision();
+        f.write_str(builtin::f64_to_exp_string(*self, prec, false));
+    }
+}
+
+impl UpperExp for f64 {
+    fn fmt(&self, f: &mut Formatter) {
+        let prec = f.precision();
+        f.write_str(builtin::f64_to_exp_string(*self, prec, true));
     }
 }
 ```
 
-### Format Parameters
-
-Format parameters (width, precision, alignment, sign, alternate form) are handled by the compiler, not the traits. The compiler:
-
-1. Calls the appropriate trait method to get the base string
-2. Applies padding/alignment based on width and fill
-3. Applies precision (for floats)
-4. Adds sign prefix if specified
-5. Adds alternate prefix (`0x`, `0b`, `0o`) if specified
-
-This separation keeps traits simple while allowing rich formatting.
-
-```wado
-// Compiler desugaring for `{x:#08x}`:
-// 1. let base = x.fmt_lower_hex();        // "2a"
-// 2. let prefixed = "0x" + base;          // "0x2a"
-// 3. let padded = pad_left(prefixed, 8, '0');  // "0x00002a"
-```
-
 ### Custom Type Formatting
 
-Users can implement format traits for custom types:
+Users implement format traits for custom types:
 
 ```wado
 struct Point { x: i32, y: i32 }
 
 impl Display for Point {
-    fn fmt(&self) -> String {
-        return `({self.x}, {self.y})`;
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_char('(');
+        // Nested formatting respects outer precision/width? No.
+        // Each interpolation gets its own Formatter.
+        f.write_str(self.x.to_string());
+        f.write_str(", ");
+        f.write_str(self.y.to_string());
+        f.write_char(')');
     }
 }
 
 impl LowerHex for Point {
-    fn fmt_lower_hex(&self) -> String {
-        return `({self.x:x}, {self.y:x})`;
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_char('(');
+        // For hex formatting of fields, create sub-formatter or use helpers
+        if f.alternate() {
+            f.write_str("0x");
+        }
+        f.write_str(format_hex(self.x));
+        f.write_str(", ");
+        if f.alternate() {
+            f.write_str("0x");
+        }
+        f.write_str(format_hex(self.y));
+        f.write_char(')');
     }
 }
 
 // Usage
 let p = Point { x: 255, y: 16 };
-println(`{p}`);     // "(255, 16)"
-println(`{p:x}`);   // "(ff, 10)"
+println(`{p}`);      // "(255, 16)"
+println(`{p:x}`);    // "(ff, 10)"
+println(`{p:#x}`);   // "(0xff, 0x10)"
+println(`{p:>20}`);  // "          (255, 16)"
 ```
 
-### Trait vs Method
+### Padding and Alignment
 
-The `Display` trait's `fmt()` method is separate from the existing `to_string()` methods on primitives:
+The `Formatter::finish()` method applies padding based on `FormatSpec`:
 
-| Method        | Purpose                       | Called by          |
-| ------------- | ----------------------------- | ------------------ |
-| `to_string()` | Direct conversion to String   | User code          |
-| `fmt()`       | Display trait implementation  | Format machinery   |
+1. Calculate content length from `buf`
+2. If `width > content.len()`:
+   - Calculate padding needed
+   - Apply `fill` character with `align` direction
+3. Return final string
 
-For primitives, `fmt()` delegates to `to_string()`. This allows:
-- Backward compatibility with existing `to_string()` calls
-- Clear separation between direct conversion and formatting
-- Future flexibility (e.g., `fmt()` could support locale-aware formatting)
+```wado
+impl Formatter {
+    fn finish(&mut self) -> String {
+        if let Some(width) = self.spec.width {
+            let content_len = self.buf.len();
+            if width > content_len {
+                let padding = width - content_len;
+                return match self.spec.align {
+                    Alignment::Left => {
+                        self.buf + repeat_char(self.spec.fill, padding)
+                    },
+                    Alignment::Right => {
+                        repeat_char(self.spec.fill, padding) + self.buf
+                    },
+                    Alignment::Center => {
+                        let left = padding / 2;
+                        let right = padding - left;
+                        repeat_char(self.spec.fill, left)
+                            + self.buf
+                            + repeat_char(self.spec.fill, right)
+                    },
+                };
+            }
+        }
+        return self.buf;
+    }
+}
+```
+
+### Zero Padding for Numbers
+
+Zero padding (`{x:08}`) is special:
+
+- Implies right alignment
+- Zero is inserted after sign/prefix but before digits
+
+```wado
+// {-42:08} → "-0000042" (not "000000-42")
+// {42:#08x} → "0x00002a" (not "000x002a")
+```
+
+This requires coordination between the trait implementation and `finish()`. The trait writes the sign/prefix first, then the formatter tracks where zero-padding should be inserted.
 
 ## Consequences
 
 ### Positive
 
-1. **Type-safe formatting**: Format specifiers that don't apply to a type cause compile errors
-2. **Extensible**: Custom types can implement any format trait
-3. **Simple traits**: Each trait has a single method returning String
-4. **No Formatter complexity**: Avoids Rust's `Formatter` infrastructure
-5. **Consistent with Wado's design**: Returns values, not writes to buffers
+1. **Accurate formatting**: Precision is available during formatting, not post-processing
+2. **Efficient**: Write directly to buffer, avoid intermediate strings
+3. **Rust-compatible**: Familiar design for Rust developers
+4. **Flexible**: Format options available to trait implementations
+5. **Extensible**: Easy to add new format options or traits
 
 ### Negative
 
-1. **Separate methods per trait**: Types implementing multiple traits have multiple methods
-   - **Mitigation**: Clear naming convention; each method is simple
-2. **Format parameters handled by compiler**: Less flexibility for custom formatting logic
-   - **Mitigation**: Base formatting is still customizable; parameters are standardized
-3. **Memory allocation**: Each format call allocates a String
-   - **Mitigation**: GC handles cleanup; most formatting is temporary
+1. **Infrastructure complexity**: Requires `Formatter`, `FormatSpec`, `Alignment` types
+2. **Learning curve**: More complex than simple `-> String` approach
+3. **Implementation effort**: All primitive formatting needs updating
+
+### Implementation Strategy
+
+1. Add `Alignment` enum, `FormatSpec` struct, `Formatter` struct to `core:prelude`
+2. Add format traits to `core:prelude/traits.wado`
+3. Implement traits for primitives in `core:prelude/primitives.wado`
+4. Update compiler to generate Formatter-based code for template strings
+5. Add helper builtins for float formatting with precision
 
 ### Future Extensions
 
-1. **Formatter with options**: Could add `FormatOptions` struct for precision/width if trait-level control is needed
-2. **`#[derive(Display)]`**: Auto-derive Display using field names (requires macro/attribute support)
-3. **Locale-aware formatting**: `Display` could optionally use locale settings
+1. **`{:#?}`**: Pretty-print debug with indentation
+2. **Dynamic width/precision**: `{value:{width}.{precision}}`
+3. **Named arguments**: `{name:spec}` with named parameters
+4. **Custom format specifiers**: User-defined specifier characters
 
 ## References
 
 - [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)
 - [WEP: Type Stringification](./wep-2026-01-16-type-stringification.md)
-- [Rust std::fmt traits](https://doc.rust-lang.org/std/fmt/index.html#formatting-traits)
+- [Rust std::fmt module](https://doc.rust-lang.org/std/fmt/index.html)
+- [Rust Formatter struct](https://doc.rust-lang.org/std/fmt/struct.Formatter.html)
