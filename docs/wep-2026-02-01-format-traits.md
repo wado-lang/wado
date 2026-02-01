@@ -99,25 +99,25 @@ The `:?` specifier uses the compiler intrinsic `builtin::inspect()` and does not
 
 ### Format Resolution
 
-| Specifier | Resolution                              |
-| --------- | --------------------------------------- |
-| (none)    | `Display::fmt` or `builtin::inspect`    |
-| `?`       | `builtin::inspect` (always)             |
-| `b`       | `Binary::fmt`                           |
-| `o`       | `Octal::fmt`                            |
-| `x`       | `LowerHex::fmt`                         |
-| `X`       | `UpperHex::fmt`                         |
-| `e`       | `LowerExp::fmt`                         |
-| `E`       | `UpperExp::fmt`                         |
+| Specifier | Resolution                           |
+| --------- | ------------------------------------ |
+| (none)    | `Display::fmt` or `builtin::inspect` |
+| `?`       | `builtin::inspect` (always)          |
+| `b`       | `Binary::fmt`                        |
+| `o`       | `Octal::fmt`                         |
+| `x`       | `LowerHex::fmt`                      |
+| `X`       | `UpperHex::fmt`                      |
+| `e`       | `LowerExp::fmt`                      |
+| `E`       | `UpperExp::fmt`                      |
 
 ### Primitive Implementations
 
-| Type                  | Traits                                             |
-| --------------------- | -------------------------------------------------- |
-| Integer types         | `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex` |
-| Float types           | `Display`, `LowerExp`, `UpperExp`                  |
-| `bool`, `char`        | `Display`                                          |
-| `String`              | `Display`                                          |
+| Type           | Traits                                               |
+| -------------- | ---------------------------------------------------- |
+| Integer types  | `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex` |
+| Float types    | `Display`, `LowerExp`, `UpperExp`                    |
+| `bool`, `char` | `Display`                                            |
+| `String`       | `Display`                                            |
 
 ### Zero Padding
 
