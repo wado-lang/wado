@@ -1351,13 +1351,13 @@ Match expressions are lowered to a series of pattern checks with branching:
 
 **Lowering Strategy:**
 
-| Pattern Type | Lowering |
-| ------------ | -------- |
-| Variant | `br_on_cast_fail` to test discriminant, extract payload |
-| Literal | Equality check with `br_if` |
-| Wildcard `_` | No check (always matches) |
-| Or pattern | Chain of checks with shared arm body |
-| Guard `&&` | Pattern check followed by guard expression check |
+| Pattern Type | Lowering                                                |
+| ------------ | ------------------------------------------------------- |
+| Variant      | `br_on_cast_fail` to test discriminant, extract payload |
+| Literal      | Equality check with `br_if`                             |
+| Wildcard `_` | No check (always matches)                               |
+| Or pattern   | Chain of checks with shared arm body                    |
+| Guard `&&`   | Pattern check followed by guard expression check        |
 
 **Codegen to Wasm:**
 
