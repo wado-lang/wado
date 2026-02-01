@@ -171,15 +171,7 @@ global mut counter: i32 = 0;
 pub global VERSION: i32 = 1;
 ```
 
-**Initialization:**
-
-Currently, only literal initializers are supported:
-
-```wado
-global ANSWER: i32 = 42;       // OK: literal
-global PI: f64 = 3.14159;      // OK: literal
-global FLAG: bool = true;      // OK: literal
-```
+Any type is supported. Any pure expression (no effects) can be used as an initializer.
 
 **Mutability:**
 
@@ -194,34 +186,6 @@ fn example() {
     CONSTANT = 10;    // Error: cannot assign to immutable global
 }
 ```
-
-**Supported Types:**
-
-- Integers: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`
-- Floats: `f32`, `f64`
-- Boolean: `bool`
-- Character: `char`
-
-Object types (`String`, `Array<T>`, structs) are not yet supported.
-
-#### Module Initialization (not yet implemented)
-
-For complex initializers that cannot be expressed as Wasm constant expressions, a future `#[module_init]` attribute will allow user-defined initialization:
-
-```wado
-global mut cache: Array<i32> = [];  // Default value
-
-#[module_init]
-fn setup() {
-    cache = Array::<i32>::with_capacity(100);
-}
-```
-
-The compiler will:
-
-1. Initialize globals with default/literal values in the Wasm global section
-2. Generate a module initialization function that runs before `run()`
-3. Call `#[module_init]` functions in declaration order
 
 ### Operators
 
@@ -543,6 +507,95 @@ outer: {
 
 **Design Rationale**: The label is mandatory because `{ field: value }` without context could be either a block with a labeled statement or a struct literal. Requiring the label removes this ambiguity.
 
+### Match Expression
+
+Match expression provides exhaustive pattern matching on variants and other types.
+
+```wado
+// Match expression (produces a value)
+let result = match opt {
+    Some(x) => x * 2,
+    None => 0,
+};
+
+// Match with custom variants
+let area = match shape {
+    Circle(r) => 3.14159 * r * r,
+    Rectangle([w, h]) => w * h,
+    Point => 0.0,
+};
+
+// Match statement (no value produced)
+match command {
+    Start => engine.start(),
+    Stop => engine.stop(),
+}
+```
+
+**Pattern Syntax:**
+
+| Pattern  | Example                | Description            |
+| -------- | ---------------------- | ---------------------- |
+| Wildcard | `_`                    | Matches anything       |
+| Variable | `x`                    | Binds matched value    |
+| Literal  | `0`, `"hello"`, `true` | Matches exact value    |
+| Variant  | `Some(x)`, `None`      | Matches variant case   |
+| Tuple    | `[a, b, c]`            | Destructures tuple     |
+| Or       | `Red \| Blue`          | Matches either pattern |
+| Guard    | `Some(x) && x > 0`     | Pattern with condition |
+
+**Exhaustiveness:**
+
+Match must cover all possible cases. Use `_` wildcard for catch-all:
+
+```wado
+match color {
+    Red => "red",
+    Green => "green",
+    _ => "other",  // Required for exhaustiveness
+}
+```
+
+**Guard Expressions:**
+
+Guards use `&&` to reflect left-to-right evaluation (pattern first, then guard):
+
+```wado
+match customer {
+    Premium(years) && years > 5 => 0.3,
+    Premium(_) => 0.2,
+    _ => 0.1,
+}
+```
+
+### Matches Operator
+
+The `matches` infix operator tests if a value matches a pattern, returning `bool`.
+
+```wado
+// Basic usage
+let is_some = opt matches { Some(_) };
+let is_circle = shape matches { Circle(_) };
+
+// With guard
+let is_large = shape matches { Circle(r) && r > 10.0 };
+
+// In conditions
+if opt matches { Some(_) } {
+    println("has value");
+}
+```
+
+**Scope:** Pattern bindings are scoped to the guard only and do not escape:
+
+```wado
+// Bindings don't escape
+if opt matches { Some(x) } && x > 0 { }  // ERROR: x not in scope
+
+// Use guard inside the pattern instead
+if opt matches { Some(x) && x > 0 } { }  // OK
+```
+
 ## Memory Model
 
 ### Core Principles
@@ -627,6 +680,7 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 - `Stream<T>` - Component Model async stream
 - `Future<T>` - Component Model async future
 - `Pollable` - WASI I/O polling resource
+- `i128`, `u128` - 128-bit integer types
 
 **Disabling the Prelude:**
 
@@ -643,14 +697,40 @@ Wasm primitive types are built into the language (no import required):
 
 ```wado
 // Numeric
-i8, i16, i32, i64, i128
-u8, u16, u32, u64, u128
+i8, i16, i32, i64
+u8, u16, u32, u64
 f32, f64
 
 // Basic
 bool
 char
 ```
+
+### 128-bit Integer Types (i128/u128)
+
+Unlike primitive types, `i128` and `u128` are implemented as structs in the prelude. They can be used like primitives thanks to operator overloading:
+
+```wado
+let a: u128 = 42;                      // literal coercion
+let b = u128::from_u64(1_000_000);     // explicit construction
+let sum = a + b;                       // via Add trait
+let cmp = a < b;                       // via Ord trait
+
+// Access low/high 64-bit parts
+let low = a.low();
+let high = a.high();
+```
+
+WebAssembly has no native 128-bit integer type, so Wado represents them as pairs of 64-bit values. Addition and subtraction use Wasm Wide Arithmetic instructions (`i64.add128`, `i64.sub128`) for efficiency. Other operations (division, bitwise, etc.) use software implementations.
+
+Available operations:
+
+| Category   | Operations                                    |
+| ---------- | --------------------------------------------- |
+| Arithmetic | `+`, `-`, `*`, `/`, `%`, unary `-` (i128)     |
+| Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=`              |
+| Bitwise    | `&`, `\|`, `^`, `~`, `<<`, `>>`               |
+| Conversion | `from_u64()`, `from_i64()`, `low()`, `high()` |
 
 ### Reference Types
 
@@ -1869,12 +1949,11 @@ if let Fail = result {
     println("Failed");
 }
 
-// match is not yet implemented
-// match s {
-//     Shape::Circle(r) => calculate_circle_area(r),
-//     Shape::Rectangle([w, h]) => w * h,
-//     Shape::Point => 0.0,
-// }
+match s {
+    Circle(r) => calculate_circle_area(r),
+    Rectangle([w, h]) => w * h,
+    Point => 0.0,
+}
 ```
 
 **Implementation Status**:
@@ -1883,9 +1962,10 @@ if let Fail = result {
 - `if let` pattern matching for `Option<T>`: implemented
 - `if let` pattern matching for non-generic custom variants: implemented
 - Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
+- `match` expression/statement: implemented
+- `matches` operator: implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
-- `match` statements: not yet implemented
 
 Note: `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
 

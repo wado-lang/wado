@@ -93,10 +93,13 @@ Global variables map directly to WebAssembly globals. Constant expressions are e
 
 ```wado
 // Primitives
-i8, i16, i32, i64, i128  // signed integers
-u8, u16, u32, u64, u128  // unsigned integers
-f32, f64                 // floats
+i8, i16, i32, i64         // signed integers
+u8, u16, u32, u64         // unsigned integers
+f32, f64                  // floats
 bool, char
+
+// 128-bit integers (prelude types, work like primitives)
+i128, u128
 
 // Composite
 String                  // UTF-8 string
