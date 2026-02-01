@@ -21,7 +21,7 @@ fn "Point::add"(self: &Point, other: &Point) -> Point {
 fn run() with Stdout {
     let c1: C = Point { x: 1, y: 2 } as C;
     let c2: C = Point { x: 3, y: 4 } as C;
-    let c3: C = "C::add"(&c1, &c2);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "x: ", move "i32::to_string"(c3.x)), move ", y: "), move "i32::to_string"(c3.y)));
+    let c3: C = c1."C::add"(&c2);
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "x: ", move c3.x."i32::to_string"()), move ", y: "), move c3.y."i32::to_string"()));
 }
 

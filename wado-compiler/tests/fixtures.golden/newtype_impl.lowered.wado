@@ -16,12 +16,40 @@ fn run() with Stdout {
         let self: &Radians = &r;
         break __inline_Radians__to_degrees_0: ((*self * 180.0) / 3.14159) as Degrees;
     };
-    core::cli::println(move "String::concat"(move "radians to degrees: ", move "Degrees::to_string"(d)));
+    core::cli::println(move "String::concat"(move "radians to degrees: ", __inline_f64__to_string_1: {
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(d, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_0: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_1: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        };
+    }));
     let d2: Degrees = 90.0;
-    let r2: Radians = __inline_Degrees__to_radians_1: {
+    let r2: Radians = __inline_Degrees__to_radians_2: {
         let self: &Degrees = &d2;
-        break __inline_Degrees__to_radians_1: ((*self * 3.14159) / 180.0) as Radians;
+        break __inline_Degrees__to_radians_2: ((*self * 3.14159) / 180.0) as Radians;
     };
-    core::cli::println(move "String::concat"(move "degrees to radians: ", move "Radians::to_string"(r2)));
+    core::cli::println(move "String::concat"(move "degrees to radians: ", __inline_f64__to_string_3: {
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(r2, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_2: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_2: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_3: __inline_String__internal_from_utf8_raw_3: {
+            break __inline_String__internal_from_utf8_raw_3: String { repr: arr, used: len };
+        };
+    }));
 }
 

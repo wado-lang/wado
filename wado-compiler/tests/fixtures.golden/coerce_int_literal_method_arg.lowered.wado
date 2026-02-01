@@ -13,18 +13,18 @@ struct Counter {
     value: u64,
 }
 
-fn "Counter::new"(initial: u64) -> Counter {
-    return Counter { value: initial };
-}
-
 fn run() with Stdout {
-    let counter: Counter = move "Counter::new"(0);
-    core::cli::println(move "String::concat"(move "value: ", move "u64::to_string"(__inline_Counter__get_0: {
-        break __inline_Counter__get_0: counter.value;
-    })));
-    let counter2: Counter = move "Counter::new"(42);
-    core::cli::println(move "String::concat"(move "value: ", move "u64::to_string"(__inline_Counter__get_1: {
-        break __inline_Counter__get_1: counter2.value;
-    })));
+    let counter: Counter = __inline_Counter__new_0: {
+        break __inline_Counter__new_0: Counter { value: 0 };
+    };
+    core::cli::println(move "String::concat"(move "value: ", move __inline_Counter__get_1: {
+        break __inline_Counter__get_1: counter.value;
+    }."u64::to_string"()));
+    let counter2: Counter = __inline_Counter__new_2: {
+        break __inline_Counter__new_2: Counter { value: 42 };
+    };
+    core::cli::println(move "String::concat"(move "value: ", move __inline_Counter__get_3: {
+        break __inline_Counter__get_3: counter2.value;
+    }."u64::to_string"()));
 }
 

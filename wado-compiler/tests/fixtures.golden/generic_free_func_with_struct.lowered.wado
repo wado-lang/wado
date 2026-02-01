@@ -19,38 +19,36 @@ struct "Box<i32>" {
 
 fn run() with Stdout {
     let b1: Box<i32> = __inline_make_box_i32__0: {
-        break __inline_make_box_i32__0: "Box<i32>::new"(42);
+        break __inline_make_box_i32__0: __inline_Box_i32___new_1: {
+            break __inline_Box_i32___new_1: Box<i32> { value: 42 };
+        };
     };
-    core::cli::println(move "String::concat"(move "make_box: ", move "i32::to_string"(__inline_Box_i32___get_1: {
-        break __inline_Box_i32___get_1: b1.value;
-    })));
-    let v: i32 = __inline_unwrap_box_i32__2: {
+    core::cli::println(move "String::concat"(move "make_box: ", move __inline_Box_i32___get_2: {
+        break __inline_Box_i32___get_2: b1.value;
+    }."i32::to_string"()));
+    let v: i32 = __inline_unwrap_box_i32__3: {
         let b: Box<i32> = b1;
-        break __inline_unwrap_box_i32__2: __inline_Box_i32___get_3: {
-            break __inline_Box_i32___get_3: b.value;
+        break __inline_unwrap_box_i32__3: __inline_Box_i32___get_4: {
+            break __inline_Box_i32___get_4: b.value;
         };
     };
-    core::cli::println(move "String::concat"(move "unwrap_box: ", move "i32::to_string"(v)));
-    let b2: Box<i64> = __inline_make_box_i64__4: {
+    core::cli::println(move "String::concat"(move "unwrap_box: ", move v."i32::to_string"()));
+    let b2: Box<i64> = __inline_make_box_i64__5: {
         let value: i64 = 100 as i64;
-        break __inline_make_box_i64__4: "Box<i64>::new"(value);
-    };
-    let b3: Box<i64> = __inline_transform_box_i64__5: {
-        let v: i64 = __inline_Box_i64___get_6: {
-            break __inline_Box_i64___get_6: b2.value;
+        break __inline_make_box_i64__5: __inline_Box_i64___new_6: {
+            break __inline_Box_i64___new_6: Box<i64> { value: value };
         };
-        break __inline_transform_box_i64__5: "Box<i64>::new"(v);
     };
-    core::cli::println(move "String::concat"(move "transform_box: ", move "i64::to_string"(__inline_Box_i64___get_7: {
-        break __inline_Box_i64___get_7: b3.value;
-    })));
-}
-
-pub fn "Box<i64>::new"(value: i64) -> Box<i64> {
-    return Box<i64> { value: value };
-}
-
-pub fn "Box<i32>::new"(value: i32) -> Box<i32> {
-    return Box<i32> { value: value };
+    let b3: Box<i64> = __inline_transform_box_i64__7: {
+        let v: i64 = __inline_Box_i64___get_8: {
+            break __inline_Box_i64___get_8: b2.value;
+        };
+        break __inline_transform_box_i64__7: __inline_Box_i64___new_9: {
+            break __inline_Box_i64___new_9: Box<i64> { value: v };
+        };
+    };
+    core::cli::println(move "String::concat"(move "transform_box: ", move __inline_Box_i64___get_10: {
+        break __inline_Box_i64___get_10: b3.value;
+    }."i64::to_string"()));
 }
 

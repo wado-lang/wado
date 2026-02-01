@@ -12,11 +12,25 @@
 
 fn run() with Stdout {
     let mut arr: Array<f32> = move [];
-    "Array<f32>::append"(&mut arr, 1.5 as f32);
-    "Array<f32>::append"(&mut arr, 2.5 as f32);
-    "Array<f32>::append"(&mut arr, 3.5 as f32);
+    arr."Array<f32>::append"(1.5 as f32);
+    arr."Array<f32>::append"(2.5 as f32);
+    arr."Array<f32>::append"(3.5 as f32);
     for let _item of arr {
-        core::cli::println(move "f32::to_string"(x));
+        core::cli::println(__inline_f32__to_string_0: {
+            let ptr: i32 = core::builtin::realloc(0, 0, 1, 16);
+            let len: i32 = core::builtin::f32_to_buffer(x, ptr);
+            let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+                let arr: builtin::array<u8> = "array_new<u8>"(len);
+                for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                    core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+                }
+                break __inline_memory_to_gc_array_0: arr;
+            };
+            core::builtin::realloc(ptr, 16, 1, 0);
+            break __inline_f32__to_string_0: __inline_String__internal_from_utf8_raw_1: {
+                break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+            };
+        });
     }
 }
 

@@ -16,38 +16,75 @@ fn run() with Stdout {
     __inline_Array_i32__IndexAssign__index_assign_0: {
         core::builtin::array_set::<i32>(arr_i32.repr, 0, 42);
     };
-    core::cli::println(move "String::concat"(move "i32: ", move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_1: {
+    core::cli::println(move "String::concat"(move "i32: ", move __inline_Array_i32__IndexValue__index_value_1: {
         break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(arr_i32.repr, 0);
-    })));
+    }."i32::to_string"()));
     let mut arr_i64: Array<i64> = move [0 as i64];
     __inline_Array_i64__IndexAssign__index_assign_2: {
         let value: i64 = 9999999999 as i64;
         core::builtin::array_set::<i64>(arr_i64.repr, 0, value);
     };
-    core::cli::println(move "String::concat"(move "i64: ", move "i64::to_string"(__inline_Array_i64__IndexValue__index_value_3: {
+    core::cli::println(move "String::concat"(move "i64: ", move __inline_Array_i64__IndexValue__index_value_3: {
         break __inline_Array_i64__IndexValue__index_value_3: core::builtin::array_get::<i64>(arr_i64.repr, 0);
-    })));
+    }."i64::to_string"()));
     let mut arr_f32: Array<f32> = move [0.0 as f32];
     __inline_Array_f32__IndexAssign__index_assign_4: {
         let value: f32 = 3.14 as f32;
         core::builtin::array_set::<f32>(arr_f32.repr, 0, value);
     };
-    core::cli::println(move "String::concat"(move "f32: ", move "f32::to_string"(__inline_Array_f32__IndexValue__index_value_5: {
-        break __inline_Array_f32__IndexValue__index_value_5: core::builtin::array_get::<f32>(arr_f32.repr, 0);
-    })));
+    core::cli::println(move "String::concat"(move "f32: ", __inline_f32__to_string_6: {
+        let self: f32 = __inline_Array_f32__IndexValue__index_value_5: {
+            break __inline_Array_f32__IndexValue__index_value_5: core::builtin::array_get::<f32>(arr_f32.repr, 0);
+        };
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 16);
+        let len: i32 = core::builtin::f32_to_buffer(self, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_0: arr;
+        };
+        core::builtin::realloc(ptr, 16, 1, 0);
+        break __inline_f32__to_string_6: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        };
+    }));
     let mut arr_f64: Array<f64> = move [0.0];
-    __inline_Array_f64__IndexAssign__index_assign_6: {
+    __inline_Array_f64__IndexAssign__index_assign_7: {
         core::builtin::array_set::<f64>(arr_f64.repr, 0, 2.718281828);
     };
-    core::cli::println(move "String::concat"(move "f64: ", move "f64::to_string"(__inline_Array_f64__IndexValue__index_value_7: {
-        break __inline_Array_f64__IndexValue__index_value_7: core::builtin::array_get::<f64>(arr_f64.repr, 0);
-    })));
+    core::cli::println(move "String::concat"(move "f64: ", __inline_f64__to_string_9: {
+        let self: f64 = __inline_Array_f64__IndexValue__index_value_8: {
+            break __inline_Array_f64__IndexValue__index_value_8: core::builtin::array_get::<f64>(arr_f64.repr, 0);
+        };
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_2: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_2: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_9: __inline_String__internal_from_utf8_raw_3: {
+            break __inline_String__internal_from_utf8_raw_3: String { repr: arr, used: len };
+        };
+    }));
     let mut arr_bool: Array<bool> = move [false];
-    __inline_Array_bool__IndexAssign__index_assign_8: {
+    __inline_Array_bool__IndexAssign__index_assign_10: {
         core::builtin::array_set::<bool>(arr_bool.repr, 0, true);
     };
-    core::cli::println(move "String::concat"(move "bool: ", move "bool::to_string"(__inline_Array_bool__IndexValue__index_value_9: {
-        break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(arr_bool.repr, 0);
-    })));
+    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_12: {
+        let self: bool = __inline_Array_bool__IndexValue__index_value_11: {
+            break __inline_Array_bool__IndexValue__index_value_11: core::builtin::array_get::<bool>(arr_bool.repr, 0);
+        };
+        break __inline_bool__to_string_12: if self {
+            "true";
+        } else {
+            "false";
+        };
+    }));
 }
 

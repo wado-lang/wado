@@ -47,29 +47,59 @@ fn run() with Stdout {
     __inline_Array_f64__IndexAssign__index_assign_9: {
         core::builtin::array_set::<f64>(d.repr, 1, 2.5);
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "a: ", move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_10: {
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "a: ", move __inline_Array_i32__IndexValue__index_value_10: {
         break __inline_Array_i32__IndexValue__index_value_10: core::builtin::array_get::<i32>(a.repr, 0);
-    })), move " "), move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_11: {
+    }."i32::to_string"()), move " "), move __inline_Array_i32__IndexValue__index_value_11: {
         break __inline_Array_i32__IndexValue__index_value_11: core::builtin::array_get::<i32>(a.repr, 1);
-    })), move " "), move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_12: {
+    }."i32::to_string"()), move " "), move __inline_Array_i32__IndexValue__index_value_12: {
         break __inline_Array_i32__IndexValue__index_value_12: core::builtin::array_get::<i32>(a.repr, 2);
-    })));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "b: ", move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_13: {
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "b: ", move __inline_Array_i32__IndexValue__index_value_13: {
         break __inline_Array_i32__IndexValue__index_value_13: core::builtin::array_get::<i32>(b.repr, 0);
-    })), move " "), move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_14: {
+    }."i32::to_string"()), move " "), move __inline_Array_i32__IndexValue__index_value_14: {
         break __inline_Array_i32__IndexValue__index_value_14: core::builtin::array_get::<i32>(b.repr, 1);
-    })), move " "), move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_15: {
+    }."i32::to_string"()), move " "), move __inline_Array_i32__IndexValue__index_value_15: {
         break __inline_Array_i32__IndexValue__index_value_15: core::builtin::array_get::<i32>(b.repr, 2);
-    })));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "c: ", move "i64::to_string"(__inline_Array_i64__IndexValue__index_value_16: {
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "c: ", move __inline_Array_i64__IndexValue__index_value_16: {
         break __inline_Array_i64__IndexValue__index_value_16: core::builtin::array_get::<i64>(c.repr, 0);
-    })), move " "), move "i64::to_string"(__inline_Array_i64__IndexValue__index_value_17: {
+    }."i64::to_string"()), move " "), move __inline_Array_i64__IndexValue__index_value_17: {
         break __inline_Array_i64__IndexValue__index_value_17: core::builtin::array_get::<i64>(c.repr, 1);
-    })));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "d: ", move "f64::to_string"(__inline_Array_f64__IndexValue__index_value_18: {
-        break __inline_Array_f64__IndexValue__index_value_18: core::builtin::array_get::<f64>(d.repr, 0);
-    })), move " "), move "f64::to_string"(__inline_Array_f64__IndexValue__index_value_19: {
-        break __inline_Array_f64__IndexValue__index_value_19: core::builtin::array_get::<f64>(d.repr, 1);
-    })));
+    }."i64::to_string"()));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "d: ", __inline_f64__to_string_19: {
+        let self: f64 = __inline_Array_f64__IndexValue__index_value_18: {
+            break __inline_Array_f64__IndexValue__index_value_18: core::builtin::array_get::<f64>(d.repr, 0);
+        };
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_0: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_19: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        };
+    }), move " "), __inline_f64__to_string_21: {
+        let self: f64 = __inline_Array_f64__IndexValue__index_value_20: {
+            break __inline_Array_f64__IndexValue__index_value_20: core::builtin::array_get::<f64>(d.repr, 1);
+        };
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_2: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_2: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_21: __inline_String__internal_from_utf8_raw_3: {
+            break __inline_String__internal_from_utf8_raw_3: String { repr: arr, used: len };
+        };
+    }));
 }
 

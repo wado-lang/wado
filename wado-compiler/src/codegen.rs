@@ -473,11 +473,11 @@ struct BrTableAnalysis {
 
 /// Result of resolving a newtype chain to its ultimate base
 enum UltimateBaseType {
-    Primitive(PrimitiveType),
     Struct {
         name: String,
         module_source: ModuleSource,
     },
+    Primitive(crate::tir::PrimitiveType),
 }
 
 impl Codegen {
@@ -550,22 +550,7 @@ impl Codegen {
     /// Mangle a type name for use in struct names (e.g., i32 for Box<i32>)
     fn mangle_type_for_struct_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => match prim {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -678,22 +663,7 @@ impl Codegen {
     /// Mangle a type for dependency tracking (static version of `mangle_type_for_struct_name`)
     fn mangle_type_for_dependency(type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => match prim {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -1665,12 +1635,11 @@ impl Codegen {
                         };
                         param_types.push(struct_ref_type);
                     } else {
-                        panic!(
-                            "struct type not found for &self parameter: {} (method: {}, available: {:?})",
-                            struct_name,
-                            mangled_name,
-                            self.struct_types.keys().collect::<Vec<_>>()
-                        );
+                        // For primitive type methods (i32, f64, etc.), use the type_id_to_valtype
+                        // which handles reference types correctly (e.g., &i32 -> boxed i32 ref)
+                        let self_valtype =
+                            self.type_id_to_valtype(method_type_table, param.type_id);
+                        param_types.push(self_valtype);
                     }
                 } else {
                     param_types.push(self.type_id_to_valtype(method_type_table, param.type_id));
@@ -5291,22 +5260,7 @@ impl Codegen {
     /// This handles the case where multiple `TypeIds` represent the same type.
     fn canonical_element_type_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
         match type_table.get(type_id) {
-            ResolvedType::Primitive(p) => match p {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -6146,8 +6100,10 @@ impl Codegen {
 
             // Reference types
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // For primitive references, use the box type
-                if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                // For primitive references (including newtypes of primitives), use the box type
+                // Follow newtypes to find the ultimate primitive base type
+                let ultimate_inner = type_table.get_ultimate_base_type(*inner);
+                if let ResolvedType::Primitive(prim) = type_table.get(ultimate_inner) {
                     let val_type = primitive_to_valtype(prim);
                     if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
                         return ValType::Ref(RefType {
@@ -6971,11 +6927,13 @@ impl Codegen {
                         expr: ref_expr,
                     } => {
                         // Assignment through dereference: *x = value
-                        // For primitive refs: update the box struct
+                        // For primitive refs (including newtypes of primitives): update the box struct
                         // For struct/tuple refs: this assigns the whole value (not field)
                         let ref_type = type_table.get(ref_expr.type_id);
                         if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = ref_type {
-                            if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                            // Follow newtypes to find the ultimate primitive base type
+                            let ultimate_inner = type_table.get_ultimate_base_type(*inner);
+                            if let ResolvedType::Primitive(prim) = type_table.get(ultimate_inner) {
                                 // Primitive ref: use box struct.set
                                 let val_type = primitive_to_valtype(prim);
                                 if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
@@ -7212,40 +7170,6 @@ impl Codegen {
                         }
                     }
 
-                    // Primitive method calls (e.g., i32.to_string())
-                    ResolvedType::Primitive(prim) => {
-                        if method_name == "to_string" {
-                            // Generate the receiver value first
-                            self.generate_expr(func, receiver, type_table, ctx, builder);
-
-                            // Call the appropriate builtin to_string function
-                            let func_name = match prim {
-                                PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => {
-                                    "core/internal/i32_to_string"
-                                }
-                                PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => {
-                                    "core/internal/u32_to_string"
-                                }
-                                PrimitiveType::I64 => "core/internal/i64_to_string",
-                                PrimitiveType::U64 => "core/internal/u64_to_string",
-                                PrimitiveType::F32 => "core/internal/f32_to_string",
-                                PrimitiveType::F64 => "core/internal/f64_to_string",
-                                PrimitiveType::Bool => "core/internal/bool_to_string",
-                                PrimitiveType::Char => "core/internal/char_to_string",
-                                _ => {
-                                    panic!("to_string not supported for primitive type: {prim:?}")
-                                }
-                            };
-                            if let Some(func_idx) = builder.try_func_idx(func_name) {
-                                func.instruction(&Instruction::Call(func_idx));
-                            } else {
-                                panic!("missing builtin function: {func_name}");
-                            }
-                        } else {
-                            panic!("unknown method {method_name} on primitive type {prim:?}");
-                        }
-                    }
-
                     // User-defined generic struct method calls (e.g., Box<i32>.get())
                     ResolvedType::GenericInstance {
                         name,
@@ -7406,17 +7330,6 @@ impl Codegen {
                                         );
                                     }
                                 }
-                                ResolvedType::Primitive(prim) => {
-                                    // For primitive base types, only builtin methods are supported
-                                    self.generate_expr(func, receiver, type_table, ctx, builder);
-                                    Self::generate_primitive_method(
-                                        func,
-                                        &method_name,
-                                        &name,
-                                        prim,
-                                        builder,
-                                    );
-                                }
                                 // Handle chained newtypes (e.g., type C = B, type B = A, type A = Point)
                                 ResolvedType::Newtype {
                                     base_type: inner_base,
@@ -7428,18 +7341,6 @@ impl Codegen {
                                         type_table,
                                     );
                                     match ultimate_base {
-                                        Some(UltimateBaseType::Primitive(prim)) => {
-                                            self.generate_expr(
-                                                func, receiver, type_table, ctx, builder,
-                                            );
-                                            Self::generate_primitive_method(
-                                                func,
-                                                &method_name,
-                                                &name,
-                                                prim,
-                                                builder,
-                                            );
-                                        }
                                         Some(UltimateBaseType::Struct {
                                             name: base_name,
                                             module_source: base_module,
@@ -7468,11 +7369,89 @@ impl Codegen {
                                                 );
                                             }
                                         }
+                                        Some(UltimateBaseType::Primitive(prim)) => {
+                                            let base_type_name = prim.as_str();
+
+                                            let prim_module_path = "core/prelude/primitives";
+                                            let base_mangled = MethodName::new(
+                                                prim_module_path.to_string(),
+                                                base_type_name.to_string(),
+                                                trait_name.clone(),
+                                                method_name.clone(),
+                                            )
+                                            .to_string();
+
+                                            let base_inherent = MethodName::new(
+                                                prim_module_path.to_string(),
+                                                base_type_name.to_string(),
+                                                None,
+                                                method_name.clone(),
+                                            )
+                                            .to_string();
+
+                                            let func_idx = builder
+                                                .try_func_idx(&base_mangled)
+                                                .or_else(|| builder.try_func_idx(&base_inherent));
+
+                                            if let Some(idx) = func_idx {
+                                                self.generate_expr(
+                                                    func, receiver, type_table, ctx, builder,
+                                                );
+                                                self.generate_args(
+                                                    func, args, type_table, ctx, builder,
+                                                );
+                                                func.instruction(&Instruction::Call(idx));
+                                            } else {
+                                                panic!(
+                                                    "method '{method_name}' not found on chained newtype '{name}' or ultimate base primitive '{base_type_name}'"
+                                                );
+                                            }
+                                        }
                                         None => {
                                             panic!(
                                                 "method '{method_name}' not found on chained newtype '{name}'"
                                             );
                                         }
+                                    }
+                                }
+                                // Newtype of primitive (e.g., type Meters = f64)
+                                // Look up the method on the base primitive type
+                                ResolvedType::Primitive(prim) => {
+                                    let base_type_name = prim.as_str();
+
+                                    // Primitive methods are defined in core/prelude/primitives.wado
+                                    let prim_module_path = "core/prelude/primitives";
+                                    let base_mangled = MethodName::new(
+                                        prim_module_path.to_string(),
+                                        base_type_name.to_string(),
+                                        trait_name.clone(),
+                                        method_name.clone(),
+                                    )
+                                    .to_string();
+
+                                    // Also try without trait name
+                                    let base_inherent = MethodName::new(
+                                        prim_module_path.to_string(),
+                                        base_type_name.to_string(),
+                                        None,
+                                        method_name.clone(),
+                                    )
+                                    .to_string();
+
+                                    let func_idx = builder
+                                        .try_func_idx(&base_mangled)
+                                        .or_else(|| builder.try_func_idx(&base_inherent));
+
+                                    if let Some(idx) = func_idx {
+                                        self.generate_expr(
+                                            func, receiver, type_table, ctx, builder,
+                                        );
+                                        self.generate_args(func, args, type_table, ctx, builder);
+                                        func.instruction(&Instruction::Call(idx));
+                                    } else {
+                                        panic!(
+                                            "method '{method_name}' not found on newtype '{name}' or base primitive '{base_type_name}'"
+                                        );
                                     }
                                 }
                                 _ => {
@@ -7484,9 +7463,51 @@ impl Codegen {
                         }
                     }
 
+                    // Primitive type method calls (e.g., 42.to_string())
+                    // Methods are defined in core/prelude/primitives.wado
+                    ResolvedType::Primitive(prim) => {
+                        let type_name = prim.as_str();
+
+                        // Primitive methods are defined in core/prelude/primitives.wado
+                        let module_path = "core/prelude/primitives";
+                        let mangled_name = MethodName::new(
+                            module_path.to_string(),
+                            type_name.to_string(),
+                            trait_name.clone(),
+                            method_name.clone(),
+                        )
+                        .to_string();
+
+                        // Also try without trait name (for inherent methods)
+                        let inherent_name = MethodName::new(
+                            module_path.to_string(),
+                            type_name.to_string(),
+                            None,
+                            method_name.clone(),
+                        )
+                        .to_string();
+
+                        let func_idx = builder
+                            .try_func_idx(&mangled_name)
+                            .or_else(|| builder.try_func_idx(&inherent_name));
+
+                        if let Some(idx) = func_idx {
+                            // Generate receiver
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            // Generate arguments
+                            self.generate_args(func, args, type_table, ctx, builder);
+                            // Call the method
+                            func.instruction(&Instruction::Call(idx));
+                        } else {
+                            panic!(
+                                "unknown method '{method_name}' on primitive type '{type_name}': tried [{mangled_name}], [{inherent_name}]"
+                            );
+                        }
+                    }
+
                     other => {
                         panic!(
-                            "method call receiver is not a struct or primitive type: {:?}, method: {}, receiver.type_id: {}",
+                            "method call receiver has unexpected type: {:?}, method: {}, receiver.type_id: {}",
                             other, method_name, receiver.type_id
                         );
                     }
@@ -7499,7 +7520,6 @@ impl Codegen {
                 args,
             } => {
                 let func_name = static_func.name();
-                let module_path = static_func.module_path();
 
                 // Generate arguments first
                 self.generate_args(func, args, type_table, ctx, builder);
@@ -7507,14 +7527,85 @@ impl Codegen {
                 // Check if this is a monomorphized function using metadata
                 let base_struct_name = static_func.base_struct_name();
 
-                // func_name is already mangled as "StructName::method" or "Struct<Type>::method"
+                // Get method_info for proper struct/trait/method name lookup
+                let method_info = static_func.method_info();
+
+                // Use the FunctionRef's module_path - this is set correctly by the resolver
+                // to point to where the method is defined (e.g., core/prelude/primitives for primitives,
+                // or the module where the struct/impl is defined for user types).
+                let module_path = static_func.module_path();
+
+                // func_name is already mangled as "StructName::method", "Struct^Trait::method", etc.
                 // We need to look it up using the same name format used during function definition
-                // Methods are registered with MethodName format: {module_path}/{struct_name}::{method_name}
-                let func_idx = if let Some(sep_pos) = func_name.find("::") {
+                // Methods are registered with MethodName format: {module_path}/{struct_name}^{trait}::{method_name}
+                let func_idx = if let Some(info) = &method_info {
+                    // Use method_info for accurate struct/trait/method names
+                    let struct_name = &info.struct_name;
+                    let trait_name = &info.trait_name;
+                    let method_name = info.full_method_name();
+
+                    // Build the mangled name using proper components
+                    let mangled_name = MethodName::new(
+                        module_path.join("/"),
+                        struct_name.clone(),
+                        trait_name.clone(),
+                        method_name.clone(),
+                    )
+                    .to_string();
+
+                    // Check struct metadata for fallback
+                    let struct_lookup_name =
+                        StructName::from_path_and_name(&module_path, struct_name);
+                    let struct_info = self.struct_types.get(&struct_lookup_name);
+
+                    builder
+                        .try_func_idx(&mangled_name)
+                        .or_else(|| {
+                            // Also try without trait name (for inherent methods)
+                            if trait_name.is_some() {
+                                let inherent_name = MethodName::new(
+                                    module_path.join("/"),
+                                    struct_name.clone(),
+                                    None,
+                                    method_name.clone(),
+                                )
+                                .to_string();
+                                builder.try_func_idx(&inherent_name)
+                            } else {
+                                None
+                            }
+                        })
+                        .or_else(|| {
+                            // Also try without module path (for current module lookups)
+                            builder.try_func_idx(&func_name)
+                        })
+                        .or_else(|| {
+                            // For monomorphized generic types like Array<i32>, also try the generic version
+                            // Use metadata: either from function or struct
+                            let generic_name = base_struct_name
+                                .as_ref()
+                                .or_else(|| struct_info.and_then(|s| s.base_name.as_ref()))
+                                .or(Some(&info.base_struct_name));
+
+                            if let Some(generic_struct_name) = generic_name {
+                                let generic_mangled_name = MethodName::new(
+                                    module_path.join("/"),
+                                    generic_struct_name.clone(),
+                                    trait_name.clone(),
+                                    method_name.clone(),
+                                )
+                                .to_string();
+                                builder.try_func_idx(&generic_mangled_name)
+                            } else {
+                                None
+                            }
+                        })
+                } else if let Some(sep_pos) = func_name.find("::") {
+                    // No method_info, parse from func_name (legacy path for primitives)
                     let struct_name = &func_name[..sep_pos];
                     let method_name = &func_name[sep_pos + 2..];
 
-                    // Build the mangled name in the same format as during function definition
+                    // Build the mangled name (no trait info available)
                     let mangled_name = MethodName::new(
                         module_path.join("/"),
                         struct_name.to_string(),
@@ -7530,14 +7621,9 @@ impl Codegen {
 
                     builder
                         .try_func_idx(&mangled_name)
+                        .or_else(|| builder.try_func_idx(&func_name))
                         .or_else(|| {
-                            // Also try without module path (for current module lookups)
-                            builder.try_func_idx(&func_name)
-                        })
-                        .or_else(|| {
-                            // For monomorphized generic types like Array<i32>, also try the generic version Array
-                            // This handles static methods on generic types that aren't monomorphized
-                            // Use metadata: either from function or struct, not string parsing
+                            // For monomorphized generic types, try the generic version
                             let generic_name = base_struct_name
                                 .as_ref()
                                 .or_else(|| struct_info.and_then(|s| s.base_name.as_ref()));
@@ -8250,49 +8336,12 @@ impl Codegen {
         }
     }
 
-    /// Generate method call for primitive types (e.g., `to_string`)
-    fn generate_primitive_method(
-        func: &mut Function,
-        method_name: &str,
-        newtype_name: &str,
-        prim: PrimitiveType,
-        builder: &CoreModuleBuilder,
-    ) {
-        if method_name == "to_string" {
-            let func_name = match prim {
-                PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => {
-                    "core/internal/i32_to_string"
-                }
-                PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => {
-                    "core/internal/u32_to_string"
-                }
-                PrimitiveType::I64 => "core/internal/i64_to_string",
-                PrimitiveType::U64 => "core/internal/u64_to_string",
-                PrimitiveType::F32 => "core/internal/f32_to_string",
-                PrimitiveType::F64 => "core/internal/f64_to_string",
-                PrimitiveType::Bool => "core/internal/bool_to_string",
-                PrimitiveType::Char => "core/internal/char_to_string",
-                _ => panic!("to_string not supported for primitive type: {prim:?}"),
-            };
-            if let Some(func_idx) = builder.try_func_idx(func_name) {
-                func.instruction(&Instruction::Call(func_idx));
-            } else {
-                panic!("missing builtin function: {func_name}");
-            }
-        } else {
-            panic!(
-                "method '{method_name}' not found on newtype '{newtype_name}' (primitive base type {prim:?})"
-            );
-        }
-    }
-
     /// Follow newtype chain to find the ultimate base type (struct or primitive)
     fn resolve_to_ultimate_base(
         ty: ResolvedType,
         type_table: &TypeTable,
     ) -> Option<UltimateBaseType> {
         match ty {
-            ResolvedType::Primitive(prim) => Some(UltimateBaseType::Primitive(prim)),
             ResolvedType::Struct {
                 name,
                 module_source,
@@ -8301,6 +8350,7 @@ impl Codegen {
                 name,
                 module_source,
             }),
+            ResolvedType::Primitive(prim) => Some(UltimateBaseType::Primitive(prim)),
             ResolvedType::Newtype { base_type, .. } => {
                 Self::resolve_to_ultimate_base(type_table.get(base_type).clone(), type_table)
             }
@@ -8816,9 +8866,11 @@ impl Codegen {
                 }
             }
             TirUnaryOp::Ref | TirUnaryOp::MutRef => {
-                // For primitives, box the value in a single-field struct
+                // For primitives (including newtypes of primitives), box the value in a single-field struct
                 // For GC types (structs, arrays, tuples), references are transparent
-                if let ResolvedType::Primitive(prim) = type_table.get(operand_type) {
+                // Follow newtypes to find the ultimate primitive base type
+                let ultimate_operand = type_table.get_ultimate_base_type(operand_type);
+                if let ResolvedType::Primitive(prim) = type_table.get(ultimate_operand) {
                     let val_type = primitive_to_valtype(prim);
                     if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
                         func.instruction(&Instruction::StructNew(box_type_idx));
@@ -8828,18 +8880,21 @@ impl Codegen {
                 // For non-primitives (structs, arrays, tuples), no operation needed
             }
             TirUnaryOp::Deref => {
-                // For references to primitives, unbox by extracting from the box struct
+                // For references to primitives (including newtypes of primitives), unbox by extracting from the box struct
                 // For references to GC types, references are transparent
                 if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
                     type_table.get(operand_type)
-                    && let ResolvedType::Primitive(prim) = type_table.get(*inner)
                 {
-                    let val_type = primitive_to_valtype(prim);
-                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
-                        func.instruction(&Instruction::StructGet {
-                            struct_type_index: box_type_idx,
-                            field_index: 0,
-                        });
+                    // Follow newtypes to find the ultimate primitive base type
+                    let ultimate_inner = type_table.get_ultimate_base_type(*inner);
+                    if let ResolvedType::Primitive(prim) = type_table.get(ultimate_inner) {
+                        let val_type = primitive_to_valtype(prim);
+                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: box_type_idx,
+                                field_index: 0,
+                            });
+                        }
                     }
                 }
                 // For non-primitive references, no operation needed
@@ -14368,7 +14423,10 @@ impl Codegen {
             TirExprKind::Unary { expr: inner, .. } => {
                 self.preallocate_locals_from_expr(inner, type_table, ctx);
             }
-            TirExprKind::Call { args, .. } | TirExprKind::IndirectCall { args, .. } => {
+            TirExprKind::Call { args, .. }
+            | TirExprKind::IndirectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. }
+            | TirExprKind::EffectCall { args, .. } => {
                 for arg in args {
                     self.preallocate_locals_from_expr(arg, type_table, ctx);
                 }

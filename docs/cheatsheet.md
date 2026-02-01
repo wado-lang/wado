@@ -375,14 +375,20 @@ All entity definitions can have `pub` visibility.
 
 ```wado
 impl Point {
-    // Instance method (has self parameter)
+    // Instance method with &self (borrows immutably)
     fn sum(&self) -> i32 {
         return self.x + self.y;
     }
 
+    // Instance method with &mut self (borrows mutably)
     fn reset(&mut self) {
         self.x = 0;
         self.y = 0;
+    }
+
+    // Instance method with self by value (copies value)
+    fn to_tuple(self) -> [i32, i32] {
+        return [self.x, self.y];
     }
 
     // Static method (no self parameter)

@@ -11,7 +11,7 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let s: String = __inline_f64_to_string_0: {
+    let s: String = __inline_f64__to_string_0: {
         let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
         let len: i32 = core::builtin::f64_to_buffer(3.14, ptr);
         let arr: builtin::array<u8> = __inline_memory_to_gc_array_1: {
@@ -22,7 +22,9 @@ fn run() with Stdout {
             break __inline_memory_to_gc_array_1: arr;
         };
         core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64_to_string_0: "String::internal_from_utf8_raw"(arr, len);
+        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_2: {
+            break __inline_String__internal_from_utf8_raw_2: String { repr: arr, used: len };
+        };
     };
     core::cli::println(s);
 }

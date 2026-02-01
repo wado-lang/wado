@@ -11,11 +11,13 @@
 
 fn run() with Stdout {
     let mut arr: Array<u16> = move [];
-    "Array<u16>::append"(&mut arr, 1000 as u16);
-    "Array<u16>::append"(&mut arr, 2000 as u16);
-    "Array<u16>::append"(&mut arr, 3000 as u16);
+    arr."Array<u16>::append"(1000 as u16);
+    arr."Array<u16>::append"(2000 as u16);
+    arr."Array<u16>::append"(3000 as u16);
     for let _item of arr {
-        core::cli::println(move "u16::to_string"(x));
+        core::cli::println(__inline_u16__to_string_0: {
+            break __inline_u16__to_string_0: x as i32."i32::to_string"();
+        });
     }
 }
 

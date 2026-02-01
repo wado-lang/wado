@@ -40,10 +40,32 @@ fn run() with Stdout {
     let str_box: Box<String> = move Box<String> { value: "hello" };
     let bool_box: Box<bool> = move Box<bool> { value: true };
     let char_box: Box<char> = move Box<char> { value: 'A' };
-    core::cli::println(move "String::concat"(move "i32: ", move "i32::to_string"(int_box.value)));
-    core::cli::println(move "String::concat"(move "f64: ", move "f64::to_string"(float_box.value)));
+    core::cli::println(move "String::concat"(move "i32: ", move int_box.value."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "f64: ", __inline_f64__to_string_0: {
+        let self: f64 = float_box.value;
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_0: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        };
+    }));
     core::cli::println(move "String::concat"(move "str: ", str_box.value));
-    core::cli::println(move "String::concat"(move "bool: ", move "bool::to_string"(bool_box.value)));
-    core::cli::println(move "String::concat"(move "char: ", move "char::to_string"(char_box.value)));
+    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_1: {
+        let self: bool = bool_box.value;
+        break __inline_bool__to_string_1: if self {
+            "true";
+        } else {
+            "false";
+        };
+    }));
+    core::cli::println(move "String::concat"(move "char: ", move char_box.value."char::to_string"()));
 }
 

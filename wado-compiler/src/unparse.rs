@@ -242,6 +242,10 @@ impl<'a> Unparser<'a> {
 
     fn unparse_param(&mut self, param: &Param) {
         match param.self_kind {
+            SelfKind::Value => {
+                self.output.push_str("self");
+                return;
+            }
             SelfKind::Ref => {
                 self.output.push_str("&self");
                 return;
@@ -2853,10 +2857,25 @@ impl<'a> TirUnparser<'a> {
                 type_args,
                 args,
             } => {
-                // Lowered TIR: show as static function call with receiver as first arg
-                // e.g., cat.describe() becomes "Cat^Describe::describe"(cat)
+                // Show as method call with resolved method name: receiver."Type::method"(args)
+                // This shows which method was resolved during type checking
                 let full_name = func.name();
+
+                // Unparse receiver - skip the reference operator if present
+                // (the resolver adds &/&mut for self methods, but we want to show just the value)
+                let actual_receiver = match &receiver.kind {
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                        expr: inner,
+                    } => inner.as_ref(),
+                    _ => receiver.as_ref(),
+                };
+                self.unparse_expr(actual_receiver);
+                self.output.push('.');
+                // Quote the full resolved method name to show resolution
                 self.output.push_str(&Self::quote_if_needed(&full_name));
+
+                // Type arguments (turbofish syntax)
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {
@@ -2867,12 +2886,13 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push('>');
                 }
+
+                // Arguments
                 self.output.push('(');
-                // First arg is the receiver (self)
-                self.unparse_expr(receiver);
-                // Then the rest of the args
-                for arg in args {
-                    self.output.push_str(", ");
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
                     self.unparse_expr(arg);
                 }
                 self.output.push(')');

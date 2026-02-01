@@ -14,30 +14,80 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let a: u128 = move "u128::from_u64"(100 as u64);
-    let b: u128 = move "u128::from_u64"(200 as u64);
-    let mul_result: u128 = move "u128^Mul::mul"(&a, &b);
-    core::cli::println(move "String::concat"(move "u128 100 * 200 = ", move "u128::to_string"(mul_result)));
-    let c: u128 = move "u128::from_u64"(1000000 as u64);
-    let d: u128 = move "u128::from_u64"(1000000 as u64);
-    let large_mul: u128 = move "u128^Mul::mul"(&c, &d);
-    core::cli::println(move "String::concat"(move "u128 1M * 1M = ", move "u128::to_string"(large_mul)));
-    let div_result: u128 = move "u128^Div::div"(&mul_result, &a);
-    core::cli::println(move "String::concat"(move "u128 20000 / 100 = ", move "u128::to_string"(div_result)));
-    let e: u128 = move "u128::from_u64"(17 as u64);
-    let f: u128 = move "u128::from_u64"(5 as u64);
-    let rem_result: u128 = move "u128^Rem::rem"(&e, &f);
-    core::cli::println(move "String::concat"(move "u128 17 % 5 = ", move "u128::to_string"(rem_result)));
-    let x: i128 = move "i128::from_i64"(100 as i64);
-    let y: i128 = move "i128::from_i64"(-20 as i64);
-    let i_mul: i128 = move "i128^Mul::mul"(&x, &y);
-    core::cli::println(move "String::concat"(move "i128 100 * (-20) = ", move "i128::to_string"(i_mul)));
-    let i_div: i128 = move "i128^Div::div"(&i_mul, &x);
-    core::cli::println(move "String::concat"(move "i128 (-2000) / 100 = ", move "i128::to_string"(i_div)));
-    let neg17: i128 = move "i128::from_i64"(-17 as i64);
-    let pos5: i128 = move "i128::from_i64"(5 as i64);
-    let i_rem: i128 = move "i128^Rem::rem"(&neg17, &pos5);
-    core::cli::println(move "String::concat"(move "i128 (-17) % 5 = ", move "i128::to_string"(i_rem)));
+    let a: u128 = __inline_u128__from_u64_0: {
+        let value: u64 = 100 as u64;
+        break __inline_u128__from_u64_0: u128 { low: value, high: 0 };
+    };
+    let b: u128 = __inline_u128__from_u64_1: {
+        let value: u64 = 200 as u64;
+        break __inline_u128__from_u64_1: u128 { low: value, high: 0 };
+    };
+    let mul_result: u128 = move a."u128^Mul::mul"(&b);
+    core::cli::println(move "String::concat"(move "u128 100 * 200 = ", move mul_result."u128::to_string"()));
+    let c: u128 = __inline_u128__from_u64_2: {
+        let value: u64 = 1000000 as u64;
+        break __inline_u128__from_u64_2: u128 { low: value, high: 0 };
+    };
+    let d: u128 = __inline_u128__from_u64_3: {
+        let value: u64 = 1000000 as u64;
+        break __inline_u128__from_u64_3: u128 { low: value, high: 0 };
+    };
+    let large_mul: u128 = move c."u128^Mul::mul"(&d);
+    core::cli::println(move "String::concat"(move "u128 1M * 1M = ", move large_mul."u128::to_string"()));
+    let div_result: u128 = move mul_result."u128^Div::div"(&a);
+    core::cli::println(move "String::concat"(move "u128 20000 / 100 = ", move div_result."u128::to_string"()));
+    let e: u128 = __inline_u128__from_u64_4: {
+        let value: u64 = 17 as u64;
+        break __inline_u128__from_u64_4: u128 { low: value, high: 0 };
+    };
+    let f: u128 = __inline_u128__from_u64_5: {
+        let value: u64 = 5 as u64;
+        break __inline_u128__from_u64_5: u128 { low: value, high: 0 };
+    };
+    let rem_result: u128 = move e."u128^Rem::rem"(&f);
+    core::cli::println(move "String::concat"(move "u128 17 % 5 = ", move rem_result."u128::to_string"()));
+    let x: i128 = __inline_i128__from_i64_6: {
+        let value: i64 = 100 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_6: i128 { low: value as u64, high: high };
+    };
+    let y: i128 = __inline_i128__from_i64_7: {
+        let value: i64 = -20 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_7: i128 { low: value as u64, high: high };
+    };
+    let i_mul: i128 = move x."i128^Mul::mul"(&y);
+    core::cli::println(move "String::concat"(move "i128 100 * (-20) = ", move i_mul."i128::to_string"()));
+    let i_div: i128 = move i_mul."i128^Div::div"(&x);
+    core::cli::println(move "String::concat"(move "i128 (-2000) / 100 = ", move i_div."i128::to_string"()));
+    let neg17: i128 = __inline_i128__from_i64_8: {
+        let value: i64 = -17 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_8: i128 { low: value as u64, high: high };
+    };
+    let pos5: i128 = __inline_i128__from_i64_9: {
+        let value: i64 = 5 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_9: i128 { low: value as u64, high: high };
+    };
+    let i_rem: i128 = move neg17."i128^Rem::rem"(&pos5);
+    core::cli::println(move "String::concat"(move "i128 (-17) % 5 = ", move i_rem."i128::to_string"()));
     core::cli::println(move "Mul/Div tests passed!");
 }
 

@@ -11,11 +11,17 @@
 
 fn run() with Stdout {
     let mut arr: Array<bool> = move [];
-    "Array<bool>::append"(&mut arr, true);
-    "Array<bool>::append"(&mut arr, false);
-    "Array<bool>::append"(&mut arr, true);
+    arr."Array<bool>::append"(true);
+    arr."Array<bool>::append"(false);
+    arr."Array<bool>::append"(true);
     for let _item of arr {
-        core::cli::println(move "bool::to_string"(x));
+        core::cli::println(__inline_bool__to_string_0: {
+            break __inline_bool__to_string_0: if x {
+                "true";
+            } else {
+                "false";
+            };
+        });
     }
 }
 

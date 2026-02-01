@@ -20,13 +20,21 @@ struct BigInts {
 
 fn run() with Stdout {
     let b: BigInts = __inline_get_big_0: {
-        break __inline_get_big_0: BigInts { a: "u128::from_u64"(42), b: "i128::from_pair"(18446744073709551516, -1) };
+        break __inline_get_big_0: BigInts { a: __inline_u128__from_u64_1: {
+            break __inline_u128__from_u64_1: u128 { low: 42, high: 0 };
+        }, b: __inline_i128__from_pair_2: {
+            break __inline_i128__from_pair_2: i128 { low: 18446744073709551516, high: -1 };
+        } };
     };
-    core::cli::println(move "String::concat"(move "a=", move "u128::to_string"(b.a)));
-    core::cli::println(move "String::concat"(move "b=", move "i128::to_string"(b.b)));
-    let x: u128 = move "u128::from_u64"(12345);
-    let y: i128 = move "i128::from_pair"(18446744073709483726, -1);
-    core::cli::println(move "String::concat"(move "x=", move "u128::to_string"(x)));
-    core::cli::println(move "String::concat"(move "y=", move "i128::to_string"(y)));
+    core::cli::println(move "String::concat"(move "a=", move b.a."u128::to_string"()));
+    core::cli::println(move "String::concat"(move "b=", move b.b."i128::to_string"()));
+    let x: u128 = __inline_u128__from_u64_3: {
+        break __inline_u128__from_u64_3: u128 { low: 12345, high: 0 };
+    };
+    let y: i128 = __inline_i128__from_pair_4: {
+        break __inline_i128__from_pair_4: i128 { low: 18446744073709483726, high: -1 };
+    };
+    core::cli::println(move "String::concat"(move "x=", move x."u128::to_string"()));
+    core::cli::println(move "String::concat"(move "y=", move y."i128::to_string"()));
 }
 

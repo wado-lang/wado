@@ -25,23 +25,25 @@ struct "TreeMapNode<String,i32>" {
 }
 
 fn run() with Stdout {
-    let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
-    __inline_TreeMap_String_i32__IndexAssign__index_assign_0: {
+    let mut map: TreeMap<String,i32> = __inline_TreeMap_String_i32___new_0: {
+        break __inline_TreeMap_String_i32___new_0: TreeMap<String,i32> { root: null, size: 0, deleted_count: 0 };
+    };
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_1: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "hello";
-        "TreeMap<String,i32>::insert"(self, key, 42);
+        self."TreeMap<String,i32>::insert"(key, 42);
     };
-    if Some(val) = __inline_TreeMap_String_i32__IndexValue__index_value_1: {
+    if Some(val) = __inline_TreeMap_String_i32__IndexValue__index_value_2: {
         let self: &TreeMap<String,i32> = &map;
         let key: String = move "hello";
-        break __inline_TreeMap_String_i32__IndexValue__index_value_1: "TreeMap<String,i32>::get"(self, key);
+        break __inline_TreeMap_String_i32__IndexValue__index_value_2: self."TreeMap<String,i32>::get"(key);
     } {
-        core::cli::println(move "String::concat"(move "value: ", move "i32::to_string"(val)));
+        core::cli::println(move "String::concat"(move "value: ", move val."i32::to_string"()));
     }
 }
 
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
-    if Some(node) = "TreeMap<String,i32>::find_node"(self, key) {
+    if Some(node) = self."TreeMap<String,i32>::find_node"(key) {
         return Option::Some(node.value);
     }
     return null;
@@ -50,10 +52,10 @@ fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option
 fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: String) -> Option<&TreeMapNode<String,i32>> {
     let mut current: Option<&mut TreeMapNode<String,i32>> = self.root;
     while let Some(n) = current {
-        if (!n.deleted && "String^Eq::eq"(&key, &n.key)) {
+        if (!n.deleted && key."String^Eq::eq"(&n.key)) {
             return Option::Some(n);
         }
-        if "String^Ord::lt"(&key, &n.key) {
+        if key."String^Ord::lt"(&n.key) {
             current = n.left;
         } else {
             current = n.right;
@@ -64,7 +66,7 @@ fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: String) -> 
 
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     let mut inserted: bool = false;
-    self.root = "TreeMap<String,i32>::insert_at"(self, self.root, key, value, &mut inserted);
+    self.root = self."TreeMap<String,i32>::insert_at"(self.root, key, value, &mut inserted);
     if inserted {
         self.size = (self.size + 1);
     }
@@ -72,31 +74,30 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
 
 fn "TreeMap<String,i32>::insert_at"(self: &mut TreeMap<String,i32>, node: Option<&mut TreeMapNode<String,i32>>, key: String, value: i32, inserted: &mut bool) -> Option<&mut TreeMapNode<String,i32>> {
     if Some(n) = node {
-        if (n.deleted && "String^Eq::eq"(&key, &n.key)) {
+        if (n.deleted && key."String^Eq::eq"(&n.key)) {
             n.value = value;
             n.deleted = false;
             *inserted = true;
             return Option::Some(n);
         }
-        if (!n.deleted && "String^Eq::eq"(&key, &n.key)) {
+        if (!n.deleted && key."String^Eq::eq"(&n.key)) {
             n.value = value;
             return Option::Some(n);
         }
-        if "String^Ord::lt"(&key, &n.key) {
-            n.left = "TreeMap<String,i32>::insert_at"(self, n.left, key, value, inserted);
+        if key."String^Ord::lt"(&n.key) {
+            n.left = self."TreeMap<String,i32>::insert_at"(n.left, key, value, inserted);
         } else {
-            n.right = "TreeMap<String,i32>::insert_at"(self, n.right, key, value, inserted);
+            n.right = self."TreeMap<String,i32>::insert_at"(n.right, key, value, inserted);
         }
-        let after_skew: Option<&mut TreeMapNode<String,i32>> = "TreeMap<String,i32>::skew"(self, move Option::Some(n));
-        return "TreeMap<String,i32>::split"(self, after_skew);
+        let after_skew: Option<&mut TreeMapNode<String,i32>> = self."TreeMap<String,i32>::skew"(move Option::Some(n));
+        return self."TreeMap<String,i32>::split"(after_skew);
     }
-    let mut new_node: TreeMapNode<String,i32> = move "TreeMapNode<String,i32>::new"(key, value);
+    let mut new_node: TreeMapNode<String,i32> = __inline_TreeMapNode_String_i32___new_0: {
+        let key: String = key;
+        break __inline_TreeMapNode_String_i32___new_0: TreeMapNode<String,i32> { key: key, value: value, level: 1, left: null, right: null, deleted: false };
+    };
     *inserted = true;
     return Option::Some(&mut new_node);
-}
-
-fn "TreeMapNode<String,i32>::new"(key: String, value: i32) -> TreeMapNode<String,i32> {
-    return TreeMapNode<String,i32> { key: key, value: value, level: 1, left: null, right: null, deleted: false };
 }
 
 fn "TreeMap<String,i32>::split"(self: &mut TreeMap<String,i32>, node: Option<&mut TreeMapNode<String,i32>>) -> Option<&mut TreeMapNode<String,i32>> {
@@ -128,9 +129,5 @@ fn "TreeMap<String,i32>::skew"(self: &mut TreeMap<String,i32>, node: Option<&mut
         return Option::Some(n);
     }
     return null;
-}
-
-pub fn "TreeMap<String,i32>::new"() -> TreeMap<String,i32> {
-    return TreeMap<String,i32> { root: null, size: 0, deleted_count: 0 };
 }
 

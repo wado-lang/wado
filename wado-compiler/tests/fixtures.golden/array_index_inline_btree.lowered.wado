@@ -21,15 +21,15 @@ struct "Tree<String>" {
 
 fn run() with Stdout {
     let tree: Tree<String> = move Tree<String> { root: Node<String> { keys: ["apple", "banana", "cherry", "date"], deleted: [false, true, false, false] }, max_keys: 5 };
-    let result: i32 = "Tree<String>::check"(&tree);
-    core::cli::println(move "String::concat"(move "result: ", move "i32::to_string"(result)));
+    let result: i32 = tree."Tree<String>::check"();
+    core::cli::println(move "String::concat"(move "result: ", move result."i32::to_string"()));
 }
 
 fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
     let active: i32 = __inline_Node_String___count_active_0: {
         let self: &Node<String> = &self.root;
         let mut count: i32 = 0;
-        for let mut i: i32 = 0; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
+        for let mut i: i32 = 0; (i < self.keys."Array<String>::len"()); i = (i + 1) {
             if !__inline_Array_bool__IndexValue__index_value_1: {
                 let self: &Array<bool> = &self.deleted;
                 break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(self.repr, i);
@@ -43,7 +43,7 @@ fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
         let self: &Node<String> = &self.root;
         let max_keys: i32 = self.max_keys;
         let mut count: i32 = 0;
-        for let mut i: i32 = 0; (i < "Array<String>::len"(&self.keys)); i = (i + 1) {
+        for let mut i: i32 = 0; (i < self.keys."Array<String>::len"()); i = (i + 1) {
             if !__inline_Array_bool__IndexValue__index_value_3: {
                 let self: &Array<bool> = &self.deleted;
                 break __inline_Array_bool__IndexValue__index_value_3: core::builtin::array_get::<bool>(self.repr, i);
@@ -57,7 +57,7 @@ fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
         let self: &Node<String> = &self.root;
         let key: &String = &"cherry";
         let mut i: i32 = 0;
-        while ((i < "Array<String>::len"(&self.keys)) && "String^Ord::lt"(&"Array<String>^IndexValue::index_value"(&self.keys, i), &*key)) {
+        while ((i < self.keys."Array<String>::len"()) && self.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::lt"(&*key)) {
             i = (i + 1);
         }
         break __inline_Node_String___find_index_4: i;

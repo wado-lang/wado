@@ -14,20 +14,54 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let zero: u128 = move "u128::zero"();
-    core::cli::println(move core::internal::u128_to_string(zero));
-    let small: u128 = move "u128::from_u64"(12345 as u64);
-    core::cli::println(move core::internal::u128_to_string(small));
-    let large: u128 = move "u128::from_u64"(9999999999 as u64);
-    core::cli::println(move core::internal::u128_to_string(large));
-    let i_zero: i128 = move "i128::zero"();
-    core::cli::println(move core::internal::i128_to_string(i_zero));
-    let pos: i128 = move "i128::from_i64"(42 as i64);
-    core::cli::println(move core::internal::i128_to_string(pos));
-    let neg: i128 = move "i128::from_i64"(-12345 as i64);
-    core::cli::println(move core::internal::i128_to_string(neg));
-    let large_neg: i128 = move "i128::from_i64"(-9876543210 as i64);
-    core::cli::println(move core::internal::i128_to_string(large_neg));
+    let zero: u128 = __inline_u128__zero_0: {
+        break __inline_u128__zero_0: u128 { low: 0, high: 0 };
+    };
+    core::cli::println(move zero."u128::to_string"());
+    let small: u128 = __inline_u128__from_u64_1: {
+        let value: u64 = 12345 as u64;
+        break __inline_u128__from_u64_1: u128 { low: value, high: 0 };
+    };
+    core::cli::println(move small."u128::to_string"());
+    let large: u128 = __inline_u128__from_u64_2: {
+        let value: u64 = 9999999999 as u64;
+        break __inline_u128__from_u64_2: u128 { low: value, high: 0 };
+    };
+    core::cli::println(move large."u128::to_string"());
+    let i_zero: i128 = __inline_i128__zero_3: {
+        break __inline_i128__zero_3: i128 { low: 0, high: 0 };
+    };
+    core::cli::println(move i_zero."i128::to_string"());
+    let pos: i128 = __inline_i128__from_i64_4: {
+        let value: i64 = 42 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_4: i128 { low: value as u64, high: high };
+    };
+    core::cli::println(move pos."i128::to_string"());
+    let neg: i128 = __inline_i128__from_i64_5: {
+        let value: i64 = -12345 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_5: i128 { low: value as u64, high: high };
+    };
+    core::cli::println(move neg."i128::to_string"());
+    let large_neg: i128 = __inline_i128__from_i64_6: {
+        let value: i64 = -9876543210 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_6: i128 { low: value as u64, high: high };
+    };
+    core::cli::println(move large_neg."i128::to_string"());
     core::cli::println(move "to_string tests passed!");
 }
 

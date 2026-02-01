@@ -10,17 +10,15 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let arr: Array<bool> = move "Array<bool>::filled"(3, true);
-    if __inline_Array_bool__IndexValue__index_value_0: {
-        break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(arr.repr, 0);
+    let arr: Array<bool> = __inline_Array_bool___filled_0: {
+        let repr: builtin::array<bool> = core::builtin::array_new::<bool>(3);
+        core::builtin::array_fill::<bool>(repr, 0, true, 3);
+        break __inline_Array_bool___filled_0: Array<bool> { repr: repr, used: 3 };
+    };
+    if __inline_Array_bool__IndexValue__index_value_1: {
+        break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(arr.repr, 0);
     } {
         core::cli::println(move "true");
     }
-}
-
-pub fn "Array<bool>::filled"(n: i32, element: bool) -> Array<bool> {
-    let repr: builtin::array<bool> = core::builtin::array_new::<bool>(n);
-    core::builtin::array_fill::<bool>(repr, 0, element, n);
-    return Array<bool> { repr: repr, used: n };
 }
 

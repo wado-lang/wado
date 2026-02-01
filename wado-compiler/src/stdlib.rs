@@ -53,6 +53,10 @@ pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.w
 /// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
 
+/// Embedded source for core:prelude/primitives (methods for primitive types)
+/// Located in prelude/ subdirectory and imported by prelude.wado
+pub const CORE_PRELUDE_PRIMITIVES: &str = include_str!("../lib/core/prelude/primitives.wado");
+
 /// Embedded source for core:collections (`TreeMap`)
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 
@@ -92,6 +96,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:prelude/traits" => Some(CORE_PRELUDE_TRAITS),
         "core:prelude/int128" => Some(CORE_PRELUDE_INT128),
         "core:prelude/types" => Some(CORE_PRELUDE_TYPES),
+        "core:prelude/primitives" => Some(CORE_PRELUDE_PRIMITIVES),
         "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),
@@ -180,6 +185,16 @@ mod tests {
     fn test_unknown_module() {
         assert!(get_stdlib_module("core:unknown").is_none());
         assert!(get_stdlib_module("wasi:unknown").is_none());
+    }
+
+    #[test]
+    fn test_get_prelude_primitives() {
+        let source = get_stdlib_module("core:prelude/primitives");
+        assert!(source.is_some(), "primitives module should exist");
+        assert!(
+            source.unwrap().contains("impl i32"),
+            "should contain impl i32"
+        );
     }
 
     #[test]

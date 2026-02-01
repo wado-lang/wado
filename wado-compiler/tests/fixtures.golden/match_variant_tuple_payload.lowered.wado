@@ -17,6 +17,20 @@ fn run() with Stdout {
         Rectangle((w, h)) => (w * h),
         Point => 0.0,
     };
-    core::cli::println(move "String::concat"(move "Rectangle area: ", move "f64::to_string"(area)));
+    core::cli::println(move "String::concat"(move "Rectangle area: ", __inline_f64__to_string_0: {
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(area, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_0: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        };
+    }));
 }
 

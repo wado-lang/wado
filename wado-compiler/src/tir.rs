@@ -222,6 +222,29 @@ pub enum PrimitiveType {
     Char,
 }
 
+impl PrimitiveType {
+    /// Returns the string representation of the primitive type (e.g., "i32", "f64")
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::I128 => "i128",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::U128 => "u128",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            Self::Bool => "bool",
+            Self::Char => "char",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolvedType {
     Primitive(PrimitiveType),
@@ -747,22 +770,7 @@ impl TypeTable {
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
         match self.get(id) {
-            ResolvedType::Primitive(p) => match p {
-                PrimitiveType::I8 => "i8".to_string(),
-                PrimitiveType::I16 => "i16".to_string(),
-                PrimitiveType::I32 => "i32".to_string(),
-                PrimitiveType::I64 => "i64".to_string(),
-                PrimitiveType::I128 => "i128".to_string(),
-                PrimitiveType::U8 => "u8".to_string(),
-                PrimitiveType::U16 => "u16".to_string(),
-                PrimitiveType::U32 => "u32".to_string(),
-                PrimitiveType::U64 => "u64".to_string(),
-                PrimitiveType::U128 => "u128".to_string(),
-                PrimitiveType::F32 => "f32".to_string(),
-                PrimitiveType::F64 => "f64".to_string(),
-                PrimitiveType::Bool => "bool".to_string(),
-                PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Unit => "()".to_string(),
             ResolvedType::Never => "!".to_string(),
             ResolvedType::Unknown => "unknown".to_string(),

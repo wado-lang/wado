@@ -17,8 +17,30 @@ global PI: f64 = 3.14159;
 global FLAG: bool = true;
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "ANSWER=", move "i32::to_string"(ANSWER)));
-    core::cli::println(move "String::concat"(move "PI=", move "f64::to_string"(PI)));
-    core::cli::println(move "String::concat"(move "FLAG=", move "bool::to_string"(FLAG)));
+    core::cli::println(move "String::concat"(move "ANSWER=", move ANSWER."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "PI=", __inline_f64__to_string_0: {
+        let self: f64 = PI;
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_0: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        };
+    }));
+    core::cli::println(move "String::concat"(move "FLAG=", __inline_bool__to_string_1: {
+        let self: bool = FLAG;
+        break __inline_bool__to_string_1: if self {
+            "true";
+        } else {
+            "false";
+        };
+    }));
 }
 

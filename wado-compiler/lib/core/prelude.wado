@@ -25,6 +25,10 @@ pub use { i128, u128 } from "./prelude/int128.wado";
 /// Core variant types (Option, Result, Stream, Future)
 pub use { Option, Result, Stream, Future } from "./prelude/types.wado";
 
+/// Primitive type methods (impl i32 { to_string, ... }, etc.)
+/// Import marker to trigger module loading - impl blocks don't need re-export
+use { __PRIMITIVES_MODULE_LOADED } from "./prelude/primitives.wado";
+
 /// String type and iterators (separated to allow other stdlib modules to depend on it)
 pub use { String, StrUtf8ByteIter, StrCharIter } from "core:string";
 

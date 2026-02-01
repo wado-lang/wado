@@ -11,11 +11,18 @@
 
 fn run() with Stdout {
     let mut arr: Array<[bool, i32, String]> = move [];
-    "Array<Tuple<bool,i32,String>>::append"(&mut arr, move [true, 1, "one"]);
-    "Array<Tuple<bool,i32,String>>::append"(&mut arr, move [false, 2, "two"]);
-    "Array<Tuple<bool,i32,String>>::append"(&mut arr, move [true, 3, "three"]);
+    arr."Array<Tuple<bool,i32,String>>::append"(move [true, 1, "one"]);
+    arr."Array<Tuple<bool,i32,String>>::append"(move [false, 2, "two"]);
+    arr."Array<Tuple<bool,i32,String>>::append"(move [true, 3, "three"]);
     for let _item of arr {
-        core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "bool::to_string"(x.0), move " "), move "i32::to_string"(x.1)), move " "), x.2));
+        core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(__inline_bool__to_string_0: {
+            let self: bool = x.0;
+            break __inline_bool__to_string_0: if self {
+                "true";
+            } else {
+                "false";
+            };
+        }, move " "), move x.1."i32::to_string"()), move " "), x.2));
     }
 }
 

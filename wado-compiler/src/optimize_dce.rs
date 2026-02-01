@@ -1115,28 +1115,21 @@ fn analyze_expr(
 
 /// Add the appropriate `to_string` function call for a type
 fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut FunctionAnalysis) {
-    let core_internal: &[&str] = &["core", "internal"];
     // Follow newtype chain to get the ultimate base type
     let base_type_id = type_table.get_ultimate_base_type(type_id);
     match type_table.get(base_type_id) {
         ResolvedType::Primitive(prim) => {
-            let func_name = match prim {
-                PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => "i32_to_string",
-                PrimitiveType::U32 | PrimitiveType::U8 | PrimitiveType::U16 => "u32_to_string",
-                PrimitiveType::I64 => "i64_to_string",
-                PrimitiveType::U64 => "u64_to_string",
-                PrimitiveType::F32 => "f32_to_string",
-                PrimitiveType::F64 => "f64_to_string",
-                PrimitiveType::Bool => "bool_to_string",
-                PrimitiveType::Char => "char_to_string",
-                _ => return,
-            };
-            analysis
-                .callees
-                .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                    core_internal,
-                    func_name,
-                )));
+            // Primitive to_string methods are defined in core:prelude/primitives as impl blocks
+            // e.g., impl i32 { fn to_string(&self) -> String { ... } }
+            let prim_name = prim.as_str();
+            // Method format: module_path/StructName::method_name
+            let method_id = FunctionId::Method(MethodName::new(
+                "core/prelude/primitives".to_string(),
+                prim_name.to_string(),
+                None,
+                "to_string".to_string(),
+            ));
+            analysis.callees.insert(method_id);
         }
         ResolvedType::Struct { name, .. } if name == "String" => {
             // String.to_string() is a no-op, no function call needed
@@ -1149,22 +1142,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
 /// Used for creating monomorphized function names like Array<i32>`::len`.
 fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
     match type_table.get(type_id) {
-        ResolvedType::Primitive(prim) => match prim {
-            PrimitiveType::I8 => "i8".to_string(),
-            PrimitiveType::I16 => "i16".to_string(),
-            PrimitiveType::I32 => "i32".to_string(),
-            PrimitiveType::I64 => "i64".to_string(),
-            PrimitiveType::I128 => "i128".to_string(),
-            PrimitiveType::U8 => "u8".to_string(),
-            PrimitiveType::U16 => "u16".to_string(),
-            PrimitiveType::U32 => "u32".to_string(),
-            PrimitiveType::U64 => "u64".to_string(),
-            PrimitiveType::U128 => "u128".to_string(),
-            PrimitiveType::F32 => "f32".to_string(),
-            PrimitiveType::F64 => "f64".to_string(),
-            PrimitiveType::Bool => "bool".to_string(),
-            PrimitiveType::Char => "char".to_string(),
-        },
+        ResolvedType::Primitive(prim) => prim.as_str().to_string(),
         ResolvedType::Unit => "unit".to_string(),
         ResolvedType::Struct { name, .. } => name.clone(),
         ResolvedType::GenericInstance {

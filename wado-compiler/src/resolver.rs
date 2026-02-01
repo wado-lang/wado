@@ -2055,6 +2055,10 @@ impl<'a> Resolver<'a> {
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = match param.self_kind {
+                ast::SelfKind::Value => {
+                    // self by value: use impl type directly
+                    self.resolve_type(impl_type)
+                }
                 ast::SelfKind::Ref => {
                     // &self: wrap impl type in immutable reference
                     let inner_type = self.resolve_type(impl_type);
@@ -5582,6 +5586,17 @@ impl<'a> Resolver<'a> {
                     module_source.to_path(),
                     Some(module_source.clone()),
                 ),
+                // Primitive types have impl blocks in core:prelude/primitives
+                ResolvedType::Primitive(_) => {
+                    let prim_module = ModuleSource::Core {
+                        name: "prelude/primitives".to_string(),
+                    };
+                    (
+                        self.mangle_type_name(base_type_id),
+                        prim_module.to_path(),
+                        Some(prim_module),
+                    )
+                }
                 _ => (self.mangle_type_name(base_type_id), vec![], None),
             };
 
@@ -6607,22 +6622,7 @@ impl<'a> Resolver<'a> {
     /// Mangle a type name for use in function names
     fn mangle_type_name(&self, type_id: TypeId) -> String {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Primitive(prim) => match prim {
-                crate::tir::PrimitiveType::I8 => "i8".to_string(),
-                crate::tir::PrimitiveType::I16 => "i16".to_string(),
-                crate::tir::PrimitiveType::I32 => "i32".to_string(),
-                crate::tir::PrimitiveType::I64 => "i64".to_string(),
-                crate::tir::PrimitiveType::I128 => "i128".to_string(),
-                crate::tir::PrimitiveType::U8 => "u8".to_string(),
-                crate::tir::PrimitiveType::U16 => "u16".to_string(),
-                crate::tir::PrimitiveType::U32 => "u32".to_string(),
-                crate::tir::PrimitiveType::U64 => "u64".to_string(),
-                crate::tir::PrimitiveType::U128 => "u128".to_string(),
-                crate::tir::PrimitiveType::F32 => "f32".to_string(),
-                crate::tir::PrimitiveType::F64 => "f64".to_string(),
-                crate::tir::PrimitiveType::Bool => "bool".to_string(),
-                crate::tir::PrimitiveType::Char => "char".to_string(),
-            },
+            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
             ResolvedType::Unit => "unit".to_string(),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -6708,23 +6708,11 @@ impl<'a> Resolver<'a> {
                 None,
                 Some(*base_type),
             ),
-            // Primitive types have built-in methods like to_string()
-            ResolvedType::Primitive(_) => {
-                if method_name == "to_string" {
-                    // Return String struct type - primitives use value receiver
-                    let return_type = self
-                        .type_table
-                        .borrow()
-                        .find_struct_type("String", &string_module_source())
-                        .unwrap_or(TypeTable::UNKNOWN);
-                    return Some(MethodInfo {
-                        return_type,
-                        self_kind: ast::SelfKind::None,
-                        param_types: vec![],
-                        inherited_from_base: None,
-                    });
-                }
-                return None;
+            // Primitive types - search for impl blocks in loaded modules
+            // (e.g., impl i32 { fn to_string(&self) -> String { ... } })
+            ResolvedType::Primitive(prim) => {
+                // Use empty module path to trigger "search all loaded modules" logic
+                (prim.as_str().to_string(), Vec::new(), None, None)
             }
             _ => return None,
         };
@@ -7331,6 +7319,23 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Get the ultimate base type by stripping all Ref/MutRef and Newtype wrappers
+    /// This follows the entire chain: Ref(Newtype(Ref(Primitive))) -> Primitive
+    fn get_ultimate_base_type(&self, type_id: TypeId) -> TypeId {
+        let mut current = type_id;
+        loop {
+            match self.type_table.borrow().get(current).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    current = inner;
+                }
+                ResolvedType::Newtype { base_type, .. } => {
+                    current = base_type;
+                }
+                _ => return current,
+            }
+        }
+    }
+
     /// Adjust the receiver expression to match what the method's self parameter expects
     fn adjust_receiver_for_self_kind(
         &mut self,
@@ -7341,7 +7346,7 @@ impl<'a> Resolver<'a> {
         let receiver_type = self.type_table.borrow().get(receiver.type_id).clone();
 
         match self_kind {
-            ast::SelfKind::None => {
+            ast::SelfKind::None | ast::SelfKind::Value => {
                 // Method expects value (self), so deref all refs
                 self.deref_to_value(receiver, span)
             }
@@ -9037,14 +9042,42 @@ impl<'a> Resolver<'a> {
                     let string_expr = if resolved.type_id == string_type {
                         resolved
                     } else {
-                        // Call to_string method
-                        let receiver_type_name = self.mangle_type_name(resolved.type_id);
+                        // Call to_string method - determine correct module source based on type
+                        // Follow newtypes and references to find the ultimate base type
+                        let base_type_id = self.get_ultimate_base_type(resolved.type_id);
+                        let (receiver_type_name, method_module_source) =
+                            match self.type_table.borrow().get(base_type_id).clone() {
+                                ResolvedType::Struct {
+                                    name,
+                                    module_source,
+                                    ..
+                                } => (name.clone(), module_source),
+                                ResolvedType::GenericInstance {
+                                    name,
+                                    module_source,
+                                    ..
+                                } => (name.clone(), module_source),
+                                ResolvedType::Primitive(_) => {
+                                    // Primitive to_string methods are in core:prelude/primitives
+                                    let prim_module = ModuleSource::Core {
+                                        name: "prelude/primitives".to_string(),
+                                    };
+                                    (self.mangle_type_name(base_type_id), prim_module)
+                                }
+                                _ => {
+                                    // Fallback to current module
+                                    (
+                                        self.mangle_type_name(resolved.type_id),
+                                        self.current_module_source.clone(),
+                                    )
+                                }
+                            };
                         let mangled_method_name = format!("{receiver_type_name}::to_string");
                         TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(resolved.clone()),
                                 func: FunctionRef::External {
-                                    module_source: self.current_module_source.clone(),
+                                    module_source: method_module_source,
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(

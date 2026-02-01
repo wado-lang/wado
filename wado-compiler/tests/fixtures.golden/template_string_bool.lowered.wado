@@ -10,7 +10,19 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "true: ", move "bool::to_string"(true)));
-    core::cli::println(move "String::concat"(move "false: ", move "bool::to_string"(false)));
+    core::cli::println(move "String::concat"(move "true: ", __inline_bool__to_string_0: {
+        break __inline_bool__to_string_0: if true {
+            "true";
+        } else {
+            "false";
+        };
+    }));
+    core::cli::println(move "String::concat"(move "false: ", __inline_bool__to_string_1: {
+        break __inline_bool__to_string_1: if false {
+            "true";
+        } else {
+            "false";
+        };
+    }));
 }
 

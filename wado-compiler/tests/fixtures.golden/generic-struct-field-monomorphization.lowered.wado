@@ -14,40 +14,42 @@ struct "Container<i32>" {
 }
 
 fn run() with Stdout {
-    let mut container: Container<i32> = move "Container<i32>::new"();
-    __inline_Container_i32___add_0: {
-        "Array<i32>::append"(&mut container.items, 10);
+    let mut container: Container<i32> = __inline_Container_i32___new_0: {
+        break __inline_Container_i32___new_0: Container<i32> { items: [] };
     };
     __inline_Container_i32___add_1: {
-        "Array<i32>::append"(&mut container.items, 20);
+        container.items."Array<i32>::append"(10);
     };
     __inline_Container_i32___add_2: {
-        "Array<i32>::append"(&mut container.items, 30);
+        container.items."Array<i32>::append"(20);
     };
-    core::cli::println(move "String::concat"(move "Length: ", move "i32::to_string"(__inline_Container_i32___len_3: {
-        break __inline_Container_i32___len_3: __inline_Array_i32___len_0: {
+    __inline_Container_i32___add_3: {
+        container.items."Array<i32>::append"(30);
+    };
+    core::cli::println(move "String::concat"(move "Length: ", move __inline_Container_i32___len_4: {
+        break __inline_Container_i32___len_4: __inline_Array_i32___len_0: {
             let self: &Array<i32> = &container.items;
             break __inline_Array_i32___len_0: self.used;
         };
-    })));
-    core::cli::println(move "String::concat"(move "First: ", move "i32::to_string"(__inline_Container_i32___get_4: {
-        break __inline_Container_i32___get_4: __inline_Array_i32__IndexValue__index_value_1: {
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "First: ", move __inline_Container_i32___get_5: {
+        break __inline_Container_i32___get_5: __inline_Array_i32__IndexValue__index_value_1: {
             let self: &Array<i32> = &container.items;
             break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(self.repr, 0);
         };
-    })));
-    core::cli::println(move "String::concat"(move "Second: ", move "i32::to_string"(__inline_Container_i32___get_5: {
-        break __inline_Container_i32___get_5: __inline_Array_i32__IndexValue__index_value_2: {
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Second: ", move __inline_Container_i32___get_6: {
+        break __inline_Container_i32___get_6: __inline_Array_i32__IndexValue__index_value_2: {
             let self: &Array<i32> = &container.items;
             break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(self.repr, 1);
         };
-    })));
-    core::cli::println(move "String::concat"(move "Third: ", move "i32::to_string"(__inline_Container_i32___get_6: {
-        break __inline_Container_i32___get_6: __inline_Array_i32__IndexValue__index_value_3: {
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Third: ", move __inline_Container_i32___get_7: {
+        break __inline_Container_i32___get_7: __inline_Array_i32__IndexValue__index_value_3: {
             let self: &Array<i32> = &container.items;
             break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(self.repr, 2);
         };
-    })));
+    }."i32::to_string"()));
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
@@ -64,9 +66,5 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     }
     core::builtin::array_set::<i32>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Container<i32>::new"() -> Container<i32> {
-    return Container<i32> { items: [] };
 }
 
