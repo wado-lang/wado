@@ -1,21 +1,30 @@
-// Test that for-of loop variables are captured correctly per iteration
-// Each closure captures its own iteration's value of item
+// Test that for-of loop variable itself has per-iteration binding
+// Directly capture the loop variable without intermediate variable
 use { println, Stdout } from "core:cli";
+
+fn call_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
 
 fn run() with Stdout {
     let items: Array<i32> = [10, 20, 30, 40, 50];
-    let mut results: Array<i32> = [];
+    let mut closures: Array<fn(i32) -> i32> = [];
 
+    // Directly capture the loop variable item
     for let item of items {
-        // Create closure that captures item
         let get_item = |_: i32| item;
-
-        // Call it and store result
-        results.append(get_item(0));
+        closures.append(get_item);
     }
 
-    // Verify each closure captured its iteration's value
-    println(`{results[0]},{results[1]},{results[2]},{results[3]},{results[4]}`);
+    // Call closures after the loop
+    // Each should return its iteration's value
+    let r0 = call_fn(closures[0], 0);
+    let r1 = call_fn(closures[1], 0);
+    let r2 = call_fn(closures[2], 0);
+    let r3 = call_fn(closures[3], 0);
+    let r4 = call_fn(closures[4], 0);
+
+    println(`{r0},{r1},{r2},{r3},{r4}`);
 }
 
 __DATA__
