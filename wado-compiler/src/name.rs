@@ -520,7 +520,7 @@ pub fn extract_local_name(name: &str) -> &str {
 /// This is used to extract struct/trait/method info from names like:
 /// - `Point::sum` → `struct_name="Point"`, `trait_name=None`, `method_name="sum"`
 /// - `Point^Display::fmt` → `struct_name="Point"`, `trait_name=Some("Display")`, `method_name="fmt"`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LocalMethodName {
     /// The struct name, possibly with type args (e.g., "Point" or "Point<i32>")
     pub struct_name: String,
@@ -634,74 +634,6 @@ impl LocalMethodName {
         }
     }
 
-    /// Parse a local method name string into its components.
-    ///
-    /// Expected formats:
-    /// - `StructName::method`
-    /// - `StructName^TraitName::method`
-    /// - `StructName<TypeArgs>::method`
-    /// - `StructName<TypeArgs>^TraitName::method`
-    ///
-    /// Returns `None` if the format is invalid (no `::` separator).
-    pub fn parse(name: &str) -> Option<Self> {
-        let sep_pos = name.find("::")?;
-        let prefix = &name[..sep_pos];
-        let method_part = &name[sep_pos + 2..];
-
-        // Parse method name and type args (e.g., "transform<i64>" -> "transform", ["i64"])
-        let (method_name, method_type_args) = if let Some(angle_pos) = method_part.find('<') {
-            let base_name = &method_part[..angle_pos];
-            // Extract type args from between < and >
-            let type_args_str = method_part
-                .strip_prefix(&format!("{base_name}<"))
-                .and_then(|s| s.strip_suffix('>'))
-                .unwrap_or("");
-            let type_args: Vec<String> = type_args_str
-                .split(',')
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect();
-            (base_name, type_args)
-        } else {
-            (method_part, vec![])
-        };
-
-        // Check for trait separator `^` in the prefix
-        if let Some(caret_pos) = prefix.find('^') {
-            let struct_name = &prefix[..caret_pos];
-            let trait_name = &prefix[caret_pos + 1..];
-            Some(Self {
-                struct_name: struct_name.to_string(),
-                base_struct_name: strip_type_params(struct_name).to_string(),
-                trait_name: Some(trait_name.to_string()),
-                method_name: method_name.to_string(),
-                method_type_args,
-            })
-        } else {
-            Some(Self {
-                struct_name: prefix.to_string(),
-                base_struct_name: strip_type_params(prefix).to_string(),
-                trait_name: None,
-                method_name: method_name.to_string(),
-                method_type_args,
-            })
-        }
-    }
-
-    /// Parse a potentially module-qualified method name.
-    ///
-    /// This first strips the module path (e.g., `./main.wado/`) and then
-    /// parses the local method name.
-    ///
-    /// Examples:
-    /// - `"./main.wado/Point::sum"` → Some(LocalMethodName { `struct_name`: "Point", ... })
-    /// - `"Point^Display::fmt"` → Some(LocalMethodName { `struct_name`: "Point", `trait_name`: Some("Display"), ... })
-    /// - `"run"` → None (not a method)
-    pub fn parse_qualified(name: &str) -> Option<Self> {
-        let local_name = extract_local_name(name);
-        Self::parse(local_name)
-    }
-
     /// Returns true if this is a trait method.
     pub fn is_trait_method(&self) -> bool {
         self.trait_name.is_some()
@@ -810,47 +742,6 @@ impl fmt::Display for StructName {
 }
 
 // =============================================================================
-// Parsing Utilities
-// =============================================================================
-
-/// Parse a mangled method name back into its components.
-///
-/// Returns `None` if the format is invalid.
-///
-/// Expected formats:
-/// - `{filename}/{struct_name}::{method_name}`
-/// - `{filename}/{struct_name}^{trait_name}::{method_name}`
-pub fn parse_method_mangled_name(mangled: &str) -> Option<MethodName> {
-    // Split at the last `/` to separate filename from the rest
-    let slash_pos = mangled.rfind('/')?;
-    let filename = &mangled[..slash_pos];
-    let rest = &mangled[slash_pos + 1..];
-
-    // Split at `::` to separate struct/trait from method name
-    let double_colon_pos = rest.find("::")?;
-    let struct_trait_part = &rest[..double_colon_pos];
-    let method_name = &rest[double_colon_pos + 2..];
-
-    // Check for trait separator `^`
-    if let Some(caret_pos) = struct_trait_part.find('^') {
-        let struct_name = &struct_trait_part[..caret_pos];
-        let trait_name = &struct_trait_part[caret_pos + 1..];
-        Some(MethodName::new(
-            filename.to_string(),
-            struct_name.to_string(),
-            Some(trait_name.to_string()),
-            method_name.to_string(),
-        ))
-    } else {
-        Some(MethodName::new(
-            filename.to_string(),
-            struct_trait_part.to_string(),
-            None,
-            method_name.to_string(),
-        ))
-    }
-}
-
 /// Build a core/internal function name.
 ///
 /// Format: `core/internal/{name}`
@@ -1143,6 +1034,77 @@ fn remove_dot_segments(path: &str) -> String {
 }
 
 // =============================================================================
+// Type Name Formatting
+// =============================================================================
+
+/// Information about a type for name formatting.
+///
+/// This enum represents the structure of a type without requiring
+/// knowledge of `TypeId` or `ResolvedType`. It serves as the interface
+/// between type resolution (in tir.rs) and name formatting (in name.rs).
+#[derive(Debug, Clone)]
+pub enum TypeNameInfo {
+    /// A primitive type (i32, f64, bool, etc.)
+    Primitive(String),
+    /// The unit type ()
+    Unit,
+    /// A named type (struct, enum, variant, resource, newtype, type param)
+    Named(String),
+    /// A generic instance with type argument names already resolved
+    Generic { name: String, args: Vec<String> },
+    /// Option<T> with inner type name
+    Option(String),
+    /// Result<T, E> with ok and err type names
+    Result { ok: String, err: String },
+    /// A tuple type with element type names
+    Tuple(Vec<String>),
+    /// A function type with param count and return type name
+    Function {
+        param_count: usize,
+        return_type: String,
+    },
+    /// Array<T> with element type name
+    Array(String),
+    /// Stream<T> with inner type name
+    Stream(String),
+    /// Future<T> with inner type name
+    Future(String),
+    /// Reactive<T> with inner type name
+    Reactive(String),
+    /// A reference type - formats as inner type (references stripped)
+    Ref(String),
+    /// Never, Unknown, or Error types
+    Unknown,
+}
+
+/// Format a type name from its structural info.
+///
+/// This function centralizes all type name formatting logic.
+/// Other modules should use this instead of formatting type names directly.
+#[must_use]
+pub fn format_type_name(info: TypeNameInfo) -> String {
+    match info {
+        TypeNameInfo::Primitive(name) => name,
+        TypeNameInfo::Unit => "unit".to_string(),
+        TypeNameInfo::Named(name) => name,
+        TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
+        TypeNameInfo::Option(inner) => mangle_option_type(&inner),
+        TypeNameInfo::Result { ok, err } => mangle_result_type(&ok, &err),
+        TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
+        TypeNameInfo::Function {
+            param_count,
+            return_type,
+        } => mangle_fn_type(param_count, &return_type),
+        TypeNameInfo::Array(elem) => mangle_array_type(&elem),
+        TypeNameInfo::Stream(inner) => mangle_generic_name("Stream", &[inner]),
+        TypeNameInfo::Future(inner) => mangle_generic_name("Future", &[inner]),
+        TypeNameInfo::Reactive(inner) => mangle_generic_name("Reactive", &[inner]),
+        TypeNameInfo::Ref(inner) => inner,
+        TypeNameInfo::Unknown => "unknown".to_string(),
+    }
+}
+
+// =============================================================================
 // Name Mangling Utilities
 // =============================================================================
 
@@ -1156,24 +1118,6 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
         base_name.to_string()
     } else {
         format!("{}<{}>", base_name, type_args.join(","))
-    }
-}
-
-/// Strip type parameters from a generic name, returning the base name.
-///
-/// This is the inverse of `mangle_generic_name` - it extracts the base name
-/// from a potentially generic name.
-///
-/// Examples:
-/// - `strip_type_params("IndexValue<i32>")` → `"IndexValue"`
-/// - `strip_type_params("Map<String,i32>")` → `"Map"`
-/// - `strip_type_params("Point")` → `"Point"` (unchanged)
-#[must_use]
-pub fn strip_type_params(name: &str) -> &str {
-    if let Some(bracket_pos) = name.find('<') {
-        &name[..bracket_pos]
-    } else {
-        name
     }
 }
 
@@ -1221,6 +1165,30 @@ pub fn mangle_array_type(elem_type: &str) -> String {
     format!("Array<{elem_type}>")
 }
 
+/// Build a Result type name from ok and error type names.
+///
+/// Examples:
+/// - `mangle_result_type("i32", "String")` → `"Result<i32,String>"`
+pub fn mangle_result_type(ok_type: &str, err_type: &str) -> String {
+    format!("Result<{ok_type},{err_type}>")
+}
+
+/// Build a local method name from struct name and method name.
+///
+/// Examples:
+/// - `mangle_local_method("Point", "sum")` → `"Point::sum"`
+pub fn mangle_local_method(struct_name: &str, method_name: &str) -> String {
+    format!("{struct_name}::{method_name}")
+}
+
+/// Build a local method name with trait from struct name, trait name, and method name.
+///
+/// Examples:
+/// - `mangle_local_trait_method("Point", "Display", "fmt")` → `"Point^Display::fmt"`
+pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_name: &str) -> String {
+    format!("{struct_name}^{trait_name}::{method_name}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1249,60 +1217,6 @@ mod tests {
             "fmt".to_string(),
         );
         assert_eq!(method.to_string(), "./geometry.wado/Point^Display::fmt");
-    }
-
-    #[test]
-    fn test_parse_method_mangled_name_simple() {
-        let parsed = parse_method_mangled_name("./geometry.wado/Point::sum").unwrap();
-        assert_eq!(parsed.filename, "./geometry.wado");
-        assert_eq!(parsed.struct_name, "Point");
-        assert_eq!(parsed.trait_name, None);
-        assert_eq!(parsed.method_name, "sum");
-    }
-
-    #[test]
-    fn test_parse_method_mangled_name_with_trait() {
-        let parsed = parse_method_mangled_name("./geometry.wado/Point^Display::fmt").unwrap();
-        assert_eq!(parsed.filename, "./geometry.wado");
-        assert_eq!(parsed.struct_name, "Point");
-        assert_eq!(parsed.trait_name, Some("Display".to_string()));
-        assert_eq!(parsed.method_name, "fmt");
-    }
-
-    #[test]
-    fn test_roundtrip_simple() {
-        let original = MethodName::new(
-            "./geometry.wado".to_string(),
-            "Point".to_string(),
-            None,
-            "magnitude".to_string(),
-        );
-        let mangled = original.to_string();
-        let parsed = parse_method_mangled_name(&mangled).unwrap();
-        assert_eq!(original, parsed);
-    }
-
-    #[test]
-    fn test_roundtrip_with_trait() {
-        let original = MethodName::new(
-            "./models/user.wado".to_string(),
-            "User".to_string(),
-            Some("Serialize".to_string()),
-            "to_json".to_string(),
-        );
-        let mangled = original.to_string();
-        let parsed = parse_method_mangled_name(&mangled).unwrap();
-        assert_eq!(original, parsed);
-    }
-
-    #[test]
-    fn test_parse_invalid_no_slash() {
-        assert!(parse_method_mangled_name("Point::sum").is_none());
-    }
-
-    #[test]
-    fn test_parse_invalid_no_double_colon() {
-        assert!(parse_method_mangled_name("./geometry.wado/Point").is_none());
     }
 
     // =========================================================================

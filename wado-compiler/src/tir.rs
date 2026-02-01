@@ -16,7 +16,7 @@ use std::rc::Rc;
 use indexmap::IndexMap;
 
 use crate::component_model::CmCallConvention;
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
 use crate::token::Span;
 
 // ============================================================================
@@ -815,6 +815,87 @@ impl TypeTable {
                 format!("{}<{}>", name, arg_names.join(", "))
             }
             ResolvedType::Newtype { name, .. } => name.clone(),
+        }
+    }
+
+    /// Get a mangled name for a type suitable for use in struct/function names.
+    ///
+    /// Unlike `type_name` which returns human-readable names (e.g., `[i32, String]`),
+    /// this returns mangled names suitable for monomorphization (e.g., `Tuple<i32,String>`).
+    ///
+    /// The format is:
+    /// - Primitives: `i32`, `f64`, `bool`, etc.
+    /// - Unit: `unit`
+    /// - Struct: struct name
+    /// - Tuple: `Tuple<T1,T2,...>`
+    /// - Option: `Option<T>`
+    /// - Result: `Result<T,E>`
+    /// - Array: `Array<T>`
+    /// - Function: `Fn<paramCount,returnType>`
+    /// - `GenericInstance`: `Name<T1,T2,...>`
+    /// - Ref/MutRef: inner type (references are stripped for mangling)
+    #[must_use]
+    pub fn mangle_type_name(&self, id: TypeId) -> String {
+        let info = self.get_type_name_info(id);
+        format_type_name(info)
+    }
+
+    /// Convert a resolved type to its name info for formatting.
+    ///
+    /// This separates type resolution (here in tir.rs) from name formatting
+    /// (in name.rs), following the principle that name format details belong
+    /// in name.rs.
+    fn get_type_name_info(&self, id: TypeId) -> TypeNameInfo {
+        match self.get(id) {
+            ResolvedType::Primitive(prim) => TypeNameInfo::Primitive(prim.as_str().to_string()),
+            ResolvedType::Unit => TypeNameInfo::Unit,
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::Enum { name, .. }
+            | ResolvedType::Resource { name, .. }
+            | ResolvedType::Variant { name, .. }
+            | ResolvedType::Newtype { name, .. }
+            | ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name(*t))
+                    .collect();
+                TypeNameInfo::Generic {
+                    name: name.clone(),
+                    args,
+                }
+            }
+            ResolvedType::Option(inner) => TypeNameInfo::Option(self.mangle_type_name(*inner)),
+            ResolvedType::Result { ok, err } => TypeNameInfo::Result {
+                ok: self.mangle_type_name(*ok),
+                err: self.mangle_type_name(*err),
+            },
+            ResolvedType::Tuple(elems) => {
+                let elem_names: Vec<String> =
+                    elems.iter().map(|t| self.mangle_type_name(*t)).collect();
+                TypeNameInfo::Tuple(elem_names)
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => TypeNameInfo::Function {
+                param_count: params.len(),
+                return_type: self.mangle_type_name(*return_type),
+            },
+            ResolvedType::BuiltinArray(elem) => TypeNameInfo::Array(self.mangle_type_name(*elem)),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                // For references, use the inner type's name (strip reference)
+                TypeNameInfo::Ref(self.mangle_type_name(*inner))
+            }
+            ResolvedType::Stream(inner) => TypeNameInfo::Stream(self.mangle_type_name(*inner)),
+            ResolvedType::Future(inner) => TypeNameInfo::Future(self.mangle_type_name(*inner)),
+            ResolvedType::Reactive(inner) => TypeNameInfo::Reactive(self.mangle_type_name(*inner)),
+            ResolvedType::Never | ResolvedType::Unknown | ResolvedType::Error => {
+                TypeNameInfo::Unknown
+            }
         }
     }
 }
@@ -1727,12 +1808,32 @@ pub struct TirImport {
 }
 
 /// Tracks a requested instantiation of a generic item
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Note: Only `name` and `type_args` are used for equality/hashing.
+/// `method_info` is auxiliary metadata for name formatting.
+#[derive(Debug, Clone)]
 pub struct InstantiationKey {
     /// Name of the generic item (struct, function, or enum)
     pub name: String,
     /// Concrete type arguments for instantiation
     pub type_args: Vec<TypeId>,
+    /// Method info for method instantiations (None for struct/enum instantiations)
+    /// Not included in equality/hash - used only for name formatting
+    pub method_info: Option<LocalMethodName>,
+}
+
+impl PartialEq for InstantiationKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.type_args == other.type_args
+    }
+}
+
+impl Eq for InstantiationKey {}
+
+impl std::hash::Hash for InstantiationKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.type_args.hash(state);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1759,6 +1860,8 @@ pub struct TirModule {
     pub string_literals: Vec<String>,
     /// Map of function name to string literals it contains (for DCE)
     pub function_strings: HashMap<String, Vec<String>>,
+    /// Map of function name to its method info (for DCE), populated alongside `function_strings`
+    pub function_method_info: HashMap<String, Option<LocalMethodName>>,
     /// Generic struct definitions (before monomorphization)
     /// Key: struct name
     pub generic_structs: HashMap<String, TirStruct>,
@@ -1791,6 +1894,7 @@ impl TirModule {
             data_section: None,
             string_literals: Vec::new(),
             function_strings: HashMap::new(),
+            function_method_info: HashMap::new(),
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiation_requests: std::collections::HashSet::new(),
@@ -1819,6 +1923,7 @@ impl TirModule {
             data_section: None,
             string_literals: Vec::new(),
             function_strings: HashMap::new(),
+            function_method_info: HashMap::new(),
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiation_requests: std::collections::HashSet::new(),
