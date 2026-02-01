@@ -84,6 +84,7 @@ pub mod lexer;
 pub mod loader;
 pub mod logger;
 pub mod lower;
+pub mod lower_loop;
 pub mod monomorphize;
 pub mod name;
 pub mod optimize;

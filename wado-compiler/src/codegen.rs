@@ -8377,83 +8377,6 @@ impl Codegen {
         }
     }
 
-    /// Try to generate an inverted condition for `br_if` optimization.
-    /// Returns true if the condition was inverted and generated, false otherwise.
-    /// This eliminates the pattern: condition + i32.eqz + `br_if`
-    /// by directly generating: `inverted_condition` + `br_if`
-    fn try_generate_inverted_condition(
-        &self,
-        func: &mut Function,
-        condition: &TirExpr,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-    ) -> bool {
-        // Check if condition is a simple binary comparison that can be inverted
-        if let TirExprKind::Binary { left, op, right } = &condition.kind {
-            let inverted_op = match op {
-                TirBinaryOp::Lt => Some(TirBinaryOp::GtEq),
-                TirBinaryOp::LtEq => Some(TirBinaryOp::Gt),
-                TirBinaryOp::Gt => Some(TirBinaryOp::LtEq),
-                TirBinaryOp::GtEq => Some(TirBinaryOp::Lt),
-                TirBinaryOp::Eq => Some(TirBinaryOp::NotEq),
-                TirBinaryOp::NotEq => Some(TirBinaryOp::Eq),
-                _ => None,
-            };
-
-            if let Some(inv_op) = inverted_op {
-                // Generate left operand
-                self.generate_expr(func, left, type_table, ctx, builder);
-                // Generate right operand
-                self.generate_expr(func, right, type_table, ctx, builder);
-                // Determine the effective type for the comparison
-                // (same logic as in generate_binary_op for comparison signedness)
-                let is_left_unsigned = matches!(
-                    type_table.get(left.type_id),
-                    ResolvedType::Primitive(
-                        PrimitiveType::U8
-                            | PrimitiveType::U16
-                            | PrimitiveType::U32
-                            | PrimitiveType::U64
-                    )
-                );
-                let is_right_unsigned = matches!(
-                    type_table.get(right.type_id),
-                    ResolvedType::Primitive(
-                        PrimitiveType::U8
-                            | PrimitiveType::U16
-                            | PrimitiveType::U32
-                            | PrimitiveType::U64
-                    )
-                );
-                let effective_type = if is_left_unsigned || is_right_unsigned {
-                    let is_i64 = matches!(
-                        type_table.get(left.type_id),
-                        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-                    );
-                    if is_i64 { TypeTable::U64 } else { left.type_id }
-                } else {
-                    left.type_id
-                };
-                // Generate the inverted comparison
-                self.generate_binary_op(func, inv_op, effective_type, type_table);
-                return true;
-            }
-        }
-
-        // Check if condition is a negation (!expr) - we can just use the inner expr
-        if let TirExprKind::Unary {
-            op: TirUnaryOp::Not,
-            expr: inner,
-        } = &condition.kind
-        {
-            self.generate_expr(func, inner, type_table, ctx, builder);
-            return true;
-        }
-
-        false
-    }
-
     /// Generate code for a TIR binary operation
     fn generate_binary_op(
         &self,
@@ -9329,35 +9252,9 @@ impl Codegen {
                 func.instruction(&Instruction::End);
             }
 
-            TirStmtKind::While { condition, body } => {
-                // Push new loop context: (extra_depth=0, break_offset=1, no result type)
-                ctx.loop_info.push((None, 0, 1, true, None));
-
-                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
-                func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
-
-                // Check condition, break if false
-                // Try to generate inverted condition directly to avoid i32.eqz
-                let (_, extra, break_offset, _, _) = *ctx.loop_info.last().unwrap();
-                if !self.try_generate_inverted_condition(func, condition, type_table, ctx, builder)
-                {
-                    // Fallback: generate condition and negate
-                    self.generate_expr(func, condition, type_table, ctx, builder);
-                    func.instruction(&Instruction::I32Eqz);
-                }
-                func.instruction(&Instruction::BrIf(break_offset + extra));
-
-                // Execute body
-                self.generate_block(func, body, type_table, ctx, builder);
-
-                // Continue loop
-                let (_, extra, _, _, _) = *ctx.loop_info.last().unwrap();
-                func.instruction(&Instruction::Br(extra));
-
-                func.instruction(&Instruction::End); // End loop
-                func.instruction(&Instruction::End); // End block
-
-                ctx.loop_info.pop();
+            // While is lowered to Loop + If + Break in lower_loop.rs
+            TirStmtKind::While { .. } => {
+                unreachable!("While should be lowered to Loop before codegen")
             }
 
             TirStmtKind::Loop { body } => {
@@ -9379,72 +9276,9 @@ impl Codegen {
                 ctx.loop_info.pop();
             }
 
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                // Generate init statements first (e.g., let i = 0)
-                for init_stmt in init {
-                    self.generate_stmt(func, init_stmt, type_table, ctx, builder);
-                }
-
-                // For loop structure:
-                // block $exit        ; break target
-                //   loop $loop       ; for loop header
-                //     ;; condition check (if present)
-                //     block $body    ; continue target
-                //       ;; body
-                //     end
-                //     ;; update (if present)
-                //     br $loop
-                //   end
-                // end
-                //
-                // From inside body:
-                // - continue: br 0 (to end of $body, then update executes, then br $loop)
-                // - break: br 2 (to $exit)
-
-                // Push new loop context: (extra_depth=0, break_offset=2, no result type)
-                // break_offset=2 because break needs to skip body block + loop
-                ctx.loop_info.push((None, 0, 2, true, None));
-
-                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
-                func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
-
-                // Check condition if present
-                if let Some(cond) = condition {
-                    // Try to generate inverted condition directly to avoid i32.eqz
-                    if !self.try_generate_inverted_condition(func, cond, type_table, ctx, builder) {
-                        // Fallback: generate condition and negate
-                        self.generate_expr(func, cond, type_table, ctx, builder);
-                        func.instruction(&Instruction::I32Eqz);
-                    }
-                    // At this point we're not inside the body block yet, so br 1 exits to $exit
-                    func.instruction(&Instruction::BrIf(1));
-                }
-
-                // Body block (continue target)
-                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
-
-                self.generate_block(func, body, type_table, ctx, builder);
-
-                func.instruction(&Instruction::End); // End body block
-
-                // Update expression if present
-                if let Some(upd) = update {
-                    // Use optimized statement generation to avoid drop-tee pattern
-                    self.generate_expr_as_stmt(func, upd, type_table, ctx, builder);
-                }
-
-                // Continue to loop header (br 0 from here)
-                func.instruction(&Instruction::Br(0));
-
-                func.instruction(&Instruction::End); // End loop
-                func.instruction(&Instruction::End); // End exit block
-
-                ctx.loop_info.pop();
+            // For is lowered to Loop + If + Break in lower_loop.rs
+            TirStmtKind::For { .. } => {
+                unreachable!("For should be lowered to Loop before codegen")
             }
 
             TirStmtKind::ForOf {
@@ -9692,26 +9526,14 @@ impl Codegen {
                 );
             }
 
-            TirStmtKind::WhilePattern {
-                scrutinee,
-                pattern,
-                body,
-            } => {
-                self.generate_while_pattern(
-                    func, scrutinee, pattern, body, type_table, ctx, builder,
-                );
+            // WhilePattern is lowered to Loop + IfPattern + Break in lower_loop.rs
+            TirStmtKind::WhilePattern { .. } => {
+                unreachable!("WhilePattern should be lowered to Loop before codegen")
             }
 
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                pattern,
-                body,
-                update,
-            } => {
-                self.generate_for_pattern(
-                    func, init, scrutinee, pattern, body, update, type_table, ctx, builder,
-                );
+            // ForPattern is lowered to Loop + IfPattern + Break in lower_loop.rs
+            TirStmtKind::ForPattern { .. } => {
+                unreachable!("ForPattern should be lowered to Loop before codegen")
             }
         }
     }
@@ -11362,251 +11184,6 @@ impl Codegen {
                 // Unsupported pattern - do nothing
             }
         }
-    }
-
-    /// Generate code for while-pattern statement: `while let Some(x) = expr { ... }`
-    ///
-    /// Structure:
-    /// ```text
-    /// block $exit
-    ///   loop $loop
-    ///     ;; evaluate scrutinee
-    ///     ;; if pattern matches: bind + body + br $loop
-    ///     ;; else: br $exit
-    ///   end
-    /// end
-    /// ```
-    fn generate_while_pattern(
-        &self,
-        func: &mut Function,
-        scrutinee: &TirExpr,
-        pattern: &TirPattern,
-        body: &TirBlock,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-    ) {
-        // Outer block for exit
-        ctx.loop_info.push((None, 1, 0, false, None)); // break_offset=1, continue_offset=0
-        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
-
-        // Inner loop
-        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
-
-        // Generate scrutinee and store in a temp local (evaluate only once per iteration!)
-        self.generate_expr(func, scrutinee, type_table, ctx, builder);
-
-        let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-        let type_key = format!("{:?}", scrutinee.type_id);
-        let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-        let local_name = format!("__while_pattern_scrutinee_{type_key}_{counter}");
-        *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-        let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
-        func.instruction(&Instruction::LocalSet(scrutinee_local));
-
-        // Pattern matching - reuse the same logic as if-pattern
-        // For Option<T> with Some(x) pattern
-        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-        match (&scrutinee_type, pattern) {
-            (
-                ResolvedType::Option(inner_type),
-                TirPattern::Variant {
-                    variant_name,
-                    bindings,
-                    payload_type: pattern_payload_type,
-                    ..
-                },
-            ) if variant_name == "Some" => {
-                // Check if null (None case means exit)
-                func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::RefIsNull);
-                // If null, exit the loop
-                func.instruction(&Instruction::BrIf(1)); // br $exit
-
-                // Bind the inner value (the non-null reference)
-                if let Some(binding) = bindings.first() {
-                    func.instruction(&Instruction::LocalGet(scrutinee_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-
-                    // For primitive types with simple binding, unbox the value from the box struct
-                    if let TirPattern::Binding { local_index, .. } = binding {
-                        let is_address_taken = ctx.address_taken_locals.contains(local_index);
-                        if !is_address_taken
-                            && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
-                        {
-                            let val_type = primitive_to_valtype(prim);
-                            if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
-                                func.instruction(&Instruction::StructGet {
-                                    struct_type_index: box_type_idx,
-                                    field_index: 0,
-                                });
-                            }
-                        }
-                    }
-
-                    // Bind the value to the pattern (handles Binding, Tuple, Wildcard, etc.)
-                    self.generate_let_pattern_binding(
-                        func,
-                        binding,
-                        *pattern_payload_type,
-                        type_table,
-                        ctx,
-                        builder,
-                    );
-                }
-
-                // Generate loop body
-                self.generate_block(func, body, type_table, ctx, builder);
-
-                // Continue the loop
-                func.instruction(&Instruction::Br(0)); // br $loop
-            }
-
-            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
-                if variant_name == "None" =>
-            {
-                // Check if not null (Some case means exit for None pattern)
-                func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::RefIsNull);
-                func.instruction(&Instruction::I32Eqz); // !is_null = Some
-                // If not null (Some), exit the loop
-                func.instruction(&Instruction::BrIf(1)); // br $exit
-
-                // Generate loop body
-                self.generate_block(func, body, type_table, ctx, builder);
-
-                // Continue the loop
-                func.instruction(&Instruction::Br(0)); // br $loop
-            }
-
-            _ => {
-                panic!("Unsupported while-pattern: {pattern:?} on type {scrutinee_type:?}");
-            }
-        }
-
-        func.instruction(&Instruction::End); // end loop
-        func.instruction(&Instruction::End); // end block
-        ctx.loop_info.pop();
-    }
-
-    /// Generate code for for-pattern statement: `for init; let Some(x) = expr; update { ... }`
-    ///
-    /// Structure:
-    /// ```text
-    /// ;; init
-    /// block $exit
-    ///   loop $loop
-    ///     block $body
-    ///       ;; evaluate scrutinee
-    ///       ;; if pattern matches: bind + body
-    ///       ;; else: br $exit
-    ///     end
-    ///     ;; update
-    ///     br $loop
-    ///   end
-    /// end
-    /// ```
-    fn generate_for_pattern(
-        &self,
-        func: &mut Function,
-        init: &[TirStmt],
-        scrutinee: &TirExpr,
-        pattern: &TirPattern,
-        body: &TirBlock,
-        update: &Option<TirExpr>,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-    ) {
-        // Generate init statements
-        for stmt in init {
-            self.generate_stmt(func, stmt, type_table, ctx, builder);
-        }
-
-        // Outer block for exit
-        ctx.loop_info.push((None, 1, 0, false, None)); // break_offset=1, continue_offset=0
-        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
-
-        // Inner loop
-        func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
-
-        // Body block (for continue to skip to update)
-        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
-
-        // Generate scrutinee and store in a temp local (evaluate only once per iteration!)
-        self.generate_expr(func, scrutinee, type_table, ctx, builder);
-
-        let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-        let type_key = format!("{:?}", scrutinee.type_id);
-        let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-        let local_name = format!("__for_pattern_scrutinee_{type_key}_{counter}");
-        *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-        let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
-        func.instruction(&Instruction::LocalSet(scrutinee_local));
-
-        // Pattern matching
-        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-        match (&scrutinee_type, pattern) {
-            (
-                ResolvedType::Option(inner_type),
-                TirPattern::Variant {
-                    variant_name,
-                    bindings,
-                    ..
-                },
-            ) if variant_name == "Some" => {
-                // Check if null (None case means exit)
-                func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::RefIsNull);
-                // If null, exit the loop
-                func.instruction(&Instruction::BrIf(2)); // br $exit
-
-                // Bind the inner value (the non-null reference)
-                if let Some(TirPattern::Binding { local_index, .. }) = bindings.first() {
-                    func.instruction(&Instruction::LocalGet(scrutinee_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-
-                    // For primitive types, unbox the value from the box struct
-                    let is_address_taken = ctx.address_taken_locals.contains(local_index);
-                    if !is_address_taken
-                        && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
-                    {
-                        let val_type = primitive_to_valtype(prim);
-                        if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: box_type_idx,
-                                field_index: 0,
-                            });
-                        }
-                    }
-
-                    // Store in the binding local with proper offset
-                    let adjusted_index = *local_index + ctx.local_index_offset;
-                    func.instruction(&Instruction::LocalSet(adjusted_index));
-                }
-
-                // Generate loop body
-                self.generate_block(func, body, type_table, ctx, builder);
-            }
-
-            _ => {
-                panic!("Unsupported for-pattern: {pattern:?} on type {scrutinee_type:?}");
-            }
-        }
-
-        func.instruction(&Instruction::End); // end $body block
-
-        // Generate update expression
-        if let Some(upd) = update {
-            self.generate_expr_as_stmt(func, upd, type_table, ctx, builder);
-        }
-
-        // Continue the loop
-        func.instruction(&Instruction::Br(0)); // br $loop
-
-        func.instruction(&Instruction::End); // end loop
-        func.instruction(&Instruction::End); // end block
-        ctx.loop_info.pop();
     }
 
     /// Generate a Wasm function from TIR function

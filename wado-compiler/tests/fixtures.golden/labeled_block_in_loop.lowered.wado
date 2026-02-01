@@ -15,14 +15,23 @@
 
 fn run() with Stdout {
     let mut sum: i32 = 0;
-    for let mut i: i32 = 0; (i < 3); i = (i + 1) {
-        search: {
-            if (i == 1) {
-                break search;
+    __for_loop_0: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < 3) {
+                break __for_loop_0;
             }
-            sum = (sum + (i * 10));
+            __for_body_1: {
+                search: {
+                    if (i == 1) {
+                        break search;
+                    }
+                    sum = (sum + (i * 10));
+                }
+                sum = (sum + 1);
+            }
+            i = (i + 1);
         }
-        sum = (sum + 1);
     }
     __assert_0: {
         let __cond: bool = (sum == 23);

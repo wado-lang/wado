@@ -197,20 +197,28 @@ fn run() with Stdout {
         }
     }
     core::cli::print(move "keys: ");
-    let _licm_repr: builtin::array<String> = keys.repr;
-    for let mut i: i32 = 0; (i < keys."Array<String>::len"()); i = (i + 1) {
-        if (i > 0) {
-            core::cli::print(move ", ");
+    __for_loop_0: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = keys.used;
+        let _licm_repr: builtin::array<String> = keys.repr;
+        loop {
+            if !(i < __inline_Array_String___len_23: {
+                break __inline_Array_String___len_23: _licm_used;
+            }) {
+                break __for_loop_0;
+            }
+            __for_body_1: {
+                if (i > 0) {
+                    core::cli::print(move ", ");
+                }
+                core::cli::print(__inline_Array_String__IndexValue__index_value_24: {
+                    break __inline_Array_String__IndexValue__index_value_24: core::builtin::array_get::<String>(_licm_repr, i);
+                });
+            }
+            i = (i + 1);
         }
-        core::cli::print(__inline_Array_String__IndexValue__index_value_23: {
-            break __inline_Array_String__IndexValue__index_value_23: core::builtin::array_get::<String>(_licm_repr, i);
-        });
     }
     core::cli::println(move "");
-}
-
-pub fn "Array<String>::len"(self: &Array<String>) -> i32 {
-    return self.used;
 }
 
 pub fn "TreeMap<String,i32>::values"(self: &TreeMap<String,i32>) -> Array<i32> {

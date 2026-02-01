@@ -20,23 +20,21 @@ fn run() with Stdout {
     let idx: i32 = __inline_Container_String_i32___find_key_index_0: {
         let key: &String = &"cherry";
         let mut i: i32 = 0;
-        while ((i < c.keys."Array<String>::len"()) && c.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::lt"(&*key)) {
+        loop {
+            if !((i < __inline_Array_String___len_1: {
+                let self: &Array<String> = &c.keys;
+                break __inline_Array_String___len_1: self.used;
+            }) && __inline_Array_String__IndexValue__index_value_2: {
+                let self: &Array<String> = &c.keys;
+                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
+            }."String^Ord::lt"(&*key)) {
+                break;
+            }
             i = (i + 1);
         }
         break __inline_Container_String_i32___find_key_index_0: i;
     };
-    let full: bool = __inline_Container_String_i32___is_full_1: {
-        let mut count: i32 = 0;
-        for let mut i: i32 = 0; (i < c.keys."Array<String>::len"()); i = (i + 1) {
-            if !__inline_Array_bool__IndexValue__index_value_2: {
-                let self: &Array<bool> = &c.deleted;
-                break __inline_Array_bool__IndexValue__index_value_2: core::builtin::array_get::<bool>(self.repr, i);
-            } {
-                count = (count + 1);
-            }
-        }
-        break __inline_Container_String_i32___is_full_1: (count >= 5);
-    };
+    let full: bool = c."Container<String,i32>::is_full"(5);
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "index: ", move idx."i32::to_string"()), move ", full: "), __inline_bool__to_string_3: {
         break __inline_bool__to_string_3: if full {
             "true";
@@ -46,11 +44,30 @@ fn run() with Stdout {
     }));
 }
 
-pub fn "Array<String>::len"(self: &Array<String>) -> i32 {
-    return self.used;
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    return core::builtin::array_get::<String>(self.repr, index);
+fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32) -> bool {
+    let mut count: i32 = 0;
+    __for_loop_0: {
+        let mut i: i32 = 0;
+        let _licm_keys: Array<String> = self.keys;
+        let _licm_deleted: Array<bool> = self.deleted;
+        let _licm_used: i32 = _licm_keys.used;
+        let _licm_repr: builtin::array<bool> = _licm_deleted.repr;
+        loop {
+            if !(i < __inline_Array_String___len_0: {
+                break __inline_Array_String___len_0: _licm_used;
+            }) {
+                break __for_loop_0;
+            }
+            __for_body_1: {
+                if !__inline_Array_bool__IndexValue__index_value_1: {
+                    break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr, i);
+                } {
+                    count = (count + 1);
+                }
+            }
+            i = (i + 1);
+        }
+    }
+    return (count >= max_keys);
 }
 

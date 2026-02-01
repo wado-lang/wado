@@ -20,24 +20,37 @@ fn run() with Stdout {
     let mut iter: ArrayIter<i32> = __inline_Array_i32___iter_0: {
         break __inline_Array_i32___iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
     };
-    let collected: Array<i32> = __inline_ArrayIter_i32___collect_1: {
-        let remaining: i32 = (iter.used - iter.index);
-        let mut repr: builtin::array<i32> = "array_new<i32>"(remaining);
-        let mut result_used: i32 = 0;
-        for let mut i: i32 = iter.index; (i < iter.used); i = (i + 1) {
-            let item: i32 = "array_get<i32>"(iter.repr, i);
-            "array_set<i32>"(repr, result_used, item);
-            result_used = (result_used + 1);
-        }
-        iter.index = iter.used;
-        break __inline_ArrayIter_i32___collect_1: Array<i32> { repr: repr, used: result_used };
-    };
+    let collected: Array<i32> = move iter."ArrayIter<i32>::collect"();
     for let _item of collected {
         core::cli::println(move x."i32::to_string"());
     }
-    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_2: {
-        break __inline_Array_i32___len_2: collected.used;
+    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_1: {
+        break __inline_Array_i32___len_1: collected.used;
     }."i32::to_string"()));
+}
+
+pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
+    let remaining: i32 = (self.used - self.index);
+    let mut repr: builtin::array<i32> = "array_new<i32>"(remaining);
+    let mut result_used: i32 = 0;
+    __for_loop_0: {
+        let mut i: i32 = self.index;
+        let _licm_used: i32 = self.used;
+        let _licm_repr: builtin::array<i32> = self.repr;
+        loop {
+            if !(i < _licm_used) {
+                break __for_loop_0;
+            }
+            __for_body_1: {
+                let item: i32 = "array_get<i32>"(_licm_repr, i);
+                "array_set<i32>"(repr, result_used, item);
+                result_used = (result_used + 1);
+            }
+            i = (i + 1);
+        }
+    }
+    self.index = self.used;
+    return Array<i32> { repr: repr, used: result_used };
 }
 
 fn "array_set<i32>"(arr: builtin::array<i32>, idx: i32, value: i32);

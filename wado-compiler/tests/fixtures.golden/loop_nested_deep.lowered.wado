@@ -10,20 +10,41 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    for let mut i: i32 = 0; (i < 2); i = (i + 1) {
-        let mut j: i32 = 0;
-        while (j < 2) {
-            j = (j + 1);
-            let mut k: i32 = 0;
-            loop {
-                k = (k + 1);
-                for let mut l: i32 = 0; (l < 2); l = (l + 1) {
-                    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move i."i32::to_string"(), move "-"), move j."i32::to_string"()), move "-"), move k."i32::to_string"()), move "-"), move l."i32::to_string"()));
-                }
-                if (k >= 2) {
-                    break;
+    __for_loop_0: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < 2) {
+                break __for_loop_0;
+            }
+            __for_body_3: {
+                let mut j: i32 = 0;
+                loop {
+                    if !(j < 2) {
+                        break;
+                    }
+                    j = (j + 1);
+                    let mut k: i32 = 0;
+                    loop {
+                        k = (k + 1);
+                        __for_loop_1: {
+                            let mut l: i32 = 0;
+                            loop {
+                                if !(l < 2) {
+                                    break __for_loop_1;
+                                }
+                                __for_body_2: {
+                                    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move i."i32::to_string"(), move "-"), move j."i32::to_string"()), move "-"), move k."i32::to_string"()), move "-"), move l."i32::to_string"()));
+                                }
+                                l = (l + 1);
+                            }
+                        }
+                        if (k >= 2) {
+                            break;
+                        }
+                    }
                 }
             }
+            i = (i + 1);
         }
     }
     core::cli::println(move "done");

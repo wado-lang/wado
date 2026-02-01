@@ -46,27 +46,16 @@ fn run() with Stdout {
             break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(self.repr, 1);
         };
     };
-    let count: i32 = __inline_Container_String___count_flagged_10: {
-        let mut count: i32 = 0;
-        for let mut i: i32 = 0; (i < c.markers."Array<bool>::len"()); i = (i + 1) {
-            if __inline_Array_bool__IndexValue__index_value_11: {
-                let self: &Array<bool> = &c.markers;
-                break __inline_Array_bool__IndexValue__index_value_11: core::builtin::array_get::<bool>(self.repr, i);
-            } {
-                count = (count + 1);
-            }
-        }
-        break __inline_Container_String___count_flagged_10: count;
-    };
+    let count: i32 = c."Container<String>::count_flagged"();
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "items: ", item0), move ", "), item1), move ", "), item2));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "flags: ", __inline_bool__to_string_12: {
-        break __inline_bool__to_string_12: if flag0 {
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "flags: ", __inline_bool__to_string_10: {
+        break __inline_bool__to_string_10: if flag0 {
             "true";
         } else {
             "false";
         };
-    }), move ", "), __inline_bool__to_string_13: {
-        break __inline_bool__to_string_13: if flag1 {
+    }), move ", "), __inline_bool__to_string_11: {
+        break __inline_bool__to_string_11: if flag1 {
             "true";
         } else {
             "false";
@@ -75,7 +64,29 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "count: ", move count."i32::to_string"()));
 }
 
-pub fn "Array<bool>::len"(self: &Array<bool>) -> i32 {
-    return self.used;
+fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
+    let mut count: i32 = 0;
+    __for_loop_0: {
+        let mut i: i32 = 0;
+        let _licm_markers: Array<bool> = self.markers;
+        let _licm_used: i32 = _licm_markers.used;
+        let _licm_repr: builtin::array<bool> = _licm_markers.repr;
+        loop {
+            if !(i < __inline_Array_bool___len_0: {
+                break __inline_Array_bool___len_0: _licm_used;
+            }) {
+                break __for_loop_0;
+            }
+            __for_body_1: {
+                if __inline_Array_bool__IndexValue__index_value_1: {
+                    break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr, i);
+                } {
+                    count = (count + 1);
+                }
+            }
+            i = (i + 1);
+        }
+    }
+    return count;
 }
 

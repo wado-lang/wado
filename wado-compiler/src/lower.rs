@@ -1,6 +1,7 @@
 //! Lowering pass for Wado TIR
 //!
 //! The lower phase performs type-driven transformations on TIR:
+//! - Loop lowering (transform While/For/ForOf/WhilePattern/ForPattern to Loop) - see `lower_loop.rs`
 //! - String literal collection (for data section)
 //! - Closure lowering (transform closures to functor structs with `__call` methods)
 //! - i128/u128 match pattern lowering (convert to if-else chains)
@@ -13,6 +14,7 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
+use crate::lower_loop::lower_loops;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::FunctionRef;
@@ -26,11 +28,17 @@ use crate::token::Span;
 /// Lower a TIR module
 ///
 /// Performs:
-/// 1. Global variable initialization lowering (extract non-constant initializers)
-/// 2. Closure lowering (transform closures to functor structs with `__call` methods)
-/// 3. String literal collection for the data section
+/// 1. Loop lowering (transform While/For/ForOf/WhilePattern/ForPattern to Loop)
+/// 2. Global variable initialization lowering (extract non-constant initializers)
+/// 3. Closure lowering (transform closures to functor structs with `__call` methods)
+/// 4. String literal collection for the data section
 pub fn lower(mut module: TirModule) -> TirModule {
-    // Phase 0: Lower i128/u128 match patterns to if-else chains
+    // Phase 0: Lower loops to canonical Loop form
+    // All loop constructs (While, For, ForOf, WhilePattern, ForPattern) are transformed
+    // to Loop + If/IfPattern + Break/Continue. This simplifies codegen and optimizer.
+    lower_loops(&mut module);
+
+    // Phase 1: Lower i128/u128 match patterns to if-else chains
     // WebAssembly doesn't have i128/u128 comparison instructions, so we convert
     // match expressions with i128/u128 literal patterns to if-else chains with
     // explicit equality comparisons that use the wide arithmetic extension.
