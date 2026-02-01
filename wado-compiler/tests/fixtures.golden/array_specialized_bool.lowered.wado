@@ -9,21 +9,47 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<bool>" {
+    repr: builtin::array<bool>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let mut arr: Array<bool> = move [];
     arr."Array<bool>::append"(true);
     arr."Array<bool>::append"(false);
     arr."Array<bool>::append"(true);
-    for let _item of arr {
-        core::cli::println(__inline_bool__to_string_0: {
-            break __inline_bool__to_string_0: if x {
-                "true";
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<bool> = __inline_Array_bool__IntoIterator__into_iter_0: {
+            break __inline_Array_bool__IntoIterator__into_iter_0: ArrayIter<bool> { repr: arr.repr, used: arr.used, index: 0 };
+        };
+        loop {
+            if Some(x) = __iter_0."ArrayIter<bool>^Iterator::next"() {
+                core::cli::println(__inline_bool__to_string_1: {
+                    break __inline_bool__to_string_1: if x {
+                        "true";
+                    } else {
+                        "false";
+                    };
+                });
             } else {
-                "false";
-            };
-        });
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<bool>^Iterator::next"(self: &mut ArrayIter<bool>) -> Option<bool> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: bool = "array_get<bool>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<bool>"(arr: builtin::array<bool>, idx: i32) -> bool;
 
 pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
     let used: i32 = self.used;

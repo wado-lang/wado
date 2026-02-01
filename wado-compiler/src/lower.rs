@@ -1,12 +1,12 @@
 //! Lowering pass for Wado TIR
 //!
 //! The lower phase performs type-driven transformations on TIR:
-//! - Loop lowering (transform While/For/ForOf/WhilePattern/ForPattern to Loop) - see `lower_loop.rs`
 //! - String literal collection (for data section)
 //! - Closure lowering (transform closures to functor structs with `__call` methods)
 //! - i128/u128 match pattern lowering (convert to if-else chains)
 //!
-//! Note: Monomorphization has been moved to a separate phase (see `monomorphize.rs`)
+//! Note: All loop constructs are desugared at the AST level in desugar.rs.
+//! Monomorphization has been moved to a separate phase (see `monomorphize.rs`).
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -14,7 +14,6 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
-use crate::lower_loop::lower_loops;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::FunctionRef;
@@ -28,16 +27,12 @@ use crate::token::Span;
 /// Lower a TIR module
 ///
 /// Performs:
-/// 1. Loop lowering (transform While/For/ForOf/WhilePattern/ForPattern to Loop)
-/// 2. Global variable initialization lowering (extract non-constant initializers)
-/// 3. Closure lowering (transform closures to functor structs with `__call` methods)
-/// 4. String literal collection for the data section
+/// 1. Global variable initialization lowering (extract non-constant initializers)
+/// 2. Closure lowering (transform closures to functor structs with `__call` methods)
+/// 3. String literal collection for the data section
+///
+/// Note: All loop constructs are desugared at the AST level in desugar.rs.
 pub fn lower(mut module: TirModule) -> TirModule {
-    // Phase 0: Lower loops to canonical Loop form
-    // All loop constructs (While, For, ForOf, WhilePattern, ForPattern) are transformed
-    // to Loop + If/IfPattern + Break/Continue. This simplifies codegen and optimizer.
-    lower_loops(&mut module);
-
     // Phase 1: Lower i128/u128 match patterns to if-else chains
     // WebAssembly doesn't have i128/u128 comparison instructions, so we convert
     // match expressions with i128/u128 literal patterns to if-else chains with
@@ -332,54 +327,10 @@ fn lower_wide_int_in_stmt(stmt: &mut TirStmt, type_table: &Rc<RefCell<TypeTable>
                 lower_wide_int_in_block(else_b, type_table);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            lower_wide_int_in_expr(condition, type_table);
-            lower_wide_int_in_block(body, type_table);
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            lower_wide_int_in_expr(scrutinee, type_table);
-            lower_wide_int_in_block(body, type_table);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            update,
-            body,
-        } => {
-            for i in init {
-                lower_wide_int_in_stmt(i, type_table);
-            }
-            if let Some(c) = condition {
-                lower_wide_int_in_expr(c, type_table);
-            }
-            if let Some(u) = update {
-                lower_wide_int_in_expr(u, type_table);
-            }
-            lower_wide_int_in_block(body, type_table);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            update,
-            body,
-            ..
-        } => {
-            for i in init {
-                lower_wide_int_in_stmt(i, type_table);
-            }
-            lower_wide_int_in_expr(scrutinee, type_table);
-            if let Some(u) = update {
-                lower_wide_int_in_expr(u, type_table);
-            }
-            lower_wide_int_in_block(body, type_table);
-        }
         TirStmtKind::Break { .. }
         | TirStmtKind::Continue
         | TirStmtKind::Return { value: None }
         | TirStmtKind::Loop { .. }
-        | TirStmtKind::ForOf { .. }
         | TirStmtKind::LabeledBlock { .. }
         | TirStmtKind::LetPattern { .. } => {}
     }
@@ -1361,32 +1312,7 @@ impl ClosureLowerer {
                     self.collect_closures_in_block(else_blk);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.collect_closures_in_expr(condition);
-                self.collect_closures_in_block(body);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.collect_closures_in_stmt(s);
-                }
-                if let Some(cond) = condition {
-                    self.collect_closures_in_expr(cond);
-                }
-                self.collect_closures_in_block(body);
-                if let Some(upd) = update {
-                    self.collect_closures_in_expr(upd);
-                }
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.collect_closures_in_block(body);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.collect_closures_in_expr(iterable);
                 self.collect_closures_in_block(body);
             }
             TirStmtKind::IfPattern {
@@ -1399,28 +1325,6 @@ impl ClosureLowerer {
                 self.collect_closures_in_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.collect_closures_in_block(else_blk);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.collect_closures_in_expr(scrutinee);
-                self.collect_closures_in_block(body);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.collect_closures_in_stmt(s);
-                }
-                self.collect_closures_in_expr(scrutinee);
-                self.collect_closures_in_block(body);
-                if let Some(upd) = update {
-                    self.collect_closures_in_expr(upd);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {
@@ -1599,32 +1503,7 @@ impl ClosureLowerer {
                     self.analyze_closure_safety_block(else_blk);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.analyze_closure_safety_expr(condition, false);
-                self.analyze_closure_safety_block(body);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.analyze_closure_safety_stmt(s);
-                }
-                if let Some(cond) = condition {
-                    self.analyze_closure_safety_expr(cond, false);
-                }
-                self.analyze_closure_safety_block(body);
-                if let Some(upd) = update {
-                    self.analyze_closure_safety_expr(upd, false);
-                }
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.analyze_closure_safety_block(body);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.analyze_closure_safety_expr(iterable, false);
                 self.analyze_closure_safety_block(body);
             }
             TirStmtKind::IfPattern {
@@ -1637,28 +1516,6 @@ impl ClosureLowerer {
                 self.analyze_closure_safety_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.analyze_closure_safety_block(else_blk);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.analyze_closure_safety_expr(scrutinee, false);
-                self.analyze_closure_safety_block(body);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.analyze_closure_safety_stmt(s);
-                }
-                self.analyze_closure_safety_expr(scrutinee, false);
-                self.analyze_closure_safety_block(body);
-                if let Some(upd) = update {
-                    self.analyze_closure_safety_expr(upd, false);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {
@@ -2003,32 +1860,7 @@ impl ClosureLowerer {
                     Self::collect_locals_from_block(else_blk, locals);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                Self::collect_locals_from_expr(condition, locals);
-                Self::collect_locals_from_block(body, locals);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    Self::collect_locals_from_stmt(s, locals);
-                }
-                if let Some(cond) = condition {
-                    Self::collect_locals_from_expr(cond, locals);
-                }
-                Self::collect_locals_from_block(body, locals);
-                if let Some(upd) = update {
-                    Self::collect_locals_from_expr(upd, locals);
-                }
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                Self::collect_locals_from_block(body, locals);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                Self::collect_locals_from_expr(iterable, locals);
                 Self::collect_locals_from_block(body, locals);
             }
             TirStmtKind::IfPattern {
@@ -2041,28 +1873,6 @@ impl ClosureLowerer {
                 Self::collect_locals_from_block(then_block, locals);
                 if let Some(else_blk) = else_block {
                     Self::collect_locals_from_block(else_blk, locals);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                Self::collect_locals_from_expr(scrutinee, locals);
-                Self::collect_locals_from_block(body, locals);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    Self::collect_locals_from_stmt(s, locals);
-                }
-                Self::collect_locals_from_expr(scrutinee, locals);
-                Self::collect_locals_from_block(body, locals);
-                if let Some(upd) = update {
-                    Self::collect_locals_from_expr(upd, locals);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {
@@ -2604,73 +2414,7 @@ impl ClosureLowerer {
                     self.transform_closure_body_block(b, captures, struct_type_id, self_ref_type)
                 }),
             },
-            TirStmtKind::While { condition, body } => TirStmtKind::While {
-                condition: self.transform_closure_body(
-                    condition,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-                body: self.transform_closure_body_block(
-                    body,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-            },
             TirStmtKind::Loop { body } => TirStmtKind::Loop {
-                body: self.transform_closure_body_block(
-                    body,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-            },
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => TirStmtKind::For {
-                init: init
-                    .iter()
-                    .map(|s| {
-                        self.transform_closure_body_stmt(s, captures, struct_type_id, self_ref_type)
-                    })
-                    .collect(),
-                condition: condition.as_ref().map(|c| {
-                    self.transform_closure_body(c, captures, struct_type_id, self_ref_type, span)
-                }),
-                body: self.transform_closure_body_block(
-                    body,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-                update: update.as_ref().map(|u| {
-                    self.transform_closure_body(u, captures, struct_type_id, self_ref_type, span)
-                }),
-            },
-            TirStmtKind::ForOf {
-                binding_local,
-                binding_type,
-                is_mut,
-                iterable,
-                iterable_type,
-                body,
-            } => TirStmtKind::ForOf {
-                binding_local: binding_local + 1, // Shift by 1 for self parameter
-                binding_type: *binding_type,
-                is_mut: *is_mut,
-                iterable: self.transform_closure_body(
-                    iterable,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-                iterable_type: *iterable_type,
                 body: self.transform_closure_body_block(
                     body,
                     captures,
@@ -2709,57 +2453,6 @@ impl ClosureLowerer {
                 ),
                 else_block: else_block.as_ref().map(|b| {
                     self.transform_closure_body_block(b, captures, struct_type_id, self_ref_type)
-                }),
-            },
-            TirStmtKind::WhilePattern {
-                scrutinee,
-                pattern,
-                body,
-            } => TirStmtKind::WhilePattern {
-                scrutinee: self.transform_closure_body(
-                    scrutinee,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-                pattern: self.transform_closure_body_pattern(pattern),
-                body: self.transform_closure_body_block(
-                    body,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-            },
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                pattern,
-                body,
-                update,
-            } => TirStmtKind::ForPattern {
-                init: init
-                    .iter()
-                    .map(|s| {
-                        self.transform_closure_body_stmt(s, captures, struct_type_id, self_ref_type)
-                    })
-                    .collect(),
-                scrutinee: self.transform_closure_body(
-                    scrutinee,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                    span,
-                ),
-                pattern: self.transform_closure_body_pattern(pattern),
-                body: self.transform_closure_body_block(
-                    body,
-                    captures,
-                    struct_type_id,
-                    self_ref_type,
-                ),
-                update: update.as_ref().map(|u| {
-                    self.transform_closure_body(u, captures, struct_type_id, self_ref_type, span)
                 }),
             },
             TirStmtKind::LetPattern {
@@ -2949,32 +2642,8 @@ impl ClosureLowerer {
                         .as_ref()
                         .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
             }
-            TirStmtKind::While { condition, body } => {
-                self.fn_param_in_struct_field_expr(condition, fn_param_indices)
-                    || self.fn_param_stored_in_struct_field(body, fn_param_indices)
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                init.iter()
-                    .any(|s| self.fn_param_in_struct_field_stmt(s, fn_param_indices))
-                    || condition
-                        .as_ref()
-                        .is_some_and(|c| self.fn_param_in_struct_field_expr(c, fn_param_indices))
-                    || self.fn_param_stored_in_struct_field(body, fn_param_indices)
-                    || update
-                        .as_ref()
-                        .is_some_and(|u| self.fn_param_in_struct_field_expr(u, fn_param_indices))
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.fn_param_stored_in_struct_field(body, fn_param_indices)
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.fn_param_in_struct_field_expr(iterable, fn_param_indices)
-                    || self.fn_param_stored_in_struct_field(body, fn_param_indices)
             }
             TirStmtKind::IfPattern {
                 scrutinee,
@@ -2987,27 +2656,6 @@ impl ClosureLowerer {
                     || else_block
                         .as_ref()
                         .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
-                    || self.fn_param_stored_in_struct_field(body, fn_param_indices)
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                init.iter()
-                    .any(|s| self.fn_param_in_struct_field_stmt(s, fn_param_indices))
-                    || self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
-                    || self.fn_param_stored_in_struct_field(body, fn_param_indices)
-                    || update
-                        .as_ref()
-                        .is_some_and(|u| self.fn_param_in_struct_field_expr(u, fn_param_indices))
             }
             TirStmtKind::LetPattern { value, .. } => {
                 self.fn_param_in_struct_field_expr(value, fn_param_indices)
@@ -3170,32 +2818,7 @@ impl ClosureLowerer {
                     self.collect_fn_param_specs(else_blk, func_by_name, type_table, requests);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.collect_fn_param_specs_expr(condition, func_by_name, type_table, requests);
-                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.collect_fn_param_specs_stmt(s, func_by_name, type_table, requests);
-                }
-                if let Some(cond) = condition {
-                    self.collect_fn_param_specs_expr(cond, func_by_name, type_table, requests);
-                }
-                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
-                if let Some(upd) = update {
-                    self.collect_fn_param_specs_expr(upd, func_by_name, type_table, requests);
-                }
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.collect_fn_param_specs_expr(iterable, func_by_name, type_table, requests);
                 self.collect_fn_param_specs(body, func_by_name, type_table, requests);
             }
             TirStmtKind::IfPattern {
@@ -3208,28 +2831,6 @@ impl ClosureLowerer {
                 self.collect_fn_param_specs(then_block, func_by_name, type_table, requests);
                 if let Some(else_blk) = else_block {
                     self.collect_fn_param_specs(else_blk, func_by_name, type_table, requests);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
-                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.collect_fn_param_specs_stmt(s, func_by_name, type_table, requests);
-                }
-                self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
-                self.collect_fn_param_specs(body, func_by_name, type_table, requests);
-                if let Some(upd) = update {
-                    self.collect_fn_param_specs_expr(upd, func_by_name, type_table, requests);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {
@@ -3587,32 +3188,7 @@ impl ClosureLowerer {
                     self.count_closures_in_block(else_blk, counter);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.count_closures_in_expr(condition, counter);
-                self.count_closures_in_block(body, counter);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.count_closures_in_stmt(s, counter);
-                }
-                if let Some(cond) = condition {
-                    self.count_closures_in_expr(cond, counter);
-                }
-                self.count_closures_in_block(body, counter);
-                if let Some(upd) = update {
-                    self.count_closures_in_expr(upd, counter);
-                }
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.count_closures_in_block(body, counter);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.count_closures_in_expr(iterable, counter);
                 self.count_closures_in_block(body, counter);
             }
             TirStmtKind::IfPattern {
@@ -3800,44 +3376,7 @@ impl ClosureLowerer {
                     .as_ref()
                     .map(|b| self.specialize_function_body(b, param_to_functor, type_table)),
             },
-            TirStmtKind::While { condition, body } => TirStmtKind::While {
-                condition: self.specialize_expr(condition, param_to_functor, type_table),
-                body: self.specialize_function_body(body, param_to_functor, type_table),
-            },
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => TirStmtKind::For {
-                init: init
-                    .iter()
-                    .map(|s| self.specialize_stmt(s, param_to_functor, type_table))
-                    .collect(),
-                condition: condition
-                    .as_ref()
-                    .map(|c| self.specialize_expr(c, param_to_functor, type_table)),
-                body: self.specialize_function_body(body, param_to_functor, type_table),
-                update: update
-                    .as_ref()
-                    .map(|u| self.specialize_expr(u, param_to_functor, type_table)),
-            },
             TirStmtKind::Loop { body } => TirStmtKind::Loop {
-                body: self.specialize_function_body(body, param_to_functor, type_table),
-            },
-            TirStmtKind::ForOf {
-                binding_local,
-                binding_type,
-                is_mut,
-                iterable,
-                iterable_type,
-                body,
-            } => TirStmtKind::ForOf {
-                binding_local: *binding_local,
-                binding_type: *binding_type,
-                is_mut: *is_mut,
-                iterable: self.specialize_expr(iterable, param_to_functor, type_table),
-                iterable_type: *iterable_type,
                 body: self.specialize_function_body(body, param_to_functor, type_table),
             },
             TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
@@ -3863,33 +3402,6 @@ impl ClosureLowerer {
                 else_block: else_block
                     .as_ref()
                     .map(|b| self.specialize_function_body(b, param_to_functor, type_table)),
-            },
-            TirStmtKind::WhilePattern {
-                scrutinee,
-                pattern,
-                body,
-            } => TirStmtKind::WhilePattern {
-                scrutinee: self.specialize_expr(scrutinee, param_to_functor, type_table),
-                pattern: pattern.clone(),
-                body: self.specialize_function_body(body, param_to_functor, type_table),
-            },
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                pattern,
-                body,
-                update,
-            } => TirStmtKind::ForPattern {
-                init: init
-                    .iter()
-                    .map(|s| self.specialize_stmt(s, param_to_functor, type_table))
-                    .collect(),
-                scrutinee: self.specialize_expr(scrutinee, param_to_functor, type_table),
-                pattern: pattern.clone(),
-                body: self.specialize_function_body(body, param_to_functor, type_table),
-                update: update
-                    .as_ref()
-                    .map(|u| self.specialize_expr(u, param_to_functor, type_table)),
             },
             TirStmtKind::LetPattern {
                 pattern,
@@ -4424,32 +3936,7 @@ impl ClosureLowerer {
                     self.transform_block(else_blk, type_table);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.transform_expr(condition, type_table);
-                self.transform_block(body, type_table);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.transform_stmt(s, type_table);
-                }
-                if let Some(cond) = condition {
-                    self.transform_expr(cond, type_table);
-                }
-                self.transform_block(body, type_table);
-                if let Some(upd) = update {
-                    self.transform_expr(upd, type_table);
-                }
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.transform_block(body, type_table);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.transform_expr(iterable, type_table);
                 self.transform_block(body, type_table);
             }
             TirStmtKind::IfPattern {
@@ -4462,28 +3949,6 @@ impl ClosureLowerer {
                 self.transform_block(then_block, type_table);
                 if let Some(else_blk) = else_block {
                     self.transform_block(else_blk, type_table);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.transform_expr(scrutinee, type_table);
-                self.transform_block(body, type_table);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.transform_stmt(s, type_table);
-                }
-                self.transform_expr(scrutinee, type_table);
-                self.transform_block(body, type_table);
-                if let Some(upd) = update {
-                    self.transform_expr(upd, type_table);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {
@@ -4838,32 +4303,7 @@ impl ClosureLowerer {
                     self.transform_remaining_closures_block(else_blk);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.transform_remaining_closures_expr(condition);
-                self.transform_remaining_closures_block(body);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.transform_remaining_closures_stmt(s);
-                }
-                if let Some(c) = condition {
-                    self.transform_remaining_closures_expr(c);
-                }
-                self.transform_remaining_closures_block(body);
-                if let Some(u) = update {
-                    self.transform_remaining_closures_expr(u);
-                }
-            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.transform_remaining_closures_block(body);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.transform_remaining_closures_expr(iterable);
                 self.transform_remaining_closures_block(body);
             }
             TirStmtKind::IfPattern {
@@ -4876,28 +4316,6 @@ impl ClosureLowerer {
                 self.transform_remaining_closures_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.transform_remaining_closures_block(else_blk);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.transform_remaining_closures_expr(scrutinee);
-                self.transform_remaining_closures_block(body);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.transform_remaining_closures_stmt(s);
-                }
-                self.transform_remaining_closures_expr(scrutinee);
-                self.transform_remaining_closures_block(body);
-                if let Some(u) = update {
-                    self.transform_remaining_closures_expr(u);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {
@@ -5182,32 +4600,7 @@ impl StringCollector {
                     self.collect_block(else_blk);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.collect_expr(condition);
-                self.collect_block(body);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.collect_stmt(s);
-                }
-                if let Some(cond) = condition {
-                    self.collect_expr(cond);
-                }
-                self.collect_block(body);
-                if let Some(upd) = update {
-                    self.collect_expr(upd);
-                }
-            }
             TirStmtKind::Loop { body } => {
-                self.collect_block(body);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.collect_expr(iterable);
                 self.collect_block(body);
             }
             TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
@@ -5224,28 +4617,6 @@ impl StringCollector {
                 self.collect_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.collect_block(else_blk);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.collect_expr(scrutinee);
-                self.collect_block(body);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.collect_stmt(s);
-                }
-                self.collect_expr(scrutinee);
-                self.collect_block(body);
-                if let Some(upd) = update {
-                    self.collect_expr(upd);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {

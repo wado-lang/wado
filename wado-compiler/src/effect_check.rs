@@ -135,31 +135,6 @@ impl<'a> EffectChecker<'a> {
                     self.check_block(else_blk);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.check_expr(condition);
-                self.check_block(body);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                update,
-                body,
-            } => {
-                for init_stmt in init {
-                    self.check_stmt(init_stmt);
-                }
-                if let Some(cond) = condition {
-                    self.check_expr(cond);
-                }
-                if let Some(upd) = update {
-                    self.check_expr(upd);
-                }
-                self.check_block(body);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.check_expr(iterable);
-                self.check_block(body);
-            }
             TirStmtKind::Loop { body } => {
                 self.check_block(body);
             }
@@ -182,28 +157,6 @@ impl<'a> EffectChecker<'a> {
                 self.check_block(then_block);
                 if let Some(else_blk) = else_block {
                     self.check_block(else_blk);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.check_expr(scrutinee);
-                self.check_block(body);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for init_stmt in init {
-                    self.check_stmt(init_stmt);
-                }
-                self.check_expr(scrutinee);
-                self.check_block(body);
-                if let Some(upd) = update {
-                    self.check_expr(upd);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {

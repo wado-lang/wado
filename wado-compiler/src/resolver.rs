@@ -19,9 +19,9 @@ use crate::component_model::WasiRegistry;
 use crate::name::{self as name, LocalMethodName, ModuleSource, mangle_generic_name};
 
 use crate::ast::{
-    self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
-    GlobalDecl, IfExpr, IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern,
-    ReturnStmt, Stmt, Type, UnaryOp, WhileStmt,
+    self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, Function, GlobalDecl, IfExpr,
+    IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt, Type,
+    UnaryOp,
 };
 use crate::project::Project;
 use crate::symbol::{SymbolKind, SymbolTable};
@@ -2174,9 +2174,10 @@ impl<'a> Resolver<'a> {
             Stmt::Expr(expr_stmt) => vec![self.resolve_expr_stmt(expr_stmt, ctx)],
             Stmt::Return(ret_stmt) => vec![self.resolve_return(ret_stmt, ctx)],
             Stmt::If(if_stmt) => self.resolve_if_stmt(if_stmt, ctx),
-            Stmt::While(while_stmt) => vec![self.resolve_while(while_stmt, ctx)],
-            Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
-            Stmt::ForOf(for_of_stmt) => vec![self.resolve_for_of(for_of_stmt, ctx)],
+            // While, For, ForOf are desugared to Loop in the desugar phase
+            Stmt::While(_) => unreachable!("While should be desugared before resolving"),
+            Stmt::For(_) => unreachable!("For should be desugared before resolving"),
+            Stmt::ForOf(_) => unreachable!("ForOf should be desugared before resolving"),
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
@@ -2782,577 +2783,6 @@ impl<'a> Resolver<'a> {
         }
         TypeTable::UNKNOWN
     }
-
-    /// Resolve a while statement
-    fn resolve_while(&mut self, while_stmt: &WhileStmt, ctx: &mut FunctionContext) -> TirStmt {
-        match &while_stmt.condition {
-            ast::Condition::Expr(expr) => {
-                let condition = self.resolve_expr(expr, ctx);
-                let body = self.resolve_block(&while_stmt.body, ctx);
-                TirStmt::new(TirStmtKind::While { condition, body }, while_stmt.span)
-            }
-            ast::Condition::Pattern { pattern, expr, .. } => {
-                // while let Some(x) = expr { ... }
-                let scrutinee = self.resolve_expr(expr, ctx);
-                let scrutinee_type = scrutinee.type_id;
-
-                // Enter scope for pattern bindings (visible in body)
-                ctx.enter_scope();
-
-                let tir_pattern =
-                    self.resolve_if_pattern(pattern, scrutinee_type, ctx, while_stmt.span);
-                let body = self.resolve_block(&while_stmt.body, ctx);
-
-                ctx.exit_scope();
-
-                TirStmt::new(
-                    TirStmtKind::WhilePattern {
-                        scrutinee,
-                        pattern: tir_pattern,
-                        body,
-                    },
-                    while_stmt.span,
-                )
-            }
-        }
-    }
-
-    /// Resolve a for statement - generates a For node with init statements included
-    /// The For node handles continue correctly (executes update before next iteration)
-    /// The init variable is scoped to the for loop and not visible after it
-    fn resolve_for(&mut self, for_stmt: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
-        // Enter scope for the for loop's init variable
-        ctx.enter_scope();
-
-        // Resolve init statement if present (e.g., let i = 0)
-        let init = if let Some(init_stmt) = &for_stmt.init {
-            self.resolve_stmt(init_stmt, ctx)
-        } else {
-            Vec::new()
-        };
-
-        // Check if condition is a pattern
-        let for_tir = match &for_stmt.condition {
-            Some(ast::Condition::Pattern { pattern, expr, .. }) => {
-                // for init; let Some(x) = expr; update { ... }
-                let scrutinee = self.resolve_expr(expr, ctx);
-                let scrutinee_type = scrutinee.type_id;
-
-                // Enter scope for pattern bindings (visible in body)
-                ctx.enter_scope();
-
-                let tir_pattern =
-                    self.resolve_if_pattern(pattern, scrutinee_type, ctx, for_stmt.span);
-                let body = self.resolve_block(&for_stmt.body, ctx);
-
-                ctx.exit_scope();
-
-                // Resolve update expression
-                let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
-
-                TirStmt::new(
-                    TirStmtKind::ForPattern {
-                        init,
-                        scrutinee,
-                        pattern: tir_pattern,
-                        body,
-                        update,
-                    },
-                    for_stmt.span,
-                )
-            }
-            Some(ast::Condition::Expr(expr)) => {
-                // Regular for loop with expression condition
-                let condition = Some(self.resolve_expr(expr, ctx));
-
-                // Resolve the body (note: resolve_block enters its own scope for body variables)
-                let body = self.resolve_block(&for_stmt.body, ctx);
-
-                // Resolve update expression
-                let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
-
-                TirStmt::new(
-                    TirStmtKind::For {
-                        init,
-                        condition,
-                        body,
-                        update,
-                    },
-                    for_stmt.span,
-                )
-            }
-            None => {
-                // Infinite loop (no condition)
-                let body = self.resolve_block(&for_stmt.body, ctx);
-                let update = for_stmt.update.as_ref().map(|u| self.resolve_expr(u, ctx));
-
-                TirStmt::new(
-                    TirStmtKind::For {
-                        init,
-                        condition: None,
-                        body,
-                        update,
-                    },
-                    for_stmt.span,
-                )
-            }
-        };
-
-        // Exit the for loop's scope
-        ctx.exit_scope();
-
-        vec![for_tir]
-    }
-
-    /// Resolve a for-of statement: `for let item of iterable { ... }`
-    ///
-    /// For Arrays, uses the optimized `TirStmtKind::ForOf` that generates efficient WASM.
-    /// For other types implementing `IntoIterator`, desugars to:
-    /// ```text
-    /// {
-    ///     let mut __iter = iterable.into_iter();
-    ///     loop {
-    ///         if let Some(binding) = __iter.next() {
-    ///             body
-    ///         } else {
-    ///             break;
-    ///         }
-    ///     }
-    /// }
-    /// ```
-    fn resolve_for_of(&mut self, for_of_stmt: &ForOfStmt, ctx: &mut FunctionContext) -> TirStmt {
-        // Resolve the iterable expression
-        let iterable = self.resolve_expr(&for_of_stmt.iterable, ctx);
-        let iterable_type = iterable.type_id;
-
-        // Fast path: Array<T> - use optimized codegen
-        let element_type_opt = self.type_table.borrow().as_array(iterable_type);
-        if let Some(element_type) = element_type_opt {
-            return self.resolve_for_of_array(for_of_stmt, iterable, element_type, ctx);
-        }
-
-        // Slow path: Check for IntoIterator implementation
-        if let Some((item_type, iter_type)) = self.find_into_iterator_impl(iterable_type) {
-            return self.resolve_for_of_into_iterator(
-                for_of_stmt,
-                iterable,
-                iterable_type,
-                item_type,
-                iter_type,
-                ctx,
-            );
-        }
-
-        // No valid iteration method found
-        self.errors.push(TypeError::TypeMismatch {
-            expected: "Array<T> or type implementing IntoIterator".to_string(),
-            found: self.type_table.borrow().type_name(iterable_type),
-            span: for_of_stmt.iterable.span(),
-        });
-
-        // Generate a dummy loop to avoid cascading errors
-        ctx.enter_scope();
-        let binding_local = ctx.add_local(
-            for_of_stmt.binding.clone(),
-            TypeTable::UNKNOWN,
-            for_of_stmt.is_mut,
-        );
-        let body = self.resolve_block(&for_of_stmt.body, ctx);
-        ctx.exit_scope();
-
-        TirStmt::new(
-            TirStmtKind::ForOf {
-                binding_local,
-                binding_type: TypeTable::UNKNOWN,
-                is_mut: for_of_stmt.is_mut,
-                iterable,
-                iterable_type,
-                body,
-            },
-            for_of_stmt.span,
-        )
-    }
-
-    /// Optimized for-of for Array<T> - generates direct array access in codegen
-    fn resolve_for_of_array(
-        &mut self,
-        for_of_stmt: &ForOfStmt,
-        iterable: TirExpr,
-        element_type: TypeId,
-        ctx: &mut FunctionContext,
-    ) -> TirStmt {
-        let iterable_type = iterable.type_id;
-
-        ctx.enter_scope();
-        let binding_local = ctx.add_local(
-            for_of_stmt.binding.clone(),
-            element_type,
-            for_of_stmt.is_mut,
-        );
-        let body = self.resolve_block(&for_of_stmt.body, ctx);
-        ctx.exit_scope();
-
-        TirStmt::new(
-            TirStmtKind::ForOf {
-                binding_local,
-                binding_type: element_type,
-                is_mut: for_of_stmt.is_mut,
-                iterable,
-                iterable_type,
-                body,
-            },
-            for_of_stmt.span,
-        )
-    }
-
-    /// Desugar for-of for `IntoIterator` types into a loop with iterator method calls
-    fn resolve_for_of_into_iterator(
-        &mut self,
-        for_of_stmt: &ForOfStmt,
-        iterable: TirExpr,
-        iterable_type: TypeId,
-        item_type: TypeId,
-        iter_type: TypeId,
-        ctx: &mut FunctionContext,
-    ) -> TirStmt {
-        let span = for_of_stmt.span;
-
-        // Create outer scope for the whole desugared construct
-        ctx.enter_scope();
-
-        // Generate: let mut __iter = iterable.into_iter();
-        let iter_local = ctx.add_local("__iter".to_string(), iter_type, true);
-
-        // Get base type info for method name mangling
-        let (struct_name, module_path, type_args) = self.get_type_info_for_method(iterable_type);
-        let module_source = ModuleSource::from_path(&module_path);
-
-        // Build into_iter() method call
-        // Receiver needs to be a reference: &iterable
-        let ref_type = self.type_table.borrow_mut().make_ref(iterable_type);
-        let receiver = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(iterable),
-            },
-            ref_type,
-            span,
-        );
-
-        let into_iter_method_name = format!("{struct_name}^IntoIterator::into_iter");
-        let into_iter_call = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                func: FunctionRef::External {
-                    module_source,
-                    name: into_iter_method_name,
-                    monomorph_info: None,
-                    method_info: Some(crate::name::LocalMethodName::new(
-                        struct_name.clone(),
-                        Some("IntoIterator".to_string()),
-                        "into_iter".to_string(),
-                    )),
-                },
-                type_args: type_args.clone().unwrap_or_default(),
-                args: vec![],
-            },
-            iter_type,
-            span,
-        );
-
-        let let_iter_stmt = TirStmt::new(
-            TirStmtKind::Let {
-                name: "__iter".to_string(),
-                local_index: iter_local,
-                is_mut: true,
-                is_reactive: false,
-                type_id: iter_type,
-                value: into_iter_call,
-            },
-            span,
-        );
-
-        // Create inner scope for the loop body
-        ctx.enter_scope();
-
-        // Add the user's binding variable
-        let binding_local =
-            ctx.add_local(for_of_stmt.binding.clone(), item_type, for_of_stmt.is_mut);
-
-        // Resolve the user's body
-        let user_body = self.resolve_block(&for_of_stmt.body, ctx);
-
-        ctx.exit_scope();
-
-        // Get iterator type info for next() method name
-        let (iter_struct_name, iter_module_path, iter_type_args) =
-            self.get_type_info_for_method(iter_type);
-        let iter_module_source = ModuleSource::from_path(&iter_module_path);
-
-        // Build __iter.next() call
-        // Receiver needs to be a mutable reference: &mut __iter
-        let iter_local_expr = TirExpr::new(
-            TirExprKind::Local {
-                index: iter_local,
-                name: "__iter".to_string(),
-            },
-            iter_type,
-            span,
-        );
-        let mut_ref_type = self.type_table.borrow_mut().make_mut_ref(iter_type);
-        let next_receiver = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::MutRef,
-                expr: Box::new(iter_local_expr),
-            },
-            mut_ref_type,
-            span,
-        );
-
-        let next_method_name = format!("{iter_struct_name}^Iterator::next");
-        let option_item_type = self
-            .type_table
-            .borrow_mut()
-            .intern(ResolvedType::Option(item_type));
-
-        let next_call = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(next_receiver),
-                func: FunctionRef::External {
-                    module_source: iter_module_source,
-                    name: next_method_name,
-                    monomorph_info: None,
-                    method_info: Some(crate::name::LocalMethodName::new(
-                        iter_struct_name,
-                        Some("Iterator".to_string()),
-                        "next".to_string(),
-                    )),
-                },
-                type_args: iter_type_args.unwrap_or_default(),
-                args: vec![],
-            },
-            option_item_type,
-            span,
-        );
-
-        // Build: if let Some(binding) = __iter.next() { body } else { break; }
-        let some_pattern = TirPattern::Variant {
-            variant_name: "Some".to_string(),
-            enum_type: option_item_type,
-            bindings: vec![TirPattern::Binding {
-                name: for_of_stmt.binding.clone(),
-                local_index: binding_local,
-                type_id: item_type,
-            }],
-            payload_type: item_type,
-        };
-
-        let break_stmt = TirStmt::new(
-            TirStmtKind::Break {
-                label: None,
-                value: None,
-            },
-            span,
-        );
-
-        let if_pattern = TirStmt::new(
-            TirStmtKind::IfPattern {
-                scrutinee: next_call,
-                pattern: some_pattern,
-                then_block: user_body,
-                else_block: Some(TirBlock::new(vec![break_stmt], span)),
-            },
-            span,
-        );
-
-        // Build: loop { if let Some(binding) = __iter.next() { body } else { break; } }
-        let loop_stmt = TirStmt::new(
-            TirStmtKind::Loop {
-                body: TirBlock::new(vec![if_pattern], span),
-            },
-            span,
-        );
-
-        ctx.exit_scope();
-
-        // Wrap everything in a labeled block to create proper scope
-        TirStmt::new(
-            TirStmtKind::LabeledBlock {
-                label: "__for_of".to_string(),
-                block: TirBlock::new(vec![let_iter_stmt, loop_stmt], span),
-            },
-            span,
-        )
-    }
-
-    /// Find `IntoIterator` implementation for a type and return (Item, Iter) types
-    fn find_into_iterator_impl(&mut self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
-        // Get base type for lookup
-        let base_type_id = self.get_base_type(type_id);
-        let base_type = self.type_table.borrow().get(base_type_id).clone();
-
-        let (struct_name, module_path, type_args) = match &base_type {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.to_path(), None),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => (
-                name.clone(),
-                module_source.to_path(),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
-            ),
-            _ => return None,
-        };
-
-        // Look for impl IntoIterator for StructName
-        self.find_into_iterator_impl_for_struct(&struct_name, &module_path, type_args.as_deref())
-    }
-
-    /// Find `IntoIterator` impl for a struct and return (Item, Iter) associated types
-    fn find_into_iterator_impl_for_struct(
-        &mut self,
-        struct_name: &str,
-        module_path: &[String],
-        receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<(TypeId, TypeId)> {
-        // Collect impl blocks from all modules
-        let mut impl_blocks_to_check: Vec<(Type, Type, Vec<crate::ast::AssociatedTypeBinding>)> =
-            Vec::new();
-
-        // Check specific module if provided
-        if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(module_path)
-        {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && self.get_type_name(trait_type) == "IntoIterator"
-                {
-                    impl_blocks_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.associated_types.clone(),
-                    ));
-                }
-            }
-        }
-
-        // Also check all loaded modules
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && self.get_type_name(trait_type) == "IntoIterator"
-                {
-                    impl_blocks_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.associated_types.clone(),
-                    ));
-                }
-            }
-        }
-
-        // Check current module items
-        for item in &self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-                && self.get_type_name(trait_type) == "IntoIterator"
-            {
-                impl_blocks_to_check.push((
-                    impl_block.ty.clone(),
-                    trait_type.clone(),
-                    impl_block.associated_types.clone(),
-                ));
-            }
-        }
-
-        // Find matching impl
-        for (impl_ty, _trait_type, associated_types) in impl_blocks_to_check {
-            let impl_struct_name = self.get_type_name(&impl_ty);
-            if impl_struct_name == struct_name {
-                // Set up type params for generic impls
-                let old_type_params = std::mem::take(&mut self.current_type_params);
-                if let Some(type_args) = receiver_type_args
-                    && let Type::Generic(generic) = &impl_ty
-                {
-                    for (i, arg) in generic.args.iter().enumerate() {
-                        if let Type::Named(named) = arg
-                            && i < type_args.len()
-                        {
-                            self.current_type_params
-                                .insert(named.name.clone(), (i as u32, type_args[i]));
-                        }
-                    }
-                }
-
-                // Resolve associated types
-                let mut item_type = TypeTable::UNKNOWN;
-                let mut iter_type = TypeTable::UNKNOWN;
-
-                for binding in &associated_types {
-                    let resolved = self.resolve_type(&binding.ty);
-                    match binding.name.as_str() {
-                        "Item" => item_type = resolved,
-                        "Iter" => iter_type = resolved,
-                        _ => {}
-                    }
-                }
-
-                self.current_type_params = old_type_params;
-
-                if item_type != TypeTable::UNKNOWN && iter_type != TypeTable::UNKNOWN {
-                    return Some((item_type, iter_type));
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Get type info for method call generation: (`struct_name`, `module_path`, `type_args`)
-    fn get_type_info_for_method(
-        &self,
-        type_id: TypeId,
-    ) -> (String, Vec<String>, Option<Vec<TypeId>>) {
-        let base_type_id = self.get_base_type(type_id);
-        match self.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name, module_source.to_path(), None),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => (
-                name,
-                module_source.to_path(),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args)
-                },
-            ),
-            ResolvedType::BuiltinArray(elem) => (
-                "Array".to_string(),
-                vec!["core".to_string(), "prelude".to_string()],
-                Some(vec![elem]),
-            ),
-            _ => ("unknown".to_string(), vec![], None),
-        }
-    }
-
     /// Resolve a loop statement (infinite loop)
     fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) -> TirStmt {
         let body = self.resolve_block(&loop_stmt.body, ctx);
@@ -5595,6 +5025,17 @@ impl<'a> Resolver<'a> {
                         Some(prim_module),
                     )
                 }
+                // BuiltinArray is Array - impl blocks are in core:prelude
+                ResolvedType::BuiltinArray(_) => {
+                    let prelude_module = ModuleSource::Core {
+                        name: "prelude".to_string(),
+                    };
+                    (
+                        "Array".to_string(),
+                        prelude_module.to_path(),
+                        Some(prelude_module),
+                    )
+                }
                 _ => (
                     self.type_table.borrow().mangle_type_name(base_type_id),
                     vec![],
@@ -5613,6 +5054,8 @@ impl<'a> Resolver<'a> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }
+                // BuiltinArray(elem) is Array<elem>, so type args = [elem]
+                ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
                 _ => None,
             };
 
@@ -5707,14 +5150,37 @@ impl<'a> Resolver<'a> {
         let mut impl_offset = 0u32;
 
         // First, add impl-level type args from receiver's generic type (use base type)
-        if let ResolvedType::GenericInstance {
-            type_args: receiver_type_args,
-            ..
-        } = self.type_table.borrow().get(base_type_id).clone()
-            && !receiver_type_args.is_empty()
-        {
-            impl_offset = receiver_type_args.len() as u32;
-            subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
+        // IMPORTANT: Skip this for trait methods because find_trait_method_for_type already
+        // resolved the return type using associated type bindings. Adding impl_args here would
+        // incorrectly substitute TypeParams from the OUTER context (e.g., TreeMap's K, V) that
+        // happen to have the same indices as this impl's type params (e.g., Array's T).
+        if trait_name.is_none() {
+            match self.type_table.borrow().get(base_type_id).clone() {
+                ResolvedType::GenericInstance {
+                    type_args: receiver_type_args,
+                    ..
+                } if !receiver_type_args.is_empty() => {
+                    impl_offset = receiver_type_args.len() as u32;
+                    subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
+                }
+                // BuiltinArray(elem) is Array<elem>, so type args = [elem]
+                ResolvedType::BuiltinArray(elem) => {
+                    impl_offset = 1;
+                    subst_ctx = subst_ctx.with_impl_args(&[elem]);
+                }
+                _ => {}
+            }
+        } else {
+            // For trait methods, just compute impl_offset for method type args
+            match self.type_table.borrow().get(base_type_id).clone() {
+                ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
+                    impl_offset = type_args.len() as u32;
+                }
+                ResolvedType::BuiltinArray(_) => {
+                    impl_offset = 1;
+                }
+                _ => {}
+            }
         }
 
         // Then add method-level type args with the correct offset
@@ -9343,11 +8809,7 @@ impl<'a> Resolver<'a> {
                 }
                 None
             }
-            TirStmtKind::While { body, .. }
-            | TirStmtKind::For { body, .. }
-            | TirStmtKind::ForOf { body, .. }
-            | TirStmtKind::Loop { body }
-            | TirStmtKind::LabeledBlock { block: body, .. } => {
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::find_return_type_in_block(body)
             }
             _ => None,

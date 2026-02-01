@@ -46,43 +46,10 @@ fn licm_block(
 
     for mut stmt in std::mem::take(&mut block.stmts) {
         match &mut stmt.kind {
-            TirStmtKind::While { body, .. } => {
-                // Apply LICM to the while loop
-                let empty_set = HashSet::new();
-                let hoist_stmts = licm_loop(body, local_count, local_types, type_table, &empty_set);
-
-                // Prepend hoisting statements
-                new_stmts.extend(hoist_stmts);
-                new_stmts.push(stmt);
-            }
-            TirStmtKind::For { body, .. } => {
-                // Apply LICM to the for loop body
-                let empty_set = HashSet::new();
-                let hoist_stmts = licm_loop(body, local_count, local_types, type_table, &empty_set);
-
-                // Prepend hoisting statements
-                new_stmts.extend(hoist_stmts);
-                new_stmts.push(stmt);
-            }
             TirStmtKind::Loop { body } => {
                 // Apply LICM to the loop body
                 let empty_set = HashSet::new();
                 let hoist_stmts = licm_loop(body, local_count, local_types, type_table, &empty_set);
-
-                // Prepend hoisting statements
-                new_stmts.extend(hoist_stmts);
-                new_stmts.push(stmt);
-            }
-            TirStmtKind::ForOf {
-                binding_local,
-                body,
-                ..
-            } => {
-                // The binding variable changes each iteration - include it as modified
-                let mut extra_modified = HashSet::new();
-                extra_modified.insert(*binding_local);
-                let hoist_stmts =
-                    licm_loop(body, local_count, local_types, type_table, &extra_modified);
 
                 // Prepend hoisting statements
                 new_stmts.extend(hoist_stmts);
@@ -281,37 +248,7 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
                 collect_modified_vars_in_block(eb, modified);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            collect_modified_vars_in_expr(condition, modified);
-            collect_modified_vars_in_block(body, modified);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            body,
-            update,
-        } => {
-            for s in init {
-                collect_modified_vars_in_stmt(s, modified);
-            }
-            if let Some(c) = condition {
-                collect_modified_vars_in_expr(c, modified);
-            }
-            collect_modified_vars_in_block(body, modified);
-            if let Some(u) = update {
-                collect_modified_vars_in_expr(u, modified);
-            }
-        }
         TirStmtKind::Loop { body } => {
-            collect_modified_vars_in_block(body, modified);
-        }
-        TirStmtKind::ForOf {
-            binding_local,
-            body,
-            ..
-        } => {
-            // The binding variable changes each iteration, so it's modified
-            modified.insert(*binding_local);
             collect_modified_vars_in_block(body, modified);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
@@ -331,32 +268,6 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
             collect_modified_vars_in_block(then_block, modified);
             if let Some(eb) = else_block {
                 collect_modified_vars_in_block(eb, modified);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee,
-            pattern,
-            body,
-        } => {
-            collect_modified_vars_in_expr(scrutinee, modified);
-            collect_pattern_bindings(pattern, modified);
-            collect_modified_vars_in_block(body, modified);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            pattern,
-            body,
-            update,
-        } => {
-            for s in init {
-                collect_modified_vars_in_stmt(s, modified);
-            }
-            collect_modified_vars_in_expr(scrutinee, modified);
-            collect_pattern_bindings(pattern, modified);
-            collect_modified_vars_in_block(body, modified);
-            if let Some(u) = update {
-                collect_modified_vars_in_expr(u, modified);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -641,31 +552,7 @@ fn collect_licm_ref_bindings_in_stmt(
                 collect_licm_ref_bindings_in_block(eb, type_table, bindings);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            collect_licm_ref_bindings_in_expr(condition, type_table, bindings);
-            collect_licm_ref_bindings_in_block(body, type_table, bindings);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            body,
-            update,
-        } => {
-            for s in init {
-                collect_licm_ref_bindings_in_stmt(s, type_table, bindings);
-            }
-            if let Some(c) = condition {
-                collect_licm_ref_bindings_in_expr(c, type_table, bindings);
-            }
-            collect_licm_ref_bindings_in_block(body, type_table, bindings);
-            if let Some(u) = update {
-                collect_licm_ref_bindings_in_expr(u, type_table, bindings);
-            }
-        }
         TirStmtKind::Loop { body } => {
-            collect_licm_ref_bindings_in_block(body, type_table, bindings);
-        }
-        TirStmtKind::ForOf { body, .. } => {
             collect_licm_ref_bindings_in_block(body, type_table, bindings);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
@@ -681,28 +568,6 @@ fn collect_licm_ref_bindings_in_stmt(
             collect_licm_ref_bindings_in_block(then_block, type_table, bindings);
             if let Some(eb) = else_block {
                 collect_licm_ref_bindings_in_block(eb, type_table, bindings);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            collect_licm_ref_bindings_in_expr(scrutinee, type_table, bindings);
-            collect_licm_ref_bindings_in_block(body, type_table, bindings);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                collect_licm_ref_bindings_in_stmt(s, type_table, bindings);
-            }
-            collect_licm_ref_bindings_in_expr(scrutinee, type_table, bindings);
-            collect_licm_ref_bindings_in_block(body, type_table, bindings);
-            if let Some(u) = update {
-                collect_licm_ref_bindings_in_expr(u, type_table, bindings);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -941,80 +806,7 @@ fn find_hoist_candidates_in_stmt(
                 );
             }
         }
-        TirStmtKind::While { condition, body } => {
-            find_hoist_candidates_in_expr(
-                condition,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            find_hoist_candidates_in_block(
-                body,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            body,
-            update,
-        } => {
-            for s in init {
-                find_hoist_candidates_in_stmt(
-                    s,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-            if let Some(c) = condition {
-                find_hoist_candidates_in_expr(
-                    c,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-            find_hoist_candidates_in_block(
-                body,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            if let Some(u) = update {
-                find_hoist_candidates_in_expr(
-                    u,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
         TirStmtKind::Loop { body } => {
-            find_hoist_candidates_in_block(
-                body,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        TirStmtKind::ForOf { body, .. } => {
             find_hoist_candidates_in_block(
                 body,
                 modified_vars,
@@ -1059,70 +851,6 @@ fn find_hoist_candidates_in_stmt(
             if let Some(eb) = else_block {
                 find_hoist_candidates_in_block(
                     eb,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            find_hoist_candidates_in_expr(
-                scrutinee,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            find_hoist_candidates_in_block(
-                body,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                find_hoist_candidates_in_stmt(
-                    s,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-            find_hoist_candidates_in_expr(
-                scrutinee,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            find_hoist_candidates_in_block(
-                body,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            if let Some(u) = update {
-                find_hoist_candidates_in_expr(
-                    u,
                     modified_vars,
                     ref_bindings,
                     candidates,
@@ -1564,31 +1292,7 @@ fn replace_hoisted_in_stmt(
                 replace_hoisted_in_block(eb, candidates, ref_bindings);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            replace_hoisted_in_expr(condition, candidates, ref_bindings);
-            replace_hoisted_in_block(body, candidates, ref_bindings);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            body,
-            update,
-        } => {
-            for s in init {
-                replace_hoisted_in_stmt(s, candidates, ref_bindings);
-            }
-            if let Some(c) = condition {
-                replace_hoisted_in_expr(c, candidates, ref_bindings);
-            }
-            replace_hoisted_in_block(body, candidates, ref_bindings);
-            if let Some(u) = update {
-                replace_hoisted_in_expr(u, candidates, ref_bindings);
-            }
-        }
         TirStmtKind::Loop { body } => {
-            replace_hoisted_in_block(body, candidates, ref_bindings);
-        }
-        TirStmtKind::ForOf { body, .. } => {
             replace_hoisted_in_block(body, candidates, ref_bindings);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
@@ -1604,28 +1308,6 @@ fn replace_hoisted_in_stmt(
             replace_hoisted_in_block(then_block, candidates, ref_bindings);
             if let Some(eb) = else_block {
                 replace_hoisted_in_block(eb, candidates, ref_bindings);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            replace_hoisted_in_expr(scrutinee, candidates, ref_bindings);
-            replace_hoisted_in_block(body, candidates, ref_bindings);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                replace_hoisted_in_stmt(s, candidates, ref_bindings);
-            }
-            replace_hoisted_in_expr(scrutinee, candidates, ref_bindings);
-            replace_hoisted_in_block(body, candidates, ref_bindings);
-            if let Some(u) = update {
-                replace_hoisted_in_expr(u, candidates, ref_bindings);
             }
         }
         TirStmtKind::Break { value, .. } => {

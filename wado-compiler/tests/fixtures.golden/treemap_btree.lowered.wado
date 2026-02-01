@@ -9,6 +9,12 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<Tuple<String,i32>>" {
+    repr: builtin::array<[String, i32]>,
+    used: i32,
+    index: i32,
+}
+
 struct "TreeMap<String,i32>" {
     root: Option<&mut BTreeNode<String,i32>>,
     t: i32,
@@ -59,28 +65,46 @@ fn run() with Stdout {
     }
     core::cli::println(move "\n=== Iteration (sorted) ===");
     let entries: Array<[String, i32]> = move map."TreeMap<String,i32>::iter"();
-    for let _item of entries {
-        let key: String = entry.0;
-        let value: i32 = entry.1;
-        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
+    __for_of_7: {
+        let mut __iter_7: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_3: {
+            break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_3: ArrayIter<Tuple<String,i32>> { repr: entries.repr, used: entries.used, index: 0 };
+        };
+        loop {
+            if Some(entry) = __iter_7."ArrayIter<Tuple<String,i32>>^Iterator::next"() {
+                let key: String = entry.0;
+                let value: i32 = entry.1;
+                core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
+            } else {
+                break;
+            }
+        }
     }
     core::cli::println(move "\n=== After compaction ===");
-    if __inline_TreeMap_String_i32___needs_compaction_3: {
-        break __inline_TreeMap_String_i32___needs_compaction_3: ((map.deleted_count > 0) && ((map.deleted_count * 4) > (map.size + map.deleted_count)));
+    if __inline_TreeMap_String_i32___needs_compaction_4: {
+        break __inline_TreeMap_String_i32___needs_compaction_4: ((map.deleted_count > 0) && ((map.deleted_count * 4) > (map.size + map.deleted_count)));
     } {
         core::cli::println(move "Compaction needed, running...");
         map."TreeMap<String,i32>::compact"();
     }
-    core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_4: {
-        break __inline_TreeMap_String_i32___len_4: map.size;
+    core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_5: {
+        break __inline_TreeMap_String_i32___len_5: map.size;
     }."i32::to_string"()));
     core::cli::println(move "String::concat"(move "Deleted count: ", move map.deleted_count."i32::to_string"()));
     core::cli::println(move "\n=== Final iteration ===");
     let final_entries: Array<[String, i32]> = move map."TreeMap<String,i32>::iter"();
-    for let _item of final_entries {
-        let key: String = entry.0;
-        let value: i32 = entry.1;
-        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
+    __for_of_8: {
+        let mut __iter_8: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_6: {
+            break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_6: ArrayIter<Tuple<String,i32>> { repr: final_entries.repr, used: final_entries.used, index: 0 };
+        };
+        loop {
+            if Some(entry) = __iter_8."ArrayIter<Tuple<String,i32>>^Iterator::next"() {
+                let key: String = entry.0;
+                let value: i32 = entry.1;
+                core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
+            } else {
+                break;
+            }
+        }
     }
 }
 
@@ -201,6 +225,17 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     core::builtin::array_set::<String>(self.repr, used, value);
     self.used = (used + 1);
 }
+
+fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<String,i32>>) -> Option<[String, i32]> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: [String, i32] = move "array_get<Tuple<String,i32>>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<Tuple<String,i32>>"(arr: builtin::array<[String, i32]>, idx: i32) -> [String, i32];
 
 fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
     let mut result: Array<[String, i32]> = move [];

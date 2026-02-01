@@ -9,15 +9,41 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<u64>" {
+    repr: builtin::array<u64>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let mut arr: Array<u64> = move [];
     arr."Array<u64>::append"(10000000000 as u64);
     arr."Array<u64>::append"(20000000000 as u64);
     arr."Array<u64>::append"(30000000000 as u64);
-    for let _item of arr {
-        core::cli::println(move x."u64::to_string"());
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<u64> = __inline_Array_u64__IntoIterator__into_iter_0: {
+            break __inline_Array_u64__IntoIterator__into_iter_0: ArrayIter<u64> { repr: arr.repr, used: arr.used, index: 0 };
+        };
+        loop {
+            if Some(x) = __iter_0."ArrayIter<u64>^Iterator::next"() {
+                core::cli::println(move x."u64::to_string"());
+            } else {
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<u64>^Iterator::next"(self: &mut ArrayIter<u64>) -> Option<u64> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: u64 = "array_get<u64>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<u64>"(arr: builtin::array<u64>, idx: i32) -> u64;
 
 pub fn "Array<u64>::append"(self: &mut Array<u64>, value: u64) {
     let used: i32 = self.used;

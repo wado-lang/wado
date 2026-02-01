@@ -9,12 +9,38 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<Tuple<i32,i32>>" {
+    repr: builtin::array<[i32, i32]>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let t1: [i32, i32] = move [1, 2];
     let t2: [i32, i32] = move [3, 4];
     let pairs: Array<[i32, i32]> = move [t1, t2];
-    for let _item of pairs {
-        core::cli::println(move "String::concat"(move "String::concat"(move p.0."i32::to_string"(), move ","), move p.1."i32::to_string"()));
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<Tuple<i32,i32>> = __inline_Array_Tuple_i32_i32___IntoIterator__into_iter_0: {
+            break __inline_Array_Tuple_i32_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<i32,i32>> { repr: pairs.repr, used: pairs.used, index: 0 };
+        };
+        loop {
+            if Some(p) = __iter_0."ArrayIter<Tuple<i32,i32>>^Iterator::next"() {
+                core::cli::println(move "String::concat"(move "String::concat"(move p.0."i32::to_string"(), move ","), move p.1."i32::to_string"()));
+            } else {
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<Tuple<i32,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<i32,i32>>) -> Option<[i32, i32]> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: [i32, i32] = move "array_get<Tuple<i32,i32>>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<Tuple<i32,i32>>"(arr: builtin::array<[i32, i32]>, idx: i32) -> [i32, i32];
 

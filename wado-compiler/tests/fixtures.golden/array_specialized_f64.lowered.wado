@@ -10,23 +10,49 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<f64>" {
+    repr: builtin::array<f64>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let mut arr: Array<f64> = move [];
     arr."Array<f64>::append"(1.5);
     arr."Array<f64>::append"(2.5);
     arr."Array<f64>::append"(3.5);
-    for let _item of arr {
-        core::cli::println(__inline_f64__to_string_0: {
-            let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-            let len: i32 = core::builtin::f64_to_buffer(x, ptr);
-            let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-            core::builtin::realloc(ptr, 24, 1, 0);
-            break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_0: {
-                break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
-            };
-        });
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<f64> = __inline_Array_f64__IntoIterator__into_iter_0: {
+            break __inline_Array_f64__IntoIterator__into_iter_0: ArrayIter<f64> { repr: arr.repr, used: arr.used, index: 0 };
+        };
+        loop {
+            if Some(x) = __iter_0."ArrayIter<f64>^Iterator::next"() {
+                core::cli::println(__inline_f64__to_string_1: {
+                    let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+                    let len: i32 = core::builtin::f64_to_buffer(x, ptr);
+                    let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
+                    core::builtin::realloc(ptr, 24, 1, 0);
+                    break __inline_f64__to_string_1: __inline_String__internal_from_utf8_raw_0: {
+                        break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
+                    };
+                });
+            } else {
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<f64>^Iterator::next"(self: &mut ArrayIter<f64>) -> Option<f64> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: f64 = "array_get<f64>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<f64>"(arr: builtin::array<f64>, idx: i32) -> f64;
 
 pub fn "Array<f64>::append"(self: &mut Array<f64>, value: f64) {
     let used: i32 = self.used;

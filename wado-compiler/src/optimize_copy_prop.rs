@@ -151,31 +151,6 @@ fn collect_assigned_in_stmt(stmt: &TirStmt, assigned: &mut HashSet<u32>) {
                 collect_assigned_in_stmts(&eb.stmts, assigned);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            collect_assigned_in_expr(condition, assigned);
-            collect_assigned_in_stmts(&body.stmts, assigned);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            update,
-            body,
-        } => {
-            for s in init {
-                collect_assigned_in_stmt(s, assigned);
-            }
-            if let Some(c) = condition {
-                collect_assigned_in_expr(c, assigned);
-            }
-            if let Some(u) = update {
-                collect_assigned_in_expr(u, assigned);
-            }
-            collect_assigned_in_stmts(&body.stmts, assigned);
-        }
-        TirStmtKind::ForOf { iterable, body, .. } => {
-            collect_assigned_in_expr(iterable, assigned);
-            collect_assigned_in_stmts(&body.stmts, assigned);
-        }
         TirStmtKind::Loop { body } => {
             collect_assigned_in_stmts(&body.stmts, assigned);
         }
@@ -192,28 +167,6 @@ fn collect_assigned_in_stmt(stmt: &TirStmt, assigned: &mut HashSet<u32>) {
             collect_assigned_in_stmts(&then_block.stmts, assigned);
             if let Some(eb) = else_block {
                 collect_assigned_in_stmts(&eb.stmts, assigned);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            collect_assigned_in_expr(scrutinee, assigned);
-            collect_assigned_in_stmts(&body.stmts, assigned);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                collect_assigned_in_stmt(s, assigned);
-            }
-            collect_assigned_in_expr(scrutinee, assigned);
-            collect_assigned_in_stmts(&body.stmts, assigned);
-            if let Some(u) = update {
-                collect_assigned_in_expr(u, assigned);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -368,32 +321,6 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut HashMap<u32, LocalUsage>, i
                 collect_usage_in_block(eb, usage, in_loop);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            // Mark uses in condition as in_loop_condition
-            collect_usage_in_expr(condition, usage, true, true);
-            collect_usage_in_block(body, usage, true);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            update,
-            body,
-        } => {
-            for s in init {
-                collect_usage_in_stmt(s, usage, true);
-            }
-            if let Some(c) = condition {
-                collect_usage_in_expr(c, usage, true, true);
-            }
-            if let Some(u) = update {
-                collect_usage_in_expr(u, usage, true, false);
-            }
-            collect_usage_in_block(body, usage, true);
-        }
-        TirStmtKind::ForOf { iterable, body, .. } => {
-            collect_usage_in_expr(iterable, usage, in_loop, false);
-            collect_usage_in_block(body, usage, true);
-        }
         TirStmtKind::Loop { body } => {
             collect_usage_in_block(body, usage, true);
         }
@@ -410,28 +337,6 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut HashMap<u32, LocalUsage>, i
             collect_usage_in_block(then_block, usage, in_loop);
             if let Some(eb) = else_block {
                 collect_usage_in_block(eb, usage, in_loop);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            collect_usage_in_expr(scrutinee, usage, true, true);
-            collect_usage_in_block(body, usage, true);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                collect_usage_in_stmt(s, usage, true);
-            }
-            collect_usage_in_expr(scrutinee, usage, true, true);
-            collect_usage_in_block(body, usage, true);
-            if let Some(u) = update {
-                collect_usage_in_expr(u, usage, true, false);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -703,31 +608,6 @@ fn substitute_in_stmt(stmt: &mut TirStmt, from_local: u32, source: &CopySource) 
                 substitute_in_block(eb, from_local, source);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            substitute_in_expr(condition, from_local, source);
-            substitute_in_block(body, from_local, source);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            update,
-            body,
-        } => {
-            for s in init {
-                substitute_in_stmt(s, from_local, source);
-            }
-            if let Some(c) = condition {
-                substitute_in_expr(c, from_local, source);
-            }
-            if let Some(u) = update {
-                substitute_in_expr(u, from_local, source);
-            }
-            substitute_in_block(body, from_local, source);
-        }
-        TirStmtKind::ForOf { iterable, body, .. } => {
-            substitute_in_expr(iterable, from_local, source);
-            substitute_in_block(body, from_local, source);
-        }
         TirStmtKind::Loop { body } => {
             substitute_in_block(body, from_local, source);
         }
@@ -744,28 +624,6 @@ fn substitute_in_stmt(stmt: &mut TirStmt, from_local: u32, source: &CopySource) 
             substitute_in_block(then_block, from_local, source);
             if let Some(eb) = else_block {
                 substitute_in_block(eb, from_local, source);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            substitute_in_expr(scrutinee, from_local, source);
-            substitute_in_block(body, from_local, source);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                substitute_in_stmt(s, from_local, source);
-            }
-            substitute_in_expr(scrutinee, from_local, source);
-            substitute_in_block(body, from_local, source);
-            if let Some(u) = update {
-                substitute_in_expr(u, from_local, source);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -972,31 +830,6 @@ fn collect_copy_bindings_in_stmt(
                 collect_copy_bindings(&eb.stmts, bindings, block_local_assigned);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            collect_copy_bindings_in_expr(condition, bindings, block_local_assigned);
-            collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            update,
-            body,
-        } => {
-            for s in init {
-                collect_copy_bindings_in_stmt(s, bindings, block_local_assigned);
-            }
-            if let Some(c) = condition {
-                collect_copy_bindings_in_expr(c, bindings, block_local_assigned);
-            }
-            if let Some(u) = update {
-                collect_copy_bindings_in_expr(u, bindings, block_local_assigned);
-            }
-            collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
-        }
-        TirStmtKind::ForOf { iterable, body, .. } => {
-            collect_copy_bindings_in_expr(iterable, bindings, block_local_assigned);
-            collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
-        }
         TirStmtKind::Loop { body } => {
             collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
         }
@@ -1015,28 +848,6 @@ fn collect_copy_bindings_in_stmt(
             collect_copy_bindings(&then_block.stmts, bindings, block_local_assigned);
             if let Some(eb) = else_block {
                 collect_copy_bindings(&eb.stmts, bindings, block_local_assigned);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            collect_copy_bindings_in_expr(scrutinee, bindings, block_local_assigned);
-            collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                collect_copy_bindings_in_stmt(s, bindings, block_local_assigned);
-            }
-            collect_copy_bindings_in_expr(scrutinee, bindings, block_local_assigned);
-            collect_copy_bindings(&body.stmts, bindings, block_local_assigned);
-            if let Some(u) = update {
-                collect_copy_bindings_in_expr(u, bindings, block_local_assigned);
             }
         }
         TirStmtKind::Break { value, .. } => {
@@ -1202,31 +1013,6 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u32>) 
                 remove_copy_bindings(&mut eb.stmts, dead_locals);
             }
         }
-        TirStmtKind::While { condition, body } => {
-            remove_copy_bindings_in_expr(condition, dead_locals);
-            remove_copy_bindings(&mut body.stmts, dead_locals);
-        }
-        TirStmtKind::For {
-            init,
-            condition,
-            update,
-            body,
-        } => {
-            for s in init {
-                remove_copy_bindings_in_stmt(s, dead_locals);
-            }
-            if let Some(c) = condition {
-                remove_copy_bindings_in_expr(c, dead_locals);
-            }
-            if let Some(u) = update {
-                remove_copy_bindings_in_expr(u, dead_locals);
-            }
-            remove_copy_bindings(&mut body.stmts, dead_locals);
-        }
-        TirStmtKind::ForOf { iterable, body, .. } => {
-            remove_copy_bindings_in_expr(iterable, dead_locals);
-            remove_copy_bindings(&mut body.stmts, dead_locals);
-        }
         TirStmtKind::Loop { body } => {
             remove_copy_bindings(&mut body.stmts, dead_locals);
         }
@@ -1243,28 +1029,6 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u32>) 
             remove_copy_bindings(&mut then_block.stmts, dead_locals);
             if let Some(eb) = else_block {
                 remove_copy_bindings(&mut eb.stmts, dead_locals);
-            }
-        }
-        TirStmtKind::WhilePattern {
-            scrutinee, body, ..
-        } => {
-            remove_copy_bindings_in_expr(scrutinee, dead_locals);
-            remove_copy_bindings(&mut body.stmts, dead_locals);
-        }
-        TirStmtKind::ForPattern {
-            init,
-            scrutinee,
-            body,
-            update,
-            ..
-        } => {
-            for s in init {
-                remove_copy_bindings_in_stmt(s, dead_locals);
-            }
-            remove_copy_bindings_in_expr(scrutinee, dead_locals);
-            remove_copy_bindings(&mut body.stmts, dead_locals);
-            if let Some(u) = update {
-                remove_copy_bindings_in_expr(u, dead_locals);
             }
         }
         TirStmtKind::Break { value, .. } => {

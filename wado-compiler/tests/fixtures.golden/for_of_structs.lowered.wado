@@ -14,12 +14,38 @@ struct Point {
     y: i32,
 }
 
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let p1: Point = move Point { x: 1, y: 2 };
     let p2: Point = move Point { x: 3, y: 4 };
     let points: Array<Point> = move [p1, p2];
-    for let _item of points {
-        core::cli::println(move "String::concat"(move "String::concat"(move p.x."i32::to_string"(), move ","), move p.y."i32::to_string"()));
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<Point> = __inline_Array_Point__IntoIterator__into_iter_0: {
+            break __inline_Array_Point__IntoIterator__into_iter_0: ArrayIter<Point> { repr: points.repr, used: points.used, index: 0 };
+        };
+        loop {
+            if Some(p) = __iter_0."ArrayIter<Point>^Iterator::next"() {
+                core::cli::println(move "String::concat"(move "String::concat"(move p.x."i32::to_string"(), move ","), move p.y."i32::to_string"()));
+            } else {
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<Point>^Iterator::next"(self: &mut ArrayIter<Point>) -> Option<Point> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: Point = move "array_get<Point>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<Point>"(arr: builtin::array<Point>, idx: i32) -> Point;
 

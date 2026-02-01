@@ -9,6 +9,12 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<i32>" {
+    repr: builtin::array<i32>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let sum: i32 = (10 + 20);
     core::cli::println(move "String::concat"(move "flags + type = ", move sum."i32::to_string"()));
@@ -17,8 +23,28 @@ fn run() with Stdout {
     };
     core::cli::println(move "String::concat"(move "test_param result = ", move result."i32::to_string"()));
     let arr: Array<i32> = move [1, 2, 3];
-    for let _item of arr {
-        core::cli::println(move "String::concat"(move "for-of flags = ", move flags."i32::to_string"()));
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_1: {
+            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+        };
+        loop {
+            if Some(flags) = __iter_0."ArrayIter<i32>^Iterator::next"() {
+                core::cli::println(move "String::concat"(move "for-of flags = ", move flags."i32::to_string"()));
+            } else {
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 

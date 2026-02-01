@@ -9,15 +9,42 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<i32>" {
+    repr: builtin::array<i32>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let x: i32 = foo: {
-        for let _item of [5, 6, 7] {
-            if ((item % 2) == 0) {
-                break foo: item;
+        __for_of_0: {
+            let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_0: {
+                let self: &Array<i32> = &[5, 6, 7];
+                break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
+            };
+            loop {
+                if Some(item) = __iter_0."ArrayIter<i32>^Iterator::next"() {
+                    if ((item % 2) == 0) {
+                        break foo: item;
+                    }
+                } else {
+                    break;
+                }
             }
         }
         break foo: -1;
     };
     core::cli::println(move "String::concat"(move "x=", move x."i32::to_string"()));
 }
+
+fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 

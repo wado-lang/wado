@@ -21,13 +21,33 @@ fn run() with Stdout {
         break __inline_Array_i32___iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
     };
     let collected: Array<i32> = move iter."ArrayIter<i32>::collect"();
-    for let _item of collected {
-        core::cli::println(move x."i32::to_string"());
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_1: {
+            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: collected.repr, used: collected.used, index: 0 };
+        };
+        loop {
+            if Some(x) = __iter_0."ArrayIter<i32>^Iterator::next"() {
+                core::cli::println(move x."i32::to_string"());
+            } else {
+                break;
+            }
+        }
     }
-    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_1: {
-        break __inline_Array_i32___len_1: collected.used;
+    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_2: {
+        break __inline_Array_i32___len_2: collected.used;
     }."i32::to_string"()));
 }
+
+fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 
 pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
     let remaining: i32 = (self.used - self.index);
@@ -54,8 +74,6 @@ pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
 }
 
 fn "array_set<i32>"(arr: builtin::array<i32>, idx: i32, value: i32);
-
-fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 
 fn "array_new<i32>"(len: i32) -> builtin::array<i32>;
 

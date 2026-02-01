@@ -568,34 +568,7 @@ fn analyze_block(
                     analyze_block(else_blk, current_module, type_table, analysis);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                analyze_expr(condition, current_module, type_table, analysis);
-                analyze_block(body, current_module, type_table, analysis);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for init_stmt in init {
-                    if let TirStmtKind::Let { value, .. } = &init_stmt.kind {
-                        analyze_expr(value, current_module, type_table, analysis);
-                    }
-                }
-                if let Some(cond) = condition {
-                    analyze_expr(cond, current_module, type_table, analysis);
-                }
-                analyze_block(body, current_module, type_table, analysis);
-                if let Some(upd) = update {
-                    analyze_expr(upd, current_module, type_table, analysis);
-                }
-            }
             TirStmtKind::Loop { body } => {
-                analyze_block(body, current_module, type_table, analysis);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                analyze_expr(iterable, current_module, type_table, analysis);
                 analyze_block(body, current_module, type_table, analysis);
             }
             TirStmtKind::LabeledBlock { block, .. } => {
@@ -611,30 +584,6 @@ fn analyze_block(
                 analyze_block(then_block, current_module, type_table, analysis);
                 if let Some(else_blk) = else_block {
                     analyze_block(else_blk, current_module, type_table, analysis);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                analyze_expr(scrutinee, current_module, type_table, analysis);
-                analyze_block(body, current_module, type_table, analysis);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for init_stmt in init {
-                    if let TirStmtKind::Let { value, .. } = &init_stmt.kind {
-                        analyze_expr(value, current_module, type_table, analysis);
-                    }
-                }
-                analyze_expr(scrutinee, current_module, type_table, analysis);
-                analyze_block(body, current_module, type_table, analysis);
-                if let Some(upd) = update {
-                    analyze_expr(upd, current_module, type_table, analysis);
                 }
             }
             TirStmtKind::Break { value, .. } => {
@@ -1512,35 +1461,7 @@ fn collect_types_from_block(
                     collect_types_from_block(else_blk, type_table, reachable);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                collect_types_from_expr(condition, type_table, reachable);
-                collect_types_from_block(body, type_table, reachable);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for init_stmt in init {
-                    if let TirStmtKind::Let { value, type_id, .. } = &init_stmt.kind {
-                        collect_type_transitive(*type_id, type_table, reachable);
-                        collect_types_from_expr(value, type_table, reachable);
-                    }
-                }
-                if let Some(cond) = condition {
-                    collect_types_from_expr(cond, type_table, reachable);
-                }
-                collect_types_from_block(body, type_table, reachable);
-                if let Some(upd) = update {
-                    collect_types_from_expr(upd, type_table, reachable);
-                }
-            }
             TirStmtKind::Loop { body } => {
-                collect_types_from_block(body, type_table, reachable);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                collect_types_from_expr(iterable, type_table, reachable);
                 collect_types_from_block(body, type_table, reachable);
             }
             TirStmtKind::LabeledBlock { block, .. } => {
@@ -1557,35 +1478,6 @@ fn collect_types_from_block(
                 collect_types_from_block(then_block, type_table, reachable);
                 if let Some(else_blk) = else_block {
                     collect_types_from_block(else_blk, type_table, reachable);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee,
-                pattern,
-                body,
-            } => {
-                collect_types_from_expr(scrutinee, type_table, reachable);
-                collect_types_from_pattern(pattern, type_table, reachable);
-                collect_types_from_block(body, type_table, reachable);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                pattern,
-                body,
-                update,
-            } => {
-                for init_stmt in init {
-                    if let TirStmtKind::Let { value, type_id, .. } = &init_stmt.kind {
-                        collect_type_transitive(*type_id, type_table, reachable);
-                        collect_types_from_expr(value, type_table, reachable);
-                    }
-                }
-                collect_types_from_expr(scrutinee, type_table, reachable);
-                collect_types_from_pattern(pattern, type_table, reachable);
-                collect_types_from_block(body, type_table, reachable);
-                if let Some(upd) = update {
-                    collect_types_from_expr(upd, type_table, reachable);
                 }
             }
             TirStmtKind::Break { value, .. } => {

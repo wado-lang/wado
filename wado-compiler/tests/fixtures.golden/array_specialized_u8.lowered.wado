@@ -9,17 +9,43 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<u8>" {
+    repr: builtin::array<u8>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let mut arr: Array<u8> = move [];
     arr."Array<u8>::append"(1 as u8);
     arr."Array<u8>::append"(2 as u8);
     arr."Array<u8>::append"(3 as u8);
-    for let _item of arr {
-        core::cli::println(__inline_u8__to_string_0: {
-            break __inline_u8__to_string_0: x as i32."i32::to_string"();
-        });
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<u8> = __inline_Array_u8__IntoIterator__into_iter_0: {
+            break __inline_Array_u8__IntoIterator__into_iter_0: ArrayIter<u8> { repr: arr.repr, used: arr.used, index: 0 };
+        };
+        loop {
+            if Some(x) = __iter_0."ArrayIter<u8>^Iterator::next"() {
+                core::cli::println(__inline_u8__to_string_1: {
+                    break __inline_u8__to_string_1: x as i32."i32::to_string"();
+                });
+            } else {
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<u8>^Iterator::next"(self: &mut ArrayIter<u8>) -> Option<u8> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: u8 = "array_get<u8>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<u8>"(arr: builtin::array<u8>, idx: i32) -> u8;
 
 pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     let used: i32 = self.used;
