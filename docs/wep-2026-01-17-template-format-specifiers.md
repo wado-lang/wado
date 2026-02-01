@@ -237,5 +237,6 @@ For developers coming from other languages:
 - [RFC #2729: General floating point formatting in Debug](https://github.com/rust-lang/rfcs/pull/2729)
 - [Rust PR #86479: Automatic exponential formatting in Debug](https://github.com/rust-lang/rust/pull/86479)
 - [WEP: Type Stringification](./wep-2026-01-16-type-stringification.md)
+- [WEP: Format Traits](./wep-2026-02-01-format-traits.md)
 - [Go fmt package](https://pkg.go.dev/fmt)
 - [Python f-strings](https://peps.python.org/pep-0498/)

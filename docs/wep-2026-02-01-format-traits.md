@@ -1,0 +1,154 @@
+# WEP: Format Traits
+
+## Context
+
+Template strings in Wado support format specifiers: `` `{x:spec}` ``. As defined in [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md), Wado uses Rust-compatible format specifiers:
+
+| Specifier | Description           | Example              |
+| --------- | --------------------- | -------------------- |
+| (none)    | Default display       | `{x}` → `"42"`       |
+| `?`       | Debug/Inspect         | `{x:?}` → `"42"`     |
+| `b`       | Binary integers       | `{x:b}` → `"101010"` |
+| `o`       | Octal integers        | `{x:o}` → `"52"`     |
+| `x`       | Lowercase hex         | `{x:x}` → `"2a"`     |
+| `X`       | Uppercase hex         | `{x:X}` → `"2A"`     |
+| `e`       | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
+| `E`       | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
+
+This WEP defines the trait system and Formatter infrastructure that backs these format specifiers.
+
+## Decision
+
+### Formatter Infrastructure
+
+Format traits write to a `Formatter` object that holds format options and an output buffer. This design follows Rust's `std::fmt` approach, adapted for Wado's semantics.
+
+```wado
+/// Text alignment for padding
+enum Alignment {
+    Left,
+    Center,
+    Right,
+}
+
+/// Format specification parsed from `{expr:spec}`
+struct FormatSpec {
+    width: Option<i32>,
+    precision: Option<i32>,
+    fill: char,
+    align: Alignment,
+    sign_plus: bool,
+    alternate: bool,
+    zero_pad: bool,
+}
+
+/// Formatter that accumulates formatted output
+struct Formatter {
+    spec: FormatSpec,
+    buf: String,
+}
+
+impl Formatter {
+    fn write_str(&mut self, s: String);
+    fn write_char(&mut self, c: char);
+    fn width(&self) -> Option<i32>;
+    fn precision(&self) -> Option<i32>;
+    fn alternate(&self) -> bool;
+    fn sign_plus(&self) -> bool;
+    fn finish(&mut self) -> String;
+}
+```
+
+### Format Traits
+
+All format traits follow the same pattern: write to a `Formatter`.
+
+```wado
+trait Display {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+trait Binary {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+trait Octal {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+trait LowerHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+trait UpperHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+trait LowerExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+trait UpperExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+```
+
+### Debug Formatting
+
+The `:?` specifier uses the compiler intrinsic `builtin::inspect()` and does not use a trait.
+
+### Format Resolution
+
+| Specifier | Resolution                           |
+| --------- | ------------------------------------ |
+| (none)    | `Display::fmt` or `builtin::inspect` |
+| `?`       | `builtin::inspect` (always)          |
+| `b`       | `Binary::fmt`                        |
+| `o`       | `Octal::fmt`                         |
+| `x`       | `LowerHex::fmt`                      |
+| `X`       | `UpperHex::fmt`                      |
+| `e`       | `LowerExp::fmt`                      |
+| `E`       | `UpperExp::fmt`                      |
+
+### Primitive Implementations
+
+| Type           | Traits                                               |
+| -------------- | ---------------------------------------------------- |
+| Integer types  | `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex` |
+| Float types    | `Display`, `LowerExp`, `UpperExp`                    |
+| `bool`, `char` | `Display`                                            |
+| `String`       | `Display`                                            |
+
+### Zero Padding
+
+Zero padding (`{x:08}`) inserts zeros after sign/prefix but before digits:
+
+```
+{-42:08}   → "-0000042"
+{42:#08x}  → "0x00002a"
+```
+
+## Consequences
+
+### Positive
+
+1. **Accurate formatting**: Precision is available during formatting
+2. **Efficient**: Write directly to buffer
+3. **Rust-compatible**: Familiar design for Rust developers
+4. **Extensible**: Easy to add new format options or traits
+
+### Negative
+
+1. **Infrastructure complexity**: Requires `Formatter`, `FormatSpec`, `Alignment` types
+2. **Implementation effort**: All primitive formatting needs trait implementations
+
+### Future Extensions
+
+1. **`{:#?}`**: Pretty-print debug with indentation
+2. **Dynamic width/precision**: `{value:{width}.{precision}}`
+
+## References
+
+- [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)
+- [WEP: Type Stringification](./wep-2026-01-16-type-stringification.md)
+- [Rust std::fmt module](https://doc.rust-lang.org/std/fmt/index.html)
