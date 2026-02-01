@@ -25,9 +25,9 @@ fn "Point::add"(self: &Point, other: &Point) -> Point {
 fn run() with Stdout {
     let loc1: Location = Point { x: 10, y: 20 } as Location;
     let loc2: Location = Point { x: 5, y: 5 } as Location;
-    let s: i32 = "Location::sum"(&loc1);
-    core::cli::println(move "String::concat"(move "sum: ", move "i32::to_string"(s)));
-    let loc3: Location = "Location::add"(&loc1, &loc2);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "added: (", move "i32::to_string"(loc3.x)), move ", "), move "i32::to_string"(loc3.y)), move ")"));
+    let s: i32 = &loc1.sum();
+    core::cli::println(move "String::concat"(move "sum: ", move s.to_string()));
+    let loc3: Location = &loc1.add(&loc2);
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "added: (", move loc3.x.to_string()), move ", "), move loc3.y.to_string()), move ")"));
 }
 

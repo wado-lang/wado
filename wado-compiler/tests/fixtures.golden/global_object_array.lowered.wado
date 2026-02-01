@@ -12,19 +12,19 @@
 global mut ITEMS: Array<i32> = null;
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "len=", move "i32::to_string"(__inline_Array_i32___len_0: {
+    core::cli::println(move "String::concat"(move "len=", move __inline_Array_i32___len_0: {
         let self: &Array<i32> = &ITEMS;
         break __inline_Array_i32___len_0: self.used;
-    })));
-    core::cli::println(move "String::concat"(move "item0=", move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_1: {
+    }.to_string()));
+    core::cli::println(move "String::concat"(move "item0=", move __inline_Array_i32__IndexValue__index_value_1: {
         let self: &Array<i32> = &ITEMS;
         break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(self.repr, 0);
-    })));
-    "Array<i32>::append"(&mut ITEMS, 4);
-    core::cli::println(move "String::concat"(move "after append len=", move "i32::to_string"(__inline_Array_i32___len_2: {
+    }.to_string()));
+    &mut ITEMS.append(4);
+    core::cli::println(move "String::concat"(move "after append len=", move __inline_Array_i32___len_2: {
         let self: &Array<i32> = &ITEMS;
         break __inline_Array_i32___len_2: self.used;
-    })));
+    }.to_string()));
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

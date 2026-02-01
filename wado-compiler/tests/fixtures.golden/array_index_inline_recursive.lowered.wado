@@ -16,22 +16,22 @@ struct "Node<String>" {
 }
 
 fn print_depth(depth: i32) with Stdout {
-    core::cli::println(move "String::concat"(move "depth: ", move "i32::to_string"(depth)));
+    core::cli::println(move "String::concat"(move "depth: ", move depth.to_string()));
 }
 
 fn run() with Stdout {
     let mut leaf1: Node<String> = move Node<String> { keys: ["a", "b"], children: [], is_leaf: true };
     let mut leaf2: Node<String> = move Node<String> { keys: ["d", "e"], children: [], is_leaf: true };
     let root: Node<String> = move Node<String> { keys: ["c"], children: [&mut leaf1, &mut leaf2], is_leaf: false };
-    "Node<String>::traverse"(&root, 0);
+    &root.traverse(0);
 }
 
 fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {
     print_depth(depth);
     if !self.is_leaf {
         let _licm_children: Array<&mut Node<String>> = self.children;
-        for let mut i: i32 = 0; (i < "Array<Node<String>>::len"(&self.children)); i = (i + 1) {
-            "Node<String>::traverse"("Array<Node<String>>^IndexValue::index_value"(&_licm_children, i), (depth + 1));
+        for let mut i: i32 = 0; (i < &self.children.len()); i = (i + 1) {
+            &_licm_children.index_value(i).traverse((depth + 1));
         }
     }
 }

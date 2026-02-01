@@ -17,7 +17,7 @@ fn run() with Stdout {
     let a: u128 = __inline_u128__from_u64_0: {
         break __inline_u128__from_u64_0: u128 { low: 100, high: 0 };
     };
-    core::cli::println(move "String::concat"(move "u128 literal coercion: ", move "u128::to_string"(a)));
+    core::cli::println(move "String::concat"(move "u128 literal coercion: ", move a.to_string()));
     let b: i128 = __inline_i128__from_i64_1: {
         let high: i64 = if (42 < 0 as i64) {
             -1 as i64;
@@ -26,15 +26,15 @@ fn run() with Stdout {
         };
         break __inline_i128__from_i64_1: i128 { low: 42 as u64, high: high };
     };
-    core::cli::println(move "String::concat"(move "i128 literal coercion: ", move "i128::to_string"(b)));
+    core::cli::println(move "String::concat"(move "i128 literal coercion: ", move b.to_string()));
     let c: i128 = __inline_i128__from_pair_2: {
         break __inline_i128__from_pair_2: i128 { low: 18446744073709551516, high: -1 };
     };
-    core::cli::println(move "String::concat"(move "i128 negative literal coercion: ", move "i128::to_string"(c)));
+    core::cli::println(move "String::concat"(move "i128 negative literal coercion: ", move c.to_string()));
     let d: u128 = __inline_u128__from_u64_3: {
         break __inline_u128__from_u64_3: u128 { low: 200, high: 0 };
     };
-    core::cli::println(move "String::concat"(move "u128 cast: ", move "u128::to_string"(d)));
+    core::cli::println(move "String::concat"(move "u128 cast: ", move d.to_string()));
     let e: i128 = __inline_i128__from_i64_4: {
         let high: i64 = if (300 < 0 as i64) {
             -1 as i64;
@@ -43,12 +43,12 @@ fn run() with Stdout {
         };
         break __inline_i128__from_i64_4: i128 { low: 300 as u64, high: high };
     };
-    core::cli::println(move "String::concat"(move "i128 cast: ", move "i128::to_string"(e)));
+    core::cli::println(move "String::concat"(move "i128 cast: ", move e.to_string()));
     let g: u128 = __inline_u128__from_u64_5: {
         let value: u64 = 500 as u64;
         break __inline_u128__from_u64_5: u128 { low: value, high: 0 };
     };
-    core::cli::println(move "String::concat"(move "u128 from i64 variable: ", move "u128::to_string"(g)));
+    core::cli::println(move "String::concat"(move "u128 from i64 variable: ", move g.to_string()));
     let h: i128 = __inline_i128__from_i64_6: {
         let value: i64 = 500 as i64;
         let high: i64 = if (value < 0 as i64) {
@@ -58,15 +58,15 @@ fn run() with Stdout {
         };
         break __inline_i128__from_i64_6: i128 { low: value as u64, high: high };
     };
-    core::cli::println(move "String::concat"(move "i128 from i64 variable: ", move "i128::to_string"(h)));
+    core::cli::println(move "String::concat"(move "i128 from i64 variable: ", move h.to_string()));
     let sum: u128 = __inline_u128__from_u64_7: {
         break __inline_u128__from_u64_7: u128 { low: 10, high: 0 };
     };
-    let sum2: u128 = move "u128^Add::add"(&sum, &__inline_u128__from_u64_8: {
+    let sum2: u128 = move &sum.add(&__inline_u128__from_u64_8: {
         let value: u64 = 5 as u64;
         break __inline_u128__from_u64_8: u128 { low: value, high: 0 };
     });
-    core::cli::println(move "String::concat"(move "u128 arithmetic: ", move "u128::to_string"(sum2)));
+    core::cli::println(move "String::concat"(move "u128 arithmetic: ", move sum2.to_string()));
     core::cli::println(move "All coercion tests passed!");
 }
 

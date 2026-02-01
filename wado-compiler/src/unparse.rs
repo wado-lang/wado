@@ -2857,10 +2857,21 @@ impl<'a> TirUnparser<'a> {
                 type_args,
                 args,
             } => {
-                // Lowered TIR: show as static function call with receiver as first arg
-                // e.g., cat.describe() becomes "Cat^Describe::describe"(cat)
+                // Show as method call: receiver.method(args)
+                // Extract method name from func.name() (e.g., "Type::method" or "Type^Trait::method")
                 let full_name = func.name();
-                self.output.push_str(&Self::quote_if_needed(&full_name));
+                let method_name = if let Some(pos) = full_name.rfind("::") {
+                    &full_name[pos + 2..]
+                } else {
+                    &full_name
+                };
+
+                // Unparse receiver
+                self.unparse_expr(receiver);
+                self.output.push('.');
+                self.output.push_str(method_name);
+
+                // Type arguments (turbofish syntax)
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {
@@ -2871,12 +2882,13 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push('>');
                 }
+
+                // Arguments
                 self.output.push('(');
-                // First arg is the receiver (self)
-                self.unparse_expr(receiver);
-                // Then the rest of the args
-                for arg in args {
-                    self.output.push_str(", ");
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
                     self.unparse_expr(arg);
                 }
                 self.output.push(')');

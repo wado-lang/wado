@@ -477,6 +477,7 @@ enum UltimateBaseType {
         name: String,
         module_source: ModuleSource,
     },
+    Primitive(crate::tir::PrimitiveType),
 }
 
 impl Codegen {
@@ -7413,11 +7414,89 @@ impl Codegen {
                                                 );
                                             }
                                         }
+                                        Some(UltimateBaseType::Primitive(prim)) => {
+                                            let base_type_name = Self::primitive_type_name(&prim);
+
+                                            let prim_module_path = "core/prelude/primitives";
+                                            let base_mangled = MethodName::new(
+                                                prim_module_path.to_string(),
+                                                base_type_name.to_string(),
+                                                trait_name.clone(),
+                                                method_name.clone(),
+                                            )
+                                            .to_string();
+
+                                            let base_inherent = MethodName::new(
+                                                prim_module_path.to_string(),
+                                                base_type_name.to_string(),
+                                                None,
+                                                method_name.clone(),
+                                            )
+                                            .to_string();
+
+                                            let func_idx = builder
+                                                .try_func_idx(&base_mangled)
+                                                .or_else(|| builder.try_func_idx(&base_inherent));
+
+                                            if let Some(idx) = func_idx {
+                                                self.generate_expr(
+                                                    func, receiver, type_table, ctx, builder,
+                                                );
+                                                self.generate_args(
+                                                    func, args, type_table, ctx, builder,
+                                                );
+                                                func.instruction(&Instruction::Call(idx));
+                                            } else {
+                                                panic!(
+                                                    "method '{method_name}' not found on chained newtype '{name}' or ultimate base primitive '{base_type_name}'"
+                                                );
+                                            }
+                                        }
                                         None => {
                                             panic!(
                                                 "method '{method_name}' not found on chained newtype '{name}'"
                                             );
                                         }
+                                    }
+                                }
+                                // Newtype of primitive (e.g., type Meters = f64)
+                                // Look up the method on the base primitive type
+                                ResolvedType::Primitive(prim) => {
+                                    let base_type_name = Self::primitive_type_name(&prim);
+
+                                    // Primitive methods are defined in core/prelude/primitives.wado
+                                    let prim_module_path = "core/prelude/primitives";
+                                    let base_mangled = MethodName::new(
+                                        prim_module_path.to_string(),
+                                        base_type_name.to_string(),
+                                        trait_name.clone(),
+                                        method_name.clone(),
+                                    )
+                                    .to_string();
+
+                                    // Also try without trait name
+                                    let base_inherent = MethodName::new(
+                                        prim_module_path.to_string(),
+                                        base_type_name.to_string(),
+                                        None,
+                                        method_name.clone(),
+                                    )
+                                    .to_string();
+
+                                    let func_idx = builder
+                                        .try_func_idx(&base_mangled)
+                                        .or_else(|| builder.try_func_idx(&base_inherent));
+
+                                    if let Some(idx) = func_idx {
+                                        self.generate_expr(
+                                            func, receiver, type_table, ctx, builder,
+                                        );
+                                        self.generate_args(func, args, type_table, ctx, builder);
+                                        func.instruction(&Instruction::Call(idx));
+                                    } else {
+                                        panic!(
+                                            "method '{method_name}' not found on newtype '{name}' or base primitive '{base_type_name}'"
+                                        );
                                     }
                                 }
                                 _ => {
@@ -7426,6 +7505,48 @@ impl Codegen {
                                     );
                                 }
                             }
+                        }
+                    }
+
+                    // Primitive type method calls (e.g., 42.to_string())
+                    // Methods are defined in core/prelude/primitives.wado
+                    ResolvedType::Primitive(prim) => {
+                        let type_name = Self::primitive_type_name(&prim);
+
+                        // Primitive methods are defined in core/prelude/primitives.wado
+                        let module_path = "core/prelude/primitives";
+                        let mangled_name = MethodName::new(
+                            module_path.to_string(),
+                            type_name.to_string(),
+                            trait_name.clone(),
+                            method_name.clone(),
+                        )
+                        .to_string();
+
+                        // Also try without trait name (for inherent methods)
+                        let inherent_name = MethodName::new(
+                            module_path.to_string(),
+                            type_name.to_string(),
+                            None,
+                            method_name.clone(),
+                        )
+                        .to_string();
+
+                        let func_idx = builder
+                            .try_func_idx(&mangled_name)
+                            .or_else(|| builder.try_func_idx(&inherent_name));
+
+                        if let Some(idx) = func_idx {
+                            // Generate receiver
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            // Generate arguments
+                            self.generate_args(func, args, type_table, ctx, builder);
+                            // Call the method
+                            func.instruction(&Instruction::Call(idx));
+                        } else {
+                            panic!(
+                                "unknown method '{method_name}' on primitive type '{type_name}': tried [{mangled_name}], [{inherent_name}]"
+                            );
                         }
                     }
 
@@ -7444,7 +7565,6 @@ impl Codegen {
                 args,
             } => {
                 let func_name = static_func.name();
-                let module_path = static_func.module_path();
 
                 // Generate arguments first
                 self.generate_args(func, args, type_table, ctx, builder);
@@ -7452,14 +7572,85 @@ impl Codegen {
                 // Check if this is a monomorphized function using metadata
                 let base_struct_name = static_func.base_struct_name();
 
-                // func_name is already mangled as "StructName::method" or "Struct<Type>::method"
+                // Get method_info for proper struct/trait/method name lookup
+                let method_info = static_func.method_info();
+
+                // Use the FunctionRef's module_path - this is set correctly by the resolver
+                // to point to where the method is defined (e.g., core/prelude/primitives for primitives,
+                // or the module where the struct/impl is defined for user types).
+                let module_path = static_func.module_path();
+
+                // func_name is already mangled as "StructName::method", "Struct^Trait::method", etc.
                 // We need to look it up using the same name format used during function definition
-                // Methods are registered with MethodName format: {module_path}/{struct_name}::{method_name}
-                let func_idx = if let Some(sep_pos) = func_name.find("::") {
+                // Methods are registered with MethodName format: {module_path}/{struct_name}^{trait}::{method_name}
+                let func_idx = if let Some(info) = &method_info {
+                    // Use method_info for accurate struct/trait/method names
+                    let struct_name = &info.struct_name;
+                    let trait_name = &info.trait_name;
+                    let method_name = info.full_method_name();
+
+                    // Build the mangled name using proper components
+                    let mangled_name = MethodName::new(
+                        module_path.join("/"),
+                        struct_name.clone(),
+                        trait_name.clone(),
+                        method_name.clone(),
+                    )
+                    .to_string();
+
+                    // Check struct metadata for fallback
+                    let struct_lookup_name =
+                        StructName::from_path_and_name(&module_path, struct_name);
+                    let struct_info = self.struct_types.get(&struct_lookup_name);
+
+                    builder
+                        .try_func_idx(&mangled_name)
+                        .or_else(|| {
+                            // Also try without trait name (for inherent methods)
+                            if trait_name.is_some() {
+                                let inherent_name = MethodName::new(
+                                    module_path.join("/"),
+                                    struct_name.clone(),
+                                    None,
+                                    method_name.clone(),
+                                )
+                                .to_string();
+                                builder.try_func_idx(&inherent_name)
+                            } else {
+                                None
+                            }
+                        })
+                        .or_else(|| {
+                            // Also try without module path (for current module lookups)
+                            builder.try_func_idx(&func_name)
+                        })
+                        .or_else(|| {
+                            // For monomorphized generic types like Array<i32>, also try the generic version
+                            // Use metadata: either from function or struct
+                            let generic_name = base_struct_name
+                                .as_ref()
+                                .or_else(|| struct_info.and_then(|s| s.base_name.as_ref()))
+                                .or_else(|| Some(&info.base_struct_name));
+
+                            if let Some(generic_struct_name) = generic_name {
+                                let generic_mangled_name = MethodName::new(
+                                    module_path.join("/"),
+                                    generic_struct_name.clone(),
+                                    trait_name.clone(),
+                                    method_name.clone(),
+                                )
+                                .to_string();
+                                builder.try_func_idx(&generic_mangled_name)
+                            } else {
+                                None
+                            }
+                        })
+                } else if let Some(sep_pos) = func_name.find("::") {
+                    // No method_info, parse from func_name (legacy path for primitives)
                     let struct_name = &func_name[..sep_pos];
                     let method_name = &func_name[sep_pos + 2..];
 
-                    // Build the mangled name in the same format as during function definition
+                    // Build the mangled name (no trait info available)
                     let mangled_name = MethodName::new(
                         module_path.join("/"),
                         struct_name.to_string(),
@@ -7475,14 +7666,9 @@ impl Codegen {
 
                     builder
                         .try_func_idx(&mangled_name)
+                        .or_else(|| builder.try_func_idx(&func_name))
                         .or_else(|| {
-                            // Also try without module path (for current module lookups)
-                            builder.try_func_idx(&func_name)
-                        })
-                        .or_else(|| {
-                            // For monomorphized generic types like Array<i32>, also try the generic version Array
-                            // This handles static methods on generic types that aren't monomorphized
-                            // Use metadata: either from function or struct, not string parsing
+                            // For monomorphized generic types, try the generic version
                             let generic_name = base_struct_name
                                 .as_ref()
                                 .or_else(|| struct_info.and_then(|s| s.base_name.as_ref()));
@@ -8195,7 +8381,7 @@ impl Codegen {
         }
     }
 
-    /// Follow newtype chain to find the ultimate base type (struct)
+    /// Follow newtype chain to find the ultimate base type (struct or primitive)
     fn resolve_to_ultimate_base(
         ty: ResolvedType,
         type_table: &TypeTable,
@@ -8209,10 +8395,31 @@ impl Codegen {
                 name,
                 module_source,
             }),
+            ResolvedType::Primitive(prim) => Some(UltimateBaseType::Primitive(prim)),
             ResolvedType::Newtype { base_type, .. } => {
                 Self::resolve_to_ultimate_base(type_table.get(base_type).clone(), type_table)
             }
             _ => None,
+        }
+    }
+
+    /// Get the string name of a primitive type for method lookup
+    fn primitive_type_name(prim: &PrimitiveType) -> &'static str {
+        match prim {
+            PrimitiveType::I8 => "i8",
+            PrimitiveType::I16 => "i16",
+            PrimitiveType::I32 => "i32",
+            PrimitiveType::I64 => "i64",
+            PrimitiveType::I128 => "i128",
+            PrimitiveType::U8 => "u8",
+            PrimitiveType::U16 => "u16",
+            PrimitiveType::U32 => "u32",
+            PrimitiveType::U64 => "u64",
+            PrimitiveType::U128 => "u128",
+            PrimitiveType::F32 => "f32",
+            PrimitiveType::F64 => "f64",
+            PrimitiveType::Bool => "bool",
+            PrimitiveType::Char => "char",
         }
     }
 

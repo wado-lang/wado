@@ -63,38 +63,38 @@ fn run() with Stdout {
         };
         break __inline_Container__from_values_3: Container { v0: a, v1: b, v2: c, read_count: 0, write_count: 0 };
     };
-    let v0: Value = *"Container^Index::index"(&c, 0);
+    let v0: Value = *&c.index(0);
     core::cli::println(move "String::concat"(move "v0: ", __inline_Value__describe_4: {
-        break __inline_Value__describe_4: "String::concat"(move "String::concat"(v0.tag, move ":"), move "i32::to_string"(v0.n));
+        break __inline_Value__describe_4: "String::concat"(move "String::concat"(v0.tag, move ":"), move v0.n.to_string());
     }));
-    let v1: Value = *"Container^Index::index"(&c, 1);
+    let v1: Value = *&c.index(1);
     core::cli::println(move "String::concat"(move "v1: ", __inline_Value__describe_5: {
-        break __inline_Value__describe_5: "String::concat"(move "String::concat"(v1.tag, move ":"), move "i32::to_string"(v1.n));
+        break __inline_Value__describe_5: "String::concat"(move "String::concat"(v1.tag, move ":"), move v1.n.to_string());
     }));
     __inline_Value__increment_6: {
-        let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 0);
+        let self: &mut Value = &mut c.index_mut(0);
         self.n = (self.n + 1);
     };
     __inline_Value__add_7: {
-        let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 1);
+        let self: &mut Value = &mut c.index_mut(1);
         self.n = (self.n + 100);
     };
     __inline_Value__add_8: {
-        let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 2);
+        let self: &mut Value = &mut c.index_mut(2);
         self.n = (self.n + 200);
     };
     core::cli::println(move "After mutations:");
     core::cli::println(move "String::concat"(move "v0: ", __inline_Value__describe_9: {
         let self: &Value = &c.v0;
-        break __inline_Value__describe_9: "String::concat"(move "String::concat"(self.tag, move ":"), move "i32::to_string"(self.n));
+        break __inline_Value__describe_9: "String::concat"(move "String::concat"(self.tag, move ":"), move self.n.to_string());
     }));
     core::cli::println(move "String::concat"(move "v1: ", __inline_Value__describe_10: {
         let self: &Value = &c.v1;
-        break __inline_Value__describe_10: "String::concat"(move "String::concat"(self.tag, move ":"), move "i32::to_string"(self.n));
+        break __inline_Value__describe_10: "String::concat"(move "String::concat"(self.tag, move ":"), move self.n.to_string());
     }));
     core::cli::println(move "String::concat"(move "v2: ", __inline_Value__describe_11: {
         let self: &Value = &c.v2;
-        break __inline_Value__describe_11: "String::concat"(move "String::concat"(self.tag, move ":"), move "i32::to_string"(self.n));
+        break __inline_Value__describe_11: "String::concat"(move "String::concat"(self.tag, move ":"), move self.n.to_string());
     }));
     __inline_Container_IndexAssign__index_assign_12: {
         let value: Value = __inline_Value__new_13: {
@@ -114,31 +114,31 @@ fn run() with Stdout {
     };
     core::cli::println(move "String::concat"(move "After replace: ", __inline_Value__describe_14: {
         let self: &Value = &c.v2;
-        break __inline_Value__describe_14: "String::concat"(move "String::concat"(self.tag, move ":"), move "i32::to_string"(self.n));
+        break __inline_Value__describe_14: "String::concat"(move "String::concat"(self.tag, move ":"), move self.n.to_string());
     }));
-    core::cli::println(move "String::concat"(move "Total: ", move "i32::to_string"(__inline_Container__total_15: {
+    core::cli::println(move "String::concat"(move "Total: ", move __inline_Container__total_15: {
         break __inline_Container__total_15: ((c.v0.n + c.v1.n) + c.v2.n);
-    })));
+    }.to_string()));
     core::cli::println(move "String::concat"(move "Stats: ", __inline_Container__stats_16: {
-        break __inline_Container__stats_16: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move "i32::to_string"(c.read_count)), move ", writes="), move "i32::to_string"(c.write_count));
+        break __inline_Container__stats_16: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move c.read_count.to_string()), move ", writes="), move c.write_count.to_string());
     }));
     __inline_Container__reset_stats_17: {
         c.read_count = 0;
         c.write_count = 0;
     };
     core::cli::println(move "String::concat"(move "After reset: ", __inline_Container__stats_18: {
-        break __inline_Container__stats_18: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move "i32::to_string"(c.read_count)), move ", writes="), move "i32::to_string"(c.write_count));
+        break __inline_Container__stats_18: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move c.read_count.to_string()), move ", writes="), move c.write_count.to_string());
     }));
     __inline_Value__increment_19: {
-        let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 0);
+        let self: &mut Value = &mut c.index_mut(0);
         self.n = (self.n + 1);
     };
     __inline_Value__increment_20: {
-        let self: &mut Value = "Container^IndexMut::index_mut"(&mut c, 1);
+        let self: &mut Value = &mut c.index_mut(1);
         self.n = (self.n + 1);
     };
     core::cli::println(move "String::concat"(move "Final stats: ", __inline_Container__stats_21: {
-        break __inline_Container__stats_21: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move "i32::to_string"(c.read_count)), move ", writes="), move "i32::to_string"(c.write_count));
+        break __inline_Container__stats_21: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move c.read_count.to_string()), move ", writes="), move c.write_count.to_string());
     }));
 }
 

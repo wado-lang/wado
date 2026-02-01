@@ -35,9 +35,9 @@ fn apply_padding(s: String, spec: FormatSpec) -> String {
     };
     return match spec.align {
         Left => {
-            "String::append"(&mut result, s);
+            &mut result.append(s);
             for let mut i: i32 = 0; (i < pad_len); i = (i + 1) {
-                "String::append_char"(&mut result, fill);
+                &mut result.append_char(fill);
             }
             result;
         },
@@ -45,19 +45,19 @@ fn apply_padding(s: String, spec: FormatSpec) -> String {
             let left_pad: i32 = (pad_len / 2);
             let right_pad: i32 = (pad_len - left_pad);
             for let mut i: i32 = 0; (i < left_pad); i = (i + 1) {
-                "String::append_char"(&mut result, fill);
+                &mut result.append_char(fill);
             }
-            "String::append"(&mut result, s);
+            &mut result.append(s);
             for let mut i: i32 = 0; (i < right_pad); i = (i + 1) {
-                "String::append_char"(&mut result, fill);
+                &mut result.append_char(fill);
             }
             result;
         },
         Right => {
             for let mut i: i32 = 0; (i < pad_len); i = (i + 1) {
-                "String::append_char"(&mut result, fill);
+                &mut result.append_char(fill);
             }
-            "String::append"(&mut result, s);
+            &mut result.append(s);
             result;
         },
     };

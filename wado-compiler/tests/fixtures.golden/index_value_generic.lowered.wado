@@ -23,16 +23,16 @@ struct "Triple<i32>" {
 
 fn run() with Stdout {
     let nums: Triple<i32> = move Triple<i32> { first: 10, second: 20, third: 30 };
-    let n0: i32 = "Triple<i32>^IndexValue::index_value"(&nums, 0);
-    let n1: i32 = "Triple<i32>^IndexValue::index_value"(&nums, 1);
-    let n2: i32 = "Triple<i32>^IndexValue::index_value"(&nums, 2);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "nums: ", move "i32::to_string"(n0)), move ", "), move "i32::to_string"(n1)), move ", "), move "i32::to_string"(n2)));
+    let n0: i32 = &nums.index_value(0);
+    let n1: i32 = &nums.index_value(1);
+    let n2: i32 = &nums.index_value(2);
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "nums: ", move n0.to_string()), move ", "), move n1.to_string()), move ", "), move n2.to_string()));
     let longs: Triple<i64> = move Triple<i64> { first: 100 as i64, second: 200 as i64, third: 300 as i64 };
-    let l0: i64 = "Triple<i64>^IndexValue::index_value"(&longs, 0);
-    let l1: i64 = "Triple<i64>^IndexValue::index_value"(&longs, 1);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "longs: ", move "i64::to_string"(l0)), move ", "), move "i64::to_string"(l1)));
-    let sum: i32 = (("Triple<i32>^IndexValue::index_value"(&nums, 0) + "Triple<i32>^IndexValue::index_value"(&nums, 1)) + "Triple<i32>^IndexValue::index_value"(&nums, 2));
-    core::cli::println(move "String::concat"(move "sum: ", move "i32::to_string"(sum)));
+    let l0: i64 = &longs.index_value(0);
+    let l1: i64 = &longs.index_value(1);
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "longs: ", move l0.to_string()), move ", "), move l1.to_string()));
+    let sum: i32 = ((&nums.index_value(0) + &nums.index_value(1)) + &nums.index_value(2));
+    core::cli::println(move "String::concat"(move "sum: ", move sum.to_string()));
 }
 
 fn "Triple<i64>^IndexValue::index_value"(self: &Triple<i64>, index: i32) -> i64 {

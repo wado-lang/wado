@@ -24,9 +24,9 @@ fn "Point::offset"(self: &Point, dx: i32, dy: i32) -> Point {
 
 fn run() with Stdout {
     let loc: Location = Point { x: 10, y: 20 } as Location;
-    let loc2: Location = "Location::clone_point"(&loc);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "clone: (", move "i32::to_string"(loc2.x)), move ", "), move "i32::to_string"(loc2.y)), move ")"));
-    let loc4: Location = "Location::offset"(&loc, 5, 5);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "offset: (", move "i32::to_string"(loc4.x)), move ", "), move "i32::to_string"(loc4.y)), move ")"));
+    let loc2: Location = &loc.clone_point();
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "clone: (", move loc2.x.to_string()), move ", "), move loc2.y.to_string()), move ")"));
+    let loc4: Location = &loc.offset(5, 5);
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "offset: (", move loc4.x.to_string()), move ", "), move loc4.y.to_string()), move ")"));
 }
 

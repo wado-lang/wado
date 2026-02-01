@@ -20,6 +20,6 @@ struct "Box<i32>" {
 fn run() with Stdout {
     let inner: Box<i32> = move Box<i32> { value: 42 };
     let outer: Box<Box<i32>> = move Box<Box<i32>> { value: inner };
-    core::cli::println(move "String::concat"(move "nested value: ", move "i32::to_string"(outer.value.value)));
+    core::cli::println(move "String::concat"(move "nested value: ", move outer.value.value.to_string()));
 }
 
