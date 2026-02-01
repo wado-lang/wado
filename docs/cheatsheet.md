@@ -116,27 +116,6 @@ Result<T, E>            // result type
 ()
 ```
 
-### 128-bit Integers
-
-`i128` and `u128` are defined in the prelude as structs but work like primitives via operator overloading:
-
-```wado
-let a: u128 = 42;                      // literal coercion
-let b = u128::from_u64(1_000_000);     // explicit construction
-let sum = a + b;                       // arithmetic
-let cmp = a < b;                       // comparison
-
-// Bitwise operations
-let bits = a & b;
-let shifted = a << 10;
-
-// Access low/high 64-bit parts
-let low = a.low();
-let high = a.high();
-```
-
-All arithmetic (`+`, `-`, `*`, `/`, `%`), comparison, and bitwise operations are supported. Addition and subtraction use efficient Wasm Wide Arithmetic instructions.
-
 ## Newtype
 
 ```wado
