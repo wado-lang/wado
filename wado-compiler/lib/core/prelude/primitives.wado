@@ -20,15 +20,15 @@ fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
 
 impl bool {
     /// Convert bool to String ("true" or "false")
-    pub fn to_string(&self) -> String {
-        return if *self { "true" } else { "false" };
+    pub fn to_string(self) -> String {
+        return if self { "true" } else { "false" };
     }
 }
 
 impl char {
     /// Convert char to String (single character as UTF-8)
-    pub fn to_string(&self) -> String {
-        let code = (*self) as u32;
+    pub fn to_string(self) -> String {
+        let code = (self) as u32;
 
         if code < 0x80 {
             // ASCII: single byte
@@ -64,41 +64,41 @@ impl char {
 
 impl i8 {
     /// Convert i8 to String
-    pub fn to_string(&self) -> String {
+    pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm
-        return ((*self) as i32).to_string();
+        return ((self) as i32).to_string();
     }
 }
 
 impl u8 {
     /// Convert u8 to String
-    pub fn to_string(&self) -> String {
+    pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm (u8 fits in positive i32)
-        return ((*self) as i32).to_string();
+        return ((self) as i32).to_string();
     }
 }
 
 impl i16 {
     /// Convert i16 to String
-    pub fn to_string(&self) -> String {
+    pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm
-        return ((*self) as i32).to_string();
+        return ((self) as i32).to_string();
     }
 }
 
 impl u16 {
     /// Convert u16 to String
-    pub fn to_string(&self) -> String {
+    pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm (u16 fits in positive i32)
-        return ((*self) as i32).to_string();
+        return ((self) as i32).to_string();
     }
 }
 
 impl i32 {
     /// Convert i32 to String
     /// Maximum i32 value is 2147483647 (10 digits) + optional minus sign = 11 chars max
-    pub fn to_string(&self) -> String {
-        let value = *self;
+    pub fn to_string(self) -> String {
+        let value = self;
 
         // Handle zero case
         if value == 0 {
@@ -146,9 +146,9 @@ impl i32 {
 impl u32 {
     /// Convert u32 to String (unsigned)
     /// Maximum u32 value is 4294967295 (10 digits)
-    pub fn to_string(&self) -> String {
+    pub fn to_string(self) -> String {
         // u32 is represented as i32 in Wasm, interpret as unsigned
-        let value = (*self) as i32;
+        let value = (self) as i32;
 
         // Handle zero case
         if value == 0 {
@@ -190,8 +190,8 @@ impl u32 {
 impl i64 {
     /// Convert i64 to String
     /// Maximum i64 value is 9223372036854775807 (19 digits) + optional minus sign = 20 chars max
-    pub fn to_string(&self) -> String {
-        let value = *self;
+    pub fn to_string(self) -> String {
+        let value = self;
 
         // Handle zero case
         let zero_i64: i64 = 0 as i64;
@@ -243,9 +243,9 @@ impl i64 {
 impl u64 {
     /// Convert u64 to String (unsigned)
     /// Maximum u64 value is 18446744073709551615 (20 digits)
-    pub fn to_string(&self) -> String {
+    pub fn to_string(self) -> String {
         // u64 is represented as i64 in Wasm, interpret as unsigned
-        let value = (*self) as i64;
+        let value = (self) as i64;
 
         // Handle zero case
         let zero: i64 = 0 as i64;
@@ -310,8 +310,8 @@ impl i128 {
     /// Convert i128 to String (signed)
     /// Maximum i128 value is 170141183460469231731687303715884105727 (39 digits)
     /// Minimum i128 value is -170141183460469231731687303715884105728 (40 chars with sign)
-    pub fn to_string(&self) -> String {
-        let value = *self;
+    pub fn to_string(self) -> String {
+        let value = self;
 
         // Handle zero case
         if value == i128::zero() {
@@ -346,8 +346,8 @@ impl i128 {
 impl u128 {
     /// Convert u128 to String (unsigned)
     /// Maximum u128 value is 340282366920938463463374607431768211455 (39 digits)
-    pub fn to_string(&self) -> String {
-        let value = *self;
+    pub fn to_string(self) -> String {
+        let value = self;
 
         // Handle zero case
         if value == u128::zero() {
@@ -385,8 +385,8 @@ impl u128 {
 
 impl f32 {
     /// Convert f32 to String using the bundled float-to-string algorithm
-    pub fn to_string(&self) -> String {
-        let value = *self;
+    pub fn to_string(self) -> String {
+        let value = self;
 
         // Allocate linear memory buffer (16 bytes max for f32)
         let ptr = builtin::realloc(0, 0, 1, 16);
@@ -405,8 +405,8 @@ impl f32 {
 
 impl f64 {
     /// Convert f64 to String using the bundled float-to-string algorithm
-    pub fn to_string(&self) -> String {
-        let value = *self;
+    pub fn to_string(self) -> String {
+        let value = self;
 
         // Allocate linear memory buffer (24 bytes max for f64)
         let ptr = builtin::realloc(0, 0, 1, 24);

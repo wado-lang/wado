@@ -760,6 +760,25 @@ impl Parser {
             });
         }
 
+        // Handle self by value (without `:`)
+        // Note: `self: Type` is a named self parameter handled below as a regular parameter
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && name == "self"
+            && !matches!(self.peek_nth(1).kind, TokenKind::Colon)
+        {
+            self.advance();
+            let self_type = Type::Named(NamedType {
+                name: "Self".to_string(),
+                span: start_span,
+            });
+            return Ok(Param {
+                name: "self".to_string(),
+                ty: self_type,
+                self_kind: SelfKind::Value,
+                span: start_span,
+            });
+        }
+
         let name = self.consume_ident()?;
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;

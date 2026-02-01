@@ -679,7 +679,7 @@ fn lower_primitive_methods_in_stmt(stmt: &mut TirStmt, type_table: &Rc<RefCell<T
         TirStmtKind::Continue => {}
         TirStmtKind::Return { value: None } => {}
         TirStmtKind::Return { value: Some(expr) } => {
-            lower_primitive_methods_in_expr(expr, type_table)
+            lower_primitive_methods_in_expr(expr, type_table);
         }
         TirStmtKind::ForPattern {
             init,
@@ -822,18 +822,15 @@ fn lower_primitive_methods_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<T
 
         if let ResolvedType::Primitive(_) = base_type {
             // Transform MethodCall to StaticCall
-            // receiver.method(args) -> Type::method(&receiver, args)
+            // receiver.method(args) -> Type::method(receiver, args)
+            // Note: The resolver has already adjusted the receiver type appropriately:
+            // - For &self methods: receiver is &T
+            // - For self by value methods: receiver is T
 
             let span = expr.span;
             let result_type = expr.type_id;
 
-            // Check if receiver is already a reference
-            let receiver_is_ref = matches!(
-                tt.get(receiver.type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            );
-
-            // We need to drop the borrow before modifying the type_table
+            // We need to drop the borrow before modifying
             drop(tt);
 
             // Take ownership of the components
@@ -844,25 +841,8 @@ fn lower_primitive_methods_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<T
             let func_owned = func.clone();
             let mut args_owned = std::mem::take(args);
 
-            // Wrap receiver in a reference if it's not already a reference
-            let receiver_with_ref = if receiver_is_ref {
-                // Already a reference, use as-is
-                receiver_owned
-            } else {
-                // Create a reference to the receiver: &receiver
-                let ref_type_id = type_table.borrow_mut().make_ref(receiver_owned.type_id);
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Ref,
-                        expr: Box::new(receiver_owned),
-                    },
-                    ref_type_id,
-                    span,
-                )
-            };
-
-            // Prepend receiver to args
-            args_owned.insert(0, receiver_with_ref);
+            // Prepend receiver to args (already correctly typed by resolver)
+            args_owned.insert(0, receiver_owned);
 
             // Replace the expression with StaticCall
             expr.kind = TirExprKind::StaticCall {

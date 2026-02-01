@@ -2055,6 +2055,10 @@ impl<'a> Resolver<'a> {
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = match param.self_kind {
+                ast::SelfKind::Value => {
+                    // self by value: use impl type directly
+                    self.resolve_type(impl_type)
+                }
                 ast::SelfKind::Ref => {
                     // &self: wrap impl type in immutable reference
                     let inner_type = self.resolve_type(impl_type);
@@ -7373,7 +7377,7 @@ impl<'a> Resolver<'a> {
         let receiver_type = self.type_table.borrow().get(receiver.type_id).clone();
 
         match self_kind {
-            ast::SelfKind::None => {
+            ast::SelfKind::None | ast::SelfKind::Value => {
                 // Method expects value (self), so deref all refs
                 self.deref_to_value(receiver, span)
             }

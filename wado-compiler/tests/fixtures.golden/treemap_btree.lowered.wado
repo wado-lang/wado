@@ -32,22 +32,22 @@ fn run() with Stdout {
     "TreeMap<String,i32>::insert"(&mut map, move "date", 4);
     "TreeMap<String,i32>::insert"(&mut map, move "elderberry", 5);
     core::cli::println(move "=== After insertion ===");
-    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(&__inline_TreeMap_String_i32___len_0: {
+    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_0: {
         break __inline_TreeMap_String_i32___len_0: map.size;
     })));
     if Some(val) = "TreeMap<String,i32>::get"(&map, &"banana") {
-        core::cli::println(move "String::concat"(move "banana = ", move "i32::to_string"(&val)));
+        core::cli::println(move "String::concat"(move "banana = ", move "i32::to_string"(val)));
     }
     if Some(val2) = "TreeMap<String,i32>::get"(&map, &"date") {
-        core::cli::println(move "String::concat"(move "date = ", move "i32::to_string"(&val2)));
+        core::cli::println(move "String::concat"(move "date = ", move "i32::to_string"(val2)));
     }
     "TreeMap<String,i32>::insert"(&mut map, move "banana", 20);
     if Some(val3) = "TreeMap<String,i32>::get"(&map, &"banana") {
-        core::cli::println(move "String::concat"(move "banana (updated) = ", move "i32::to_string"(&val3)));
+        core::cli::println(move "String::concat"(move "banana (updated) = ", move "i32::to_string"(val3)));
     }
     core::cli::println(move "\n=== After deleting cherry ===");
     "TreeMap<String,i32>::delete"(&mut map, &"cherry");
-    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(&__inline_TreeMap_String_i32___len_1: {
+    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_1: {
         break __inline_TreeMap_String_i32___len_1: map.size;
     })));
     if None = "TreeMap<String,i32>::get"(&map, &"cherry") {
@@ -58,7 +58,7 @@ fn run() with Stdout {
     for let _item of entries {
         let key: String = entry.0;
         let value: i32 = entry.1;
-        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move "i32::to_string"(&value)));
+        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move "i32::to_string"(value)));
     }
     core::cli::println(move "\n=== After compaction ===");
     if __inline_TreeMap_String_i32___needs_compaction_2: {
@@ -67,16 +67,16 @@ fn run() with Stdout {
         core::cli::println(move "Compaction needed, running...");
         "TreeMap<String,i32>::compact"(&mut map);
     }
-    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(&__inline_TreeMap_String_i32___len_3: {
+    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_3: {
         break __inline_TreeMap_String_i32___len_3: map.size;
     })));
-    core::cli::println(move "String::concat"(move "Deleted count: ", move "i32::to_string"(&map.deleted_count)));
+    core::cli::println(move "String::concat"(move "Deleted count: ", move "i32::to_string"(map.deleted_count)));
     core::cli::println(move "\n=== Final iteration ===");
     let final_entries: Array<[String, i32]> = move "TreeMap<String,i32>::iter"(&map);
     for let _item of final_entries {
         let key: String = entry.0;
         let value: i32 = entry.1;
-        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move "i32::to_string"(&value)));
+        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move "i32::to_string"(value)));
     }
 }
 

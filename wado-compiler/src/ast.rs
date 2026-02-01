@@ -300,10 +300,11 @@ pub struct Function {
     pub span: Span,
 }
 
-/// Self parameter shorthand: &self or &mut self
+/// Self parameter kind: self, &self, or &mut self
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfKind {
     None,
+    Value,
     Ref,
     MutRef,
 }

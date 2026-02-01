@@ -242,6 +242,10 @@ impl<'a> Unparser<'a> {
 
     fn unparse_param(&mut self, param: &Param) {
         match param.self_kind {
+            SelfKind::Value => {
+                self.output.push_str("self");
+                return;
+            }
             SelfKind::Ref => {
                 self.output.push_str("&self");
                 return;
