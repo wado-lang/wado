@@ -1894,9 +1894,31 @@ impl ClosureLowerer {
 
             let body_block = TirBlock::new(body_stmts, collected.span);
 
-            let local_count = 1 + collected.params.len() as u32;
+            // Collect local types: self + params + internal locals from body
+            // Parameters are locals 0 (self) through params.len()
+            let param_count = 1 + collected.params.len() as u32;
             let mut local_types = vec![self_ref_type];
             local_types.extend(collected.params.iter().map(|(_, t)| *t));
+
+            // Collect internal locals from the body (Let statements with index >= param_count)
+            let mut body_locals: Vec<(u32, TypeId)> = Vec::new();
+            Self::collect_locals_from_block(&body_block, &mut body_locals);
+
+            // Extend local_types with body locals, sorted by index
+            body_locals.sort_by_key(|(idx, _)| *idx);
+            for (idx, type_id) in &body_locals {
+                // Ensure we only add locals beyond parameter range
+                if *idx >= param_count {
+                    // Extend vector if needed to accommodate sparse indices
+                    while local_types.len() <= *idx as usize {
+                        local_types.push(TypeTable::UNKNOWN);
+                    }
+                    local_types[*idx as usize] = *type_id;
+                }
+            }
+
+            // local_count is the total number of locals
+            let local_count = local_types.len() as u32;
 
             // method_info tells codegen how to register this function with the proper mangled name
             let method_info = LocalMethodName::new(
@@ -1934,6 +1956,193 @@ impl ClosureLowerer {
                 call_method: call_method_rc,
                 captures: collected.captures.clone(),
             });
+        }
+    }
+
+    /// Collect all local variable declarations from a block, including nested blocks.
+    /// Returns pairs of (`local_index`, `type_id`) for each Let statement found.
+    fn collect_locals_from_block(block: &TirBlock, locals: &mut Vec<(u32, TypeId)>) {
+        for stmt in &block.stmts {
+            Self::collect_locals_from_stmt(stmt, locals);
+        }
+    }
+
+    fn collect_locals_from_stmt(stmt: &TirStmt, locals: &mut Vec<(u32, TypeId)>) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index,
+                type_id,
+                value,
+                ..
+            } => {
+                locals.push((*local_index, *type_id));
+                Self::collect_locals_from_expr(value, locals);
+            }
+            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
+                Self::collect_locals_from_expr(expr, locals);
+            }
+            TirStmtKind::Return { value: None }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => {}
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::collect_locals_from_expr(condition, locals);
+                Self::collect_locals_from_block(then_block, locals);
+                if let Some(else_blk) = else_block {
+                    Self::collect_locals_from_block(else_blk, locals);
+                }
+            }
+            TirStmtKind::While { condition, body } => {
+                Self::collect_locals_from_expr(condition, locals);
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::For {
+                init,
+                condition,
+                body,
+                update,
+            } => {
+                for s in init {
+                    Self::collect_locals_from_stmt(s, locals);
+                }
+                if let Some(cond) = condition {
+                    Self::collect_locals_from_expr(cond, locals);
+                }
+                Self::collect_locals_from_block(body, locals);
+                if let Some(upd) = update {
+                    Self::collect_locals_from_expr(upd, locals);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::ForOf { iterable, body, .. } => {
+                Self::collect_locals_from_expr(iterable, locals);
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                Self::collect_locals_from_block(then_block, locals);
+                if let Some(else_blk) = else_block {
+                    Self::collect_locals_from_block(else_blk, locals);
+                }
+            }
+            TirStmtKind::WhilePattern {
+                scrutinee, body, ..
+            } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                Self::collect_locals_from_block(body, locals);
+            }
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                body,
+                update,
+                ..
+            } => {
+                for s in init {
+                    Self::collect_locals_from_stmt(s, locals);
+                }
+                Self::collect_locals_from_expr(scrutinee, locals);
+                Self::collect_locals_from_block(body, locals);
+                if let Some(upd) = update {
+                    Self::collect_locals_from_expr(upd, locals);
+                }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                Self::collect_locals_from_expr(value, locals);
+            }
+        }
+    }
+
+    fn collect_locals_from_expr(expr: &TirExpr, locals: &mut Vec<(u32, TypeId)>) {
+        match &expr.kind {
+            TirExprKind::Block(block) => {
+                Self::collect_locals_from_block(block, locals);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::collect_locals_from_expr(condition, locals);
+                Self::collect_locals_from_block(then_branch, locals);
+                if let Some(else_blk) = else_branch {
+                    Self::collect_locals_from_block(else_blk, locals);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::collect_locals_from_expr(left, locals);
+                Self::collect_locals_from_expr(right, locals);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::OptionSome { value: inner }
+            | TirExprKind::Move { value: inner } => {
+                Self::collect_locals_from_expr(inner, locals);
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::StaticCall { args, .. }
+            | TirExprKind::EffectCall { args, .. } => {
+                for arg in args {
+                    Self::collect_locals_from_expr(arg, locals);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::collect_locals_from_expr(receiver, locals);
+                for arg in args {
+                    Self::collect_locals_from_expr(arg, locals);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::collect_locals_from_expr(callee, locals);
+                for arg in args {
+                    Self::collect_locals_from_expr(arg, locals);
+                }
+            }
+            TirExprKind::Index { expr: array, index } => {
+                Self::collect_locals_from_expr(array, locals);
+                Self::collect_locals_from_expr(index, locals);
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::collect_locals_from_expr(target, locals);
+                Self::collect_locals_from_expr(value, locals);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::collect_locals_from_expr(&field.value, locals);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::collect_locals_from_expr(elem, locals);
+                }
+            }
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                Self::collect_locals_from_expr(scrutinee, locals);
+                for arm in arms {
+                    Self::collect_locals_from_expr(&arm.body, locals);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    Self::collect_locals_from_expr(payload_expr, locals);
+                }
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::collect_locals_from_block(block, locals);
+            }
+            // Terminals - no locals to collect
+            _ => {}
         }
     }
 

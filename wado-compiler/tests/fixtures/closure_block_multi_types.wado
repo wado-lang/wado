@@ -1,0 +1,19 @@
+// Test closure with block body containing multiple types of local variables
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let mixed = |n: i32| {
+        let a: i64 = n as i64 * 1000000000 as i64;
+        let b: f64 = n as f64 * 1.5;
+        let c: bool = n > 0;
+        let d: i32 = if c { n * 2 } else { 0 };
+        return d;
+    };
+
+    println(`{mixed(5)}`);   // 10
+    println(`{mixed(-3)}`);  // 0
+    println(`{mixed(7)}`);   // 14
+}
+
+__DATA__
+{"stdout": "10\n0\n14\n"}

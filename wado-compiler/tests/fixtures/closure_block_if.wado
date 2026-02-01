@@ -1,0 +1,17 @@
+// Test closure with block body containing if statement
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let max_of_three = |a: i32, b: i32, c: i32| {
+        let max_ab = if a > b { a } else { b };
+        let result = if max_ab > c { max_ab } else { c };
+        return result;
+    };
+
+    println(`{max_of_three(1, 5, 3)}`);  // 5
+    println(`{max_of_three(10, 2, 8)}`); // 10
+    println(`{max_of_three(4, 7, 9)}`);  // 9
+}
+
+__DATA__
+{"stdout": "5\n10\n9\n"}

@@ -844,7 +844,7 @@ fn inline_calls_in_block(
                 if let Some((mut inlined_expr, inlined_key)) = inline_result {
                     // Track the inlined function
                     if !inlined_funcs.contains(&inlined_key) {
-                        inlined_funcs.push(inlined_key);
+                        inlined_funcs.push(inlined_key.clone());
                     }
                     // Process the inlined expression for nested inlining opportunities
                     inline_calls_in_expr(
