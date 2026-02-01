@@ -15,8 +15,8 @@ struct "Box<i32>" {
 
 fn run() with Stdout {
     let mut b: Box<i32> = move Box<i32> { value: 10 };
-    core::cli::println(move "String::concat"(move "before: ", move "i32::to_string"(b.value)));
+    core::cli::println(move "String::concat"(move "before: ", move "i32::to_string"(&b.value)));
     b.value = 42;
-    core::cli::println(move "String::concat"(move "after: ", move "i32::to_string"(b.value)));
+    core::cli::println(move "String::concat"(move "after: ", move "i32::to_string"(&b.value)));
 }
 

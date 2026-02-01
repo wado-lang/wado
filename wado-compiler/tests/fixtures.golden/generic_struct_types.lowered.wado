@@ -40,10 +40,10 @@ fn run() with Stdout {
     let str_box: Box<String> = move Box<String> { value: "hello" };
     let bool_box: Box<bool> = move Box<bool> { value: true };
     let char_box: Box<char> = move Box<char> { value: 'A' };
-    core::cli::println(move "String::concat"(move "i32: ", move "i32::to_string"(int_box.value)));
-    core::cli::println(move "String::concat"(move "f64: ", move "f64::to_string"(float_box.value)));
+    core::cli::println(move "String::concat"(move "i32: ", move "i32::to_string"(&int_box.value)));
+    core::cli::println(move "String::concat"(move "f64: ", move "f64::to_string"(&float_box.value)));
     core::cli::println(move "String::concat"(move "str: ", str_box.value));
-    core::cli::println(move "String::concat"(move "bool: ", move "bool::to_string"(bool_box.value)));
-    core::cli::println(move "String::concat"(move "char: ", move "char::to_string"(char_box.value)));
+    core::cli::println(move "String::concat"(move "bool: ", move "bool::to_string"(&bool_box.value)));
+    core::cli::println(move "String::concat"(move "char: ", move "char::to_string"(&char_box.value)));
 }
 

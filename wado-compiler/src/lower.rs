@@ -50,7 +50,12 @@ pub fn lower(mut module: TirModule) -> TirModule {
     let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
     closure_lowerer.lower_module(&mut module);
 
-    // Phase 3: Collect string literals and their function mappings
+    // Phase 3: Lower primitive method calls to static calls
+    // Transforms: receiver.method(args) -> Type::method(&receiver, args)
+    // This allows codegen to treat primitive methods like any other static function.
+    lower_primitive_method_calls(&mut module);
+
+    // Phase 4: Collect string literals and their function mappings
     let mut collector = StringCollector::new();
     collector.collect_module(&module);
     let (strings, function_strings) = collector.into_results();
@@ -567,6 +572,319 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+// ============================================================================
+// Primitive Method Call Lowering
+// ============================================================================
+
+/// Lower primitive method calls to static calls
+///
+/// Transforms: `receiver.method(args)` -> `Type::method(&receiver, args)`
+///
+/// This allows codegen to treat primitive type methods like any other static
+/// function call, without requiring special-case handling for primitives.
+fn lower_primitive_method_calls(module: &mut TirModule) {
+    let type_table = Rc::clone(&module.type_table);
+
+    // Process all functions
+    for func_rc in &module.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = &mut func.body {
+            lower_primitive_methods_in_block(body, &type_table);
+        }
+    }
+
+    // Process impl block methods
+    for impl_block in &mut module.impls {
+        for method in &mut impl_block.methods {
+            if let Some(body) = &mut method.body {
+                lower_primitive_methods_in_block(body, &type_table);
+            }
+        }
+    }
+}
+
+fn lower_primitive_methods_in_block(block: &mut TirBlock, type_table: &Rc<RefCell<TypeTable>>) {
+    for stmt in &mut block.stmts {
+        lower_primitive_methods_in_stmt(stmt, type_table);
+    }
+}
+
+fn lower_primitive_methods_in_stmt(stmt: &mut TirStmt, type_table: &Rc<RefCell<TypeTable>>) {
+    match &mut stmt.kind {
+        TirStmtKind::Expr(expr) => lower_primitive_methods_in_expr(expr, type_table),
+        TirStmtKind::Let { value, .. } => {
+            lower_primitive_methods_in_expr(value, type_table);
+        }
+        TirStmtKind::While { condition, body }
+        | TirStmtKind::WhilePattern {
+            scrutinee: condition,
+            body,
+            ..
+        } => {
+            lower_primitive_methods_in_expr(condition, type_table);
+            lower_primitive_methods_in_block(body, type_table);
+        }
+        TirStmtKind::For {
+            init,
+            condition,
+            update,
+            body,
+        } => {
+            for i in init {
+                lower_primitive_methods_in_stmt(i, type_table);
+            }
+            if let Some(c) = condition {
+                lower_primitive_methods_in_expr(c, type_table);
+            }
+            if let Some(u) = update {
+                lower_primitive_methods_in_expr(u, type_table);
+            }
+            lower_primitive_methods_in_block(body, type_table);
+        }
+        TirStmtKind::Loop { body } => {
+            lower_primitive_methods_in_block(body, type_table);
+        }
+        TirStmtKind::ForOf { iterable, body, .. } => {
+            lower_primitive_methods_in_expr(iterable, type_table);
+            lower_primitive_methods_in_block(body, type_table);
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        }
+        | TirStmtKind::IfPattern {
+            scrutinee: condition,
+            then_block,
+            else_block,
+            ..
+        } => {
+            lower_primitive_methods_in_expr(condition, type_table);
+            lower_primitive_methods_in_block(then_block, type_table);
+            if let Some(e) = else_block {
+                lower_primitive_methods_in_block(e, type_table);
+            }
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            lower_primitive_methods_in_block(block, type_table);
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                lower_primitive_methods_in_expr(v, type_table);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::Return { value: None } => {}
+        TirStmtKind::Return { value: Some(expr) } => {
+            lower_primitive_methods_in_expr(expr, type_table)
+        }
+        TirStmtKind::ForPattern {
+            init,
+            scrutinee,
+            body,
+            update,
+            ..
+        } => {
+            for i in init {
+                lower_primitive_methods_in_stmt(i, type_table);
+            }
+            lower_primitive_methods_in_expr(scrutinee, type_table);
+            lower_primitive_methods_in_block(body, type_table);
+            if let Some(u) = update {
+                lower_primitive_methods_in_expr(u, type_table);
+            }
+        }
+        TirStmtKind::LetPattern { value, .. } => {
+            lower_primitive_methods_in_expr(value, type_table);
+        }
+    }
+}
+
+fn lower_primitive_methods_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>>) {
+    // First, recursively process sub-expressions
+    match &mut expr.kind {
+        TirExprKind::Binary { left, right, .. } => {
+            lower_primitive_methods_in_expr(left, type_table);
+            lower_primitive_methods_in_expr(right, type_table);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::OptionSome { value: inner }
+        | TirExprKind::Move { value: inner } => {
+            lower_primitive_methods_in_expr(inner, type_table);
+        }
+        TirExprKind::Assign { target, value } => {
+            lower_primitive_methods_in_expr(target, type_table);
+            lower_primitive_methods_in_expr(value, type_table);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            lower_primitive_methods_in_expr(value, type_table);
+        }
+        TirExprKind::Index { expr: arr, index } => {
+            lower_primitive_methods_in_expr(arr, type_table);
+            lower_primitive_methods_in_expr(index, type_table);
+        }
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::EffectCall { args, .. } => {
+            for arg in args {
+                lower_primitive_methods_in_expr(arg, type_table);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            lower_primitive_methods_in_expr(receiver, type_table);
+            for arg in args {
+                lower_primitive_methods_in_expr(arg, type_table);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            lower_primitive_methods_in_expr(callee, type_table);
+            for arg in args {
+                lower_primitive_methods_in_expr(arg, type_table);
+            }
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            lower_primitive_methods_in_expr(condition, type_table);
+            lower_primitive_methods_in_block(then_branch, type_table);
+            if let Some(e) = else_branch {
+                lower_primitive_methods_in_block(e, type_table);
+            }
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            lower_primitive_methods_in_block(block, type_table);
+        }
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
+            lower_primitive_methods_in_expr(scrutinee, type_table);
+            for arm in arms {
+                lower_primitive_methods_in_expr(&mut arm.body, type_table);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                lower_primitive_methods_in_expr(&mut field.value, type_table);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
+            for elem in elements {
+                lower_primitive_methods_in_expr(elem, type_table);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            lower_primitive_methods_in_expr(body, type_table);
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            lower_primitive_methods_in_expr(functor, type_table);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                lower_primitive_methods_in_expr(p, type_table);
+            }
+        }
+        // Terminals - no sub-expressions
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+
+    // Now check if this is a MethodCall on a primitive type
+    if let TirExprKind::MethodCall {
+        receiver,
+        func,
+        args,
+        type_args: _,
+    } = &mut expr.kind
+    {
+        let tt = type_table.borrow();
+
+        // Get the base type of the receiver (strip references)
+        let base_type_id = get_primitive_base_type(receiver.type_id, &tt);
+        let base_type = tt.get(base_type_id);
+
+        if let ResolvedType::Primitive(_) = base_type {
+            // Transform MethodCall to StaticCall
+            // receiver.method(args) -> Type::method(&receiver, args)
+
+            let span = expr.span;
+            let result_type = expr.type_id;
+
+            // Check if receiver is already a reference
+            let receiver_is_ref = matches!(
+                tt.get(receiver.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
+
+            // We need to drop the borrow before modifying the type_table
+            drop(tt);
+
+            // Take ownership of the components
+            let receiver_owned = std::mem::replace(
+                receiver.as_mut(),
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+            );
+            let func_owned = func.clone();
+            let mut args_owned = std::mem::take(args);
+
+            // Wrap receiver in a reference if it's not already a reference
+            let receiver_with_ref = if receiver_is_ref {
+                // Already a reference, use as-is
+                receiver_owned
+            } else {
+                // Create a reference to the receiver: &receiver
+                let ref_type_id = type_table.borrow_mut().make_ref(receiver_owned.type_id);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref,
+                        expr: Box::new(receiver_owned),
+                    },
+                    ref_type_id,
+                    span,
+                )
+            };
+
+            // Prepend receiver to args
+            args_owned.insert(0, receiver_with_ref);
+
+            // Replace the expression with StaticCall
+            expr.kind = TirExprKind::StaticCall {
+                func: func_owned,
+                args: args_owned,
+            };
+            expr.type_id = result_type;
+        }
+    }
+}
+
+/// Get the base type by stripping Ref/MutRef wrappers
+/// Get the primitive base type by following references and newtypes.
+/// Returns the `type_id` of the underlying primitive type if found, or the original `type_id`.
+fn get_primitive_base_type(type_id: TypeId, type_table: &TypeTable) -> TypeId {
+    let mut current = type_id;
+    loop {
+        match type_table.get(current) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = *inner,
+            ResolvedType::Newtype { base_type, .. } => current = *base_type,
+            _ => return current,
+        }
     }
 }
 

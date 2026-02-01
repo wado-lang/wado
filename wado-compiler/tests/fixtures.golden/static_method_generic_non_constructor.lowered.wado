@@ -15,11 +15,11 @@ struct "Counter<i32>" {
 
 fn run() with Stdout {
     let z: i32 = "Counter<i32>::zero"();
-    core::cli::println(move "String::concat"(move "zero: ", move "i32::to_string"(z)));
+    core::cli::println(move "String::concat"(move "zero: ", move "i32::to_string"(&z)));
     let d: i32 = "Counter<i32>::default_value"(100);
-    core::cli::println(move "String::concat"(move "default: ", move "i32::to_string"(d)));
+    core::cli::println(move "String::concat"(move "default: ", move "i32::to_string"(&d)));
     let c: Counter<i32> = move "Counter<i32>::new"(42);
-    core::cli::println(move "String::concat"(move "counter value: ", move "i32::to_string"(__inline_Counter_i32___get_0: {
+    core::cli::println(move "String::concat"(move "counter value: ", move "i32::to_string"(&__inline_Counter_i32___get_0: {
         break __inline_Counter_i32___get_0: c.value;
     })));
 }

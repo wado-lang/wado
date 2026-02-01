@@ -10,16 +10,19 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
+    let x: i32 = 10;
     scope: {
-        core::cli::println(move "String::concat"(move "x in scope: ", move "i32::to_string"(20)));
+        let x: i32 = 20;
+        core::cli::println(move "String::concat"(move "x in scope: ", move "i32::to_string"(&x)));
     }
-    core::cli::println(move "String::concat"(move "x after scope: ", move "i32::to_string"(10)));
+    core::cli::println(move "String::concat"(move "x after scope: ", move "i32::to_string"(&x)));
     outer: {
+        let a: i32 = 1;
         inner: {
-            let sum: i32 = (1 + 2);
-            core::cli::println(move "String::concat"(move "a + b = ", move "i32::to_string"(sum)));
+            let sum: i32 = (a + 2);
+            core::cli::println(move "String::concat"(move "a + b = ", move "i32::to_string"(&sum)));
         }
-        core::cli::println(move "String::concat"(move "a = ", move "i32::to_string"(1)));
+        core::cli::println(move "String::concat"(move "a = ", move "i32::to_string"(&a)));
     }
     core::cli::println(move "labeled block tests passed");
 }

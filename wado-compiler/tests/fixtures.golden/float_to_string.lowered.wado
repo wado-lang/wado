@@ -11,9 +11,11 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "f is ", move "f64::to_string"(1.23)));
-    core::cli::println(move "String::concat"(move "pi is approximately ", move "f64::to_string"(3.14159)));
+    let f: f64 = 1.23;
+    core::cli::println(move "String::concat"(move "f is ", move "f64::to_string"(&f)));
+    let pi: f64 = 3.14159;
+    core::cli::println(move "String::concat"(move "pi is approximately ", move "f64::to_string"(&pi)));
     let result: f64 = (10.5 + 2.5);
-    core::cli::println(move "String::concat"(move "10.5 + 2.5 = ", move "f64::to_string"(result)));
+    core::cli::println(move "String::concat"(move "10.5 + 2.5 = ", move "f64::to_string"(&result)));
 }
 

@@ -7346,6 +7346,23 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Get the ultimate base type by stripping all Ref/MutRef and Newtype wrappers
+    /// This follows the entire chain: Ref(Newtype(Ref(Primitive))) -> Primitive
+    fn get_ultimate_base_type(&self, type_id: TypeId) -> TypeId {
+        let mut current = type_id;
+        loop {
+            match self.type_table.borrow().get(current).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    current = inner;
+                }
+                ResolvedType::Newtype { base_type, .. } => {
+                    current = base_type;
+                }
+                _ => return current,
+            }
+        }
+    }
+
     /// Adjust the receiver expression to match what the method's self parameter expects
     fn adjust_receiver_for_self_kind(
         &mut self,
@@ -9052,14 +9069,42 @@ impl<'a> Resolver<'a> {
                     let string_expr = if resolved.type_id == string_type {
                         resolved
                     } else {
-                        // Call to_string method
-                        let receiver_type_name = self.mangle_type_name(resolved.type_id);
+                        // Call to_string method - determine correct module source based on type
+                        // Follow newtypes and references to find the ultimate base type
+                        let base_type_id = self.get_ultimate_base_type(resolved.type_id);
+                        let (receiver_type_name, method_module_source) =
+                            match self.type_table.borrow().get(base_type_id).clone() {
+                                ResolvedType::Struct {
+                                    name,
+                                    module_source,
+                                    ..
+                                } => (name.clone(), module_source),
+                                ResolvedType::GenericInstance {
+                                    name,
+                                    module_source,
+                                    ..
+                                } => (name.clone(), module_source),
+                                ResolvedType::Primitive(_) => {
+                                    // Primitive to_string methods are in core:prelude/primitives
+                                    let prim_module = ModuleSource::Core {
+                                        name: "prelude/primitives".to_string(),
+                                    };
+                                    (self.mangle_type_name(base_type_id), prim_module)
+                                }
+                                _ => {
+                                    // Fallback to current module
+                                    (
+                                        self.mangle_type_name(resolved.type_id),
+                                        self.current_module_source.clone(),
+                                    )
+                                }
+                            };
                         let mangled_method_name = format!("{receiver_type_name}::to_string");
                         TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(resolved.clone()),
                                 func: FunctionRef::External {
-                                    module_source: self.current_module_source.clone(),
+                                    module_source: method_module_source,
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(

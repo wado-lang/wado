@@ -38,10 +38,10 @@ fn "Point::distance_squared"(a: Point, b: Point) -> i32 {
 
 fn run() with Stdout {
     let p1: Point = move "Point::scale"(move "Point::origin"(), 5);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "scaled origin: (", move "i32::to_string"(p1.x)), move ", "), move "i32::to_string"(p1.y)), move ")"));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "scaled origin: (", move "i32::to_string"(&p1.x)), move ", "), move "i32::to_string"(&p1.y)), move ")"));
     let p2: Point = move "Point::add"(move "Point::new"(1, 2), move "Point::new"(3, 4));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "sum of points: (", move "i32::to_string"(p2.x)), move ", "), move "i32::to_string"(p2.y)), move ")"));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "sum of points: (", move "i32::to_string"(&p2.x)), move ", "), move "i32::to_string"(&p2.y)), move ")"));
     let dist: i32 = "Point::distance_squared"(move "Point::origin"(), move "Point::new"(3, 4));
-    core::cli::println(move "String::concat"(move "distance squared: ", move "i32::to_string"(dist)));
+    core::cli::println(move "String::concat"(move "distance squared: ", move "i32::to_string"(&dist)));
 }
 

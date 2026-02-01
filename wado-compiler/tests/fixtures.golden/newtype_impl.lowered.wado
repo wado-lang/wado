@@ -10,18 +10,20 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+fn "Radians::to_degrees"(self: &Radians) -> Degrees {
+    return ((*self * 180.0) / 3.14159) as Degrees;
+}
+
+fn "Degrees::to_radians"(self: &Degrees) -> Radians {
+    return ((*self * 3.14159) / 180.0) as Radians;
+}
+
 fn run() with Stdout {
     let r: Radians = 3.14159;
-    let d: Degrees = __inline_Radians__to_degrees_0: {
-        let self: &Radians = &r;
-        break __inline_Radians__to_degrees_0: ((*self * 180.0) / 3.14159) as Degrees;
-    };
-    core::cli::println(move "String::concat"(move "radians to degrees: ", move "Degrees::to_string"(d)));
+    let d: Degrees = "Radians::to_degrees"(&r);
+    core::cli::println(move "String::concat"(move "radians to degrees: ", move "f64::to_string"(&d)));
     let d2: Degrees = 90.0;
-    let r2: Radians = __inline_Degrees__to_radians_1: {
-        let self: &Degrees = &d2;
-        break __inline_Degrees__to_radians_1: ((*self * 3.14159) / 180.0) as Radians;
-    };
-    core::cli::println(move "String::concat"(move "degrees to radians: ", move "Radians::to_string"(r2)));
+    let r2: Radians = "Degrees::to_radians"(&d2);
+    core::cli::println(move "String::concat"(move "degrees to radians: ", move "f64::to_string"(&r2)));
 }
 

@@ -10,9 +10,11 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
+    let pos: i32 = 42;
     let neg: i32 = (0 - 17);
-    core::cli::println(move "String::concat"(move "positive: ", move "i32::to_string"(42)));
-    core::cli::println(move "String::concat"(move "negative: ", move "i32::to_string"(neg)));
-    core::cli::println(move "String::concat"(move "zero: ", move "i32::to_string"(0)));
+    let zero: i32 = 0;
+    core::cli::println(move "String::concat"(move "positive: ", move "i32::to_string"(&pos)));
+    core::cli::println(move "String::concat"(move "negative: ", move "i32::to_string"(&neg)));
+    core::cli::println(move "String::concat"(move "zero: ", move "i32::to_string"(&zero)));
 }
 

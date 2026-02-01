@@ -64,8 +64,9 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
 
 fn run() with Stdout {
     core::cli::println(__inline_f64_to_string_fill_0: {
+        let value: f64 = 42.0;
         let align: Align = move Align::Right;
-        let s: String = move "f64::to_string"(42.0);
+        let s: String = move "f64::to_string"(&value);
         let spec: FormatSpec = move FormatSpec { fill: '_', align: align, width: 8 };
         break __inline_f64_to_string_fill_0: apply_padding(s, spec);
     });

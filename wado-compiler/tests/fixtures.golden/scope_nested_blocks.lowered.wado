@@ -10,12 +10,15 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
+    let a: i32 = 1;
     if true {
+        let b: i32 = 2;
         if true {
-            core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "i32::to_string"(1), move ","), move "i32::to_string"(2)), move ","), move "i32::to_string"(3)));
+            let c: i32 = 3;
+            core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "i32::to_string"(&a), move ","), move "i32::to_string"(&b)), move ","), move "i32::to_string"(&c)));
         }
-        core::cli::println(move "String::concat"(move "String::concat"(move "i32::to_string"(1), move ","), move "i32::to_string"(2)));
+        core::cli::println(move "String::concat"(move "String::concat"(move "i32::to_string"(&a), move ","), move "i32::to_string"(&b)));
     }
-    core::cli::println(move "i32::to_string"(1));
+    core::cli::println(move "i32::to_string"(&a));
 }
 
