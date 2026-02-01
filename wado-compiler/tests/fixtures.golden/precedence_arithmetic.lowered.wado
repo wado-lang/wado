@@ -61,14 +61,42 @@ fn run() {
     __assert_6: {
         let __cond: bool = (g == 14.0);
         if !__cond {
-            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/precedence_arithmetic.wado"), move ":"), move "i32::to_string"(37)), move "\ncondition: g == 14.0\n"), move "g: "), move "f64::to_string"(g)), move "\n"));
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/precedence_arithmetic.wado"), move ":"), move "i32::to_string"(37)), move "\ncondition: g == 14.0\n"), move "g: "), __inline_f64__to_string_0: {
+                let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+                let len: i32 = core::builtin::f64_to_buffer(g, ptr);
+                let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+                    let arr: builtin::array<u8> = "array_new<u8>"(len);
+                    for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                        core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+                    }
+                    break __inline_memory_to_gc_array_0: arr;
+                };
+                core::builtin::realloc(ptr, 24, 1, 0);
+                break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_1: {
+                    break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+                };
+            }), move "\n"));
         }
     }
     let h: f64 = (10.0 - (8.0 / 2.0));
     __assert_7: {
         let __cond: bool = (h == 6.0);
         if !__cond {
-            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/precedence_arithmetic.wado"), move ":"), move "i32::to_string"(40)), move "\ncondition: h == 6.0\n"), move "h: "), move "f64::to_string"(h)), move "\n"));
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/precedence_arithmetic.wado"), move ":"), move "i32::to_string"(40)), move "\ncondition: h == 6.0\n"), move "h: "), __inline_f64__to_string_1: {
+                let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+                let len: i32 = core::builtin::f64_to_buffer(h, ptr);
+                let arr: builtin::array<u8> = __inline_memory_to_gc_array_2: {
+                    let arr: builtin::array<u8> = "array_new<u8>"(len);
+                    for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                        core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+                    }
+                    break __inline_memory_to_gc_array_2: arr;
+                };
+                core::builtin::realloc(ptr, 24, 1, 0);
+                break __inline_f64__to_string_1: __inline_String__internal_from_utf8_raw_3: {
+                    break __inline_String__internal_from_utf8_raw_3: String { repr: arr, used: len };
+                };
+            }), move "\n"));
         }
     }
 }

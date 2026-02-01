@@ -14,15 +14,13 @@ struct Point {
     y: i32,
 }
 
-fn "Point::origin"() -> Point {
-    return Point { x: 0, y: 0 };
-}
-
 fn run() with Stdout {
-    let p: Point = move "Point::origin"();
+    let p: Point = __inline_Point__origin_0: {
+        break __inline_Point__origin_0: Point { x: 0, y: 0 };
+    };
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "origin: (", move "i32::to_string"(p.x)), move ", "), move "i32::to_string"(p.y)), move ")"));
-    core::cli::println(move "String::concat"(move "sum: ", move "i32::to_string"(__inline_Point__sum_0: {
-        break __inline_Point__sum_0: (p.x + p.y);
+    core::cli::println(move "String::concat"(move "sum: ", move "i32::to_string"(__inline_Point__sum_1: {
+        break __inline_Point__sum_1: (p.x + p.y);
     })));
 }
 

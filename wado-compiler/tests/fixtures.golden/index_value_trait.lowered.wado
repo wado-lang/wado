@@ -27,12 +27,10 @@ fn "IntStore^IndexValue::index_value"(self: &IntStore, index: i32) -> i32 {
     }
 }
 
-fn "IntStore::new"(a: i32, b: i32, c: i32) -> IntStore {
-    return IntStore { a: a, b: b, c: c };
-}
-
 fn run() with Stdout {
-    let store: IntStore = move "IntStore::new"(10, 20, 30);
+    let store: IntStore = __inline_IntStore__new_0: {
+        break __inline_IntStore__new_0: IntStore { a: 10, b: 20, c: 30 };
+    };
     let first: i32 = "IntStore^IndexValue::index_value"(&store, 0);
     let second: i32 = "IntStore^IndexValue::index_value"(&store, 1);
     let third: i32 = "IntStore^IndexValue::index_value"(&store, 2);

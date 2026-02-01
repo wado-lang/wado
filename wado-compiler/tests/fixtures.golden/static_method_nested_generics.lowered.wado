@@ -23,35 +23,29 @@ struct "Box<Array<i32>>" {
 
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3];
-    let boxed_arr: Box<Array<i32>> = move "Box<Array<i32>>::new"(arr);
-    let inner: Array<i32> = __inline_Box_Array_i32____get_0: {
-        break __inline_Box_Array_i32____get_0: boxed_arr.value;
+    let boxed_arr: Box<Array<i32>> = __inline_Box_Array_i32____new_0: {
+        break __inline_Box_Array_i32____new_0: Box<Array<i32>> { value: arr };
     };
-    core::cli::println(move "String::concat"(move "inner len: ", move "i32::to_string"(__inline_Array_i32___len_1: {
-        break __inline_Array_i32___len_1: inner.used;
-    })));
-    core::cli::println(move "String::concat"(move "inner[0]: ", move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_2: {
-        break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(inner.repr, 0);
-    })));
-    let inner_box: Box<i32> = move "Box<i32>::new"(42);
-    let outer_box: Box<Box<i32>> = move "Box<Box<i32>>::new"(inner_box);
-    let unwrapped: Box<i32> = __inline_Box_Box_i32____get_3: {
-        break __inline_Box_Box_i32____get_3: outer_box.value;
+    let inner: Array<i32> = __inline_Box_Array_i32____get_1: {
+        break __inline_Box_Array_i32____get_1: boxed_arr.value;
     };
-    core::cli::println(move "String::concat"(move "unwrapped value: ", move "i32::to_string"(__inline_Box_i32___get_4: {
-        break __inline_Box_i32___get_4: unwrapped.value;
+    core::cli::println(move "String::concat"(move "inner len: ", move "i32::to_string"(__inline_Array_i32___len_2: {
+        break __inline_Array_i32___len_2: inner.used;
     })));
-}
-
-pub fn "Box<Box<i32>>::new"(value: Box<i32>) -> Box<Box<i32>> {
-    return Box<Box<i32>> { value: value };
-}
-
-pub fn "Box<i32>::new"(value: i32) -> Box<i32> {
-    return Box<i32> { value: value };
-}
-
-pub fn "Box<Array<i32>>::new"(value: Array<i32>) -> Box<Array<i32>> {
-    return Box<Array<i32>> { value: value };
+    core::cli::println(move "String::concat"(move "inner[0]: ", move "i32::to_string"(__inline_Array_i32__IndexValue__index_value_3: {
+        break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(inner.repr, 0);
+    })));
+    let inner_box: Box<i32> = __inline_Box_i32___new_4: {
+        break __inline_Box_i32___new_4: Box<i32> { value: 42 };
+    };
+    let outer_box: Box<Box<i32>> = __inline_Box_Box_i32____new_5: {
+        break __inline_Box_Box_i32____new_5: Box<Box<i32>> { value: inner_box };
+    };
+    let unwrapped: Box<i32> = __inline_Box_Box_i32____get_6: {
+        break __inline_Box_Box_i32____get_6: outer_box.value;
+    };
+    core::cli::println(move "String::concat"(move "unwrapped value: ", move "i32::to_string"(__inline_Box_i32___get_7: {
+        break __inline_Box_i32___get_7: unwrapped.value;
+    })));
 }
 

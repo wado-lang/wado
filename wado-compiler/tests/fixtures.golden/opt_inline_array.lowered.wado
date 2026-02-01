@@ -11,15 +11,13 @@
 
 fn run() with Stdout {
     let x: i32 = __inline_test_0: {
-        let arr: Array<i32> = move "Array<i32>::with_capacity"(10);
-        break __inline_test_0: __inline_Array_i32___len_1: {
-            break __inline_Array_i32___len_1: arr.used;
+        let arr: Array<i32> = __inline_Array_i32___with_capacity_1: {
+            break __inline_Array_i32___with_capacity_1: Array<i32> { repr: core::builtin::array_new::<i32>(10), used: 0 };
+        };
+        break __inline_test_0: __inline_Array_i32___len_2: {
+            break __inline_Array_i32___len_2: arr.used;
         };
     };
     core::cli::println(move "i32::to_string"(x));
-}
-
-pub fn "Array<i32>::with_capacity"(capacity: i32) -> Array<i32> {
-    return Array<i32> { repr: core::builtin::array_new::<i32>(capacity), used: 0 };
 }
 

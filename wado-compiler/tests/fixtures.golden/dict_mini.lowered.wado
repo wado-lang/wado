@@ -14,7 +14,9 @@ struct "MiniDict<String,String>" {
 }
 
 fn run() with Stdout {
-    let mut dict: MiniDict<String,String> = move "MiniDict<String,String>::new"();
+    let mut dict: MiniDict<String,String> = __inline_MiniDict_String_String___new_0: {
+        break __inline_MiniDict_String_String___new_0: MiniDict<String,String> { entries: [] };
+    };
     "MiniDict<String,String>::set"(&mut dict, move "name", move "Wado");
     "MiniDict<String,String>::set"(&mut dict, move "type", move "language");
     "MiniDict<String,String>::set"(&mut dict, move "target", move "WebAssembly");
@@ -28,10 +30,24 @@ fn run() with Stdout {
     if Some(updated_val) = "MiniDict<String,String>::get"(&dict, move "name") {
         core::cli::println(move "String::concat"(move "updated name: ", updated_val));
     }
-    core::cli::println(move "String::concat"(move "has 'target': ", move "bool::to_string"("MiniDict<String,String>::has"(&dict, move "target"))));
-    core::cli::println(move "String::concat"(move "has 'version': ", move "bool::to_string"("MiniDict<String,String>::has"(&dict, move "version"))));
-    core::cli::println(move "String::concat"(move "size: ", move "i32::to_string"(__inline_MiniDict_String_String___size_0: {
-        break __inline_MiniDict_String_String___size_0: __inline_Array_Tuple_String_String____len_0: {
+    core::cli::println(move "String::concat"(move "has 'target': ", __inline_bool__to_string_1: {
+        let self: bool = "MiniDict<String,String>::has"(&dict, move "target");
+        break __inline_bool__to_string_1: if self {
+            "true";
+        } else {
+            "false";
+        };
+    }));
+    core::cli::println(move "String::concat"(move "has 'version': ", __inline_bool__to_string_2: {
+        let self: bool = "MiniDict<String,String>::has"(&dict, move "version");
+        break __inline_bool__to_string_2: if self {
+            "true";
+        } else {
+            "false";
+        };
+    }));
+    core::cli::println(move "String::concat"(move "size: ", move "i32::to_string"(__inline_MiniDict_String_String___size_3: {
+        break __inline_MiniDict_String_String___size_3: __inline_Array_Tuple_String_String____len_0: {
             let self: &Array<[String, String]> = &dict.entries;
             break __inline_Array_Tuple_String_String____len_0: self.used;
         };
@@ -104,9 +120,5 @@ pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>,
     }
     core::builtin::array_set::<[String, String]>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "MiniDict<String,String>::new"() -> MiniDict<String,String> {
-    return MiniDict<String,String> { entries: [] };
 }
 

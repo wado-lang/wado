@@ -14,10 +14,6 @@ pub struct Opts {
     width: i32,
 }
 
-pub fn "Opts::default"() -> Opts {
-    return Opts { align: Align::Right, width: 0 };
-}
-
 pub fn format_str(s: String, opts: Opts) -> String {
     if (opts.width <= 0) {
         return s;
@@ -30,7 +26,9 @@ pub fn format_str(s: String, opts: Opts) -> String {
 }
 
 fn run() with Stdout {
-    let opts: Opts = move "Opts::default"();
+    let opts: Opts = __inline_Opts__default_0: {
+        break __inline_Opts__default_0: Opts { align: Align::Right, width: 0 };
+    };
     let s: String = move format_str(move "hello", opts);
     core::cli::println(s);
 }

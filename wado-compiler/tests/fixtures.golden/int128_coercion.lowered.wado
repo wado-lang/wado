@@ -14,22 +14,58 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let a: u128 = move "u128::from_u64"(100);
+    let a: u128 = __inline_u128__from_u64_0: {
+        break __inline_u128__from_u64_0: u128 { low: 100, high: 0 };
+    };
     core::cli::println(move "String::concat"(move "u128 literal coercion: ", move "u128::to_string"(a)));
-    let b: i128 = move "i128::from_i64"(42);
+    let b: i128 = __inline_i128__from_i64_1: {
+        let high: i64 = if (42 < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_1: i128 { low: 42 as u64, high: high };
+    };
     core::cli::println(move "String::concat"(move "i128 literal coercion: ", move "i128::to_string"(b)));
-    let c: i128 = move "i128::from_pair"(18446744073709551516, -1);
+    let c: i128 = __inline_i128__from_pair_2: {
+        break __inline_i128__from_pair_2: i128 { low: 18446744073709551516, high: -1 };
+    };
     core::cli::println(move "String::concat"(move "i128 negative literal coercion: ", move "i128::to_string"(c)));
-    let d: u128 = move "u128::from_u64"(200);
+    let d: u128 = __inline_u128__from_u64_3: {
+        break __inline_u128__from_u64_3: u128 { low: 200, high: 0 };
+    };
     core::cli::println(move "String::concat"(move "u128 cast: ", move "u128::to_string"(d)));
-    let e: i128 = move "i128::from_i64"(300);
+    let e: i128 = __inline_i128__from_i64_4: {
+        let high: i64 = if (300 < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_4: i128 { low: 300 as u64, high: high };
+    };
     core::cli::println(move "String::concat"(move "i128 cast: ", move "i128::to_string"(e)));
-    let g: u128 = move "u128::from_u64"(500 as u64);
+    let g: u128 = __inline_u128__from_u64_5: {
+        let value: u64 = 500 as u64;
+        break __inline_u128__from_u64_5: u128 { low: value, high: 0 };
+    };
     core::cli::println(move "String::concat"(move "u128 from i64 variable: ", move "u128::to_string"(g)));
-    let h: i128 = move "i128::from_i64"(500 as i64);
+    let h: i128 = __inline_i128__from_i64_6: {
+        let value: i64 = 500 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_6: i128 { low: value as u64, high: high };
+    };
     core::cli::println(move "String::concat"(move "i128 from i64 variable: ", move "i128::to_string"(h)));
-    let sum: u128 = move "u128::from_u64"(10);
-    let sum2: u128 = move "u128^Add::add"(&sum, &"u128::from_u64"(5 as u64));
+    let sum: u128 = __inline_u128__from_u64_7: {
+        break __inline_u128__from_u64_7: u128 { low: 10, high: 0 };
+    };
+    let sum2: u128 = move "u128^Add::add"(&sum, &__inline_u128__from_u64_8: {
+        let value: u64 = 5 as u64;
+        break __inline_u128__from_u64_8: u128 { low: value, high: 0 };
+    });
     core::cli::println(move "String::concat"(move "u128 arithmetic: ", move "u128::to_string"(sum2)));
     core::cli::println(move "All coercion tests passed!");
 }

@@ -28,47 +28,46 @@ struct "Pair<i32,i64>" {
 }
 
 fn run() with Stdout {
-    let p: Pair<i32,i64> = move "Pair<i32,i64>::create"(10, 20 as i64);
-    let boxed: Box<i32> = move "Box<i32>::new"(__inline_Pair_i32_i64___get_first_0: {
-        break __inline_Pair_i32_i64___get_first_0: p.first;
-    });
-    core::cli::println(move "String::concat"(move "boxed first: ", move "i32::to_string"(__inline_Box_i32___get_1: {
-        break __inline_Box_i32___get_1: boxed.value;
-    })));
-    let pair: Pair<i32,i32> = move "Pair<i32,i32>::create"(100, 200);
-    let boxed_pair: Box<Pair<i32,i32>> = move "Box<Pair<i32,i32>>::new"(pair);
-    let inner_pair: Pair<i32,i32> = __inline_Box_Pair_i32_i32____get_2: {
-        break __inline_Box_Pair_i32_i32____get_2: boxed_pair.value;
+    let p: Pair<i32,i64> = __inline_Pair_i32_i64___create_0: {
+        let second: i64 = 20 as i64;
+        break __inline_Pair_i32_i64___create_0: Pair<i32,i64> { first: 10, second: second };
     };
-    core::cli::println(move "String::concat"(move "inner first: ", move "i32::to_string"(__inline_Pair_i32_i32___get_first_3: {
-        break __inline_Pair_i32_i32___get_first_3: inner_pair.first;
+    let boxed: Box<i32> = __inline_Box_i32___new_2: {
+        let value: i32 = __inline_Pair_i32_i64___get_first_1: {
+            break __inline_Pair_i32_i64___get_first_1: p.first;
+        };
+        break __inline_Box_i32___new_2: Box<i32> { value: value };
+    };
+    core::cli::println(move "String::concat"(move "boxed first: ", move "i32::to_string"(__inline_Box_i32___get_3: {
+        break __inline_Box_i32___get_3: boxed.value;
     })));
-    core::cli::println(move "String::concat"(move "inner second: ", move "i32::to_string"(__inline_Pair_i32_i32___get_second_4: {
-        break __inline_Pair_i32_i32___get_second_4: inner_pair.second;
+    let pair: Pair<i32,i32> = __inline_Pair_i32_i32___create_4: {
+        break __inline_Pair_i32_i32___create_4: Pair<i32,i32> { first: 100, second: 200 };
+    };
+    let boxed_pair: Box<Pair<i32,i32>> = __inline_Box_Pair_i32_i32____new_5: {
+        break __inline_Box_Pair_i32_i32____new_5: Box<Pair<i32,i32>> { value: pair };
+    };
+    let inner_pair: Pair<i32,i32> = __inline_Box_Pair_i32_i32____get_6: {
+        break __inline_Box_Pair_i32_i32____get_6: boxed_pair.value;
+    };
+    core::cli::println(move "String::concat"(move "inner first: ", move "i32::to_string"(__inline_Pair_i32_i32___get_first_7: {
+        break __inline_Pair_i32_i32___get_first_7: inner_pair.first;
     })));
-    let val: i32 = __inline_Box_i32___get_5: {
-        let self: &Box<i32> = &"Box<i32>::new"(__inline_Pair_i32_i32___get_second_6: {
-            let self: &Pair<i32,i32> = &"Pair<i32,i32>::create"(5, 10);
-            break __inline_Pair_i32_i32___get_second_6: self.second;
-        });
-        break __inline_Box_i32___get_5: self.value;
+    core::cli::println(move "String::concat"(move "inner second: ", move "i32::to_string"(__inline_Pair_i32_i32___get_second_8: {
+        break __inline_Pair_i32_i32___get_second_8: inner_pair.second;
+    })));
+    let val: i32 = __inline_Box_i32___get_9: {
+        let self: &Box<i32> = &__inline_Box_i32___new_12: {
+            let value: i32 = __inline_Pair_i32_i32___get_second_11: {
+                let self: &Pair<i32,i32> = &__inline_Pair_i32_i32___create_10: {
+                    break __inline_Pair_i32_i32___create_10: Pair<i32,i32> { first: 5, second: 10 };
+                };
+                break __inline_Pair_i32_i32___get_second_11: self.second;
+            };
+            break __inline_Box_i32___new_12: Box<i32> { value: value };
+        };
+        break __inline_Box_i32___get_9: self.value;
     };
     core::cli::println(move "String::concat"(move "chained result: ", move "i32::to_string"(val)));
-}
-
-pub fn "Box<Pair<i32,i32>>::new"(value: Pair<i32,i32>) -> Box<Pair<i32,i32>> {
-    return Box<Pair<i32,i32>> { value: value };
-}
-
-pub fn "Pair<i32,i32>::create"(first: i32, second: i32) -> Pair<i32,i32> {
-    return Pair<i32,i32> { first: first, second: second };
-}
-
-pub fn "Box<i32>::new"(value: i32) -> Box<i32> {
-    return Box<i32> { value: value };
-}
-
-pub fn "Pair<i32,i64>::create"(first: i32, second: i64) -> Pair<i32,i64> {
-    return Pair<i32,i64> { first: first, second: second };
 }
 

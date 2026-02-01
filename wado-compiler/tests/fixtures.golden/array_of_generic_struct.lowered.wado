@@ -25,7 +25,9 @@ struct "Box<i32>" {
 fn __test_0_container_of_boxes() {
     let mut c: Container<Box<i32>> = move "Container<Box<i32>>::new"();
     __inline_Container_Box_i32____add_0: {
-        let item: Box<i32> = move "Box<i32>::new"(42);
+        let item: Box<i32> = __inline_Box_i32___new_1: {
+            break __inline_Box_i32___new_1: Box<i32> { value: 42 };
+        };
         "Array<Box<i32>>::append"(&mut c.items, item);
         c.size = (c.size + 1);
     };
@@ -47,8 +49,12 @@ fn __test_0_container_of_boxes() {
 
 fn __test_1_array_of_boxes() {
     let mut arr: Array<Box<i32>> = move [];
-    "Array<Box<i32>>::append"(&mut arr, move "Box<i32>::new"(10));
-    "Array<Box<i32>>::append"(&mut arr, move "Box<i32>::new"(20));
+    "Array<Box<i32>>::append"(&mut arr, __inline_Box_i32___new_0: {
+        break __inline_Box_i32___new_0: Box<i32> { value: 10 };
+    });
+    "Array<Box<i32>>::append"(&mut arr, __inline_Box_i32___new_1: {
+        break __inline_Box_i32___new_1: Box<i32> { value: 20 };
+    });
     __assert_2: {
         let __v0: i32 = "Array<Box<i32>>::len"(&arr);
         let __cond: bool = (__v0 == 2);
@@ -98,10 +104,6 @@ pub fn "Array<Box<i32>>::append"(self: &mut Array<Box<i32>>, value: Box<i32>) {
 
 fn "Array<Box<i32>>^IndexValue::index_value"(self: &Array<Box<i32>>, index: i32) -> Box<i32> {
     return core::builtin::array_get::<Box<i32>>(self.repr, index);
-}
-
-fn "Box<i32>::new"(value: i32) -> Box<i32> {
-    return Box<i32> { value: value };
 }
 
 fn "Container<Box<i32>>::new"() -> Container<Box<i32>> {

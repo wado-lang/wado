@@ -10,12 +10,20 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "i8: ", move "i8::to_string"(42)));
-    core::cli::println(move "String::concat"(move "i16: ", move "i16::to_string"(1000)));
+    core::cli::println(move "String::concat"(move "i8: ", __inline_i8__to_string_0: {
+        break __inline_i8__to_string_0: "i32::to_string"(42 as i32);
+    }));
+    core::cli::println(move "String::concat"(move "i16: ", __inline_i16__to_string_1: {
+        break __inline_i16__to_string_1: "i32::to_string"(1000 as i32);
+    }));
     core::cli::println(move "String::concat"(move "i32: ", move "i32::to_string"(100000)));
     core::cli::println(move "String::concat"(move "i64: ", move "i64::to_string"(10000000000)));
-    core::cli::println(move "String::concat"(move "u8: ", move "u8::to_string"(200)));
-    core::cli::println(move "String::concat"(move "u16: ", move "u16::to_string"(50000)));
+    core::cli::println(move "String::concat"(move "u8: ", __inline_u8__to_string_2: {
+        break __inline_u8__to_string_2: "i32::to_string"(200 as i32);
+    }));
+    core::cli::println(move "String::concat"(move "u16: ", __inline_u16__to_string_3: {
+        break __inline_u16__to_string_3: "i32::to_string"(50000 as i32);
+    }));
     core::cli::println(move "String::concat"(move "u32: ", move "u32::to_string"(3000000000)));
     core::cli::println(move "String::concat"(move "u64: ", move "u64::to_string"(10000000000000000000)));
 }

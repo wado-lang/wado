@@ -25,15 +25,19 @@ struct "BTreeNode<String,i32>" {
 }
 
 fn run() with Stdout {
-    let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::with_default_degree"();
+    let mut map: TreeMap<String,i32> = __inline_TreeMap_String_i32___with_default_degree_0: {
+        break __inline_TreeMap_String_i32___with_default_degree_0: __inline_TreeMap_String_i32___new_0: {
+            break __inline_TreeMap_String_i32___new_0: TreeMap<String,i32> { root: null, t: 3, size: 0, deleted_count: 0 };
+        };
+    };
     "TreeMap<String,i32>::insert"(&mut map, move "apple", 1);
     "TreeMap<String,i32>::insert"(&mut map, move "banana", 2);
     "TreeMap<String,i32>::insert"(&mut map, move "cherry", 3);
     "TreeMap<String,i32>::insert"(&mut map, move "date", 4);
     "TreeMap<String,i32>::insert"(&mut map, move "elderberry", 5);
     core::cli::println(move "=== After insertion ===");
-    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_0: {
-        break __inline_TreeMap_String_i32___len_0: map.size;
+    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_1: {
+        break __inline_TreeMap_String_i32___len_1: map.size;
     })));
     if Some(val) = "TreeMap<String,i32>::get"(&map, &"banana") {
         core::cli::println(move "String::concat"(move "banana = ", move "i32::to_string"(val)));
@@ -47,8 +51,8 @@ fn run() with Stdout {
     }
     core::cli::println(move "\n=== After deleting cherry ===");
     "TreeMap<String,i32>::delete"(&mut map, &"cherry");
-    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_1: {
-        break __inline_TreeMap_String_i32___len_1: map.size;
+    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_2: {
+        break __inline_TreeMap_String_i32___len_2: map.size;
     })));
     if None = "TreeMap<String,i32>::get"(&map, &"cherry") {
         core::cli::println(move "cherry = (not found)");
@@ -61,14 +65,14 @@ fn run() with Stdout {
         core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move "i32::to_string"(value)));
     }
     core::cli::println(move "\n=== After compaction ===");
-    if __inline_TreeMap_String_i32___needs_compaction_2: {
-        break __inline_TreeMap_String_i32___needs_compaction_2: ((map.deleted_count > 0) && ((map.deleted_count * 4) > (map.size + map.deleted_count)));
+    if __inline_TreeMap_String_i32___needs_compaction_3: {
+        break __inline_TreeMap_String_i32___needs_compaction_3: ((map.deleted_count > 0) && ((map.deleted_count * 4) > (map.size + map.deleted_count)));
     } {
         core::cli::println(move "Compaction needed, running...");
         "TreeMap<String,i32>::compact"(&mut map);
     }
-    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_3: {
-        break __inline_TreeMap_String_i32___len_3: map.size;
+    core::cli::println(move "String::concat"(move "Size: ", move "i32::to_string"(__inline_TreeMap_String_i32___len_4: {
+        break __inline_TreeMap_String_i32___len_4: map.size;
     })));
     core::cli::println(move "String::concat"(move "Deleted count: ", move "i32::to_string"(map.deleted_count)));
     core::cli::println(move "\n=== Final iteration ===");
@@ -552,13 +556,5 @@ fn "BTreeNode<String,i32>::new_internal"() -> BTreeNode<String,i32> {
 
 fn "BTreeNode<String,i32>::new_leaf"() -> BTreeNode<String,i32> {
     return BTreeNode<String,i32> { keys: [], values: [], deleted: [], children: [], is_leaf: true };
-}
-
-fn "TreeMap<String,i32>::with_default_degree"() -> TreeMap<String,i32> {
-    return "TreeMap<String,i32>::new"(3);
-}
-
-fn "TreeMap<String,i32>::new"(t: i32) -> TreeMap<String,i32> {
-    return TreeMap<String,i32> { root: null, t: t, size: 0, deleted_count: 0 };
 }
 

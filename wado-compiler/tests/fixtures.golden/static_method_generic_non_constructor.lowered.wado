@@ -14,25 +14,19 @@ struct "Counter<i32>" {
 }
 
 fn run() with Stdout {
-    let z: i32 = "Counter<i32>::zero"();
+    let z: i32 = __inline_Counter_i32___zero_0: {
+        break __inline_Counter_i32___zero_0: 0;
+    };
     core::cli::println(move "String::concat"(move "zero: ", move "i32::to_string"(z)));
-    let d: i32 = "Counter<i32>::default_value"(100);
+    let d: i32 = __inline_Counter_i32___default_value_1: {
+        break __inline_Counter_i32___default_value_1: 100;
+    };
     core::cli::println(move "String::concat"(move "default: ", move "i32::to_string"(d)));
-    let c: Counter<i32> = move "Counter<i32>::new"(42);
-    core::cli::println(move "String::concat"(move "counter value: ", move "i32::to_string"(__inline_Counter_i32___get_0: {
-        break __inline_Counter_i32___get_0: c.value;
+    let c: Counter<i32> = __inline_Counter_i32___new_2: {
+        break __inline_Counter_i32___new_2: Counter<i32> { value: 42 };
+    };
+    core::cli::println(move "String::concat"(move "counter value: ", move "i32::to_string"(__inline_Counter_i32___get_3: {
+        break __inline_Counter_i32___get_3: c.value;
     })));
-}
-
-pub fn "Counter<i32>::new"(value: i32) -> Counter<i32> {
-    return Counter<i32> { value: value };
-}
-
-pub fn "Counter<i32>::default_value"(v: i32) -> i32 {
-    return v;
-}
-
-pub fn "Counter<i32>::zero"() -> i32 {
-    return 0;
 }
 

@@ -15,28 +15,34 @@ fn run() with Stdout {
     let c: String = move "World!";
     let combined: String = move "String::concat"(move "String::concat"(a, b), c);
     core::cli::println(combined);
-    let mut builder: String = move "String::with_capacity"(20);
+    let mut builder: String = __inline_String__with_capacity_0: {
+        break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(20), used: 0 };
+    };
     "String::append"(&mut builder, move "Hello");
     "String::append"(&mut builder, move ", ");
     "String::append"(&mut builder, move "World!");
     core::cli::println(builder);
-    let mut s: String = move "String::with_capacity"(10);
-    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"(__inline_String__len_0: {
-        break __inline_String__len_0: s.used;
+    let mut s: String = __inline_String__with_capacity_1: {
+        break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(10), used: 0 };
+    };
+    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"(__inline_String__len_2: {
+        break __inline_String__len_2: s.used;
     })));
     "String::append"(&mut s, move "Hi");
-    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"(__inline_String__len_1: {
-        break __inline_String__len_1: s.used;
+    core::cli::println(move "String::concat"(move "len: ", move "i32::to_string"(__inline_String__len_3: {
+        break __inline_String__len_3: s.used;
     })));
-    let empty: String = move "String::with_capacity"(0);
-    if __inline_String__is_empty_2: {
-        break __inline_String__is_empty_2: (empty.used == 0);
+    let empty: String = __inline_String__with_capacity_4: {
+        break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(0), used: 0 };
+    };
+    if __inline_String__is_empty_5: {
+        break __inline_String__is_empty_5: (empty.used == 0);
     } {
         core::cli::println(move "empty is empty");
     }
     let nonempty: String = move "test";
-    if !__inline_String__is_empty_3: {
-        break __inline_String__is_empty_3: (nonempty.used == 0);
+    if !__inline_String__is_empty_6: {
+        break __inline_String__is_empty_6: (nonempty.used == 0);
     } {
         core::cli::println(move "nonempty is not empty");
     }

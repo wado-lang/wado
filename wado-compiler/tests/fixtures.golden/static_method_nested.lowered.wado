@@ -14,34 +14,35 @@ struct Point {
     y: i32,
 }
 
-fn "Point::origin"() -> Point {
-    return Point { x: 0, y: 0 };
-}
-
-fn "Point::new"(x: i32, y: i32) -> Point {
-    return Point { x: x, y: y };
-}
-
-fn "Point::scale"(p: Point, factor: i32) -> Point {
-    return Point { x: (p.x * factor), y: (p.y * factor) };
-}
-
-fn "Point::add"(a: Point, b: Point) -> Point {
-    return Point { x: (a.x + b.x), y: (a.y + b.y) };
-}
-
-fn "Point::distance_squared"(a: Point, b: Point) -> i32 {
-    let dx: i32 = (a.x - b.x);
-    let dy: i32 = (a.y - b.y);
-    return ((dx * dx) + (dy * dy));
-}
-
 fn run() with Stdout {
-    let p1: Point = move "Point::scale"(move "Point::origin"(), 5);
+    let p1: Point = __inline_Point__scale_1: {
+        let p: Point = __inline_Point__origin_0: {
+            break __inline_Point__origin_0: Point { x: 0, y: 0 };
+        };
+        break __inline_Point__scale_1: Point { x: (p.x * 5), y: (p.y * 5) };
+    };
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "scaled origin: (", move "i32::to_string"(p1.x)), move ", "), move "i32::to_string"(p1.y)), move ")"));
-    let p2: Point = move "Point::add"(move "Point::new"(1, 2), move "Point::new"(3, 4));
+    let p2: Point = __inline_Point__add_4: {
+        let a: Point = __inline_Point__new_2: {
+            break __inline_Point__new_2: Point { x: 1, y: 2 };
+        };
+        let b: Point = __inline_Point__new_3: {
+            break __inline_Point__new_3: Point { x: 3, y: 4 };
+        };
+        break __inline_Point__add_4: Point { x: (a.x + b.x), y: (a.y + b.y) };
+    };
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "sum of points: (", move "i32::to_string"(p2.x)), move ", "), move "i32::to_string"(p2.y)), move ")"));
-    let dist: i32 = "Point::distance_squared"(move "Point::origin"(), move "Point::new"(3, 4));
+    let dist: i32 = __inline_Point__distance_squared_7: {
+        let a: Point = __inline_Point__origin_5: {
+            break __inline_Point__origin_5: Point { x: 0, y: 0 };
+        };
+        let b: Point = __inline_Point__new_6: {
+            break __inline_Point__new_6: Point { x: 3, y: 4 };
+        };
+        let dx: i32 = (a.x - b.x);
+        let dy: i32 = (a.y - b.y);
+        break __inline_Point__distance_squared_7: ((dx * dx) + (dy * dy));
+    };
     core::cli::println(move "String::concat"(move "distance squared: ", move "i32::to_string"(dist)));
 }
 

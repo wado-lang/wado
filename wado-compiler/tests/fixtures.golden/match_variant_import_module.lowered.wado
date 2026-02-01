@@ -31,7 +31,9 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
     let pad_len: i32 = (width - __inline_String__len_1: {
         break __inline_String__len_1: s.used;
     });
-    let mut result: String = move "String::with_capacity"(width);
+    let mut result: String = __inline_String__with_capacity_2: {
+        break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(width), used: 0 };
+    };
     return match spec.align {
         Left => {
             "String::append"(&mut result, s);
@@ -65,7 +67,21 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
 fn run() with Stdout {
     core::cli::println(__inline_f64_to_string_fill_0: {
         let align: Align = move Align::Right;
-        let s: String = move "f64::to_string"(42.0);
+        let s: String = __inline_f64__to_string_0: {
+            let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+            let len: i32 = core::builtin::f64_to_buffer(42.0, ptr);
+            let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+                let arr: builtin::array<u8> = "array_new<u8>"(len);
+                for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                    core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+                }
+                break __inline_memory_to_gc_array_0: arr;
+            };
+            core::builtin::realloc(ptr, 24, 1, 0);
+            break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_1: {
+                break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+            };
+        };
         let spec: FormatSpec = move FormatSpec { fill: '_', align: align, width: 8 };
         break __inline_f64_to_string_fill_0: apply_padding(s, spec);
     });

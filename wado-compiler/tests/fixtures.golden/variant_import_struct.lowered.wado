@@ -10,7 +10,9 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let mut opts: Options = move "Options::default"();
+    let mut opts: Options = __inline_Options__default_0: {
+        break __inline_Options__default_0: Options { align: Align::Right, width: 0 };
+    };
     opts.width = 10;
     let s1: String = move ./variant_import_struct_module.wado::format_with_opts(move "hi", opts);
     core::cli::println(move "String::concat"(move "String::concat"(move "[", s1), move "]"));

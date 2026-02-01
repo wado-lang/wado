@@ -17,29 +17,27 @@ struct Container {
     item: Value,
 }
 
-fn "Value::new"(n: i32) -> Value {
-    return Value { n: n };
-}
-
-fn "Container::new"() -> Container {
-    return Container { item: "Value::new"(10) };
-}
-
 fn run() with Stdout {
-    let mut c: Container = move "Container::new"();
-    let v: Value = *__inline_Container_Index__index_0: {
-        break __inline_Container_Index__index_0: &c.item;
+    let mut c: Container = __inline_Container__new_0: {
+        break __inline_Container__new_0: Container { item: __inline_Value__new_0: {
+            break __inline_Value__new_0: Value { n: 10 };
+        } };
+    };
+    let v: Value = *__inline_Container_Index__index_1: {
+        break __inline_Container_Index__index_1: &c.item;
     };
     core::cli::println(move "String::concat"(move "Initial: ", move "i32::to_string"(v.n)));
-    __inline_Value__double_1: {
-        let self: &mut Value = __inline_Container_IndexMut__index_mut_2: {
-            break __inline_Container_IndexMut__index_mut_2: &mut c.item;
+    __inline_Value__double_2: {
+        let self: &mut Value = __inline_Container_IndexMut__index_mut_3: {
+            break __inline_Container_IndexMut__index_mut_3: &mut c.item;
         };
         self.n = (self.n * 2);
     };
     core::cli::println(move "String::concat"(move "After double: ", move "i32::to_string"(c.item.n)));
-    __inline_Container_IndexAssign__index_assign_3: {
-        let value: Value = move "Value::new"(100);
+    __inline_Container_IndexAssign__index_assign_4: {
+        let value: Value = __inline_Value__new_5: {
+            break __inline_Value__new_5: Value { n: 100 };
+        };
         c.item = value;
     };
     core::cli::println(move "String::concat"(move "After assign: ", move "i32::to_string"(c.item.n)));

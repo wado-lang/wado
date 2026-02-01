@@ -16,35 +16,74 @@
 fn run() with Stdout {
     let u128_max: u128 = move "u128::from_string"(move "340282366920938463463374607431768211455");
     core::cli::println(move "String::concat"(move "u128 max: ", move "u128::to_string"(u128_max)));
-    let u128_zero: u128 = move "u128::from_u64"(0);
+    let u128_zero: u128 = __inline_u128__from_u64_0: {
+        break __inline_u128__from_u64_0: u128 { low: 0, high: 0 };
+    };
     core::cli::println(move "String::concat"(move "u128 zero: ", move "u128::to_string"(u128_zero)));
-    let u128_one: u128 = move "u128::from_u64"(1);
+    let u128_one: u128 = __inline_u128__from_u64_1: {
+        break __inline_u128__from_u64_1: u128 { low: 1, high: 0 };
+    };
     core::cli::println(move "String::concat"(move "u128 one: ", move "u128::to_string"(u128_one)));
-    let u128_max_u64: u128 = move "u128::from_u64"(18446744073709551615 as u64);
+    let u128_max_u64: u128 = __inline_u128__from_u64_2: {
+        let value: u64 = 18446744073709551615 as u64;
+        break __inline_u128__from_u64_2: u128 { low: value, high: 0 };
+    };
     core::cli::println(move "String::concat"(move "u128 max_u64: ", move "u128::to_string"(u128_max_u64)));
     let i128_max: i128 = move "i128::from_string"(move "170141183460469231731687303715884105727");
     core::cli::println(move "String::concat"(move "i128 max: ", move "i128::to_string"(i128_max)));
     let i128_min: i128 = move "i128::from_string"(move "-170141183460469231731687303715884105728");
     core::cli::println(move "String::concat"(move "i128 min: ", move "i128::to_string"(i128_min)));
-    let i128_zero: i128 = move "i128::from_i64"(0);
+    let i128_zero: i128 = __inline_i128__from_i64_3: {
+        let high: i64 = if (0 < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_3: i128 { low: 0 as u64, high: high };
+    };
     core::cli::println(move "String::concat"(move "i128 zero: ", move "i128::to_string"(i128_zero)));
-    let i128_one: i128 = move "i128::from_i64"(1);
+    let i128_one: i128 = __inline_i128__from_i64_4: {
+        let high: i64 = if (1 < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_4: i128 { low: 1 as u64, high: high };
+    };
     core::cli::println(move "String::concat"(move "i128 one: ", move "i128::to_string"(i128_one)));
-    let i128_neg_one: i128 = move "i128::from_pair"(18446744073709551615, -1);
+    let i128_neg_one: i128 = __inline_i128__from_pair_5: {
+        break __inline_i128__from_pair_5: i128 { low: 18446744073709551615, high: -1 };
+    };
     core::cli::println(move "String::concat"(move "i128 neg_one: ", move "i128::to_string"(i128_neg_one)));
-    let i128_max_i64: i128 = move "i128::from_i64"(9223372036854775807 as i64);
+    let i128_max_i64: i128 = __inline_i128__from_i64_6: {
+        let value: i64 = 9223372036854775807 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_6: i128 { low: value as u64, high: high };
+    };
     core::cli::println(move "String::concat"(move "i128 max_i64: ", move "i128::to_string"(i128_max_i64)));
-    let i128_min_i64: i128 = move "i128::from_i64"(-9223372036854775808 as i64);
+    let i128_min_i64: i128 = __inline_i128__from_i64_7: {
+        let value: i64 = -9223372036854775808 as i64;
+        let high: i64 = if (value < 0 as i64) {
+            -1 as i64;
+        } else {
+            0 as i64;
+        };
+        break __inline_i128__from_i64_7: i128 { low: value as u64, high: high };
+    };
     core::cli::println(move "String::concat"(move "i128 min_i64: ", move "i128::to_string"(i128_min_i64)));
-    if ((__inline_u128__low_0: {
-        break __inline_u128__low_0: u128_max.low;
-    } == 18446744073709551615 as u64) && (__inline_u128__high_1: {
-        break __inline_u128__high_1: u128_max.high;
+    if ((__inline_u128__low_8: {
+        break __inline_u128__low_8: u128_max.low;
+    } == 18446744073709551615 as u64) && (__inline_u128__high_9: {
+        break __inline_u128__high_9: u128_max.high;
     } == 18446744073709551615 as u64)) {
         core::cli::println(move "u128 max low/high correct");
     }
-    if __inline_i128__is_negative_2: {
-        break __inline_i128__is_negative_2: (i128_min.high < 0 as i64);
+    if __inline_i128__is_negative_10: {
+        break __inline_i128__is_negative_10: (i128_min.high < 0 as i64);
     } {
         core::cli::println(move "i128 min is negative");
     }

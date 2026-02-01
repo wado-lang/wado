@@ -29,6 +29,40 @@ fn run() with Stdout {
     let e: bool = __inline_identity_bool__4: {
         break __inline_identity_bool__4: true;
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "i32::to_string"(a), move " "), move "i64::to_string"(b)), move " "), move "f32::to_string"(c)), move " "), move "f64::to_string"(d)), move " "), move "bool::to_string"(e)));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "i32::to_string"(a), move " "), move "i64::to_string"(b)), move " "), __inline_f32__to_string_5: {
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 16);
+        let len: i32 = core::builtin::f32_to_buffer(c, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_0: arr;
+        };
+        core::builtin::realloc(ptr, 16, 1, 0);
+        break __inline_f32__to_string_5: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        };
+    }), move " "), __inline_f64__to_string_6: {
+        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
+        let len: i32 = core::builtin::f64_to_buffer(d, ptr);
+        let arr: builtin::array<u8> = __inline_memory_to_gc_array_2: {
+            let arr: builtin::array<u8> = "array_new<u8>"(len);
+            for let mut i: i32 = 0; (i < len); i = (i + 1) {
+                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
+            }
+            break __inline_memory_to_gc_array_2: arr;
+        };
+        core::builtin::realloc(ptr, 24, 1, 0);
+        break __inline_f64__to_string_6: __inline_String__internal_from_utf8_raw_3: {
+            break __inline_String__internal_from_utf8_raw_3: String { repr: arr, used: len };
+        };
+    }), move " "), __inline_bool__to_string_7: {
+        break __inline_bool__to_string_7: if e {
+            "true";
+        } else {
+            "false";
+        };
+    }));
 }
 
