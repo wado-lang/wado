@@ -13,15 +13,41 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
+pub struct "ArrayIter<char>" {
+    repr: builtin::array<char>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let mut arr: Array<char> = move [];
     arr."Array<char>::append"('A');
     arr."Array<char>::append"('B');
     arr."Array<char>::append"('C');
-    for let _item of arr {
-        core::cli::println(move x."char::to_string"());
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<char> = __inline_Array_char__IntoIterator__into_iter_0: {
+            break __inline_Array_char__IntoIterator__into_iter_0: ArrayIter<char> { repr: arr.repr, used: arr.used, index: 0 };
+        };
+        loop {
+            if Some(x) = __iter_0."ArrayIter<char>^Iterator::next"() {
+                core::cli::println(move x."char::to_string"());
+            } else {
+                break;
+            }
+        }
     }
 }
+
+fn "ArrayIter<char>^Iterator::next"(self: &mut ArrayIter<char>) -> Option<char> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: char = "array_get<char>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<char>"(arr: builtin::array<char>, idx: i32) -> char;
 
 pub fn "Array<char>::append"(self: &mut Array<char>, value: char) {
     let used: i32 = self.used;

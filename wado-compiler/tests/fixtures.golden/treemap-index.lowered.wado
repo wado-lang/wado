@@ -156,14 +156,18 @@ fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option
 
 fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: String) -> Option<&TreeMapNode<String,i32>> {
     let mut current: Option<&mut TreeMapNode<String,i32>> = self.root;
-    while let Some(n) = current {
-        if (!n.deleted && key."String^Eq::eq"(&n.key)) {
-            return Option::Some(n);
-        }
-        if key."String^Ord::lt"(&n.key) {
-            current = n.left;
+    loop {
+        if Some(n) = current {
+            if (!n.deleted && key."String^Eq::eq"(&n.key)) {
+                return Option::Some(n);
+            }
+            if key."String^Ord::lt"(&n.key) {
+                current = n.left;
+            } else {
+                current = n.right;
+            }
         } else {
-            current = n.right;
+            break;
         }
     }
     return null;

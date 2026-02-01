@@ -21,11 +21,22 @@ use crate::unparse::unparse_expr_simple;
 struct DesugarContext {
     /// Counter for generating unique assert block labels
     assert_counter: u32,
+    /// Counter for generating unique loop labels (for break/continue handling)
+    loop_counter: u32,
+    /// Stack of loop labels for break/continue transformation in For loops
+    /// Each entry is `(outer_label, body_label)` where:
+    /// - `outer_label`: target for unlabeled break
+    /// - `body_label`: target for unlabeled continue (to skip to update)
+    for_loop_labels: Vec<(String, String)>,
 }
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
 pub fn desugar_module(module: &Module) -> Module {
-    let mut ctx = DesugarContext { assert_counter: 0 };
+    let mut ctx = DesugarContext {
+        assert_counter: 0,
+        loop_counter: 0,
+        for_loop_labels: Vec::new(),
+    };
     Module::with_metadata(
         module
             .items
@@ -199,36 +210,48 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
             span: i.span,
         }),
-        Stmt::While(w) => Stmt::While(WhileStmt {
-            condition: desugar_condition(&w.condition),
-            body: desugar_block(&w.body, ctx),
-            span: w.span,
-        }),
-        Stmt::For(f) => Stmt::For(ForStmt {
-            init: f.init.as_ref().map(|s| Box::new(desugar_stmt(s, ctx))),
-            condition: f.condition.as_ref().map(desugar_condition),
-            update: f.update.as_ref().map(desugar_expr),
-            body: desugar_block(&f.body, ctx),
-            span: f.span,
-        }),
-        Stmt::ForOf(f) => Stmt::ForOf(ForOfStmt {
-            binding: f.binding.clone(),
-            is_mut: f.is_mut,
-            iterable: desugar_expr(&f.iterable),
-            body: desugar_block(&f.body, ctx),
-            span: f.span,
-        }),
+        Stmt::While(w) => desugar_while(w, ctx),
+        Stmt::For(f) => desugar_for(f, ctx),
+        Stmt::ForOf(f) => desugar_for_of(f, ctx),
         Stmt::Assert(a) => desugar_assert(a, ctx),
-        Stmt::Loop(l) => Stmt::Loop(LoopStmt {
-            body: desugar_block(&l.body, ctx),
-            span: l.span,
-        }),
-        Stmt::Break(b) => Stmt::Break(BreakStmt {
-            label: b.label.clone(),
-            value: b.value.as_ref().map(|v| Box::new(desugar_expr(v))),
-            span: b.span,
-        }),
-        Stmt::Continue(c) => Stmt::Continue(ContinueStmt { span: c.span }),
+        Stmt::Loop(l) => {
+            // Save and clear for_loop_labels - breaks inside this loop should
+            // target this loop, not an outer for loop
+            let saved_labels = std::mem::take(&mut ctx.for_loop_labels);
+            let body = desugar_block(&l.body, ctx);
+            ctx.for_loop_labels = saved_labels;
+            Stmt::Loop(LoopStmt { body, span: l.span })
+        }
+        Stmt::Break(b) => {
+            // If we're inside a For loop and this is an unlabeled break,
+            // transform it to break the outer loop label
+            if b.label.is_none()
+                && let Some((outer_label, _)) = ctx.for_loop_labels.last()
+            {
+                return Stmt::Break(BreakStmt {
+                    label: Some(outer_label.clone()),
+                    value: b.value.as_ref().map(|v| Box::new(desugar_expr(v))),
+                    span: b.span,
+                });
+            }
+            Stmt::Break(BreakStmt {
+                label: b.label.clone(),
+                value: b.value.as_ref().map(|v| Box::new(desugar_expr(v))),
+                span: b.span,
+            })
+        }
+        Stmt::Continue(c) => {
+            // If we're inside a For loop, transform continue to break the body label
+            // (this will skip to the update expression)
+            if let Some((_, body_label)) = ctx.for_loop_labels.last() {
+                return Stmt::Break(BreakStmt {
+                    label: Some(body_label.clone()),
+                    value: None,
+                    span: c.span,
+                });
+            }
+            Stmt::Continue(ContinueStmt { span: c.span })
+        }
         Stmt::LabeledBlock(lb) => Stmt::LabeledBlock(LabeledBlockStmt {
             label: lb.label.clone(),
             block: desugar_block(&lb.block, ctx),
@@ -323,7 +346,11 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 Expr::Block(Box::new(desugar_block(b, ctx)))
             } else {
                 // No context - create a temporary one (rare case)
-                let mut temp_ctx = DesugarContext { assert_counter: 0 };
+                let mut temp_ctx = DesugarContext {
+                    assert_counter: 0,
+                    loop_counter: 0,
+                    for_loop_labels: Vec::new(),
+                };
                 Expr::Block(Box::new(desugar_block(b, &mut temp_ctx)))
             }
         }
@@ -337,7 +364,11 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     span: i.span,
                 }))
             } else {
-                let mut temp_ctx = DesugarContext { assert_counter: 0 };
+                let mut temp_ctx = DesugarContext {
+                    assert_counter: 0,
+                    loop_counter: 0,
+                    for_loop_labels: Vec::new(),
+                };
                 Expr::If(Box::new(IfExpr {
                     init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),
                     condition: desugar_condition(&i.condition),
@@ -402,7 +433,11 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     span: lb.span,
                 }))
             } else {
-                let mut ctx = DesugarContext { assert_counter: 0 };
+                let mut ctx = DesugarContext {
+                    assert_counter: 0,
+                    loop_counter: 0,
+                    for_loop_labels: Vec::new(),
+                };
                 Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
                     label: lb.label.clone(),
                     block: desugar_block(&lb.block, &mut ctx),
@@ -548,6 +583,370 @@ fn desugar_template_string(t: &TemplateStringExpr) -> TemplateStringExpr {
             .collect(),
         span: t.span,
     }
+}
+
+/// Desugar while loop to loop with if-break.
+///
+/// `while cond { body }` becomes:
+/// ```text
+/// loop { if !cond { break; } body }
+/// ```
+///
+/// `while let pattern = expr { body }` becomes:
+/// ```text
+/// loop { if let pattern = expr { body } else { break; } }
+/// ```
+fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
+    let span = w.span;
+
+    // Save and clear for_loop_labels - breaks inside this while loop should
+    // target the generated loop, not an outer for loop
+    let saved_labels = std::mem::take(&mut ctx.for_loop_labels);
+
+    let result = match &w.condition {
+        Condition::Expr(cond) => {
+            // while cond { body } -> loop { if !cond { break; } body }
+            let negated_cond = Expr::Unary(Box::new(UnaryExpr {
+                op: UnaryOp::Not,
+                expr: desugar_expr(cond),
+                span,
+            }));
+
+            let break_stmt = Stmt::Break(BreakStmt {
+                label: None,
+                value: None,
+                span,
+            });
+
+            let if_break = Stmt::If(IfStmt {
+                init: None,
+                condition: Condition::Expr(negated_cond),
+                then_block: Block {
+                    stmts: vec![break_stmt],
+                    span,
+                },
+                else_block: None,
+                span,
+            });
+
+            let mut loop_stmts = vec![if_break];
+            loop_stmts.extend(desugar_block(&w.body, ctx).stmts);
+
+            Stmt::Loop(LoopStmt {
+                body: Block {
+                    stmts: loop_stmts,
+                    span,
+                },
+                span,
+            })
+        }
+        Condition::Pattern { pattern, expr, .. } => {
+            // while let pattern = expr { body } -> loop { if let pattern = expr { body } else { break; } }
+            let break_stmt = Stmt::Break(BreakStmt {
+                label: None,
+                value: None,
+                span,
+            });
+
+            let if_pattern = Stmt::If(IfStmt {
+                init: None,
+                condition: Condition::Pattern {
+                    pattern: pattern.clone(),
+                    expr: desugar_expr(expr),
+                    span,
+                },
+                then_block: desugar_block(&w.body, ctx),
+                else_block: Some(Block {
+                    stmts: vec![break_stmt],
+                    span,
+                }),
+                span,
+            });
+
+            Stmt::Loop(LoopStmt {
+                body: Block {
+                    stmts: vec![if_pattern],
+                    span,
+                },
+                span,
+            })
+        }
+    };
+
+    // Restore for_loop_labels
+    ctx.for_loop_labels = saved_labels;
+    result
+}
+
+/// Desugar C-style for loop to loop with labeled blocks for break/continue handling.
+///
+/// `for init; cond; update { body }` becomes:
+/// ```text
+/// __for_N: {
+///     init;
+///     loop {
+///         if !cond { break __for_N; }
+///         __for_N_body: { body }
+///         update;
+///     }
+/// }
+/// ```
+///
+/// Pattern conditions are handled similarly:
+/// `for init; let pattern = expr; update { body }` becomes:
+/// ```text
+/// __for_N: {
+///     init;
+///     loop {
+///         if let pattern = expr {
+///             __for_N_body: { body }
+///             update;
+///         } else {
+///             break __for_N;
+///         }
+///     }
+/// }
+/// ```
+fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
+    let span = f.span;
+    let loop_id = ctx.loop_counter;
+    ctx.loop_counter += 1;
+
+    let outer_label = format!("__for_{loop_id}");
+    let body_label = format!("__for_{loop_id}_body");
+
+    // Push labels for break/continue transformation
+    ctx.for_loop_labels
+        .push((outer_label.clone(), body_label.clone()));
+
+    // Desugar body with the labels in scope
+    let desugared_body = desugar_block(&f.body, ctx);
+
+    // Pop labels
+    ctx.for_loop_labels.pop();
+
+    // Wrap body in labeled block for continue handling
+    let labeled_body = Stmt::LabeledBlock(LabeledBlockStmt {
+        label: body_label,
+        block: desugared_body,
+        span,
+    });
+
+    // Build loop body based on condition type
+    let loop_body = match &f.condition {
+        Some(Condition::Expr(cond)) => {
+            // Expr condition: if !cond { break __for_N; }
+            let negated_cond = Expr::Unary(Box::new(UnaryExpr {
+                op: UnaryOp::Not,
+                expr: desugar_expr(cond),
+                span,
+            }));
+
+            let break_outer = Stmt::Break(BreakStmt {
+                label: Some(outer_label.clone()),
+                value: None,
+                span,
+            });
+
+            let if_break = Stmt::If(IfStmt {
+                init: None,
+                condition: Condition::Expr(negated_cond),
+                then_block: Block {
+                    stmts: vec![break_outer],
+                    span,
+                },
+                else_block: None,
+                span,
+            });
+
+            let mut stmts = vec![if_break, labeled_body];
+            if let Some(update) = &f.update {
+                stmts.push(Stmt::Expr(ExprStmt {
+                    expr: desugar_expr(update),
+                    span,
+                }));
+            }
+            Block { stmts, span }
+        }
+        Some(Condition::Pattern { pattern, expr, .. }) => {
+            // Pattern condition: if let pattern = expr { body; update; } else { break __for_N; }
+            let break_outer = Stmt::Break(BreakStmt {
+                label: Some(outer_label.clone()),
+                value: None,
+                span,
+            });
+
+            let mut then_stmts = vec![labeled_body];
+            if let Some(update) = &f.update {
+                then_stmts.push(Stmt::Expr(ExprStmt {
+                    expr: desugar_expr(update),
+                    span,
+                }));
+            }
+
+            let if_pattern = Stmt::If(IfStmt {
+                init: None,
+                condition: Condition::Pattern {
+                    pattern: pattern.clone(),
+                    expr: desugar_expr(expr),
+                    span,
+                },
+                then_block: Block {
+                    stmts: then_stmts,
+                    span,
+                },
+                else_block: Some(Block {
+                    stmts: vec![break_outer],
+                    span,
+                }),
+                span,
+            });
+
+            Block {
+                stmts: vec![if_pattern],
+                span,
+            }
+        }
+        None => {
+            // No condition: infinite loop (just body + update)
+            let mut stmts = vec![labeled_body];
+            if let Some(update) = &f.update {
+                stmts.push(Stmt::Expr(ExprStmt {
+                    expr: desugar_expr(update),
+                    span,
+                }));
+            }
+            Block { stmts, span }
+        }
+    };
+
+    let loop_stmt = Stmt::Loop(LoopStmt {
+        body: loop_body,
+        span,
+    });
+
+    // Build outer block: init; loop { ... }
+    let mut outer_stmts = Vec::new();
+    if let Some(init) = &f.init {
+        outer_stmts.push(desugar_stmt(init, ctx));
+    }
+    outer_stmts.push(loop_stmt);
+
+    Stmt::LabeledBlock(LabeledBlockStmt {
+        label: outer_label,
+        block: Block {
+            stmts: outer_stmts,
+            span,
+        },
+        span,
+    })
+}
+
+/// Desugar for-of loop to loop with iterator methods.
+///
+/// `for let x of items { body }` becomes:
+/// ```text
+/// {
+///     let mut __iter_N = items.into_iter();
+///     loop {
+///         if let Some(x) = __iter_N.next() { body } else { break; }
+///     }
+/// }
+/// ```
+fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
+    let span = f.span;
+    let loop_id = ctx.loop_counter;
+    ctx.loop_counter += 1;
+
+    // Save and clear for_loop_labels - breaks inside this for-of loop should
+    // target the generated loop, not an outer for loop
+    let saved_labels = std::mem::take(&mut ctx.for_loop_labels);
+
+    let iter_var = format!("__iter_{loop_id}");
+
+    // let mut __iter_N = items.into_iter();
+    let into_iter_call = Expr::MethodCall(Box::new(MethodCallExpr {
+        receiver: desugar_expr(&f.iterable),
+        method: "into_iter".to_string(),
+        type_args: vec![],
+        args: vec![],
+        has_trailing_comma: false,
+        span,
+    }));
+
+    let iter_let = Stmt::Let(LetStmt {
+        pattern: Pattern::Ident(iter_var.clone()),
+        is_mut: true,
+        is_reactive: false,
+        ty: None,
+        value: into_iter_call,
+        span,
+    });
+
+    // __iter_N.next()
+    let next_call = Expr::MethodCall(Box::new(MethodCallExpr {
+        receiver: Expr::Ident(IdentExpr {
+            name: iter_var,
+            span,
+        }),
+        method: "next".to_string(),
+        type_args: vec![],
+        args: vec![],
+        has_trailing_comma: false,
+        span,
+    }));
+
+    // Pattern: Some(binding)
+    let some_pattern = Pattern::Variant {
+        variant_name: "Some".to_string(),
+        bindings: vec![Pattern::Ident(f.binding.clone())],
+        span,
+    };
+
+    // break;
+    let break_stmt = Stmt::Break(BreakStmt {
+        label: None,
+        value: None,
+        span,
+    });
+
+    // if let Some(x) = __iter_N.next() { body } else { break; }
+    let if_let = Stmt::If(IfStmt {
+        init: None,
+        condition: Condition::Pattern {
+            pattern: some_pattern,
+            expr: next_call,
+            span,
+        },
+        then_block: desugar_block(&f.body, ctx),
+        else_block: Some(Block {
+            stmts: vec![break_stmt],
+            span,
+        }),
+        span,
+    });
+
+    // loop { if let ... }
+    let loop_stmt = Stmt::Loop(LoopStmt {
+        body: Block {
+            stmts: vec![if_let],
+            span,
+        },
+        span,
+    });
+
+    // Restore for_loop_labels
+    ctx.for_loop_labels = saved_labels;
+
+    // Wrap in a labeled block: __for_of_N: { let mut __iter_N = ...; loop { ... } }
+    Stmt::LabeledBlock(LabeledBlockStmt {
+        label: format!("__for_of_{loop_id}"),
+        block: Block {
+            stmts: vec![iter_let, loop_stmt],
+            span,
+        },
+        span,
+    })
 }
 
 /// Desugar an assert statement into a labeled block with intermediate value caching.

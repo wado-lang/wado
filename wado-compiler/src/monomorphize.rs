@@ -639,40 +639,7 @@ impl Monomorphizer {
                     self.rewrite_types_in_block(else_blk, type_table);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.rewrite_types_in_expr(condition, type_table);
-                self.rewrite_types_in_block(body, type_table);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.rewrite_types_in_stmt(s, type_table);
-                }
-                if let Some(cond) = condition {
-                    self.rewrite_types_in_expr(cond, type_table);
-                }
-                self.rewrite_types_in_block(body, type_table);
-                if let Some(upd) = update {
-                    self.rewrite_types_in_expr(upd, type_table);
-                }
-            }
             TirStmtKind::Loop { body } => {
-                self.rewrite_types_in_block(body, type_table);
-            }
-            TirStmtKind::ForOf {
-                iterable,
-                body,
-                binding_type,
-                iterable_type,
-                ..
-            } => {
-                *binding_type = self.rewrite_type_id(*binding_type, type_table);
-                *iterable_type = self.rewrite_type_id(*iterable_type, type_table);
-                self.rewrite_types_in_expr(iterable, type_table);
                 self.rewrite_types_in_block(body, type_table);
             }
             TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
@@ -690,32 +657,6 @@ impl Monomorphizer {
                 self.rewrite_types_in_block(then_block, type_table);
                 if let Some(else_blk) = else_block {
                     self.rewrite_types_in_block(else_blk, type_table);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee,
-                pattern,
-                body,
-            } => {
-                self.rewrite_types_in_expr(scrutinee, type_table);
-                self.rewrite_types_in_pattern(pattern, type_table);
-                self.rewrite_types_in_block(body, type_table);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                pattern,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.rewrite_types_in_stmt(s, type_table);
-                }
-                self.rewrite_types_in_expr(scrutinee, type_table);
-                self.rewrite_types_in_pattern(pattern, type_table);
-                self.rewrite_types_in_block(body, type_table);
-                if let Some(upd) = update {
-                    self.rewrite_types_in_expr(upd, type_table);
                 }
             }
             TirStmtKind::LetPattern { pattern, value, .. } => {
@@ -1357,48 +1298,7 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    condition,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.collect_func_instantiation_sites_in_stmt(s, generic_functions, type_table);
-                }
-                if let Some(cond) = condition {
-                    self.collect_func_instantiation_sites_in_expr(
-                        cond,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-                self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
-                if let Some(upd) = update {
-                    self.collect_func_instantiation_sites_in_expr(
-                        upd,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
             TirStmtKind::Loop { body } => {
-                self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    iterable,
-                    generic_functions,
-                    type_table,
-                );
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
             TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
@@ -1428,40 +1328,6 @@ impl Monomorphizer {
                 if let Some(else_blk) = else_block {
                     self.collect_func_instantiation_sites_in_block(
                         else_blk,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    scrutinee,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.collect_func_instantiation_sites_in_stmt(s, generic_functions, type_table);
-                }
-                self.collect_func_instantiation_sites_in_expr(
-                    scrutinee,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
-                if let Some(upd) = update {
-                    self.collect_func_instantiation_sites_in_expr(
-                        upd,
                         generic_functions,
                         type_table,
                     );
@@ -2194,40 +2060,7 @@ impl Monomorphizer {
                     self.substitute_types_in_block(else_blk, substitution, type_table);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.substitute_types_in_expr(condition, substitution, type_table);
-                self.substitute_types_in_block(body, substitution, type_table);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.substitute_types_in_stmt(s, substitution, type_table);
-                }
-                if let Some(cond) = condition {
-                    self.substitute_types_in_expr(cond, substitution, type_table);
-                }
-                self.substitute_types_in_block(body, substitution, type_table);
-                if let Some(upd) = update {
-                    self.substitute_types_in_expr(upd, substitution, type_table);
-                }
-            }
             TirStmtKind::Loop { body } => {
-                self.substitute_types_in_block(body, substitution, type_table);
-            }
-            TirStmtKind::ForOf {
-                iterable,
-                body,
-                binding_type,
-                iterable_type,
-                ..
-            } => {
-                *binding_type = self.substitute_type(*binding_type, substitution, type_table);
-                *iterable_type = self.substitute_type(*iterable_type, substitution, type_table);
-                self.substitute_types_in_expr(iterable, substitution, type_table);
                 self.substitute_types_in_block(body, substitution, type_table);
             }
             TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
@@ -2245,32 +2078,6 @@ impl Monomorphizer {
                 self.substitute_types_in_block(then_block, substitution, type_table);
                 if let Some(else_blk) = else_block {
                     self.substitute_types_in_block(else_blk, substitution, type_table);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee,
-                pattern,
-                body,
-            } => {
-                self.substitute_types_in_expr(scrutinee, substitution, type_table);
-                self.substitute_types_in_pattern(pattern, substitution, type_table);
-                self.substitute_types_in_block(body, substitution, type_table);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                pattern,
-                body,
-                update,
-            } => {
-                for stmt in init {
-                    self.substitute_types_in_stmt(stmt, substitution, type_table);
-                }
-                self.substitute_types_in_expr(scrutinee, substitution, type_table);
-                self.substitute_types_in_pattern(pattern, substitution, type_table);
-                self.substitute_types_in_block(body, substitution, type_table);
-                if let Some(upd) = update {
-                    self.substitute_types_in_expr(upd, substitution, type_table);
                 }
             }
             TirStmtKind::LetPattern { pattern, value, .. } => {
@@ -2641,10 +2448,7 @@ impl Monomorphizer {
                         Self::sync_local_types_from_lets(else_blk, local_types);
                     }
                 }
-                TirStmtKind::While { body, .. }
-                | TirStmtKind::Loop { body }
-                | TirStmtKind::For { body, .. }
-                | TirStmtKind::ForOf { body, .. } => {
+                TirStmtKind::Loop { body } => {
                     Self::sync_local_types_from_lets(body, local_types);
                 }
                 _ => {}
@@ -2683,32 +2487,7 @@ impl Monomorphizer {
                     Self::update_local_expr_types(else_blk, local_types);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                Self::update_local_expr_types_in_expr(condition, local_types);
-                Self::update_local_expr_types(body, local_types);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    Self::update_local_expr_types_in_stmt(s, local_types);
-                }
-                if let Some(expr) = condition {
-                    Self::update_local_expr_types_in_expr(expr, local_types);
-                }
-                Self::update_local_expr_types(body, local_types);
-                if let Some(expr) = update {
-                    Self::update_local_expr_types_in_expr(expr, local_types);
-                }
-            }
             TirStmtKind::Loop { body } => {
-                Self::update_local_expr_types(body, local_types);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                Self::update_local_expr_types_in_expr(iterable, local_types);
                 Self::update_local_expr_types(body, local_types);
             }
             _ => {}
@@ -2835,32 +2614,7 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_block(else_blk, type_table);
                 }
             }
-            TirStmtKind::While { condition, body } => {
-                self.rewrite_function_calls_in_expr(condition, type_table);
-                self.rewrite_function_calls_in_block(body, type_table);
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                for s in init {
-                    self.rewrite_function_calls_in_stmt(s, type_table);
-                }
-                if let Some(cond) = condition {
-                    self.rewrite_function_calls_in_expr(cond, type_table);
-                }
-                self.rewrite_function_calls_in_block(body, type_table);
-                if let Some(upd) = update {
-                    self.rewrite_function_calls_in_expr(upd, type_table);
-                }
-            }
             TirStmtKind::Loop { body } => {
-                self.rewrite_function_calls_in_block(body, type_table);
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.rewrite_function_calls_in_expr(iterable, type_table);
                 self.rewrite_function_calls_in_block(body, type_table);
             }
             TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
@@ -2877,28 +2631,6 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_block(then_block, type_table);
                 if let Some(else_blk) = else_block {
                     self.rewrite_function_calls_in_block(else_blk, type_table);
-                }
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee, body, ..
-            } => {
-                self.rewrite_function_calls_in_expr(scrutinee, type_table);
-                self.rewrite_function_calls_in_block(body, type_table);
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                body,
-                update,
-                ..
-            } => {
-                for s in init {
-                    self.rewrite_function_calls_in_stmt(s, type_table);
-                }
-                self.rewrite_function_calls_in_expr(scrutinee, type_table);
-                self.rewrite_function_calls_in_block(body, type_table);
-                if let Some(upd) = update {
-                    self.rewrite_function_calls_in_expr(upd, type_table);
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {

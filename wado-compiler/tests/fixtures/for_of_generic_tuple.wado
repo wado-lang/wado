@@ -1,0 +1,23 @@
+// Test for-of with tuple type inside generic method
+use { println, Stdout } from "core:cli";
+
+struct Holder<K, V> {
+    items: Array<[K, V]>,
+}
+
+impl Holder<K, V> {
+    fn process(&self) {
+        for let pair of self.items {
+            // iteration test
+        }
+    }
+}
+
+fn run() with Stdout {
+    let h: Holder<String, i32> = Holder { items: [["a", 1], ["b", 2]] };
+    h.process();
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

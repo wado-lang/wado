@@ -1444,33 +1444,8 @@ pub enum TirStmtKind {
         then_block: TirBlock,
         else_block: Option<TirBlock>,
     },
-    While {
-        condition: TirExpr,
-        body: TirBlock,
-    },
-    /// C-style for loop: continue executes update, break exits loop
-    For {
-        /// Init statements (e.g., `let mut i = 0`)
-        init: Vec<TirStmt>,
-        condition: Option<TirExpr>,
-        body: TirBlock,
-        update: Option<TirExpr>,
-    },
+    /// Canonical loop: `loop { ... }` - infinite loop exited via break
     Loop {
-        body: TirBlock,
-    },
-    /// For-of loop: `for let item of array { ... }`
-    ForOf {
-        /// Local index for the loop binding variable
-        binding_local: u32,
-        /// Type of the binding (element type of the array)
-        binding_type: TypeId,
-        /// Whether the binding is mutable
-        is_mut: bool,
-        /// The array expression to iterate over
-        iterable: TirExpr,
-        /// Type of the iterable (should be Array<T>)
-        iterable_type: TypeId,
         body: TirBlock,
     },
     /// Break statement: `break;`, `break label;`, or `break label: expr;`
@@ -1496,28 +1471,6 @@ pub enum TirStmtKind {
         then_block: TirBlock,
         /// Optional else block when pattern doesn't match
         else_block: Option<TirBlock>,
-    },
-    /// Pattern match in while condition: `while let Some(x) = expr { ... }`
-    WhilePattern {
-        /// The expression being matched against (evaluated each iteration)
-        scrutinee: TirExpr,
-        /// The pattern to match
-        pattern: TirPattern,
-        /// Block executed when pattern matches
-        body: TirBlock,
-    },
-    /// Pattern match in for condition: `for init; let Some(x) = expr; update { ... }`
-    ForPattern {
-        /// Init statements (e.g., `let mut iter = arr.iter()`)
-        init: Vec<TirStmt>,
-        /// The expression being matched against (evaluated each iteration)
-        scrutinee: TirExpr,
-        /// The pattern to match
-        pattern: TirPattern,
-        /// Block executed when pattern matches
-        body: TirBlock,
-        /// Optional update expression (executed after body, before next iteration)
-        update: Option<TirExpr>,
     },
     /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
     LetPattern {

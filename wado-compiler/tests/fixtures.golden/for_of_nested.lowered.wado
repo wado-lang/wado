@@ -9,13 +9,50 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+pub struct "ArrayIter<i32>" {
+    repr: builtin::array<i32>,
+    used: i32,
+    index: i32,
+}
+
 fn run() with Stdout {
     let outer: Array<i32> = move [1, 2, 3];
     let inner: Array<i32> = move [10, 20];
-    for let _item of outer {
-        for let _item of inner {
-            core::cli::println(move "String::concat"(move "String::concat"(move i."i32::to_string"(), move ","), move j."i32::to_string"()));
+    __for_of_0: {
+        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_0: {
+            break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: outer.repr, used: outer.used, index: 0 };
+        };
+        let _licm_repr: builtin::array<i32> = inner.repr;
+        let _licm_used: i32 = inner.used;
+        loop {
+            if Some(i) = __iter_0."ArrayIter<i32>^Iterator::next"() {
+                __for_of_1: {
+                    let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_1: {
+                        break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: _licm_repr, used: _licm_used, index: 0 };
+                    };
+                    loop {
+                        if Some(j) = __iter_1."ArrayIter<i32>^Iterator::next"() {
+                            core::cli::println(move "String::concat"(move "String::concat"(move i."i32::to_string"(), move ","), move j."i32::to_string"()));
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
         }
     }
 }
+
+fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
+    if (self.index >= self.used) {
+        return null;
+    }
+    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    self.index = (self.index + 1);
+    return Option::Some(item);
+}
+
+fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 

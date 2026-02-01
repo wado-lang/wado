@@ -17,7 +17,10 @@ fn run() with Stdout {
     let val: u64 = 12345 as u64;
     let mut digits: Array<i32> = move [];
     let mut v: u64 = val;
-    while (v > 0 as u64) {
+    loop {
+        if !(v > 0 as u64) {
+            break;
+        }
         digits."Array<i32>::append"((v % 10 as u64) as i32);
         v = (v / 10 as u64);
     }

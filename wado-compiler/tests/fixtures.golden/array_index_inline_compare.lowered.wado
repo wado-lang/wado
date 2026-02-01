@@ -12,22 +12,20 @@
 fn run() with Stdout {
     let keys: Array<String> = move ["apple", "banana", "cherry", "date"];
     let result: i32 = __inline_find_key_index_0: {
-        let keys: &Array<String> = &keys;
         let key: &String = &"cherry";
         let mut i: i32 = 0;
-        while ((i < keys."Array<String>::len"()) && keys."Array<String>^IndexValue::index_value"(i)."String^Ord::lt"(&*key)) {
+        loop {
+            if !((i < __inline_Array_String___len_1: {
+                break __inline_Array_String___len_1: keys.used;
+            }) && __inline_Array_String__IndexValue__index_value_2: {
+                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(keys.repr, i);
+            }."String^Ord::lt"(&*key)) {
+                break;
+            }
             i = (i + 1);
         }
         break __inline_find_key_index_0: i;
     };
     core::cli::println(move "String::concat"(move "index: ", move result."i32::to_string"()));
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    return core::builtin::array_get::<String>(self.repr, index);
-}
-
-pub fn "Array<String>::len"(self: &Array<String>) -> i32 {
-    return self.used;
 }
 

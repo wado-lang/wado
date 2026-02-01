@@ -10,8 +10,17 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    for let mut i: i32 = 0; (i < 3); i = (i + 1) {
-        core::cli::println(move "loop");
+    __for_0: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < 3) {
+                break __for_0;
+            }
+            __for_0_body: {
+                core::cli::println(move "loop");
+            }
+            i = (i + 1);
+        }
     }
     core::cli::println(move "done");
 }

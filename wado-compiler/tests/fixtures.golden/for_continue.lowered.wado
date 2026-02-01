@@ -10,11 +10,20 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    for let mut i: i32 = 0; (i < 5); i = (i + 1) {
-        if (i == 2) {
-            continue;
+    __for_0: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < 5) {
+                break __for_0;
+            }
+            __for_0_body: {
+                if (i == 2) {
+                    break __for_0_body;
+                }
+                core::cli::println(move "String::concat"(move "i: ", move i."i32::to_string"()));
+            }
+            i = (i + 1);
         }
-        core::cli::println(move "String::concat"(move "i: ", move i."i32::to_string"()));
     }
     core::cli::println(move "done");
 }

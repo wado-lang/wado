@@ -2334,41 +2334,6 @@ impl<'a> TirUnparser<'a> {
         }
     }
 
-    /// Unparse a statement inline (no indent, no trailing newline/semicolon)
-    /// Used for for-loop init statements
-    fn unparse_stmt_inline(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                name,
-                is_mut,
-                is_reactive,
-                type_id,
-                value,
-                ..
-            } => {
-                self.output.push_str("let ");
-                if *is_reactive {
-                    self.output.push_str("reactive ");
-                }
-                if *is_mut {
-                    self.output.push_str("mut ");
-                }
-                self.output.push_str(name);
-                self.output.push_str(": ");
-                self.output.push_str(&self.type_table.type_name(*type_id));
-                self.output.push_str(" = ");
-                self.unparse_expr(value);
-            }
-            TirStmtKind::Expr(expr) => {
-                self.unparse_expr(expr);
-            }
-            _ => {
-                // Fallback for other statement types - shouldn't happen in for-loop init
-                self.output.push_str("/* unsupported inline stmt */");
-            }
-        }
-    }
-
     fn unparse_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
@@ -2432,61 +2397,9 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push('\n');
             }
-            TirStmtKind::While { condition, body } => {
-                self.write_indent();
-                self.output.push_str("while ");
-                self.unparse_expr(condition);
-                self.output.push_str(" {\n");
-                self.indent_level += 1;
-                self.unparse_block(body);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push_str("}\n");
-            }
-            TirStmtKind::For {
-                init,
-                condition,
-                body,
-                update,
-            } => {
-                self.write_indent();
-                self.output.push_str("for ");
-                // Unparse init statements inline (typically a single Let)
-                for (i, init_stmt) in init.iter().enumerate() {
-                    if i > 0 {
-                        self.output.push_str(", ");
-                    }
-                    self.unparse_stmt_inline(init_stmt);
-                }
-                self.output.push_str("; ");
-                if let Some(cond) = condition {
-                    self.unparse_expr(cond);
-                }
-                self.output.push_str("; ");
-                if let Some(upd) = update {
-                    self.unparse_expr(upd);
-                }
-                self.output.push_str(" {\n");
-                self.indent_level += 1;
-                self.unparse_block(body);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push_str("}\n");
-            }
             TirStmtKind::Loop { body } => {
                 self.write_indent();
                 self.output.push_str("loop {\n");
-                self.indent_level += 1;
-                self.unparse_block(body);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push_str("}\n");
-            }
-            TirStmtKind::ForOf { iterable, body, .. } => {
-                self.write_indent();
-                self.output.push_str("for let _item of ");
-                self.unparse_expr(iterable);
-                self.output.push_str(" {\n");
                 self.indent_level += 1;
                 self.unparse_block(body);
                 self.indent_level -= 1;
@@ -2546,54 +2459,6 @@ impl<'a> TirUnparser<'a> {
                     self.output.push('}');
                 }
                 self.output.push('\n');
-            }
-            TirStmtKind::WhilePattern {
-                scrutinee,
-                pattern,
-                body,
-            } => {
-                self.write_indent();
-                self.output.push_str("while let ");
-                self.unparse_tir_pattern(pattern);
-                self.output.push_str(" = ");
-                self.unparse_expr(scrutinee);
-                self.output.push_str(" {\n");
-                self.indent_level += 1;
-                self.unparse_block(body);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push_str("}\n");
-            }
-            TirStmtKind::ForPattern {
-                init,
-                scrutinee,
-                pattern,
-                body,
-                update,
-            } => {
-                self.write_indent();
-                self.output.push_str("for ");
-                // Init
-                for (i, stmt) in init.iter().enumerate() {
-                    if i > 0 {
-                        self.output.push_str(", ");
-                    }
-                    self.unparse_stmt(stmt);
-                }
-                self.output.push_str("; let ");
-                self.unparse_tir_pattern(pattern);
-                self.output.push_str(" = ");
-                self.unparse_expr(scrutinee);
-                self.output.push_str("; ");
-                if let Some(upd) = update {
-                    self.unparse_expr(upd);
-                }
-                self.output.push_str(" {\n");
-                self.indent_level += 1;
-                self.unparse_block(body);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push_str("}\n");
             }
             TirStmtKind::LetPattern {
                 pattern,

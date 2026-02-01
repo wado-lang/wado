@@ -11,12 +11,21 @@
 
 fn run() with Stdout {
     let mut arr: Array<i32> = move [0, 0, 0, 0, 0];
-    let _licm_repr: builtin::array<i32> = arr.repr;
-    for let mut i: i32 = 0; (i < 5); i = (i + 1) {
-        __inline_Array_i32__IndexAssign__index_assign_0: {
-            let value: i32 = (i * 10);
-            core::builtin::array_set::<i32>(_licm_repr, i, value);
-        };
+    __for_0: {
+        let mut i: i32 = 0;
+        let _licm_repr: builtin::array<i32> = arr.repr;
+        loop {
+            if !(i < 5) {
+                break __for_0;
+            }
+            __for_0_body: {
+                __inline_Array_i32__IndexAssign__index_assign_0: {
+                    let value: i32 = (i * 10);
+                    core::builtin::array_set::<i32>(_licm_repr, i, value);
+                };
+            }
+            i = (i + 1);
+        }
     }
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "for: ", move __inline_Array_i32__IndexValue__index_value_1: {
         break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(arr.repr, 0);
@@ -32,7 +41,10 @@ fn run() with Stdout {
     let mut arr2: Array<i32> = move [0, 0, 0];
     let mut j: i32 = 0;
     let _licm_repr: builtin::array<i32> = arr2.repr;
-    while (j < 3) {
+    loop {
+        if !(j < 3) {
+            break;
+        }
         __inline_Array_i32__IndexAssign__index_assign_6: {
             let value: i32 = (j + 100);
             core::builtin::array_set::<i32>(_licm_repr, j, value);

@@ -14,47 +14,29 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "f is ", __inline_f64__to_string_0: {
         let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
         let len: i32 = core::builtin::f64_to_buffer(1.23, ptr);
-        let arr: builtin::array<u8> = __inline_memory_to_gc_array_0: {
-            let arr: builtin::array<u8> = "array_new<u8>"(len);
-            for let mut i: i32 = 0; (i < len); i = (i + 1) {
-                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
-            }
-            break __inline_memory_to_gc_array_0: arr;
-        };
+        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
         core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_1: {
-            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
+        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_0: {
+            break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
         };
     }));
     core::cli::println(move "String::concat"(move "pi is approximately ", __inline_f64__to_string_1: {
         let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
         let len: i32 = core::builtin::f64_to_buffer(3.14159, ptr);
-        let arr: builtin::array<u8> = __inline_memory_to_gc_array_2: {
-            let arr: builtin::array<u8> = "array_new<u8>"(len);
-            for let mut i: i32 = 0; (i < len); i = (i + 1) {
-                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
-            }
-            break __inline_memory_to_gc_array_2: arr;
-        };
+        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
         core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_1: __inline_String__internal_from_utf8_raw_3: {
-            break __inline_String__internal_from_utf8_raw_3: String { repr: arr, used: len };
+        break __inline_f64__to_string_1: __inline_String__internal_from_utf8_raw_1: {
+            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
         };
     }));
     let result: f64 = (10.5 + 2.5);
     core::cli::println(move "String::concat"(move "10.5 + 2.5 = ", __inline_f64__to_string_2: {
         let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
         let len: i32 = core::builtin::f64_to_buffer(result, ptr);
-        let arr: builtin::array<u8> = __inline_memory_to_gc_array_4: {
-            let arr: builtin::array<u8> = "array_new<u8>"(len);
-            for let mut i: i32 = 0; (i < len); i = (i + 1) {
-                core::builtin::array_set_u8(arr, i, core::builtin::memory_load8_u((ptr + i)));
-            }
-            break __inline_memory_to_gc_array_4: arr;
-        };
+        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
         core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_2: __inline_String__internal_from_utf8_raw_5: {
-            break __inline_String__internal_from_utf8_raw_5: String { repr: arr, used: len };
+        break __inline_f64__to_string_2: __inline_String__internal_from_utf8_raw_2: {
+            break __inline_String__internal_from_utf8_raw_2: String { repr: arr, used: len };
         };
     }));
 }
