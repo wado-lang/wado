@@ -52,10 +52,10 @@ fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option
 fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: String) -> Option<&TreeMapNode<String,i32>> {
     let mut current: Option<&mut TreeMapNode<String,i32>> = self.root;
     while let Some(n) = current {
-        if (!n.deleted && &key."String^Eq::eq"(&n.key)) {
+        if (!n.deleted && key."String^Eq::eq"(&n.key)) {
             return Option::Some(n);
         }
-        if &key."String^Ord::lt"(&n.key) {
+        if key."String^Ord::lt"(&n.key) {
             current = n.left;
         } else {
             current = n.right;
@@ -74,17 +74,17 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
 
 fn "TreeMap<String,i32>::insert_at"(self: &mut TreeMap<String,i32>, node: Option<&mut TreeMapNode<String,i32>>, key: String, value: i32, inserted: &mut bool) -> Option<&mut TreeMapNode<String,i32>> {
     if Some(n) = node {
-        if (n.deleted && &key."String^Eq::eq"(&n.key)) {
+        if (n.deleted && key."String^Eq::eq"(&n.key)) {
             n.value = value;
             n.deleted = false;
             *inserted = true;
             return Option::Some(n);
         }
-        if (!n.deleted && &key."String^Eq::eq"(&n.key)) {
+        if (!n.deleted && key."String^Eq::eq"(&n.key)) {
             n.value = value;
             return Option::Some(n);
         }
-        if &key."String^Ord::lt"(&n.key) {
+        if key."String^Ord::lt"(&n.key) {
             n.left = self."TreeMap<String,i32>::insert_at"(n.left, key, value, inserted);
         } else {
             n.right = self."TreeMap<String,i32>::insert_at"(n.right, key, value, inserted);

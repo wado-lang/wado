@@ -22,24 +22,24 @@ fn run() with Stdout {
         let value: u64 = 0x0FF0 as u64;
         break __inline_u128__from_u64_1: u128 { low: value, high: 0 };
     };
-    let and_result: u128 = move &a."u128^BitAnd::bitand"(&b);
+    let and_result: u128 = move a."u128^BitAnd::bitand"(&b);
     core::cli::println(move "String::concat"(move "u128 AND: ", move and_result."u128::to_string"()));
-    let or_result: u128 = move &a."u128^BitOr::bitor"(&b);
+    let or_result: u128 = move a."u128^BitOr::bitor"(&b);
     core::cli::println(move "String::concat"(move "u128 OR: ", move or_result."u128::to_string"()));
-    let xor_result: u128 = move &a."u128^BitXor::bitxor"(&b);
+    let xor_result: u128 = move a."u128^BitXor::bitxor"(&b);
     core::cli::println(move "String::concat"(move "u128 XOR: ", move xor_result."u128::to_string"()));
-    let not_a: u128 = move &a."u128^BitNot::bitnot"();
-    let not_masked: u128 = move &not_a."u128^BitAnd::bitand"(&__inline_u128__from_u64_2: {
+    let not_a: u128 = move a."u128^BitNot::bitnot"();
+    let not_masked: u128 = move not_a."u128^BitAnd::bitand"(&__inline_u128__from_u64_2: {
         let value: u64 = 0xFFFF as u64;
         break __inline_u128__from_u64_2: u128 { low: value, high: 0 };
     });
     core::cli::println(move "String::concat"(move "u128 NOT masked: ", move not_masked."u128::to_string"()));
-    let shl_result: u128 = move &__inline_u128__from_u64_3: {
+    let shl_result: u128 = move __inline_u128__from_u64_3: {
         let value: u64 = 1 as u64;
         break __inline_u128__from_u64_3: u128 { low: value, high: 0 };
     }."u128^Shl::shl"(4 as u32);
     core::cli::println(move "String::concat"(move "u128 SHL: ", move shl_result."u128::to_string"()));
-    let shr_result: u128 = move &__inline_u128__from_u64_4: {
+    let shr_result: u128 = move __inline_u128__from_u64_4: {
         let value: u64 = 256 as u64;
         break __inline_u128__from_u64_4: u128 { low: value, high: 0 };
     }."u128^Shr::shr"(4 as u32);
@@ -62,9 +62,9 @@ fn run() with Stdout {
         };
         break __inline_i128__from_i64_6: i128 { low: value as u64, high: high };
     };
-    let i_and: i128 = move &x."i128^BitAnd::bitand"(&y);
+    let i_and: i128 = move x."i128^BitAnd::bitand"(&y);
     core::cli::println(move "String::concat"(move "i128 AND: ", move i_and."i128::to_string"()));
-    let i_shl: i128 = move &__inline_i128__from_i64_7: {
+    let i_shl: i128 = move __inline_i128__from_i64_7: {
         let value: i64 = 1 as i64;
         let high: i64 = if (value < 0 as i64) {
             -1 as i64;
@@ -83,7 +83,7 @@ fn run() with Stdout {
         };
         break __inline_i128__from_i64_8: i128 { low: value as u64, high: high };
     };
-    let neg_shr: i128 = move &neg."i128^Shr::shr"(4 as u32);
+    let neg_shr: i128 = move neg."i128^Shr::shr"(4 as u32);
     core::cli::println(move "String::concat"(move "i128 SHR negative: ", move neg_shr."i128::to_string"()));
     core::cli::println(move "Bitwise tests passed!");
 }

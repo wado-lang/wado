@@ -57,7 +57,7 @@ fn run() with Stdout {
         }
     }
     __assert_1: {
-        let __v0: bool = &map."TreeMap<String,i32>::contains_key"(move "one");
+        let __v0: bool = map."TreeMap<String,i32>::contains_key"(move "one");
         if !__v0 {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/treemap-index.wado"), move ":"), move 14."i32::to_string"()), move "\ncondition: map.contains_key(\"one\")\n"), move "map.contains_key(\"one\"): "), __inline_bool__to_string_5: {
                 break __inline_bool__to_string_5: if __v0 {
@@ -69,7 +69,7 @@ fn run() with Stdout {
         }
     }
     __assert_2: {
-        let __v0: bool = &map."TreeMap<String,i32>::contains_key"(move "two");
+        let __v0: bool = map."TreeMap<String,i32>::contains_key"(move "two");
         if !__v0 {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/treemap-index.wado"), move ":"), move 15."i32::to_string"()), move "\ncondition: map.contains_key(\"two\")\n"), move "map.contains_key(\"two\"): "), __inline_bool__to_string_6: {
                 break __inline_bool__to_string_6: if __v0 {
@@ -81,7 +81,7 @@ fn run() with Stdout {
         }
     }
     __assert_3: {
-        let __v0: bool = &map."TreeMap<String,i32>::contains_key"(move "three");
+        let __v0: bool = map."TreeMap<String,i32>::contains_key"(move "three");
         if !__v0 {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/treemap-index.wado"), move ":"), move 16."i32::to_string"()), move "\ncondition: map.contains_key(\"three\")\n"), move "map.contains_key(\"three\"): "), __inline_bool__to_string_7: {
                 break __inline_bool__to_string_7: if __v0 {
@@ -157,10 +157,10 @@ fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option
 fn "TreeMap<String,i32>::find_node"(self: &TreeMap<String,i32>, key: String) -> Option<&TreeMapNode<String,i32>> {
     let mut current: Option<&mut TreeMapNode<String,i32>> = self.root;
     while let Some(n) = current {
-        if (!n.deleted && &key."String^Eq::eq"(&n.key)) {
+        if (!n.deleted && key."String^Eq::eq"(&n.key)) {
             return Option::Some(n);
         }
-        if &key."String^Ord::lt"(&n.key) {
+        if key."String^Ord::lt"(&n.key) {
             current = n.left;
         } else {
             current = n.right;
@@ -183,17 +183,17 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
 
 fn "TreeMap<String,i32>::insert_at"(self: &mut TreeMap<String,i32>, node: Option<&mut TreeMapNode<String,i32>>, key: String, value: i32, inserted: &mut bool) -> Option<&mut TreeMapNode<String,i32>> {
     if Some(n) = node {
-        if (n.deleted && &key."String^Eq::eq"(&n.key)) {
+        if (n.deleted && key."String^Eq::eq"(&n.key)) {
             n.value = value;
             n.deleted = false;
             *inserted = true;
             return Option::Some(n);
         }
-        if (!n.deleted && &key."String^Eq::eq"(&n.key)) {
+        if (!n.deleted && key."String^Eq::eq"(&n.key)) {
             n.value = value;
             return Option::Some(n);
         }
-        if &key."String^Ord::lt"(&n.key) {
+        if key."String^Ord::lt"(&n.key) {
             n.left = self."TreeMap<String,i32>::insert_at"(n.left, key, value, inserted);
         } else {
             n.right = self."TreeMap<String,i32>::insert_at"(n.right, key, value, inserted);

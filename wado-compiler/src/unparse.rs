@@ -2861,8 +2861,16 @@ impl<'a> TirUnparser<'a> {
                 // This shows which method was resolved during type checking
                 let full_name = func.name();
 
-                // Unparse receiver
-                self.unparse_expr(receiver);
+                // Unparse receiver - skip the reference operator if present
+                // (the resolver adds &/&mut for self methods, but we want to show just the value)
+                let actual_receiver = match &receiver.kind {
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                        expr: inner,
+                    } => inner.as_ref(),
+                    _ => receiver.as_ref(),
+                };
+                self.unparse_expr(actual_receiver);
                 self.output.push('.');
                 // Quote the full resolved method name to show resolution
                 self.output.push_str(&Self::quote_if_needed(&full_name));

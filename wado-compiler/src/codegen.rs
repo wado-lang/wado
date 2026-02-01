@@ -7415,7 +7415,7 @@ impl Codegen {
                                             }
                                         }
                                         Some(UltimateBaseType::Primitive(prim)) => {
-                                            let base_type_name = Self::primitive_type_name(&prim);
+                                            let base_type_name = prim.as_str();
 
                                             let prim_module_path = "core/prelude/primitives";
                                             let base_mangled = MethodName::new(
@@ -7462,7 +7462,7 @@ impl Codegen {
                                 // Newtype of primitive (e.g., type Meters = f64)
                                 // Look up the method on the base primitive type
                                 ResolvedType::Primitive(prim) => {
-                                    let base_type_name = Self::primitive_type_name(&prim);
+                                    let base_type_name = prim.as_str();
 
                                     // Primitive methods are defined in core/prelude/primitives.wado
                                     let prim_module_path = "core/prelude/primitives";
@@ -7511,7 +7511,7 @@ impl Codegen {
                     // Primitive type method calls (e.g., 42.to_string())
                     // Methods are defined in core/prelude/primitives.wado
                     ResolvedType::Primitive(prim) => {
-                        let type_name = Self::primitive_type_name(&prim);
+                        let type_name = prim.as_str();
 
                         // Primitive methods are defined in core/prelude/primitives.wado
                         let module_path = "core/prelude/primitives";
@@ -8403,25 +8403,6 @@ impl Codegen {
         }
     }
 
-    /// Get the string name of a primitive type for method lookup
-    fn primitive_type_name(prim: &PrimitiveType) -> &'static str {
-        match prim {
-            PrimitiveType::I8 => "i8",
-            PrimitiveType::I16 => "i16",
-            PrimitiveType::I32 => "i32",
-            PrimitiveType::I64 => "i64",
-            PrimitiveType::I128 => "i128",
-            PrimitiveType::U8 => "u8",
-            PrimitiveType::U16 => "u16",
-            PrimitiveType::U32 => "u32",
-            PrimitiveType::U64 => "u64",
-            PrimitiveType::U128 => "u128",
-            PrimitiveType::F32 => "f32",
-            PrimitiveType::F64 => "f64",
-            PrimitiveType::Bool => "bool",
-            PrimitiveType::Char => "char",
-        }
-    }
 
     /// Get the Wasm array type index for a given element type
     fn get_array_type_index(&self, element_type: TypeId) -> u32 {

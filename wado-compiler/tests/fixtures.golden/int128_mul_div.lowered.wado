@@ -22,7 +22,7 @@ fn run() with Stdout {
         let value: u64 = 200 as u64;
         break __inline_u128__from_u64_1: u128 { low: value, high: 0 };
     };
-    let mul_result: u128 = move &a."u128^Mul::mul"(&b);
+    let mul_result: u128 = move a."u128^Mul::mul"(&b);
     core::cli::println(move "String::concat"(move "u128 100 * 200 = ", move mul_result."u128::to_string"()));
     let c: u128 = __inline_u128__from_u64_2: {
         let value: u64 = 1000000 as u64;
@@ -32,9 +32,9 @@ fn run() with Stdout {
         let value: u64 = 1000000 as u64;
         break __inline_u128__from_u64_3: u128 { low: value, high: 0 };
     };
-    let large_mul: u128 = move &c."u128^Mul::mul"(&d);
+    let large_mul: u128 = move c."u128^Mul::mul"(&d);
     core::cli::println(move "String::concat"(move "u128 1M * 1M = ", move large_mul."u128::to_string"()));
-    let div_result: u128 = move &mul_result."u128^Div::div"(&a);
+    let div_result: u128 = move mul_result."u128^Div::div"(&a);
     core::cli::println(move "String::concat"(move "u128 20000 / 100 = ", move div_result."u128::to_string"()));
     let e: u128 = __inline_u128__from_u64_4: {
         let value: u64 = 17 as u64;
@@ -44,7 +44,7 @@ fn run() with Stdout {
         let value: u64 = 5 as u64;
         break __inline_u128__from_u64_5: u128 { low: value, high: 0 };
     };
-    let rem_result: u128 = move &e."u128^Rem::rem"(&f);
+    let rem_result: u128 = move e."u128^Rem::rem"(&f);
     core::cli::println(move "String::concat"(move "u128 17 % 5 = ", move rem_result."u128::to_string"()));
     let x: i128 = __inline_i128__from_i64_6: {
         let value: i64 = 100 as i64;
@@ -64,9 +64,9 @@ fn run() with Stdout {
         };
         break __inline_i128__from_i64_7: i128 { low: value as u64, high: high };
     };
-    let i_mul: i128 = move &x."i128^Mul::mul"(&y);
+    let i_mul: i128 = move x."i128^Mul::mul"(&y);
     core::cli::println(move "String::concat"(move "i128 100 * (-20) = ", move i_mul."i128::to_string"()));
-    let i_div: i128 = move &i_mul."i128^Div::div"(&x);
+    let i_div: i128 = move i_mul."i128^Div::div"(&x);
     core::cli::println(move "String::concat"(move "i128 (-2000) / 100 = ", move i_div."i128::to_string"()));
     let neg17: i128 = __inline_i128__from_i64_8: {
         let value: i64 = -17 as i64;
@@ -86,7 +86,7 @@ fn run() with Stdout {
         };
         break __inline_i128__from_i64_9: i128 { low: value as u64, high: high };
     };
-    let i_rem: i128 = move &neg17."i128^Rem::rem"(&pos5);
+    let i_rem: i128 = move neg17."i128^Rem::rem"(&pos5);
     core::cli::println(move "String::concat"(move "i128 (-17) % 5 = ", move i_rem."i128::to_string"()));
     core::cli::println(move "Mul/Div tests passed!");
 }

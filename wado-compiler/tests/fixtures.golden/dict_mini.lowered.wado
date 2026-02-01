@@ -17,21 +17,21 @@ fn run() with Stdout {
     let mut dict: MiniDict<String,String> = __inline_MiniDict_String_String___new_0: {
         break __inline_MiniDict_String_String___new_0: MiniDict<String,String> { entries: [] };
     };
-    &mut dict."MiniDict<String,String>::set"(move "name", move "Wado");
-    &mut dict."MiniDict<String,String>::set"(move "type", move "language");
-    &mut dict."MiniDict<String,String>::set"(move "target", move "WebAssembly");
-    if Some(name_val) = &dict."MiniDict<String,String>::get"(move "name") {
+    dict."MiniDict<String,String>::set"(move "name", move "Wado");
+    dict."MiniDict<String,String>::set"(move "type", move "language");
+    dict."MiniDict<String,String>::set"(move "target", move "WebAssembly");
+    if Some(name_val) = dict."MiniDict<String,String>::get"(move "name") {
         core::cli::println(move "String::concat"(move "name: ", name_val));
     }
-    if Some(type_val) = &dict."MiniDict<String,String>::get"(move "type") {
+    if Some(type_val) = dict."MiniDict<String,String>::get"(move "type") {
         core::cli::println(move "String::concat"(move "type: ", type_val));
     }
-    &mut dict."MiniDict<String,String>::set"(move "name", move "Wado Language");
-    if Some(updated_val) = &dict."MiniDict<String,String>::get"(move "name") {
+    dict."MiniDict<String,String>::set"(move "name", move "Wado Language");
+    if Some(updated_val) = dict."MiniDict<String,String>::get"(move "name") {
         core::cli::println(move "String::concat"(move "updated name: ", updated_val));
     }
     core::cli::println(move "String::concat"(move "has 'target': ", __inline_bool__to_string_1: {
-        let self: bool = &dict."MiniDict<String,String>::has"(move "target");
+        let self: bool = dict."MiniDict<String,String>::has"(move "target");
         break __inline_bool__to_string_1: if self {
             "true";
         } else {
@@ -39,7 +39,7 @@ fn run() with Stdout {
         };
     }));
     core::cli::println(move "String::concat"(move "has 'version': ", __inline_bool__to_string_2: {
-        let self: bool = &dict."MiniDict<String,String>::has"(move "version");
+        let self: bool = dict."MiniDict<String,String>::has"(move "version");
         break __inline_bool__to_string_2: if self {
             "true";
         } else {
@@ -52,7 +52,7 @@ fn run() with Stdout {
             break __inline_Array_Tuple_String_String____len_0: self.used;
         };
     }."i32::to_string"()));
-    if None = &dict."MiniDict<String,String>::get"(move "missing") {
+    if None = dict."MiniDict<String,String>::get"(move "missing") {
         core::cli::println(move "missing key returned None");
     }
 }
@@ -64,8 +64,8 @@ pub fn "Array<Tuple<String,String>>::len"(self: &Array<[String, String]>) -> i32
 fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -> bool {
     let _licm_entries: Array<[String, String]> = self.entries;
     let _licm_repr: builtin::array<[String, String]> = _licm_entries.repr;
-    for let mut i: i32 = 0; (i < &self.entries."Array<Tuple<String,String>>::len"()); i = (i + 1) {
-        if &__inline_Array_Tuple_String_String___IndexValue__index_value_0: {
+    for let mut i: i32 = 0; (i < self.entries."Array<Tuple<String,String>>::len"()); i = (i + 1) {
+        if __inline_Array_Tuple_String_String___IndexValue__index_value_0: {
             break __inline_Array_Tuple_String_String___IndexValue__index_value_0: core::builtin::array_get::<[String, String]>(_licm_repr, i);
         }.0."String^Eq::eq"(&key) {
             return true;
@@ -77,8 +77,8 @@ fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -
 fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -> Option<String> {
     let _licm_entries: Array<[String, String]> = self.entries;
     let _licm_repr: builtin::array<[String, String]> = _licm_entries.repr;
-    for let mut i: i32 = 0; (i < &self.entries."Array<Tuple<String,String>>::len"()); i = (i + 1) {
-        if &__inline_Array_Tuple_String_String___IndexValue__index_value_0: {
+    for let mut i: i32 = 0; (i < self.entries."Array<Tuple<String,String>>::len"()); i = (i + 1) {
+        if __inline_Array_Tuple_String_String___IndexValue__index_value_0: {
             break __inline_Array_Tuple_String_String___IndexValue__index_value_0: core::builtin::array_get::<[String, String]>(_licm_repr, i);
         }.0."String^Eq::eq"(&key) {
             return Option::Some(__inline_Array_Tuple_String_String___IndexValue__index_value_1: {
@@ -90,8 +90,8 @@ fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -
 }
 
 fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: String, value: String) {
-    for let mut i: i32 = 0; (i < &self.entries."Array<Tuple<String,String>>::len"()); i = (i + 1) {
-        if &__inline_Array_Tuple_String_String___IndexValue__index_value_0: {
+    for let mut i: i32 = 0; (i < self.entries."Array<Tuple<String,String>>::len"()); i = (i + 1) {
+        if __inline_Array_Tuple_String_String___IndexValue__index_value_0: {
             let self: &Array<[String, String]> = &self.entries;
             break __inline_Array_Tuple_String_String___IndexValue__index_value_0: core::builtin::array_get::<[String, String]>(self.repr, i);
         }.0."String^Eq::eq"(&key) {
@@ -103,7 +103,7 @@ fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: Strin
             return;
         }
     }
-    &mut self.entries."Array<Tuple<String,String>>::append"(move [key, value]);
+    self.entries."Array<Tuple<String,String>>::append"(move [key, value]);
 }
 
 pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>, value: [String, String]) {

@@ -222,6 +222,29 @@ pub enum PrimitiveType {
     Char,
 }
 
+impl PrimitiveType {
+    /// Returns the string representation of the primitive type (e.g., "i32", "f64")
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::I128 => "i128",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::U128 => "u128",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            Self::Bool => "bool",
+            Self::Char => "char",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolvedType {
     Primitive(PrimitiveType),

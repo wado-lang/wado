@@ -30,7 +30,7 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
         break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(pad_len), used: 0 };
     };
     for let mut i: i32 = 0; (i < pad_len); i = (i + 1) {
-        &mut pad."String::append"(move " ");
+        pad."String::append"(move " ");
     }
     return match opts.align {
         Left => "String::concat"(s, pad),
@@ -41,10 +41,10 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
             let mut lpad: String = move "String::with_capacity"(left);
             let mut rpad: String = move "String::with_capacity"(right);
             for let mut i: i32 = 0; (i < left); i = (i + 1) {
-                &mut lpad."String::append"(move " ");
+                lpad."String::append"(move " ");
             }
             for let mut i: i32 = 0; (i < right); i = (i + 1) {
-                &mut rpad."String::append"(move " ");
+                rpad."String::append"(move " ");
             }
             "String::concat"(move "String::concat"(lpad, s), rpad);
         },
