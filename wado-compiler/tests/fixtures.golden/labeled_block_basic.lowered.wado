@@ -11,15 +11,15 @@
 
 fn run() with Stdout {
     scope: {
-        core::cli::println(move "String::concat"(move "x in scope: ", move 20.to_string()));
+        core::cli::println(move "String::concat"(move "x in scope: ", move 20."i32::to_string"()));
     }
-    core::cli::println(move "String::concat"(move "x after scope: ", move 10.to_string()));
+    core::cli::println(move "String::concat"(move "x after scope: ", move 10."i32::to_string"()));
     outer: {
         inner: {
             let sum: i32 = (1 + 2);
-            core::cli::println(move "String::concat"(move "a + b = ", move sum.to_string()));
+            core::cli::println(move "String::concat"(move "a + b = ", move sum."i32::to_string"()));
         }
-        core::cli::println(move "String::concat"(move "a = ", move 1.to_string()));
+        core::cli::println(move "String::concat"(move "a = ", move 1."i32::to_string"()));
     }
     core::cli::println(move "labeled block tests passed");
 }

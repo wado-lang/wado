@@ -13,12 +13,12 @@ fn run() with Stdout {
     let arr: Array<i32> = move [10, 20, 30, 40, 50];
     let mut sum: i32 = 0;
     let _licm_repr: builtin::array<i32> = arr.repr;
-    for let mut i: i32 = 0; (i < &arr.len()); i = (i + 1) {
+    for let mut i: i32 = 0; (i < &arr."Array<i32>::len"()); i = (i + 1) {
         sum = (sum + __inline_Array_i32__IndexValue__index_value_0: {
             break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(_licm_repr, i);
         });
     }
-    core::cli::println(move "String::concat"(move "sum: ", move sum.to_string()));
+    core::cli::println(move "String::concat"(move "sum: ", move sum."i32::to_string"()));
     let mut arr2: Array<i32> = move [0, 0, 0];
     let _licm_repr: builtin::array<i32> = arr2.repr;
     for let mut i: i32 = 0; (i < 3); i = (i + 1) {
@@ -29,11 +29,11 @@ fn run() with Stdout {
     }
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move __inline_Array_i32__IndexValue__index_value_2: {
         break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(arr2.repr, 0);
-    }.to_string(), move ", "), move __inline_Array_i32__IndexValue__index_value_3: {
+    }."i32::to_string"(), move ", "), move __inline_Array_i32__IndexValue__index_value_3: {
         break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(arr2.repr, 1);
-    }.to_string()), move ", "), move __inline_Array_i32__IndexValue__index_value_4: {
+    }."i32::to_string"()), move ", "), move __inline_Array_i32__IndexValue__index_value_4: {
         break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(arr2.repr, 2);
-    }.to_string()));
+    }."i32::to_string"()));
 }
 
 pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {

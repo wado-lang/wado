@@ -12,16 +12,16 @@
 global mut MAIN_VALUE: i32 = 0;
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "HELPER_COUNTER=", move ./sub/global_multimod_helper.wado::HELPER_COUNTER.to_string()));
+    core::cli::println(move "String::concat"(move "HELPER_COUNTER=", move ./sub/global_multimod_helper.wado::HELPER_COUNTER."i32::to_string"()));
     core::cli::println(move "String::concat"(move "get_counter()=", move __inline_get_counter_0: {
         break __inline_get_counter_0: ./sub/global_multimod_helper.wado::HELPER_COUNTER;
-    }.to_string()));
-    core::cli::println(move "String::concat"(move "MAIN_VALUE=", move MAIN_VALUE.to_string()));
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "MAIN_VALUE=", move MAIN_VALUE."i32::to_string"()));
     __inline_increment_1: {
         ./sub/global_multimod_helper.wado::HELPER_COUNTER = (./sub/global_multimod_helper.wado::HELPER_COUNTER + 1);
     };
     core::cli::println(move "String::concat"(move "after increment=", move __inline_get_counter_2: {
         break __inline_get_counter_2: ./sub/global_multimod_helper.wado::HELPER_COUNTER;
-    }.to_string()));
+    }."i32::to_string"()));
 }
 

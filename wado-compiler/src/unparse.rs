@@ -2857,19 +2857,15 @@ impl<'a> TirUnparser<'a> {
                 type_args,
                 args,
             } => {
-                // Show as method call: receiver.method(args)
-                // Extract method name from func.name() (e.g., "Type::method" or "Type^Trait::method")
+                // Show as method call with resolved method name: receiver."Type::method"(args)
+                // This shows which method was resolved during type checking
                 let full_name = func.name();
-                let method_name = if let Some(pos) = full_name.rfind("::") {
-                    &full_name[pos + 2..]
-                } else {
-                    &full_name
-                };
 
                 // Unparse receiver
                 self.unparse_expr(receiver);
                 self.output.push('.');
-                self.output.push_str(method_name);
+                // Quote the full resolved method name to show resolution
+                self.output.push_str(&Self::quote_if_needed(&full_name));
 
                 // Type arguments (turbofish syntax)
                 if !type_args.is_empty() {

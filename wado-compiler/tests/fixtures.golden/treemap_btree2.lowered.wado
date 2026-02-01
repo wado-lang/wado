@@ -37,75 +37,75 @@ fn run() with Stdout {
     __inline_TreeMap_String_i32__IndexAssign__index_assign_1: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "apple";
-        self.insert(key, 1);
+        self."TreeMap<String,i32>::insert"(key, 1);
     };
     __inline_TreeMap_String_i32__IndexAssign__index_assign_2: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "banana";
-        self.insert(key, 2);
+        self."TreeMap<String,i32>::insert"(key, 2);
     };
     __inline_TreeMap_String_i32__IndexAssign__index_assign_3: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "cherry";
-        self.insert(key, 3);
+        self."TreeMap<String,i32>::insert"(key, 3);
     };
     __inline_TreeMap_String_i32__IndexAssign__index_assign_4: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "date";
-        self.insert(key, 4);
+        self."TreeMap<String,i32>::insert"(key, 4);
     };
     __inline_TreeMap_String_i32__IndexAssign__index_assign_5: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "elderberry";
-        self.insert(key, 5);
+        self."TreeMap<String,i32>::insert"(key, 5);
     };
     core::cli::println(move "=== After insertion ===");
     core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_6: {
         break __inline_TreeMap_String_i32___len_6: map.size;
-    }.to_string()));
-    core::cli::println(move "String::concat"(move "banana = ", move *&map.index(move "banana").to_string()));
-    core::cli::println(move "String::concat"(move "date = ", move *&map.index(move "date").to_string()));
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "banana = ", move *&map."TreeMap<String,i32>^Index::index"(move "banana")."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "date = ", move *&map."TreeMap<String,i32>^Index::index"(move "date")."i32::to_string"()));
     __inline_TreeMap_String_i32__IndexAssign__index_assign_7: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "banana";
-        self.insert(key, 20);
+        self."TreeMap<String,i32>::insert"(key, 20);
     };
-    core::cli::println(move "String::concat"(move "banana (updated) = ", move *&map.index(move "banana").to_string()));
+    core::cli::println(move "String::concat"(move "banana (updated) = ", move *&map."TreeMap<String,i32>^Index::index"(move "banana")."i32::to_string"()));
     core::cli::println(move "\n=== After deleting cherry ===");
-    &mut map.delete(&"cherry");
+    &mut map."TreeMap<String,i32>::delete"(&"cherry");
     core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_8: {
         break __inline_TreeMap_String_i32___len_8: map.size;
-    }.to_string()));
+    }."i32::to_string"()));
     core::cli::println(move "\n=== Iteration (sorted) ===");
-    let entries: Array<[String, i32]> = move &map.iter();
+    let entries: Array<[String, i32]> = move &map."TreeMap<String,i32>::iter"();
     for let _item of entries {
         let key: String = entry.0;
         let value: i32 = entry.1;
-        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value.to_string()));
+        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
     }
     core::cli::println(move "\n=== After compaction ===");
     if __inline_TreeMap_String_i32___needs_compaction_9: {
         break __inline_TreeMap_String_i32___needs_compaction_9: ((map.deleted_count > 0) && ((map.deleted_count * 4) > (map.size + map.deleted_count)));
     } {
         core::cli::println(move "Compaction needed, running...");
-        &mut map.compact();
+        &mut map."TreeMap<String,i32>::compact"();
     }
     core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_10: {
         break __inline_TreeMap_String_i32___len_10: map.size;
-    }.to_string()));
-    core::cli::println(move "String::concat"(move "Deleted count: ", move map.deleted_count.to_string()));
+    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Deleted count: ", move map.deleted_count."i32::to_string"()));
     core::cli::println(move "\n=== Final iteration ===");
-    let final_entries: Array<[String, i32]> = move &map.iter();
+    let final_entries: Array<[String, i32]> = move &map."TreeMap<String,i32>::iter"();
     for let _item of final_entries {
         let key: String = entry.0;
         let value: i32 = entry.1;
-        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value.to_string()));
+        core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
     }
 }
 
 fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
     if Some(root) = self.root {
-        root.compact();
+        root."BTreeNode<String,i32>::compact"();
         self.deleted_count = 0;
     }
 }
@@ -120,17 +120,17 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
     let _licm_repr: builtin::array<bool> = _licm_deleted.repr;
     let _licm_repr: builtin::array<String> = _licm_keys.repr;
     let _licm_repr: builtin::array<i32> = _licm_values.repr;
-    for let mut i: i32 = 0; (i < &self.keys.len()); i = (i + 1) {
+    for let mut i: i32 = 0; (i < &self.keys."Array<String>::len"()); i = (i + 1) {
         if !__inline_Array_bool__IndexValue__index_value_0: {
             break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(_licm_repr, i);
         } {
-            &mut new_keys.append(__inline_Array_String__IndexValue__index_value_1: {
+            &mut new_keys."Array<String>::append"(__inline_Array_String__IndexValue__index_value_1: {
                 break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
             });
-            &mut new_values.append(__inline_Array_i32__IndexValue__index_value_2: {
+            &mut new_values."Array<i32>::append"(__inline_Array_i32__IndexValue__index_value_2: {
                 break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(_licm_repr, i);
             });
-            &mut new_deleted.append(false);
+            &mut new_deleted."Array<bool>::append"(false);
         }
     }
     self.keys = new_keys;
@@ -138,8 +138,8 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
     self.deleted = new_deleted;
     if !self.is_leaf {
         let _licm_children: Array<&mut BTreeNode<String,i32>> = self.children;
-        for let mut i: i32 = 0; (i < &self.children.len()); i = (i + 1) {
-            &_licm_children.index_value(i).compact();
+        for let mut i: i32 = 0; (i < &self.children."Array<BTreeNode<String,i32>>::len"()); i = (i + 1) {
+            &_licm_children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i)."BTreeNode<String,i32>::compact"();
         }
     }
 }
@@ -211,7 +211,7 @@ pub fn "Array<String>::len"(self: &Array<String>) -> i32 {
 fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
     let mut result: Array<[String, i32]> = move [];
     if Some(root) = self.root {
-        self.collect_entries(root, &mut result);
+        self."TreeMap<String,i32>::collect_entries"(root, &mut result);
     }
     return result;
 }
@@ -226,14 +226,14 @@ fn "TreeMap<String,i32>::collect_entries"(self: &TreeMap<String,i32>, node: &BTr
     let _licm_repr: builtin::array<bool> = _licm_deleted.repr;
     let _licm_repr: builtin::array<String> = _licm_keys.repr;
     let _licm_repr: builtin::array<i32> = _licm_values.repr;
-    while (i < &node.keys.len()) {
-        if (!_licm_is_leaf && (i < &_licm_children.len())) {
-            self.collect_entries(&_licm_children.index_value(i), result);
+    while (i < &node.keys."Array<String>::len"()) {
+        if (!_licm_is_leaf && (i < &_licm_children."Array<BTreeNode<String,i32>>::len"())) {
+            self."TreeMap<String,i32>::collect_entries"(&_licm_children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), result);
         }
         if !__inline_Array_bool__IndexValue__index_value_0: {
             break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(_licm_repr, i);
         } {
-            result.append(move [__inline_Array_String__IndexValue__index_value_1: {
+            result."Array<Tuple<String,i32>>::append"(move [__inline_Array_String__IndexValue__index_value_1: {
                 break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
             }, __inline_Array_i32__IndexValue__index_value_2: {
                 break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(_licm_repr, i);
@@ -241,8 +241,8 @@ fn "TreeMap<String,i32>::collect_entries"(self: &TreeMap<String,i32>, node: &BTr
         }
         i = (i + 1);
     }
-    if (!node.is_leaf && (&node.children.len() > i)) {
-        self.collect_entries(&node.children.index_value(i), result);
+    if (!node.is_leaf && (&node.children."Array<BTreeNode<String,i32>>::len"() > i)) {
+        self."TreeMap<String,i32>::collect_entries"(&node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), result);
     }
 }
 
@@ -264,20 +264,20 @@ pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value
 
 fn "TreeMap<String,i32>::delete"(self: &mut TreeMap<String,i32>, key: &String) -> bool {
     if Some(root) = self.root {
-        return self.delete_in_node(root, key);
+        return self."TreeMap<String,i32>::delete_in_node"(root, key);
     }
     return false;
 }
 
 fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &mut BTreeNode<String,i32>, key: &String) -> bool {
     let mut i: i32 = 0;
-    while ((i < &node.keys.len()) && &&node.keys.index_value(i).lt(&*key)) {
+    while ((i < &node.keys."Array<String>::len"()) && &&node.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::lt"(&*key)) {
         i = (i + 1);
     }
     if ((i < __inline_Array_String___len_0: {
         let self: &Array<String> = &node.keys;
         break __inline_Array_String___len_0: self.used;
-    }) && &*key.eq(&__inline_Array_String__IndexValue__index_value_1: {
+    }) && &*key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_1: {
         let self: &Array<String> = &node.keys;
         break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, i);
     })) {
@@ -298,11 +298,11 @@ fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &
     if node.is_leaf {
         return false;
     }
-    return self.delete_in_node(&node.children.index_value(i), key);
+    return self."TreeMap<String,i32>::delete_in_node"(&node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), key);
 }
 
 fn "TreeMap<String,i32>^Index::index"(self: &TreeMap<String,i32>, key: String) -> &i32 {
-    if Some(val) = self.get(&key) {
+    if Some(val) = self."TreeMap<String,i32>::get"(&key) {
         return &val;
     }
     core::prelude::panic(move "key not found");
@@ -310,20 +310,20 @@ fn "TreeMap<String,i32>^Index::index"(self: &TreeMap<String,i32>, key: String) -
 
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: &String) -> Option<i32> {
     if Some(root) = self.root {
-        return self.search_in_node(root, key);
+        return self."TreeMap<String,i32>::search_in_node"(root, key);
     }
     return null;
 }
 
 fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTreeNode<String,i32>, key: &String) -> Option<i32> {
     let mut i: i32 = 0;
-    while ((i < &node.keys.len()) && &&node.keys.index_value(i).lt(&*key)) {
+    while ((i < &node.keys."Array<String>::len"()) && &&node.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::lt"(&*key)) {
         i = (i + 1);
     }
     if ((i < __inline_Array_String___len_0: {
         let self: &Array<String> = &node.keys;
         break __inline_Array_String___len_0: self.used;
-    }) && &*key.eq(&__inline_Array_String__IndexValue__index_value_1: {
+    }) && &*key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_1: {
         let self: &Array<String> = &node.keys;
         break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, i);
     })) {
@@ -341,15 +341,15 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
     if node.is_leaf {
         return null;
     }
-    return self.search_in_node(&node.children.index_value(i), key);
+    return self."TreeMap<String,i32>::search_in_node"(&node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), key);
 }
 
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     if None = self.root {
         let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_leaf"();
-        &mut new_root.keys.append(key);
-        &mut new_root.values.append(value);
-        &mut new_root.deleted.append(false);
+        &mut new_root.keys."Array<String>::append"(key);
+        &mut new_root.values."Array<i32>::append"(value);
+        &mut new_root.deleted."Array<bool>::append"(false);
         self.root = move Option::Some(&mut new_root);
         self.size = 1;
         return;
@@ -360,7 +360,7 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
                 break __inline_TreeMap_String_i32___max_keys_0: ((2 * self.t) - 1);
             };
             let mut count: i32 = 0;
-            for let mut i: i32 = 0; (i < &root.keys.len()); i = (i + 1) {
+            for let mut i: i32 = 0; (i < &root.keys."Array<String>::len"()); i = (i + 1) {
                 if !__inline_Array_bool__IndexValue__index_value_0: {
                     let self: &Array<bool> = &root.deleted;
                     break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(self.repr, i);
@@ -371,12 +371,12 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
             break __inline_BTreeNode_String_i32___is_full_1: (count >= max_keys);
         } {
             let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_internal"();
-            &mut new_root.children.append(root);
-            self.split_child(&mut new_root, 0);
+            &mut new_root.children."Array<BTreeNode<String,i32>>::append"(root);
+            self."TreeMap<String,i32>::split_child"(&mut new_root, 0);
             self.root = move Option::Some(&mut new_root);
         }
         if Some(r) = self.root {
-            self.insert_non_full(r, key, value);
+            self."TreeMap<String,i32>::insert_non_full"(r, key, value);
         }
     }
 }
@@ -384,7 +384,7 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
 fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: &mut BTreeNode<String,i32>, key: String, value: i32) {
     if node.is_leaf {
         let mut pos: i32 = 0;
-        while ((pos < &node.keys.len()) && &&node.keys.index_value(pos).lt(&key)) {
+        while ((pos < &node.keys."Array<String>::len"()) && &&node.keys."Array<String>^IndexValue::index_value"(pos)."String^Ord::lt"(&key)) {
             pos = (pos + 1);
         }
         if ((pos < __inline_Array_String___len_0: {
@@ -393,7 +393,7 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         }) && &__inline_Array_String__IndexValue__index_value_1: {
             let self: &Array<String> = &node.keys;
             break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, pos);
-        }.eq(&key)) {
+        }."String^Eq::eq"(&key)) {
             __inline_Array_i32__IndexAssign__index_assign_2: {
                 let self: &mut Array<i32> = &mut node.values;
                 core::builtin::array_set::<i32>(self.repr, pos, value);
@@ -410,23 +410,23 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
             }
             return;
         }
-        &mut node.keys.append(key);
-        &mut node.values.append(value);
-        &mut node.deleted.append(false);
-        self.sort_node_entries(node);
+        &mut node.keys."Array<String>::append"(key);
+        &mut node.values."Array<i32>::append"(value);
+        &mut node.deleted."Array<bool>::append"(false);
+        self."TreeMap<String,i32>::sort_node_entries"(node);
         self.size = (self.size + 1);
     } else {
         let mut pos: i32 = 0;
-        while ((pos < &node.keys.len()) && &&node.keys.index_value(pos).lt(&key)) {
+        while ((pos < &node.keys."Array<String>::len"()) && &&node.keys."Array<String>^IndexValue::index_value"(pos)."String^Ord::lt"(&key)) {
             pos = (pos + 1);
         }
         if __inline_BTreeNode_String_i32___is_full_6: {
-            let self: &mut BTreeNode<String,i32> = &node.children.index_value(pos);
+            let self: &mut BTreeNode<String,i32> = &node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(pos);
             let max_keys: i32 = __inline_TreeMap_String_i32___max_keys_5: {
                 break __inline_TreeMap_String_i32___max_keys_5: ((2 * self.t) - 1);
             };
             let mut count: i32 = 0;
-            for let mut i: i32 = 0; (i < &self.keys.len()); i = (i + 1) {
+            for let mut i: i32 = 0; (i < &self.keys."Array<String>::len"()); i = (i + 1) {
                 if !__inline_Array_bool__IndexValue__index_value_0: {
                     let self: &Array<bool> = &self.deleted;
                     break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(self.repr, i);
@@ -436,25 +436,25 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
             }
             break __inline_BTreeNode_String_i32___is_full_6: (count >= max_keys);
         } {
-            self.split_child(node, pos);
+            self."TreeMap<String,i32>::split_child"(node, pos);
             if &__inline_Array_String__IndexValue__index_value_7: {
                 let self: &Array<String> = &node.keys;
                 break __inline_Array_String__IndexValue__index_value_7: core::builtin::array_get::<String>(self.repr, pos);
-            }.lt(&key) {
+            }."String^Ord::lt"(&key) {
                 pos = (pos + 1);
             }
         }
-        self.insert_non_full(&node.children.index_value(pos), key, value);
+        self."TreeMap<String,i32>::insert_non_full"(&node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(pos), key, value);
     }
 }
 
 fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &mut BTreeNode<String,i32>) {
-    for let mut i: i32 = 0; (i < &node.keys.len()); i = (i + 1) {
-        for let mut j: i32 = (i + 1); (j < &node.keys.len()); j = (j + 1) {
+    for let mut i: i32 = 0; (i < &node.keys."Array<String>::len"()); i = (i + 1) {
+        for let mut j: i32 = (i + 1); (j < &node.keys."Array<String>::len"()); j = (j + 1) {
             if &__inline_Array_String__IndexValue__index_value_0: {
                 let self: &Array<String> = &node.keys;
                 break __inline_Array_String__IndexValue__index_value_0: core::builtin::array_get::<String>(self.repr, j);
-            }.lt(&__inline_Array_String__IndexValue__index_value_1: {
+            }."String^Ord::lt"(&__inline_Array_String__IndexValue__index_value_1: {
                 let self: &Array<String> = &node.keys;
                 break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, i);
             }) {
@@ -512,7 +512,7 @@ fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &m
 }
 
 fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &mut BTreeNode<String,i32>, child_index: i32) {
-    let full_child: &mut BTreeNode<String,i32> = &parent.children.index_value(child_index);
+    let full_child: &mut BTreeNode<String,i32> = &parent.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(child_index);
     let mut new_sibling: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_leaf"();
     if !full_child.is_leaf {
         new_sibling = move "BTreeNode<String,i32>::new_internal"();
@@ -524,21 +524,21 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
     let _licm_repr: builtin::array<String> = _licm_keys.repr;
     let _licm_repr: builtin::array<i32> = _licm_values.repr;
     let _licm_repr: builtin::array<bool> = _licm_deleted.repr;
-    for let mut i: i32 = (mid + 1); (i < &full_child.keys.len()); i = (i + 1) {
-        &mut new_sibling.keys.append(__inline_Array_String__IndexValue__index_value_0: {
+    for let mut i: i32 = (mid + 1); (i < &full_child.keys."Array<String>::len"()); i = (i + 1) {
+        &mut new_sibling.keys."Array<String>::append"(__inline_Array_String__IndexValue__index_value_0: {
             break __inline_Array_String__IndexValue__index_value_0: core::builtin::array_get::<String>(_licm_repr, i);
         });
-        &mut new_sibling.values.append(__inline_Array_i32__IndexValue__index_value_1: {
+        &mut new_sibling.values."Array<i32>::append"(__inline_Array_i32__IndexValue__index_value_1: {
             break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(_licm_repr, i);
         });
-        &mut new_sibling.deleted.append(__inline_Array_bool__IndexValue__index_value_2: {
+        &mut new_sibling.deleted."Array<bool>::append"(__inline_Array_bool__IndexValue__index_value_2: {
             break __inline_Array_bool__IndexValue__index_value_2: core::builtin::array_get::<bool>(_licm_repr, i);
         });
     }
     if !full_child.is_leaf {
         let _licm_children: Array<&mut BTreeNode<String,i32>> = full_child.children;
-        for let mut i: i32 = (mid + 1); (i < &full_child.children.len()); i = (i + 1) {
-            &mut new_sibling.children.append(&_licm_children.index_value(i));
+        for let mut i: i32 = (mid + 1); (i < &full_child.children."Array<BTreeNode<String,i32>>::len"()); i = (i + 1) {
+            &mut new_sibling.children."Array<BTreeNode<String,i32>>::append"(&_licm_children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i));
         }
     }
     let promoted_key: String = __inline_Array_String__IndexValue__index_value_3: {
@@ -553,11 +553,11 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
         let self: &Array<bool> = &full_child.deleted;
         break __inline_Array_bool__IndexValue__index_value_5: core::builtin::array_get::<bool>(self.repr, mid);
     };
-    &mut parent.keys.append(promoted_key);
-    &mut parent.values.append(promoted_value);
-    &mut parent.deleted.append(promoted_deleted);
-    &mut parent.children.append(&mut new_sibling);
-    self.sort_node_entries(parent);
+    &mut parent.keys."Array<String>::append"(promoted_key);
+    &mut parent.values."Array<i32>::append"(promoted_value);
+    &mut parent.deleted."Array<bool>::append"(promoted_deleted);
+    &mut parent.children."Array<BTreeNode<String,i32>>::append"(&mut new_sibling);
+    self."TreeMap<String,i32>::sort_node_entries"(parent);
 }
 
 pub fn "Array<BTreeNode<String,i32>>::append"(self: &mut Array<&mut BTreeNode<String,i32>>, value: &mut BTreeNode<String,i32>) {
