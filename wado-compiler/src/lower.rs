@@ -53,9 +53,10 @@ pub fn lower(mut module: TirModule) -> TirModule {
     // Phase 3: Collect string literals and their function mappings
     let mut collector = StringCollector::new();
     collector.collect_module(&module);
-    let (strings, function_strings) = collector.into_results();
+    let (strings, function_strings, function_method_info) = collector.into_results();
     module.string_literals = strings;
     module.function_strings = function_strings;
+    module.function_method_info = function_method_info;
 
     module
 }
@@ -4678,6 +4679,8 @@ struct StringCollector {
     strings: Vec<String>,
     /// Map of function name → strings in that function (for DCE filtering)
     function_strings: HashMap<String, Vec<String>>,
+    /// Map of function name → method info (for DCE to avoid parsing)
+    function_method_info: HashMap<String, Option<LocalMethodName>>,
     /// Current function being collected (for tracking)
     current_function: Option<String>,
 }
@@ -4687,12 +4690,23 @@ impl StringCollector {
         Self {
             strings: Vec::new(),
             function_strings: HashMap::new(),
+            function_method_info: HashMap::new(),
             current_function: None,
         }
     }
 
-    fn into_results(self) -> (Vec<String>, HashMap<String, Vec<String>>) {
-        (self.strings, self.function_strings)
+    fn into_results(
+        self,
+    ) -> (
+        Vec<String>,
+        HashMap<String, Vec<String>>,
+        HashMap<String, Option<LocalMethodName>>,
+    ) {
+        (
+            self.strings,
+            self.function_strings,
+            self.function_method_info,
+        )
     }
 
     fn add_string(&mut self, s: String) {
@@ -4713,6 +4727,8 @@ impl StringCollector {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
                 self.current_function = Some(func.name.clone());
+                self.function_method_info
+                    .insert(func.name.clone(), func.method_info.clone());
                 self.collect_block(body);
                 self.current_function = None;
             }
@@ -4722,6 +4738,8 @@ impl StringCollector {
             for method in &impl_block.methods {
                 if let Some(body) = &method.body {
                     self.current_function = Some(method.name.clone());
+                    self.function_method_info
+                        .insert(method.name.clone(), method.method_info.clone());
                     self.collect_block(body);
                     self.current_function = None;
                 }

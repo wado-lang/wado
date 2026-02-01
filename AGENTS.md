@@ -215,6 +215,7 @@ This project relies on the following Wasm features:
 
 - The principle: `codegen.rs` emits the `Project` as is, which does not have the knowledge of the previous phases.
 - Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formats.
+- Do not parse mangled / formatted names even in `name.rs`. Use parsed objects instead.
 - Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
 - Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
 

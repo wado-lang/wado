@@ -15,6 +15,7 @@ use crate::component_model::{
 use crate::copy_context::{ArrayCopyLocals, CopyContext};
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, StructName, build_core_internal_name,
+    mangle_array_type, mangle_generic_name, mangle_result_type,
 };
 use crate::project::Project;
 use crate::symbol::SymbolTable;
@@ -547,62 +548,6 @@ impl Codegen {
         self.struct_types.get(&simple)
     }
 
-    /// Mangle a type name for use in struct names (e.g., i32 for Box<i32>)
-    fn mangle_type_for_struct_name(&self, type_id: TypeId, type_table: &TypeTable) -> String {
-        match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
-            ResolvedType::Unit => "unit".to_string(),
-            ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.mangle_type_for_struct_name(*t, type_table))
-                    .collect();
-                format!("{}<{}>", name, args.join(","))
-            }
-            // Function types: Fn<paramCount,returnType>
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                let ret_name = self.mangle_type_for_struct_name(*return_type, type_table);
-                format!("Fn<{},{}>", params.len(), ret_name)
-            }
-            ResolvedType::Tuple(elems) => {
-                let elem_names: Vec<String> = elems
-                    .iter()
-                    .map(|t| self.mangle_type_for_struct_name(*t, type_table))
-                    .collect();
-                format!("Tuple<{}>", elem_names.join(","))
-            }
-            ResolvedType::Option(inner) => {
-                let inner_name = self.mangle_type_for_struct_name(*inner, type_table);
-                format!("Option<{inner_name}>")
-            }
-            ResolvedType::Result { ok, err } => {
-                let ok_name = self.mangle_type_for_struct_name(*ok, type_table);
-                let err_name = self.mangle_type_for_struct_name(*err, type_table);
-                format!("Result<{ok_name},{err_name}>")
-            }
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // For references, use the inner type's name
-                self.mangle_type_for_struct_name(*inner, type_table)
-            }
-            ResolvedType::Resource { name, .. } => {
-                // Resource types are i32 handles, use the name for identification
-                name.clone()
-            }
-            ResolvedType::Enum { name, .. } => {
-                // Enum types are i32, use the name for identification
-                name.clone()
-            }
-            _ => "unknown".to_string(),
-        }
-    }
-
     /// Extract struct names that a type depends on (for field types)
     /// Returns mangled names for `GenericInstance` types (e.g., "`BTreeNode`<String,i32>")
     /// Get type dependencies (struct and variant names) for a given type.
@@ -611,12 +556,10 @@ impl Codegen {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => vec![name.clone()],
             ResolvedType::Variant { name, .. } => vec![name.clone()],
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
+            ResolvedType::GenericInstance { type_args, .. } => {
                 // Get dependencies from type arguments
                 // Use mangled name for the generic instance (e.g., "BTreeNode<String,i32>")
-                let mangled_name = Self::mangle_generic_instance_name(name, type_args, type_table);
+                let mangled_name = type_table.mangle_type_name(type_id);
                 let mut deps = vec![mangled_name];
                 for arg in type_args {
                     deps.extend(Self::get_type_dependencies(type_table, *arg));
@@ -640,39 +583,6 @@ impl Codegen {
                 .flat_map(|e| Self::get_type_dependencies(type_table, *e))
                 .collect(),
             _ => vec![],
-        }
-    }
-
-    /// Mangle a generic instance name for dependency tracking (static version)
-    /// e.g., ("`BTreeNode`", [String, i32]) -> "`BTreeNode`<String,i32>"
-    fn mangle_generic_instance_name(
-        name: &str,
-        type_args: &[TypeId],
-        type_table: &TypeTable,
-    ) -> String {
-        if type_args.is_empty() {
-            return name.to_string();
-        }
-        let args: Vec<String> = type_args
-            .iter()
-            .map(|t| Self::mangle_type_for_dependency(*t, type_table))
-            .collect();
-        format!("{}<{}>", name, args.join(","))
-    }
-
-    /// Mangle a type for dependency tracking (static version of `mangle_type_for_struct_name`)
-    fn mangle_type_for_dependency(type_id: TypeId, type_table: &TypeTable) -> String {
-        match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
-            ResolvedType::Unit => "unit".to_string(),
-            ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => Self::mangle_generic_instance_name(name, type_args, type_table),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                Self::mangle_type_for_dependency(*inner, type_table)
-            }
-            _ => "unknown".to_string(),
         }
     }
 
@@ -700,13 +610,11 @@ impl Codegen {
                 // Exact name match only
                 name == struct_name
             }
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
+            ResolvedType::GenericInstance { type_args, .. } => {
                 // Check if this GenericInstance IS the struct we're looking for.
                 // E.g., Node<String> is represented as GenericInstance { name: "Node", type_args: [String] }
                 // and we need to check if "Node<String>" matches struct_name.
-                let mangled_name = Self::mangle_generic_instance_name(name, type_args, type_table);
+                let mangled_name = type_table.mangle_type_name(type_id);
                 if mangled_name == struct_name {
                     return true;
                 }
@@ -989,23 +897,15 @@ impl Codegen {
             if module_source.is_wasi() {
                 continue;
             }
-            // Methods are stored as functions with mangled names like "Point::sum" or "String^Eq::eq"
+            // Methods are stored as functions with method_info metadata
             // (resolver adds them to functions, not impls)
             for func_rc in &tir_mod.functions {
                 let func = func_rc.borrow();
-                // Check if this is a method (name contains ::)
-                if let Some(sep_pos) = func.name.find("::") {
-                    let prefix = &func.name[..sep_pos];
-                    let method_name = &func.name[sep_pos + 2..];
-
-                    // Parse struct name and optional trait name from prefix
-                    // Format: "StructName" or "StructName^TraitName"
-                    let (struct_name, trait_name): (&str, Option<&str>) =
-                        if let Some(caret_pos) = prefix.find('^') {
-                            (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
-                        } else {
-                            (prefix, None)
-                        };
+                // Check if this is a method using metadata
+                if let Some(ref info) = func.method_info {
+                    let struct_name = &info.struct_name;
+                    let trait_name = info.trait_name.as_deref();
+                    let method_name = &info.method_name;
 
                     // Skip non-pub methods (except monomorphized ones which are generated for
                     // concrete instantiation sites and must be included)
@@ -1046,10 +946,10 @@ impl Codegen {
                     // Determine struct lookup name - use qualified name if there's a collision
                     let struct_lookup_name = if main_module_struct_names.contains(struct_name) {
                         // Collision - use qualified StructName
-                        StructName::new(module_source.clone(), struct_name.to_string())
+                        StructName::new(module_source.clone(), struct_name.clone())
                     } else {
                         // No collision - use simple StructName (entry point)
-                        StructName::new(ModuleSource::entry_point(), struct_name.to_string())
+                        StructName::new(ModuleSource::entry_point(), struct_name.clone())
                     };
                     // Use the same fully mangled name for registration
                     // This ensures consistency between DCE tracking and codegen
@@ -1544,22 +1444,13 @@ impl Codegen {
                 vec![self.type_id_to_valtype(type_table, tir_func.return_type)]
             };
 
-            // For methods, build the type name from method_info (struct name, trait name)
-            // and parse the method name from tir_func.name (which includes method type args)
+            // For methods, build the type name from method_info metadata
             let type_name = if let Some(ref info) = tir_func.method_info {
-                // Extract method name with type args from func.name
-                // func.name is like "Container<i32>::transform<i64>"
-                // We need the part after "::" which is "transform<i64>"
-                let method_name_with_args = if let Some(sep_pos) = tir_func.name.find("::") {
-                    tir_func.name[sep_pos + 2..].to_string()
-                } else {
-                    info.method_name.clone()
-                };
                 MethodName::new(
                     entry_module_source.to_path().join("/"),
                     info.struct_name.clone(),
                     info.trait_name.clone(),
-                    method_name_with_args,
+                    info.full_method_name(),
                 )
                 .to_string()
             } else {
@@ -4126,8 +4017,8 @@ impl Codegen {
                 ));
 
                 // 2. Array struct type (use mangled name for consistency)
-                let elem_mangled = self.mangle_type_for_struct_name(element_type_id, type_table);
-                let array_struct_name = format!("Array<{elem_mangled}>");
+                let elem_mangled = type_table.mangle_type_name(element_type_id);
+                let array_struct_name = mangle_generic_name("Array", &[elem_mangled]);
                 let array_struct_fields = vec![
                     FieldType {
                         element_type: StorageType::Val(ValType::Ref(RefType {
@@ -4215,8 +4106,8 @@ impl Codegen {
                 .insert(canonical_name.clone(), raw_array_idx);
 
             // Register Array struct type in struct_types (unified with other generic structs)
-            let elem_mangled = self.mangle_type_for_struct_name(element_type_id, type_table);
-            let array_struct_mangled = format!("Array<{elem_mangled}>");
+            let elem_mangled = type_table.mangle_type_name(element_type_id);
+            let array_struct_mangled = mangle_generic_name("Array", &[elem_mangled]);
             let array_struct_name =
                 StructName::new(ModuleSource::entry_point(), array_struct_mangled);
             self.struct_types.insert(
@@ -4354,7 +4245,7 @@ impl Codegen {
                 // Check if this is a variant (has a declaration in tir_module.variants)
                 let is_variant = tir_module.variants.iter().any(|v| v.name == *name);
                 if is_variant {
-                    let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                    let mangled_name = type_table.mangle_type_name(type_id);
                     // Skip if already registered
                     if !self.variant_types.borrow().contains_key(&mangled_name) {
                         generic_variants.push((name.clone(), type_args.clone()));
@@ -4385,7 +4276,7 @@ impl Codegen {
             let mangled_name = {
                 let arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|&tid| self.mangle_type_for_struct_name(tid, type_table))
+                    .map(|&tid| type_table.mangle_type_name(tid))
                     .collect();
                 format!("{}<{}>", base_name, arg_names.join(","))
             };
@@ -4464,7 +4355,7 @@ impl Codegen {
 
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::Result { ok, err } = type_table.get(type_id) {
-                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                let mangled_name = type_table.mangle_type_name(type_id);
                 // Skip if already registered
                 if !self.variant_types.borrow().contains_key(&mangled_name) {
                     result_types.push((type_id, *ok, *err));
@@ -4474,7 +4365,7 @@ impl Codegen {
 
         // Register each Result type as a variant with subtype hierarchy
         for (type_id, ok_type_id, err_type_id) in result_types {
-            let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+            let mangled_name = type_table.mangle_type_name(type_id);
 
             // Define the base type with just the tag field
             let base_fields = vec![FieldType {
@@ -4619,7 +4510,7 @@ impl Codegen {
             }
             ResolvedType::GenericInstance { .. } => {
                 // All generic instances (including Array<T>) use the mangled name lookup
-                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                let mangled_name = type_table.mangle_type_name(type_id);
                 if let Some(info) =
                     self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
                 {
@@ -5198,7 +5089,7 @@ impl Codegen {
         match type_table.get(type_id) {
             ResolvedType::GenericInstance { .. } => {
                 // Check if this generic instance is registered
-                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                let mangled_name = type_table.mangle_type_name(type_id);
                 !self
                     .struct_types
                     .contains_key(&StructName::new(ModuleSource::entry_point(), mangled_name))
@@ -5378,8 +5269,8 @@ impl Codegen {
         builder: &mut CoreModuleBuilder,
     ) -> u32 {
         // Construct the mangled name for Array<T> (e.g., "Array<i32>")
-        let element_name = self.mangle_type_for_struct_name(element_type_id, type_table);
-        let mangled_name = format!("Array<{element_name}>");
+        let element_name = type_table.mangle_type_name(element_type_id);
+        let mangled_name = mangle_array_type(&element_name);
 
         // Check if already registered in struct_types
         if let Some(info) = self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point()) {
@@ -5408,7 +5299,7 @@ impl Codegen {
             },
         ];
 
-        let type_name = format!("Array<{element_name}>");
+        let type_name = mangle_generic_name("Array", &[element_name.clone()]);
         let type_idx = builder.define_gc_struct_type(&type_name, &fields);
 
         // Register in struct_types for consistency with other generic structs
@@ -5432,8 +5323,8 @@ impl Codegen {
         element_type_id: TypeId,
         type_table: &TypeTable,
     ) -> Option<u32> {
-        let element_name = self.mangle_type_for_struct_name(element_type_id, type_table);
-        let mangled_name = format!("Array<{element_name}>");
+        let element_name = type_table.mangle_type_name(element_type_id);
+        let mangled_name = mangle_array_type(&element_name);
         self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
             .map(|info| info.type_idx)
     }
@@ -5639,7 +5530,7 @@ impl Codegen {
                 }
 
                 // Check if this GenericInstance is already registered in struct_types
-                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                let mangled_name = type_table.mangle_type_name(type_id);
                 let is_registered_in_struct_types = self
                     .lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
                     .is_some();
@@ -6212,7 +6103,7 @@ impl Codegen {
             // Generic instances (other than Array, which is handled above)
             // Look up the monomorphized struct or variant type
             ResolvedType::GenericInstance { .. } => {
-                let mangled_name = self.mangle_type_for_struct_name(type_id, type_table);
+                let mangled_name = type_table.mangle_type_name(type_id);
                 // Check pending_type_indices first (for rec group construction)
                 if let Some(&type_idx) = self.pending_type_indices.borrow().get(&mangled_name) {
                     return ValType::Ref(RefType {
@@ -6458,9 +6349,9 @@ impl Codegen {
                         // Build mangled name for generic variant: Result<i32,String>
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                            .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        format!("{}<{}>", name, type_arg_names.join(","))
+                        mangle_generic_name(name, &type_arg_names)
                     }
                     other => panic!("Expected Variant type for VariantConstruct, got: {other:?}"),
                 };
@@ -7180,9 +7071,9 @@ impl Codegen {
                         let module_path = module_source.to_path();
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                            .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        let mangled_struct_name = format!("{}<{}>", name, type_arg_names.join(","));
+                        let mangled_struct_name = mangle_generic_name(&name, &type_arg_names);
 
                         // For trait methods, use the trait name in the method reference
                         // e.g., Triple<i32>^IndexValue<i32>::index_value
@@ -7600,49 +7491,13 @@ impl Codegen {
                                 None
                             }
                         })
-                } else if let Some(sep_pos) = func_name.find("::") {
-                    // No method_info, parse from func_name (legacy path for primitives)
-                    let struct_name = &func_name[..sep_pos];
-                    let method_name = &func_name[sep_pos + 2..];
-
-                    // Build the mangled name (no trait info available)
-                    let mangled_name = MethodName::new(
-                        module_path.join("/"),
-                        struct_name.to_string(),
-                        None,
-                        method_name.to_string(),
-                    )
-                    .to_string();
-
-                    // Check struct metadata for fallback
-                    let struct_lookup_name =
-                        StructName::from_path_and_name(&module_path, struct_name);
-                    let struct_info = self.struct_types.get(&struct_lookup_name);
-
-                    builder
-                        .try_func_idx(&mangled_name)
-                        .or_else(|| builder.try_func_idx(&func_name))
-                        .or_else(|| {
-                            // For monomorphized generic types, try the generic version
-                            let generic_name = base_struct_name
-                                .as_ref()
-                                .or_else(|| struct_info.and_then(|s| s.base_name.as_ref()));
-
-                            if let Some(generic_struct_name) = generic_name {
-                                let generic_mangled_name = MethodName::new(
-                                    module_path.join("/"),
-                                    generic_struct_name.clone(),
-                                    None,
-                                    method_name.to_string(),
-                                )
-                                .to_string();
-                                builder.try_func_idx(&generic_mangled_name)
-                            } else {
-                                None
-                            }
-                        })
                 } else {
-                    // No :: separator, try as a regular function call
+                    // Method calls (containing ::) should always have method_info
+                    assert!(
+                        !func_name.contains("::"),
+                        "StaticCall to method '{func_name}' missing method_info"
+                    );
+                    // Free function call (no :: separator)
                     let full_name = if module_path.is_empty() {
                         func_name.clone()
                     } else {
@@ -7665,9 +7520,9 @@ impl Codegen {
                             // Build the mangled struct name (e.g., Box<i32>)
                             let type_arg_names: Vec<String> = type_args
                                 .iter()
-                                .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                                .map(|t| type_table.mangle_type_name(*t))
                                 .collect();
-                            let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                            let mangled = mangle_generic_name(name, &type_arg_names);
                             Some((mangled, type_module_source.clone()))
                         }
                         ResolvedType::Struct {
@@ -7782,8 +7637,7 @@ impl Codegen {
 
                             // Get Result type info for Ok and Err subtypes
                             let result_type_id = expr.type_id;
-                            let mangled_name =
-                                self.mangle_type_for_struct_name(result_type_id, type_table);
+                            let mangled_name = type_table.mangle_type_name(result_type_id);
                             let variant_types = self.variant_types.borrow();
                             let result_info =
                                 variant_types.get(&mangled_name).unwrap_or_else(|| {
@@ -8073,9 +7927,9 @@ impl Codegen {
                         // Generic struct literal - look up the monomorphized struct name
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                            .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        let mangled_name = format!("{}<{}>", name, type_arg_names.join(","));
+                        let mangled_name = mangle_generic_name(name, &type_arg_names);
                         self.lookup_struct_type(&mangled_name, module_source)
                     }
                     _ => {
@@ -10219,8 +10073,7 @@ impl Codegen {
                 },
             ) => {
                 // Look up variant type info - for GenericInstance, use the mangled name
-                let variant_lookup_name =
-                    self.mangle_type_for_struct_name(scrutinee.type_id, type_table);
+                let variant_lookup_name = type_table.mangle_type_name(scrutinee.type_id);
                 let variant_types = self.variant_types.borrow();
                 let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
                     // Fallback to base name for non-generic variants
@@ -10478,8 +10331,7 @@ impl Codegen {
                     ..
                 },
             ) => {
-                let variant_lookup_name =
-                    self.mangle_type_for_struct_name(scrutinee.type_id, type_table);
+                let variant_lookup_name = type_table.mangle_type_name(scrutinee.type_id);
                 let variant_types = self.variant_types.borrow();
                 let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
                     variant_types.get(name).unwrap_or_else(|| {
@@ -11150,9 +11002,9 @@ impl Codegen {
                 },
             ) => {
                 // Build mangled name for Result<ok, err>
-                let ok_name = self.mangle_type_for_struct_name(*ok, _type_table);
-                let err_name = self.mangle_type_for_struct_name(*err, _type_table);
-                let mangled_name = format!("Result<{ok_name},{err_name}>");
+                let ok_name = _type_table.mangle_type_name(*ok);
+                let err_name = _type_table.mangle_type_name(*err);
+                let mangled_name = mangle_result_type(&ok_name, &err_name);
 
                 let variant_types = self.variant_types.borrow();
                 let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
@@ -11227,9 +11079,9 @@ impl Codegen {
                 // Build mangled name including type arguments
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_for_struct_name(*t, _type_table))
+                    .map(|t| _type_table.mangle_type_name(*t))
                     .collect();
-                let mangled_name = format!("{}<{}>", name, type_arg_names.join(","));
+                let mangled_name = mangle_generic_name(name, &type_arg_names);
 
                 let variant_types = self.variant_types.borrow();
                 let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
@@ -11359,9 +11211,9 @@ impl Codegen {
             ) => {
                 if let Some(binding) = bindings.first() {
                     // Build mangled name for Result<ok, err>
-                    let ok_name = self.mangle_type_for_struct_name(ok, type_table);
-                    let err_name = self.mangle_type_for_struct_name(err, type_table);
-                    let mangled_name = format!("Result<{ok_name},{err_name}>");
+                    let ok_name = type_table.mangle_type_name(ok);
+                    let err_name = type_table.mangle_type_name(err);
+                    let mangled_name = mangle_result_type(&ok_name, &err_name);
 
                     let variant_types = self.variant_types.borrow();
                     let variant_info = variant_types.get(&mangled_name).unwrap();
@@ -11450,9 +11302,9 @@ impl Codegen {
                     // Build mangled name including type arguments
                     let type_arg_names: Vec<String> = type_args
                         .iter()
-                        .map(|t| self.mangle_type_for_struct_name(*t, type_table))
+                        .map(|t| type_table.mangle_type_name(*t))
                         .collect();
-                    let mangled_name = format!("{}<{}>", name, type_arg_names.join(","));
+                    let mangled_name = mangle_generic_name(&name, &type_arg_names);
 
                     let variant_types = self.variant_types.borrow();
                     let variant_info = variant_types.get(&mangled_name).unwrap();

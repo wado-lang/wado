@@ -11,7 +11,10 @@ use indexmap::IndexMap;
 use crate::ast::Type;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
-use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, MethodName, ModuleSource};
+use crate::name::{
+    FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
+    mangle_local_method, mangle_local_trait_method, mangle_method_generic,
+};
 use crate::project::Project;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule,
@@ -327,34 +330,35 @@ pub fn analyze_project(project: &mut Project) {
             // Build function ID(s) to check if it's reachable
             // Note: monomorphized methods are tracked as FunctionId::Free in the call graph
             // but their names look like methods (e.g., "TreeMap<String,i32>^Index::index")
-            let is_reachable = if let Some(parsed) = LocalMethodName::parse(func_name) {
-                // Method name like "Point::sum" or "Point^Trait::method"
-                // Check as MethodName first (for non-monomorphized methods)
-                let method_id = FunctionId::Method(MethodName::new(
-                    module_path.join("/"),
-                    parsed.struct_name.clone(),
-                    parsed.trait_name.clone(),
-                    parsed.method_name.clone(),
-                ));
-                if reachable.contains(&method_id) {
-                    true
+            let is_reachable =
+                if let Some(Some(method_info)) = module.function_method_info.get(func_name) {
+                    // Method with method_info
+                    // Check as MethodName first (for non-monomorphized methods)
+                    let method_id = FunctionId::Method(MethodName::new(
+                        module_path.join("/"),
+                        method_info.struct_name.clone(),
+                        method_info.trait_name.clone(),
+                        method_info.method_name.clone(),
+                    ));
+                    if reachable.contains(&method_id) {
+                        true
+                    } else {
+                        // For monomorphized methods, also check as FreeFunctionName
+                        // Monomorphized methods have type args in the struct name (e.g., "TreeMap<String,i32>")
+                        let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                            &module_path,
+                            func_name,
+                        ));
+                        reachable.contains(&free_id)
+                    }
                 } else {
-                    // For monomorphized methods, also check as FreeFunctionName
-                    // Monomorphized methods have type args in the struct name (e.g., "TreeMap<String,i32>")
-                    let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
+                    // Regular function (no method_info)
+                    let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
                         &module_path,
                         func_name,
                     ));
-                    reachable.contains(&free_id)
-                }
-            } else {
-                // Regular function
-                let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    &module_path,
-                    func_name,
-                ));
-                reachable.contains(&func_id)
-            };
+                    reachable.contains(&func_id)
+                };
 
             if is_reachable {
                 for s in strings {
@@ -827,21 +831,19 @@ fn analyze_expr(
                         // Generic instance method call (e.g., Box<i32>.get())
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| mangle_type_for_name(*t, type_table))
+                            .map(|t| type_table.mangle_type_name(*t))
                             .collect();
                         // Include trait name for trait methods (e.g., TreeMap<String,i32>^Index::index)
                         let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
-                            let mangled = format!(
-                                "{}<{}>^{trait_n}::{method_name}",
-                                name,
-                                type_arg_names.join(",")
-                            );
-                            let base = format!("{name}^{trait_n}::{method_name}");
+                            let generic_name = mangle_generic_name(&name, &type_arg_names);
+                            let mangled =
+                                mangle_local_trait_method(&generic_name, trait_n, &method_name);
+                            let base = mangle_local_trait_method(&name, trait_n, &method_name);
                             (mangled, base)
                         } else {
                             let mangled =
-                                format!("{}<{}>::{method_name}", name, type_arg_names.join(","));
-                            let base = format!("{name}::{method_name}");
+                                mangle_method_generic(&name, &type_arg_names, &method_name);
+                            let base = mangle_local_method(&name, &method_name);
                             (mangled, base)
                         };
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
@@ -853,15 +855,18 @@ fn analyze_expr(
                     }
                     ResolvedType::BuiltinArray(elem_type) => {
                         // Array<T> method call (e.g., arr.len(), arr.append())
-                        let elem_name = mangle_type_for_name(elem_type, type_table);
+                        let elem_name = type_table.mangle_type_name(elem_type);
                         // Include trait name for trait methods (e.g., Array<i32>^Index::index)
                         let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
-                            let mangled = format!("Array<{elem_name}>^{trait_n}::{method_name}");
-                            let base = format!("Array^{trait_n}::{method_name}");
+                            let array_name = mangle_generic_name("Array", &[elem_name]);
+                            let mangled =
+                                mangle_local_trait_method(&array_name, trait_n, &method_name);
+                            let base = mangle_local_trait_method("Array", trait_n, &method_name);
                             (mangled, base)
                         } else {
-                            let mangled = format!("Array<{elem_name}>::{method_name}");
-                            let base = format!("Array::{method_name}");
+                            let mangled =
+                                mangle_method_generic("Array", &[elem_name], &method_name);
+                            let base = mangle_local_method("Array", &method_name);
                             (mangled, base)
                         };
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
@@ -1139,47 +1144,6 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
 }
 
 /// Mangle a type ID into a string suitable for struct/function names.
-/// Used for creating monomorphized function names like Array<i32>`::len`.
-fn mangle_type_for_name(type_id: TypeId, type_table: &TypeTable) -> String {
-    match type_table.get(type_id) {
-        ResolvedType::Primitive(prim) => prim.as_str().to_string(),
-        ResolvedType::Unit => "unit".to_string(),
-        ResolvedType::Struct { name, .. } => name.clone(),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
-            let args: Vec<String> = type_args
-                .iter()
-                .map(|t| mangle_type_for_name(*t, type_table))
-                .collect();
-            format!("{}<{}>", name, args.join(","))
-        }
-        ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } => {
-            let ret_name = mangle_type_for_name(*return_type, type_table);
-            format!("Fn<{},{}>", params.len(), ret_name)
-        }
-        ResolvedType::Tuple(elems) => {
-            let elem_names: Vec<String> = elems
-                .iter()
-                .map(|t| mangle_type_for_name(*t, type_table))
-                .collect();
-            format!("Tuple<{}>", elem_names.join(","))
-        }
-        ResolvedType::Option(inner) => {
-            let inner_name = mangle_type_for_name(*inner, type_table);
-            format!("Option<{inner_name}>")
-        }
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            mangle_type_for_name(*inner, type_table)
-        }
-        _ => "unknown".to_string(),
-    }
-}
-
 /// Compute the set of reachable functions from an entry point
 fn compute_reachable(
     call_graph: &HashMap<FunctionId, HashSet<FunctionId>>,

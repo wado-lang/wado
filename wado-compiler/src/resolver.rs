@@ -16,9 +16,7 @@ use indexmap::IndexMap;
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
-use crate::name::{
-    self as name, LocalMethodName, ModuleSource, mangle_generic_name, strip_type_params,
-};
+use crate::name::{self as name, LocalMethodName, ModuleSource, mangle_generic_name};
 
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
@@ -5592,12 +5590,16 @@ impl<'a> Resolver<'a> {
                         name: "prelude/primitives".to_string(),
                     };
                     (
-                        self.mangle_type_name(base_type_id),
+                        self.type_table.borrow().mangle_type_name(base_type_id),
                         prim_module.to_path(),
                         Some(prim_module),
                     )
                 }
-                _ => (self.mangle_type_name(base_type_id), vec![], None),
+                _ => (
+                    self.type_table.borrow().mangle_type_name(base_type_id),
+                    vec![],
+                    None,
+                ),
             };
 
         // Look up method info based on receiver type
@@ -5741,7 +5743,7 @@ impl<'a> Resolver<'a> {
                 } => {
                     let type_arg_names: Vec<String> = type_args
                         .iter()
-                        .map(|t| self.mangle_type_name(*t))
+                        .map(|t| self.type_table.borrow().mangle_type_name(*t))
                         .collect();
                     let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                     (
@@ -5752,7 +5754,7 @@ impl<'a> Resolver<'a> {
                     )
                 }
                 ResolvedType::BuiltinArray(elem) => {
-                    let elem_name = self.mangle_type_name(elem);
+                    let elem_name = self.type_table.borrow().mangle_type_name(elem);
                     let _mangled = format!("Array<{elem_name}>");
                     (
                         "Array".to_string(),
@@ -5762,7 +5764,7 @@ impl<'a> Resolver<'a> {
                     )
                 }
                 _ => {
-                    let name = self.mangle_type_name(base_type_id);
+                    let name = self.type_table.borrow().mangle_type_name(base_type_id);
                     (name.clone(), name, vec![], None)
                 }
             };
@@ -5791,7 +5793,7 @@ impl<'a> Resolver<'a> {
         // Use inferred type args if available, otherwise use explicit type args
         let method_type_arg_names: Vec<String> = method_type_args
             .iter()
-            .map(|t| self.mangle_type_name(*t))
+            .map(|t| self.type_table.borrow().mangle_type_name(*t))
             .collect();
 
         // Build method_info with base struct name, then apply impl and method type args
@@ -6052,7 +6054,7 @@ impl<'a> Resolver<'a> {
                 // Build mangled name for generic type: Array<i32>
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_name(*t))
+                    .map(|t| self.type_table.borrow().mangle_type_name(*t))
                     .collect();
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                 (
@@ -6077,7 +6079,7 @@ impl<'a> Resolver<'a> {
                     } => {
                         let type_arg_names: Vec<String> = type_args
                             .iter()
-                            .map(|t| self.mangle_type_name(*t))
+                            .map(|t| self.type_table.borrow().mangle_type_name(*t))
                             .collect();
                         let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                         (
@@ -6157,7 +6159,7 @@ impl<'a> Resolver<'a> {
                 let generic_name = format!("{}::{}", struct_name, static_call.method);
                 let type_arg_names: Vec<String> = struct_type_args
                     .iter()
-                    .map(|t| self.mangle_type_name(*t))
+                    .map(|t| self.type_table.borrow().mangle_type_name(*t))
                     .collect();
                 (
                     Some(MonomorphInfo {
@@ -6617,45 +6619,6 @@ impl<'a> Resolver<'a> {
 
         // Default to current module source
         self.current_module_source.clone()
-    }
-
-    /// Mangle a type name for use in function names
-    fn mangle_type_name(&self, type_id: TypeId) -> String {
-        match self.type_table.borrow().get(type_id) {
-            ResolvedType::Primitive(prim) => prim.as_str().to_string(),
-            ResolvedType::Unit => "unit".to_string(),
-            ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.mangle_type_name(*t))
-                    .collect();
-                format!("{}<{}>", name, args.join(","))
-            }
-            ResolvedType::Option(inner) => format!("Option<{}>", self.mangle_type_name(*inner)),
-            ResolvedType::Ref(inner) => format!("ref<{}>", self.mangle_type_name(*inner)),
-            ResolvedType::MutRef(inner) => format!("mutref<{}>", self.mangle_type_name(*inner)),
-            ResolvedType::TypeParam { name, .. } => name.clone(),
-            ResolvedType::Tuple(elems) => {
-                let parts: Vec<String> = elems.iter().map(|e| self.mangle_type_name(*e)).collect();
-                format!("Tuple<{}>", parts.join(","))
-            }
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                let ret_name = self.mangle_type_name(*return_type);
-                format!("Fn<{},{}>", params.len(), ret_name)
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                format!("Array<{}>", self.mangle_type_name(*elem))
-            }
-            ResolvedType::Newtype { name, .. } => name.clone(),
-            _ => "unknown".to_string(),
-        }
     }
 
     /// Look up method info based on receiver type and method name.
@@ -8093,9 +8056,8 @@ impl<'a> Resolver<'a> {
                     // Restore associated type bindings
                     self.current_associated_type_bindings = old_bindings;
 
-                    // Return base trait name (e.g., "IndexValue" not "IndexValue<i32>")
-                    let base_trait_name = strip_type_params(&trait_name).to_string();
-                    return Some((assoc_type, self_kind, base_trait_name));
+                    // trait_name is already base name (get_type_name returns name without type args)
+                    return Some((assoc_type, self_kind, trait_name));
                 }
             }
         }
@@ -8278,7 +8240,13 @@ impl<'a> Resolver<'a> {
                         Some(type_args)
                     },
                 ),
-                _ => (self.mangle_type_name(output_base_type_id), vec![], None),
+                _ => (
+                    self.type_table
+                        .borrow()
+                        .mangle_type_name(output_base_type_id),
+                    vec![],
+                    None,
+                ),
             };
 
         // Look up method info to check if it needs &mut self
@@ -9062,12 +9030,15 @@ impl<'a> Resolver<'a> {
                                     let prim_module = ModuleSource::Core {
                                         name: "prelude/primitives".to_string(),
                                     };
-                                    (self.mangle_type_name(base_type_id), prim_module)
+                                    (
+                                        self.type_table.borrow().mangle_type_name(base_type_id),
+                                        prim_module,
+                                    )
                                 }
                                 _ => {
                                     // Fallback to current module
                                     (
-                                        self.mangle_type_name(resolved.type_id),
+                                        self.type_table.borrow().mangle_type_name(resolved.type_id),
                                         self.current_module_source.clone(),
                                     )
                                 }
