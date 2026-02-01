@@ -7630,7 +7630,7 @@ impl Codegen {
                             let generic_name = base_struct_name
                                 .as_ref()
                                 .or_else(|| struct_info.and_then(|s| s.base_name.as_ref()))
-                                .or_else(|| Some(&info.base_struct_name));
+                                .or(Some(&info.base_struct_name));
 
                             if let Some(generic_struct_name) = generic_name {
                                 let generic_mangled_name = MethodName::new(
@@ -8402,7 +8402,6 @@ impl Codegen {
             _ => None,
         }
     }
-
 
     /// Get the Wasm array type index for a given element type
     fn get_array_type_index(&self, element_type: TypeId) -> u32 {
