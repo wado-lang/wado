@@ -651,33 +651,26 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        // Check for float (decimal point)
-        let is_float = if self.peek_char() == Some('.') {
+        // Check for float (decimal point followed by digits)
+        if self.peek_char() == Some('.') {
             let mut chars = self.chars.clone();
             chars.next();
-            if let Some((_, ch)) = chars.peek() {
-                if ch.is_ascii_digit() {
-                    self.advance(); // consume '.'
-                    while let Some((_, ch)) = self.peek() {
-                        if ch.is_ascii_digit() || ch == '_' {
-                            self.advance();
-                        } else {
-                            break;
-                        }
+            if let Some((_, ch)) = chars.peek()
+                && ch.is_ascii_digit()
+            {
+                self.advance(); // consume '.'
+                while let Some((_, ch)) = self.peek() {
+                    if ch.is_ascii_digit() || ch == '_' {
+                        self.advance();
+                    } else {
+                        break;
                     }
-                    true
-                } else {
-                    false
                 }
-            } else {
-                false
             }
-        } else {
-            false
-        };
+        }
 
         // Check for scientific notation (e or E)
-        let has_exponent = if let Some('e' | 'E') = self.peek_char() {
+        if let Some('e' | 'E') = self.peek_char() {
             self.advance();
             // Optional sign
             if let Some('+' | '-') = self.peek_char() {
@@ -697,19 +690,12 @@ impl<'a> Lexer<'a> {
                     break;
                 }
             }
-            true
-        } else {
-            false
-        };
+        }
 
         let text = &self.input[start..self.pos];
 
-        // Just return the string representation; parsing happens in resolver
-        if is_float || has_exponent {
-            Ok(TokenKind::FloatLit(text.to_string()))
-        } else {
-            Ok(TokenKind::IntLit(text.to_string()))
-        }
+        // Return string representation; type is determined by context in resolver
+        Ok(TokenKind::NumberLit(text.to_string()))
     }
 
     fn lex_hex_number(
@@ -737,7 +723,7 @@ impl<'a> Lexer<'a> {
 
         // Include "0x" prefix in repr; actual parsing happens in resolver
         let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::IntLit(repr))
+        Ok(TokenKind::NumberLit(repr))
     }
 
     fn lex_binary_number(
@@ -765,7 +751,7 @@ impl<'a> Lexer<'a> {
 
         // Include "0b" prefix in repr; actual parsing happens in resolver
         let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::IntLit(repr))
+        Ok(TokenKind::NumberLit(repr))
     }
 
     fn lex_octal_number(
@@ -793,7 +779,7 @@ impl<'a> Lexer<'a> {
 
         // Include "0o" prefix in repr; actual parsing happens in resolver
         let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::IntLit(repr))
+        Ok(TokenKind::NumberLit(repr))
     }
 
     fn lex_string(&mut self) -> Result<TokenKind, LexError> {

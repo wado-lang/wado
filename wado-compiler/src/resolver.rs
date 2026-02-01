@@ -2607,7 +2607,16 @@ impl<'a> Resolver<'a> {
             }
             Pattern::Literal(lit) => {
                 let tir_lit = match lit {
-                    Literal::Int(i) => {
+                    Literal::Number(n) => {
+                        // Float literals cannot be used in match patterns
+                        if Self::is_float_only_literal(&n.repr) {
+                            self.errors.push(TypeError::InvalidPattern {
+                                message: "float literals cannot be used in match patterns"
+                                    .to_string(),
+                                span,
+                            });
+                            return TirPattern::Wildcard;
+                        }
                         // Check if scrutinee type is unsigned
                         let is_unsigned = matches!(
                             self.type_table.borrow().get(scrutinee_type),
@@ -2620,23 +2629,16 @@ impl<'a> Resolver<'a> {
                             )
                         );
                         if is_unsigned {
-                            match Self::parse_u128_literal(&i.repr) {
+                            match Self::parse_u128_literal(&n.repr) {
                                 Ok(value) => TirLiteralPattern::U128(value),
                                 Err(_) => TirLiteralPattern::U128(0),
                             }
                         } else {
-                            match Self::parse_i128_literal(&i.repr) {
+                            match Self::parse_i128_literal(&n.repr) {
                                 Ok(value) => TirLiteralPattern::I128(value),
                                 Err(_) => TirLiteralPattern::I128(0),
                             }
                         }
-                    }
-                    Literal::Float(_) => {
-                        self.errors.push(TypeError::InvalidPattern {
-                            message: "float literals cannot be used in match patterns".to_string(),
-                            span,
-                        });
-                        return TirPattern::Wildcard;
                     }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     Literal::Char(c) => TirLiteralPattern::Char(*c),
@@ -3464,12 +3466,26 @@ impl<'a> Resolver<'a> {
     }
 
     /// Parse an integer literal string into a u64 value
+    /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10")
     fn parse_int_literal(repr: &str) -> Result<u64, String> {
         // Remove underscores for parsing
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
 
         // Handle negative numbers by parsing as i64 and reinterpreting bits
         if clean.starts_with('-') {
+            // Check for scientific notation in negative numbers
+            if clean.to_lowercase().contains('e') {
+                let value: f64 = clean
+                    .parse()
+                    .map_err(|_| format!("invalid integer literal: {repr}"))?;
+                if value.fract() != 0.0 {
+                    return Err(format!("integer literal has fractional part: {repr}"));
+                }
+                if value < i64::MIN as f64 || value > i64::MAX as f64 {
+                    return Err(format!("integer literal out of range: {repr}"));
+                }
+                return Ok((value as i64) as u64);
+            }
             let value: i64 = clean
                 .parse()
                 .map_err(|_| format!("invalid integer literal: {repr}"))?;
@@ -3485,6 +3501,18 @@ impl<'a> Resolver<'a> {
         } else if clean.starts_with("0o") || clean.starts_with("0O") {
             u64::from_str_radix(&clean[2..], 8)
                 .map_err(|_| format!("invalid octal literal: {repr}"))
+        } else if clean.to_lowercase().contains('e') {
+            // Scientific notation: parse as f64 first, then convert to u64
+            let value: f64 = clean
+                .parse()
+                .map_err(|_| format!("invalid integer literal: {repr}"))?;
+            if value.fract() != 0.0 {
+                return Err(format!("integer literal has fractional part: {repr}"));
+            }
+            if value < 0.0 || value > u64::MAX as f64 {
+                return Err(format!("integer literal out of range: {repr}"));
+            }
+            Ok(value as u64)
         } else {
             clean
                 .parse()
@@ -3496,9 +3524,44 @@ impl<'a> Resolver<'a> {
     fn parse_float_literal(repr: &str) -> Result<f64, String> {
         // Remove underscores for parsing
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
+
+        // Handle hex/binary/octal literals as float values (not bit patterns)
+        if clean.starts_with("0x") || clean.starts_with("0X") {
+            let value = u64::from_str_radix(&clean[2..], 16)
+                .map_err(|_| format!("invalid hex literal: {repr}"))?;
+            return Ok(value as f64);
+        } else if clean.starts_with("0b") || clean.starts_with("0B") {
+            let value = u64::from_str_radix(&clean[2..], 2)
+                .map_err(|_| format!("invalid binary literal: {repr}"))?;
+            return Ok(value as f64);
+        } else if clean.starts_with("0o") || clean.starts_with("0O") {
+            let value = u64::from_str_radix(&clean[2..], 8)
+                .map_err(|_| format!("invalid octal literal: {repr}"))?;
+            return Ok(value as f64);
+        }
+
         clean
             .parse()
             .map_err(|_| format!("invalid float literal: {repr}"))
+    }
+
+    /// Check if a number literal can only be a float (has decimal point or negative exponent)
+    fn is_float_only_literal(repr: &str) -> bool {
+        // Has decimal point → float only
+        if repr.contains('.') {
+            return true;
+        }
+
+        // Check for negative exponent (e.g., "1e-5")
+        let lower = repr.to_lowercase();
+        if let Some(e_pos) = lower.find('e') {
+            let after_e = &repr[e_pos + 1..];
+            if after_e.starts_with('-') {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Parse an unsigned integer literal into a u128 value
@@ -3566,53 +3629,55 @@ impl<'a> Resolver<'a> {
     /// Resolve a literal expression
     fn resolve_literal(&mut self, lit: &ast::LiteralExpr, ctx: &FunctionContext) -> TirExpr {
         let (kind, type_id) = match &lit.value {
-            Literal::Int(int_lit) => {
-                match Self::parse_int_literal(&int_lit.repr) {
-                    Ok(value) => (
-                        TirExprKind::IntLiteral {
-                            value,
-                            repr: int_lit.repr.clone(),
-                        },
-                        TypeTable::I32,
-                    ),
-                    Err(message) => {
-                        self.errors.push(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        // Return 0 as fallback to continue resolution
-                        (
-                            TirExprKind::IntLiteral {
-                                value: 0,
-                                repr: int_lit.repr.clone(),
-                            },
-                            TypeTable::I32,
-                        )
-                    }
-                }
-            }
-            Literal::Float(float_lit) => {
-                match Self::parse_float_literal(&float_lit.repr) {
-                    Ok(value) => (
-                        TirExprKind::FloatLiteral {
-                            value,
-                            repr: float_lit.repr.clone(),
-                        },
-                        TypeTable::F64,
-                    ),
-                    Err(message) => {
-                        self.errors.push(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        // Return 0.0 as fallback to continue resolution
-                        (
+            Literal::Number(num_lit) => {
+                // Default type: i32 if integer-compatible, f64 if float-only
+                if Self::is_float_only_literal(&num_lit.repr) {
+                    // Must be float (has decimal point or negative exponent)
+                    match Self::parse_float_literal(&num_lit.repr) {
+                        Ok(value) => (
                             TirExprKind::FloatLiteral {
-                                value: 0.0,
-                                repr: float_lit.repr.clone(),
+                                value,
+                                repr: num_lit.repr.clone(),
                             },
                             TypeTable::F64,
-                        )
+                        ),
+                        Err(message) => {
+                            self.errors.push(TypeError::InvalidLiteral {
+                                message,
+                                span: lit.span,
+                            });
+                            (
+                                TirExprKind::FloatLiteral {
+                                    value: 0.0,
+                                    repr: num_lit.repr.clone(),
+                                },
+                                TypeTable::F64,
+                            )
+                        }
+                    }
+                } else {
+                    // Can be integer (default to i32)
+                    match Self::parse_int_literal(&num_lit.repr) {
+                        Ok(value) => (
+                            TirExprKind::IntLiteral {
+                                value,
+                                repr: num_lit.repr.clone(),
+                            },
+                            TypeTable::I32,
+                        ),
+                        Err(message) => {
+                            self.errors.push(TypeError::InvalidLiteral {
+                                message,
+                                span: lit.span,
+                            });
+                            (
+                                TirExprKind::IntLiteral {
+                                    value: 0,
+                                    repr: num_lit.repr.clone(),
+                                },
+                                TypeTable::I32,
+                            )
+                        }
                     }
                 }
             }
@@ -5117,17 +5182,35 @@ impl<'a> Resolver<'a> {
     ) -> TirExpr {
         // Handle numeric literal coercion
         if let Some(target_type) = expected_type {
-            // Integer literal coercion
+            // Number literal coercion to integer
             if let Expr::Literal(lit) = expr
-                && let Literal::Int(int_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
                 && self.type_table.borrow().is_integer(target_type)
             {
-                match Self::parse_int_literal(&int_lit.repr) {
+                // Check if the literal can be an integer
+                if Self::is_float_only_literal(&num_lit.repr) {
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!(
+                            "cannot use float literal '{}' as integer (has decimal point or negative exponent)",
+                            num_lit.repr
+                        ),
+                        span: lit.span,
+                    });
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: 0,
+                            repr: num_lit.repr.clone(),
+                        },
+                        target_type,
+                        lit.span,
+                    );
+                }
+                match Self::parse_int_literal(&num_lit.repr) {
                     Ok(value) => {
                         return TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value,
-                                repr: int_lit.repr.clone(),
+                                repr: num_lit.repr.clone(),
                             },
                             target_type,
                             lit.span,
@@ -5141,7 +5224,7 @@ impl<'a> Resolver<'a> {
                         return TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value: 0,
-                                repr: int_lit.repr.clone(),
+                                repr: num_lit.repr.clone(),
                             },
                             target_type,
                             lit.span,
@@ -5150,21 +5233,39 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            // Negated integer literal coercion: -42 as i64
+            // Negated number literal coercion to integer: -42 as i64
             if let Expr::Unary(unary) = expr
                 && unary.op == UnaryOp::Neg
                 && let Expr::Literal(lit) = &unary.expr
-                && let Literal::Int(int_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
                 && self.type_table.borrow().is_integer(target_type)
             {
-                match Self::parse_int_literal(&int_lit.repr) {
+                // Check if the literal can be an integer
+                if Self::is_float_only_literal(&num_lit.repr) {
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!(
+                            "cannot use float literal '-{}' as integer (has decimal point or negative exponent)",
+                            num_lit.repr
+                        ),
+                        span: unary.span,
+                    });
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: 0,
+                            repr: format!("-{}", num_lit.repr),
+                        },
+                        target_type,
+                        unary.span,
+                    );
+                }
+                match Self::parse_int_literal(&num_lit.repr) {
                     Ok(value) => {
                         // Negate as i64 then store as u64 (two's complement)
                         let neg_value = (value as i64).wrapping_neg() as u64;
                         return TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value: neg_value,
-                                repr: format!("-{}", int_lit.repr),
+                                repr: format!("-{}", num_lit.repr),
                             },
                             target_type,
                             unary.span,
@@ -5178,7 +5279,7 @@ impl<'a> Resolver<'a> {
                         return TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value: 0,
-                                repr: format!("-{}", int_lit.repr),
+                                repr: format!("-{}", num_lit.repr),
                             },
                             target_type,
                             unary.span,
@@ -5187,17 +5288,17 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            // Float literal coercion
+            // Number literal coercion to float
             if let Expr::Literal(lit) = expr
-                && let Literal::Float(float_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
                 && self.type_table.borrow().is_float(target_type)
             {
-                match Self::parse_float_literal(&float_lit.repr) {
+                match Self::parse_float_literal(&num_lit.repr) {
                     Ok(value) => {
                         return TirExpr::new(
                             TirExprKind::FloatLiteral {
                                 value,
-                                repr: float_lit.repr.clone(),
+                                repr: num_lit.repr.clone(),
                             },
                             target_type,
                             lit.span,
@@ -5211,7 +5312,7 @@ impl<'a> Resolver<'a> {
                         return TirExpr::new(
                             TirExprKind::FloatLiteral {
                                 value: 0.0,
-                                repr: float_lit.repr.clone(),
+                                repr: num_lit.repr.clone(),
                             },
                             target_type,
                             lit.span,
@@ -5220,19 +5321,19 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            // Negated float literal coercion: -3.14 as f32
+            // Negated number literal coercion to float: -3.14 as f32
             if let Expr::Unary(unary) = expr
                 && unary.op == UnaryOp::Neg
                 && let Expr::Literal(lit) = &unary.expr
-                && let Literal::Float(float_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
                 && self.type_table.borrow().is_float(target_type)
             {
-                match Self::parse_float_literal(&float_lit.repr) {
+                match Self::parse_float_literal(&num_lit.repr) {
                     Ok(value) => {
                         return TirExpr::new(
                             TirExprKind::FloatLiteral {
                                 value: -value,
-                                repr: format!("-{}", float_lit.repr),
+                                repr: format!("-{}", num_lit.repr),
                             },
                             target_type,
                             unary.span,
@@ -5246,7 +5347,7 @@ impl<'a> Resolver<'a> {
                         return TirExpr::new(
                             TirExprKind::FloatLiteral {
                                 value: 0.0,
-                                repr: format!("-{}", float_lit.repr),
+                                repr: format!("-{}", num_lit.repr),
                             },
                             target_type,
                             unary.span,
@@ -5258,7 +5359,8 @@ impl<'a> Resolver<'a> {
             // i128/u128 literal coercion: let x: u128 = 42 → u128::from_u64(42 as u64)
             // For values larger than u64, use from_pair: let x: u128 = 340... → u128::from_pair(low, high)
             if let Expr::Literal(lit) = expr
-                && let Literal::Int(int_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
+                && !Self::is_float_only_literal(&num_lit.repr)
             {
                 let struct_name = match self.type_table.borrow().get(target_type).clone() {
                     ResolvedType::Struct { name, .. } => Some(name),
@@ -5269,7 +5371,7 @@ impl<'a> Resolver<'a> {
                     && (name == "u128" || name == "i128")
                 {
                     // Try to parse the literal value as u64 first (most efficient path)
-                    if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                    if let Ok(value) = Self::parse_int_literal(&num_lit.repr) {
                         // For u128: value fits in u64, use from_u64
                         // For i128: value must also fit in i64 (positive range)
                         let use_from_u64_or_i64 = if name == "u128" {
@@ -5289,7 +5391,7 @@ impl<'a> Resolver<'a> {
                             let inner_literal = TirExpr::new(
                                 TirExprKind::IntLiteral {
                                     value,
-                                    repr: int_lit.repr.clone(),
+                                    repr: num_lit.repr.clone(),
                                 },
                                 inner_type,
                                 lit.span,
@@ -5319,7 +5421,7 @@ impl<'a> Resolver<'a> {
                     // Value doesn't fit in u64 (or i64 for i128), use from_pair
                     // Parse at compile time and generate from_pair(low, high)
                     if name == "u128" {
-                        if let Ok(value) = Self::parse_u128_literal(&int_lit.repr) {
+                        if let Ok(value) = Self::parse_u128_literal(&num_lit.repr) {
                             let (low, high) = Self::unpack_u128(value);
                             return self.build_from_pair_call(
                                 &name,
@@ -5330,12 +5432,12 @@ impl<'a> Resolver<'a> {
                             );
                         }
                         self.errors.push(TypeError::InvalidLiteral {
-                            message: format!("invalid u128 literal: {}", int_lit.repr),
+                            message: format!("invalid u128 literal: {}", num_lit.repr),
                             span: lit.span,
                         });
                     } else {
                         // i128: parse as i128 (handles positive values > i64::MAX)
-                        if let Ok(value) = Self::parse_i128_literal(&int_lit.repr) {
+                        if let Ok(value) = Self::parse_i128_literal(&num_lit.repr) {
                             let (low, high) = Self::unpack_i128(value);
                             return self.build_from_pair_call(
                                 &name,
@@ -5346,19 +5448,20 @@ impl<'a> Resolver<'a> {
                             );
                         }
                         self.errors.push(TypeError::InvalidLiteral {
-                            message: format!("invalid i128 literal: {}", int_lit.repr),
+                            message: format!("invalid i128 literal: {}", num_lit.repr),
                             span: lit.span,
                         });
                     }
                 }
             }
 
-            // Handle negated integer literal to i128: let x: i128 = -100
+            // Handle negated number literal to i128: let x: i128 = -100
             // For large values: let x: i128 = -170... → i128::from_pair(low, high)
             if let Expr::Unary(unary) = expr
                 && unary.op == ast::UnaryOp::Neg
                 && let Expr::Literal(lit) = &unary.expr
-                && let Literal::Int(int_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
+                && !Self::is_float_only_literal(&num_lit.repr)
             {
                 let struct_name = match self.type_table.borrow().get(target_type).clone() {
                     ResolvedType::Struct { name, .. } => Some(name),
@@ -5369,7 +5472,7 @@ impl<'a> Resolver<'a> {
                     && name == "i128"
                 {
                     // Parse the negated value directly using Rust's i128
-                    let negated_repr = format!("-{}", Self::clean_literal_repr(&int_lit.repr));
+                    let negated_repr = format!("-{}", Self::clean_literal_repr(&num_lit.repr));
                     if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
                         let (low, high) = Self::unpack_i128(value);
                         return self.build_from_pair_call(
@@ -5381,7 +5484,7 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     self.errors.push(TypeError::InvalidLiteral {
-                        message: format!("invalid i128 literal: -{}", int_lit.repr),
+                        message: format!("invalid i128 literal: -{}", num_lit.repr),
                         span: unary.span,
                     });
                 }
@@ -6304,11 +6407,11 @@ impl<'a> Resolver<'a> {
         Vec::new()
     }
 
-    /// Check if an expression is a numeric literal (integer or float)
+    /// Check if an expression is a numeric literal
     fn is_numeric_literal(&self, expr: &Expr) -> bool {
         matches!(
             expr,
-            Expr::Literal(lit) if matches!(lit.value, Literal::Int(_) | Literal::Float(_))
+            Expr::Literal(lit) if matches!(lit.value, Literal::Number(_))
         )
     }
 
@@ -8439,10 +8542,11 @@ impl<'a> Resolver<'a> {
             let elements = elements.clone();
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Int(int_lit),
+                value: ast::Literal::Number(num_lit),
                 ..
             }) = &index.index
-                && let Ok(idx) = int_lit.repr.parse::<usize>()
+                && !Self::is_float_only_literal(&num_lit.repr)
+                && let Ok(idx) = num_lit.repr.parse::<usize>()
             {
                 if idx < elements.len() {
                     let field_type = elements[idx];
@@ -9045,12 +9149,13 @@ impl<'a> Resolver<'a> {
         if let Some(ref name) = struct_name
             && (name == "u128" || name == "i128")
         {
-            // Handle integer literal cast specially to support values > u64
+            // Handle number literal cast specially to support values > u64
             if let ast::Expr::Literal(lit) = &cast.expr
-                && let Literal::Int(int_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
+                && !Self::is_float_only_literal(&num_lit.repr)
             {
                 // Try to parse as u64
-                if let Ok(value) = Self::parse_int_literal(&int_lit.repr) {
+                if let Ok(value) = Self::parse_int_literal(&num_lit.repr) {
                     // For u128: value fits in u64, use from_u64
                     // For i128: value must also fit in i64 (positive range), otherwise use from_string
                     let use_from_u64_or_i64 = if name == "u128" {
@@ -9070,7 +9175,7 @@ impl<'a> Resolver<'a> {
                         let inner_literal = TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value,
-                                repr: int_lit.repr.clone(),
+                                repr: num_lit.repr.clone(),
                             },
                             inner_type,
                             lit.span,
@@ -9098,7 +9203,7 @@ impl<'a> Resolver<'a> {
 
                 // Value doesn't fit in u64 (or i64 for i128), use from_pair
                 if name == "u128" {
-                    if let Ok(value) = Self::parse_u128_literal(&int_lit.repr) {
+                    if let Ok(value) = Self::parse_u128_literal(&num_lit.repr) {
                         let (low, high) = Self::unpack_u128(value);
                         return self.build_from_pair_call(
                             name,
@@ -9109,37 +9214,38 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     self.errors.push(TypeError::InvalidLiteral {
-                        message: format!("invalid u128 literal: {}", int_lit.repr),
+                        message: format!("invalid u128 literal: {}", num_lit.repr),
                         span: lit.span,
                     });
                 } else {
                     // i128
-                    if let Ok(value) = Self::parse_i128_literal(&int_lit.repr) {
+                    if let Ok(value) = Self::parse_i128_literal(&num_lit.repr) {
                         let (low, high) = Self::unpack_i128(value);
                         return self.build_from_pair_call(name, low, high, target_type, cast.span);
                     }
                     self.errors.push(TypeError::InvalidLiteral {
-                        message: format!("invalid i128 literal: {}", int_lit.repr),
+                        message: format!("invalid i128 literal: {}", num_lit.repr),
                         span: lit.span,
                     });
                 }
             }
 
-            // Handle negated integer literal cast: -170... as i128
+            // Handle negated number literal cast: -170... as i128
             if let ast::Expr::Unary(unary) = &cast.expr
                 && unary.op == ast::UnaryOp::Neg
                 && let ast::Expr::Literal(lit) = &unary.expr
-                && let Literal::Int(int_lit) = &lit.value
+                && let Literal::Number(num_lit) = &lit.value
+                && !Self::is_float_only_literal(&num_lit.repr)
                 && name == "i128"
             {
                 // Parse the negated value directly using Rust's i128
-                let negated_repr = format!("-{}", Self::clean_literal_repr(&int_lit.repr));
+                let negated_repr = format!("-{}", Self::clean_literal_repr(&num_lit.repr));
                 if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
                     let (low, high) = Self::unpack_i128(value);
                     return self.build_from_pair_call(name, low, high, target_type, unary.span);
                 }
                 self.errors.push(TypeError::InvalidLiteral {
-                    message: format!("invalid i128 literal: -{}", int_lit.repr),
+                    message: format!("invalid i128 literal: -{}", num_lit.repr),
                     span: unary.span,
                 });
             }
@@ -9293,13 +9399,13 @@ impl<'a> Resolver<'a> {
             .enumerate()
             .map(|(index, field)| {
                 // Find expected field type for literal coercion (only for numeric literals)
-                // We only use expected type for integer/float literals (including negated ones)
+                // We only use expected type for numeric literals (including negated ones)
                 // to avoid interfering with tuple-to-array coercion for generic struct fields
                 let is_numeric_literal = matches!(
                     &field.value,
                     ast::Expr::Literal(lit) if matches!(
                         &lit.value,
-                        ast::Literal::Int(_) | ast::Literal::Float(_)
+                        ast::Literal::Number(_)
                     )
                 ) || matches!(
                     &field.value,
@@ -9307,7 +9413,7 @@ impl<'a> Resolver<'a> {
                         &unary.expr,
                         ast::Expr::Literal(lit) if matches!(
                             &lit.value,
-                            ast::Literal::Int(_) | ast::Literal::Float(_)
+                            ast::Literal::Number(_)
                         )
                     )
                 );
