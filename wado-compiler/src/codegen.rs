@@ -1665,12 +1665,11 @@ impl Codegen {
                         };
                         param_types.push(struct_ref_type);
                     } else {
-                        panic!(
-                            "struct type not found for &self parameter: {} (method: {}, available: {:?})",
-                            struct_name,
-                            mangled_name,
-                            self.struct_types.keys().collect::<Vec<_>>()
-                        );
+                        // For primitive type methods (i32, f64, etc.), use the type_id_to_valtype
+                        // which handles reference types correctly (e.g., &i32 -> boxed i32 ref)
+                        let self_valtype =
+                            self.type_id_to_valtype(method_type_table, param.type_id);
+                        param_types.push(self_valtype);
                     }
                 } else {
                     param_types.push(self.type_id_to_valtype(method_type_table, param.type_id));
@@ -7214,11 +7213,34 @@ impl Codegen {
 
                     // Primitive method calls (e.g., i32.to_string())
                     ResolvedType::Primitive(prim) => {
-                        if method_name == "to_string" {
-                            // Generate the receiver value first
+                        let prim_name = match prim {
+                            PrimitiveType::I8 => "i8",
+                            PrimitiveType::I16 => "i16",
+                            PrimitiveType::I32 => "i32",
+                            PrimitiveType::I64 => "i64",
+                            PrimitiveType::I128 => "i128",
+                            PrimitiveType::U8 => "u8",
+                            PrimitiveType::U16 => "u16",
+                            PrimitiveType::U32 => "u32",
+                            PrimitiveType::U64 => "u64",
+                            PrimitiveType::U128 => "u128",
+                            PrimitiveType::F32 => "f32",
+                            PrimitiveType::F64 => "f64",
+                            PrimitiveType::Bool => "bool",
+                            PrimitiveType::Char => "char",
+                        };
+
+                        // Try user-defined method first (e.g., "i32::to_string")
+                        let mangled_method_name = format!("{prim_name}::{method_name}");
+                        if let Some(idx) = builder.try_func_idx(&mangled_method_name) {
+                            // Generate receiver and args, then call
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            self.generate_args(func, args, type_table, ctx, builder);
+                            func.instruction(&Instruction::Call(idx));
+                        } else if method_name == "to_string" {
+                            // Fallback to hardcoded internal function for to_string
                             self.generate_expr(func, receiver, type_table, ctx, builder);
 
-                            // Call the appropriate builtin to_string function
                             let func_name = match prim {
                                 PrimitiveType::I32 | PrimitiveType::I8 | PrimitiveType::I16 => {
                                     "core/internal/i32_to_string"

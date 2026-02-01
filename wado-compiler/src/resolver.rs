@@ -5582,6 +5582,17 @@ impl<'a> Resolver<'a> {
                     module_source.to_path(),
                     Some(module_source.clone()),
                 ),
+                // Primitive types have impl blocks in core:prelude/primitives
+                ResolvedType::Primitive(_) => {
+                    let prim_module = ModuleSource::Core {
+                        name: "prelude/primitives".to_string(),
+                    };
+                    (
+                        self.mangle_type_name(base_type_id),
+                        prim_module.to_path(),
+                        Some(prim_module),
+                    )
+                }
                 _ => (self.mangle_type_name(base_type_id), vec![], None),
             };
 
@@ -6708,23 +6719,27 @@ impl<'a> Resolver<'a> {
                 None,
                 Some(*base_type),
             ),
-            // Primitive types have built-in methods like to_string()
-            ResolvedType::Primitive(_) => {
-                if method_name == "to_string" {
-                    // Return String struct type - primitives use value receiver
-                    let return_type = self
-                        .type_table
-                        .borrow()
-                        .find_struct_type("String", &string_module_source())
-                        .unwrap_or(TypeTable::UNKNOWN);
-                    return Some(MethodInfo {
-                        return_type,
-                        self_kind: ast::SelfKind::None,
-                        param_types: vec![],
-                        inherited_from_base: None,
-                    });
-                }
-                return None;
+            // Primitive types - search for impl blocks in loaded modules
+            // (e.g., impl i32 { fn to_string(&self) -> String { ... } })
+            ResolvedType::Primitive(prim) => {
+                let prim_name = match prim {
+                    crate::tir::PrimitiveType::I8 => "i8",
+                    crate::tir::PrimitiveType::I16 => "i16",
+                    crate::tir::PrimitiveType::I32 => "i32",
+                    crate::tir::PrimitiveType::I64 => "i64",
+                    crate::tir::PrimitiveType::I128 => "i128",
+                    crate::tir::PrimitiveType::U8 => "u8",
+                    crate::tir::PrimitiveType::U16 => "u16",
+                    crate::tir::PrimitiveType::U32 => "u32",
+                    crate::tir::PrimitiveType::U64 => "u64",
+                    crate::tir::PrimitiveType::U128 => "u128",
+                    crate::tir::PrimitiveType::F32 => "f32",
+                    crate::tir::PrimitiveType::F64 => "f64",
+                    crate::tir::PrimitiveType::Bool => "bool",
+                    crate::tir::PrimitiveType::Char => "char",
+                };
+                // Use empty module path to trigger "search all loaded modules" logic
+                (prim_name.to_string(), Vec::new(), None, None)
             }
             _ => return None,
         };
