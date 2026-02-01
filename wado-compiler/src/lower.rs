@@ -2127,7 +2127,10 @@ impl ClosureLowerer {
                     Self::collect_locals_from_expr(elem, locals);
                 }
             }
-            TirExprKind::Match { expr: scrutinee, arms } => {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 Self::collect_locals_from_expr(scrutinee, locals);
                 for arm in arms {
                     Self::collect_locals_from_expr(&arm.body, locals);
@@ -2616,6 +2619,156 @@ impl ClosureLowerer {
                     self_ref_type,
                 ),
             },
+            TirStmtKind::For {
+                init,
+                condition,
+                body,
+                update,
+            } => TirStmtKind::For {
+                init: init
+                    .iter()
+                    .map(|s| {
+                        self.transform_closure_body_stmt(s, captures, struct_type_id, self_ref_type)
+                    })
+                    .collect(),
+                condition: condition.as_ref().map(|c| {
+                    self.transform_closure_body(c, captures, struct_type_id, self_ref_type, span)
+                }),
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+                update: update.as_ref().map(|u| {
+                    self.transform_closure_body(u, captures, struct_type_id, self_ref_type, span)
+                }),
+            },
+            TirStmtKind::ForOf {
+                binding_local,
+                binding_type,
+                is_mut,
+                iterable,
+                iterable_type,
+                body,
+            } => TirStmtKind::ForOf {
+                binding_local: binding_local + 1, // Shift by 1 for self parameter
+                binding_type: *binding_type,
+                is_mut: *is_mut,
+                iterable: self.transform_closure_body(
+                    iterable,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                iterable_type: *iterable_type,
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+            },
+            TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
+                label: label.clone(),
+                block: self.transform_closure_body_block(
+                    block,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+            },
+            TirStmtKind::IfPattern {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => TirStmtKind::IfPattern {
+                scrutinee: self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                pattern: self.transform_closure_body_pattern(pattern),
+                then_block: self.transform_closure_body_block(
+                    then_block,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+                else_block: else_block.as_ref().map(|b| {
+                    self.transform_closure_body_block(b, captures, struct_type_id, self_ref_type)
+                }),
+            },
+            TirStmtKind::WhilePattern {
+                scrutinee,
+                pattern,
+                body,
+            } => TirStmtKind::WhilePattern {
+                scrutinee: self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                pattern: self.transform_closure_body_pattern(pattern),
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+            },
+            TirStmtKind::ForPattern {
+                init,
+                scrutinee,
+                pattern,
+                body,
+                update,
+            } => TirStmtKind::ForPattern {
+                init: init
+                    .iter()
+                    .map(|s| {
+                        self.transform_closure_body_stmt(s, captures, struct_type_id, self_ref_type)
+                    })
+                    .collect(),
+                scrutinee: self.transform_closure_body(
+                    scrutinee,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+                pattern: self.transform_closure_body_pattern(pattern),
+                body: self.transform_closure_body_block(
+                    body,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                ),
+                update: update.as_ref().map(|u| {
+                    self.transform_closure_body(u, captures, struct_type_id, self_ref_type, span)
+                }),
+            },
+            TirStmtKind::LetPattern {
+                pattern,
+                is_mut,
+                value,
+            } => TirStmtKind::LetPattern {
+                pattern: self.transform_closure_body_pattern(pattern),
+                is_mut: *is_mut,
+                value: self.transform_closure_body(
+                    value,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                    span,
+                ),
+            },
             TirStmtKind::Break { label, value } => TirStmtKind::Break {
                 label: label.clone(),
                 value: value.as_ref().map(|v| {
@@ -2623,10 +2776,45 @@ impl ClosureLowerer {
                 }),
             },
             TirStmtKind::Continue => TirStmtKind::Continue,
-            // For other statement types, clone as-is
-            other => other.clone(),
         };
         TirStmt::new(kind, stmt.span)
+    }
+
+    /// Transform a pattern within a closure body, adjusting local indices by 1 for self parameter
+    fn transform_closure_body_pattern(&self, pattern: &TirPattern) -> TirPattern {
+        match pattern {
+            TirPattern::Wildcard => TirPattern::Wildcard,
+            TirPattern::Binding {
+                name,
+                local_index,
+                type_id,
+            } => TirPattern::Binding {
+                name: name.clone(),
+                local_index: local_index + 1, // Shift by 1 for self parameter
+                type_id: *type_id,
+            },
+            TirPattern::Literal(lit) => TirPattern::Literal(lit.clone()),
+            TirPattern::Tuple(patterns) => TirPattern::Tuple(
+                patterns
+                    .iter()
+                    .map(|p| self.transform_closure_body_pattern(p))
+                    .collect(),
+            ),
+            TirPattern::Variant {
+                enum_type,
+                variant_name,
+                bindings,
+                payload_type,
+            } => TirPattern::Variant {
+                enum_type: *enum_type,
+                variant_name: variant_name.clone(),
+                bindings: bindings
+                    .iter()
+                    .map(|p| self.transform_closure_body_pattern(p))
+                    .collect(),
+                payload_type: *payload_type,
+            },
+        }
     }
 
     // ========================================================================
