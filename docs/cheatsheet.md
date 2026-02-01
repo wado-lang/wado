@@ -386,7 +386,7 @@ impl Point {
         self.y = 0;
     }
 
-    // Instance method with self by value (takes ownership/copy)
+    // Instance method with self by value (copies value)
     fn to_tuple(self) -> [i32, i32] {
         return [self.x, self.y];
     }
