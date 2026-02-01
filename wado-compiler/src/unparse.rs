@@ -1222,8 +1222,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
-            Literal::Int(int_lit) => self.output.push_str(&int_lit.repr),
-            Literal::Float(float_lit) => self.output.push_str(&float_lit.repr),
+            Literal::Number(num_lit) => self.output.push_str(&num_lit.repr),
             Literal::String(s) => {
                 // Use raw form to preserve multiline strings as-is
                 self.output.push('"');
@@ -2055,8 +2054,7 @@ fn unparse_type_into(ty: &Type, output: &mut String) {
 
 fn unparse_literal_into(lit: &Literal, output: &mut String) {
     match lit {
-        Literal::Int(int_lit) => output.push_str(&int_lit.repr),
-        Literal::Float(float_lit) => output.push_str(&float_lit.repr),
+        Literal::Number(num_lit) => output.push_str(&num_lit.repr),
         Literal::String(s) => {
             // Use raw form to preserve multiline strings as-is
             output.push('"');

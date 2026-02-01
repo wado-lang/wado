@@ -10,14 +10,11 @@ global POW10_MIN: i32 = -348;
 
 // Powers of 10 from 10^0 to 10^19
 global POW10: Array<u64> = [
-    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
-    10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000,
-    1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000,
-    10000000000000000000,
+    1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9,
+    1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
 ];
 
 pub fn pow10(n: i32) -> u64 {
-    assert n >= 0 && n <= 19, "pow10: n must be in range 0..19";
     return POW10[n];
 }
 
@@ -100,9 +97,7 @@ pub struct PmHiLo {
 }
 
 pub fn get_pow10(p: i32) -> PmHiLo {
-    let idx = p - POW10_MIN;
-    assert idx >= 0 && idx < 696, "get_pow10: p must be in range -348..347";
-    return POW10_TAB[idx];
+    return POW10_TAB[p - POW10_MIN];
 }
 
 // uscale computes unround(x * 2^e * 10^p) using the pow10 table

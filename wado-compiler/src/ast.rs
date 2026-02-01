@@ -703,8 +703,7 @@ pub struct LiteralExpr {
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    Int(IntLiteral),
-    Float(FloatLiteral),
+    Number(NumberLiteral),
     String(StringLiteral),
     Char(char),
     Bool(bool),
@@ -739,17 +738,14 @@ impl PartialEq<&str> for StringLiteral {
     }
 }
 
-/// Integer literal with original representation (e.g., "0b1100", "0xFF", "42")
-/// The actual value is parsed in the resolver phase to provide better error messages.
+/// Numeric literal with original representation (e.g., "0b1100", "0xFF", "42", "3.14", "1e10")
+/// The actual value and type are determined in the resolver phase based on context.
+/// Format rules:
+/// - Has `.` → float only (e.g., "3.14", "1.0")
+/// - Has negative exponent → float only (e.g., "1e-5")
+/// - Otherwise → can be int or float based on context (e.g., "42", "1e10")
 #[derive(Debug, Clone)]
-pub struct IntLiteral {
-    pub repr: String,
-}
-
-/// Float literal with original representation (e.g., "3.14", "6.022e23")
-/// The actual value is parsed in the resolver phase to provide better error messages.
-#[derive(Debug, Clone)]
-pub struct FloatLiteral {
+pub struct NumberLiteral {
     pub repr: String,
 }
 

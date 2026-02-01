@@ -6,14 +6,14 @@ use crate::ast::{
     BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ContinueStmt, EffectDecl,
     EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    FloatLiteral, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
-    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, IntLiteral,
-    Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
-    MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Param, Pattern,
-    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral, StructDecl,
-    StructField, StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr,
-    Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
-    WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
+    Module, NamedType, NamespacedGenericType, NumberLiteral, Param, Pattern, ResourceDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport,
+    WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -1382,14 +1382,10 @@ impl Parser {
             } else {
                 Ok(Pattern::Ident(name))
             }
-        } else if let TokenKind::IntLit(repr) = self.peek_kind().clone() {
-            // Literal pattern: 42
+        } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
+            // Literal pattern: 42 or 3.14
             self.advance();
-            Ok(Pattern::Literal(Literal::Int(IntLiteral { repr })))
-        } else if let TokenKind::FloatLit(repr) = self.peek_kind().clone() {
-            // Literal pattern: 3.14
-            self.advance();
-            Ok(Pattern::Literal(Literal::Float(FloatLiteral { repr })))
+            Ok(Pattern::Literal(Literal::Number(NumberLiteral { repr })))
         } else if let TokenKind::StringLit { value, raw } = self.peek_kind().clone() {
             // Literal pattern: "hello"
             self.advance();
@@ -1416,20 +1412,15 @@ impl Parser {
         } else if self.check(&TokenKind::Minus) {
             // Negative literal pattern: -42 or -3.14
             self.advance();
-            if let TokenKind::IntLit(repr) = self.peek_kind().clone() {
+            if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
                 self.advance();
-                Ok(Pattern::Literal(Literal::Int(IntLiteral {
-                    repr: format!("-{repr}"),
-                })))
-            } else if let TokenKind::FloatLit(repr) = self.peek_kind().clone() {
-                self.advance();
-                Ok(Pattern::Literal(Literal::Float(FloatLiteral {
+                Ok(Pattern::Literal(Literal::Number(NumberLiteral {
                     repr: format!("-{repr}"),
                 })))
             } else {
                 Err(ParseError {
                     message: format!(
-                        "expected integer or float literal after '-', found {:?}",
+                        "expected numeric literal after '-', found {:?}",
                         self.peek_kind()
                     ),
                     span: self.peek().span,
@@ -1925,31 +1916,35 @@ impl Parser {
                     self.advance();
                     let field_span = self.peek().span;
 
-                    // Support identifier, integer literal, and float literal for field access
+                    // Support identifier and number literal for field access
                     // Integer literals are used for tuple field access: t.0, t.1, etc.
-                    // Float literals like "0.0" after a dot are split into two field accesses.
-                    let (field, second_field) = if let TokenKind::IntLit(s) = &self.peek().kind {
-                        let field_name = s.clone();
-                        self.advance();
-                        (field_name, None)
-                    } else if let TokenKind::FloatLit(s) = &self.peek().kind {
-                        // Handle cases like `t.0.0` where the lexer tokenizes "0.0" as a float
-                        // Split the float literal into two field indices
-                        let parts: Vec<&str> = s.split('.').collect();
-                        if parts.len() == 2
-                            && parts[0].chars().all(|c| c.is_ascii_digit())
-                            && parts[1].chars().all(|c| c.is_ascii_digit())
-                        {
-                            let first = parts[0].to_string();
-                            let second = parts[1].to_string();
-                            self.advance();
-                            (first, Some(second))
+                    // Number literals like "0.0" after a dot are split into two field accesses.
+                    let (field, second_field) = if let TokenKind::NumberLit(s) = &self.peek().kind {
+                        // Check if it's a simple integer or contains a dot
+                        if s.contains('.') {
+                            // Handle cases like `t.0.0` where the lexer tokenizes "0.0" as a number
+                            // Split the number literal into two field indices
+                            let parts: Vec<&str> = s.split('.').collect();
+                            if parts.len() == 2
+                                && parts[0].chars().all(|c| c.is_ascii_digit())
+                                && parts[1].chars().all(|c| c.is_ascii_digit())
+                            {
+                                let first = parts[0].to_string();
+                                let second = parts[1].to_string();
+                                self.advance();
+                                (first, Some(second))
+                            } else {
+                                // Not a valid tuple field sequence
+                                return Err(ParseError {
+                                    message: format!("expected field name, found NumberLit({s:?})"),
+                                    span: field_span,
+                                });
+                            }
                         } else {
-                            // Not a valid tuple field sequence
-                            return Err(ParseError {
-                                message: format!("expected field name, found FloatLit({s:?})"),
-                                span: field_span,
-                            });
+                            // Simple integer literal for tuple field access
+                            let field_name = s.clone();
+                            self.advance();
+                            (field_name, None)
                         }
                     } else {
                         // Allow keywords as field names (unambiguous after dot)
@@ -2142,17 +2137,10 @@ impl Parser {
         }
 
         match self.peek_kind().clone() {
-            TokenKind::IntLit(repr) => {
+            TokenKind::NumberLit(repr) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Int(IntLiteral { repr: repr.clone() }),
-                    span: start_span,
-                }))
-            }
-            TokenKind::FloatLit(repr) => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Float(FloatLiteral { repr: repr.clone() }),
+                    value: Literal::Number(NumberLiteral { repr: repr.clone() }),
                     span: start_span,
                 }))
             }
