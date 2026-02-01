@@ -273,6 +273,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [WIT and Wado Mapping](./docs/wep-2026-01-29-wit-wado-mapping.md)
 - [Newtype Semantics](./docs/wep-2026-01-29-newtype-semantics.md)
 - [SIMD v128 Types](./docs/wep-2026-01-31-simd-v128.md)
+- [Format Traits](./docs/wep-2026-02-01-format-traits.md)
 
 ### Structure
 
