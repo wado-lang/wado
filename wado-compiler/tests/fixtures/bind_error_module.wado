@@ -1,0 +1,12 @@
+// Test: bind error in a dependency module is reported
+
+use { println, Stdout } from "core:cli";
+use { helper } from "./bind_error/dep.wado";
+
+fn run() with Stdout {
+    let x = helper();
+    println(`{x}`);
+}
+
+__DATA__
+{"compile_error": "'x' is not in scope"}

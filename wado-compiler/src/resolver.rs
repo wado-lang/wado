@@ -107,7 +107,7 @@ pub enum TypeError {
     UnknownFunction { name: String, span: Span },
 
     /// Unknown variable
-    UnknownVariable { name: String, span: Span },
+    UnknownIdentifier { name: String, span: Span },
 
     /// Field not found on struct
     FieldNotFound {
@@ -168,10 +168,10 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, name
                 )
             }
-            TypeError::UnknownVariable { name, span } => {
+            TypeError::UnknownIdentifier { name, span } => {
                 write!(
                     f,
-                    "{}:{}: unknown variable '{}'",
+                    "{}:{}: unknown identifier '{}'",
                     span.line, span.column, name
                 )
             }
@@ -3276,16 +3276,49 @@ impl<'a> Resolver<'a> {
             );
         }
 
-        // Otherwise it's a global reference (function, constant, etc.)
-        // For now, return Unknown type - will be resolved by looking up in symbol table
-        TirExpr::new(
-            TirExprKind::Global {
-                module_source: ModuleSource::entry_point(),
-                name: ident.name.clone(),
-            },
-            TypeTable::UNKNOWN,
-            ident.span,
-        )
+        // Check if it's a known function (function reference)
+        if self.function_return_types.contains_key(&ident.name)
+            || self.imported_functions.contains(&ident.name)
+        {
+            // It's a function reference - return Global
+            // The function type and proper handling will be done later
+            let module_source = if self.function_return_types.contains_key(&ident.name) {
+                self.current_module_source.clone()
+            } else {
+                // For imported functions, look up the module source from symbols
+                self.symbols
+                    .lookup(&ident.name)
+                    .map(|s| ModuleSource::from_path(&s.module_path))
+                    .unwrap_or_else(ModuleSource::entry_point)
+            };
+            return TirExpr::new(
+                TirExprKind::Global {
+                    module_source,
+                    name: ident.name.clone(),
+                },
+                TypeTable::UNKNOWN,
+                ident.span,
+            );
+        }
+
+        // Check if it's a prelude function (panic, unreachable)
+        if matches!(ident.name.as_str(), "panic" | "unreachable") {
+            return TirExpr::new(
+                TirExprKind::Global {
+                    module_source: ModuleSource::core("prelude"),
+                    name: ident.name.clone(),
+                },
+                TypeTable::UNKNOWN,
+                ident.span,
+            );
+        }
+
+        // Unknown variable - report error
+        self.errors.push(TypeError::UnknownIdentifier {
+            name: ident.name.clone(),
+            span: ident.span,
+        });
+        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
     }
 
     /// Resolve a binary expression

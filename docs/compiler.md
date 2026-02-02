@@ -7,29 +7,30 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Codegen
-                           ↓                                           ↓                           ↓          ↓
-                       Unparser                                  TIR (Typed IR)              TIR Unparser  TIR Unparser
-                           ↓                                                                      ↓              ↓
-                   Formatted Source                                                       Pseudo-Wado Source (pre/post lower)
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Codegen
+                           ↓                        ↓                           ↓          ↓
+                       Unparser                TIR (Typed IR)              TIR Unparser  TIR Unparser
+                           ↓                                                    ↓              ↓
+                   Formatted Source                                     Pseudo-Wado Source (pre/post lower)
 ```
 
 ### Compilation Pipeline
 
-| Phase        | Input         | Output       | Description                              |
-| ------------ | ------------- | ------------ | ---------------------------------------- |
-| Lexer        | Source        | Tokens       | Tokenize, extract `__DATA__` section     |
-| Parser       | Tokens        | AST          | Build abstract syntax tree               |
-| Bind         | AST           | Bind info    | Local name resolution, scope tracking    |
-| Desugar      | AST           | AST          | Transform syntactic sugar                |
-| Load         | AST           | All modules  | Load all dependencies recursively        |
-| Analyze      | All modules   | Symbol table | Build symbol table, validate imports     |
-| Resolve      | AST + Symbols | Project      | Type resolution, produce Project         |
-| Effect Check | Project       | Errors       | Validate function effect requirements    |
-| Monomorphize | Project       | Project      | Instantiate generics with concrete types |
-| Lower        | Project       | Project      | String literal collection                |
-| Optimize     | Project       | Project      | DCE, usage analysis, feature flags       |
-| Codegen      | Project       | Wasm bytes   | Generate Component Model Wasm            |
+| Phase        | Input         | Output           | Description                                                   |
+| ------------ | ------------- | ---------------- | ------------------------------------------------------------- |
+| Lexer        | Source        | Tokens           | Tokenize, extract `__DATA__` section                          |
+| Parser       | Tokens        | AST              | Build abstract syntax tree                                    |
+| Bind         | AST           | AST (validated)  | Local name resolution, scope/mutability checking              |
+| Load         | AST           | All modules      | Load dependencies; each module: parse → bind → desugar        |
+| Analyze      | All modules   | Symbol table     | Build symbol table, validate imports                          |
+| Resolve      | AST + Symbols | Project          | Type resolution, produce Project                              |
+| Effect Check | Project       | Errors           | Validate function effect requirements                         |
+| Monomorphize | Project       | Project          | Instantiate generics with concrete types                      |
+| Lower        | Project       | Project          | Closure, i128 match, global init, string literal lowering     |
+| Optimize     | Project       | Project          | DCE, usage analysis, feature flags                            |
+| Codegen      | Project       | Wasm bytes       | Generate Component Model Wasm                                 |
+
+**Note:** The Desugar phase is integrated into the Load phase. Each module goes through the same frontend pipeline: `lexer → parser → bind → desugar`.
 
 ### Modules
 
@@ -52,7 +53,7 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 | Resolver         | `resolver.rs`           | Type resolution, AST to TIR, produces Project         |
 | TIR              | `tir.rs`                | Typed Intermediate Representation                     |
 | Monomorphize     | `monomorphize.rs`       | Generic type/function instantiation (Project→Project) |
-| Lower            | `lower.rs`              | String literal collection (Project→Project)           |
+| Lower            | `lower.rs`              | Closure, i128 match, global init, string lowering     |
 | Project          | `project.rs`            | Project: compilation context passed through pipeline  |
 | Optimize         | `optimize.rs`           | Optimization coordinator, dispatches to sub-modules   |
 | OptimizeDCE      | `optimize_dce.rs`       | Dead code elimination via reachability analysis       |
@@ -76,7 +77,7 @@ Source (.wado) → Lexer → Parser → Bind → Desugar → Load → Analyze �
 
 ### Parser and Desugar Separation
 
-The parser preserves source syntax literally to enable accurate formatting via the unparser. Syntactic sugar is transformed in the desugar pass before codegen.
+The parser preserves source syntax literally to enable accurate formatting via the unparser. Syntactic sugar is transformed in the desugar pass, which runs during module loading (not as a separate top-level phase).
 
 | Construct              | Parser Output           | Desugar Output                  |
 | ---------------------- | ----------------------- | ------------------------------- |
@@ -526,7 +527,14 @@ The analyzer validates module paths before loading to provide better error messa
 
 ### Module Loader
 
-The module loader validates module paths before loading:
+The module loader loads all modules and applies the frontend pipeline to each:
+
+**Frontend Pipeline (per module):**
+
+1. **Lexer**: Source → Tokens
+2. **Parser**: Tokens → AST
+3. **Bind**: Validate local scopes, detect use-before-define and duplicate definitions
+4. **Desugar**: Transform syntactic sugar (compound assignment, comparison chains, loops)
 
 **Namespace Validation:**
 

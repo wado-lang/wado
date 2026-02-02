@@ -1,0 +1,12 @@
+// Test: bind error - duplicate variable definition in the same scope
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    let x = 42;
+    let x = 99;  // Error: cannot redeclare 'x' in the same scope
+    println(`{x}`);
+}
+
+__DATA__
+{"compile_error": "cannot redeclare 'x'"}

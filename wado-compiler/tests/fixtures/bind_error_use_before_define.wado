@@ -1,0 +1,14 @@
+// Test: bind error - using a variable defined in inner scope from outer scope
+
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    if true {
+        let x = 42;
+    }
+    // x is defined in inner scope but not accessible here
+    println(`{x}`);
+}
+
+__DATA__
+{"compile_error": "'x' is not in scope"}

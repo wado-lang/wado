@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{Item, Module};
+use crate::bind::{self, BindError};
 use crate::compiler_host::{Code, CompilerHost, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
@@ -26,6 +27,11 @@ pub enum LoadError {
     },
     /// Lexer error
     LexError {
+        module_source: ModuleSource,
+        message: String,
+    },
+    /// Bind error (scope checking)
+    BindError {
         module_source: ModuleSource,
         message: String,
     },
@@ -54,6 +60,12 @@ impl std::fmt::Display for LoadError {
                 message,
             } => {
                 write!(f, "lex error in {module_source}: {message}")
+            }
+            LoadError::BindError {
+                module_source,
+                message,
+            } => {
+                write!(f, "bind error in {module_source}: {message}")
             }
             LoadError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
@@ -149,22 +161,24 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<LoadResult, LoadError> {
         self.logger().span_start("load");
 
-        // Parse entry module
+        // Parse, bind, and desugar entry module
         let entry_module_source = if let Some(filename) = entry_filename {
             ModuleSource::entry_point_with_filename(filename)
         } else {
             ModuleSource::entry_point()
         };
-        let entry_module = self.parse_source(entry_source, &entry_module_source)?;
+        // Parse first to collect imports before binding
+        let entry_ast = self.parse_source(entry_source, &entry_module_source)?;
 
-        // Desugar and store entry module
-        let desugared_entry = desugar_module(&entry_module);
+        // Collect imports from entry module (before bind/desugar)
+        let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
+        self.collect_imports(&entry_ast, &entry_module_source, &mut pending)?;
+
+        // Bind and desugar, then store
+        self.bind_module(&entry_ast, &entry_module_source)?;
+        let desugared_entry = desugar_module(&entry_ast);
         self.loaded
             .insert(entry_module_source.clone(), desugared_entry);
-
-        // Collect imports from entry module
-        let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
-        self.collect_imports(&entry_module, &entry_module_source, &mut pending)?;
 
         // Load all dependencies iteratively
         while let Some((from_module_source, module_source)) = pending.pop_front() {
@@ -183,13 +197,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Load and parse the module
             let source = self.get_source(&module_source, &from_module_source).await?;
-            let module = self.parse_source(&source, &module_source)?;
+            let ast = self.parse_source(&source, &module_source)?;
 
-            // Collect its imports
-            self.collect_imports(&module, &module_source, &mut pending)?;
+            // Collect its imports (before bind/desugar)
+            self.collect_imports(&ast, &module_source, &mut pending)?;
 
-            // Desugar and store
-            let desugared = desugar_module(&module);
+            // Bind, desugar, and store
+            self.bind_module(&ast, &module_source)?;
+            let desugared = desugar_module(&ast);
             self.loaded.insert(module_source.clone(), desugared);
             self.loading.remove(&module_source);
         }
@@ -256,16 +271,25 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             {
                 Ok(source) => {
                     match self.parse_source(&source, &module_source) {
-                        Ok(module) => {
+                        Ok(ast) => {
                             // Collect imports from implicit module
                             let mut pending = VecDeque::new();
                             // Implicit modules should only use valid import paths
                             if let Err(e) =
-                                self.collect_imports(&module, &module_source, &mut pending)
+                                self.collect_imports(&ast, &module_source, &mut pending)
                             {
                                 self.logger().warn(
                                     Code::ModuleParseError,
                                     format!("failed to collect imports from implicit module: {e}"),
+                                );
+                                continue;
+                            }
+
+                            // Bind the implicit module
+                            if let Err(e) = self.bind_module(&ast, &module_source) {
+                                self.logger().warn(
+                                    Code::ModuleParseError,
+                                    format!("failed to bind implicit module: {e}"),
                                 );
                                 continue;
                             }
@@ -280,22 +304,23 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                                 if let Ok(dep_source) = self
                                     .get_source(&dep_module_source, &from_module_source)
                                     .await
-                                    && let Ok(dep_module) =
+                                    && let Ok(dep_ast) =
                                         self.parse_source(&dep_source, &dep_module_source)
                                     && self
                                         .collect_imports(
-                                            &dep_module,
+                                            &dep_ast,
                                             &dep_module_source,
                                             &mut pending,
                                         )
                                         .is_ok()
+                                    && self.bind_module(&dep_ast, &dep_module_source).is_ok()
                                 {
-                                    let desugared = desugar_module(&dep_module);
+                                    let desugared = desugar_module(&dep_ast);
                                     self.loaded.insert(dep_module_source, desugared);
                                 }
                             }
 
-                            let desugared = desugar_module(&module);
+                            let desugared = desugar_module(&ast);
                             self.loaded.insert(module_source.clone(), desugared);
                             self.implicit_modules.insert(module_source);
                         }
@@ -470,6 +495,21 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 "line {}, column {}: {}",
                 e.span.line, e.span.column, e.message
             ),
+        })
+    }
+
+    /// Bind a module (local name resolution and scope checking)
+    fn bind_module(&self, module: &Module, module_source: &ModuleSource) -> Result<(), LoadError> {
+        bind::bind_module(module).map_err(|errors| {
+            let message = errors
+                .iter()
+                .map(BindError::to_string)
+                .collect::<Vec<_>>()
+                .join("; ");
+            LoadError::BindError {
+                module_source: module_source.clone(),
+                message,
+            }
         })
     }
 }
