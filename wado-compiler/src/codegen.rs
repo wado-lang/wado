@@ -6635,13 +6635,13 @@ impl Codegen {
 
                 // End default block and generate default code
                 func.instruction(&Instruction::End);
-                self.generate_block(func, default, type_table, ctx, builder);
+                self.generate_block_as_expr(func, default, expr.type_id, type_table, ctx, builder);
                 func.instruction(&Instruction::Br(arms.len() as u32)); // Jump to result
 
                 // Generate each arm (in order)
                 for (i, arm) in arms.iter().enumerate() {
                     func.instruction(&Instruction::End);
-                    self.generate_block(func, arm, type_table, ctx, builder);
+                    self.generate_block_as_expr(func, arm, expr.type_id, type_table, ctx, builder);
                     func.instruction(&Instruction::Br((arms.len() - 1 - i) as u32));
                 }
 
