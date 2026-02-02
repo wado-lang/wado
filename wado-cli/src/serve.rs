@@ -1,8 +1,23 @@
-use std::process::{self, Command, Stdio};
+use std::net::SocketAddr;
+use std::process;
+use std::sync::Arc;
 
 use anyhow::Result;
+use bytes::Bytes;
+use futures::try_join;
+use http_body_util::{BodyExt, Empty, Full};
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Request as HyperRequest, Response as HyperResponse};
+use hyper_util::rt::TokioIo;
 use lexopt::Arg::{Long, Short, Value};
-use tempfile::NamedTempFile;
+use tokio::net::TcpListener;
+use tokio::sync::Mutex;
+use wasmtime::component::{Component, Linker, ResourceTable};
+use wasmtime::{Config, Engine, Store};
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi_http::p3::bindings::Service;
+use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use crate::args::{
     next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
@@ -20,7 +35,7 @@ pub struct ServeOptions {
 pub fn print_usage() {
     eprintln!("Usage: wado serve [options] <file.wado>");
     eprintln!();
-    eprintln!("Compile and serve a Wado HTTP service using wasmtime serve.");
+    eprintln!("Compile and serve a Wado HTTP service using wasmtime.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  --addr <addr>    Address to listen on (default: 0.0.0.0:8080)");
@@ -103,42 +118,192 @@ pub fn parse_args(mut parser: lexopt::Parser) -> ServeOptions {
     }
 }
 
-fn run_http_service(wasm: &[u8], addr: &str) -> Result<()> {
-    use std::io::Write;
+// ============================================================================
+// HTTP WASI State
+// ============================================================================
 
-    // Write wasm to a temp file
-    let mut temp_file = NamedTempFile::new()?;
-    temp_file.write_all(wasm)?;
-    temp_file.flush()?;
+struct HttpWasiCtx;
 
-    let temp_path = temp_file.path();
-    eprintln!("Starting HTTP server with wasmtime serve...");
-    eprintln!("Listening on: http://{addr}/");
+impl WasiHttpCtx for HttpWasiCtx {}
 
-    // Run wasmtime serve with P3 support
-    let status = Command::new("wasmtime")
-        .arg("serve")
-        .arg("--addr")
-        .arg(addr)
-        .arg("-W")
-        .arg("all-proposals=y")
-        .arg("-W")
-        .arg("stack-switching=n")
-        .arg("-S")
-        .arg("p3=y")
-        .arg("-S")
-        .arg("http=y")
-        .arg(temp_path)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+struct HttpWasiState {
+    table: ResourceTable,
+    wasi: WasiCtx,
+    http: HttpWasiCtx,
+}
 
-    if !status.success() {
-        anyhow::bail!("wasmtime serve exited with status: {status}");
+impl WasiView for HttpWasiState {
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView {
+            ctx: &mut self.wasi,
+            table: &mut self.table,
+        }
     }
+}
 
-    Ok(())
+impl WasiHttpView for HttpWasiState {
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: &mut self.http,
+            table: &mut self.table,
+        }
+    }
+}
+
+// ============================================================================
+// HTTP Engine and Linker
+// ============================================================================
+
+fn create_http_engine() -> Result<Engine> {
+    let mut config = Config::new();
+    config.async_support(true);
+    config.wasm_component_model(true);
+    config.wasm_component_model_async(true);
+    config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_gc(true);
+    config.wasm_gc(true);
+    config.wasm_function_references(true);
+    config.wasm_wide_arithmetic(true);
+    config.wasm_threads(true);
+    config.wasm_simd(true);
+    // Use minimal optimization for faster compilation during development
+    config.cranelift_opt_level(wasmtime::OptLevel::None);
+    Ok(Engine::new(&config)?)
+}
+
+fn create_http_linker(engine: &Engine) -> Result<Linker<HttpWasiState>> {
+    let mut linker: Linker<HttpWasiState> = Linker::new(engine);
+    // Add both P2 and P3 interfaces (like wasmtime tests do)
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
+    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    Ok(linker)
+}
+
+fn create_http_state() -> HttpWasiState {
+    HttpWasiState {
+        table: ResourceTable::new(),
+        wasi: WasiCtxBuilder::new().inherit_stdio().build(),
+        http: HttpWasiCtx,
+    }
+}
+
+// ============================================================================
+// HTTP Handler
+// ============================================================================
+
+/// Handle a single HTTP request using the Wasm component
+async fn handle_http_request(
+    engine: &Engine,
+    component: &Component,
+    linker: &Linker<HttpWasiState>,
+    req: HyperRequest<hyper::body::Incoming>,
+) -> Result<HyperResponse<Full<Bytes>>> {
+    let state = create_http_state();
+    let mut store = Store::new(engine, state);
+
+    let service = Service::instantiate_async(&mut store, component, linker).await?;
+
+    // Convert hyper request to http::Request with Empty body
+    let (parts, _body) = req.into_parts();
+    let http_req = http::Request::from_parts(parts, Empty::<Bytes>::new());
+
+    let (wasi_req, io) = WasiRequest::from_http(http_req);
+
+    // Channel to receive the response
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    // Run handler and response receiver in parallel
+    let result = try_join!(
+        async {
+            store
+                .run_concurrent(async |store| {
+                    let (res, task) = match service.handle(store, wasi_req).await? {
+                        Ok(pair) => pair,
+                        Err(err) => return Ok(Err(Some(err))),
+                    };
+                    let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                    task.block(store).await;
+                    Ok(Ok(()))
+                })
+                .await?
+        },
+        async {
+            let res = rx.await?;
+            let (parts, body) = res.into_parts();
+            let body = body.collect().await?;
+            anyhow::Ok(http::Response::from_parts(parts, body))
+        }
+    );
+
+    // Drop io - we don't consume request body in simple cases
+    drop(io);
+
+    match result {
+        Ok((Ok(()), res)) => {
+            let (parts, body) = res.into_parts();
+            Ok(HyperResponse::from_parts(parts, Full::new(body.to_bytes())))
+        }
+        Ok((Err(Some(error_code)), _)) => {
+            // Handler returned error code - map to HTTP 500
+            Ok(HyperResponse::builder()
+                .status(500)
+                .body(Full::new(Bytes::from(format!("{error_code:?}"))))?)
+        }
+        Ok((Err(None), _)) => Ok(HyperResponse::builder()
+            .status(500)
+            .body(Full::new(Bytes::from("Handler returned error")))?),
+        Err(e) => Ok(HyperResponse::builder()
+            .status(500)
+            .body(Full::new(Bytes::from(format!("Internal error: {e}"))))?),
+    }
+}
+
+// ============================================================================
+// HTTP Server
+// ============================================================================
+
+async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
+    let engine = create_http_engine()?;
+    let component = Component::new(&engine, &wasm)?;
+    let linker = create_http_linker(&engine)?;
+
+    // Wrap in Arc for sharing across connections
+    let engine = Arc::new(engine);
+    let component = Arc::new(component);
+    let linker = Arc::new(Mutex::new(linker));
+
+    let addr: SocketAddr = addr.parse()?;
+    let listener = TcpListener::bind(addr).await?;
+
+    eprintln!("HTTP server listening on http://{addr}/");
+    eprintln!("Press Ctrl+C to stop");
+
+    loop {
+        let (stream, remote_addr) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+
+        let engine = Arc::clone(&engine);
+        let component = Arc::clone(&component);
+        let linker = Arc::clone(&linker);
+
+        tokio::spawn(async move {
+            let service = service_fn(|req| {
+                let engine = Arc::clone(&engine);
+                let component = Arc::clone(&component);
+                let linker = Arc::clone(&linker);
+
+                async move {
+                    let linker = linker.lock().await;
+                    handle_http_request(&engine, &component, &linker, req).await
+                }
+            });
+
+            if let Err(e) = http1::Builder::new().serve_connection(io, service).await {
+                eprintln!("Error serving {remote_addr}: {e}");
+            }
+        });
+    }
 }
 
 pub async fn run(opts: ServeOptions) {
@@ -150,8 +315,8 @@ pub async fn run(opts: ServeOptions) {
     )
     .await;
 
-    if let Err(e) = run_http_service(&wasm, &opts.addr) {
-        eprintln!("Runtime error: {e}");
+    if let Err(e) = run_http_server(wasm, &opts.addr).await {
+        eprintln!("Server error: {e}");
         process::exit(1);
     }
 }
