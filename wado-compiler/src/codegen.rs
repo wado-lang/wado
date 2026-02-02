@@ -10775,12 +10775,6 @@ impl Codegen {
             func_ctx.alloc_local(&local_name, local_type);
         }
 
-        // Pre-allocate locals for assert statements
-        if let Some(body) = &tir_func.body {
-            let string_array_type = self.get_array_type_index(TypeTable::U8);
-            self.preallocate_assert_locals(body, type_table, &mut func_ctx, string_array_type);
-        }
-
         // Pre-allocate locals for value copy operations (struct, array, tuple)
         if !tir_func.needed_copy_types.is_empty() {
             self.preallocate_value_copy_locals(
@@ -10908,12 +10902,6 @@ impl Codegen {
 
             let local_name = format!("_local_{local_idx}");
             func_ctx.alloc_local(&local_name, local_type);
-        }
-
-        // Pre-allocate locals for assert statements
-        if let Some(body) = &tir_func.body {
-            let string_array_type = self.get_array_type_index(TypeTable::U8);
-            self.preallocate_assert_locals(body, type_table, &mut func_ctx, string_array_type);
         }
 
         // Pre-allocate locals for value copy operations (struct, array, tuple)
@@ -12279,45 +12267,6 @@ impl Codegen {
                 }
                 _ => {}
             }
-        }
-    }
-
-    /// Pre-allocate locals for TIR assert statements in a block
-    fn preallocate_assert_locals(
-        &self,
-        block: &TirBlock,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        string_array_type: u32,
-    ) {
-        for stmt in &block.stmts {
-            self.preallocate_assert_locals_from_stmt(stmt, type_table, ctx, string_array_type);
-        }
-    }
-
-    /// Pre-allocate locals from a single TIR statement (recursively handles nested blocks)
-    fn preallocate_assert_locals_from_stmt(
-        &self,
-        stmt: &TirStmt,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        string_array_type: u32,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.preallocate_assert_locals(body, type_table, ctx, string_array_type);
-            }
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.preallocate_assert_locals(then_block, type_table, ctx, string_array_type);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_assert_locals(else_blk, type_table, ctx, string_array_type);
-                }
-            }
-            _ => {}
         }
     }
 
